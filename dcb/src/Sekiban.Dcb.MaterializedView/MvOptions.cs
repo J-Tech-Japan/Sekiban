@@ -1,18 +1,15 @@
 namespace Sekiban.Dcb.MaterializedView;
 
-public class MvWorkerOptions
+public sealed class MvOptions
 {
     public const string DefaultTablePrefix = "sekiban_mv";
 
     public int BatchSize { get; set; } = 100;
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
     public int SafeWindowMs { get; set; } = 5000;
+    public int MaxConsecutiveFailuresBeforeStop { get; set; } = 3;
     public string TablePrefix { get; set; } = DefaultTablePrefix;
     public PhysicalNameResolver? PhysicalNameResolver { get; set; }
-}
-
-public sealed class MvOptions : MvWorkerOptions
-{
 }
 
 public static class MvSchemaHelper
@@ -28,7 +25,7 @@ public static class MvPhysicalName
 {
     private const int MaximumIdentifierLength = 63;
 
-    public static string Resolve(MvWorkerOptions options, string viewName, int viewVersion, string logicalTable)
+    public static string Resolve(MvOptions options, string viewName, int viewVersion, string logicalTable)
     {
         var resolver = options.PhysicalNameResolver ?? ((view, version, logical) =>
             $"{SanitizeSegment(options.TablePrefix)}_{SanitizeSegment(view)}_v{version}_{SanitizeSegment(logical)}");

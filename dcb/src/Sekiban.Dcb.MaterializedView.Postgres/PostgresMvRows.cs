@@ -6,14 +6,16 @@ namespace Sekiban.Dcb.MaterializedView.Postgres;
 public sealed class PostgresMvRow : IMvRow
 {
     private readonly IReadOnlyDictionary<string, object?> _values;
+    private readonly IReadOnlyList<string> _columnNames;
 
     public PostgresMvRow(IReadOnlyDictionary<string, object?> values)
     {
         _values = values.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        _columnNames = _values.Keys.ToList();
     }
 
     public int ColumnCount => _values.Count;
-    public IReadOnlyList<string> ColumnNames => _values.Keys.ToList();
+    public IReadOnlyList<string> ColumnNames => _columnNames;
 
     public bool IsNull(string columnName) => !_values.TryGetValue(columnName, out var value) || value is null || value is DBNull;
     public Guid GetGuid(string columnName) => GetAs<Guid>(columnName);

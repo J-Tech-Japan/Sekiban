@@ -17,7 +17,7 @@ public class MaterializedViewUnitTests
         Assert.Throws<ArgumentException>(() => MvPhysicalName.ValidateIdentifier("bad-name"));
         Assert.Equal(
             "sekiban_mv_ordersummary_v1_items",
-            MvPhysicalName.Resolve(new MvWorkerOptions(), "OrderSummary", 1, "items"));
+            MvPhysicalName.Resolve(new MvOptions(), "OrderSummary", 1, "items"));
     }
 
     [Fact]
@@ -58,17 +58,9 @@ public class MaterializedViewUnitTests
 
         Assert.Single(createdStatements);
         Assert.Contains("INSERT INTO sekiban_mv_ordersummary_v1_orders", createdStatements[0].Sql);
+        Assert.Equal("999", ReadParameter(createdStatements[0].Parameters, "SortableUniqueId"));
 
-        ctx.SingleResults["SELECT * FROM sekiban_mv_ordersummary_v1_orders WHERE id = @Id"] = new FakeMvRow(
-            new Dictionary<string, object?>
-            {
-                ["id"] = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-                ["status"] = "Pending",
-                ["total"] = 10m,
-                ["created_at"] = DateTimeOffset.UtcNow,
-                ["_last_sortable_unique_id"] = "090",
-                ["_last_applied_at"] = DateTimeOffset.UtcNow
-            });
+        ctx.ScalarResults["SELECT COUNT(*) FROM sekiban_mv_ordersummary_v1_orders WHERE id = @Id"] = 1;
 
         var itemStatements = await view.ApplyToViewAsync(
             new Event(
@@ -89,11 +81,30 @@ public class MaterializedViewUnitTests
         Assert.Equal(2, itemStatements.Count);
         Assert.Contains("sekiban_mv_ordersummary_v1_items", itemStatements[0].Sql);
         Assert.Contains("UPDATE sekiban_mv_ordersummary_v1_orders", itemStatements[1].Sql);
+        Assert.Equal(24m, ReadParameter(itemStatements[1].Parameters, "Delta"));
+
+        ctx.ScalarResults["SELECT COUNT(*) FROM sekiban_mv_ordersummary_v1_orders WHERE id = @Id"] = 0;
+        var noOrderStatements = await view.ApplyToViewAsync(
+            new Event(
+                new OrderItemAdded(
+                    Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                    Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                    "Monitor",
+                    1,
+                    50m,
+                    DateTimeOffset.UtcNow),
+                "102",
+                nameof(OrderItemAdded),
+                Guid.NewGuid(),
+                new EventMetadata("cause", "corr", "tester"),
+                []),
+            ctx);
+        Assert.Empty(noOrderStatements);
 
         var cancelledStatements = await view.ApplyToViewAsync(
             new Event(
                 new OrderCancelled(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), DateTimeOffset.UtcNow),
-                "102",
+                "103",
                 nameof(OrderCancelled),
                 Guid.NewGuid(),
                 new EventMetadata("cause", "corr", "tester"),
@@ -102,6 +113,17 @@ public class MaterializedViewUnitTests
 
         Assert.Single(cancelledStatements);
         Assert.Contains("SET status = @Status", cancelledStatements[0].Sql);
+
+        var unknownStatements = await view.ApplyToViewAsync(
+            new Event(
+                new UnknownEvent(),
+                "104",
+                nameof(UnknownEvent),
+                Guid.NewGuid(),
+                new EventMetadata("cause", "corr", "tester"),
+                []),
+            ctx);
+        Assert.Empty(unknownStatements);
     }
 
     [Fact]
@@ -178,6 +200,7 @@ public class MaterializedViewUnitTests
     private sealed class FakeApplyContext : IMvApplyContext
     {
         public Dictionary<string, IMvRow> SingleResults { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, object> ScalarResults { get; } = new(StringComparer.OrdinalIgnoreCase);
         public MvDbType DatabaseType => MvDbType.Postgres;
         public System.Data.IDbConnection Connection => throw new NotSupportedException();
         public System.Data.IDbTransaction Transaction => throw new NotSupportedException();
@@ -189,6 +212,9 @@ public class MaterializedViewUnitTests
 
         public Task<IMvRowSet> QueryRowsAsync(string sql, object? param = null, CancellationToken cancellationToken = default) =>
             Task.FromResult<IMvRowSet>(new FakeMvRowSet([]));
+
+        public Task<TScalar> ExecuteScalarAsync<TScalar>(string sql, object? param = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult((TScalar)ScalarResults[sql]);
 
         public MvTable GetDependencyViewTable(string viewName, string logicalTable) => throw new NotSupportedException();
         public MvTable GetDependencyViewTable<TView>(string logicalTable) where TView : IMaterializedViewProjector => throw new NotSupportedException();
@@ -229,4 +255,9 @@ public class MaterializedViewUnitTests
         public Task<IReadOnlyList<MvSqlStatement>> ApplyToViewAsync(Event ev, IMvApplyContext ctx, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<MvSqlStatement>>([]);
     }
+
+    private sealed record UnknownEvent : IEventPayload;
+
+    private static object? ReadParameter(object? parameterBag, string name) =>
+        parameterBag?.GetType().GetProperty(name)?.GetValue(parameterBag);
 }

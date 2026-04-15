@@ -52,7 +52,8 @@ public static class MvRowMapper<T> where T : class
         var type = typeof(T);
         var rowParameter = Expression.Parameter(typeof(IMvRow), "row");
         var ctor = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
-            .OrderByDescending(c => c.GetParameters().Length)
+            .OrderBy(c => c.GetParameters().Length == 0 ? 0 : 1)
+            .ThenByDescending(c => c.GetParameters().Length)
             .FirstOrDefault();
 
         if (ctor is null)

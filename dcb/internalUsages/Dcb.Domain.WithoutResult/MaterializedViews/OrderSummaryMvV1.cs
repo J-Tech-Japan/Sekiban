@@ -71,21 +71,20 @@ public sealed class OrderSummaryMvV1 : IMaterializedViewProjector
         IMvApplyContext ctx,
         CancellationToken cancellationToken)
     {
-        var order = await ctx.QuerySingleOrDefaultAsync<OrderRow>(
-            $"SELECT * FROM {Orders.PhysicalName} WHERE id = @Id",
+        var orderExists = await ctx.ExecuteScalarAsync<int>(
+            $"SELECT COUNT(*) FROM {Orders.PhysicalName} WHERE id = @Id",
             new { Id = added.OrderId },
             cancellationToken).ConfigureAwait(false);
 
-        if (order is null)
+        if (orderExists == 0)
         {
             return [];
         }
 
-        var newTotal = order.Total + (added.Quantity * added.UnitPrice);
         return
         [
             InsertItem(added, ctx.CurrentSortableUniqueId),
-            UpdateOrderTotal(added.OrderId, newTotal, ctx.CurrentSortableUniqueId)
+            UpdateOrderTotal(added.OrderId, added.Quantity * added.UnitPrice, ctx.CurrentSortableUniqueId)
         ];
     }
 
@@ -139,11 +138,11 @@ public sealed class OrderSummaryMvV1 : IMaterializedViewProjector
                 SortableUniqueId = sortableUniqueId
             });
 
-    private MvSqlStatement UpdateOrderTotal(Guid orderId, decimal total, string sortableUniqueId) =>
+    private MvSqlStatement UpdateOrderTotal(Guid orderId, decimal delta, string sortableUniqueId) =>
         new(
             $"""
              UPDATE {Orders.PhysicalName}
-             SET total = @Total,
+             SET total = total + @Delta,
                  _last_sortable_unique_id = @SortableUniqueId,
                  _last_applied_at = NOW()
              WHERE id = @OrderId
@@ -152,7 +151,7 @@ public sealed class OrderSummaryMvV1 : IMaterializedViewProjector
             new
             {
                 OrderId = orderId,
-                Total = total,
+                Delta = delta,
                 SortableUniqueId = sortableUniqueId
             });
 

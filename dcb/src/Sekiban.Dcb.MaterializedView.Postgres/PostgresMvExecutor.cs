@@ -16,7 +16,7 @@ public sealed class PostgresMvExecutor : IMvExecutor
     private readonly IEventStore _eventStore;
     private readonly IEventTypes _eventTypes;
     private readonly ILogger<PostgresMvExecutor> _logger;
-    private readonly MvWorkerOptions _options;
+    private readonly MvOptions _options;
     private readonly IMvRegistryStore _registryStore;
     private readonly string _connectionString;
     private readonly IServiceIdProvider _serviceIdProvider;

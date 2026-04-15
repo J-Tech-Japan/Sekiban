@@ -78,6 +78,7 @@ public interface IMvApplyContext
 
     Task<IMvRow?> QuerySingleOrDefaultRowAsync(string sql, object? param = null, CancellationToken cancellationToken = default);
     Task<IMvRowSet> QueryRowsAsync(string sql, object? param = null, CancellationToken cancellationToken = default);
+    Task<TScalar> ExecuteScalarAsync<TScalar>(string sql, object? param = null, CancellationToken cancellationToken = default);
     MvTable GetDependencyViewTable(string viewName, string logicalTable);
     MvTable GetDependencyViewTable<TView>(string logicalTable) where TView : IMaterializedViewProjector;
 }

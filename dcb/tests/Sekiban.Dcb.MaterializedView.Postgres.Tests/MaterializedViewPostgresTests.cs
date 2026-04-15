@@ -63,7 +63,25 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
 
         await using var connection = await fixture.OpenConnectionAsync();
         var orderRow = await connection.QuerySingleAsync<OrderQueryRow>(
-            "SELECT id, status, total, _last_sortable_unique_id AS LastSortableUniqueId FROM sekiban_mv_ordersummary_v1_orders WHERE id = @Id;",
+            """
+            SELECT id,
+                   status,
+                   total,
+                   _last_sortable_unique_id AS LastSortableUniqueId,
+                   _last_applied_at AS LastAppliedAt
+            FROM sekiban_mv_ordersummary_v1_orders
+            WHERE id = @Id;
+            """,
+            new { Id = orderId });
+        var itemRow = await connection.QuerySingleAsync<ItemQueryRow>(
+            """
+            SELECT id,
+                   order_id AS OrderId,
+                   _last_sortable_unique_id AS LastSortableUniqueId,
+                   _last_applied_at AS LastAppliedAt
+            FROM sekiban_mv_ordersummary_v1_items
+            WHERE order_id = @Id;
+            """,
             new { Id = orderId });
         var itemCount = await connection.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM sekiban_mv_ordersummary_v1_items WHERE order_id = @Id;",
@@ -86,6 +104,69 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         Assert.Equal(1, itemCount);
         Assert.Equal(latestSortableUniqueId, registryPosition);
         Assert.False(string.IsNullOrWhiteSpace(orderRow.LastSortableUniqueId));
+        Assert.NotEqual(default, orderRow.LastAppliedAt);
+        Assert.False(string.IsNullOrWhiteSpace(itemRow.LastSortableUniqueId));
+        Assert.NotEqual(default, itemRow.LastAppliedAt);
+    }
+
+    [Fact]
+    public async Task CatchUp_RemainsIdempotentWhenRegistryPositionIsRewound()
+    {
+        await fixture.ResetAsync();
+        await fixture.Executor.InitializeAsync(fixture.Projector);
+
+        var executor = new GeneralSekibanExecutor(fixture.EventStore, fixture.ActorAccessor, fixture.DomainTypes);
+        var orderId = Guid.CreateVersion7();
+        var itemId = Guid.CreateVersion7();
+
+        await executor.ExecuteAsync(new CreateOrder { OrderId = orderId, CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-1) });
+        await executor.ExecuteAsync(new AddOrderItem
+        {
+            OrderId = orderId,
+            ItemId = itemId,
+            ProductName = "Mouse",
+            Quantity = 2,
+            UnitPrice = 15m,
+            AddedAt = DateTimeOffset.UtcNow.AddSeconds(-30)
+        });
+        await executor.ExecuteAsync(new CancelOrder { OrderId = orderId, CancelledAt = DateTimeOffset.UtcNow.AddSeconds(-10) });
+
+        await fixture.Executor.CatchUpOnceAsync(fixture.Projector);
+
+        await using (var rewindConnection = await fixture.OpenConnectionAsync())
+        {
+            await rewindConnection.ExecuteAsync(
+                """
+                UPDATE sekiban_mv_registry
+                SET current_position = NULL,
+                    last_sortable_unique_id = NULL
+                WHERE view_name = 'OrderSummary';
+                """);
+        }
+
+        var replayCatchUp = await fixture.Executor.CatchUpOnceAsync(fixture.Projector);
+
+        await using var connection = await fixture.OpenConnectionAsync();
+        var orderRow = await connection.QuerySingleAsync<OrderQueryRow>(
+            """
+            SELECT id,
+                   status,
+                   total,
+                   _last_sortable_unique_id AS LastSortableUniqueId,
+                   _last_applied_at AS LastAppliedAt
+            FROM sekiban_mv_ordersummary_v1_orders
+            WHERE id = @Id;
+            """,
+            new { Id = orderId });
+        var itemCount = await connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM sekiban_mv_ordersummary_v1_items WHERE order_id = @Id;",
+            new { Id = orderId });
+
+        Assert.Equal(3, replayCatchUp.AppliedEvents);
+        Assert.Equal("Cancelled", orderRow.Status);
+        Assert.Equal(30m, orderRow.Total);
+        Assert.Equal(1, itemCount);
+        Assert.NotEqual(default, orderRow.LastAppliedAt);
     }
 
     [Fact]
@@ -114,7 +195,8 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         Assert.Null(registryPosition);
     }
 
-    private sealed record OrderQueryRow(Guid Id, string Status, decimal Total, string LastSortableUniqueId);
+    private sealed record OrderQueryRow(Guid Id, string Status, decimal Total, string LastSortableUniqueId, DateTimeOffset LastAppliedAt);
+    private sealed record ItemQueryRow(Guid Id, Guid OrderId, string LastSortableUniqueId, DateTimeOffset LastAppliedAt);
 
     private sealed class FailingMvProjector : IMaterializedViewProjector
     {
