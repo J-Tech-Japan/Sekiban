@@ -61,6 +61,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
             state.EventOrder.Clear();
             state.Events.Clear();
             state.TagStreams.Clear();
+            state.MaxSortableUniqueId = string.Empty;
         }
     }
 
