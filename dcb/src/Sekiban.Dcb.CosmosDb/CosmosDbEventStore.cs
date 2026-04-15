@@ -938,7 +938,7 @@ public partial class CosmosDbEventStore : IHotEventStore
             var container = await _context.GetEventsContainerAsync(settings).ConfigureAwait(false);
 
             var queryDefinition = new QueryDefinition(
-                $"SELECT VALUE TOP 1 c.sortableUniqueId FROM c WHERE c.serviceId = {ParamServiceId} ORDER BY c.sortableUniqueId DESC")
+                $"SELECT TOP 1 VALUE c.sortableUniqueId FROM c WHERE c.serviceId = {ParamServiceId} ORDER BY c.sortableUniqueId DESC")
                 .WithParameter(ParamServiceId, serviceId);
 
             using var iterator = container.GetItemQueryIterator<string>(queryDefinition);
