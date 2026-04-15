@@ -201,6 +201,17 @@ public class InMemoryEventStore : IEventStore
         }
     }
 
+    public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    {
+        lock (_lock)
+        {
+            var latest = _events.Count > 0
+                ? _events[^1].SortableUniqueIdValue
+                : string.Empty;
+            return Task.FromResult(ResultBox.FromValue(latest));
+        }
+    }
+
     public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
     {
         lock (_lock)

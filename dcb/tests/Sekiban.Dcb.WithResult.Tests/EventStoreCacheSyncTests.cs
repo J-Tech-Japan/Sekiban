@@ -152,6 +152,9 @@ public class EventStoreCacheSyncTests
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) =>
             throw new NotSupportedException();
 
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
+            throw new NotSupportedException();
+
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             ReadAllSerializableEventsAsync(since, null);
 

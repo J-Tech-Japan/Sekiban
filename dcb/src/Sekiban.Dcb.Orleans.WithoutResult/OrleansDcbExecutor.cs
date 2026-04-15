@@ -221,6 +221,9 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         return listGeneralBox.GetValue().ToTypedResult<TResult>().UnwrapBox();
     }
 
+    public Task<string> GetLatestSortableUniqueIdAsync() =>
+        _generalExecutor.GetLatestSortableUniqueIdAsync();
+
     public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _generalExecutor.GetSerializableTagStateAsync(tagStateId);
 

@@ -407,6 +407,55 @@ public class DynamoDbEventStore : IHotEventStore
         }
     }
 
+    public async Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    {
+        try
+        {
+            var serviceId = CurrentServiceId;
+            var shardCount = Math.Max(1, _options.WriteShardCount);
+            var shardKeys = shardCount == 1
+                ? new[] { BuildEventsGsiPartitionKey(serviceId) }
+                : Enumerable.Range(0, shardCount)
+                    .Select(i => BuildEventsGsiPartitionKey(serviceId, i))
+                    .ToArray();
+
+            var latest = string.Empty;
+            foreach (var shardKey in shardKeys)
+            {
+                var request = new QueryRequest
+                {
+                    TableName = _context.EventsTableName,
+                    IndexName = DynamoDbContext.EventsGsiName,
+                    KeyConditionExpression = "gsi1pk = :pk",
+                    ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                    {
+                        [":pk"] = new AttributeValue { S = shardKey }
+                    },
+                    ScanIndexForward = false,
+                    Limit = 1,
+                    ProjectionExpression = "sortableUniqueId"
+                };
+
+                var response = await _client.QueryAsync(request).ConfigureAwait(false);
+                if (response.Items.Count > 0 &&
+                    response.Items[0].TryGetValue("sortableUniqueId", out var attr))
+                {
+                    var id = attr.S;
+                    if (string.Compare(id, latest, StringComparison.Ordinal) > 0)
+                    {
+                        latest = id;
+                    }
+                }
+            }
+
+            return ResultBox.FromValue(latest);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<string>(ex);
+        }
+    }
+
     /// <summary>
     ///     Returns all tag infos, optionally filtered by tag group.
     /// </summary>

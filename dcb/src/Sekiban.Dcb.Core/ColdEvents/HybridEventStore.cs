@@ -64,6 +64,9 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
         => _hotStore.GetAllTagsAsync(tagGroup);
 
+    public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+        => _hotStore.GetLatestSortableUniqueIdAsync();
+
     public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
         ITag tag, SortableUniqueId? since = null)
         => _hotStore.ReadSerializableEventsByTagAsync(tag, since);

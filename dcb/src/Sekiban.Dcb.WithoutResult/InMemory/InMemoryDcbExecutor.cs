@@ -68,6 +68,9 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
         IListQueryCommon<TResult> queryCommon) =>
         _inner.QueryAsync(queryCommon);
 
+    Task<string> ISekibanExecutor.GetLatestSortableUniqueIdAsync() =>
+        _inner.GetLatestSortableUniqueIdAsync();
+
     Task<ResultBox<SerializableTagState>> ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _inner.GetSerializableTagStateAsync(tagStateId);
 
@@ -328,6 +331,18 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                     StringComparison.Ordinal) > 0);
 
                 return Task.FromResult(ResultBox.FromValue((long)count));
+            }
+        }
+
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+        {
+            var state = GetState();
+            lock (state.Lock)
+            {
+                var latest = state.Events.Count > 0
+                    ? state.Events[^1].SortableUniqueIdValue
+                    : string.Empty;
+                return Task.FromResult(ResultBox.FromValue(latest));
             }
         }
 

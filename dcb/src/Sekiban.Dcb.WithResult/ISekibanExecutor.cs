@@ -34,4 +34,11 @@ public interface ISekibanExecutor : ICommandExecutor
     /// <returns>The paginated query result</returns>
     Task<ResultBox<ListQueryResult<TResult>>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
         where TResult : notnull;
+
+    /// <summary>
+    ///     Gets the latest (maximum) SortableUniqueId across all events in the event store.
+    ///     Useful for passing to IWaitForSortableUniqueId to ensure projection catch-up.
+    ///     Returns empty string if no events exist.
+    /// </summary>
+    Task<ResultBox<string>> GetLatestSortableUniqueIdAsync();
 }

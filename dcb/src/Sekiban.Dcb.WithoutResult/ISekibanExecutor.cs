@@ -42,4 +42,12 @@ public interface ISekibanExecutor : ICommandExecutor
     /// <exception cref="Exception">Thrown when query execution fails</exception>
     Task<ListQueryResult<TResult>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
         where TResult : notnull;
+
+    /// <summary>
+    ///     Gets the latest (maximum) SortableUniqueId across all events in the event store.
+    ///     Useful for passing to IWaitForSortableUniqueId to ensure projection catch-up.
+    ///     Returns empty string if no events exist.
+    /// </summary>
+    /// <exception cref="Exception">Thrown when the event store query fails</exception>
+    Task<string> GetLatestSortableUniqueIdAsync();
 }

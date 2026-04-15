@@ -302,6 +302,9 @@ public class OrleansTagStatePersistentTests
         public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) =>
             Task.FromResult(ResultBox.FromValue(Enumerable.Empty<TagInfo>()));
 
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
+            Task.FromResult(ResultBox.FromValue(string.Empty));
+
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             Task.FromResult(ResultBox.FromValue(Enumerable.Empty<SerializableEvent>()));
 

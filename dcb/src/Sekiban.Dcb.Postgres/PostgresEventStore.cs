@@ -344,6 +344,27 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         }
     }
 
+    public async Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var serviceId = CurrentServiceId;
+
+            var latest = await context.Events
+                .Where(e => e.ServiceId == serviceId)
+                .OrderByDescending(e => e.SortableUniqueId)
+                .Select(e => e.SortableUniqueId)
+                .FirstOrDefaultAsync();
+
+            return ResultBox.FromValue(latest ?? string.Empty);
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<string>(ex);
+        }
+    }
+
     public async Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
     {
         try

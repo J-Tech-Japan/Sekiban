@@ -282,6 +282,18 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
         }
     }
 
+    public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+    {
+        var state = GetState();
+        lock (state.Lock)
+        {
+            var latest = state.EventOrder.Count > 0
+                ? state.EventOrder[^1].SortableUniqueIdValue
+                : string.Empty;
+            return Task.FromResult(ResultBox.FromValue(latest));
+        }
+    }
+
     public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null)
     {
         var state = GetState();

@@ -746,6 +746,9 @@ public class CoreGeneralSekibanExecutor
         }
     }
 
+    public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
+        _eventStore.GetLatestSortableUniqueIdAsync();
+
     /// <summary>
     ///     Parses a tag string into an ITag for serialized commit.
     ///     Consistency tags are wrapped in ConsistencyTag, others in FallbackTag.
