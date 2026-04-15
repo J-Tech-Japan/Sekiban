@@ -254,11 +254,11 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
                 return ResultBox.FromValue(serializers.serialize(domainTypes, safeWindowThreshold, payload));
             }
 
-            // Fallback: JSON serialize + Gzip compression
-            var json = JsonSerializer.Serialize(payload, payload.GetType(), domainTypes.JsonSerializerOptions);
-            var rawBytes = Encoding.UTF8.GetBytes(json);
-            var originalSize = rawBytes.LongLength;
-            var compressed = GzipCompression.Compress(rawBytes);
+            // Fallback: stream JSON directly into GZip to avoid holding json string + raw bytes + gzip bytes at once.
+            var (compressed, originalSize) = GzipCompression.CompressJson(
+                payload,
+                payload.GetType(),
+                domainTypes.JsonSerializerOptions);
             var compressedSize = compressed.LongLength;
 
             return ResultBox.FromValue(new SerializationResult(
@@ -269,6 +269,61 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
         catch (Exception ex)
         {
             return ResultBox.Error<SerializationResult>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Stream-oriented fallback. For the default JSON+Gzip serializer, the compressed
+    ///     bytes are piped straight into the destination stream, so a large multi-projection
+    ///     snapshot never needs the full compressed payload in managed memory. Custom
+    ///     serializers still fall back to materializing via <see cref="Serialize" />.
+    /// </summary>
+    public ResultBox<SerializationSizeInfo> SerializeToStream(
+        string projectorName,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
+        IMultiProjectionPayload payload,
+        Stream destination)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(safeWindowThreshold))
+            {
+                return ResultBox.Error<SerializationSizeInfo>(
+                    new ArgumentException("safeWindowThreshold must be supplied"));
+            }
+            if (destination is null)
+            {
+                return ResultBox.Error<SerializationSizeInfo>(new ArgumentNullException(nameof(destination)));
+            }
+
+            if (_customSerializers.TryGetValue(projectorName, out var serializers))
+            {
+                var serializeResult = serializers.serialize(domainTypes, safeWindowThreshold, payload);
+                if (serializeResult.Data is { Length: > 0 })
+                {
+                    destination.Write(serializeResult.Data, 0, serializeResult.Data.Length);
+                }
+                return ResultBox.FromValue(new SerializationSizeInfo(
+                    serializeResult.OriginalSizeBytes,
+                    serializeResult.CompressedSizeBytes));
+            }
+
+            var startPosition = destination.CanSeek ? destination.Position : 0L;
+            var originalSize = GzipCompression.CompressJsonToStream(
+                destination,
+                payload,
+                payload.GetType(),
+                domainTypes.JsonSerializerOptions);
+            var compressedSize = destination.CanSeek
+                ? Math.Max(0, destination.Position - startPosition)
+                : originalSize;
+
+            return ResultBox.FromValue(new SerializationSizeInfo(originalSize, compressedSize));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<SerializationSizeInfo>(ex);
         }
     }
 

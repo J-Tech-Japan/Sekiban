@@ -31,6 +31,12 @@ public static class SekibanDcbNativeRuntimeExtensions
         services.TryAddSingleton<SnapshotTempFileOptions>();
         services.TryAddSingleton<TempFileSnapshotManager>();
 
+        // Stream-first snapshot persistence: the spillable payload buffer keeps the
+        // serialized multi-projection payload off the managed heap once it exceeds the
+        // in-memory threshold, removing the large transient byte[] spike during persist.
+        services.TryAddSingleton<SpillableSnapshotPayloadOptions>();
+        services.TryAddSingleton<ISnapshotPayloadBufferProvider, SpillableSnapshotPayloadBufferProvider>();
+
         return services;
     }
 }

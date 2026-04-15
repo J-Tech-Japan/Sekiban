@@ -47,7 +47,8 @@ public class NativeProjectionActorHost : IProjectionActorHost
             jsonOptions,
             _actor,
             serviceProvider.GetService<IBlobStorageSnapshotAccessor>(),
-            resolvedLogger);
+            resolvedLogger,
+            serviceProvider.GetService<ISnapshotPayloadBufferProvider>());
     }
 
     public Task AddSerializableEventsAsync(

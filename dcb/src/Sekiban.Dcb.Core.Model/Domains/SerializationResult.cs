@@ -19,3 +19,18 @@ public record SerializationResult(
         ? (double)CompressedSizeBytes / OriginalSizeBytes
         : 1.0;
 }
+
+/// <summary>
+///     Size information produced by a stream-oriented serialization pass.
+///     Used by the stream-first multi-projection persistence path so callers can
+///     report both uncompressed and compressed sizes without holding the serialized
+///     <see cref="byte"/>[] in managed memory.
+/// </summary>
+/// <param name="OriginalSizeBytes">Size before compression (number of bytes written to the counting writer)</param>
+/// <param name="CompressedSizeBytes">Size after compression (number of bytes written to the destination stream)</param>
+public record SerializationSizeInfo(long OriginalSizeBytes, long CompressedSizeBytes)
+{
+    public double CompressionRatio => OriginalSizeBytes > 0
+        ? (double)CompressedSizeBytes / OriginalSizeBytes
+        : 1.0;
+}

@@ -18,17 +18,20 @@ internal class NativeProjectionSnapshotHandler
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly GeneralMultiProjectionActor _actor;
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
+    private readonly ISnapshotPayloadBufferProvider? _payloadBufferProvider;
     private readonly ILogger _logger;
 
     public NativeProjectionSnapshotHandler(
         JsonSerializerOptions jsonOptions,
         GeneralMultiProjectionActor actor,
         IBlobStorageSnapshotAccessor? blobAccessor,
-        ILogger logger)
+        ILogger logger,
+        ISnapshotPayloadBufferProvider? payloadBufferProvider = null)
     {
         _jsonOptions = jsonOptions;
         _actor = actor;
         _blobAccessor = blobAccessor;
+        _payloadBufferProvider = payloadBufferProvider;
         _logger = logger;
     }
 
@@ -102,11 +105,21 @@ internal class NativeProjectionSnapshotHandler
                 }
             }
 
-            var snapshotResult = await _actor.BuildSnapshotEnvelopeAsync(
-                canGetUnsafeState,
-                _blobAccessor,
-                offloadThresholdBytes,
-                cancellationToken);
+            // Prefer the stream-first persistence path when a spillable buffer is available.
+            // It keeps the serialized payload off the managed heap for large snapshots and
+            // streams directly to blob storage when the payload crosses the offload threshold.
+            var snapshotResult = _payloadBufferProvider is not null
+                ? await _actor.BuildSnapshotEnvelopeStreamFirstAsync(
+                    _payloadBufferProvider,
+                    canGetUnsafeState,
+                    _blobAccessor,
+                    offloadThresholdBytes,
+                    cancellationToken)
+                : await _actor.BuildSnapshotEnvelopeAsync(
+                    canGetUnsafeState,
+                    _blobAccessor,
+                    offloadThresholdBytes,
+                    cancellationToken);
             if (!snapshotResult.IsSuccess)
             {
                 return ResultBox.Error<bool>(snapshotResult.GetException());

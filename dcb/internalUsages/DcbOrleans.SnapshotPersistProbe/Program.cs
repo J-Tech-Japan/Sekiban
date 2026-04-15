@@ -60,9 +60,23 @@ internal static class Program
     {
         var domainTypes = BuildDomainTypes();
         var primitive = new NativeMultiProjectionProjectionPrimitive(domainTypes);
-        var services = new ServiceCollection()
-            .AddSingleton<IBlobStorageSnapshotAccessor>(workspace.BlobAccessor)
-            .BuildServiceProvider();
+        var servicesBuilder = new ServiceCollection()
+            .AddSingleton<IBlobStorageSnapshotAccessor>(workspace.BlobAccessor);
+
+        // Stream-first mode registers a spillable payload buffer so the handler picks
+        // the new zero-materialization persist path internally.
+        if (options.Mode == ProbeMode.StreamFirst)
+        {
+            servicesBuilder.AddSingleton<ISnapshotPayloadBufferProvider>(
+                new SpillableSnapshotPayloadBufferProvider(
+                    new SpillableSnapshotPayloadOptions
+                    {
+                        InMemoryThresholdBytes = options.SpillThresholdBytes,
+                        TempDirectory = workspace.SpillDirectory
+                    }));
+        }
+
+        var services = servicesBuilder.BuildServiceProvider();
         var host = new NativeProjectionActorHost(
             domainTypes,
             services,
@@ -117,6 +131,11 @@ internal static class Program
                 host,
                 snapshotStream,
                 options.OffloadThresholdBytes).ConfigureAwait(false),
+            ProbeMode.StreamFirst => await host.WriteSnapshotForPersistenceToStreamAsync(
+                snapshotStream,
+                canGetUnsafeState: false,
+                offloadThresholdBytes: options.OffloadThresholdBytes,
+                CancellationToken.None).ConfigureAwait(false),
             _ => throw new ArgumentOutOfRangeException()
         };
 
@@ -251,9 +270,13 @@ internal sealed class ProbeWorkspace : IDisposable
     {
         Directory.CreateDirectory(_rootDirectory);
         BlobAccessor = new TempFileBlobStorageSnapshotAccessor(Path.Combine(_rootDirectory, "blob"));
+        SpillDirectory = Path.Combine(_rootDirectory, "spill");
+        Directory.CreateDirectory(SpillDirectory);
     }
 
     public TempFileBlobStorageSnapshotAccessor BlobAccessor { get; }
+
+    public string SpillDirectory { get; }
 
     public void Dispose()
     {
@@ -307,6 +330,7 @@ internal sealed record ProbeOptions(
     int EventCount,
     int PayloadSizeBytes,
     int OffloadThresholdBytes,
+    int SpillThresholdBytes,
     int Iterations)
 {
     public static ProbeOptions Parse(string[] args)
@@ -315,6 +339,7 @@ internal sealed record ProbeOptions(
         var eventCount = 24;
         var payloadSizeBytes = 512 * 1024;
         var offloadThresholdBytes = 1024 * 1024;
+        var spillThresholdBytes = 64 * 1024;
         var iterations = 3;
 
         for (var index = 0; index < args.Length; index += 2)
@@ -339,6 +364,9 @@ internal sealed record ProbeOptions(
                 case "--offload-threshold-bytes":
                     offloadThresholdBytes = int.Parse(value);
                     break;
+                case "--spill-threshold-bytes":
+                    spillThresholdBytes = int.Parse(value);
+                    break;
                 case "--iterations":
                     iterations = int.Parse(value);
                     break;
@@ -347,7 +375,7 @@ internal sealed record ProbeOptions(
             }
         }
 
-        return new ProbeOptions(mode, eventCount, payloadSizeBytes, offloadThresholdBytes, iterations);
+        return new ProbeOptions(mode, eventCount, payloadSizeBytes, offloadThresholdBytes, spillThresholdBytes, iterations);
     }
 
     private static ProbeMode ParseMode(string value) =>
@@ -355,14 +383,16 @@ internal sealed record ProbeOptions(
         {
             "legacy" => ProbeMode.Legacy,
             "offloaded" => ProbeMode.Offloaded,
-            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Mode must be legacy or offloaded.")
+            "streamfirst" or "stream-first" => ProbeMode.StreamFirst,
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Mode must be legacy, offloaded, or streamfirst.")
         };
 }
 
 internal enum ProbeMode
 {
     Legacy,
-    Offloaded
+    Offloaded,
+    StreamFirst
 }
 
 internal sealed record ProbeSummary(
