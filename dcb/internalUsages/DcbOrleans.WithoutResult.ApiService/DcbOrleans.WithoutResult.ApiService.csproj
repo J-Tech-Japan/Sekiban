@@ -42,6 +42,8 @@
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans.WithoutResult\Sekiban.Dcb.Orleans.WithoutResult.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.BlobStorage.AzureStorage\Sekiban.Dcb.BlobStorage.AzureStorage.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.ColdStorage\Sekiban.Dcb.ColdStorage.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView\Sekiban.Dcb.MaterializedView.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.Postgres\Sekiban.Dcb.MaterializedView.Postgres.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.CosmosDb\Sekiban.Dcb.CosmosDb.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Sqlite\Sekiban.Dcb.Sqlite.csproj" />

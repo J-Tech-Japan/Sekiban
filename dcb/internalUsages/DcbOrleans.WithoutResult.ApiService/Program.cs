@@ -6,6 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.ClassRoom;
 using Dcb.Domain.WithoutResult.Enrollment;
+using Dcb.Domain.WithoutResult.MaterializedViews;
+using Dcb.Domain.WithoutResult.Order;
 using Dcb.Domain.WithoutResult.Queries;
 using Dcb.Domain.WithoutResult.Student;
 using Dcb.Domain.WithoutResult.Weather;
@@ -28,6 +30,8 @@ using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
 using Sekiban.Dcb.ColdEvents;
+using Sekiban.Dcb.MaterializedView;
+using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.ServiceId;
 var builder = WebApplication.CreateBuilder(args);
 
@@ -395,6 +399,12 @@ builder.Services.AddSingleton(domainTypes);
 // Register native runtime abstraction interfaces
 builder.Services.AddSekibanDcbNativeRuntime();
 builder.Services.AddSekibanDcbColdEventDefaults();
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.BatchSize = 100;
+    options.PollInterval = TimeSpan.FromSeconds(1);
+});
+builder.Services.AddMaterializedView<OrderSummaryMvV1>();
 
 // Configure database storage based on configuration
 if (databaseType == "cosmos")
@@ -419,6 +429,7 @@ else
     builder.Services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
     builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
     builder.Services.AddSekibanDcbPostgresWithAspire();
+    builder.Services.AddSekibanDcbMaterializedViewPostgres(builder.Configuration);
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Postgres.PostgresMultiProjectionStateStore>();
 }
 
@@ -489,6 +500,63 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 
 // Student endpoints
+apiRoute
+    .MapPost(
+        "/orders",
+        async ([FromBody] CreateOrder command, [FromServices] ISekibanExecutor executor) =>
+        {
+            var execution = await executor.ExecuteAsync(command);
+            var createdEvent = execution.Events.FirstOrDefault(item => item.Payload is OrderCreated)?.Payload as OrderCreated;
+            return Results.Ok(
+                new
+                {
+                    orderId = createdEvent?.OrderId ?? command.OrderId,
+                    eventId = execution.EventId,
+                    sortableUniqueId = execution.SortableUniqueId,
+                    message = "Order created successfully"
+                });
+        })
+    .WithOpenApi()
+    .WithName("CreateOrder");
+
+apiRoute
+    .MapPost(
+        "/orders/{orderId:guid}/items",
+        async (Guid orderId, [FromBody] AddOrderItem command, [FromServices] ISekibanExecutor executor) =>
+        {
+            var execution = await executor.ExecuteAsync(command with { OrderId = orderId });
+            var addedEvent = execution.Events.FirstOrDefault(item => item.Payload is OrderItemAdded)?.Payload as OrderItemAdded;
+            return Results.Ok(
+                new
+                {
+                    orderId,
+                    itemId = addedEvent?.ItemId ?? command.ItemId,
+                    eventId = execution.EventId,
+                    sortableUniqueId = execution.SortableUniqueId,
+                    message = "Order item added successfully"
+                });
+        })
+    .WithOpenApi()
+    .WithName("AddOrderItem");
+
+apiRoute
+    .MapPost(
+        "/orders/{orderId:guid}/cancel",
+        async (Guid orderId, [FromBody] CancelOrder command, [FromServices] ISekibanExecutor executor) =>
+        {
+            var execution = await executor.ExecuteAsync(command with { OrderId = orderId });
+            return Results.Ok(
+                new
+                {
+                    orderId,
+                    eventId = execution.EventId,
+                    sortableUniqueId = execution.SortableUniqueId,
+                    message = "Order cancelled successfully"
+                });
+        })
+    .WithOpenApi()
+    .WithName("CancelOrder");
+
 apiRoute
     .MapPost(
         "/students",

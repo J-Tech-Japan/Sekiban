@@ -48,6 +48,8 @@
   <Folder Name="/dcb/src/">
     <Project Path="dcb/src/Sekiban.Dcb.Core.Model/Sekiban.Dcb.Core.Model.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.Core/Sekiban.Dcb.Core.csproj" />
+    <Project Path="dcb/src/Sekiban.Dcb.MaterializedView/Sekiban.Dcb.MaterializedView.csproj" />
+    <Project Path="dcb/src/Sekiban.Dcb.MaterializedView.Postgres/Sekiban.Dcb.MaterializedView.Postgres.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.WithResult.Model/Sekiban.Dcb.WithResult.Model.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.WithResult/Sekiban.Dcb.WithResult.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.WithoutResult.Model/Sekiban.Dcb.WithoutResult.Model.csproj" />
@@ -84,6 +86,8 @@
   </Folder>
   <Folder Name="/dcb/tests/">
     <Project Path="dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj" />
+    <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.Tests/Sekiban.Dcb.MaterializedView.Tests.csproj" />
+    <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.Postgres.Tests/Sekiban.Dcb.MaterializedView.Postgres.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj" />

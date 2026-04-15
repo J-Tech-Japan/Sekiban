@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
+    <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView\Sekiban.Dcb.MaterializedView.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="ResultBoxes" Version="0.4.0" />

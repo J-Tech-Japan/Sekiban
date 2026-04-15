@@ -1,5 +1,6 @@
 using Dcb.Domain.WithoutResult.ClassRoom;
 using Dcb.Domain.WithoutResult.Enrollment;
+using Dcb.Domain.WithoutResult.Order;
 using Dcb.Domain.WithoutResult.Projections;
 using Dcb.Domain.WithoutResult.Queries;
 using Dcb.Domain.WithoutResult.Student;
@@ -29,22 +30,28 @@ public static class DomainType
             types.EventTypes.RegisterEventType<WeatherForecastUpdated>();
             types.EventTypes.RegisterEventType<WeatherForecastDeleted>();
             types.EventTypes.RegisterEventType<LocationNameChanged>();
+            types.EventTypes.RegisterEventType<OrderCreated>();
+            types.EventTypes.RegisterEventType<OrderItemAdded>();
+            types.EventTypes.RegisterEventType<OrderCancelled>();
 
             // Register tag projectors
             types.TagProjectorTypes.RegisterProjector<StudentProjector>();
             types.TagProjectorTypes.RegisterProjector<ClassRoomProjector>();
             types.TagProjectorTypes.RegisterProjector<WeatherForecastProjector>();
+            types.TagProjectorTypes.RegisterProjector<OrderProjector>();
 
             // Register tag state payload types
             types.TagStatePayloadTypes.RegisterPayloadType<StudentState>();
             types.TagStatePayloadTypes.RegisterPayloadType<AvailableClassRoomState>();
             types.TagStatePayloadTypes.RegisterPayloadType<FilledClassRoomState>();
             types.TagStatePayloadTypes.RegisterPayloadType<WeatherForecastState>();
+            types.TagStatePayloadTypes.RegisterPayloadType<OrderState>();
 
             // Register tag types
             types.TagTypes.RegisterTagGroupType<StudentTag>();
             types.TagTypes.RegisterTagGroupType<ClassRoomTag>();
             types.TagTypes.RegisterTagGroupType<WeatherForecastTag>();
+            types.TagTypes.RegisterTagGroupType<OrderTag>();
 
             // Register multi-projectors
             types.MultiProjectorTypes.RegisterProjector<WeatherForecastProjection>();
