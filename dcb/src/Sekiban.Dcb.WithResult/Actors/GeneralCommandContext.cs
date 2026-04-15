@@ -19,6 +19,10 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore? _eventStore;
 
+    /// <summary>
+    ///     Creates a context without IEventStore. GetMaxTagInTagGroupAsync will return NotSupportedException.
+    ///     Prefer the constructor that accepts IEventStore for full functionality.
+    /// </summary>
     public GeneralCommandContext(IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes)
     {
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
