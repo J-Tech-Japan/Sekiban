@@ -1,7 +1,7 @@
 # DCB Materialized View — Design Document
 
 **Status**: Proposal (design-only, no implementation in this PR)
-**Scope**: New public API in `Sekiban.Dcb.Core` (new interfaces), new packages `Sekiban.Dcb.MaterializedView` + `Sekiban.Dcb.MaterializedView.Postgres`, integration with existing event store
+**Scope**: New .NET authoring API in `Sekiban.Dcb.MaterializedView` plus `Sekiban.Dcb.MaterializedView.Postgres`, with a future language-neutral runtime protocol for Wasm/remote execution, integrated with the existing event store
 **Working name**: **"DCB Materialized View"** (DCB MV / `Mv*`). The feature is distinct from the existing multi-projection model and uses a separate name to avoid confusion.
 
 ---
@@ -60,8 +60,8 @@ The term **Materialized View** was chosen deliberately because:
 4. Make the developer experience familiar to users of `ICoreMultiProjector<T>` — "same mental model, different target"
 5. Keep **SQL authorship in the developer's hands** — no SQL dialect abstraction leaks
 6. Provide **row metadata** for idempotency and debugging (`_last_sortable_unique_id`)
-7. Allow **cross-view reads** during apply, via a context helper that resolves the active version of another materialized view
-8. Be **WASM-friendly**: all boundary data is JSON or string-shaped
+7. Allow **cross-view reads** during apply, via a context helper that resolves a dependency-pinned version of another materialized view rather than a live mutable active pointer
+8. Keep the **.NET authoring API idiomatic** while reserving a separate language-neutral runtime protocol for future Wasm/remote execution
 9. Keep all names distinct from existing DCB types so code search and IntelliSense stay unambiguous
 
 ### Non-goals
@@ -92,7 +92,7 @@ A DCB materialized view has exactly two phases:
 
 **Phase 1 (Initialize)** runs once when the view version is first registered in the MV registry. It creates the physical tables, indexes, and any preparatory structures.
 
-**Phase 2 (Apply)** runs for every event during catch-up and steady-state. It consumes an event, optionally reads existing rows, and returns a list of `MvSqlStatement`s describing the writes. The framework executes the list inside a single transaction and advances `current_position`.
+**Phase 2 (Apply)** runs for every event during catch-up and steady-state. It consumes an event, optionally reads existing rows, and returns a list of `MvSqlStatement`s describing the writes. The framework opens a transaction first, binds the apply context to that transaction/snapshot, performs the reads through that context, then executes the returned list and advances `current_position` in the same transaction.
 
 The apply method is named `ApplyToViewAsync` (not `ApplyAsync` or `ProjectAsync`) to make its purpose unmistakable and avoid visual confusion with `ICoreMultiProjector.Project` when both types appear in the same file.
 
@@ -112,7 +112,7 @@ This has several benefits:
 - **Dry-run / logging is trivial** — you have all the SQL as data
 - **Pipeline optimization** — framework can log/audit/transform before executing
 
-Reads **are** executed immediately through the context, since apply logic often needs to read existing rows and branch on them. Separating "reads happen now, writes happen at the end" is conceptually clean.
+Reads **are** executed immediately through the context, since apply logic often needs to read existing rows and branch on them. The important contract is that those reads happen against the **same transaction/snapshot** that later executes the returned writes, so the read-modify-write cycle stays consistent.
 
 ### 3.3 Developer writes SQL; framework abstracts nothing
 
@@ -150,17 +150,19 @@ The `IMvApplyContext` exposes `CurrentSortableUniqueId` so user code can embed i
 
 ### 3.5 Cross-view reads
 
-Apply logic sometimes needs to read from **another** materialized view to compute its writes (e.g., `OrderSummaryMv.ApplyToViewAsync(OrderItemAdded)` reads a discount tier from `CustomerSummaryMv`). This is supported through:
+Apply logic sometimes needs to read from **another** materialized view to compute its writes (e.g., `OrderSummaryMv.ApplyToViewAsync(OrderItemAdded)` reads a discount tier from `CustomerSummaryMv`). This must **not** resolve "whatever version is active right now", because replaying the same event stream after an activation change would otherwise produce different results.
+
+When cross-view reads are added, they are supported through a **dependency-pinned** resolver:
 
 ```csharp
-MvTable GetActiveViewTable(string viewName, string logicalTable);
-MvTable GetActiveViewTable<TView>(string logicalTable)
+MvTable GetDependencyViewTable(string viewName, string logicalTable);
+MvTable GetDependencyViewTable<TView>(string logicalTable)
     where TView : IMaterializedViewProjector;
 ```
 
-The resolution uses the **MV registry + MV active** tables (see §5) to locate the currently-active version's physical table name. Writes are forbidden across views — you can only read from another view. Your own view's writes are the only thing returned from `ApplyToViewAsync`.
+The resolution uses a **pinned dependency version map** captured for the current view version and stored in MV metadata. The apply context resolves physical table names from that pinned map, not from a live `sekiban_mv_active` lookup on every call. Writes are forbidden across views — you can only read from another view. Your own view's writes are the only thing returned from `ApplyToViewAsync`.
 
-**Consistency caveat**: during catch-up, the "other view" may be at an earlier `current_position` than your view. This is an eventually-consistent system; document it clearly.
+**Consistency caveat**: during catch-up, the dependency view may still be at an earlier `current_position` than your view. This is an eventually-consistent system; the contract here is deterministic replay, not global serializability.
 
 ---
 
@@ -181,13 +183,13 @@ IMvInitContext                             (framework provides)
  └── ExecuteAsync(sql, params)              ← used for CREATE TABLE/INDEX
 
 IMvApplyContext                            (framework provides)
- ├── DbType, Connection
+ ├── DbType, Connection, Transaction
  ├── CurrentEvent, CurrentSortableUniqueId
  ├── QuerySingleOrDefaultAsync<T>(sql, params)
  ├── QueryAsync<T>(sql, params)
  ├── QuerySingleOrDefaultRowAsync(sql, params): IMvRow?
  ├── QueryRowsAsync(sql, params): IMvRowSet
- └── GetActiveViewTable(viewName, logicalTable): MvTable
+ └── GetDependencyViewTable(viewName, logicalTable): MvTable
 ```
 
 ### 4.1 `IMaterializedViewProjector`
@@ -241,6 +243,8 @@ public readonly record struct MvSqlStatement(string Sql, object? Parameters = nu
 
 A value type. `Sql` is a raw SQL string (parameterized via `@name` placeholders). `Parameters` is an anonymous object or POCO compatible with Dapper's parameter model.
 
+`MvSqlStatement` is part of the **.NET authoring surface**, not the future cross-language ABI. A Wasm/remote runtime will use a separate serialized contract and a host adapter that converts the protocol's parameter payload into this host-side form.
+
 The name `MvSqlStatement` was chosen over plain `SqlStatement` to avoid ambiguity with any general-purpose "sql statement" type that might exist elsewhere in DCB or the broader .NET ecosystem.
 
 ### 4.4 Contexts
@@ -259,6 +263,7 @@ public interface IMvApplyContext
 {
     DbType DbType { get; }
     IDbConnection Connection { get; }
+    IDbTransaction Transaction { get; }
 
     IEvent CurrentEvent { get; }
     string CurrentSortableUniqueId { get; }
@@ -274,13 +279,15 @@ public interface IMvApplyContext
     Task<IMvRowSet> QueryRowsAsync(string sql, object? param = null);
 
     // Cross-view table resolution
-    MvTable GetActiveViewTable(string viewName, string logicalTable);
-    MvTable GetActiveViewTable<TView>(string logicalTable)
+    MvTable GetDependencyViewTable(string viewName, string logicalTable);
+    MvTable GetDependencyViewTable<TView>(string logicalTable)
         where TView : IMaterializedViewProjector;
 }
 ```
 
-`IDbConnection` is exposed as an escape hatch — developers who want to use Dapper directly (or Npgsql's COPY, or anything else) can do so without fighting the framework.
+`IMvInitContext` and `IMvApplyContext` are **.NET host-side authoring interfaces**. They are intentionally idiomatic .NET and are not themselves the Wasm/remote ABI. Future multi-language execution uses a separate serialized runtime protocol whose host adapter provides these interfaces to the .NET implementation.
+
+`IDbConnection` is exposed as an escape hatch — developers who want to use Dapper directly (or Npgsql's COPY, or anything else) can do so without fighting the framework. `IMvApplyContext.Transaction` and all read methods are bound to the same transaction/snapshot that later executes the returned statements.
 
 ---
 
@@ -328,9 +335,9 @@ CREATE TABLE sekiban_mv_registry (
     status                   TEXT NOT NULL,   -- initializing / catching_up / ready / active / retired
     current_position         TEXT,            -- last SortableUniqueId applied
     target_position          TEXT,            -- position at which catch-up is considered "ready"
-    last_sortable_unique_id  TEXT,            -- used by cross-view integrity checks
+    last_sortable_unique_id  TEXT,            -- used by dependency integrity checks
     last_updated             TIMESTAMPTZ NOT NULL,
-    metadata                 JSONB,
+    metadata                 JSONB,           -- future: dependency version map, operator metadata
     PRIMARY KEY (service_id, view_name, view_version, logical_table)
 );
 
@@ -490,7 +497,7 @@ Notice the POCOs used for reads are named `OrderRow`, `OrderItemRow` — avoidin
 
 Dapper is an excellent library and will be used **internally** in the initial Postgres implementation. But:
 
-- The public interface must not force callers (especially WASM-based MV code) to depend on Dapper types
+- The public authoring surface must not force callers, adapters, or future runtime-protocol implementations to depend on Dapper types
 - Alternative backends (Npgsql direct, ADO.NET, native Postgres driver) should be pluggable
 - WASM multi-language scenarios need an ABI-friendly row representation
 
@@ -581,23 +588,41 @@ The generator emits a `public static OrderRow FromMvRow(IMvRow row)`. This is ou
 
 ---
 
-## 8. WASM ABI considerations
+## 8. Runtime protocol / WASM considerations
 
-### 8.1 The constraint
+### 8.1 Two layers, not one
+
+This design intentionally separates two concerns:
+
+1. **.NET authoring API**
+   - `IMaterializedViewProjector`
+   - `IMvInitContext`
+   - `IMvApplyContext`
+   - `MvSqlStatement`
+2. **Language-neutral runtime protocol** (future)
+   - serialized apply request / response messages
+   - serialized read request / row result messages
+   - serialized statement list messages
+
+The .NET authoring API is optimized for maintainable .NET code. The future runtime protocol is optimized for Wasm/remote execution. They are related, but they are **not the same interface**.
+
+### 8.2 The constraint
 
 WebAssembly ABIs can only pass primitive types (`i32`, `i64`, `f32`, `f64`) and byte ranges (pointer + length). Complex C# types cannot cross the boundary directly; they must be serialized.
 
-For this framework, the items that must cross the host ↔ guest boundary are:
+That means a Wasm or remote guest must never see `IDbConnection`, `IDbTransaction`, `object? param`, or `IEvent` directly. A host adapter converts between the runtime protocol and the host-side authoring API.
+
+For this framework, the items that must cross the host ↔ guest boundary are therefore:
 
 | Direction | Payload | Suggested form |
 |---|---|---|
 | guest → host | SQL string | UTF-8 bytes |
 | guest → host | SQL parameters | JSON |
-| host → guest | Event to apply | JSON |
+| host → guest | Event envelope to apply | JSON |
 | host → guest | Row data (read result) | **JSON (PoC)** → MessagePack (opt) |
 | guest → host | `MvSqlStatement` list | JSON |
 
-### 8.2 Cost analysis
+### 8.3 Cost analysis
 
 Per-event marshaling cost estimate with JSON:
 
@@ -618,11 +643,11 @@ Throughput impact:
 
 **Conclusion**: JSON is sufficient for PoC and for most operational workloads. Extreme catch-up throughput should either use MessagePack at the boundary or stay on the native (non-WASM) path entirely.
 
-### 8.3 Key observation
+### 8.4 Key observation
 
 **SQL strings and parameters have effectively zero marshaling overhead** — they're UTF-8 strings that pass as `(ptr, len)`. The only expensive direction is row data coming back from reads. This is a well-bounded optimization target.
 
-### 8.4 Decimal handling
+### 8.5 Decimal handling
 
 `decimal` through JSON loses precision. Options, in order of preference:
 
@@ -749,9 +774,12 @@ while (!cancellationToken.IsCancellationRequested)
             break;
         }
 
-        var statements = await view.ApplyToViewAsync(ev.ToEvent(), applyContext);
-
         using var tx = connection.BeginTransaction();
+        var dependencyMap = await registry.GetPinnedDependencyMapAsync(
+            viewName, viewVersion, tx);
+        var applyContext = new PostgresMvApplyContext(
+            connection, tx, ev.ToEvent(), dependencyMap);
+        var statements = await view.ApplyToViewAsync(ev.ToEvent(), applyContext);
         foreach (var stmt in statements)
             await connection.ExecuteAsync(stmt.Sql, stmt.Parameters, tx);
         await registry.UpdatePositionAsync(
@@ -765,7 +793,7 @@ while (!cancellationToken.IsCancellationRequested)
 
 ### 10.3 Activation and rollback
 
-Activation is an atomic update of `sekiban_mv_active.active_version`. Optionally, a view-based read side (§11) allows activation to also `CREATE OR REPLACE VIEW` so external consumers see the switch atomically.
+Activation is an atomic update of `sekiban_mv_active.active_version`. When dependency-aware views are introduced, activation also captures the dependency version map that the new active version will read against. Optionally, a view-based read side (§11) allows activation to also `CREATE OR REPLACE VIEW` so external consumers see the switch atomically.
 
 Rollback from v2 to v1 is equally simple: update `active_version` back. Both versions' data tables remain intact until the operator issues `RETIRE`.
 
@@ -815,7 +843,7 @@ All registry and active entries are scoped by `service_id`. The default resolver
 - **No dialect abstraction leak**: developer owns SQL, framework owns orchestration
 - **Reuses DCB primitives**: `IEventStore`, `SortableUniqueId`, `ServiceId`, safe window
 - **Name-clash-free**: every new public type uses `MaterializedView` / `Mv*` naming
-- **WASM-ready**: everything at the boundary is string or JSON
+- **Runtime-protocol-ready**: the future Wasm/remote boundary is explicitly separate from the .NET authoring API
 - **Testable**: `ApplyToViewAsync` is pure enough to unit-test against the returned statement list
 - **AI-convertible**: existing `ICoreMultiProjector<T>` code can be mechanically translated (see `integration-notes.md`)
 

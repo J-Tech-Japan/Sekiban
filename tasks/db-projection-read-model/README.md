@@ -25,8 +25,8 @@ Every publicly exposed new type uses the full word `MaterializedView` or the sho
 
 | File | Purpose |
 |---|---|
-| `design.md` | Full design document (lifecycle, object model, context APIs, cross-view reads, WASM marshaling, ORM layers, name-collision audit) |
-| `tasks.md` | Task breakdown into phases (Phase 1 → Phase 11) and the scope of the first PoC sprint |
+| `design.md` | Full design document (lifecycle, object model, context APIs, dependency-pinned reads, runtime protocol/WASM notes, ORM layers, name-collision audit) |
+| `tasks.md` | Task breakdown into phases (Phase 1 → Phase 13) and the scope of the first PoC sprint |
 | `poc-scope.md` | Minimum viable PoC and acceptance criteria |
 | `open-questions.md` | Open questions captured during design, grouped by category |
 | `integration-notes.md` | Notes on how this fits into existing DCB architecture (relationship to `ICoreMultiProjector`, `IMultiProjectionStateStore`, `GeneralMultiProjectionActor`, safe/unsafe state) |
@@ -40,7 +40,7 @@ DCB projections currently materialize a single in-memory state that is snapshott
 - No schema evolution story for projection internals
 - Not ideal as a read model for application queries that need `WHERE` / `JOIN` / index access
 
-The DCB Materialized View subsystem provides a parallel option: projection logic still consumes events, but writes are emitted as a list of `MvSqlStatement`s that the framework executes against real tables in one transaction per event. The table shape, indexes, and queries become normal database artifacts.
+The DCB Materialized View subsystem provides a parallel option: projection logic still consumes events, but writes are emitted as a list of `MvSqlStatement`s that the framework executes against real tables in one transaction per event. Reads performed by `ApplyToViewAsync` are part of that same transaction/snapshot. The table shape, indexes, and queries become normal database artifacts.
 
 ## Relationship to existing `ICoreMultiProjector<T>`
 
@@ -55,11 +55,11 @@ The same `IEventStore`, `SortableUniqueId`, safe/unsafe window semantics, and sh
 
 1. **Two-phase lifecycle**: `InitializeAsync` (once) + `ApplyToViewAsync` (per event)
 2. **Developer writes SQL**: No SQL dialect abstraction in the framework
-3. **Writes are returned, not executed**: `ApplyToViewAsync` returns `IReadOnlyList<MvSqlStatement>`, framework executes them in one transaction
+3. **Writes are returned, not executed**: `ApplyToViewAsync` returns `IReadOnlyList<MvSqlStatement>`, framework executes them in the same transaction/snapshot used for reads
 4. **Row metadata for idempotency**: `_last_sortable_unique_id` column enables safe replay
-5. **Cross-view reads**: Read from another MV's active-version tables via a context helper
+5. **Cross-view reads**: Deferred for PoC; future support resolves dependency-pinned tables, not live active pointers
 6. **ORM via layered `IMvRow`**: Framework core exposes `IMvRow`/`IMvRowSet`, mappers sit on top, Dapper is an internal implementation detail
-7. **WASM-friendly**: All boundary data is JSON/MessagePack-friendly, SQL strings pass freely
+7. **Runtime-protocol-ready**: .NET authoring APIs stay idiomatic; future Wasm/remote execution uses a separate JSON/MessagePack-friendly protocol
 8. **Name-clash-free**: Every new public type uses `MaterializedView` or `Mv*` prefix
 
 ## This PR contains ONLY

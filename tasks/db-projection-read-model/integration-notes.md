@@ -8,7 +8,7 @@ How the new DCB Materialized View subsystem fits alongside the existing DCB code
 
 | Concept | Source location | Usage by MV |
 |---|---|---|
-| `IEvent` | `Sekiban.Dcb.Core.Model/Events/` | Input to `ApplyToViewAsync` |
+| `IEvent` | `Sekiban.Dcb.Core.Model/Events/` | Input to the .NET authoring form of `ApplyToViewAsync` |
 | `SortableUniqueId` | `Sekiban.Dcb.Core.Model/Common/SortableUniqueId.cs` | Position tracking in registry, idempotency guard |
 | `IEventStore` | `Sekiban.Dcb.Core/Storage/IEventStore.cs` | Reads events for catch-up via `ReadAllSerializableEventsAsync` |
 | `ServiceId` / `IServiceIdProvider` | existing | Multi-tenant isolation in `sekiban_mv_registry` and `sekiban_mv_active` |
@@ -117,9 +117,9 @@ tasks/db-projection-read-model/
 | Storage backend | Pluggable (`IMultiProjectionStateStore`): Postgres/Cosmos/DynamoDB/SQLite | Pluggable (`IMvRegistryStore` + Dapper): Postgres (first), others later |
 | Version identifier | `MultiProjectorVersion` (string) | `ViewVersion` (int) |
 | Write semantics | Return new `T` from `Project` | Return `IReadOnlyList<MvSqlStatement>` from `ApplyToViewAsync` |
-| Transaction boundary | Entire snapshot write | Per-event (returned list = 1 transaction) |
+| Transaction boundary | Entire snapshot write | Per-event read + returned writes + registry update in 1 transaction |
 | Reads during apply | All state in memory | SQL reads via context (`QuerySingleOrDefaultAsync` etc.) |
-| Cross-projector reads | Not directly supported | Supported via `GetActiveViewTable` |
+| Cross-projector reads | Not directly supported | Deferred in PoC; future support via dependency-pinned `GetDependencyViewTable` |
 | Safe/unsafe handling | `SafeUnsafeProjectionState<K,V>` in memory | Worker delays apply of unsafe events |
 | Actor hosting | Orleans `GeneralMultiProjectionActor` | `IHostedService` (PoC), Orleans grain later |
 | BI tool queryable | No (blob) | Yes (real tables) |
@@ -136,6 +136,7 @@ The two models solve overlapping but distinct problems. Users will pick based on
 - MV does NOT participate in DCB's conditional-append / optimistic concurrency mechanism. MV is pure read-model materialization, downstream of the event store.
 - MV does NOT try to be an actor model. Catch-up is a background job; query access is direct DB access.
 - MV does NOT expose its state via Orleans grains (in PoC). If Orleans-based query access is needed later, that's a follow-up effort.
+- MV's public .NET authoring interfaces do NOT double as the Wasm/remote ABI. Multi-language execution, when added, uses a separate serialized runtime protocol and host adapters.
 
 ---
 

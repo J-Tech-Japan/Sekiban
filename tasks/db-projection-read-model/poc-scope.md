@@ -25,11 +25,11 @@ This document defines the minimum viable PoC for DCB Materialized View. The goal
 |---|---|
 | Multiple MV versions coexisting (v1 + v2) | Requires full version manager; not needed to prove the core loop |
 | Activation/rollback API | Hardcode v1 as active for PoC |
-| Cross-view reads (Phase 8) | Single-view PoC first |
+| Cross-view reads (Phase 8) | Single-view PoC first; dependency-pinned resolution is a later phase |
 | Read-side query API (Phase 11) | Use `Connection` directly |
 | Orleans grain integration | IHostedService is enough for the first proof |
 | Source Generator for `MvRowMapper` | Reflection-based mapper is plenty for PoC |
-| MessagePack at WASM boundary | JSON is fine for PoC; WASM itself is deferred |
+| Runtime protocol implementation for WASM/remote execution | The contract is reserved in the design, but PoC ships only the .NET authoring path |
 | Multi-tenant physical name override | Use default resolver |
 | `IDependsOnMv` topological sort | Single view |
 | CLI for activation/retire | Manual SQL updates are fine for PoC |
@@ -43,7 +43,7 @@ The PoC is considered successful when all of the following are verifiable:
 2. **View initialization**: `OrderSummaryMvV1.InitializeAsync` successfully runs and creates `sekiban_mv_ordersummary_v1_orders` and `sekiban_mv_ordersummary_v1_items` tables.
 3. **Registry entries**: After initialization, `sekiban_mv_registry` contains 2 rows (one per logical table) with `status='catching_up'`. `sekiban_mv_active` contains 1 row pointing at `v1`.
 4. **Catch-up**: `MvCatchUpWorker` reads events via `IEventStore.ReadAllSerializableEventsAsync` and applies them. Events older than the safe window (5s) are applied.
-5. **Write atomicity**: For each event producing multiple `MvSqlStatement`s, all statements and the registry `current_position` update happen in a single transaction. Verified by intentionally failing a second statement and observing that the first is rolled back.
+5. **Read/write atomicity**: For each event, all reads performed by `ApplyToViewAsync`, all returned `MvSqlStatement`s, and the registry `current_position` update happen in a single transaction/snapshot. Verified by intentionally failing a second statement and observing that the first is rolled back.
 6. **Idempotency**: Killing and restarting the worker mid-event results in no duplicate writes. The `_last_sortable_unique_id` guard prevents double-apply.
 7. **Row data**: After sending a series of test commands (create order → add items → cancel), running `SELECT * FROM sekiban_mv_ordersummary_v1_orders` from `psql` returns the expected row.
 8. **Metadata columns**: Every row has a non-null `_last_sortable_unique_id` and `_last_applied_at`.

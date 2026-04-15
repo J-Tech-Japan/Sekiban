@@ -38,7 +38,7 @@ Neither package depends on `Sekiban.Dcb.Postgres` (the existing snapshot-based s
 - [ ] **2.1** Define `MvTable` sealed class (LogicalName, PhysicalName, ViewName, ViewVersion)
 - [ ] **2.2** Define `MvSqlStatement` record struct (Sql, Parameters)
 - [ ] **2.3** Define `IMvInitContext` interface (DbType, Connection, RegisterTable, ExecuteAsync)
-- [ ] **2.4** Define `IMvApplyContext` interface (DbType, Connection, CurrentEvent, CurrentSortableUniqueId, read operations, IMvRow operations, GetActiveViewTable)
+- [ ] **2.4** Define `IMvApplyContext` interface (DbType, Connection, Transaction, CurrentEvent, CurrentSortableUniqueId, read operations, IMvRow operations, GetDependencyViewTable)
 - [ ] **2.5** Define `IMaterializedViewProjector` interface (ViewName, ViewVersion, InitializeAsync, ApplyToViewAsync)
 
 ## Phase 3 — `IMvRow` Row Abstraction
@@ -83,7 +83,7 @@ Neither package depends on `Sekiban.Dcb.Postgres` (the existing snapshot-based s
 - [ ] **6.2** Implement `MvCatchUpWorker` (IHostedService-based default implementation)
   - Reads events from `IEventStore.ReadAllSerializableEventsAsync`
   - Respects safe window (5s default)
-  - Calls `ApplyToViewAsync` and executes returned statements in a transaction
+  - Opens a transaction before `ApplyToViewAsync`, runs apply-time reads and returned statements in the same transaction/snapshot
   - Updates `current_position` atomically with writes
   - Handles restart by resuming from `registry.current_position`
 - [ ] **6.3** Configuration: `MvWorkerOptions` (BatchSize, PollInterval, SafeWindowMs, etc.)
@@ -102,11 +102,12 @@ Neither package depends on `Sekiban.Dcb.Postgres` (the existing snapshot-based s
 
 **Package**: `Sekiban.Dcb.MaterializedView`
 
-- [ ] **8.1** Implement `GetActiveViewTable(viewName, logicalTable)` in `IMvApplyContext`
-- [ ] **8.2** Implement the typed variant `GetActiveViewTable<TView>(logicalTable)`
-- [ ] **8.3** Cache active version lookups within a single apply operation
-- [ ] **8.4** Document consistency caveats in XML docs
-- [ ] **8.5** Unit test: stale read during catch-up returns the data from the other view at its own current_position
+- [ ] **8.1** Implement `GetDependencyViewTable(viewName, logicalTable)` in `IMvApplyContext`
+- [ ] **8.2** Implement the typed variant `GetDependencyViewTable<TView>(logicalTable)`
+- [ ] **8.3** Resolve tables from a persisted dependency version map, not from live `sekiban_mv_active` lookups
+- [ ] **8.4** Cache dependency table lookups within a single apply operation
+- [ ] **8.5** Document determinism and consistency caveats in XML docs
+- [ ] **8.6** Unit test: replay after dependency activation change still resolves the originally pinned dependency version
 
 ## Phase 9 — Sample Application
 
@@ -128,7 +129,7 @@ Neither package depends on `Sekiban.Dcb.Postgres` (the existing snapshot-based s
 - [ ] **10.3** Idempotency test: replay same events twice, assert final state
 - [ ] **10.4** Version coexistence test: v1 `active`, v2 `catching_up`, reads go to v1
 - [ ] **10.5** Activation test: v2 reaches `ready`, activate, reads go to v2 atomically
-- [ ] **10.6** Cross-view read test: `OrderSummaryMv` reads from `CustomerSummaryMv` during apply
+- [ ] **10.6** Cross-view read test: `OrderSummaryMv` reads from `CustomerSummaryMv` through a pinned dependency version during apply
 - [ ] **10.7** Safe window test: events within unsafe window are not yet applied
 - [ ] **10.8** Recovery test: worker crashes mid-batch, on restart resumes from last committed position
 
@@ -146,7 +147,16 @@ Explicitly out of PoC scope. Planned follow-up:
 - [ ] **12.1** `[DependsOnMv(typeof(CustomerSummaryMv))]` attribute or DI-based declaration
 - [ ] **12.2** Topological sort of MVs during catch-up worker startup
 - [ ] **12.3** Cycle detection (fail at startup with clear error)
-- [ ] **12.4** Wait-for-dependency policy during cross-view reads (configurable)
+- [ ] **12.4** Capture dependency version map during activation (or equivalent explicit checkpoint) and persist it for replay determinism
+- [ ] **12.5** Wait-for-dependency policy during cross-view reads (configurable)
+
+## Phase 13 — Runtime Protocol for Wasm/Remote Execution (Deferred)
+
+- [ ] **13.1** Define serialized apply request/response contracts separate from `IMvApplyContext`
+- [ ] **13.2** Define serialized read request/response contracts for row reads
+- [ ] **13.3** Define serialized statement-list result contract separate from `MvSqlStatement`
+- [ ] **13.4** Implement host adapters between the runtime protocol and the .NET authoring API
+- [ ] **13.5** Add protocol compatibility tests against at least one non-.NET guest
 
 ---
 

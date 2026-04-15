@@ -8,6 +8,7 @@ Open questions from the design discussion, grouped by category. Each is tagged a
 
 - `[PoC]` Should the core interface be `IMaterializedViewProjector` or simply `IMvProjector`? The longer form is more searchable, the shorter form is easier to type. **Current preference: `IMaterializedViewProjector`** with `Mv*` prefix for supporting types.
 - `[PoC]` Is `ApplyToViewAsync` the right method name, or would `MaterializeAsync` / `HandleAsync` / `ApplyEventAsync` be clearer? **Current preference: `ApplyToViewAsync`** — unambiguous and mirrors existing DCB verb style.
+- `[PoC]` Are `IMaterializedViewProjector` / `IMvApplyContext` / `MvSqlStatement` the cross-language ABI? **No.** They are the .NET authoring API. Wasm/remote execution will use a separate serialized runtime protocol and host adapters.
 - `[impl]` Should `MvSqlStatement` be a `record struct` or a regular `record`? Value type avoids allocations but complicates `List<>.Add()` scenarios.
 - `[impl]` Should `MvTable` be sealed? (Current design says yes.)
 - `[later]` Does `MvRowMapper<T>` need async variants? Probably not for PoC.
@@ -36,6 +37,7 @@ Open questions from the design discussion, grouped by category. Each is tagged a
 ## Error handling and recovery
 
 - `[PoC]` On SQL execution failure: transaction rollback + retry on next worker iteration. Confirmed.
+- `[PoC]` Must apply-time reads run in the same transaction/snapshot as the returned writes and registry update? **Yes.** This is required for a deterministic read-modify-write cycle.
 - `[impl]` What is the retry policy? Exponential backoff? Max retries? For PoC, a simple "retry with 1s delay up to N times, then halt" is enough.
 - `[impl]` How does the operator re-start a halted worker after fixing a poison event? Manual `UPDATE sekiban_mv_registry SET status = 'catching_up'` is acceptable for PoC.
 - `[later]` Poison event handling: skip-and-log, dead-letter, halt-and-wait. PoC halts the worker.
@@ -50,9 +52,10 @@ Open questions from the design discussion, grouped by category. Each is tagged a
 
 ## Cross-view reads
 
-- `[impl]` What happens when `GetActiveViewTable("Foo", "bar")` is called but `Foo` has no active version (e.g., still in `catching_up`)? **Current preference: throw with a descriptive error.** Alternative would be to return null, but silent null-return in apply logic is dangerous.
-- `[later]` Should cross-view reads be cached within a single `ApplyToViewAsync` call? E.g., if the user calls `GetActiveViewTable("CustomerSummary", "customers")` three times, the resolution should be cached once per apply.
-- `[later]` How are dependencies between MVs declared? Attribute-based (`[DependsOnMv(typeof(CustomerSummaryMv))]`), DI-based, or auto-detected by scanning code for `GetActiveViewTable` calls? Defer.
+- `[impl]` What happens when `GetDependencyViewTable("Foo", "bar")` is called but `Foo` is not present in the pinned dependency map? **Current preference: throw with a descriptive error.** Silent fallback to live active resolution would break replay determinism.
+- `[impl]` When is the dependency version map captured? **Current preference: at activation time or another explicit version-management checkpoint**, then persisted in metadata so replays see the same dependency versions.
+- `[later]` Should cross-view reads be cached within a single `ApplyToViewAsync` call? E.g., if the user calls `GetDependencyViewTable("CustomerSummary", "customers")` three times, the resolution should be cached once per apply.
+- `[later]` How are dependencies between MVs declared? Attribute-based (`[DependsOnMv(typeof(CustomerSummaryMv))]`), DI-based, or auto-detected by scanning code for `GetDependencyViewTable` calls? Defer.
 - `[later]` Cycle detection — when? (compile-time analyzer? DI-time validation? first-access runtime check?)
 
 ## Version management
@@ -67,9 +70,10 @@ Open questions from the design discussion, grouped by category. Each is tagged a
 - `[impl]` Should MV projector registration be typed (`services.AddMaterializedView<OrderSummaryMvV1>()`) or collection-based (`services.AddMaterializedViews(typeof(OrderSummaryMvV1), typeof(CustomerSummaryMvV1))`)? Both are trivial; decide in implementation.
 - `[impl]` Does each MV need its own `IDbConnection` factory, or does the whole subsystem share one? For PoC, share one. Multi-database scenarios are later.
 
-## WASM
+## Runtime protocol / WASM
 
-- `[later]` WASM entirely out of PoC scope. Design document captures the strategy so that it's not painted into a corner, but no code.
+- `[later]` WASM entirely out of PoC scope. The design now explicitly separates .NET authoring interfaces from the future serialized runtime protocol so that the PoC does not paint us into a corner.
+- `[impl]` What should the first runtime protocol message set look like? Current preference: apply request/response, read request/response, statement list response, all JSON in the first iteration.
 - `[later]` When WASM is added: native + WASM mode selection via DI config, similar to what `0216_multiprojection_wasm_abstraction` does for multi-projections.
 
 ## Interaction with existing code
