@@ -140,7 +140,7 @@ internal sealed class SpillableSnapshotPayloadStream : Stream
             return;
         }
 
-        EnsureBacking(_length + count);
+        EnsureBacking(Math.Max(_length, _position + count));
 
         if (_file is not null)
         {
@@ -167,7 +167,7 @@ internal sealed class SpillableSnapshotPayloadStream : Stream
             return;
         }
 
-        EnsureBacking(_length + buffer.Length);
+        EnsureBacking(Math.Max(_length, _position + buffer.Length));
 
         if (_file is not null)
         {
@@ -197,7 +197,7 @@ internal sealed class SpillableSnapshotPayloadStream : Stream
             return;
         }
 
-        EnsureBacking(_length + buffer.Length);
+        EnsureBacking(Math.Max(_length, _position + buffer.Length));
 
         if (_file is not null)
         {
@@ -219,7 +219,7 @@ internal sealed class SpillableSnapshotPayloadStream : Stream
 
     public override void WriteByte(byte value)
     {
-        EnsureBacking(_length + 1);
+        EnsureBacking(Math.Max(_length, _position + 1));
         if (_file is not null)
         {
             _file.Position = _position;

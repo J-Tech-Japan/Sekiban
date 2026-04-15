@@ -105,10 +105,17 @@ internal class NativeProjectionSnapshotHandler
                 }
             }
 
-            // Prefer the stream-first persistence path when a spillable buffer is available.
-            // It keeps the serialized payload off the managed heap for large snapshots and
-            // streams directly to blob storage when the payload crosses the offload threshold.
-            var snapshotResult = _payloadBufferProvider is not null
+            // Prefer the stream-first persistence path only when offload is actually possible:
+            // both a blob accessor and a positive offload threshold must be configured, and a
+            // spillable payload buffer provider must be registered. For inline-only
+            // configurations (no blob accessor) the legacy byte[] path is still the fastest
+            // because it avoids the buffer allocation + rehydrate copy that stream-first does
+            // for sub-threshold payloads.
+            var canStreamFirst = _payloadBufferProvider is not null
+                && _blobAccessor is not null
+                && offloadThresholdBytes > 0;
+
+            var snapshotResult = canStreamFirst
                 ? await _actor.BuildSnapshotEnvelopeStreamFirstAsync(
                     _payloadBufferProvider,
                     canGetUnsafeState,

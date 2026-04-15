@@ -63,15 +63,15 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
             },
             SerializeToStream: (destination, domainTypes, safeWindowThreshold, payload) =>
             {
-                var startPosition = destination.CanSeek ? destination.Position : 0L;
-                var originalSize = GzipCompression.CompressJsonToStream(
+                var result = MultiProjectorStreamSerializationHelper.WriteGzipJsonToStream(
                     destination,
                     (TProjector)payload,
                     typeInfo);
-                var compressedSize = destination.CanSeek
-                    ? Math.Max(0, destination.Position - startPosition)
-                    : originalSize;
-                return new SerializationSizeInfo(originalSize, compressedSize);
+                if (!result.IsSuccess)
+                {
+                    throw result.GetException();
+                }
+                return result.GetValue();
             },
             Deserialize: (domainTypes, safeWindowThreshold, data) =>
             {

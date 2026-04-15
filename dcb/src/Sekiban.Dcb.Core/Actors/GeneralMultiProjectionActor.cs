@@ -326,11 +326,11 @@ public class GeneralMultiProjectionActor
             .ConfigureAwait(false);
 
         var bufferStream = buffer.Stream;
-        if (!bufferStream.CanWrite || !bufferStream.CanSeek)
+        if (!bufferStream.CanRead || !bufferStream.CanWrite || !bufferStream.CanSeek)
         {
             return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(
                 new InvalidOperationException(
-                    "ISnapshotPayloadBufferProvider must return a writable, seekable stream."));
+                    "ISnapshotPayloadBufferProvider must return a readable, writable, seekable stream."));
         }
 
         // Reset in case the provider reused a stream.
@@ -411,19 +411,25 @@ public class GeneralMultiProjectionActor
         // Base64 field in the envelope. Since inline payloads are below the offload threshold
         // by construction, this does not cause the large-memory spike the stream-first path
         // is designed to avoid.
-        bufferStream.Position = 0;
-        var payloadBytes = new byte[compressedLength];
-        var offset = 0;
-        while (offset < payloadBytes.Length)
+        if (compressedLength > int.MaxValue)
         {
-            var read = await bufferStream
-                .ReadAsync(payloadBytes.AsMemory(offset, payloadBytes.Length - offset), cancellationToken)
-                .ConfigureAwait(false);
-            if (read == 0)
-            {
-                break;
-            }
-            offset += read;
+            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(
+                new InvalidOperationException(
+                    $"Inline snapshot payload size {compressedLength} exceeds int.MaxValue; the payload must be offloaded via IBlobStorageSnapshotAccessor."));
+        }
+
+        bufferStream.Position = 0;
+        var payloadBytes = new byte[(int)compressedLength];
+        try
+        {
+            await bufferStream.ReadExactlyAsync(payloadBytes, cancellationToken).ConfigureAwait(false);
+        }
+        catch (EndOfStreamException ex)
+        {
+            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(
+                new InvalidOperationException(
+                    $"Snapshot payload buffer returned fewer bytes than the declared length {compressedLength} for projector {_projectorName}.",
+                    ex));
         }
 
         var inlineState = SerializableMultiProjectionState.FromBytes(

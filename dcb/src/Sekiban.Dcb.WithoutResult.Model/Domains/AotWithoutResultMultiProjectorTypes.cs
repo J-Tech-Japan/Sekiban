@@ -54,12 +54,15 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
             SerializeToStream: (destination, _, _, payload) =>
             {
                 var typed = (TProjector)payload;
-                var startPosition = destination.CanSeek ? destination.Position : 0L;
-                var originalSize = GzipCompression.CompressJsonToStream(destination, typed, typeInfo);
-                var compressedSize = destination.CanSeek
-                    ? Math.Max(0, destination.Position - startPosition)
-                    : originalSize;
-                return new SerializationSizeInfo(originalSize, compressedSize);
+                var result = MultiProjectorStreamSerializationHelper.WriteGzipJsonToStream(
+                    destination,
+                    typed,
+                    typeInfo);
+                if (!result.IsSuccess)
+                {
+                    throw result.GetException();
+                }
+                return result.GetValue();
             },
             Deserialize: (_, _, data) =>
             {
