@@ -270,8 +270,8 @@ internal sealed class TempFileBlobStorageSnapshotAccessor(string rootDirectory) 
     private const string TempFileProbeProviderName = "TempFileProbe";
     private readonly string _rootDirectory = rootDirectory;
 
-    public static string StaticProviderName => TempFileProbeProviderName;
-    public string ProviderName => StaticProviderName;
+    public static string ProviderName => TempFileProbeProviderName;
+    string IBlobStorageSnapshotAccessor.ProviderName => ProviderName;
 
     public async Task<string> WriteAsync(
         Stream data,
