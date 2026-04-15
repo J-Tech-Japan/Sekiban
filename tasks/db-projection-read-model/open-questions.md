@@ -39,7 +39,7 @@ Open questions from the design discussion, grouped by category. Each is tagged a
 - `[PoC]` On SQL execution failure: transaction rollback + retry on next worker iteration. Confirmed.
 - `[PoC]` Must apply-time reads run in the same transaction/snapshot as the returned writes and registry update? **Yes.** This is required for a deterministic read-modify-write cycle.
 - `[impl]` What is the retry policy? Exponential backoff? Max retries? For PoC, a simple "retry with 1s delay up to N times, then halt" is enough.
-- `[impl]` How does the operator re-start a halted worker after fixing a poison event? Manual `UPDATE sekiban_mv_registry SET status = 'catching_up'` is acceptable for PoC.
+- `[impl]` How does the operator restart a halted worker after fixing a poison event? Manual `UPDATE sekiban_mv_registry SET status = 'catching_up'` is acceptable for PoC.
 - `[later]` Poison event handling: skip-and-log, dead-letter, halt-and-wait. PoC halts the worker.
 
 ## ORM / `IMvRow` details
@@ -67,6 +67,7 @@ Open questions from the design discussion, grouped by category. Each is tagged a
 ## DI and configuration
 
 - `[PoC]` Options type: `MvOptions` with `PhysicalNameResolver`, `SafeWindowMs`, `BatchSize`, `PollInterval`, `TablePrefix`.
+- `[PoC]` Database engine identifier type: `MvDbType` rather than `DbType`, to avoid confusion with `System.Data.DbType`.
 - `[impl]` Should MV projector registration be typed (`services.AddMaterializedView<OrderSummaryMvV1>()`) or collection-based (`services.AddMaterializedViews(typeof(OrderSummaryMvV1), typeof(CustomerSummaryMvV1))`)? Both are trivial; decide in implementation.
 - `[impl]` Does each MV need its own `IDbConnection` factory, or does the whole subsystem share one? For PoC, share one. Multi-database scenarios are later.
 

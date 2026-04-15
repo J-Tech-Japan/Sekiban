@@ -22,7 +22,7 @@ Neither package depends on `Sekiban.Dcb.Postgres` (the existing snapshot-based s
 - [ ] **1.1** Define `MvRegistryEntry` record (service_id, view_name, view_version, logical_table, physical_table, status, current_position, target_position, last_sortable_unique_id, last_updated, metadata)
 - [ ] **1.2** Define `MvActiveEntry` record (service_id, view_name, active_version, activated_at)
 - [ ] **1.3** Define `MvStatus` enum (`Initializing`, `CatchingUp`, `Ready`, `Active`, `Retired`)
-- [ ] **1.4** Define `IMvRegistryStore` interface with operations:
+- [ ] **1.4** Define `IMvRegistryStore` interface with operations (`UpdatePositionAsync` / `UpdateStatusAsync` apply to all `logical_table` rows for a given `(viewName, viewVersion)` in one transactionally-consistent update):
   - `RegisterAsync(MvRegistryEntry entry)`
   - `UpdatePositionAsync(viewName, viewVersion, sortableUniqueId, IDbTransaction? tx)`
   - `UpdateStatusAsync(viewName, viewVersion, MvStatus status)`
@@ -37,8 +37,8 @@ Neither package depends on `Sekiban.Dcb.Postgres` (the existing snapshot-based s
 
 - [ ] **2.1** Define `MvTable` sealed class (LogicalName, PhysicalName, ViewName, ViewVersion)
 - [ ] **2.2** Define `MvSqlStatement` record struct (Sql, Parameters)
-- [ ] **2.3** Define `IMvInitContext` interface (DbType, Connection, RegisterTable, ExecuteAsync)
-- [ ] **2.4** Define `IMvApplyContext` interface (DbType, Connection, Transaction, CurrentEvent, CurrentSortableUniqueId, read operations, IMvRow operations, GetDependencyViewTable)
+- [ ] **2.3** Define `IMvInitContext` interface (`MvDbType`, Connection, RegisterTable, ExecuteAsync)
+- [ ] **2.4** Define `IMvApplyContext` interface (`MvDbType`, Connection, Transaction, CurrentEvent, CurrentSortableUniqueId, read operations, IMvRow operations, GetDependencyViewTable)
 - [ ] **2.5** Define `IMaterializedViewProjector` interface (ViewName, ViewVersion, InitializeAsync, ApplyToViewAsync)
 
 ## Phase 3 — `IMvRow` Row Abstraction
@@ -48,7 +48,7 @@ Neither package depends on `Sekiban.Dcb.Postgres` (the existing snapshot-based s
 - [ ] **3.1** Define `IMvRow` interface (ColumnCount, ColumnNames, IsNull, typed accessors for Guid/string/int/long/decimal/double/bool/DateTimeOffset/byte[], null-allowing variants, GetAs<T>, ToJson)
 - [ ] **3.2** Define `IMvRowSet` interface (inherits `IReadOnlyList<IMvRow>` + ColumnNames)
 - [ ] **3.3** Define `MvColumnAttribute` for property-to-column mapping overrides
-- [ ] **3.4** Implement `MvRowMapper<T>` with Expression-tree compilation and caching
+- [ ] **3.4** Implement `MvRowMapper<T>` with Expression-tree compilation and caching, supporting both property-based models and record primary constructors / `init`-only members
 - [ ] **3.5** Extension methods on `IMvApplyContext` (`QuerySingleOrDefaultAsync<T>`, `QueryAsync<T>`)
 
 ## Phase 4 — Row Metadata Conventions
@@ -72,8 +72,8 @@ Neither package depends on `Sekiban.Dcb.Postgres` (the existing snapshot-based s
 - [ ] **5.4** Implement `PostgresMvRow : IMvRow` adapter over Dapper's `IDataReader` output
 - [ ] **5.5** Implement `PostgresMvRowSet : IMvRowSet`
 - [ ] **5.6** Wire Dapper as an internal dependency (not exposed through public API)
-- [ ] **5.7** DI extension methods: `AddSekibanMaterializedView(Action<MvOptions>)` and `AddPostgresMv(connectionString)`
-- [ ] **5.8** Expose `DbType.Postgres` value
+- [ ] **5.7** DI extension methods: `AddSekibanDcbMaterializedView(Action<MvOptions>)` and `AddSekibanDcbMaterializedViewPostgres(connectionString)`
+- [ ] **5.8** Expose `MvDbType.Postgres` value
 
 ## Phase 6 — Catch-up Worker
 

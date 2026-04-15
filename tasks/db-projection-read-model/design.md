@@ -121,7 +121,7 @@ The framework does **not** provide `Upsert(row)`, `Insert(row)`, `Update(row)` h
 - SQL dialects diverge deeply (JSONB, UPSERT, interval types, partitioning). Any abstraction leaks.
 - Dapper already gives a great minimal API surface; we don't need another layer
 - Debugging and performance tuning are far easier when you see the actual SQL in your code
-- When a view needs to target two DBs, the developer `switch`es on `ctx.DbType` once — no framework-wide dialect system needed
+- When a view needs to target two DBs, the developer `switch`es on `ctx.DatabaseType` once — no framework-wide dialect system needed
 
 The framework provides:
 - **Physical table name resolution** (via `MvTable.PhysicalName`)
@@ -178,12 +178,12 @@ IMaterializedViewProjector                 (user implements)
 MvSqlStatement (record struct)             (value type, framework-executed)
 
 IMvInitContext                             (framework provides)
- ├── DbType, Connection
+ ├── DatabaseType, Connection
  ├── RegisterTable(logicalName): MvTable
  └── ExecuteAsync(sql, params)              ← used for CREATE TABLE/INDEX
 
 IMvApplyContext                            (framework provides)
- ├── DbType, Connection, Transaction
+ ├── DatabaseType, Connection, Transaction
  ├── CurrentEvent, CurrentSortableUniqueId
  ├── QuerySingleOrDefaultAsync<T>(sql, params)
  ├── QueryAsync<T>(sql, params)
@@ -252,7 +252,7 @@ The name `MvSqlStatement` was chosen over plain `SqlStatement` to avoid ambiguit
 ```csharp
 public interface IMvInitContext
 {
-    DbType DbType { get; }
+    MvDbType DatabaseType { get; }
     IDbConnection Connection { get; }
 
     MvTable RegisterTable(string logicalName);
@@ -261,7 +261,7 @@ public interface IMvInitContext
 
 public interface IMvApplyContext
 {
-    DbType DbType { get; }
+    MvDbType DatabaseType { get; }
     IDbConnection Connection { get; }
     IDbTransaction Transaction { get; }
 
@@ -286,6 +286,8 @@ public interface IMvApplyContext
 ```
 
 `IMvInitContext` and `IMvApplyContext` are **.NET host-side authoring interfaces**. They are intentionally idiomatic .NET and are not themselves the Wasm/remote ABI. Future multi-language execution uses a separate serialized runtime protocol whose host adapter provides these interfaces to the .NET implementation.
+
+`MvDbType` is a small MV-specific enum (`Postgres`, future `Sqlite`, etc.). It is intentionally named to avoid confusion with `System.Data.DbType`, whose values represent parameter/column types rather than a database engine.
 
 `IDbConnection` is exposed as an escape hatch — developers who want to use Dapper directly (or Npgsql's COPY, or anything else) can do so without fighting the framework. `IMvApplyContext.Transaction` and all read methods are bound to the same transaction/snapshot that later executes the returned statements.
 
@@ -314,12 +316,14 @@ Examples:
 The naming is deterministic. Overrides are allowed at DI registration time:
 
 ```csharp
-services.AddSekibanMaterializedView(opts =>
+services.AddSekibanDcbMaterializedView(opts =>
 {
     opts.PhysicalNameResolver = (view, version, logical)
-        => $"sekiban_mv_{TenantContext.Current}_{view}_v{version}_{logical}";
+        => $"sekiban_mv_{SanitizeIdentifier(TenantContext.Current)}_{view}_v{version}_{logical}";
 });
 ```
+
+Any custom `PhysicalNameResolver` must return an already-sanitized identifier segment set (`[A-Za-z0-9_]` after normalization in the default implementation). The framework should validate or reject invalid names before embedding them in DDL.
 
 ### 5.2 MV registry and active tables
 
@@ -400,7 +404,7 @@ public class OrderSummaryMvV1 : IMaterializedViewProjector
             """);
 
         await ctx.ExecuteAsync($"""
-            CREATE INDEX IF NOT EXISTS idx_{Items.LogicalName}_order_id
+            CREATE INDEX IF NOT EXISTS idx_{Items.PhysicalName}_order_id
             ON {Items.PhysicalName} (order_id)
             """);
     }
@@ -547,14 +551,14 @@ Column access is **by name only** — deliberately no positional accessors. This
 ### 7.3 `MvRowMapper<T>` (convention-based default)
 
 ```csharp
-public static class MvRowMapper<T> where T : class, new()
+public static class MvRowMapper<T> where T : class
 {
     public static T MapFrom(IMvRow row);               // Expression-tree compiled, cached
     public static IReadOnlyList<T> MapAll(IMvRowSet set);
 }
 ```
 
-Convention: `snake_case` column → `PascalCase` property, with `[MvColumn("...")]` as an override. Implementation compiles to an `Expression<Func<IMvRow, T>>` once per type and caches it — reflection overhead only on first use.
+Convention: `snake_case` column → `PascalCase` property, with `[MvColumn("...")]` as an override. Implementation compiles to an `Expression<Func<IMvRow, T>>` once per type and caches it — reflection overhead only on first use. The mapper is expected to support both property-based population and record primary constructors / `init`-only members; a parameterless constructor is not required.
 
 ### 7.4 Extension methods on the context
 
@@ -563,7 +567,7 @@ public static class MvApplyContextExtensions
 {
     public static async Task<T?> QuerySingleOrDefaultAsync<T>(
         this IMvApplyContext ctx, string sql, object? param = null)
-        where T : class, new()
+        where T : class
     {
         var row = await ctx.QuerySingleOrDefaultRowAsync(sql, param);
         return row is null ? null : MvRowMapper<T>.MapFrom(row);
@@ -663,7 +667,7 @@ For PoC, always encode `decimal` as a string at the ABI boundary.
 
 ### 9.1 `IEventStore`
 
-No changes required. The new MV catch-up worker reads events via `ReadAllSerializableEventsAsync(since: currentPosition, maxCount: batchSize)` and feeds them to `ApplyToViewAsync`.
+No changes required. The new MV catch-up worker reads events via `ReadAllSerializableEventsAsync(since: currentPosition, maxCount: batchSize)` and feeds successful results to `ApplyToViewAsync`. Read failures remain part of the worker contract because the underlying API returns `ResultBox<IEnumerable<SerializableEvent>>`.
 
 ### 9.2 `SortableUniqueId`
 
@@ -762,9 +766,29 @@ This guarantees code search like "grep -rn 'MultiProjector'" returns only the ex
 ```csharp
 while (!cancellationToken.IsCancellationRequested)
 {
-    var batch = await eventStore.ReadAllSerializableEventsAsync(
+    var readResult = await eventStore.ReadAllSerializableEventsAsync(
         since: currentPosition, maxCount: BatchSize);
-    if (!batch.Any()) { await Task.Delay(pollInterval); continue; }
+    if (!readResult.IsSuccess)
+    {
+        if (readResult.GetException() is NotSupportedException unsupported)
+        {
+            logger.LogError(
+                unsupported,
+                "ReadAllSerializableEventsAsync is not supported by the configured event store. Stopping catch-up worker for {ViewName}/{ViewVersion}.",
+                viewName, viewVersion);
+            break;
+        }
+
+        logger.LogWarning(
+            readResult.GetException(),
+            "Failed to read events for {ViewName}/{ViewVersion}. Retrying after delay.",
+            viewName, viewVersion);
+        await Task.Delay(pollInterval, cancellationToken);
+        continue;
+    }
+
+    var batch = readResult.GetValue().ToList();
+    if (batch.Count == 0) { await Task.Delay(pollInterval, cancellationToken); continue; }
 
     foreach (var ev in batch)
     {
@@ -783,7 +807,7 @@ while (!cancellationToken.IsCancellationRequested)
         foreach (var stmt in statements)
             await connection.ExecuteAsync(stmt.Sql, stmt.Parameters, tx);
         await registry.UpdatePositionAsync(
-            viewName, viewVersion, ev.SortableUniqueId, tx);
+            viewName, viewVersion, ev.SortableUniqueId, tx); // updates all logical_table rows for the view/version
         tx.Commit();
 
         currentPosition = ev.SortableUniqueId;
