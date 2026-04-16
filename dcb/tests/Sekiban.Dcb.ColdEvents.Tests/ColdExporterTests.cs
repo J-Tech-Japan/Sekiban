@@ -234,6 +234,64 @@ public class ColdExporterTests
     }
 
     [Fact]
+    public async Task ExportIncrementalAsync_should_append_when_tail_merge_is_disabled()
+    {
+        var options = EnabledOptions with
+        {
+            SegmentMaxEvents = 10,
+            SegmentMaxBytes = long.MaxValue,
+            EnableTailMerge = false
+        };
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var e1 = CreateEvent(t0, "Event1");
+        var e2 = CreateEvent(t0.AddSeconds(1), "Event2");
+        var e3 = CreateEvent(t0.AddSeconds(2), "Event3");
+
+        var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, _storage, _leaseManager);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        Assert.True(first.IsSuccess);
+
+        var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, _storage, _leaseManager);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        Assert.True(second.IsSuccess);
+
+        var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
+        Assert.NotNull(manifest);
+        Assert.Equal(2, manifest!.Segments.Count);
+        Assert.Equal(2, manifest.Segments[0].EventCount);
+        Assert.Equal(1, manifest.Segments[1].EventCount);
+    }
+
+    [Fact]
+    public async Task ExportIncrementalAsync_should_append_when_tail_merge_exceeds_local_budget()
+    {
+        var options = EnabledOptions with
+        {
+            SegmentMaxEvents = 10,
+            SegmentMaxBytes = long.MaxValue,
+            TailMergeMaxLocalBytes = 1
+        };
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var e1 = CreateEvent(t0, "Event1");
+        var e2 = CreateEvent(t0.AddSeconds(1), "Event2");
+        var e3 = CreateEvent(t0.AddSeconds(2), "Event3");
+
+        var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, _storage, _leaseManager);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        Assert.True(first.IsSuccess);
+
+        var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, _storage, _leaseManager);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        Assert.True(second.IsSuccess);
+
+        var manifest = await ColdControlFileHelper.LoadManifestAsync(_storage, ServiceId, CancellationToken.None);
+        Assert.NotNull(manifest);
+        Assert.Equal(2, manifest!.Segments.Count);
+        Assert.Equal(2, manifest.Segments[0].EventCount);
+        Assert.Equal(1, manifest.Segments[1].EventCount);
+    }
+
+    [Fact]
     public async Task ExportIncrementalAsync_should_not_grow_tiny_tail_segments_for_repeated_trickle_exports()
     {
         // Given
