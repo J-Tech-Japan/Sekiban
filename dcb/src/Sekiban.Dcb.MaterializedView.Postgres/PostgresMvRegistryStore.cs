@@ -340,25 +340,27 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
     }
 
     private static MvRegistryEntry MapEntry(IReadOnlyDictionary<string, object?> row) =>
-        new(
-            ReadRequiredString(row, "ServiceId"),
-            ReadRequiredString(row, "ViewName"),
-            ReadRequiredInt(row, "ViewVersion"),
-            ReadRequiredString(row, "LogicalTable"),
-            ReadRequiredString(row, "PhysicalTable"),
-            Enum.Parse<MvStatus>(ReadRequiredString(row, "Status"), ignoreCase: true),
-            ReadNullableString(row, "CurrentPosition"),
-            ReadNullableString(row, "TargetPosition"),
-            ReadNullableString(row, "LastSortableUniqueId"),
-            ReadRequiredLong(row, "AppliedEventVersion"),
-            ReadNullableString(row, "LastAppliedSource"),
-            ReadNullableDateTimeOffset(row, "LastAppliedAt"),
-            ReadNullableString(row, "LastStreamReceivedSortableUniqueId"),
-            ReadNullableDateTimeOffset(row, "LastStreamReceivedAt"),
-            ReadNullableString(row, "LastStreamAppliedSortableUniqueId"),
-            ReadNullableString(row, "LastCatchUpSortableUniqueId"),
-            ReadRequiredDateTimeOffset(row, "LastUpdated"),
-            ReadNullableString(row, "Metadata"));
+        new()
+        {
+            ServiceId = ReadRequiredString(row, "ServiceId"),
+            ViewName = ReadRequiredString(row, "ViewName"),
+            ViewVersion = ReadRequiredInt(row, "ViewVersion"),
+            LogicalTable = ReadRequiredString(row, "LogicalTable"),
+            PhysicalTable = ReadRequiredString(row, "PhysicalTable"),
+            Status = Enum.Parse<MvStatus>(ReadRequiredString(row, "Status"), ignoreCase: true),
+            CurrentPosition = ReadNullableString(row, "CurrentPosition"),
+            TargetPosition = ReadNullableString(row, "TargetPosition"),
+            LastSortableUniqueId = ReadNullableString(row, "LastSortableUniqueId"),
+            AppliedEventVersion = ReadRequiredLong(row, "AppliedEventVersion"),
+            LastAppliedSource = ReadNullableString(row, "LastAppliedSource"),
+            LastAppliedAt = ReadNullableDateTimeOffset(row, "LastAppliedAt"),
+            LastStreamReceivedSortableUniqueId = ReadNullableString(row, "LastStreamReceivedSortableUniqueId"),
+            LastStreamReceivedAt = ReadNullableDateTimeOffset(row, "LastStreamReceivedAt"),
+            LastStreamAppliedSortableUniqueId = ReadNullableString(row, "LastStreamAppliedSortableUniqueId"),
+            LastCatchUpSortableUniqueId = ReadNullableString(row, "LastCatchUpSortableUniqueId"),
+            LastUpdated = ReadRequiredDateTimeOffset(row, "LastUpdated"),
+            Metadata = ReadNullableString(row, "Metadata")
+        };
 
     private static MvActiveEntry MapActiveEntry(IReadOnlyDictionary<string, object?> row) =>
         new(

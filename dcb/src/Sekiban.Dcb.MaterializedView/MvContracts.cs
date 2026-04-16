@@ -43,25 +43,27 @@ public sealed class MvTable
 
 public readonly record struct MvSqlStatement(string Sql, object? Parameters = null);
 
-public sealed record MvRegistryEntry(
-    string ServiceId,
-    string ViewName,
-    int ViewVersion,
-    string LogicalTable,
-    string PhysicalTable,
-    MvStatus Status,
-    string? CurrentPosition,
-    string? TargetPosition,
-    string? LastSortableUniqueId,
-    long AppliedEventVersion,
-    string? LastAppliedSource,
-    DateTimeOffset? LastAppliedAt,
-    string? LastStreamReceivedSortableUniqueId,
-    DateTimeOffset? LastStreamReceivedAt,
-    string? LastStreamAppliedSortableUniqueId,
-    string? LastCatchUpSortableUniqueId,
-    DateTimeOffset LastUpdated,
-    string? Metadata);
+public sealed record MvRegistryEntry
+{
+    public string ServiceId { get; init; } = string.Empty;
+    public string ViewName { get; init; } = string.Empty;
+    public int ViewVersion { get; init; }
+    public string LogicalTable { get; init; } = string.Empty;
+    public string PhysicalTable { get; init; } = string.Empty;
+    public MvStatus Status { get; init; }
+    public string? CurrentPosition { get; init; }
+    public string? TargetPosition { get; init; }
+    public string? LastSortableUniqueId { get; init; }
+    public long AppliedEventVersion { get; init; }
+    public string? LastAppliedSource { get; init; }
+    public DateTimeOffset? LastAppliedAt { get; init; }
+    public string? LastStreamReceivedSortableUniqueId { get; init; }
+    public DateTimeOffset? LastStreamReceivedAt { get; init; }
+    public string? LastStreamAppliedSortableUniqueId { get; init; }
+    public string? LastCatchUpSortableUniqueId { get; init; }
+    public DateTimeOffset LastUpdated { get; init; }
+    public string? Metadata { get; init; }
+}
 
 public sealed record MvActiveEntry(
     string ServiceId,

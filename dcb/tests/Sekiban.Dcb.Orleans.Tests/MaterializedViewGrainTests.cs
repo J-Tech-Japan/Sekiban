@@ -406,25 +406,17 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             }
 
             await RegisterAsync(
-                new MvRegistryEntry(
-                    serviceId,
-                    viewName,
-                    viewVersion,
-                    "main",
-                    $"{viewName.ToLowerInvariant()}_main",
-                    MvStatus.CatchingUp,
-                    CurrentPosition: null,
-                    TargetPosition: null,
-                    LastSortableUniqueId: null,
-                    AppliedEventVersion: 0,
-                    LastAppliedSource: null,
-                    LastAppliedAt: null,
-                    LastStreamReceivedSortableUniqueId: null,
-                    LastStreamReceivedAt: null,
-                    LastStreamAppliedSortableUniqueId: null,
-                    LastCatchUpSortableUniqueId: null,
-                    LastUpdated: DateTimeOffset.UtcNow,
-                    Metadata: null),
+                new MvRegistryEntry
+                {
+                    ServiceId = serviceId,
+                    ViewName = viewName,
+                    ViewVersion = viewVersion,
+                    LogicalTable = "main",
+                    PhysicalTable = $"{viewName.ToLowerInvariant()}_main",
+                    Status = MvStatus.CatchingUp,
+                    AppliedEventVersion = 0,
+                    LastUpdated = DateTimeOffset.UtcNow
+                },
                 cancellationToken: cancellationToken);
             await SetActiveAsync(serviceId, viewName, viewVersion, cancellationToken: cancellationToken);
         }

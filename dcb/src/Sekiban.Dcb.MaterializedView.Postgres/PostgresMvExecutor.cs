@@ -57,25 +57,17 @@ public sealed class PostgresMvExecutor : IMvExecutor
         foreach (var table in initContext.RegisteredTables)
         {
             await _registryStore.RegisterAsync(
-                new MvRegistryEntry(
-                    serviceId,
-                    projector.ViewName,
-                    projector.ViewVersion,
-                    table.LogicalName,
-                    table.PhysicalName,
-                    MvStatus.CatchingUp,
-                    CurrentPosition: null,
-                    TargetPosition: null,
-                    LastSortableUniqueId: null,
-                    AppliedEventVersion: 0,
-                    LastAppliedSource: null,
-                    LastAppliedAt: null,
-                    LastStreamReceivedSortableUniqueId: null,
-                    LastStreamReceivedAt: null,
-                    LastStreamAppliedSortableUniqueId: null,
-                    LastCatchUpSortableUniqueId: null,
-                    LastUpdated: DateTimeOffset.UtcNow,
-                    Metadata: null),
+                new MvRegistryEntry
+                {
+                    ServiceId = serviceId,
+                    ViewName = projector.ViewName,
+                    ViewVersion = projector.ViewVersion,
+                    LogicalTable = table.LogicalName,
+                    PhysicalTable = table.PhysicalName,
+                    Status = MvStatus.CatchingUp,
+                    AppliedEventVersion = 0,
+                    LastUpdated = DateTimeOffset.UtcNow
+                },
                 transaction,
                 cancellationToken).ConfigureAwait(false);
         }

@@ -859,7 +859,7 @@ apiRoute
             var rows = await QueryWeatherForecastDbRowsAsync(
                 connection,
                 context,
-                includeDeleted ?? false,
+                includeDeleted.GetValueOrDefault(),
                 pageNumber,
                 pageSize);
 
@@ -916,7 +916,7 @@ apiRoute
             var rows = await QueryWeatherForecastDbRowsAsync(
                 connection,
                 context,
-                includeDeleted ?? false,
+                includeDeleted.GetValueOrDefault(),
                 pageNumber,
                 pageSize);
 

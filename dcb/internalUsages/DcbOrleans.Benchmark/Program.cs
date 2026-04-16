@@ -124,8 +124,8 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
     <label>Endpoint
       <select id='endpointMode'>
         <option value='standard'>/weatherforecast</option>
-        <option value='single'>/weatherforecastsingle</option>
-        <option value='generic'>/weatherforecastgeneric</option>
+        <option value='{SingleMode}'>/weatherforecastsingle</option>
+        <option value='{GenericMode}'>/weatherforecastgeneric</option>
       </select>
     </label>
     <button id='startBtn' onclick='startRun()'>開始</button>
@@ -184,20 +184,20 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
     <div><button onclick='doDeactivate(&quot;standard&quot;)'>deactivate</button></div>
     <div><button onclick='doSnapshot(&quot;standard&quot;)'>snapshot</button></div>
     <div><button onclick='doRefresh(&quot;standard&quot;)'>refresh</button></div>
-    <div>single</div>
-    <div><button onclick='loadCount(&quot;single&quot;)'>fetch</button> <code id='count-single'>-</code></div>
-    <div><button onclick='loadStatus(&quot;single&quot;)'>fetch</button> <code id='status-single'>-</code></div>
-    <div><button onclick='doPersist(&quot;single&quot;)'>persist</button></div>
-    <div><button onclick='doDeactivate(&quot;single&quot;)'>deactivate</button></div>
-    <div><button onclick='doSnapshot(&quot;single&quot;)'>snapshot</button></div>
-    <div><button onclick='doRefresh(&quot;single&quot;)'>refresh</button></div>
-    <div>generic</div>
-    <div><button onclick='loadCount(&quot;generic&quot;)'>fetch</button> <code id='count-generic'>-</code></div>
-    <div><button onclick='loadStatus(&quot;generic&quot;)'>fetch</button> <code id='status-generic'>-</code></div>
-    <div><button onclick='doPersist(&quot;generic&quot;)'>persist</button></div>
-    <div><button onclick='doDeactivate(&quot;generic&quot;)'>deactivate</button></div>
-    <div><button onclick='doSnapshot(&quot;generic&quot;)'>snapshot</button></div>
-    <div><button onclick='doRefresh(&quot;generic&quot;)'>refresh</button></div>
+    <div>{SingleMode}</div>
+    <div><button onclick='loadCount(&quot;{SingleMode}&quot;)'>fetch</button> <code id='count-{SingleMode}'>-</code></div>
+    <div><button onclick='loadStatus(&quot;{SingleMode}&quot;)'>fetch</button> <code id='status-{SingleMode}'>-</code></div>
+    <div><button onclick='doPersist(&quot;{SingleMode}&quot;)'>persist</button></div>
+    <div><button onclick='doDeactivate(&quot;{SingleMode}&quot;)'>deactivate</button></div>
+    <div><button onclick='doSnapshot(&quot;{SingleMode}&quot;)'>snapshot</button></div>
+    <div><button onclick='doRefresh(&quot;{SingleMode}&quot;)'>refresh</button></div>
+    <div>{GenericMode}</div>
+    <div><button onclick='loadCount(&quot;{GenericMode}&quot;)'>fetch</button> <code id='count-{GenericMode}'>-</code></div>
+    <div><button onclick='loadStatus(&quot;{GenericMode}&quot;)'>fetch</button> <code id='status-{GenericMode}'>-</code></div>
+    <div><button onclick='doPersist(&quot;{GenericMode}&quot;)'>persist</button></div>
+    <div><button onclick='doDeactivate(&quot;{GenericMode}&quot;)'>deactivate</button></div>
+    <div><button onclick='doSnapshot(&quot;{GenericMode}&quot;)'>snapshot</button></div>
+    <div><button onclick='doRefresh(&quot;{GenericMode}&quot;)'>refresh</button></div>
     <div>{DatabaseMode}</div>
     <div><button onclick='loadCount(&quot;{DatabaseMode}&quot;)'>fetch</button> <code id='count-{DatabaseMode}'>-</code></div>
     <div><button onclick='loadStatus(&quot;{DatabaseMode}&quot;)'>fetch</button> <code id='status-{DatabaseMode}'>-</code></div>
@@ -841,9 +841,9 @@ static async Task RunAsync(string apiBase, BenchState state)
 
         // verify query
         var mode2 = state.Mode ?? "standard";
-        var listPath = mode2 == "single"
+        var listPath = mode2 == SingleMode
             ? "/api/weatherforecastsingle"
-            : mode2 == "generic" ? "/api/weatherforecastgeneric" : "/api/weatherforecast";
+            : mode2 == GenericMode ? "/api/weatherforecastgeneric" : "/api/weatherforecast";
         var listRes = await http.GetAsync($"{listPath}?pageNumber=1&pageSize=100");
         if (listRes.IsSuccessStatusCode)
         {
