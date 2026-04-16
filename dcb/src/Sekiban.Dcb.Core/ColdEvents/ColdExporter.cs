@@ -407,6 +407,10 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         var mergeResult = await TryMergeTailSegmentAsync(serviceId, existingTail, firstStagedSegment, ct);
         if (!mergeResult.IsSuccess)
         {
+            _logger.LogWarning(
+                mergeResult.GetException(),
+                "Tail merge fallback for {ServiceId}: failed to merge staged segment into existing tail",
+                serviceId);
             return ManifestUpdatePlan.ForAppend(
                 existingSegments,
                 adjustedSegments,
@@ -465,18 +469,6 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             return ResultBox.FromValue(new MergeTailAttempt(false, null));
         }
 
-        var stagedEventsResult = await ReadEventsFromLocalSegmentAsync(firstStagedSegment, ct);
-        if (!stagedEventsResult.IsSuccess)
-        {
-            return ResultBox.Error<MergeTailAttempt>(stagedEventsResult.GetException());
-        }
-
-        var stagedEvents = stagedEventsResult.GetValue();
-        if (stagedEvents.Count == 0)
-        {
-            return ResultBox.FromValue(new MergeTailAttempt(false, null));
-        }
-
         IColdSegmentFileBuilder? builder = null;
         try
         {
@@ -487,14 +479,15 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             }
 
             builder = existingEventsResult.GetValue();
-            foreach (var evt in stagedEvents)
+            var appendResult = await TryAppendLocalSegmentToBuilderAsync(firstStagedSegment, builder, ct);
+            if (!appendResult.IsSuccess)
             {
-                if (!builder.CanAppend(evt, _options))
-                {
-                    return ResultBox.FromValue(new MergeTailAttempt(false, null));
-                }
+                return ResultBox.Error<MergeTailAttempt>(appendResult.GetException());
+            }
 
-                await builder.AppendAsync(evt, ct);
+            if (!appendResult.GetValue())
+            {
+                return ResultBox.FromValue(new MergeTailAttempt(false, null));
             }
 
             var completed = await builder.CompleteAsync(serviceId, ct);
@@ -603,6 +596,11 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             ct);
         if (!readResult.IsSuccess)
         {
+            if (builder is not null)
+            {
+                await builder.DisposeAsync();
+                builder = null;
+            }
             return ResultBox.Error<IColdSegmentFileBuilder>(readResult.GetException());
         }
 
@@ -610,6 +608,46 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             ? ResultBox.Error<IColdSegmentFileBuilder>(
                 new InvalidOperationException($"Cold segment {existingTail.Path} did not contain any events."))
             : ResultBox.FromValue<IColdSegmentFileBuilder>(builder);
+    }
+
+    private async Task<ResultBox<bool>> TryAppendLocalSegmentToBuilderAsync(
+        StagedSegment stagedSegment,
+        IColdSegmentFileBuilder builder,
+        CancellationToken ct)
+    {
+        await using var stream = new FileStream(
+            stagedSegment.FilePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        try
+        {
+            var readResult = await _segmentFormatHandler.StreamSegmentAsync(
+                stream,
+                since: null,
+                maxCount: null,
+                async evt =>
+                {
+                    if (!builder.CanAppend(evt, _options))
+                    {
+                        throw new MergeCapacityExceededException();
+                    }
+
+                    await builder.AppendAsync(evt, ct);
+                },
+                ct);
+
+            return !readResult.IsSuccess
+                ? ResultBox.Error<bool>(readResult.GetException())
+                : ResultBox.FromValue(true);
+        }
+        catch (MergeCapacityExceededException)
+        {
+            return ResultBox.FromValue(false);
+        }
     }
 
     private async Task<ResultBox<List<SerializableEvent>>> ReadEventsFromLocalSegmentAsync(
@@ -681,7 +719,11 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     {
         foreach (var path in uploadedPaths)
         {
-            await _storage.DeleteAsync(path, ct);
+            var deleteResult = await _storage.DeleteAsync(path, ct);
+            if (!deleteResult.IsSuccess)
+            {
+                _logger.LogWarning(deleteResult.GetException(), "Failed to delete uploaded cold segment {Path}", path);
+            }
         }
     }
 
@@ -866,5 +908,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         IReadOnlyList<StagedSegment> Segments,
         IReadOnlyList<StagedSegment> OwnedSegments,
         int AppliedEventCount);
+
+    private sealed class MergeCapacityExceededException : Exception;
 
 }
