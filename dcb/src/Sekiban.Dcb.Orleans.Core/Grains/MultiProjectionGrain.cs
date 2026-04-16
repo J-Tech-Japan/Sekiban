@@ -28,6 +28,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 {
     private const int StreamingCatchUpApplyChunkSize = 4096;
     private const string EmptyLogValue = "empty";
+    private const int CatchUpEventTypeSummaryTopN = 5;
+    private const long CatchUpInformationElapsedThresholdMs = 1000;
     private const int DefaultSnapshotEnvelopeSizeLimitBytes = 2 * 1024 * 1024;
     private const int SnapshotEnvelopeBase64ExpansionNumerator = 3;
     private const int SnapshotEnvelopeBase64ExpansionDenominator = 4;
@@ -86,6 +88,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // Catch-up state management
     private class CatchUpProgress
     {
+        public SortableUniqueId? InitialPosition { get; set; }
         public SortableUniqueId? CurrentPosition { get; set; }
         public SortableUniqueId? TargetPosition { get; set; }
         public bool IsActive { get; set; }
@@ -127,15 +130,45 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private bool _useStreamingSnapshotIO;
     private readonly TempFileSnapshotManager? _tempFileSnapshotManager;
     private bool _hybridCatchUpCheckLogged;
-    private bool _hybridCatchUpFirstBatchLogged;
     private HybridReadBatchMetadata? _lastHybridReadBatchMetadata;
     private long _eventsProcessedSinceLastCatchUpPersist;
     private DateTime _lastCatchUpPersistUtc = DateTime.UtcNow;
+    private long _catchUpBatchSkipCount;
 
     private sealed record PersistPolicySettings(
         int PersistBatchSize,
         TimeSpan PersistInterval,
         bool SkipPersistWhenSafeCheckpointUnchanged);
+
+    private sealed record CatchUpPersistDecision(
+        bool ShouldPersist,
+        string Reason);
+
+    private sealed record CatchUpBatchTelemetry(
+        int BatchNumber,
+        string StartPosition,
+        string CurrentPosition,
+        string LastAppliedPosition,
+        string TargetPosition,
+        int RequestedMaxCount,
+        int FetchedCount,
+        int FilteredCount,
+        int AppliedCount,
+        int PendingStreamEventsBefore,
+        int PendingStreamEventsAfter,
+        long ReadElapsedMs,
+        long ApplyElapsedMs,
+        long PersistElapsedMs,
+        long SafePromotionElapsedMs,
+        long TotalElapsedMs,
+        string ReadSource,
+        int ColdEventsRead,
+        int HotEventsRead,
+        bool ReachedColdSegmentBoundary,
+        int SegmentCount,
+        bool PersistTriggered,
+        string PersistReason,
+        string EventTypeSummary);
 
     private sealed record PersistCheckpoint(
         string ProjectorVersion,
@@ -259,10 +292,74 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return value.Length > 20 ? value[..20] : value;
     }
 
+    private static string BuildCatchUpEventTypeSummary(IEnumerable<string> eventTypes)
+    {
+        var topTypes = eventTypes
+            .Where(eventType => !string.IsNullOrWhiteSpace(eventType))
+            .GroupBy(eventType => eventType, StringComparer.Ordinal)
+            .Select(group => new { EventType = group.Key, Count = group.Count() })
+            .OrderByDescending(item => item.Count)
+            .ThenBy(item => item.EventType, StringComparer.Ordinal)
+            .Take(CatchUpEventTypeSummaryTopN)
+            .ToList();
+
+        if (topTypes.Count == 0)
+        {
+            return EmptyLogValue;
+        }
+
+        return string.Join(", ", topTypes.Select(item => $"{item.EventType}:{item.Count}"));
+    }
+
+    private static bool ShouldLogCatchUpBatchAtInformation(CatchUpBatchTelemetry telemetry) =>
+        telemetry.TotalElapsedMs >= CatchUpInformationElapsedThresholdMs ||
+        telemetry.PersistTriggered ||
+        telemetry.FilteredCount > 0 ||
+        (telemetry.RequestedMaxCount > 0 &&
+         telemetry.FetchedCount > 0 &&
+         telemetry.FetchedCount < telemetry.RequestedMaxCount &&
+         telemetry.FetchedCount * 2 <= telemetry.RequestedMaxCount);
+
+    private void LogCatchUpBatchSummary(string projectorName, CatchUpBatchTelemetry telemetry)
+    {
+        var logLevel = ShouldLogCatchUpBatchAtInformation(telemetry)
+            ? LogLevel.Information
+            : LogLevel.Debug;
+
+        _logger.Log(
+            logLevel,
+            MultiProjectionLogEvents.CatchUpBatchSummary,
+            "[{ProjectorName}] Catch-up batch summary. BatchNumber={BatchNumber}, StartPosition={StartPosition}, CurrentPosition={CurrentPosition}, LastAppliedPosition={LastAppliedPosition}, TargetPosition={TargetPosition}, RequestedMaxCount={RequestedMaxCount}, FetchedCount={FetchedCount}, FilteredCount={FilteredCount}, AppliedCount={AppliedCount}, PendingStreamEventsBefore={PendingStreamEventsBefore}, PendingStreamEventsAfter={PendingStreamEventsAfter}, ReadElapsedMs={ReadElapsedMs}, ApplyElapsedMs={ApplyElapsedMs}, PersistElapsedMs={PersistElapsedMs}, SafePromotionElapsedMs={SafePromotionElapsedMs}, TotalElapsedMs={TotalElapsedMs}, ReadSource={ReadSource}, ColdEventsRead={ColdEventsRead}, HotEventsRead={HotEventsRead}, ReachedColdSegmentBoundary={ReachedColdSegmentBoundary}, SegmentCount={SegmentCount}, PersistTriggered={PersistTriggered}, PersistReason={PersistReason}, EventTypeSummary={EventTypeSummary}",
+            projectorName,
+            telemetry.BatchNumber,
+            telemetry.StartPosition,
+            telemetry.CurrentPosition,
+            telemetry.LastAppliedPosition,
+            telemetry.TargetPosition,
+            telemetry.RequestedMaxCount,
+            telemetry.FetchedCount,
+            telemetry.FilteredCount,
+            telemetry.AppliedCount,
+            telemetry.PendingStreamEventsBefore,
+            telemetry.PendingStreamEventsAfter,
+            telemetry.ReadElapsedMs,
+            telemetry.ApplyElapsedMs,
+            telemetry.PersistElapsedMs,
+            telemetry.SafePromotionElapsedMs,
+            telemetry.TotalElapsedMs,
+            telemetry.ReadSource,
+            telemetry.ColdEventsRead,
+            telemetry.HotEventsRead,
+            telemetry.ReachedColdSegmentBoundary,
+            telemetry.SegmentCount,
+            telemetry.PersistTriggered,
+            telemetry.PersistReason,
+            telemetry.EventTypeSummary);
+    }
+
     private void ResetHybridCatchUpLogging()
     {
         _hybridCatchUpCheckLogged = false;
-        _hybridCatchUpFirstBatchLogged = false;
         _lastHybridReadBatchMetadata = null;
     }
 
@@ -1489,6 +1586,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var currentPosition = await GetCurrentPositionAsync();
         _catchUpProgress = new CatchUpProgress
         {
+            InitialPosition = currentPosition,
             CurrentPosition = currentPosition,
             TargetPosition = null,
             IsActive = true,
@@ -1500,6 +1598,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         };
         ResetHybridCatchUpLogging();
         ResetCatchUpFailureTracking();
+        _catchUpBatchSkipCount = 0;
 
         MoveBufferedStreamEventsToPending(currentPosition);
 
@@ -2044,8 +2143,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _lastError = $"Catch-up batch failed: {ex.Message}";
         _logger.LogError(
             ex,
-            "[{ProjectorName}] Catch-up batch error (consecutive failures: {FailureCount}, elapsed: {FailureElapsedSeconds:F1}s)",
+            "[{ProjectorName}] Catch-up batch error. BatchNumber={BatchNumber}, CurrentPosition={CurrentPosition}, TargetPosition={TargetPosition}, PendingStreamEvents={PendingStreamEvents}, FailureCount={FailureCount}, FailureElapsedSeconds={FailureElapsedSeconds:F1}",
             projectorName,
+            _catchUpProgress.BatchesProcessed + 1,
+            _catchUpProgress.CurrentPosition?.Value ?? "beginning",
+            _catchUpProgress.TargetPosition?.Value ?? "unknown",
+            _pendingStreamEvents.Count,
             _catchUpConsecutiveFailureCount,
             failureElapsed.TotalSeconds);
 
@@ -2245,6 +2348,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Initialize catch-up progress (TargetPosition will be set during first batch)
             _catchUpProgress = new CatchUpProgress
             {
+                InitialPosition = currentPosition,
                 CurrentPosition = currentPosition,
                 TargetPosition = null, // Will be determined during catch-up
                 IsActive = true,
@@ -2258,13 +2362,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             ResetCatchUpFailureTracking();
             _eventsProcessedSinceLastCatchUpPersist = 0;
             _lastCatchUpPersistUtc = DateTime.UtcNow;
+            _catchUpBatchSkipCount = 0;
 
             MoveBufferedStreamEventsToPending(currentPosition);
 
-            _logger.LogDebug(
-                "[{ProjectorName}] Starting catch-up from {StartPosition} (target position will be determined dynamically)",
+            _logger.LogInformation(
+                MultiProjectionLogEvents.CatchUpStarted,
+                "[{ProjectorName}] Starting catch-up. StartPosition={StartPosition}, CurrentPosition={CurrentPosition}, PendingStreamEvents={PendingStreamEvents}, RequestedBatchSize={RequestedBatchSize}, ServiceId={ServiceId}",
                 projectorName,
-                currentPosition?.Value ?? "beginning");
+                currentPosition?.Value ?? "beginning",
+                currentPosition?.Value ?? "beginning",
+                _pendingStreamEvents.Count,
+                _catchUpBatchSize,
+                _serviceId);
 
             // Start catch-up timer
             StartCatchUpTimer();
@@ -2317,7 +2427,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var lockAcquired = await CatchUpBatchSemaphore.WaitAsync(TimeSpan.Zero);
         if (!lockAcquired)
         {
-            _logger.LogDebug("[{ProjectorName}] Catch-up batch skipped due to global catch-up concurrency limit", projectorName);
+            _catchUpBatchSkipCount++;
+            _logger.LogInformation(
+                MultiProjectionLogEvents.CatchUpBatchSkipped,
+                "[{ProjectorName}] Catch-up batch skipped due to global catch-up concurrency limit. NextBatchNumber={NextBatchNumber}, SkipCount={SkipCount}, WaitElapsedMs={WaitElapsedMs}, CurrentPosition={CurrentPosition}, TargetPosition={TargetPosition}, PendingStreamEvents={PendingStreamEvents}",
+                projectorName,
+                _catchUpProgress.BatchesProcessed + 1,
+                _catchUpBatchSkipCount,
+                0,
+                _catchUpProgress.CurrentPosition?.Value ?? "beginning",
+                _catchUpProgress.TargetPosition?.Value ?? "unknown",
+                _pendingStreamEvents.Count);
             return;
         }
 
@@ -2406,6 +2526,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var isHybridCatchUp = hybridCatchUpStore is not null;
         var batchSize = ResolveCatchUpBatchSize(hybridCatchUpStore);
         var startPosition = _catchUpProgress.CurrentPosition?.Value ?? "beginning";
+        var pendingStreamEventsBefore = _pendingStreamEvents.Count;
+        var batchNumber = _catchUpProgress.BatchesProcessed + 1;
 
         if (isHybridCatchUp && !_hybridCatchUpCheckLogged)
         {
@@ -2429,8 +2551,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 projectorName);
         }
 
+        _logger.LogDebug(
+            "[{ProjectorName}] Catch-up batch starting. BatchNumber={BatchNumber}, StartPosition={StartPosition}, CurrentPosition={CurrentPosition}, TargetPosition={TargetPosition}, RequestedMaxCount={RequestedMaxCount}, PendingStreamEventsBefore={PendingStreamEventsBefore}",
+            projectorName,
+            batchNumber,
+            startPosition,
+            _catchUpProgress.CurrentPosition?.Value ?? "beginning",
+            _catchUpProgress.TargetPosition?.Value ?? "unknown",
+            batchSize,
+            pendingStreamEventsBefore);
+
         ResultBox<IEnumerable<SerializableEvent>> eventsResult;
         HybridReadBatchMetadata? hybridReadBatchMetadata = null;
+        var readStopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             using var projectionContext = HybridReadProjectionContext.Push(projectorName);
@@ -2443,6 +2576,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             throw new InvalidOperationException(
                 $"[{projectorName}] Serializable catch-up is required but the configured event store does not support ReadAllSerializableEventsAsync.");
+        }
+        finally
+        {
+            readStopwatch.Stop();
         }
 
         if (!eventsResult.IsSuccess)
@@ -2468,44 +2605,76 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         var eventsEnumerable = eventsResult.GetValue();
         var events = eventsEnumerable as IReadOnlyList<SerializableEvent> ?? eventsEnumerable.ToList();
-        if (isHybridCatchUp && !_hybridCatchUpFirstBatchLogged)
-        {
-            _logger.LogInformation(
-                "[{ProjectorName}] Catch-up hybrid read fetched {FetchedEvents} events (RequestedMaxEvents={RequestedMaxEvents}, StartPosition={StartPosition})",
-                projectorName,
-                events.Count,
-                batchSize,
-                startPosition);
-            _hybridCatchUpFirstBatchLogged = true;
-        }
         if (events.Count == 0)
+        {
+            LogCatchUpBatchSummary(
+                projectorName,
+                new CatchUpBatchTelemetry(
+                    BatchNumber: batchNumber,
+                    StartPosition: startPosition,
+                    CurrentPosition: _catchUpProgress.CurrentPosition?.Value ?? "beginning",
+                    LastAppliedPosition: EmptyLogValue,
+                    TargetPosition: _catchUpProgress.TargetPosition?.Value ?? "unknown",
+                    RequestedMaxCount: batchSize,
+                    FetchedCount: 0,
+                    FilteredCount: 0,
+                    AppliedCount: 0,
+                    PendingStreamEventsBefore: pendingStreamEventsBefore,
+                    PendingStreamEventsAfter: _pendingStreamEvents.Count,
+                    ReadElapsedMs: readStopwatch.ElapsedMilliseconds,
+                    ApplyElapsedMs: 0,
+                    PersistElapsedMs: 0,
+                    SafePromotionElapsedMs: 0,
+                    TotalElapsedMs: readStopwatch.ElapsedMilliseconds,
+                    ReadSource: hybridReadBatchMetadata?.Source ?? (isHybridCatchUp ? "hybrid_no_result" : catchUpStore.GetType().Name),
+                    ColdEventsRead: hybridReadBatchMetadata?.ColdEventsRead ?? 0,
+                    HotEventsRead: hybridReadBatchMetadata?.HotEventsRead ?? 0,
+                    ReachedColdSegmentBoundary: hybridReadBatchMetadata?.ReachedColdSegmentBoundary ?? false,
+                    SegmentCount: hybridReadBatchMetadata?.SegmentCount ?? 0,
+                    PersistTriggered: false,
+                    PersistReason: "none",
+                    EventTypeSummary: EmptyLogValue));
             return 0;
+        }
 
         UpdateTargetPosition(events[^1].SortableUniqueIdValue);
 
         var filtered = FilterByPositionAndProcessed(events, e => e.Id, e => e.SortableUniqueIdValue);
+        var filteredCount = Math.Max(0, events.Count - filtered.Count);
         if (filtered.Count == 0)
         {
-            _logger.LogInformation(
-                "[{ProjectorName}] Catch-up batch read {FetchedCount} events but filtered all of them. CurrentPosition={CurrentPosition}, LastFetched={LastFetched}",
-                projectorName,
-                events.Count,
-                _catchUpProgress.CurrentPosition?.Value ?? "beginning",
-                events[^1].SortableUniqueIdValue);
             _catchUpProgress.CurrentPosition = new SortableUniqueId(events[^1].SortableUniqueIdValue);
+            LogCatchUpBatchSummary(
+                projectorName,
+                new CatchUpBatchTelemetry(
+                    BatchNumber: batchNumber,
+                    StartPosition: startPosition,
+                    CurrentPosition: _catchUpProgress.CurrentPosition?.Value ?? events[^1].SortableUniqueIdValue,
+                    LastAppliedPosition: EmptyLogValue,
+                    TargetPosition: _catchUpProgress.TargetPosition?.Value ?? events[^1].SortableUniqueIdValue,
+                    RequestedMaxCount: batchSize,
+                    FetchedCount: events.Count,
+                    FilteredCount: filteredCount,
+                    AppliedCount: 0,
+                    PendingStreamEventsBefore: pendingStreamEventsBefore,
+                    PendingStreamEventsAfter: _pendingStreamEvents.Count,
+                    ReadElapsedMs: readStopwatch.ElapsedMilliseconds,
+                    ApplyElapsedMs: 0,
+                    PersistElapsedMs: 0,
+                    SafePromotionElapsedMs: 0,
+                    TotalElapsedMs: readStopwatch.ElapsedMilliseconds,
+                    ReadSource: hybridReadBatchMetadata?.Source ?? (isHybridCatchUp ? "hybrid_unknown" : catchUpStore.GetType().Name),
+                    ColdEventsRead: hybridReadBatchMetadata?.ColdEventsRead ?? 0,
+                    HotEventsRead: hybridReadBatchMetadata?.HotEventsRead ?? 0,
+                    ReachedColdSegmentBoundary: hybridReadBatchMetadata?.ReachedColdSegmentBoundary ?? false,
+                    SegmentCount: hybridReadBatchMetadata?.SegmentCount ?? 0,
+                    PersistTriggered: false,
+                    PersistReason: "none",
+                    EventTypeSummary: EmptyLogValue));
             return 0;
         }
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        _logger.LogInformation(
-            "[{ProjectorName}] Catch-up batch applying {EventCount} events. First={FirstSortableId}/{FirstType}, Last={LastSortableId}/{LastType}, StartPosition={StartPosition}",
-            projectorName,
-            filtered.Count,
-            filtered[0].SortableUniqueIdValue,
-            filtered[0].EventPayloadName,
-            filtered[^1].SortableUniqueIdValue,
-            filtered[^1].EventPayloadName,
-            startPosition);
+        var applyStopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             await _host!.AddSerializableEventsAsync(filtered, finishedCatchUp: false);
@@ -2518,20 +2687,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 projectorName);
             throw;
         }
-        sw.Stop();
-        _logger.LogInformation(
-            "[{ProjectorName}] Catch-up batch apply completed in {ElapsedMs} ms. LastApplied={LastSortableId}",
-            projectorName,
-            sw.ElapsedMilliseconds,
-            filtered[^1].SortableUniqueIdValue);
+        finally
+        {
+            applyStopwatch.Stop();
+        }
 
         await UpdateCatchUpProgressAfterBatch(
+            batchNumber,
+            startPosition,
             filtered.Select(e => e.Id),
             filtered[^1].SortableUniqueIdValue,
-            filtered.Count,
-            sw.ElapsedMilliseconds,
+            batchSize,
+            fetchedCount: events.Count,
+            filteredCount,
+            appliedCount: filtered.Count,
+            readElapsedMs: readStopwatch.ElapsedMilliseconds,
+            applyElapsedMs: applyStopwatch.ElapsedMilliseconds,
+            pendingStreamEventsBefore,
             hybridCatchUpStore,
-            hybridReadBatchMetadata);
+            hybridReadBatchMetadata,
+            BuildCatchUpEventTypeSummary(filtered.Select(e => e.EventPayloadName)));
 
         return filtered.Count;
     }
@@ -2554,9 +2729,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         string? lastFetchedSortableUniqueId = null;
         string? lastProcessedSortableUniqueId = null;
         var fetchedCount = 0;
-        var filteredCount = 0;
+        var appliedCount = 0;
         long applyElapsedMs = 0;
         HybridReadBatchMetadata? hybridReadBatchMetadata = null;
+        var pendingStreamEventsBefore = _pendingStreamEvents.Count;
+        var batchNumber = _catchUpProgress.BatchesProcessed + 1;
+        var eventTypeNames = new List<string>(Math.Min(batchSize, StreamingCatchUpApplyChunkSize));
+
+        _logger.LogDebug(
+            "[{ProjectorName}] Catch-up batch starting. BatchNumber={BatchNumber}, StartPosition={StartPosition}, CurrentPosition={CurrentPosition}, TargetPosition={TargetPosition}, RequestedMaxCount={RequestedMaxCount}, PendingStreamEventsBefore={PendingStreamEventsBefore}",
+            projectorName,
+            batchNumber,
+            startPosition,
+            _catchUpProgress.CurrentPosition?.Value ?? "beginning",
+            _catchUpProgress.TargetPosition?.Value ?? "unknown",
+            batchSize,
+            pendingStreamEventsBefore);
 
         async Task FlushBufferAsync()
         {
@@ -2575,13 +2763,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 processedIds.Add(item.Id);
             }
 
-            filteredCount += buffer.Count;
+            appliedCount += buffer.Count;
             lastProcessedSortableUniqueId = buffer[^1].SortableUniqueIdValue;
             buffer.Clear();
         }
 
         try
         {
+            var readStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
             using var projectionContext = HybridReadProjectionContext.Push(projectorName);
             var streamResult = await streamingCatchUpStore.StreamAllSerializableEventsAsync(
                 _catchUpProgress.CurrentPosition,
@@ -2604,12 +2793,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     }
 
                     buffer.Add(ev);
+                    eventTypeNames.Add(ev.EventPayloadName);
                     if (buffer.Count >= StreamingCatchUpApplyChunkSize)
                     {
                         await FlushBufferAsync();
                     }
                 });
             hybridReadBatchMetadata = HybridReadProjectionContext.BatchMetadata;
+            var streamElapsedMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(readStartedAt).TotalMilliseconds;
+            var readElapsedMs = Math.Max(0, streamElapsedMs - applyElapsedMs);
 
             if (!streamResult.IsSuccess)
             {
@@ -2620,6 +2812,88 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     projectorName);
                 return 0;
             }
+            if (fetchedCount == 0)
+            {
+                LogCatchUpBatchSummary(
+                    projectorName,
+                    new CatchUpBatchTelemetry(
+                        BatchNumber: batchNumber,
+                        StartPosition: startPosition,
+                        CurrentPosition: _catchUpProgress.CurrentPosition?.Value ?? "beginning",
+                        LastAppliedPosition: EmptyLogValue,
+                        TargetPosition: _catchUpProgress.TargetPosition?.Value ?? "unknown",
+                        RequestedMaxCount: batchSize,
+                        FetchedCount: 0,
+                        FilteredCount: 0,
+                        AppliedCount: 0,
+                        PendingStreamEventsBefore: pendingStreamEventsBefore,
+                        PendingStreamEventsAfter: _pendingStreamEvents.Count,
+                        ReadElapsedMs: readElapsedMs,
+                        ApplyElapsedMs: applyElapsedMs,
+                        PersistElapsedMs: 0,
+                        SafePromotionElapsedMs: 0,
+                        TotalElapsedMs: readElapsedMs + applyElapsedMs,
+                        ReadSource: hybridReadBatchMetadata?.Source ?? (isHybridCatchUp ? "hybrid_no_result" : streamingCatchUpStore.GetType().Name),
+                        ColdEventsRead: hybridReadBatchMetadata?.ColdEventsRead ?? 0,
+                        HotEventsRead: hybridReadBatchMetadata?.HotEventsRead ?? 0,
+                        ReachedColdSegmentBoundary: hybridReadBatchMetadata?.ReachedColdSegmentBoundary ?? false,
+                        SegmentCount: hybridReadBatchMetadata?.SegmentCount ?? 0,
+                        PersistTriggered: false,
+                        PersistReason: "none",
+                        EventTypeSummary: EmptyLogValue));
+                return 0;
+            }
+
+            await FlushBufferAsync();
+            var filteredCount = Math.Max(0, fetchedCount - appliedCount);
+            if (appliedCount == 0)
+            {
+                _catchUpProgress.CurrentPosition = new SortableUniqueId(lastFetchedSortableUniqueId!);
+                LogCatchUpBatchSummary(
+                    projectorName,
+                    new CatchUpBatchTelemetry(
+                        BatchNumber: batchNumber,
+                        StartPosition: startPosition,
+                        CurrentPosition: _catchUpProgress.CurrentPosition?.Value ?? lastFetchedSortableUniqueId!,
+                        LastAppliedPosition: EmptyLogValue,
+                        TargetPosition: _catchUpProgress.TargetPosition?.Value ?? lastFetchedSortableUniqueId!,
+                        RequestedMaxCount: batchSize,
+                        FetchedCount: fetchedCount,
+                        FilteredCount: filteredCount,
+                        AppliedCount: 0,
+                        PendingStreamEventsBefore: pendingStreamEventsBefore,
+                        PendingStreamEventsAfter: _pendingStreamEvents.Count,
+                        ReadElapsedMs: readElapsedMs,
+                        ApplyElapsedMs: applyElapsedMs,
+                        PersistElapsedMs: 0,
+                        SafePromotionElapsedMs: 0,
+                        TotalElapsedMs: readElapsedMs + applyElapsedMs,
+                        ReadSource: hybridReadBatchMetadata?.Source ?? (isHybridCatchUp ? "hybrid_unknown" : streamingCatchUpStore.GetType().Name),
+                        ColdEventsRead: hybridReadBatchMetadata?.ColdEventsRead ?? 0,
+                        HotEventsRead: hybridReadBatchMetadata?.HotEventsRead ?? 0,
+                        ReachedColdSegmentBoundary: hybridReadBatchMetadata?.ReachedColdSegmentBoundary ?? false,
+                        SegmentCount: hybridReadBatchMetadata?.SegmentCount ?? 0,
+                        PersistTriggered: false,
+                        PersistReason: "none",
+                        EventTypeSummary: EmptyLogValue));
+                return 0;
+            }
+
+            await UpdateCatchUpProgressAfterBatch(
+                batchNumber,
+                startPosition,
+                processedIds,
+                lastProcessedSortableUniqueId!,
+                batchSize,
+                fetchedCount,
+                filteredCount,
+                appliedCount,
+                readElapsedMs,
+                applyElapsedMs,
+                pendingStreamEventsBefore,
+                hybridCatchUpStore,
+                hybridReadBatchMetadata,
+                BuildCatchUpEventTypeSummary(eventTypeNames));
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("Unknown event type", StringComparison.Ordinal))
         {
@@ -2630,38 +2904,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             throw;
         }
 
-        if (isHybridCatchUp && !_hybridCatchUpFirstBatchLogged)
-        {
-            _logger.LogInformation(
-                "[{ProjectorName}] Catch-up hybrid read fetched {FetchedEvents} events (RequestedMaxEvents={RequestedMaxEvents}, StartPosition={StartPosition})",
-                projectorName,
-                fetchedCount,
-                batchSize,
-                startPosition);
-            _hybridCatchUpFirstBatchLogged = true;
-        }
-
-        if (fetchedCount == 0)
-        {
-            return 0;
-        }
-
-        await FlushBufferAsync();
-        if (filteredCount == 0)
-        {
-            _catchUpProgress.CurrentPosition = new SortableUniqueId(lastFetchedSortableUniqueId!);
-            return 0;
-        }
-
-        await UpdateCatchUpProgressAfterBatch(
-            processedIds,
-            lastProcessedSortableUniqueId!,
-            filteredCount,
-            applyElapsedMs,
-            hybridCatchUpStore,
-            hybridReadBatchMetadata);
-
-        return filteredCount;
+        return appliedCount;
     }
 
     private int ResolveCatchUpBatchSize(HybridEventStore? hybridCatchUpStore)
@@ -2728,29 +2971,28 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     }
 
     private async Task UpdateCatchUpProgressAfterBatch(
+        int batchNumber,
+        string startPosition,
         IEnumerable<Guid> processedIds,
         string lastSortableUniqueIdValue,
+        int requestedMaxCount,
+        int fetchedCount,
         int filteredCount,
-        long elapsedMs,
+        int appliedCount,
+        long readElapsedMs,
+        long applyElapsedMs,
+        int pendingStreamEventsBefore,
         HybridEventStore? hybridCatchUpStore,
-        HybridReadBatchMetadata? hybridReadBatchMetadata)
+        HybridReadBatchMetadata? hybridReadBatchMetadata,
+        string eventTypeSummary)
     {
         var projectorName = GetProjectorName();
 
         _catchUpProgress.BatchesProcessed++;
         _catchUpProgress.HadNewEvents = true;
-        _eventsProcessed += filteredCount;
-        _eventsProcessedSinceLastCatchUpPersist += filteredCount;
+        _eventsProcessed += appliedCount;
+        _eventsProcessedSinceLastCatchUpPersist += appliedCount;
         _lastHybridReadBatchMetadata = hybridReadBatchMetadata;
-
-        if (elapsedMs > 1000)
-        {
-            _logger.LogWarning(
-                "[{ProjectorName}] Catch-up batch took {ElapsedMs}ms for {EventCount} events",
-                projectorName,
-                elapsedMs,
-                filteredCount);
-        }
 
         foreach (var id in processedIds)
         {
@@ -2759,19 +3001,46 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         _catchUpProgress.CurrentPosition = new SortableUniqueId(lastSortableUniqueIdValue);
 
-        var shouldPersist = ShouldPersistAfterCatchUpBatch(hybridCatchUpStore, hybridReadBatchMetadata);
-        if (shouldPersist)
+        var persistDecision = GetCatchUpPersistDecision(hybridCatchUpStore, hybridReadBatchMetadata);
+        long persistElapsedMs = 0;
+        if (persistDecision.ShouldPersist)
         {
-            _logger.LogDebug(
-                "[{ProjectorName}] Persisting state at {EventsProcessed:N0} events (UsedCold={UsedCold}, ReachedColdSegmentBoundary={ReachedColdSegmentBoundary})",
-                projectorName,
-                _eventsProcessed,
-                hybridReadBatchMetadata?.UsedCold ?? false,
-                hybridReadBatchMetadata?.ReachedColdSegmentBoundary ?? false);
+            var persistStopwatch = System.Diagnostics.Stopwatch.StartNew();
             await PersistStateAsync();
+            persistStopwatch.Stop();
+            persistElapsedMs = persistStopwatch.ElapsedMilliseconds;
             _eventsProcessedSinceLastCatchUpPersist = 0;
             _lastCatchUpPersistUtc = DateTime.UtcNow;
         }
+
+        var totalElapsedMs = readElapsedMs + applyElapsedMs + persistElapsedMs;
+        LogCatchUpBatchSummary(
+            projectorName,
+            new CatchUpBatchTelemetry(
+                BatchNumber: batchNumber,
+                StartPosition: startPosition,
+                CurrentPosition: _catchUpProgress.CurrentPosition?.Value ?? lastSortableUniqueIdValue,
+                LastAppliedPosition: lastSortableUniqueIdValue,
+                TargetPosition: _catchUpProgress.TargetPosition?.Value ?? lastSortableUniqueIdValue,
+                RequestedMaxCount: requestedMaxCount,
+                FetchedCount: fetchedCount,
+                FilteredCount: filteredCount,
+                AppliedCount: appliedCount,
+                PendingStreamEventsBefore: pendingStreamEventsBefore,
+                PendingStreamEventsAfter: _pendingStreamEvents.Count,
+                ReadElapsedMs: readElapsedMs,
+                ApplyElapsedMs: applyElapsedMs,
+                PersistElapsedMs: persistElapsedMs,
+                SafePromotionElapsedMs: 0,
+                TotalElapsedMs: totalElapsedMs,
+                ReadSource: hybridReadBatchMetadata?.Source ?? (hybridCatchUpStore is not null ? "hybrid_unknown" : GetCatchUpEventStore().GetType().Name),
+                ColdEventsRead: hybridReadBatchMetadata?.ColdEventsRead ?? 0,
+                HotEventsRead: hybridReadBatchMetadata?.HotEventsRead ?? 0,
+                ReachedColdSegmentBoundary: hybridReadBatchMetadata?.ReachedColdSegmentBoundary ?? false,
+                SegmentCount: hybridReadBatchMetadata?.SegmentCount ?? 0,
+                PersistTriggered: persistDecision.ShouldPersist,
+                PersistReason: persistDecision.Reason,
+                EventTypeSummary: eventTypeSummary));
 
         if (_catchUpProgress.BatchesProcessed % 10 == 0)
         {
@@ -2789,7 +3058,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
     }
 
-    private bool ShouldPersistAfterCatchUpBatch(
+    private CatchUpPersistDecision GetCatchUpPersistDecision(
         HybridEventStore? hybridCatchUpStore,
         HybridReadBatchMetadata? hybridReadBatchMetadata)
     {
@@ -2798,29 +3067,37 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (hybridCatchUpStore.ShouldPersistSnapshotOnColdSegmentBoundary()
                 && hybridReadBatchMetadata.ReachedColdSegmentBoundary)
             {
-                return true;
+                return new CatchUpPersistDecision(true, "cold_segment_boundary");
             }
 
             if (_eventsProcessedSinceLastCatchUpPersist >= hybridCatchUpStore.GetCatchUpPersistMaxEventsWithoutSnapshot())
             {
-                return true;
+                return new CatchUpPersistDecision(true, "max_events_since_last_persist");
             }
 
             if (DateTime.UtcNow - _lastCatchUpPersistUtc >= hybridCatchUpStore.GetCatchUpPersistMaxInterval())
             {
-                return true;
+                return new CatchUpPersistDecision(true, "max_interval_since_last_persist");
             }
 
-            return false;
+            return new CatchUpPersistDecision(false, "none");
         }
 
-        return _eventsProcessed > 0 && _eventsProcessed % 5000 == 0;
+        if (_eventsProcessed > 0 && _eventsProcessed % 5000 == 0)
+        {
+            return new CatchUpPersistDecision(true, "event_count_checkpoint");
+        }
+
+        return new CatchUpPersistDecision(false, "none");
     }
 
     private async Task CompleteCatchUp()
     {
         var projectorName = GetProjectorName();
         var shouldPersist = _catchUpProgress.HadNewEvents;
+        var pendingStreamEventsBefore = _pendingStreamEvents.Count;
+        long safePromotionElapsedMs = 0;
+        long persistElapsedMs = 0;
 
         try
         {
@@ -2834,10 +3111,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (shouldPersist)
             {
                 // Force promotion of any events that are now safe
+                var safePromotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 await TriggerSafePromotion();
+                safePromotionStopwatch.Stop();
+                safePromotionElapsedMs = safePromotionStopwatch.ElapsedMilliseconds;
 
                 // Final persistence
+                var persistStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 await PersistStateAsync();
+                persistStopwatch.Stop();
+                persistElapsedMs = persistStopwatch.ElapsedMilliseconds;
             }
 
             // Process any pending stream events
@@ -2847,12 +3130,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _catchUpProgress.IsActive = false;
 
             var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
-            _logger.LogDebug(
-                "[{ProjectorName}] Catch-up completed: {BatchCount} batches, {EventsProcessed:N0} events, elapsed: {ElapsedSeconds:F1}s",
+            _logger.LogInformation(
+                MultiProjectionLogEvents.CatchUpCompleted,
+                "[{ProjectorName}] Catch-up completed. BatchCount={BatchCount}, EventsProcessed={EventsProcessed}, StartPosition={StartPosition}, CurrentPosition={CurrentPosition}, TargetPosition={TargetPosition}, PendingStreamEventsBefore={PendingStreamEventsBefore}, PendingStreamEventsAfter={PendingStreamEventsAfter}, SafePromotionElapsedMs={SafePromotionElapsedMs}, PersistElapsedMs={PersistElapsedMs}, TotalElapsedMs={TotalElapsedMs}, PersistReason={PersistReason}, GlobalConcurrencySkipCount={GlobalConcurrencySkipCount}",
                 projectorName,
                 _catchUpProgress.BatchesProcessed,
                 _eventsProcessed,
-                elapsed.TotalSeconds);
+                _catchUpProgress.InitialPosition?.Value ?? "beginning",
+                _catchUpProgress.CurrentPosition?.Value ?? "beginning",
+                _catchUpProgress.TargetPosition?.Value ?? "unknown",
+                pendingStreamEventsBefore,
+                _pendingStreamEvents.Count,
+                safePromotionElapsedMs,
+                persistElapsedMs,
+                (long)elapsed.TotalMilliseconds,
+                shouldPersist ? "catch_up_complete" : "none",
+                _catchUpBatchSkipCount);
         }
         finally
         {
