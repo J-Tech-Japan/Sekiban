@@ -11,6 +11,9 @@
     <Project Path="src/Sekiban.Dcb.WithoutResult.Model/Sekiban.Dcb.WithoutResult.Model.csproj" />
     <Project Path="src/Sekiban.Dcb.WithResult/Sekiban.Dcb.WithResult.csproj" />
     <Project Path="src/Sekiban.Dcb.WithoutResult/Sekiban.Dcb.WithoutResult.csproj" />
+    <Project Path="src/Sekiban.Dcb.MaterializedView.Orleans/Sekiban.Dcb.MaterializedView.Orleans.csproj" />
+    <Project Path="src/Sekiban.Dcb.MaterializedView.Postgres/Sekiban.Dcb.MaterializedView.Postgres.csproj" />
+    <Project Path="src/Sekiban.Dcb.MaterializedView/Sekiban.Dcb.MaterializedView.csproj" />
     <Project Path="src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj" />
     <Project Path="src/Sekiban.Dcb.Orleans.WithResult/Sekiban.Dcb.Orleans.WithResult.csproj" />
     <Project Path="src/Sekiban.Dcb.Orleans.WithoutResult/Sekiban.Dcb.Orleans.WithoutResult.csproj" />
