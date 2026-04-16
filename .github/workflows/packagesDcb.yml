@@ -42,14 +42,7 @@ jobs:
           dotnet restore dcb/Sekiban.Dcb.slnx
 
       - name: Build with dotnet
-        run: |
-          dotnet build dcb/Sekiban.Dcb.slnx -c Release --no-restore
-
-          # These packable projects are not yet included in Sekiban.Dcb.slnx,
-          # so build them explicitly before `dotnet pack --no-build`.
-          dotnet build dcb/src/Sekiban.Dcb.MaterializedView/Sekiban.Dcb.MaterializedView.csproj -c Release --no-restore
-          dotnet build dcb/src/Sekiban.Dcb.MaterializedView.Postgres/Sekiban.Dcb.MaterializedView.Postgres.csproj -c Release --no-restore
-          dotnet build dcb/src/Sekiban.Dcb.MaterializedView.Orleans/Sekiban.Dcb.MaterializedView.Orleans.csproj -c Release --no-restore
+        run: dotnet build dcb/Sekiban.Dcb.slnx -c Release
 
       - name: Pack NuGet packages
         run: |
