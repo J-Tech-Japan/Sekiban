@@ -238,7 +238,8 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             return ResultBox.FromValue(new StagedExportResult(
                 ImmediateResult: null,
                 Segments: stagedSegments,
-                LastSafeSortableUniqueId: lastSafeSortableUniqueId));
+                LastSafeSortableUniqueId: lastSafeSortableUniqueId,
+                ExportedEventCount: stagedSegments.Sum(x => x.Info.EventCount)));
         }
         catch (Exception ex)
         {
@@ -279,7 +280,8 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
                 Reason: reason,
                 ShouldContinueWithinCycle: false),
             [],
-            null));
+            null,
+            0));
 
     private static async Task DisposeStagedResourcesAsync(
         IEnumerable<StagedSegment> stagedSegments,
@@ -303,17 +305,23 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     {
         var existingManifest = await ColdControlFileHelper.LoadManifestWithETagAsync(_storage, serviceId, ct);
         var existingCheckpoint = await ColdControlFileHelper.LoadCheckpointWithETagAsync(_storage, serviceId, ct);
-        var updatedSegments = (existingManifest?.Manifest?.Segments ?? []).ToList();
+        await using var updatePlan = await BuildManifestUpdatePlanAsync(
+            serviceId,
+            existingManifest?.Manifest,
+            stage,
+            ct);
+        var updatedSegments = updatePlan.UpdatedManifestSegments.ToList();
+        var uploadedPaths = new List<string>();
 
-        foreach (var segment in stage.Segments)
+        foreach (var segment in updatePlan.SegmentsToUpload)
         {
             var putResult = await segment.UploadAsync(_storage, ct);
             if (!putResult.IsSuccess)
             {
+                await CleanupUploadedSegmentsAsync(uploadedPaths, ct);
                 return ResultBox.Error<ExportResult>(putResult.GetException());
             }
-
-            updatedSegments.Add(segment.Info);
+            uploadedPaths.Add(segment.Info.Path);
         }
 
         var newVersion = Guid.NewGuid().ToString();
@@ -330,6 +338,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             manifestPath, manifestData, existingManifest?.ETag, ct);
         if (!manifestResult.IsSuccess)
         {
+            await CleanupUploadedSegmentsAsync(uploadedPaths, ct);
             return ResultBox.Error<ExportResult>(manifestResult.GetException());
         }
 
@@ -349,12 +358,387 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             return ResultBox.Error<ExportResult>(checkpointResult.GetException());
         }
 
+        await DeleteSegmentsAsync(updatePlan.ReplacedSegmentPaths, ct);
+
         return ResultBox.FromValue(new ExportResult(
-            ExportedEventCount: stage.Segments.Sum(x => x.Info.EventCount),
-            NewSegments: stage.Segments.Select(x => x.Info).ToList(),
+            ExportedEventCount: updatePlan.AppliedEventCount,
+            NewSegments: updatePlan.ResultSegments.Select(x => x.Info).ToList(),
             UpdatedManifestVersion: newVersion,
             Reason: ReasonExported,
             ShouldContinueWithinCycle: true));
+    }
+
+    private async Task<ManifestUpdatePlan> BuildManifestUpdatePlanAsync(
+        string serviceId,
+        ColdManifest? existingManifest,
+        StagedExportResult stage,
+        CancellationToken ct)
+    {
+        var existingSegments = (existingManifest?.Segments ?? []).ToList();
+        if (existingSegments.Count == 0 || stage.Segments.Count == 0)
+        {
+            return ManifestUpdatePlan.ForAppend(existingSegments, stage.Segments, [], stage.ExportedEventCount);
+        }
+
+        var existingTail = existingSegments[^1];
+        var adjustedStage = await RemoveTailOverlapAsync(serviceId, existingTail, stage.Segments, ct);
+        var adjustedSegments = adjustedStage.Segments;
+        if (adjustedSegments.Count == 0)
+        {
+            return new ManifestUpdatePlan(
+                UpdatedManifestSegments: existingSegments,
+                SegmentsToUpload: [],
+                ResultSegments: [],
+                ReplacedSegmentPaths: [],
+                OwnedSegments: adjustedStage.OwnedSegments,
+                AppliedEventCount: 0);
+        }
+
+        var firstStagedSegment = adjustedSegments[0];
+        if (!CanMergeTail(existingTail, firstStagedSegment.Info))
+        {
+            return ManifestUpdatePlan.ForAppend(
+                existingSegments,
+                adjustedSegments,
+                adjustedStage.OwnedSegments,
+                adjustedStage.AppliedEventCount);
+        }
+
+        var mergeResult = await TryMergeTailSegmentAsync(serviceId, existingTail, firstStagedSegment, ct);
+        if (!mergeResult.IsSuccess)
+        {
+            _logger.LogWarning(
+                mergeResult.GetException(),
+                "Tail merge fallback for {ServiceId}: failed to merge staged segment into existing tail",
+                serviceId);
+            return ManifestUpdatePlan.ForAppend(
+                existingSegments,
+                adjustedSegments,
+                adjustedStage.OwnedSegments,
+                adjustedStage.AppliedEventCount);
+        }
+
+        var mergeAttempt = mergeResult.GetValue();
+        if (!mergeAttempt.Merged)
+        {
+            return ManifestUpdatePlan.ForAppend(
+                existingSegments,
+                adjustedSegments,
+                adjustedStage.OwnedSegments,
+                adjustedStage.AppliedEventCount);
+        }
+        var mergedTail = mergeAttempt.Segment!;
+
+        var resultSegments = new List<StagedSegment> { mergedTail };
+        resultSegments.AddRange(adjustedSegments.Skip(1));
+
+        var updatedSegments = existingSegments.Take(existingSegments.Count - 1).ToList();
+        updatedSegments.AddRange(resultSegments.Select(x => x.Info));
+
+        var replacedSegmentPaths = mergedTail.Info.Path == existingTail.Path
+            ? Array.Empty<string>()
+            : new[] { existingTail.Path };
+
+        return new ManifestUpdatePlan(
+            UpdatedManifestSegments: updatedSegments,
+            SegmentsToUpload: resultSegments,
+            ResultSegments: resultSegments,
+            ReplacedSegmentPaths: replacedSegmentPaths,
+            OwnedSegments: adjustedStage.OwnedSegments.Concat([mergedTail]).ToList(),
+            AppliedEventCount: adjustedStage.AppliedEventCount);
+    }
+
+    private bool CanMergeTail(ColdSegmentInfo existingTail, ColdSegmentInfo firstStagedSegment)
+        => firstStagedSegment.EventCount > 0
+           && existingTail.EventCount < _options.SegmentMaxEvents
+           && existingTail.SizeBytes < _options.SegmentMaxBytes
+           && existingTail.EventCount + firstStagedSegment.EventCount <= _options.SegmentMaxEvents
+           && existingTail.SizeBytes + firstStagedSegment.SizeBytes <= _options.SegmentMaxBytes;
+
+    private async Task<ResultBox<MergeTailAttempt>> TryMergeTailSegmentAsync(
+        string serviceId,
+        ColdSegmentInfo existingTail,
+        StagedSegment firstStagedSegment,
+        CancellationToken ct)
+    {
+        if (existingTail.EventCount >= _options.SegmentMaxEvents
+            || existingTail.SizeBytes >= _options.SegmentMaxBytes
+            || existingTail.EventCount + firstStagedSegment.Info.EventCount > _options.SegmentMaxEvents
+            || existingTail.SizeBytes + firstStagedSegment.Info.SizeBytes > _options.SegmentMaxBytes)
+        {
+            return ResultBox.FromValue(new MergeTailAttempt(false, null));
+        }
+
+        IColdSegmentFileBuilder? builder = null;
+        try
+        {
+            var existingEventsResult = await AppendExistingTailAsync(existingTail, ct);
+            if (!existingEventsResult.IsSuccess)
+            {
+                return ResultBox.Error<MergeTailAttempt>(existingEventsResult.GetException());
+            }
+
+            builder = existingEventsResult.GetValue();
+            var appendResult = await TryAppendLocalSegmentToBuilderAsync(firstStagedSegment, builder, ct);
+            if (!appendResult.IsSuccess)
+            {
+                return ResultBox.Error<MergeTailAttempt>(appendResult.GetException());
+            }
+
+            if (!appendResult.GetValue())
+            {
+                return ResultBox.FromValue(new MergeTailAttempt(false, null));
+            }
+
+            var completed = await builder.CompleteAsync(serviceId, ct);
+            builder = null;
+            return ResultBox.FromValue(new MergeTailAttempt(true, new StagedSegment(completed.FilePath, completed.Info)));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<MergeTailAttempt>(ex);
+        }
+        finally
+        {
+            if (builder is not null)
+            {
+                await builder.DisposeAsync();
+            }
+        }
+    }
+
+    private async Task<TailOverlapAdjustment> RemoveTailOverlapAsync(
+        string serviceId,
+        ColdSegmentInfo existingTail,
+        IReadOnlyList<StagedSegment> stagedSegments,
+        CancellationToken ct)
+    {
+        if (stagedSegments.Count == 0)
+        {
+            return new TailOverlapAdjustment([], [], 0);
+        }
+
+        var adjustedSegments = new List<StagedSegment>();
+        var ownedSegments = new List<StagedSegment>();
+        var appliedEventCount = 0;
+        var overlapResolved = false;
+
+        foreach (var stagedSegment in stagedSegments)
+        {
+            if (overlapResolved)
+            {
+                adjustedSegments.Add(stagedSegment);
+                appliedEventCount += stagedSegment.Info.EventCount;
+                continue;
+            }
+
+            if (string.Compare(stagedSegment.Info.FromSortableUniqueId, existingTail.ToSortableUniqueId, StringComparison.Ordinal) > 0)
+            {
+                overlapResolved = true;
+                adjustedSegments.Add(stagedSegment);
+                appliedEventCount += stagedSegment.Info.EventCount;
+                continue;
+            }
+
+            var stagedEvents = (await ReadEventsFromLocalSegmentAsync(stagedSegment, ct)).GetValue();
+            var filteredEvents = stagedEvents
+                .Where(evt => string.Compare(evt.SortableUniqueIdValue, existingTail.ToSortableUniqueId, StringComparison.Ordinal) > 0)
+                .ToList();
+
+            if (filteredEvents.Count == 0)
+            {
+                continue;
+            }
+
+            overlapResolved = true;
+            if (filteredEvents.Count == stagedEvents.Count)
+            {
+                adjustedSegments.Add(stagedSegment);
+                appliedEventCount += stagedSegment.Info.EventCount;
+                continue;
+            }
+
+            var rebuiltSegment = await CreateSegmentFromEventsAsync(serviceId, filteredEvents, ct);
+            ownedSegments.Add(rebuiltSegment);
+            adjustedSegments.Add(rebuiltSegment);
+            appliedEventCount += rebuiltSegment.Info.EventCount;
+        }
+
+        return new TailOverlapAdjustment(adjustedSegments, ownedSegments, appliedEventCount);
+    }
+
+    private async Task<ResultBox<IColdSegmentFileBuilder>> AppendExistingTailAsync(
+        ColdSegmentInfo existingTail,
+        CancellationToken ct)
+    {
+        IColdSegmentFileBuilder? builder = null;
+        var streamResult = await _storage.OpenReadAsync(existingTail.Path, ct);
+        if (!streamResult.IsSuccess)
+        {
+            return ResultBox.Error<IColdSegmentFileBuilder>(streamResult.GetException());
+        }
+
+        await using var stream = streamResult.GetValue();
+        var readResult = await _segmentFormatHandler.StreamSegmentAsync(
+            stream,
+            since: null,
+            maxCount: null,
+            async evt =>
+            {
+                if (builder is null)
+                {
+                    builder = await _segmentFormatHandler.CreateBuilderAsync(evt, ct);
+                    return;
+                }
+
+                await builder.AppendAsync(evt, ct);
+            },
+            ct);
+        if (!readResult.IsSuccess)
+        {
+            if (builder is not null)
+            {
+                await builder.DisposeAsync();
+                builder = null;
+            }
+            return ResultBox.Error<IColdSegmentFileBuilder>(readResult.GetException());
+        }
+
+        return builder is null
+            ? ResultBox.Error<IColdSegmentFileBuilder>(
+                new InvalidOperationException($"Cold segment {existingTail.Path} did not contain any events."))
+            : ResultBox.FromValue<IColdSegmentFileBuilder>(builder);
+    }
+
+    private async Task<ResultBox<bool>> TryAppendLocalSegmentToBuilderAsync(
+        StagedSegment stagedSegment,
+        IColdSegmentFileBuilder builder,
+        CancellationToken ct)
+    {
+        await using var stream = new FileStream(
+            stagedSegment.FilePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        try
+        {
+            var readResult = await _segmentFormatHandler.StreamSegmentAsync(
+                stream,
+                since: null,
+                maxCount: null,
+                async evt =>
+                {
+                    if (!builder.CanAppend(evt, _options))
+                    {
+                        throw new MergeCapacityExceededException();
+                    }
+
+                    await builder.AppendAsync(evt, ct);
+                },
+                ct);
+
+            return !readResult.IsSuccess
+                ? ResultBox.Error<bool>(readResult.GetException())
+                : ResultBox.FromValue(true);
+        }
+        catch (MergeCapacityExceededException)
+        {
+            return ResultBox.FromValue(false);
+        }
+    }
+
+    private async Task<ResultBox<List<SerializableEvent>>> ReadEventsFromLocalSegmentAsync(
+        StagedSegment stagedSegment,
+        CancellationToken ct)
+    {
+        var events = new List<SerializableEvent>(stagedSegment.Info.EventCount);
+        await using var stream = new FileStream(
+            stagedSegment.FilePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        var readResult = await _segmentFormatHandler.StreamSegmentAsync(
+            stream,
+            since: null,
+            maxCount: null,
+            evt =>
+            {
+                events.Add(evt);
+                return ValueTask.CompletedTask;
+            },
+            ct);
+
+        return !readResult.IsSuccess
+            ? ResultBox.Error<List<SerializableEvent>>(readResult.GetException())
+            : ResultBox.FromValue(events);
+    }
+
+    private async Task<StagedSegment> CreateSegmentFromEventsAsync(
+        string serviceId,
+        IReadOnlyList<SerializableEvent> events,
+        CancellationToken ct)
+    {
+        if (events.Count == 0)
+        {
+            throw new InvalidOperationException("Cannot create a cold segment from an empty event list.");
+        }
+
+        IColdSegmentFileBuilder? builder = null;
+        try
+        {
+            builder = await _segmentFormatHandler.CreateBuilderAsync(events[0], ct);
+            for (var i = 1; i < events.Count; i++)
+            {
+                await builder.AppendAsync(events[i], ct);
+            }
+
+            var completed = await builder.CompleteAsync(serviceId, ct);
+            builder = null;
+            return new StagedSegment(completed.FilePath, completed.Info);
+        }
+        catch
+        {
+            if (builder is not null)
+            {
+                await builder.DisposeAsync();
+            }
+
+            throw;
+        }
+    }
+
+    private async Task CleanupUploadedSegmentsAsync(
+        IEnumerable<string> uploadedPaths,
+        CancellationToken ct)
+    {
+        foreach (var path in uploadedPaths)
+        {
+            var deleteResult = await _storage.DeleteAsync(path, ct);
+            if (!deleteResult.IsSuccess)
+            {
+                _logger.LogWarning(deleteResult.GetException(), "Failed to delete uploaded cold segment {Path}", path);
+            }
+        }
+    }
+
+    private async Task DeleteSegmentsAsync(
+        IEnumerable<string> segmentPaths,
+        CancellationToken ct)
+    {
+        foreach (var path in segmentPaths)
+        {
+            var deleteResult = await _storage.DeleteAsync(path, ct);
+            if (!deleteResult.IsSuccess)
+            {
+                _logger.LogWarning(deleteResult.GetException(), "Failed to delete replaced cold segment {Path}", path);
+            }
+        }
     }
 
     private async IAsyncEnumerable<SerializableEvent> ReadExportCandidatesAsStreamAsync(
@@ -435,7 +819,8 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     private sealed record StagedExportResult(
         ExportResult? ImmediateResult,
         IReadOnlyList<StagedSegment> Segments,
-        string? LastSafeSortableUniqueId) : IAsyncDisposable
+        string? LastSafeSortableUniqueId,
+        int ExportedEventCount) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync()
         {
@@ -486,5 +871,44 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             return ValueTask.CompletedTask;
         }
     }
+
+    private sealed record ManifestUpdatePlan(
+        IReadOnlyList<ColdSegmentInfo> UpdatedManifestSegments,
+        IReadOnlyList<StagedSegment> SegmentsToUpload,
+        IReadOnlyList<StagedSegment> ResultSegments,
+        IReadOnlyList<string> ReplacedSegmentPaths,
+        IReadOnlyList<StagedSegment> OwnedSegments,
+        int AppliedEventCount) : IAsyncDisposable
+    {
+        public static ManifestUpdatePlan ForAppend(
+            IReadOnlyList<ColdSegmentInfo> existingSegments,
+            IReadOnlyList<StagedSegment> stageSegments,
+            IReadOnlyList<StagedSegment> ownedSegments,
+            int appliedEventCount)
+            => new(
+                UpdatedManifestSegments: existingSegments.Concat(stageSegments.Select(x => x.Info)).ToList(),
+                SegmentsToUpload: stageSegments,
+                ResultSegments: stageSegments,
+                ReplacedSegmentPaths: [],
+                OwnedSegments: ownedSegments,
+                AppliedEventCount: appliedEventCount);
+
+        public async ValueTask DisposeAsync()
+        {
+            foreach (var segment in OwnedSegments)
+            {
+                await segment.DisposeAsync();
+            }
+        }
+    }
+
+    private sealed record MergeTailAttempt(bool Merged, StagedSegment? Segment);
+
+    private sealed record TailOverlapAdjustment(
+        IReadOnlyList<StagedSegment> Segments,
+        IReadOnlyList<StagedSegment> OwnedSegments,
+        int AppliedEventCount);
+
+    public sealed class MergeCapacityExceededException : Exception;
 
 }
