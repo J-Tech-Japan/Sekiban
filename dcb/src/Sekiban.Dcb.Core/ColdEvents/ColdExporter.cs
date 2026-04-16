@@ -395,8 +395,10 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         }
 
         var firstStagedSegment = adjustedSegments[0];
-        if (!CanMergeTail(existingTail, firstStagedSegment.Info))
+        var tailMergeDecision = EvaluateTailMerge(existingTail, firstStagedSegment.Info);
+        if (!tailMergeDecision.CanMerge)
         {
+            LogTailMergeSkip(serviceId, tailMergeDecision);
             return ManifestUpdatePlan.ForAppend(
                 existingSegments,
                 adjustedSegments,
@@ -448,12 +450,75 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             AppliedEventCount: adjustedStage.AppliedEventCount);
     }
 
-    private bool CanMergeTail(ColdSegmentInfo existingTail, ColdSegmentInfo firstStagedSegment)
-        => firstStagedSegment.EventCount > 0
-           && existingTail.EventCount < _options.SegmentMaxEvents
-           && existingTail.SizeBytes < _options.SegmentMaxBytes
-           && existingTail.EventCount + firstStagedSegment.EventCount <= _options.SegmentMaxEvents
-           && existingTail.SizeBytes + firstStagedSegment.SizeBytes <= _options.SegmentMaxBytes;
+    private TailMergeDecision EvaluateTailMerge(
+        ColdSegmentInfo existingTail,
+        ColdSegmentInfo firstStagedSegment)
+    {
+        if (!_options.EnableTailMerge)
+        {
+            return new TailMergeDecision(false, TailMergeSkipReason.Disabled, null, _options.TailMergeMaxLocalBytes);
+        }
+
+        if (firstStagedSegment.EventCount <= 0
+            || existingTail.EventCount >= _options.SegmentMaxEvents
+            || existingTail.SizeBytes >= _options.SegmentMaxBytes
+            || existingTail.EventCount + firstStagedSegment.EventCount > _options.SegmentMaxEvents
+            || existingTail.SizeBytes + firstStagedSegment.SizeBytes > _options.SegmentMaxBytes)
+        {
+            return new TailMergeDecision(false, TailMergeSkipReason.SegmentLimits, null, _options.TailMergeMaxLocalBytes);
+        }
+
+        var estimatedLocalBytes = EstimateTailMergeLocalBytes(existingTail, firstStagedSegment);
+        if (_options.TailMergeMaxLocalBytes is > 0 && estimatedLocalBytes > _options.TailMergeMaxLocalBytes.Value)
+        {
+            return new TailMergeDecision(
+                false,
+                TailMergeSkipReason.LocalBudgetExceeded,
+                estimatedLocalBytes,
+                _options.TailMergeMaxLocalBytes);
+        }
+
+        return new TailMergeDecision(true, null, estimatedLocalBytes, _options.TailMergeMaxLocalBytes);
+    }
+
+    private static long EstimateTailMergeLocalBytes(
+        ColdSegmentInfo existingTail,
+        ColdSegmentInfo firstStagedSegment)
+    {
+        try
+        {
+            return checked(existingTail.SizeBytes + firstStagedSegment.SizeBytes + firstStagedSegment.SizeBytes);
+        }
+        catch (OverflowException)
+        {
+            return long.MaxValue;
+        }
+    }
+
+    private void LogTailMergeSkip(string serviceId, TailMergeDecision decision)
+    {
+        if (decision.Reason is null)
+        {
+            return;
+        }
+
+        if (decision.Reason == TailMergeSkipReason.LocalBudgetExceeded)
+        {
+            _logger.LogInformation(
+                "Skipping tail merge for {ServiceId}: estimated local merge size {EstimatedBytes} exceeds budget {BudgetBytes}",
+                serviceId,
+                decision.EstimatedLocalBytes,
+                decision.LocalBudgetBytes);
+            return;
+        }
+
+        if (decision.Reason == TailMergeSkipReason.Disabled)
+        {
+            _logger.LogInformation(
+                "Skipping tail merge for {ServiceId}: tail merge is disabled by configuration",
+                serviceId);
+        }
+    }
 
     private async Task<ResultBox<MergeTailAttempt>> TryMergeTailSegmentAsync(
         string serviceId,
@@ -908,6 +973,19 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         IReadOnlyList<StagedSegment> Segments,
         IReadOnlyList<StagedSegment> OwnedSegments,
         int AppliedEventCount);
+
+    private sealed record TailMergeDecision(
+        bool CanMerge,
+        TailMergeSkipReason? Reason,
+        long? EstimatedLocalBytes,
+        long? LocalBudgetBytes);
+
+    private enum TailMergeSkipReason
+    {
+        Disabled = 1,
+        SegmentLimits = 2,
+        LocalBudgetExceeded = 3
+    }
 
     public sealed class MergeCapacityExceededException : Exception;
 
