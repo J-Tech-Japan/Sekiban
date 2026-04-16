@@ -909,6 +909,6 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         IReadOnlyList<StagedSegment> OwnedSegments,
         int AppliedEventCount);
 
-    private sealed class MergeCapacityExceededException : Exception;
+    public sealed class MergeCapacityExceededException : Exception;
 
 }
