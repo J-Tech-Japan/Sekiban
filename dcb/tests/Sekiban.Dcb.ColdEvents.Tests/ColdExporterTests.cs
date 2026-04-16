@@ -317,6 +317,50 @@ public class ColdExporterTests
     }
 
     [Fact]
+    public async Task ExportIncrementalAsync_should_not_duplicate_tail_events_when_manifest_is_ahead_of_checkpoint()
+    {
+        // Given
+        var options = EnabledOptions with { SegmentMaxEvents = 10, SegmentMaxBytes = long.MaxValue };
+        var t0 = DateTime.UtcNow.AddMinutes(-10);
+        var e1 = CreateEvent(t0, "Event1");
+        var e2 = CreateEvent(t0.AddSeconds(1), "Event2");
+        var e3 = CreateEvent(t0.AddSeconds(2), "Event3");
+
+        var baseStorage = new InMemoryColdObjectStorage();
+        var failingCheckpointStorage = new FailingCheckpointStorage(baseStorage, ServiceId);
+
+        var firstExporter = CreateExporter(new StubEventStore([e1, e2]), options, baseStorage, _leaseManager);
+        var first = await firstExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        Assert.True(first.IsSuccess);
+
+        var secondExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, failingCheckpointStorage, _leaseManager);
+        var second = await secondExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+        Assert.False(second.IsSuccess);
+
+        var staleProgress = await CreateExporter(new StubEventStore([]), options, baseStorage, _leaseManager)
+            .GetProgressAsync(ServiceId, CancellationToken.None);
+        Assert.True(staleProgress.IsSuccess);
+        Assert.Equal(e2.SortableUniqueIdValue, staleProgress.GetValue().NextSinceSortableUniqueId);
+        Assert.Equal(e3.SortableUniqueIdValue, staleProgress.GetValue().LatestSafeSortableUniqueId);
+
+        var retryExporter = CreateExporter(new StubEventStore([e1, e2, e3]), options, baseStorage, _leaseManager);
+        var retry = await retryExporter.ExportIncrementalAsync(ServiceId, CancellationToken.None);
+
+        Assert.True(retry.IsSuccess);
+        Assert.Equal(0, retry.GetValue().ExportedEventCount);
+
+        var manifest = await ColdControlFileHelper.LoadManifestAsync(baseStorage, ServiceId, CancellationToken.None);
+        Assert.NotNull(manifest);
+        Assert.Single(manifest!.Segments);
+        Assert.Equal(3, manifest.Segments[0].EventCount);
+        Assert.Equal(e3.SortableUniqueIdValue, manifest.Segments[0].ToSortableUniqueId);
+
+        var repairedProgress = await retryExporter.GetProgressAsync(ServiceId, CancellationToken.None);
+        Assert.True(repairedProgress.IsSuccess);
+        Assert.Equal(e3.SortableUniqueIdValue, repairedProgress.GetValue().NextSinceSortableUniqueId);
+    }
+
+    [Fact]
     public async Task ExportIncrementalAsync_should_fail_when_checkpoint_write_fails()
     {
         // Given
@@ -600,4 +644,5 @@ public class ColdExporterTests
         public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct)
             => _inner.DeleteAsync(path, ct);
     }
+
 }
