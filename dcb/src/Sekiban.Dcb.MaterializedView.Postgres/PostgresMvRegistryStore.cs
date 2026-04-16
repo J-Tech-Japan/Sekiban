@@ -273,10 +273,10 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
 
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await connection.QueryAsync<RegistryRow>(
+        var rows = await connection.QueryAsync(
             new CommandDefinition(sql, new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-        return rows.Select(MapEntry).ToList();
+        return rows.Select(row => (MvRegistryEntry)MapEntry(ToDictionary(row))).ToList();
     }
 
     public async Task<MvActiveEntry?> GetActiveAsync(
@@ -296,10 +296,10 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
 
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var row = await connection.QuerySingleOrDefaultAsync<ActiveRow>(
+        var row = await connection.QuerySingleOrDefaultAsync(
             new CommandDefinition(sql, new { ServiceId = serviceId, ViewName = viewName }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-        return row is null ? null : new MvActiveEntry(row.ServiceId, row.ViewName, row.ActiveVersion, row.ActivatedAt);
+        return row is null ? null : MapActiveEntry(ToDictionary(row));
     }
 
     public async Task SetActiveAsync(
@@ -339,108 +339,126 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
             new CommandDefinition(sql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    private static MvRegistryEntry MapEntry(RegistryRow row) =>
+    private static MvRegistryEntry MapEntry(IReadOnlyDictionary<string, object?> row) =>
         new(
-            row.ServiceId,
-            row.ViewName,
-            row.ViewVersion,
-            row.LogicalTable,
-            row.PhysicalTable,
-            Enum.Parse<MvStatus>(row.Status, ignoreCase: true),
-            row.CurrentPosition,
-            row.TargetPosition,
-            row.LastSortableUniqueId,
-            row.AppliedEventVersion,
-            row.LastAppliedSource,
-            row.LastAppliedAt,
-            row.LastStreamReceivedSortableUniqueId,
-            row.LastStreamReceivedAt,
-            row.LastStreamAppliedSortableUniqueId,
-            row.LastCatchUpSortableUniqueId,
-            row.LastUpdated,
-            row.Metadata);
+            ReadRequiredString(row, "ServiceId"),
+            ReadRequiredString(row, "ViewName"),
+            ReadRequiredInt(row, "ViewVersion"),
+            ReadRequiredString(row, "LogicalTable"),
+            ReadRequiredString(row, "PhysicalTable"),
+            Enum.Parse<MvStatus>(ReadRequiredString(row, "Status"), ignoreCase: true),
+            ReadNullableString(row, "CurrentPosition"),
+            ReadNullableString(row, "TargetPosition"),
+            ReadNullableString(row, "LastSortableUniqueId"),
+            ReadRequiredLong(row, "AppliedEventVersion"),
+            ReadNullableString(row, "LastAppliedSource"),
+            ReadNullableDateTimeOffset(row, "LastAppliedAt"),
+            ReadNullableString(row, "LastStreamReceivedSortableUniqueId"),
+            ReadNullableDateTimeOffset(row, "LastStreamReceivedAt"),
+            ReadNullableString(row, "LastStreamAppliedSortableUniqueId"),
+            ReadNullableString(row, "LastCatchUpSortableUniqueId"),
+            ReadRequiredDateTimeOffset(row, "LastUpdated"),
+            ReadNullableString(row, "Metadata"));
 
-    private sealed class RegistryRow
+    private static MvActiveEntry MapActiveEntry(IReadOnlyDictionary<string, object?> row) =>
+        new(
+            ReadRequiredString(row, "ServiceId"),
+            ReadRequiredString(row, "ViewName"),
+            ReadRequiredInt(row, "ActiveVersion"),
+            ReadRequiredDateTimeOffset(row, "ActivatedAt"));
+
+    private static IReadOnlyDictionary<string, object?> ToDictionary(object row)
     {
-        public RegistryRow(
-            string serviceId,
-            string viewName,
-            int viewVersion,
-            string logicalTable,
-            string physicalTable,
-            string status,
-            string? currentPosition,
-            string? targetPosition,
-            string? lastSortableUniqueId,
-            long appliedEventVersion,
-            string? lastAppliedSource,
-            DateTime? lastAppliedAt,
-            string? lastStreamReceivedSortableUniqueId,
-            DateTime? lastStreamReceivedAt,
-            string? lastStreamAppliedSortableUniqueId,
-            string? lastCatchUpSortableUniqueId,
-            DateTime lastUpdated,
-            string? metadata)
+        if (row is IReadOnlyDictionary<string, object?> readOnlyDictionary)
         {
-            ServiceId = serviceId;
-            ViewName = viewName;
-            ViewVersion = viewVersion;
-            LogicalTable = logicalTable;
-            PhysicalTable = physicalTable;
-            Status = status;
-            CurrentPosition = currentPosition;
-            TargetPosition = targetPosition;
-            LastSortableUniqueId = lastSortableUniqueId;
-            AppliedEventVersion = appliedEventVersion;
-            LastAppliedSource = lastAppliedSource;
-            LastAppliedAt = lastAppliedAt is null ? null : Normalize(lastAppliedAt.Value);
-            LastStreamReceivedSortableUniqueId = lastStreamReceivedSortableUniqueId;
-            LastStreamReceivedAt = lastStreamReceivedAt is null ? null : Normalize(lastStreamReceivedAt.Value);
-            LastStreamAppliedSortableUniqueId = lastStreamAppliedSortableUniqueId;
-            LastCatchUpSortableUniqueId = lastCatchUpSortableUniqueId;
-            LastUpdated = Normalize(lastUpdated);
-            Metadata = metadata;
+            return readOnlyDictionary;
         }
 
-        public string ServiceId { get; }
-        public string ViewName { get; }
-        public int ViewVersion { get; }
-        public string LogicalTable { get; }
-        public string PhysicalTable { get; }
-        public string Status { get; }
-        public string? CurrentPosition { get; }
-        public string? TargetPosition { get; }
-        public string? LastSortableUniqueId { get; }
-        public long AppliedEventVersion { get; }
-        public string? LastAppliedSource { get; }
-        public DateTimeOffset? LastAppliedAt { get; }
-        public string? LastStreamReceivedSortableUniqueId { get; }
-        public DateTimeOffset? LastStreamReceivedAt { get; }
-        public string? LastStreamAppliedSortableUniqueId { get; }
-        public string? LastCatchUpSortableUniqueId { get; }
-        public DateTimeOffset LastUpdated { get; }
-        public string? Metadata { get; }
-    }
-
-    private sealed class ActiveRow
-    {
-        public ActiveRow(
-            string serviceId,
-            string viewName,
-            int activeVersion,
-            DateTime activatedAt)
+        if (row is IDictionary<string, object?> dictionary)
         {
-            ServiceId = serviceId;
-            ViewName = viewName;
-            ActiveVersion = activeVersion;
-            ActivatedAt = Normalize(activatedAt);
+            return new Dictionary<string, object?>(dictionary, StringComparer.OrdinalIgnoreCase);
         }
 
-        public string ServiceId { get; }
-        public string ViewName { get; }
-        public int ActiveVersion { get; }
-        public DateTimeOffset ActivatedAt { get; }
+        if (row is IDictionary<string, object> nonNullableDictionary)
+        {
+            return nonNullableDictionary
+                .Select(pair => new KeyValuePair<string, object?>(pair.Key, pair.Value))
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (row is System.Collections.IDictionary legacyDictionary)
+        {
+            return legacyDictionary.Cast<System.Collections.DictionaryEntry>()
+                .ToDictionary(
+                    entry => entry.Key.ToString() ?? string.Empty,
+                    entry => entry.Value,
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        return row.GetType()
+            .GetProperties()
+            .ToDictionary(property => property.Name, property => property.GetValue(row), StringComparer.OrdinalIgnoreCase);
     }
+
+    private static string ReadRequiredString(IReadOnlyDictionary<string, object?> row, string key) =>
+        TryGetValue(row, key, out var value) && value is not null
+            ? value.ToString()!
+            : throw new InvalidOperationException($"Registry row is missing required value '{key}'.");
+
+    private static string? ReadNullableString(IReadOnlyDictionary<string, object?> row, string key) =>
+        TryGetValue(row, key, out var value) && value is not null
+            ? value.ToString()
+            : null;
+
+    private static int ReadRequiredInt(IReadOnlyDictionary<string, object?> row, string key) =>
+        Convert.ToInt32(TryGetValue(row, key, out var value)
+            ? value
+            : throw new InvalidOperationException($"Registry row is missing required value '{key}'."));
+
+    private static long ReadRequiredLong(IReadOnlyDictionary<string, object?> row, string key) =>
+        Convert.ToInt64(TryGetValue(row, key, out var value)
+            ? value
+            : throw new InvalidOperationException($"Registry row is missing required value '{key}'."));
+
+    private static DateTimeOffset ReadRequiredDateTimeOffset(IReadOnlyDictionary<string, object?> row, string key) =>
+        ReadDateTimeOffsetCore(
+            TryGetValue(row, key, out var value)
+                ? value
+                : throw new InvalidOperationException($"Registry row is missing required value '{key}'."),
+            key) ??
+        throw new InvalidOperationException($"Registry row is missing required timestamp '{key}'.");
+
+    private static DateTimeOffset? ReadNullableDateTimeOffset(IReadOnlyDictionary<string, object?> row, string key) =>
+        TryGetValue(row, key, out var value) ? ReadDateTimeOffsetCore(value, key) : null;
+
+    private static bool TryGetValue(IReadOnlyDictionary<string, object?> row, string key, out object? value)
+    {
+        if (row.TryGetValue(key, out value))
+        {
+            return true;
+        }
+
+        foreach (var pair in row)
+        {
+            if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
+            {
+                value = pair.Value;
+                return true;
+            }
+        }
+
+        value = null;
+        return false;
+    }
+
+    private static DateTimeOffset? ReadDateTimeOffsetCore(object? value, string key) =>
+        value switch
+        {
+            null or DBNull => null,
+            DateTimeOffset dateTimeOffset => dateTimeOffset,
+            DateTime dateTime => Normalize(dateTime),
+            _ => throw new InvalidOperationException($"Registry row value '{key}' must be a timestamp.")
+        };
 
     private static DateTimeOffset Normalize(DateTime value) =>
         new(DateTime.SpecifyKind(value, DateTimeKind.Utc));

@@ -12,6 +12,8 @@ var app = builder.Build();
 // Shared state
 var state = new BenchState();
 const string DatabaseMode = "database";
+const string SingleMode = "single";
+const string GenericMode = "generic";
 
 app.MapGet("/", () => Results.Text($@"<!doctype html>
 <html lang='ja'>
@@ -727,30 +729,30 @@ static bool IsDatabaseMode(string mode) => string.Equals(mode, DatabaseMode, Str
 
 static string GetEventStatisticsPath(string? mode) => mode switch
 {
-    "single" => "/api/weatherforecastsingle/event-statistics",
-    "generic" => "/api/weatherforecastgeneric/event-statistics",
+    SingleMode => "/api/weatherforecastsingle/event-statistics",
+    GenericMode => "/api/weatherforecastgeneric/event-statistics",
     _ => "/api/weatherforecast/event-statistics"
 };
 
 static string GetProjectionCountPath(string? mode) => mode switch
 {
-    "single" => "/api/weatherforecastsingle/count",
-    "generic" => "/api/weatherforecastgeneric/count",
+    SingleMode => "/api/weatherforecastsingle/count",
+    GenericMode => "/api/weatherforecastgeneric/count",
     _ when IsDatabaseMode(mode ?? string.Empty) => "/api/weatherforecastdb/count",
     _ => "/api/weatherforecast/count"
 };
 
 static string GetProjectionStatusPath(string? mode) => mode switch
 {
-    "single" => "/api/weatherforecastsingle/status",
-    "generic" => "/api/weatherforecastgeneric/status",
+    SingleMode => "/api/weatherforecastsingle/status",
+    GenericMode => "/api/weatherforecastgeneric/status",
     _ when IsDatabaseMode(mode ?? string.Empty) => "/api/weatherforecastdb/status",
     _ => "/api/weatherforecast/status"
 };
 
 static string GetProjectorName(string mode)
-    => mode == "single" ? "WeatherForecastProjectorWithTagStateProjector"
-       : mode == "generic" ? "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"
+    => mode == SingleMode ? "WeatherForecastProjectorWithTagStateProjector"
+       : mode == GenericMode ? "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"
        : "WeatherForecastProjection";
 
 static async Task RunAsync(string apiBase, BenchState state)
