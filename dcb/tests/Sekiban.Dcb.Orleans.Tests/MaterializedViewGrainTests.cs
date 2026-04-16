@@ -222,12 +222,13 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             }
 
             await _registry.UpdatePositionAsync(
-                serviceId,
-                projector.ViewName,
-                projector.ViewVersion,
-                batch[^1].SortableUniqueIdValue,
-                MvApplySource.CatchUp,
-                appliedEventVersionDelta: batch.Count,
+                new MvPositionUpdate(
+                    serviceId,
+                    projector.ViewName,
+                    projector.ViewVersion,
+                    batch[^1].SortableUniqueIdValue,
+                    MvApplySource.CatchUp,
+                    batch.Count),
                 cancellationToken: cancellationToken);
             return new MvCatchUpResult(batch.Count, false, batch[^1].SortableUniqueIdValue);
         }
@@ -260,12 +261,13 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             }
 
             await _registry.UpdatePositionAsync(
-                serviceId,
-                projector.ViewName,
-                projector.ViewVersion,
-                ordered[^1].SortableUniqueIdValue,
-                MvApplySource.Stream,
-                appliedEventVersionDelta: ordered.Count,
+                new MvPositionUpdate(
+                    serviceId,
+                    projector.ViewName,
+                    projector.ViewVersion,
+                    ordered[^1].SortableUniqueIdValue,
+                    MvApplySource.Stream,
+                    ordered.Count),
                 cancellationToken: cancellationToken);
             return ordered.Count;
         }
@@ -291,27 +293,25 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         }
 
         public Task UpdatePositionAsync(
-            string serviceId,
-            string viewName,
-            int viewVersion,
-            string sortableUniqueId,
-            MvApplySource source,
-            long appliedEventVersionDelta = 1,
+            MvPositionUpdate update,
             System.Data.IDbTransaction? transaction = null,
             CancellationToken cancellationToken = default)
         {
-            foreach (var key in _entries.Keys.Where(key => key.ServiceId == serviceId && key.ViewName == viewName && key.ViewVersion == viewVersion).ToList())
+            foreach (var key in _entries.Keys.Where(key =>
+                         key.ServiceId == update.ServiceId &&
+                         key.ViewName == update.ViewName &&
+                         key.ViewVersion == update.ViewVersion).ToList())
             {
                 var entry = _entries[key];
                 _entries[key] = entry with
                 {
-                    CurrentPosition = sortableUniqueId,
-                    LastSortableUniqueId = sortableUniqueId,
-                    AppliedEventVersion = entry.AppliedEventVersion + appliedEventVersionDelta,
-                    LastAppliedSource = source == MvApplySource.Stream ? "stream" : "catchup",
+                    CurrentPosition = update.SortableUniqueId,
+                    LastSortableUniqueId = update.SortableUniqueId,
+                    AppliedEventVersion = entry.AppliedEventVersion + update.AppliedEventVersionDelta,
+                    LastAppliedSource = update.Source == MvApplySource.Stream ? "stream" : "catchup",
                     LastAppliedAt = DateTimeOffset.UtcNow,
-                    LastStreamAppliedSortableUniqueId = source == MvApplySource.Stream ? sortableUniqueId : entry.LastStreamAppliedSortableUniqueId,
-                    LastCatchUpSortableUniqueId = source == MvApplySource.CatchUp ? sortableUniqueId : entry.LastCatchUpSortableUniqueId,
+                    LastStreamAppliedSortableUniqueId = update.Source == MvApplySource.Stream ? update.SortableUniqueId : entry.LastStreamAppliedSortableUniqueId,
+                    LastCatchUpSortableUniqueId = update.Source == MvApplySource.CatchUp ? update.SortableUniqueId : entry.LastCatchUpSortableUniqueId,
                     LastUpdated = DateTimeOffset.UtcNow
                 };
             }

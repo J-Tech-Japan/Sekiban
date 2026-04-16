@@ -14,7 +14,11 @@ public class MaterializedViewUnitTests
     public void PhysicalNameResolver_SanitizesAndValidates()
     {
         Assert.Equal("order_summary", MvPhysicalName.SanitizeSegment("Order Summary"));
+        Assert.Equal("order_123", MvPhysicalName.SanitizeSegment("Order_日本 123"));
         Assert.Throws<ArgumentException>(() => MvPhysicalName.ValidateIdentifier("bad-name"));
+        Assert.Throws<ArgumentException>(() => MvPhysicalName.ValidateIdentifier("OrderSummary"));
+        Assert.Throws<ArgumentException>(() => MvPhysicalName.ValidateIdentifier("注文"));
+        Assert.Throws<ArgumentException>(() => MvPhysicalName.ValidateIdentifier(new string('a', 64)));
         Assert.Equal(
             "sekiban_mv_ordersummary_v1_items",
             MvPhysicalName.Resolve(new MvOptions(), "OrderSummary", 1, "items"));
@@ -37,6 +41,10 @@ public class MaterializedViewUnitTests
         Assert.Equal("sekiban", record.Name);
         Assert.Equal(3, poco.Count);
         Assert.Equal(record.CreatedAt, poco.CreatedAt);
+
+        var dualCtor = MvRowMapper<DualConstructorTarget>.MapFrom(row);
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), dualCtor.Id);
+        Assert.Equal("sekiban", dualCtor.Name);
     }
 
     [Fact]
@@ -168,6 +176,24 @@ public class MaterializedViewUnitTests
         [MvColumn("name")] public string Name { get; init; } = string.Empty;
         [MvColumn("created_at")] public DateTimeOffset CreatedAt { get; init; }
         [MvColumn("count")] public int Count { get; init; }
+    }
+
+    private sealed class DualConstructorTarget
+    {
+        public DualConstructorTarget()
+        {
+            Id = Guid.Empty;
+            Name = string.Empty;
+        }
+
+        public DualConstructorTarget(Guid id, string name)
+        {
+            Id = id;
+            Name = name;
+        }
+
+        [MvColumn("id")] public Guid Id { get; }
+        [MvColumn("name")] public string Name { get; }
     }
 
     private sealed class FakeMvRow : IMvRow

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using DcbOrleans.Benchmark;
 using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,6 +11,7 @@ var app = builder.Build();
 
 // Shared state
 var state = new BenchState();
+const string DatabaseMode = "database";
 
 app.MapGet("/", () => Results.Text($@"<!doctype html>
 <html lang='ja'>
@@ -194,13 +196,13 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
     <div><button onclick='doDeactivate(&quot;generic&quot;)'>deactivate</button></div>
     <div><button onclick='doSnapshot(&quot;generic&quot;)'>snapshot</button></div>
     <div><button onclick='doRefresh(&quot;generic&quot;)'>refresh</button></div>
-    <div>database</div>
-    <div><button onclick='loadCount(&quot;database&quot;)'>fetch</button> <code id='count-database'>-</code></div>
-    <div><button onclick='loadStatus(&quot;database&quot;)'>fetch</button> <code id='status-database'>-</code></div>
+    <div>{DatabaseMode}</div>
+    <div><button onclick='loadCount(&quot;{DatabaseMode}&quot;)'>fetch</button> <code id='count-{DatabaseMode}'>-</code></div>
+    <div><button onclick='loadStatus(&quot;{DatabaseMode}&quot;)'>fetch</button> <code id='status-{DatabaseMode}'>-</code></div>
     <div><span style='color:#666'>n/a</span></div>
-    <div><button onclick='doDeactivate(&quot;database&quot;)'>deactivate</button></div>
+    <div><button onclick='doDeactivate(&quot;{DatabaseMode}&quot;)'>deactivate</button></div>
     <div><span style='color:#666'>n/a</span></div>
-    <div><button onclick='doRefresh(&quot;database&quot;)'>refresh</button></div>
+    <div><button onclick='doRefresh(&quot;{DatabaseMode}&quot;)'>refresh</button></div>
   </div>
   <script>
     const countLastValues = {{}};
@@ -209,7 +211,7 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
       const j = await r.json();
       const id = 'count-' + mode;
       if(j.error) {{ document.getElementById(id).textContent = 'error: ' + j.error; log('Count(' + mode + ') error: ' + j.error); return; }}
-      const txt = mode === 'database'
+      const txt = mode === '{DatabaseMode}'
         ? 'totalCount:' + (j.totalCount ?? '-') + ' table:' + (j.table ?? '-')
         : 'safeVersion:' + j.safeVersion + ' unsafeVersion:' + (j.unsafeVersion ?? '-') + ' totalCount:' + (j.totalCount ?? '-') ;
       document.getElementById(id).textContent = txt;
@@ -228,7 +230,7 @@ app.MapGet("/", () => Results.Text($@"<!doctype html>
       const j = await r.json();
       const id = 'status-' + mode;
       if(j.error) {{ document.getElementById(id).textContent = 'error: ' + j.error; return; }}
-      if (mode === 'database') {{
+      if (mode === '{DatabaseMode}') {{
         const st = j.status ?? {{}};
         const entry = j.entry ?? {{}};
         document.getElementById(id).textContent =
@@ -385,9 +387,7 @@ app.MapGet("/status", async () =>
 
             // Get event delivery statistics only (does not execute projection)
             var mode = state.Mode ?? "standard";
-            var statsPath = mode == "single"
-                ? "/api/weatherforecastsingle/event-statistics"
-                : mode == "generic" ? "/api/weatherforecastgeneric/event-statistics" : "/api/weatherforecast/event-statistics";
+            var statsPath = GetEventStatisticsPath(mode);
             var statsResponse = await http.GetAsync(statsPath);
             if (statsResponse.IsSuccessStatusCode)
             {
@@ -401,22 +401,21 @@ app.MapGet("/status", async () =>
             var minInterval = state.IsRunning ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(10);
             if (cache.LastFetchedUtc == null || now - cache.LastFetchedUtc > minInterval)
             {
-            var countPath = mode == "single"
-                ? "/api/weatherforecastsingle/count"
-                : mode == "generic" ? "/api/weatherforecastgeneric/count" : "/api/weatherforecast/count";
-            var countResponse = await http.GetAsync(countPath);
-            if (countResponse.IsSuccessStatusCode)
-            {
-                var json = await countResponse.Content.ReadAsStringAsync();
-                var count = JsonSerializer.Deserialize<WeatherCountResponse>(json);
-                cache.Value = count?.totalCount;
-                cache.LastFetchedUtc = now;
-            }
-            // On failure, keep previous cached value
-        }
-        weatherCount = cache.Value;
+                var countPath = GetProjectionCountPath(mode);
+                var countResponse = await http.GetAsync(countPath);
+                if (countResponse.IsSuccessStatusCode)
+                {
+                    var json = await countResponse.Content.ReadAsStringAsync();
+                    var count = JsonSerializer.Deserialize<WeatherCountResponse>(json);
+                    cache.Value = count?.totalCount;
+                    cache.LastFetchedUtc = now;
+                }
 
-            var dbCache = state.GetOrCreateCountCache("database");
+                // On failure, keep previous cached value
+            }
+            weatherCount = cache.Value;
+
+            var dbCache = state.GetOrCreateCountCache(DatabaseMode);
             if (dbCache.LastFetchedUtc == null || now - dbCache.LastFetchedUtc > minInterval)
             {
                 var dbCountResponse = await http.GetAsync("/api/weatherforecastdb/count");
@@ -445,7 +444,7 @@ app.MapGet("/status", async () =>
         state.Canceled,
         state.LastError,
         WeatherCount = weatherCount, // null means "not fetched"; use Projection 状況の Count(fetch) で取得
-        WeatherDbCount = state.GetOrCreateCountCache("database").Value,
+        WeatherDbCount = state.GetOrCreateCountCache(DatabaseMode).Value,
         EventStats = eventStats,
         EndpointMode = state.Mode ?? "standard"
     });
@@ -469,12 +468,7 @@ app.MapPost("/run", async (int? total, int? concurrency, bool? stopOnError, stri
     try
     {
         using var http = CreateApiClient(apiBase!);
-        var countPath = state.Mode switch
-        {
-            "single" => "/api/weatherforecastsingle/count",
-            "generic" => "/api/weatherforecastgeneric/count",
-            _ => "/api/weatherforecast/count"
-        };
+        var countPath = GetProjectionCountPath(state.Mode);
         var _ = await http.GetAsync(countPath);
     }
     catch { /* ignore preflight count error */ }
@@ -489,13 +483,7 @@ app.MapGet("/projection/count", async (string? mode) =>
     var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     var m = (mode ?? "standard").ToLowerInvariant();
-    var path = m == "single"
-        ? "/api/weatherforecastsingle/count"
-        : m == "generic"
-            ? "/api/weatherforecastgeneric/count"
-            : m == "database"
-                ? "/api/weatherforecastdb/count"
-                : "/api/weatherforecast/count";
+    var path = GetProjectionCountPath(m);
     try
     {
         using var http = CreateApiClient(apiBase!);
@@ -516,13 +504,7 @@ app.MapGet("/projection/status", async (string? mode) =>
     var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     var m = (mode ?? "standard").ToLowerInvariant();
-    var path = m == "single"
-        ? "/api/weatherforecastsingle/status"
-        : m == "generic"
-            ? "/api/weatherforecastgeneric/status"
-            : m == "database"
-                ? "/api/weatherforecastdb/status"
-                : "/api/weatherforecast/status";
+    var path = GetProjectionStatusPath(m);
     try
     {
         using var http = CreateApiClient(apiBase!);
@@ -564,7 +546,7 @@ app.MapPost("/projection/deactivate", async (string? mode) =>
     var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     var m = (mode ?? "standard").ToLowerInvariant();
-    if (m == "database")
+    if (IsDatabaseMode(m))
     {
         try
         {
@@ -600,7 +582,7 @@ app.MapGet("/projection/snapshot", async (string? mode, bool? unsafeState) =>
     var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     var m = (mode ?? "standard").ToLowerInvariant();
-    if (m == "database")
+    if (IsDatabaseMode(m))
     {
         return Results.BadRequest(new { error = "Snapshot is not supported for database materialized view benchmark row" });
     }
@@ -626,7 +608,7 @@ app.MapPost("/projection/refresh", async (string? mode) =>
     var apiBase = Environment.GetEnvironmentVariable("ApiBaseUrl")?.TrimEnd('/');
     if (string.IsNullOrWhiteSpace(apiBase)) return Results.BadRequest(new { error = "ApiBaseUrl not set" });
     var m = (mode ?? "standard").ToLowerInvariant();
-    if (m == "database")
+    if (IsDatabaseMode(m))
     {
         try
         {
@@ -740,6 +722,31 @@ static HttpClient CreateApiClient(string apiBase, int? timeoutSeconds = null)
         BaseAddress = new Uri(apiBase),
         Timeout = TimeSpan.FromSeconds(timeoutSeconds ?? GetEnvInt("BENCH_API_TIMEOUT_SECONDS", 15))
     };
+
+static bool IsDatabaseMode(string mode) => string.Equals(mode, DatabaseMode, StringComparison.Ordinal);
+
+static string GetEventStatisticsPath(string? mode) => mode switch
+{
+    "single" => "/api/weatherforecastsingle/event-statistics",
+    "generic" => "/api/weatherforecastgeneric/event-statistics",
+    _ => "/api/weatherforecast/event-statistics"
+};
+
+static string GetProjectionCountPath(string? mode) => mode switch
+{
+    "single" => "/api/weatherforecastsingle/count",
+    "generic" => "/api/weatherforecastgeneric/count",
+    _ when IsDatabaseMode(mode ?? string.Empty) => "/api/weatherforecastdb/count",
+    _ => "/api/weatherforecast/count"
+};
+
+static string GetProjectionStatusPath(string? mode) => mode switch
+{
+    "single" => "/api/weatherforecastsingle/status",
+    "generic" => "/api/weatherforecastgeneric/status",
+    _ when IsDatabaseMode(mode ?? string.Empty) => "/api/weatherforecastdb/status",
+    _ => "/api/weatherforecast/status"
+};
 
 static string GetProjectorName(string mode)
     => mode == "single" ? "WeatherForecastProjectorWithTagStateProjector"

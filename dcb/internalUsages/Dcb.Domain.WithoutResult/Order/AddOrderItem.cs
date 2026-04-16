@@ -17,13 +17,13 @@ public sealed record AddOrderItem : ICommandWithHandler<AddOrderItem>
         var tag = new OrderTag(command.OrderId);
         if (!await context.TagExistsAsync(tag).ConfigureAwait(false))
         {
-            throw new ApplicationException($"Order {command.OrderId} does not exist.");
+            throw new OrderCommandException($"Order {command.OrderId} does not exist.");
         }
 
         var state = await context.GetStateAsync<OrderProjector>(tag).ConfigureAwait(false);
         if (state.Payload is OrderState payload && payload.Status == "Cancelled")
         {
-            throw new ApplicationException($"Order {command.OrderId} is cancelled.");
+            throw new OrderCommandException($"Order {command.OrderId} is cancelled.");
         }
 
         var itemId = command.ItemId == Guid.Empty ? Guid.CreateVersion7() : command.ItemId;

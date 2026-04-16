@@ -13,13 +13,13 @@ public sealed record CancelOrder : ICommandWithHandler<CancelOrder>
         var tag = new OrderTag(command.OrderId);
         if (!await context.TagExistsAsync(tag).ConfigureAwait(false))
         {
-            throw new ApplicationException($"Order {command.OrderId} does not exist.");
+            throw new OrderCommandException($"Order {command.OrderId} does not exist.");
         }
 
         var state = await context.GetStateAsync<OrderProjector>(tag).ConfigureAwait(false);
         if (state.Payload is OrderState payload && payload.Status == "Cancelled")
         {
-            throw new ApplicationException($"Order {command.OrderId} is already cancelled.");
+            throw new OrderCommandException($"Order {command.OrderId} is already cancelled.");
         }
 
         return EventOrNone.From(

@@ -99,7 +99,9 @@ internal sealed class PostgresMvApplyContext : IMvApplyContext
 
         if (row is IDictionary<string, object> nonNullableDictionary)
         {
-            return nonNullableDictionary.ToDictionary(pair => pair.Key, pair => (object?)pair.Value, StringComparer.OrdinalIgnoreCase);
+            return nonNullableDictionary
+                .Select(pair => new KeyValuePair<string, object?>(pair.Key, pair.Value))
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
         }
 
         return row.GetType()

@@ -429,14 +429,20 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
         public StreamBatchObserver(MaterializedViewGrain owner) => _owner = owner;
 
-        public Task OnNextAsync(IList<SequentialItem<SerializableEvent>> batch) =>
-            _owner.OnStreamBatchAsync(batch.Select(item => item.Item));
+        public Task OnNextAsync(IList<SequentialItem<SerializableEvent>> items) =>
+            _owner.OnStreamBatchAsync(items.Select(item => item.Item));
 
-        public Task OnNextBatchAsync(IEnumerable<SerializableEvent> batch, StreamSequenceToken? token = null) =>
-            _owner.OnStreamBatchAsync(batch);
+        public Task OnNextAsync(SerializableEvent item, StreamSequenceToken? token = null)
+        {
+            _ = token;
+            return _owner.OnStreamBatchAsync([item]);
+        }
 
-        public Task OnNextAsync(SerializableEvent item, StreamSequenceToken? token = null) =>
-            _owner.OnStreamBatchAsync([item]);
+        public Task OnNextBatchAsync(IEnumerable<SerializableEvent> batch, StreamSequenceToken? token = null)
+        {
+            _ = token;
+            return _owner.OnStreamBatchAsync(batch);
+        }
 
         public Task OnCompletedAsync() => Task.CompletedTask;
 

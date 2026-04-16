@@ -6,6 +6,7 @@ namespace Sekiban.Dcb.MaterializedView;
 
 public sealed class MvCatchUpWorker : BackgroundService
 {
+    private readonly Dictionary<string, int> _failureCounts = new(StringComparer.Ordinal);
     private readonly IMvExecutor _executor;
     private readonly ILogger<MvCatchUpWorker> _logger;
     private readonly IReadOnlyList<IMaterializedViewProjector> _projectors;
@@ -25,70 +26,105 @@ public sealed class MvCatchUpWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        foreach (var projector in _projectors)
-        {
-            await _executor.InitializeAsync(projector, cancellationToken: stoppingToken).ConfigureAwait(false);
-        }
+        await InitializeProjectorsAsync(stoppingToken).ConfigureAwait(false);
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var processedEvents = 0;
-            var shouldDelay = false;
-            foreach (var projector in _projectors)
+            var cycle = await RunCatchUpCycleAsync(stoppingToken).ConfigureAwait(false);
+            if (cycle.ShouldStop)
             {
-                try
-                {
-                    var result = await _executor.CatchUpOnceAsync(projector, cancellationToken: stoppingToken).ConfigureAwait(false);
-                    processedEvents += result.AppliedEvents;
-                    shouldDelay |= result.ReachedUnsafeWindow;
-                    _failureCounts.Remove(GetProjectorKey(projector));
-                }
-                catch (NotSupportedException ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Materialized view worker stopped because the configured event store cannot stream all events for {ViewName}/{ViewVersion}.",
-                        projector.ViewName,
-                        projector.ViewVersion);
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    var key = GetProjectorKey(projector);
-                    var failures = _failureCounts.TryGetValue(key, out var currentFailures) ? currentFailures + 1 : 1;
-                    _failureCounts[key] = failures;
-
-                    if (failures >= _options.MaxConsecutiveFailuresBeforeStop)
-                    {
-                        _logger.LogError(
-                            ex,
-                            "Materialized view worker halted on {ViewName}/{ViewVersion} after {FailureCount} consecutive failures.",
-                            projector.ViewName,
-                            projector.ViewVersion,
-                            failures);
-                        return;
-                    }
-
-                    _logger.LogWarning(
-                        ex,
-                        "Materialized view worker retrying {ViewName}/{ViewVersion} after failure {FailureCount}/{MaxFailures}.",
-                        projector.ViewName,
-                        projector.ViewVersion,
-                        failures,
-                        _options.MaxConsecutiveFailuresBeforeStop);
-                    shouldDelay = true;
-                }
+                return;
             }
 
-            if (processedEvents == 0 || shouldDelay)
+            if (cycle.AppliedEvents == 0 || cycle.ShouldDelay)
             {
                 await Task.Delay(_options.PollInterval, stoppingToken).ConfigureAwait(false);
             }
         }
     }
 
-    private readonly Dictionary<string, int> _failureCounts = new(StringComparer.Ordinal);
+    private async Task InitializeProjectorsAsync(CancellationToken stoppingToken)
+    {
+        foreach (var projector in _projectors)
+        {
+            await _executor.InitializeAsync(projector, cancellationToken: stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<CatchUpCycleResult> RunCatchUpCycleAsync(CancellationToken stoppingToken)
+    {
+        var appliedEvents = 0;
+        var shouldDelay = false;
+
+        foreach (var projector in _projectors)
+        {
+            var projectorResult = await ProcessProjectorAsync(projector, stoppingToken).ConfigureAwait(false);
+            if (projectorResult.ShouldStop)
+            {
+                return projectorResult;
+            }
+
+            appliedEvents += projectorResult.AppliedEvents;
+            shouldDelay |= projectorResult.ShouldDelay;
+        }
+
+        return new CatchUpCycleResult(appliedEvents, shouldDelay, ShouldStop: false);
+    }
+
+    private async Task<CatchUpCycleResult> ProcessProjectorAsync(
+        IMaterializedViewProjector projector,
+        CancellationToken stoppingToken)
+    {
+        try
+        {
+            var result = await _executor.CatchUpOnceAsync(projector, cancellationToken: stoppingToken).ConfigureAwait(false);
+            _failureCounts.Remove(GetProjectorKey(projector));
+            return new CatchUpCycleResult(result.AppliedEvents, result.ReachedUnsafeWindow, ShouldStop: false);
+        }
+        catch (NotSupportedException ex)
+        {
+            _logger.LogError(
+                ex,
+                "Materialized view worker stopped because the configured event store cannot stream all events for {ViewName}/{ViewVersion}.",
+                projector.ViewName,
+                projector.ViewVersion);
+            return new CatchUpCycleResult(0, ShouldDelay: false, ShouldStop: true);
+        }
+        catch (Exception ex)
+        {
+            var failures = IncrementFailureCount(projector);
+            if (failures >= _options.MaxConsecutiveFailuresBeforeStop)
+            {
+                _logger.LogError(
+                    ex,
+                    "Materialized view worker halted on {ViewName}/{ViewVersion} after {FailureCount} consecutive failures.",
+                    projector.ViewName,
+                    projector.ViewVersion,
+                    failures);
+                return new CatchUpCycleResult(0, ShouldDelay: false, ShouldStop: true);
+            }
+
+            _logger.LogWarning(
+                ex,
+                "Materialized view worker retrying {ViewName}/{ViewVersion} after failure {FailureCount}/{MaxFailures}.",
+                projector.ViewName,
+                projector.ViewVersion,
+                failures,
+                _options.MaxConsecutiveFailuresBeforeStop);
+            return new CatchUpCycleResult(0, ShouldDelay: true, ShouldStop: false);
+        }
+    }
+
+    private int IncrementFailureCount(IMaterializedViewProjector projector)
+    {
+        var key = GetProjectorKey(projector);
+        var failures = _failureCounts.TryGetValue(key, out var currentFailures) ? currentFailures + 1 : 1;
+        _failureCounts[key] = failures;
+        return failures;
+    }
 
     private static string GetProjectorKey(IMaterializedViewProjector projector) =>
         $"{projector.ViewName}:{projector.ViewVersion}";
+
+    private sealed record CatchUpCycleResult(int AppliedEvents, bool ShouldDelay, bool ShouldStop);
 }

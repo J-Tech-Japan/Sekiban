@@ -147,12 +147,7 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
     }
 
     public async Task UpdatePositionAsync(
-        string serviceId,
-        string viewName,
-        int viewVersion,
-        string sortableUniqueId,
-        MvApplySource source,
-        long appliedEventVersionDelta = 1,
+        MvPositionUpdate update,
         IDbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
@@ -179,12 +174,12 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
 
         var parameters = new
         {
-            ServiceId = serviceId,
-            ViewName = viewName,
-            ViewVersion = viewVersion,
-            SortableUniqueId = sortableUniqueId,
-            AppliedEventVersionDelta = appliedEventVersionDelta,
-            Source = source == MvApplySource.Stream ? "stream" : "catchup"
+            update.ServiceId,
+            update.ViewName,
+            update.ViewVersion,
+            update.SortableUniqueId,
+            update.AppliedEventVersionDelta,
+            Source = update.Source == MvApplySource.Stream ? "stream" : "catchup"
         };
         await ExecuteAsync(sql, parameters, transaction, cancellationToken).ConfigureAwait(false);
     }
@@ -367,31 +362,86 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
 
     private sealed class RegistryRow
     {
-        public string ServiceId { get; set; } = string.Empty;
-        public string ViewName { get; set; } = string.Empty;
-        public int ViewVersion { get; set; }
-        public string LogicalTable { get; set; } = string.Empty;
-        public string PhysicalTable { get; set; } = string.Empty;
-        public string Status { get; set; } = string.Empty;
-        public string? CurrentPosition { get; set; }
-        public string? TargetPosition { get; set; }
-        public string? LastSortableUniqueId { get; set; }
-        public long AppliedEventVersion { get; set; }
-        public string? LastAppliedSource { get; set; }
-        public DateTimeOffset? LastAppliedAt { get; set; }
-        public string? LastStreamReceivedSortableUniqueId { get; set; }
-        public DateTimeOffset? LastStreamReceivedAt { get; set; }
-        public string? LastStreamAppliedSortableUniqueId { get; set; }
-        public string? LastCatchUpSortableUniqueId { get; set; }
-        public DateTimeOffset LastUpdated { get; set; }
-        public string? Metadata { get; set; }
+        public RegistryRow(
+            string serviceId,
+            string viewName,
+            int viewVersion,
+            string logicalTable,
+            string physicalTable,
+            string status,
+            string? currentPosition,
+            string? targetPosition,
+            string? lastSortableUniqueId,
+            long appliedEventVersion,
+            string? lastAppliedSource,
+            DateTime? lastAppliedAt,
+            string? lastStreamReceivedSortableUniqueId,
+            DateTime? lastStreamReceivedAt,
+            string? lastStreamAppliedSortableUniqueId,
+            string? lastCatchUpSortableUniqueId,
+            DateTime lastUpdated,
+            string? metadata)
+        {
+            ServiceId = serviceId;
+            ViewName = viewName;
+            ViewVersion = viewVersion;
+            LogicalTable = logicalTable;
+            PhysicalTable = physicalTable;
+            Status = status;
+            CurrentPosition = currentPosition;
+            TargetPosition = targetPosition;
+            LastSortableUniqueId = lastSortableUniqueId;
+            AppliedEventVersion = appliedEventVersion;
+            LastAppliedSource = lastAppliedSource;
+            LastAppliedAt = lastAppliedAt is null ? null : Normalize(lastAppliedAt.Value);
+            LastStreamReceivedSortableUniqueId = lastStreamReceivedSortableUniqueId;
+            LastStreamReceivedAt = lastStreamReceivedAt is null ? null : Normalize(lastStreamReceivedAt.Value);
+            LastStreamAppliedSortableUniqueId = lastStreamAppliedSortableUniqueId;
+            LastCatchUpSortableUniqueId = lastCatchUpSortableUniqueId;
+            LastUpdated = Normalize(lastUpdated);
+            Metadata = metadata;
+        }
+
+        public string ServiceId { get; }
+        public string ViewName { get; }
+        public int ViewVersion { get; }
+        public string LogicalTable { get; }
+        public string PhysicalTable { get; }
+        public string Status { get; }
+        public string? CurrentPosition { get; }
+        public string? TargetPosition { get; }
+        public string? LastSortableUniqueId { get; }
+        public long AppliedEventVersion { get; }
+        public string? LastAppliedSource { get; }
+        public DateTimeOffset? LastAppliedAt { get; }
+        public string? LastStreamReceivedSortableUniqueId { get; }
+        public DateTimeOffset? LastStreamReceivedAt { get; }
+        public string? LastStreamAppliedSortableUniqueId { get; }
+        public string? LastCatchUpSortableUniqueId { get; }
+        public DateTimeOffset LastUpdated { get; }
+        public string? Metadata { get; }
     }
 
     private sealed class ActiveRow
     {
-        public string ServiceId { get; set; } = string.Empty;
-        public string ViewName { get; set; } = string.Empty;
-        public int ActiveVersion { get; set; }
-        public DateTimeOffset ActivatedAt { get; set; }
+        public ActiveRow(
+            string serviceId,
+            string viewName,
+            int activeVersion,
+            DateTime activatedAt)
+        {
+            ServiceId = serviceId;
+            ViewName = viewName;
+            ActiveVersion = activeVersion;
+            ActivatedAt = Normalize(activatedAt);
+        }
+
+        public string ServiceId { get; }
+        public string ViewName { get; }
+        public int ActiveVersion { get; }
+        public DateTimeOffset ActivatedAt { get; }
     }
+
+    private static DateTimeOffset Normalize(DateTime value) =>
+        new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 }

@@ -260,11 +260,12 @@ public sealed class PostgresMvExecutor : IMvExecutor
         }
 
         await _registryStore.UpdatePositionAsync(
-            serviceId,
-            projector.ViewName,
-            projector.ViewVersion,
-            serializableEvent.SortableUniqueIdValue,
-            source,
+            new MvPositionUpdate(
+                serviceId,
+                projector.ViewName,
+                projector.ViewVersion,
+                serializableEvent.SortableUniqueIdValue,
+                source),
             transaction: transaction,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 

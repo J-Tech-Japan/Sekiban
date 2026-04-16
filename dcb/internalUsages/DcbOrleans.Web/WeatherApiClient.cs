@@ -16,6 +16,13 @@ public class WeatherApiClient(HttpClient httpClient)
         return forecasts?.ToArray() ?? [];
     }
 
+    // Overload for backward compatibility
+    public async Task<WeatherForecastItem[]> GetWeatherAsync(
+        int maxItems = 10,
+        string? waitForSortableUniqueId = null,
+        CancellationToken cancellationToken = default) =>
+        await GetWeatherAsync(1, maxItems, waitForSortableUniqueId, cancellationToken);
+
     public async Task<WeatherForecastItem[]> GetWeatherFromDatabaseAsync(
         int? pageNumber = null,
         int? pageSize = null,
@@ -27,14 +34,6 @@ public class WeatherApiClient(HttpClient httpClient)
 
         return forecasts?.ToArray() ?? [];
     }
-
-    // Overload for backward compatibility
-    public async Task<WeatherForecastItem[]> GetWeatherAsync(
-        int maxItems = 10,
-        string? waitForSortableUniqueId = null,
-        CancellationToken cancellationToken = default) =>
-        // Use pagination with the maxItems as pageSize
-        await GetWeatherAsync(1, maxItems, waitForSortableUniqueId, cancellationToken);
 
     public async Task<CommandResponse> InputWeatherAsync(
         CreateWeatherForecast command,

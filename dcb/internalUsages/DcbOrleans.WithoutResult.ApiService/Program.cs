@@ -12,6 +12,7 @@ using Dcb.Domain.WithoutResult.Order;
 using Dcb.Domain.WithoutResult.Queries;
 using Dcb.Domain.WithoutResult.Student;
 using Dcb.Domain.WithoutResult.Weather;
+using DcbOrleans.WithoutResult.ApiService;
 using DcbOrleans.WithoutResult.ApiService.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 using Orleans.Configuration;
@@ -851,14 +852,14 @@ apiRoute
                 }
             }
 
-            var forecastEntry = context.GetRequiredTable("forecasts");
+            var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
             await using var connection = new NpgsqlConnection(context.ConnectionString);
             await connection.OpenAsync();
 
             var rows = await QueryWeatherForecastDbRowsAsync(
                 connection,
                 context,
-                includeDeleted == true,
+                includeDeleted is true,
                 pageNumber,
                 pageSize);
 
@@ -915,7 +916,7 @@ apiRoute
             var rows = await QueryWeatherForecastDbRowsAsync(
                 connection,
                 context,
-                includeDeleted == true,
+                includeDeleted is true,
                 pageNumber,
                 pageSize);
 
@@ -945,7 +946,7 @@ apiRoute
             try
             {
                 var context = await mvQueryAccessor.GetAsync(projector);
-                var forecastEntry = context.GetRequiredTable("forecasts");
+                var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
 
                 await using var connection = new NpgsqlConnection(context.ConnectionString);
                 await connection.OpenAsync();
@@ -982,7 +983,7 @@ apiRoute
             try
             {
                 var context = await mvQueryAccessor.GetAsync(projector);
-                var forecastEntry = context.GetRequiredTable("forecasts");
+                var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
                 var status = await context.Grain.GetStatusAsync();
                 return Results.Ok(new { databaseType = context.DatabaseType, table = forecastEntry.PhysicalTable, status, entry = forecastEntry, entries = context.Entries });
             }
@@ -1004,7 +1005,7 @@ apiRoute
             try
             {
                 var context = await mvQueryAccessor.GetAsync(projector);
-                var forecastEntry = context.GetRequiredTable("forecasts");
+                var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
                 await context.Grain.RefreshAsync();
                 return Results.Ok(new { success = true, databaseType = context.DatabaseType, table = forecastEntry.PhysicalTable });
             }
@@ -1026,7 +1027,7 @@ apiRoute
             try
             {
                 var context = await mvQueryAccessor.GetAsync(projector);
-                var forecastEntry = context.GetRequiredTable("forecasts");
+                var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
                 await context.Grain.RequestDeactivationAsync();
                 return Results.Ok(new { success = true, databaseType = context.DatabaseType, table = forecastEntry.PhysicalTable });
             }
@@ -1510,7 +1511,7 @@ static async Task<List<WeatherForecastDbRow>> QueryWeatherForecastDbRowsAsync(
     int? pageNumber,
     int? pageSize)
 {
-    var forecastEntry = context.GetRequiredTable("forecasts");
+    var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
     var whereClause = includeDeleted ? string.Empty : "WHERE is_deleted = FALSE";
     var pagingClause = string.Empty;
     var parameters = new DynamicParameters();
@@ -1540,16 +1541,4 @@ static async Task<List<WeatherForecastDbRow>> QueryWeatherForecastDbRowsAsync(
          {pagingClause};
          """,
         parameters)).ToList();
-}
-
-public sealed class WeatherForecastDbRow
-{
-    public Guid ForecastId { get; set; }
-    public string Location { get; set; } = string.Empty;
-    public DateTime ForecastDate { get; set; }
-    public int TemperatureC { get; set; }
-    public string? Summary { get; set; }
-    public bool IsDeleted { get; set; }
-    public string LastSortableUniqueId { get; set; } = string.Empty;
-    public DateTimeOffset LastAppliedAt { get; set; }
 }

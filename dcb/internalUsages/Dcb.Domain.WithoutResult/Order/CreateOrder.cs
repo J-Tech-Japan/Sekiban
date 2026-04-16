@@ -14,7 +14,7 @@ public sealed record CreateOrder : ICommandWithHandler<CreateOrder>
         var tag = new OrderTag(orderId);
         if (await context.TagExistsAsync(tag).ConfigureAwait(false))
         {
-            throw new ApplicationException($"Order {orderId} already exists.");
+            throw new OrderCommandException($"Order {orderId} already exists.");
         }
 
         return EventOrNone.From(

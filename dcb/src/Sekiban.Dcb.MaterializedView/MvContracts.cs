@@ -69,6 +69,14 @@ public sealed record MvActiveEntry(
     int ActiveVersion,
     DateTimeOffset ActivatedAt);
 
+public sealed record MvPositionUpdate(
+    string ServiceId,
+    string ViewName,
+    int ViewVersion,
+    string SortableUniqueId,
+    MvApplySource Source,
+    long AppliedEventVersionDelta = 1);
+
 public interface IMvInitContext
 {
     MvDbType DatabaseType { get; }
@@ -108,15 +116,7 @@ public interface IMvRegistryStore
 {
     Task EnsureInfrastructureAsync(CancellationToken cancellationToken = default);
     Task RegisterAsync(MvRegistryEntry entry, IDbTransaction? transaction = null, CancellationToken cancellationToken = default);
-    Task UpdatePositionAsync(
-        string serviceId,
-        string viewName,
-        int viewVersion,
-        string sortableUniqueId,
-        MvApplySource source,
-        long appliedEventVersionDelta = 1,
-        IDbTransaction? transaction = null,
-        CancellationToken cancellationToken = default);
+    Task UpdatePositionAsync(MvPositionUpdate update, IDbTransaction? transaction = null, CancellationToken cancellationToken = default);
 
     Task MarkStreamReceivedAsync(
         string serviceId,

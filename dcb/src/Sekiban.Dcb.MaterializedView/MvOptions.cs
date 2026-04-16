@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Sekiban.Dcb.MaterializedView;
 
 public sealed class MvOptions
@@ -47,7 +49,7 @@ public static class MvPhysicalName
         var previousWasUnderscore = false;
         foreach (var current in value.Trim().ToLowerInvariant())
         {
-            var normalized = char.IsLetterOrDigit(current) ? current : '_';
+            var normalized = char.IsAsciiLetterOrDigit(current) ? current : '_';
             if (normalized == '_' && previousWasUnderscore)
             {
                 continue;
@@ -73,25 +75,27 @@ public static class MvPhysicalName
             throw new ArgumentException("Identifier cannot be empty.", nameof(identifier));
         }
 
-        if (identifier.Length > MaximumIdentifierLength)
+        if (Encoding.UTF8.GetByteCount(identifier) > MaximumIdentifierLength)
         {
             throw new ArgumentException(
-                $"Identifier '{identifier}' exceeds PostgreSQL's {MaximumIdentifierLength} character limit.",
+                $"Identifier '{identifier}' exceeds PostgreSQL's {MaximumIdentifierLength}-byte identifier limit.",
                 nameof(identifier));
         }
 
-        if (!(char.IsLetter(identifier[0]) || identifier[0] == '_'))
+        if (!(IsAsciiLowerLetter(identifier[0]) || identifier[0] == '_'))
         {
             throw new ArgumentException(
-                $"Identifier '{identifier}' must start with a letter or underscore.",
+                $"Identifier '{identifier}' must start with a lowercase ASCII letter or underscore.",
                 nameof(identifier));
         }
 
-        if (identifier.Any(character => !(char.IsLetterOrDigit(character) || character == '_')))
+        if (identifier.Any(character => !(IsAsciiLowerLetter(character) || char.IsAsciiDigit(character) || character == '_')))
         {
             throw new ArgumentException(
-                $"Identifier '{identifier}' contains characters outside [A-Za-z0-9_].",
+                $"Identifier '{identifier}' contains characters outside [a-z0-9_].",
                 nameof(identifier));
         }
     }
+
+    private static bool IsAsciiLowerLetter(char character) => character is >= 'a' and <= 'z';
 }

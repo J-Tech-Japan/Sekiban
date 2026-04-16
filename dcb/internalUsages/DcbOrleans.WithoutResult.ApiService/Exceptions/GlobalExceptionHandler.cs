@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Dcb.Domain.WithoutResult.Order;
 
 namespace DcbOrleans.WithoutResult.ApiService.Exceptions;
 
@@ -61,6 +62,14 @@ public class GlobalExceptionHandler : IExceptionHandler
                 Title = "Unauthorized",
                 Detail = unauthorized.Message,
                 Type = "https://tools.ietf.org/html/rfc7235#section-3.1"
+            },
+
+            OrderCommandException orderCommand => new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = orderCommand.Message,
+                Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1"
             },
 
             ApplicationException appEx => new ProblemDetails

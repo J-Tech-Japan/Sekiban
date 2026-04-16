@@ -51,10 +51,7 @@ public static class MvRowMapper<T> where T : class
     {
         var type = typeof(T);
         var rowParameter = Expression.Parameter(typeof(IMvRow), "row");
-        var ctor = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
-            .OrderBy(c => c.GetParameters().Length == 0 ? 0 : 1)
-            .ThenByDescending(c => c.GetParameters().Length)
-            .FirstOrDefault();
+        var ctor = GetPreferredConstructor(type);
 
         if (ctor is null)
         {
@@ -91,10 +88,45 @@ public static class MvRowMapper<T> where T : class
 
     private static Expression CreateColumnReadExpression(ParameterExpression rowParameter, string columnName, Type targetType)
     {
-        var method = typeof(MvRowMapper<T>).GetMethod(nameof(ReadValue), BindingFlags.NonPublic | BindingFlags.Static)!
+        var method = typeof(MvRowValueReader).GetMethod(nameof(MvRowValueReader.ReadValue), BindingFlags.Public | BindingFlags.Static)!
             .MakeGenericMethod(targetType);
         return Expression.Call(method, rowParameter, Expression.Constant(columnName));
     }
+
+    private static ConstructorInfo? GetPreferredConstructor(Type type)
+    {
+        var constructors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
+        if (constructors.Length == 0)
+        {
+            return null;
+        }
+
+        var ranked = constructors
+            .Select(constructor => new
+            {
+                Constructor = constructor,
+                ReadOnlyMatches = CountReadOnlyPropertyMatches(type, constructor)
+            })
+            .OrderByDescending(candidate => candidate.ReadOnlyMatches)
+            .ThenByDescending(candidate => candidate.Constructor.GetParameters().Length)
+            .ToList();
+
+        if (ranked[0].ReadOnlyMatches > 0)
+        {
+            return ranked[0].Constructor;
+        }
+
+        return constructors.FirstOrDefault(constructor => constructor.GetParameters().Length == 0) ?? ranked[0].Constructor;
+    }
+
+    private static int CountReadOnlyPropertyMatches(Type type, ConstructorInfo constructor) =>
+        constructor.GetParameters().Count(parameter =>
+        {
+            var property = type.GetProperty(
+                parameter.Name ?? string.Empty,
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            return property?.SetMethod is null;
+        });
 
     private static string ResolveColumnName(PropertyInfo property) =>
         property.GetCustomAttribute<MvColumnAttribute>()?.Name ?? ToSnakeCase(property.Name);
@@ -112,8 +144,6 @@ public static class MvRowMapper<T> where T : class
             BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
         return property?.GetCustomAttribute<MvColumnAttribute>()?.Name ?? ToSnakeCase(parameter.Name ?? string.Empty);
     }
-
-    private static TValue ReadValue<TValue>(IMvRow row, string columnName) => row.GetAs<TValue>(columnName);
 
     private static string ToSnakeCase(string value)
     {
@@ -144,6 +174,11 @@ public static class MvRowMapper<T> where T : class
     }
 }
 
+public static class MvRowValueReader
+{
+    public static TValue ReadValue<TValue>(IMvRow row, string columnName) => row.GetAs<TValue>(columnName);
+}
+
 public static class MvApplyContextExtensions
 {
     public static async Task<T?> QuerySingleOrDefaultAsync<T>(
@@ -171,14 +206,9 @@ public static class MvRowValueConverter
 {
     public static T ConvertValue<T>(object? value)
     {
-        if (value is null || value is DBNull)
+        if (value is null or DBNull)
         {
-            if (IsNullable(typeof(T)))
-            {
-                return default!;
-            }
-
-            throw new InvalidOperationException($"Column value is null but target type {typeof(T).Name} is not nullable.");
+            return ConvertNullValue<T>();
         }
 
         if (value is T typed)
@@ -187,45 +217,82 @@ public static class MvRowValueConverter
         }
 
         var targetType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+        if (TryConvertSpecialValue(value, targetType, out var converted))
+        {
+            return (T)converted;
+        }
+
+        return (T)Convert.ChangeType(value, targetType);
+    }
+
+    private static T ConvertNullValue<T>()
+    {
+        if (IsNullable(typeof(T)))
+        {
+            return default!;
+        }
+
+        throw new InvalidOperationException($"Column value is null but target type {typeof(T).Name} is not nullable.");
+    }
+
+    private static bool TryConvertSpecialValue(object value, Type targetType, out object converted)
+    {
         if (targetType.IsEnum)
         {
-            return (T)Enum.Parse(targetType, value.ToString()!, ignoreCase: true);
+            converted = Enum.Parse(targetType, value.ToString()!, ignoreCase: true);
+            return true;
         }
 
         if (targetType == typeof(Guid))
         {
-            return (T)(object)(value is Guid guid ? guid : Guid.Parse(value.ToString()!));
+            converted = value is Guid guid ? guid : Guid.Parse(value.ToString()!);
+            return true;
         }
 
-        if (targetType == typeof(DateTimeOffset))
+        if (targetType == typeof(DateTimeOffset) && TryConvertDateTimeOffset(value, out var dateTimeOffset))
         {
-            if (value is DateTimeOffset dateTimeOffset)
-            {
-                return (T)(object)dateTimeOffset;
-            }
-
-            if (value is DateTime dateTime)
-            {
-                return (T)(object)new DateTimeOffset(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc));
-            }
+            converted = dateTimeOffset;
+            return true;
         }
 
         if (targetType == typeof(byte[]) && value is byte[] bytes)
         {
-            return (T)(object)bytes;
+            converted = bytes;
+            return true;
         }
 
         if (targetType == typeof(string))
         {
-            return (T)(object)value.ToString()!;
+            converted = value.ToString()!;
+            return true;
         }
 
         if (value is JsonElement jsonElement)
         {
-            return jsonElement.Deserialize<T>()!;
+            converted = jsonElement.Deserialize(targetType)!;
+            return true;
         }
 
-        return (T)Convert.ChangeType(value, targetType);
+        converted = default!;
+        return false;
+    }
+
+    private static bool TryConvertDateTimeOffset(object value, out DateTimeOffset dateTimeOffset)
+    {
+        if (value is DateTimeOffset dto)
+        {
+            dateTimeOffset = dto;
+            return true;
+        }
+
+        if (value is DateTime dateTime)
+        {
+            dateTimeOffset = new DateTimeOffset(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc));
+            return true;
+        }
+
+        dateTimeOffset = default;
+        return false;
     }
 
     public static bool IsNullable(Type type) =>
