@@ -18,6 +18,7 @@
 > - [Value Objects](15_value_object.md)
 > - [Deployment Guide](16_deployment.md)
 > - [Cold Events and Catch-up](19_cold_events.md)
+> - [Materialized View Basics](20_materialized_view.md)
 
 DCB supports multiple cloud platforms for event persistence and projection snapshots. This guide covers configuration for both Azure and AWS.
 
@@ -140,6 +141,17 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 | Cosmos DB | `Sekiban.Dcb.CosmosDb` | `Sekiban.Dcb.BlobStorage.AzureStorage` | Production |
 | DynamoDB | `Sekiban.Dcb.DynamoDB` | `Sekiban.Dcb.BlobStorage.S3` | Production |
 | SQLite | `Sekiban.Dcb.Sqlite` | N/A | Development |
+
+## Materialized View Storage
+
+Materialized views are currently implemented for PostgreSQL:
+
+- `Sekiban.Dcb.MaterializedView` – core contracts and hosted catch-up worker
+- `Sekiban.Dcb.MaterializedView.Postgres` – registry, executor, row access, and table updates
+- `Sekiban.Dcb.MaterializedView.Orleans` – grain orchestration and query accessor
+
+This is separate from the main event store package. In the current PoC, a service can store events in one database and
+materialized view tables in another PostgreSQL database or schema. See [Materialized View Basics](20_materialized_view.md).
 
 ## Related
 

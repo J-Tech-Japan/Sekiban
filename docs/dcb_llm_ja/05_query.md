@@ -17,6 +17,7 @@
 > - [ResultBox](14_result_box.md)
 > - [バリューオブジェクト](15_value_object.md)
 > - [デプロイガイド](16_deployment.md)
+> - [マテリアライズドビュー基礎](20_materialized_view.md)
 
 DCB のクエリはマルチプロジェクショングレイン、もしくはタグ状態グレインからデータを読み取ります。
 `ISekibanExecutor.QueryAsync` が Orleans クラスタとのやり取りを抽象化します。
@@ -92,3 +93,30 @@ var stateResult = await executor.GetTagStateAsync(tagId);
 
 インメモリエグゼキューター (`src/Sekiban.Dcb/InMemory`) を使用して、イベントをシードしクエリを実行するだけで
 クエリの挙動を検証できます。Orleans に依存せず高速にテスト可能です。
+
+## マテリアライズドビューのクエリ
+
+マテリアライズドビューは `ISekibanExecutor.QueryAsync` ではなく、Orleans で active version と catch-up 状態を
+解決しつつ、実データは DB テーブルから読む形になります。
+
+入口は `src/Sekiban.Dcb.MaterializedView.Orleans/MvOrleansQueryAccessor.cs` の `IMvOrleansQueryAccessor` です。
+
+```csharp
+var context = await mvQueryAccessor.GetAsync(weatherForecastMv);
+var forecastTable = context.GetRequiredTable("forecasts");
+
+await using var connection = new NpgsqlConnection(context.ConnectionString);
+await connection.OpenAsync();
+
+var rows = await connection.QueryAsync<WeatherForecastMvRow>(
+    $"SELECT * FROM {forecastTable.PhysicalTable} WHERE is_deleted = FALSE");
+```
+
+このパターンで得られるもの:
+
+- 現在の storage type と connection string
+- logical table に対応する active な physical table 名
+- status 確認や待機に使える Orleans grain
+
+実例は `internalUsages/DcbOrleans.WithoutResult.ApiService/Program.cs` を参照してください。全体像は
+[マテリアライズドビュー基礎](20_materialized_view.md) にまとめています。

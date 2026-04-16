@@ -17,6 +17,7 @@
 > - [ResultBox](14_result_box.md)
 > - [バリューオブジェクト](15_value_object.md)
 > - [デプロイガイド](16_deployment.md)
+> - [マテリアライズドビュー基礎](20_materialized_view.md)
 
 ## DCBとは？
 
@@ -65,6 +66,10 @@ Dynamic Consistency Boundary (DCB) は Sekiban が採用する次世代のイベ
   - Postgres: `src/Sekiban.Dcb.Postgres/PostgresEventStore.cs`
   - Cosmos DB: `src/Sekiban.Dcb.CosmosDb/CosmosDbEventStore.cs`
   - DynamoDB: `src/Sekiban.Dcb.DynamoDB/DynamoDbEventStore.cs`
+- **マテリアライズドビュー runtime**: 順序付きイベントを SQL テーブルへ反映する DB リードモデル基盤です。
+  共通契約は `src/Sekiban.Dcb.MaterializedView`、Postgres 実装は
+  `src/Sekiban.Dcb.MaterializedView.Postgres`、Orleans 側の制御は
+  `src/Sekiban.Dcb.MaterializedView.Orleans` にあります。
 
 ## メリット
 
@@ -72,7 +77,8 @@ Dynamic Consistency Boundary (DCB) は Sekiban が採用する次世代のイベ
 2. **クロスエンティティ処理の簡略化**: 調整用のサガを排し、ビジネスロジックを直線的に書けます。
 3. **アクターによるスケーラビリティ**: タグ単位でアクターが分散配置され、ホットスポットの分離が容易です。
 4. **リッチな読み取り**: マルチプロジェクションとタグ状態プロジェクターが高速な読み取りを提供します。
-5. **可観測性**: `EventMetadata` に因果ID・相関IDが入り、追跡が容易です。
+5. **DB リードモデルの追加**: 必要に応じてマテリアライズドビューとして SQL テーブルを公開できます。
+6. **可観測性**: `EventMetadata` に因果ID・相関IDが入り、追跡が容易です。
 
 ## 設計原則
 

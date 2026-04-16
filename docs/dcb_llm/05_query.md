@@ -17,6 +17,7 @@
 > - [ResultBox](14_result_box.md)
 > - [Value Objects](15_value_object.md)
 > - [Deployment Guide](16_deployment.md)
+> - [Materialized View Basics](20_materialized_view.md)
 
 DCB queries read from MultiProjection grains or directly from tag state actors. The Orleans executor wraps these access
 patterns behind `ISekibanExecutor.QueryAsync` overloads.
@@ -96,3 +97,30 @@ records simple and version them carefully; changes flow directly to clients.
 
 Use the in-memory executor with a seeded event store (`src/Sekiban.Dcb.InMemory`) to exercise queries without Orleans.
 Replay events, run the projection, and assert on the resulting `ListQueryResult`.
+
+## Querying Materialized Views
+
+Materialized views are not queried through `ISekibanExecutor.QueryAsync`. Instead, Orleans is used to locate the active
+view version and wait for catch-up, while the actual rows are read from the database.
+
+The helper entry point is `IMvOrleansQueryAccessor` from `src/Sekiban.Dcb.MaterializedView.Orleans/MvOrleansQueryAccessor.cs`:
+
+```csharp
+var context = await mvQueryAccessor.GetAsync(weatherForecastMv);
+var forecastTable = context.GetRequiredTable("forecasts");
+
+await using var connection = new NpgsqlConnection(context.ConnectionString);
+await connection.OpenAsync();
+
+var rows = await connection.QueryAsync<WeatherForecastMvRow>(
+    $"SELECT * FROM {forecastTable.PhysicalTable} WHERE is_deleted = FALSE");
+```
+
+This pattern gives you:
+
+- the current storage type and connection string
+- the active physical table name for each logical table
+- the Orleans grain that can report status or wait for stream delivery
+
+For the current sample, see `internalUsages/DcbOrleans.WithoutResult.ApiService/Program.cs`. For the full concept and
+setup sequence, see [Materialized View Basics](20_materialized_view.md).

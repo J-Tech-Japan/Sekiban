@@ -17,6 +17,7 @@
 > - [ResultBox](14_result_box.md)
 > - [Value Objects](15_value_object.md)
 > - [Deployment Guide](16_deployment.md)
+> - [Materialized View Basics](20_materialized_view.md)
 
 While tag projectors keep per-tag state, MultiProjection composes those states into application-specific read models.
 Each MultiProjection runs in its own Orleans grain (or actor) and can offload large snapshots to Azure Blob Storage.
@@ -84,3 +85,15 @@ The Orleans grain detects the accessor and periodically checkpoints state, reduc
 
 Refer to `internalUsages/Dcb.Domain/Student/StudentSummaries.cs` for a concise example of projecting multiple tags into a
 domain-specific summary list.
+
+## MultiProjection vs. Materialized View
+
+Sekiban now supports two different read-model styles:
+
+- **MultiProjection**: In-memory projection state hosted by Orleans grains. Best when the read model is naturally consumed
+  through `ISekibanExecutor.QueryAsync`.
+- **Materialized View**: Database tables updated from the same ordered event stream. Best when you need SQL paging,
+  filtering, reporting, or direct table access from external tooling.
+
+Use MultiProjection when you want the simplest end-to-end Sekiban query path. Use materialized views when the read model
+must live in a relational database. See [Materialized View Basics](20_materialized_view.md).

@@ -18,6 +18,7 @@
 > - [バリューオブジェクト](15_value_object.md)
 > - [デプロイガイド](16_deployment.md)
 > - [コールドイベントとキャッチアップ](19_cold_events.md)
+> - [マテリアライズドビュー基礎](20_materialized_view.md)
 
 DCB は複数のストレージプロバイダーをサポートしています。
 
@@ -164,6 +165,18 @@ builder.Services.AddSekibanDcbPostgres("Host=localhost;Database=sekiban_dcb;User
 ## 今後の予定
 
 DCB の Dapr 版は開発中です。現時点では Orleans ベースの実行環境をご利用ください。
+
+## マテリアライズドビュー用ストレージ
+
+マテリアライズドビューは現在 PostgreSQL 向けに実装されています。
+
+- `Sekiban.Dcb.MaterializedView` : 共通契約と catch-up worker
+- `Sekiban.Dcb.MaterializedView.Postgres` : registry、executor、行アクセス、table update
+- `Sekiban.Dcb.MaterializedView.Orleans` : Orleans grain 制御と query accessor
+
+これはメインの event store package とは別レイヤーです。現在の PoC では、イベントストアの DB と
+マテリアライズドビューの DB を分離した構成も取れます。詳細は [マテリアライズドビュー基礎](20_materialized_view.md)
+を参照してください。
 
 ## 関連資料
 
