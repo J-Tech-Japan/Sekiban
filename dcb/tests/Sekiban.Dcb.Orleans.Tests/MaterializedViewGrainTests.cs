@@ -70,6 +70,25 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         Assert.Contains(streamedEvent.Id, SharedExecutor.AppliedEventIds);
     }
 
+    [Fact]
+    public async Task MvOrleansQueryAccessor_Should_Return_Runtime_Context()
+    {
+        var accessor = new MvOrleansQueryAccessor(
+            _cluster.Client,
+            SharedRegistry,
+            new DefaultServiceIdProvider(),
+            new MvStorageInfoProvider(new MvStorageInfo(MvDbType.Postgres, "Host=test;Database=mv;")));
+
+        var context = await accessor.GetAsync(new TestMaterializedViewProjector());
+        var table = context.GetRequiredTable("main");
+
+        Assert.Equal(DefaultServiceIdProvider.DefaultServiceId, context.ServiceId);
+        Assert.Equal(MvDbType.Postgres, context.DatabaseType);
+        Assert.Equal("Host=test;Database=mv;", context.ConnectionString);
+        Assert.True(context.Entries.Count > 0);
+        Assert.Equal("main", table.LogicalTable);
+    }
+
     private static SerializableEvent CreateSerializableEvent(int ordinal, DateTime timestampUtc) =>
         new(
             Payload: [],
@@ -115,6 +134,8 @@ public class MaterializedViewGrainTests : IAsyncLifetime
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
+                    services.AddSingleton<IMvStorageInfoProvider>(
+                        new MvStorageInfoProvider(new MvStorageInfo(MvDbType.Postgres, "Host=test;Database=mv;")));
                 })
                 .AddMemoryGrainStorage("PubSubStore")
                 .AddMemoryStreams("EventStreamProvider")

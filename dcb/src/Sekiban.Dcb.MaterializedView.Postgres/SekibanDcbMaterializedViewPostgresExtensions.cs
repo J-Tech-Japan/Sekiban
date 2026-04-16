@@ -29,6 +29,8 @@ public static class SekibanDcbMaterializedViewPostgresExtensions
         services.AddSekibanDcbMaterializedView();
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IMvRegistryStore>(_ => new PostgresMvRegistryStore(connectionString));
+        services.TryAddSingleton<IMvStorageInfoProvider>(_ =>
+            new MvStorageInfoProvider(new MvStorageInfo(MvDbType.Postgres, connectionString)));
         services.TryAddSingleton<IMvExecutor>(sp =>
             new PostgresMvExecutor(
                 sp.GetRequiredService<Sekiban.Dcb.Storage.IEventStore>(),

@@ -13,6 +13,7 @@ public static class SekibanDcbMaterializedViewOrleansExtensions
         bool activateOnStartup = true)
     {
         services.TryAddSingleton<IEventSubscriptionResolver, DefaultOrleansEventSubscriptionResolver>();
+        services.TryAddSingleton<IMvOrleansQueryAccessor, MvOrleansQueryAccessor>();
         if (activateOnStartup)
         {
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MaterializedViewGrainActivator>());

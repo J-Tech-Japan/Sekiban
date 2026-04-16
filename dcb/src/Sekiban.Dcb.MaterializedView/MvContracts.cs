@@ -154,13 +154,13 @@ public interface IMvRegistryStore
         CancellationToken cancellationToken = default);
 }
 
-public interface IMvTableResolver
+public sealed record MvStorageInfo(
+    MvDbType DatabaseType,
+    string ConnectionString);
+
+public interface IMvStorageInfoProvider
 {
-    Task<MvRegistryEntry> ResolveAsync(
-        IMaterializedViewProjector projector,
-        string logicalTable,
-        string? serviceId = null,
-        CancellationToken cancellationToken = default);
+    MvStorageInfo GetStorageInfo();
 }
 
 public interface IMvExecutor

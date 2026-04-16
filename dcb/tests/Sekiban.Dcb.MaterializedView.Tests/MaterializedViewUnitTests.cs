@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MaterializedView;
-using Sekiban.Dcb.ServiceId;
 using Xunit;
 
 namespace Sekiban.Dcb.MaterializedView.Tests;
@@ -148,49 +147,14 @@ public class MaterializedViewUnitTests
     }
 
     [Fact]
-    public async Task MvTableResolver_ResolvesPhysicalTableFromRegistry()
+    public void MvStorageInfoProvider_ReturnsConfiguredStorageInfo()
     {
-        var projector = new FakeProjector();
-        var resolver = new MvTableResolver(
-            new FakeRegistryStore(
-            [
-                new MvRegistryEntry(
-                    ServiceId: "default",
-                    ViewName: projector.ViewName,
-                    ViewVersion: projector.ViewVersion,
-                    LogicalTable: "forecasts",
-                    PhysicalTable: "sekiban_mv_fake_v1_forecasts",
-                    Status: MvStatus.Ready,
-                    CurrentPosition: null,
-                    TargetPosition: null,
-                    LastSortableUniqueId: null,
-                    AppliedEventVersion: 0,
-                    LastAppliedSource: null,
-                    LastAppliedAt: null,
-                    LastStreamReceivedSortableUniqueId: null,
-                    LastStreamReceivedAt: null,
-                    LastStreamAppliedSortableUniqueId: null,
-                    LastCatchUpSortableUniqueId: null,
-                    LastUpdated: DateTimeOffset.UtcNow,
-                    Metadata: null)
-            ]),
-            new FakeServiceIdProvider());
+        var provider = new MvStorageInfoProvider(new MvStorageInfo(MvDbType.Postgres, "Host=test;Database=mv;"));
 
-        var resolved = await resolver.ResolveAsync(projector, "forecasts");
+        var resolved = provider.GetStorageInfo();
 
-        Assert.Equal("forecasts", resolved.LogicalTable);
-        Assert.Equal("sekiban_mv_fake_v1_forecasts", resolved.PhysicalTable);
-    }
-
-    [Fact]
-    public async Task MvTableResolver_ThrowsWhenLogicalTableIsMissing()
-    {
-        var projector = new FakeProjector();
-        var resolver = new MvTableResolver(new FakeRegistryStore([]), new FakeServiceIdProvider());
-
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => resolver.ResolveAsync(projector, "missing"));
-
-        Assert.Contains("missing", ex.Message);
+        Assert.Equal(MvDbType.Postgres, resolved.DatabaseType);
+        Assert.Equal("Host=test;Database=mv;", resolved.ConnectionString);
     }
 
     private sealed record RecordTarget(
@@ -313,26 +277,6 @@ public class MaterializedViewUnitTests
         public Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<MvSqlStatement>> ApplyToViewAsync(Event ev, IMvApplyContext ctx, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<MvSqlStatement>>([]);
-    }
-
-    private sealed class FakeRegistryStore(IReadOnlyList<MvRegistryEntry> entries) : IMvRegistryStore
-    {
-        public Task EnsureInfrastructureAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task RegisterAsync(MvRegistryEntry entry, System.Data.IDbTransaction? transaction = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task UpdatePositionAsync(string serviceId, string viewName, int viewVersion, string sortableUniqueId, MvApplySource source, long appliedEventVersionDelta = 1, System.Data.IDbTransaction? transaction = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task MarkStreamReceivedAsync(string serviceId, string viewName, int viewVersion, string sortableUniqueId, DateTimeOffset receivedAt, System.Data.IDbTransaction? transaction = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task UpdateStatusAsync(string serviceId, string viewName, int viewVersion, MvStatus status, System.Data.IDbTransaction? transaction = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<IReadOnlyList<MvRegistryEntry>> GetEntriesAsync(string serviceId, string viewName, int viewVersion, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<MvRegistryEntry>>(entries
-                .Where(entry => entry.ServiceId == serviceId && entry.ViewName == viewName && entry.ViewVersion == viewVersion)
-                .ToList());
-        public Task<MvActiveEntry?> GetActiveAsync(string serviceId, string viewName, CancellationToken cancellationToken = default) => Task.FromResult<MvActiveEntry?>(null);
-        public Task SetActiveAsync(string serviceId, string viewName, int activeVersion, System.Data.IDbTransaction? transaction = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
-
-    private sealed class FakeServiceIdProvider : IServiceIdProvider
-    {
-        public string GetCurrentServiceId() => "default";
     }
 
     private sealed record UnknownEvent : IEventPayload;
