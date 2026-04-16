@@ -79,4 +79,10 @@ public static class MultiProjectionLogEvents
 
     /// <summary>Grain activation completed (catch-up may still be running in background).</summary>
     public static readonly EventId ActivationCompleted = new(1024, "ActivationCompleted");
+
+    /// <summary>Catch-up batch summary emitted for diagnostics.</summary>
+    public static readonly EventId CatchUpBatchSummary = new(1025, "CatchUpBatchSummary");
+
+    /// <summary>Catch-up batch skipped due to concurrency gating.</summary>
+    public static readonly EventId CatchUpBatchSkipped = new(1026, "CatchUpBatchSkipped");
 }
