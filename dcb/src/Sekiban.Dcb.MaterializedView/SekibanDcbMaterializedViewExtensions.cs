@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sekiban.Dcb.ServiceId;
 
 namespace Sekiban.Dcb.MaterializedView;
 
@@ -14,6 +15,8 @@ public static class SekibanDcbMaterializedViewExtensions
         {
             services.Configure(configure);
         }
+
+        services.TryAddSingleton<IMvTableResolver, MvTableResolver>();
 
         return services;
     }

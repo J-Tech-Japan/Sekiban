@@ -13,16 +13,18 @@ public static class SekibanDcbMaterializedViewPostgresExtensions
     public static IServiceCollection AddSekibanDcbMaterializedViewPostgres(
         this IServiceCollection services,
         IConfiguration configuration,
-        string connectionStringName = "DcbPostgres")
+        string connectionStringName = "DcbPostgres",
+        bool registerHostedWorker = true)
     {
         var connectionString = ResolveConnectionString(configuration, connectionStringName) ??
             throw new InvalidOperationException($"Connection string '{connectionStringName}' not found.");
-        return services.AddSekibanDcbMaterializedViewPostgres(connectionString);
+        return services.AddSekibanDcbMaterializedViewPostgres(connectionString, registerHostedWorker);
     }
 
     public static IServiceCollection AddSekibanDcbMaterializedViewPostgres(
         this IServiceCollection services,
-        string connectionString)
+        string connectionString,
+        bool registerHostedWorker = true)
     {
         services.AddSekibanDcbMaterializedView();
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
@@ -36,7 +38,10 @@ public static class SekibanDcbMaterializedViewPostgresExtensions
                 sp.GetRequiredService<IOptions<MvOptions>>(),
                 sp.GetRequiredService<ILogger<PostgresMvExecutor>>(),
                 connectionString));
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MvCatchUpWorker>());
+        if (registerHostedWorker)
+        {
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MvCatchUpWorker>());
+        }
         return services;
     }
 

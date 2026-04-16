@@ -17,12 +17,16 @@ var queue = storage.AddQueues("DcbOrleansQueue");
 var multiProjectionOffload = storage.AddBlobs("MultiProjectionOffload");
 
 // Add PostgreSQL for event storage (optional - can use in-memory for development)
-var postgres = builder
+var postgresServer = builder
     .AddPostgres("dcbOrleansPostgres")
     .WithPgAdmin()
-    .WithDbGate()
+    .WithDbGate();
     // .WithDataVolume()
-    .AddDatabase("DcbPostgres");
+
+var postgres = postgresServer.AddDatabase("DcbPostgres");
+
+// Keep materialized views in a separate database while sharing the same PostgreSQL server.
+var materializedViewPostgres = postgresServer.AddDatabase("DcbMaterializedViewPostgres");
 
 // Configure Orleans
 var orleans = builder
@@ -66,9 +70,12 @@ var bench = builder
 var withoutResultApiService = builder
     .AddProject<DcbOrleans_WithoutResult_ApiService>("withoutresultapiservice")
     .WithReference(postgres)
+    .WithReference(materializedViewPostgres)
     .WithReference(orleans)
     .WithReference(multiProjectionOffload)
-    .WaitFor(postgres);
+    .WithEnvironment("Sekiban:Database", "postgres")
+    .WaitFor(postgres)
+    .WaitFor(materializedViewPostgres);
 
 builder
     .AddAzureFunctionsProject<DcbOrleans_Catchup_Functions>("cold-catchup-timer")

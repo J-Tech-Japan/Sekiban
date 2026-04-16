@@ -21,6 +21,15 @@
 
 <div class="row mb-3">
     <div class="col-auto">
+        <label class="col-form-label">Source:</label>
+    </div>
+    <div class="col-auto">
+        <select class="form-select" value="@selectedSource" @onchange="OnSourceChanged">
+            <option value="@WeatherViewSource.MemoryProjection">Memory Projection</option>
+            <option value="@WeatherViewSource.DatabaseProjection">Database Projection</option>
+        </select>
+    </div>
+    <div class="col-auto">
         <label class="col-form-label">Page Size:</label>
     </div>
     <div class="col-auto">
@@ -35,11 +44,18 @@
         <span class="col-form-label text-muted">
             @if (forecasts != null)
             {
-                @:Showing @forecasts.Count items
+                @:Showing @forecasts.Count items from @GetSourceLabel()
             }
         </span>
     </div>
 </div>
+
+@if (!string.IsNullOrWhiteSpace(loadError))
+{
+    <div class="alert alert-danger" role="alert">
+        @loadError
+    </div>
+}
 
 @if (forecasts == null)
 {
@@ -211,12 +227,20 @@
     private EditLocationModel editLocationModel = new();
     private readonly string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
     private string? lastSortableUniqueId;
+    private string? loadError;
+    private WeatherViewSource selectedSource = WeatherViewSource.MemoryProjection;
 
     // Pagination fields
     private int currentPage = 1;
     private int pageSize = 10;
     private int totalPages = 1;
     private int totalItems;
+
+    private enum WeatherViewSource
+    {
+        MemoryProjection,
+        DatabaseProjection
+    }
 
     public class WeatherForecastModel
     {
@@ -254,7 +278,10 @@
     {
         try
         {
-            var result = await WeatherApiClient.GetWeatherAsync(currentPage, pageSize, waitForSortableUniqueId);
+            loadError = null;
+            var result = selectedSource == WeatherViewSource.DatabaseProjection
+                ? await WeatherApiClient.GetWeatherFromDatabaseAsync(currentPage, pageSize, waitForSortableUniqueId)
+                : await WeatherApiClient.GetWeatherAsync(currentPage, pageSize, waitForSortableUniqueId);
 
             forecasts = result?.ToList() ?? new List<WeatherForecastItem>();
 
@@ -278,6 +305,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading forecasts");
+            loadError = $"Failed to load {GetSourceLabel().ToLowerInvariant()}: {ex.Message}";
             forecasts = new List<WeatherForecastItem>();
             totalPages = 1;
             totalItems = 0;
@@ -322,6 +350,18 @@
             currentPage = 1; // Reset to first page when changing page size
             await LoadForecasts(lastSortableUniqueId);
         }
+    }
+
+    private async Task OnSourceChanged(ChangeEventArgs e)
+    {
+        if (!Enum.TryParse<WeatherViewSource>(e.Value?.ToString(), out var newSource))
+        {
+            return;
+        }
+
+        selectedSource = newSource;
+        currentPage = 1;
+        await LoadForecasts(lastSortableUniqueId);
     }
 
     private async Task CloseAddModal()
@@ -406,4 +446,9 @@
             forecastModel.Error = $"Failed to add weather forecast: {ex.Message}";
         }
     }
+
+    private string GetSourceLabel() =>
+        selectedSource == WeatherViewSource.DatabaseProjection
+            ? "Database Projection"
+            : "Memory Projection";
 }

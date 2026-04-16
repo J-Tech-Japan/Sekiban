@@ -25,6 +25,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans.WithResult\Sekiban.Dcb.Orleans.WithResult.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.Orleans\Sekiban.Dcb.MaterializedView.Orleans.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj"/>
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj"/>
         <ProjectReference Include="..\Sekiban.Dcb.WithResult.Tests\Sekiban.Dcb.WithResult.Tests.csproj"/>

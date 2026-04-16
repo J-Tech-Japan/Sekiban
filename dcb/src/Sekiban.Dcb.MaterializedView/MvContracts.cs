@@ -17,6 +17,12 @@ public enum MvStatus
     Retired = 4
 }
 
+public enum MvApplySource
+{
+    CatchUp = 0,
+    Stream = 1
+}
+
 public delegate string PhysicalNameResolver(string viewName, int viewVersion, string logicalTable);
 
 public sealed class MvTable
@@ -47,6 +53,13 @@ public sealed record MvRegistryEntry(
     string? CurrentPosition,
     string? TargetPosition,
     string? LastSortableUniqueId,
+    long AppliedEventVersion,
+    string? LastAppliedSource,
+    DateTimeOffset? LastAppliedAt,
+    string? LastStreamReceivedSortableUniqueId,
+    DateTimeOffset? LastStreamReceivedAt,
+    string? LastStreamAppliedSortableUniqueId,
+    string? LastCatchUpSortableUniqueId,
     DateTimeOffset LastUpdated,
     string? Metadata);
 
@@ -100,6 +113,17 @@ public interface IMvRegistryStore
         string viewName,
         int viewVersion,
         string sortableUniqueId,
+        MvApplySource source,
+        long appliedEventVersionDelta = 1,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default);
+
+    Task MarkStreamReceivedAsync(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        string sortableUniqueId,
+        DateTimeOffset receivedAt,
         IDbTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
@@ -130,10 +154,32 @@ public interface IMvRegistryStore
         CancellationToken cancellationToken = default);
 }
 
-public interface IMvExecutor
+public interface IMvTableResolver
 {
-    Task InitializeAsync(IMaterializedViewProjector projector, CancellationToken cancellationToken = default);
-    Task<MvCatchUpResult> CatchUpOnceAsync(IMaterializedViewProjector projector, CancellationToken cancellationToken = default);
+    Task<MvRegistryEntry> ResolveAsync(
+        IMaterializedViewProjector projector,
+        string logicalTable,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default);
 }
 
-public sealed record MvCatchUpResult(int AppliedEvents, bool ReachedUnsafeWindow);
+public interface IMvExecutor
+{
+    Task InitializeAsync(
+        IMaterializedViewProjector projector,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default);
+
+    Task<MvCatchUpResult> CatchUpOnceAsync(
+        IMaterializedViewProjector projector,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default);
+
+    Task<int> ApplySerializableEventsAsync(
+        IMaterializedViewProjector projector,
+        IReadOnlyList<SerializableEvent> events,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record MvCatchUpResult(int AppliedEvents, bool ReachedUnsafeWindow, string? LastAppliedSortableUniqueId = null);

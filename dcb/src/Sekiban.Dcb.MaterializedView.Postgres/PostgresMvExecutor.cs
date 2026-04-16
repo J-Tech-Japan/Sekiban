@@ -39,10 +39,13 @@ public sealed class PostgresMvExecutor : IMvExecutor
         _options = options.Value;
     }
 
-    public async Task InitializeAsync(IMaterializedViewProjector projector, CancellationToken cancellationToken = default)
+    public async Task InitializeAsync(
+        IMaterializedViewProjector projector,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default)
     {
         await _registryStore.EnsureInfrastructureAsync(cancellationToken).ConfigureAwait(false);
-        var serviceId = _serviceIdProvider.GetCurrentServiceId();
+        serviceId = ResolveServiceId(serviceId);
 
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -64,6 +67,13 @@ public sealed class PostgresMvExecutor : IMvExecutor
                     CurrentPosition: null,
                     TargetPosition: null,
                     LastSortableUniqueId: null,
+                    AppliedEventVersion: 0,
+                    LastAppliedSource: null,
+                    LastAppliedAt: null,
+                    LastStreamReceivedSortableUniqueId: null,
+                    LastStreamReceivedAt: null,
+                    LastStreamAppliedSortableUniqueId: null,
+                    LastCatchUpSortableUniqueId: null,
                     LastUpdated: DateTimeOffset.UtcNow,
                     Metadata: null),
                 transaction,
@@ -80,14 +90,17 @@ public sealed class PostgresMvExecutor : IMvExecutor
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<MvCatchUpResult> CatchUpOnceAsync(IMaterializedViewProjector projector, CancellationToken cancellationToken = default)
+    public async Task<MvCatchUpResult> CatchUpOnceAsync(
+        IMaterializedViewProjector projector,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default)
     {
-        var serviceId = _serviceIdProvider.GetCurrentServiceId();
+        serviceId = ResolveServiceId(serviceId);
         var entries = await _registryStore.GetEntriesAsync(serviceId, projector.ViewName, projector.ViewVersion, cancellationToken)
             .ConfigureAwait(false);
         if (entries.Count == 0)
         {
-            await InitializeAsync(projector, cancellationToken).ConfigureAwait(false);
+            await InitializeAsync(projector, serviceId, cancellationToken).ConfigureAwait(false);
             entries = await _registryStore.GetEntriesAsync(serviceId, projector.ViewName, projector.ViewVersion, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -116,13 +129,15 @@ public sealed class PostgresMvExecutor : IMvExecutor
         }
 
         var safeThreshold = CreateSafeThreshold(_options.SafeWindowMs);
-        var appliedEvents = 0;
         var reachedUnsafeWindow = false;
         var batch = readResult.GetValue().OrderBy(serializable => serializable.SortableUniqueIdValue).ToList();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        if (batch.Count == 0)
+        {
+            return new MvCatchUpResult(0, false);
+        }
 
+        var safeBatch = new List<SerializableEvent>(batch.Count);
         foreach (var serializableEvent in batch)
         {
             if (!new SortableUniqueId(serializableEvent.SortableUniqueIdValue).IsEarlierThanOrEqual(safeThreshold))
@@ -131,40 +146,135 @@ public sealed class PostgresMvExecutor : IMvExecutor
                 break;
             }
 
-            var eventResult = serializableEvent.ToEvent(_eventTypes);
-            if (!eventResult.IsSuccess)
-            {
-                throw eventResult.GetException();
-            }
-
-            var ev = eventResult.GetValue();
-            await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            var applyContext = new PostgresMvApplyContext(connection, transaction, ev, serializableEvent.SortableUniqueIdValue);
-            var statements = await projector.ApplyToViewAsync(ev, applyContext, cancellationToken).ConfigureAwait(false);
-            foreach (var statement in statements)
-            {
-                await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        statement.Sql,
-                        statement.Parameters,
-                        transaction,
-                        cancellationToken: cancellationToken)).ConfigureAwait(false);
-            }
-
-            await _registryStore.UpdatePositionAsync(
-                serviceId,
-                projector.ViewName,
-                projector.ViewVersion,
-                serializableEvent.SortableUniqueIdValue,
-                transaction,
-                cancellationToken).ConfigureAwait(false);
-
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            appliedEvents++;
+            safeBatch.Add(serializableEvent);
         }
 
-        return new MvCatchUpResult(appliedEvents, reachedUnsafeWindow);
+        if (safeBatch.Count == 0)
+        {
+            return new MvCatchUpResult(0, reachedUnsafeWindow);
+        }
+
+        var appliedEvents = await ApplySerializableEventsCoreAsync(
+                projector,
+                safeBatch,
+                serviceId,
+                MvApplySource.CatchUp,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var lastAppliedSortableUniqueId = appliedEvents > 0
+            ? safeBatch[^1].SortableUniqueIdValue
+            : null;
+
+        return new MvCatchUpResult(appliedEvents, reachedUnsafeWindow, lastAppliedSortableUniqueId);
     }
+
+    public async Task<int> ApplySerializableEventsAsync(
+        IMaterializedViewProjector projector,
+        IReadOnlyList<SerializableEvent> events,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (events.Count == 0)
+        {
+            return 0;
+        }
+
+        serviceId = ResolveServiceId(serviceId);
+        return await ApplySerializableEventsCoreAsync(projector, events, serviceId, MvApplySource.Stream, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<int> ApplySerializableEventsCoreAsync(
+        IMaterializedViewProjector projector,
+        IReadOnlyList<SerializableEvent> events,
+        string serviceId,
+        MvApplySource source,
+        CancellationToken cancellationToken)
+    {
+        var entries = await _registryStore.GetEntriesAsync(serviceId, projector.ViewName, projector.ViewVersion, cancellationToken)
+            .ConfigureAwait(false);
+        if (entries.Count == 0)
+        {
+            await InitializeAsync(projector, serviceId, cancellationToken).ConfigureAwait(false);
+            entries = await _registryStore.GetEntriesAsync(serviceId, projector.ViewName, projector.ViewVersion, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var currentPosition = entries
+            .Select(entry => entry.CurrentPosition)
+            .FirstOrDefault(position => !string.IsNullOrWhiteSpace(position));
+        var orderedEvents = events
+            .GroupBy(serializableEvent => serializableEvent.Id)
+            .Select(group => group.OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal).Last())
+            .Where(serializableEvent =>
+                string.IsNullOrWhiteSpace(currentPosition) ||
+                string.Compare(serializableEvent.SortableUniqueIdValue, currentPosition, StringComparison.Ordinal) > 0)
+            .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
+            .ToList();
+
+        if (orderedEvents.Count == 0)
+        {
+            return 0;
+        }
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        var appliedEvents = 0;
+
+        foreach (var serializableEvent in orderedEvents)
+        {
+            await ApplySerializableEventAsync(connection, projector, serviceId, serializableEvent, source, cancellationToken)
+                .ConfigureAwait(false);
+            appliedEvents += 1;
+        }
+
+        return appliedEvents;
+    }
+
+    private async Task ApplySerializableEventAsync(
+        NpgsqlConnection connection,
+        IMaterializedViewProjector projector,
+        string serviceId,
+        SerializableEvent serializableEvent,
+        MvApplySource source,
+        CancellationToken cancellationToken)
+    {
+        var eventResult = serializableEvent.ToEvent(_eventTypes);
+        if (!eventResult.IsSuccess)
+        {
+            throw eventResult.GetException();
+        }
+
+        var ev = eventResult.GetValue();
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var applyContext = new PostgresMvApplyContext(connection, transaction, ev, serializableEvent.SortableUniqueIdValue);
+        var statements = await projector.ApplyToViewAsync(ev, applyContext, cancellationToken).ConfigureAwait(false);
+        foreach (var statement in statements)
+        {
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    statement.Sql,
+                    statement.Parameters,
+                    transaction,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+
+        await _registryStore.UpdatePositionAsync(
+            serviceId,
+            projector.ViewName,
+            projector.ViewVersion,
+            serializableEvent.SortableUniqueIdValue,
+            source,
+            transaction: transaction,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private string ResolveServiceId(string? serviceId) =>
+        string.IsNullOrWhiteSpace(serviceId)
+            ? _serviceIdProvider.GetCurrentServiceId()
+            : serviceId;
 
     private static SortableUniqueId CreateSafeThreshold(int safeWindowMs) =>
         new(SortableUniqueId.Generate(DateTime.UtcNow.AddMilliseconds(-safeWindowMs), Guid.Empty));

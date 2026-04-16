@@ -18,7 +18,7 @@
         <!-- Authentication / Identity -->
         <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.3" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.3" />
-        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.0" />
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.2" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
 
         <!-- Orleans Core -->

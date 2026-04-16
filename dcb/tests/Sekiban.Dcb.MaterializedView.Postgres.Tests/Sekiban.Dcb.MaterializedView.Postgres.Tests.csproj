@@ -11,6 +11,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
+        <PackageReference Include="Microsoft.Orleans.TestingHost" Version="10.0.1" />
         <PackageReference Include="xunit" Version="2.9.3"/>
         <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -25,7 +26,9 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView\Sekiban.Dcb.MaterializedView.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.Orleans\Sekiban.Dcb.MaterializedView.Orleans.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.Postgres\Sekiban.Dcb.MaterializedView.Postgres.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans.Core\Sekiban.Dcb.Orleans.Core.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj"/>
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj"/>

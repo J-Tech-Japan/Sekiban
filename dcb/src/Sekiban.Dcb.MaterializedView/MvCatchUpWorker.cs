@@ -27,7 +27,7 @@ public sealed class MvCatchUpWorker : BackgroundService
     {
         foreach (var projector in _projectors)
         {
-            await _executor.InitializeAsync(projector, stoppingToken).ConfigureAwait(false);
+            await _executor.InitializeAsync(projector, cancellationToken: stoppingToken).ConfigureAwait(false);
         }
 
         while (!stoppingToken.IsCancellationRequested)
@@ -38,7 +38,7 @@ public sealed class MvCatchUpWorker : BackgroundService
             {
                 try
                 {
-                    var result = await _executor.CatchUpOnceAsync(projector, stoppingToken).ConfigureAwait(false);
+                    var result = await _executor.CatchUpOnceAsync(projector, cancellationToken: stoppingToken).ConfigureAwait(false);
                     processedEvents += result.AppliedEvents;
                     shouldDelay |= result.ReachedUnsafeWindow;
                     _failureCounts.Remove(GetProjectorKey(projector));

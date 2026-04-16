@@ -29,6 +29,13 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
                 current_position TEXT NULL,
                 target_position TEXT NULL,
                 last_sortable_unique_id TEXT NULL,
+                applied_event_version BIGINT NOT NULL DEFAULT 0,
+                last_applied_source TEXT NULL,
+                last_applied_at TIMESTAMPTZ NULL,
+                last_stream_received_sortable_unique_id TEXT NULL,
+                last_stream_received_at TIMESTAMPTZ NULL,
+                last_stream_applied_sortable_unique_id TEXT NULL,
+                last_catch_up_sortable_unique_id TEXT NULL,
                 last_updated TIMESTAMPTZ NOT NULL,
                 metadata JSONB NULL,
                 PRIMARY KEY (service_id, view_name, view_version, logical_table)
@@ -62,6 +69,13 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
                 current_position,
                 target_position,
                 last_sortable_unique_id,
+                applied_event_version,
+                last_applied_source,
+                last_applied_at,
+                last_stream_received_sortable_unique_id,
+                last_stream_received_at,
+                last_stream_applied_sortable_unique_id,
+                last_catch_up_sortable_unique_id,
                 last_updated,
                 metadata
             )
@@ -75,12 +89,26 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
                 @CurrentPosition,
                 @TargetPosition,
                 @LastSortableUniqueId,
+                @AppliedEventVersion,
+                @LastAppliedSource,
+                @LastAppliedAt,
+                @LastStreamReceivedSortableUniqueId,
+                @LastStreamReceivedAt,
+                @LastStreamAppliedSortableUniqueId,
+                @LastCatchUpSortableUniqueId,
                 @LastUpdated,
                 CAST(@Metadata AS JSONB)
             )
             ON CONFLICT (service_id, view_name, view_version, logical_table) DO UPDATE SET
                 physical_table = EXCLUDED.physical_table,
                 last_updated = EXCLUDED.last_updated,
+                applied_event_version = sekiban_mv_registry.applied_event_version,
+                last_applied_source = COALESCE(sekiban_mv_registry.last_applied_source, EXCLUDED.last_applied_source),
+                last_applied_at = COALESCE(sekiban_mv_registry.last_applied_at, EXCLUDED.last_applied_at),
+                last_stream_received_sortable_unique_id = COALESCE(sekiban_mv_registry.last_stream_received_sortable_unique_id, EXCLUDED.last_stream_received_sortable_unique_id),
+                last_stream_received_at = COALESCE(sekiban_mv_registry.last_stream_received_at, EXCLUDED.last_stream_received_at),
+                last_stream_applied_sortable_unique_id = COALESCE(sekiban_mv_registry.last_stream_applied_sortable_unique_id, EXCLUDED.last_stream_applied_sortable_unique_id),
+                last_catch_up_sortable_unique_id = COALESCE(sekiban_mv_registry.last_catch_up_sortable_unique_id, EXCLUDED.last_catch_up_sortable_unique_id),
                 metadata = COALESCE(EXCLUDED.metadata, sekiban_mv_registry.metadata);
             """;
 
@@ -95,6 +123,13 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
             entry.CurrentPosition,
             entry.TargetPosition,
             entry.LastSortableUniqueId,
+            entry.AppliedEventVersion,
+            entry.LastAppliedSource,
+            entry.LastAppliedAt,
+            entry.LastStreamReceivedSortableUniqueId,
+            entry.LastStreamReceivedAt,
+            entry.LastStreamAppliedSortableUniqueId,
+            entry.LastCatchUpSortableUniqueId,
             entry.LastUpdated,
             entry.Metadata
         };
@@ -116,6 +151,8 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
         string viewName,
         int viewVersion,
         string sortableUniqueId,
+        MvApplySource source,
+        long appliedEventVersionDelta = 1,
         IDbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
@@ -123,13 +160,66 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
             UPDATE sekiban_mv_registry
             SET current_position = @SortableUniqueId,
                 last_sortable_unique_id = @SortableUniqueId,
+                applied_event_version = applied_event_version + @AppliedEventVersionDelta,
+                last_applied_source = @Source,
+                last_applied_at = NOW(),
+                last_stream_applied_sortable_unique_id = CASE
+                    WHEN @Source = 'stream' THEN @SortableUniqueId
+                    ELSE last_stream_applied_sortable_unique_id
+                END,
+                last_catch_up_sortable_unique_id = CASE
+                    WHEN @Source = 'catchup' THEN @SortableUniqueId
+                    ELSE last_catch_up_sortable_unique_id
+                END,
                 last_updated = NOW()
             WHERE service_id = @ServiceId
               AND view_name = @ViewName
               AND view_version = @ViewVersion;
             """;
 
-        var parameters = new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion, SortableUniqueId = sortableUniqueId };
+        var parameters = new
+        {
+            ServiceId = serviceId,
+            ViewName = viewName,
+            ViewVersion = viewVersion,
+            SortableUniqueId = sortableUniqueId,
+            AppliedEventVersionDelta = appliedEventVersionDelta,
+            Source = source == MvApplySource.Stream ? "stream" : "catchup"
+        };
+        await ExecuteAsync(sql, parameters, transaction, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task MarkStreamReceivedAsync(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        string sortableUniqueId,
+        DateTimeOffset receivedAt,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            UPDATE sekiban_mv_registry
+            SET last_stream_received_sortable_unique_id = CASE
+                    WHEN last_stream_received_sortable_unique_id IS NULL
+                      OR last_stream_received_sortable_unique_id < @SortableUniqueId THEN @SortableUniqueId
+                    ELSE last_stream_received_sortable_unique_id
+                END,
+                last_stream_received_at = @ReceivedAt,
+                last_updated = NOW()
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ViewVersion;
+            """;
+
+        var parameters = new
+        {
+            ServiceId = serviceId,
+            ViewName = viewName,
+            ViewVersion = viewVersion,
+            SortableUniqueId = sortableUniqueId,
+            ReceivedAt = receivedAt
+        };
         await ExecuteAsync(sql, parameters, transaction, cancellationToken).ConfigureAwait(false);
     }
 
@@ -161,17 +251,24 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT service_id,
-                   view_name,
-                   view_version,
-                   logical_table,
-                   physical_table,
-                   status,
-                   current_position,
-                   target_position,
-                   last_sortable_unique_id,
-                   last_updated,
-                   metadata
+            SELECT service_id AS ServiceId,
+                   view_name AS ViewName,
+                   view_version AS ViewVersion,
+                   logical_table AS LogicalTable,
+                   physical_table AS PhysicalTable,
+                   status AS Status,
+                   current_position AS CurrentPosition,
+                   target_position AS TargetPosition,
+                   last_sortable_unique_id AS LastSortableUniqueId,
+                   applied_event_version AS AppliedEventVersion,
+                   last_applied_source AS LastAppliedSource,
+                   last_applied_at AS LastAppliedAt,
+                   last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
+                   last_stream_received_at AS LastStreamReceivedAt,
+                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                   last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId,
+                   last_updated AS LastUpdated,
+                   metadata::text AS Metadata
             FROM sekiban_mv_registry
             WHERE service_id = @ServiceId
               AND view_name = @ViewName
@@ -193,7 +290,10 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT service_id, view_name, active_version, activated_at
+            SELECT service_id AS ServiceId,
+                   view_name AS ViewName,
+                   active_version AS ActiveVersion,
+                   activated_at AS ActivatedAt
             FROM sekiban_mv_active
             WHERE service_id = @ServiceId
               AND view_name = @ViewName;
@@ -255,21 +355,43 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
             row.CurrentPosition,
             row.TargetPosition,
             row.LastSortableUniqueId,
+            row.AppliedEventVersion,
+            row.LastAppliedSource,
+            row.LastAppliedAt,
+            row.LastStreamReceivedSortableUniqueId,
+            row.LastStreamReceivedAt,
+            row.LastStreamAppliedSortableUniqueId,
+            row.LastCatchUpSortableUniqueId,
             row.LastUpdated,
             row.Metadata);
 
-    private sealed record RegistryRow(
-        string ServiceId,
-        string ViewName,
-        int ViewVersion,
-        string LogicalTable,
-        string PhysicalTable,
-        string Status,
-        string? CurrentPosition,
-        string? TargetPosition,
-        string? LastSortableUniqueId,
-        DateTimeOffset LastUpdated,
-        string? Metadata);
+    private sealed class RegistryRow
+    {
+        public string ServiceId { get; set; } = string.Empty;
+        public string ViewName { get; set; } = string.Empty;
+        public int ViewVersion { get; set; }
+        public string LogicalTable { get; set; } = string.Empty;
+        public string PhysicalTable { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string? CurrentPosition { get; set; }
+        public string? TargetPosition { get; set; }
+        public string? LastSortableUniqueId { get; set; }
+        public long AppliedEventVersion { get; set; }
+        public string? LastAppliedSource { get; set; }
+        public DateTimeOffset? LastAppliedAt { get; set; }
+        public string? LastStreamReceivedSortableUniqueId { get; set; }
+        public DateTimeOffset? LastStreamReceivedAt { get; set; }
+        public string? LastStreamAppliedSortableUniqueId { get; set; }
+        public string? LastCatchUpSortableUniqueId { get; set; }
+        public DateTimeOffset LastUpdated { get; set; }
+        public string? Metadata { get; set; }
+    }
 
-    private sealed record ActiveRow(string ServiceId, string ViewName, int ActiveVersion, DateTimeOffset ActivatedAt);
+    private sealed class ActiveRow
+    {
+        public string ServiceId { get; set; } = string.Empty;
+        public string ViewName { get; set; } = string.Empty;
+        public int ActiveVersion { get; set; }
+        public DateTimeOffset ActivatedAt { get; set; }
+    }
 }

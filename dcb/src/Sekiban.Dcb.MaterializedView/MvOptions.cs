@@ -3,9 +3,11 @@ namespace Sekiban.Dcb.MaterializedView;
 public sealed class MvOptions
 {
     public const string DefaultTablePrefix = "sekiban_mv";
+    public static readonly TimeSpan DefaultStreamReorderWindow = TimeSpan.FromSeconds(1);
 
     public int BatchSize { get; set; } = 100;
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
+    public TimeSpan StreamReorderWindow { get; set; } = DefaultStreamReorderWindow;
     public int SafeWindowMs { get; set; } = 5000;
     public int MaxConsecutiveFailuresBeforeStop { get; set; } = 3;
     public string TablePrefix { get; set; } = DefaultTablePrefix;

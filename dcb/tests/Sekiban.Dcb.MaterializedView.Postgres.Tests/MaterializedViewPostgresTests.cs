@@ -1,4 +1,6 @@
 using Dcb.Domain.WithoutResult.Order;
+using Dcb.Domain.WithoutResult.MaterializedViews;
+using Dcb.Domain.WithoutResult.Weather;
 using Dapper;
 using Npgsql;
 using Sekiban.Dcb.Actors;
@@ -18,6 +20,11 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
     [Fact]
     public async Task Initialize_CreatesRegistryAndTables()
     {
+        if (!fixture.IsAvailable)
+        {
+            fixture.EnsureAvailable();
+            return;
+        }
         await fixture.ResetAsync();
 
         await fixture.Executor.InitializeAsync(fixture.Projector);
@@ -39,6 +46,11 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
     [Fact]
     public async Task CatchUp_MaterializesRowsAndIsIdempotent()
     {
+        if (!fixture.IsAvailable)
+        {
+            fixture.EnsureAvailable();
+            return;
+        }
         await fixture.ResetAsync();
         await fixture.Executor.InitializeAsync(fixture.Projector);
 
@@ -92,6 +104,19 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
             FROM sekiban_mv_registry
             WHERE view_name = 'OrderSummary' AND logical_table = 'orders';
             """);
+        var registryRow = await connection.QuerySingleAsync<RegistryQueryRow>(
+            """
+            SELECT current_position AS CurrentPosition,
+                   last_sortable_unique_id AS LastSortableUniqueId,
+                   applied_event_version AS AppliedEventVersion,
+                   last_applied_source AS LastAppliedSource,
+                   last_applied_at AS LastAppliedAt,
+                   last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
+                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                   last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId
+            FROM sekiban_mv_registry
+            WHERE view_name = 'OrderSummary' AND logical_table = 'orders';
+            """);
 
         var latestSortableUniqueId = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
             .Max(serializableEvent => serializableEvent.SortableUniqueIdValue);
@@ -103,6 +128,14 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         Assert.Equal(30m, orderRow.Total);
         Assert.Equal(1, itemCount);
         Assert.Equal(latestSortableUniqueId, registryPosition);
+        Assert.Equal(latestSortableUniqueId, registryRow.CurrentPosition);
+        Assert.Equal(latestSortableUniqueId, registryRow.LastSortableUniqueId);
+        Assert.Equal(3, registryRow.AppliedEventVersion);
+        Assert.Equal("catchup", registryRow.LastAppliedSource);
+        Assert.NotNull(registryRow.LastAppliedAt);
+        Assert.Null(registryRow.LastStreamReceivedSortableUniqueId);
+        Assert.Null(registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(latestSortableUniqueId, registryRow.LastCatchUpSortableUniqueId);
         Assert.False(string.IsNullOrWhiteSpace(orderRow.LastSortableUniqueId));
         Assert.NotEqual(default, orderRow.LastAppliedAt);
         Assert.False(string.IsNullOrWhiteSpace(itemRow.LastSortableUniqueId));
@@ -112,6 +145,11 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
     [Fact]
     public async Task CatchUp_RemainsIdempotentWhenRegistryPositionIsRewound()
     {
+        if (!fixture.IsAvailable)
+        {
+            fixture.EnsureAvailable();
+            return;
+        }
         await fixture.ResetAsync();
         await fixture.Executor.InitializeAsync(fixture.Projector);
 
@@ -172,6 +210,11 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
     [Fact]
     public async Task CatchUp_RollsBackWhenApplyStatementFails()
     {
+        if (!fixture.IsAvailable)
+        {
+            fixture.EnsureAvailable();
+            return;
+        }
         await fixture.ResetAsync();
         var failingProjector = new FailingMvProjector();
         await fixture.Executor.InitializeAsync(failingProjector);
@@ -195,8 +238,111 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         Assert.Null(registryPosition);
     }
 
-    private sealed record OrderQueryRow(Guid Id, string Status, decimal Total, string LastSortableUniqueId, DateTimeOffset LastAppliedAt);
-    private sealed record ItemQueryRow(Guid Id, Guid OrderId, string LastSortableUniqueId, DateTimeOffset LastAppliedAt);
+    [Fact]
+    public async Task CatchUp_WeatherForecastMaterializesSingleForecastTable()
+    {
+        if (!fixture.IsAvailable)
+        {
+            fixture.EnsureAvailable();
+            return;
+        }
+
+        await fixture.ResetAsync();
+        var projector = new WeatherForecastMvV1();
+        await fixture.Executor.InitializeAsync(projector);
+
+        var executor = new GeneralSekibanExecutor(fixture.EventStore, fixture.ActorAccessor, fixture.DomainTypes);
+        var forecastId = Guid.CreateVersion7();
+        var forecastDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+
+        await executor.ExecuteAsync(new CreateWeatherForecast
+        {
+            ForecastId = forecastId,
+            Location = "Tokyo",
+            Date = forecastDate,
+            TemperatureC = 24,
+            Summary = "Sunny"
+        });
+        await executor.ExecuteAsync(new ChangeLocationName
+        {
+            ForecastId = forecastId,
+            NewLocationName = "Osaka"
+        });
+        await executor.ExecuteAsync(new UpdateWeatherForecast
+        {
+            ForecastId = forecastId,
+            Location = "Osaka",
+            Date = forecastDate.AddDays(1),
+            TemperatureC = 18,
+            Summary = "Cloudy"
+        });
+
+        var catchUp = await fixture.Executor.CatchUpOnceAsync(projector);
+
+        await using var connection = await fixture.OpenConnectionAsync();
+        var row = await connection.QuerySingleAsync<WeatherForecastQueryRow>(
+            """
+            SELECT forecast_id AS ForecastId,
+                   location AS Location,
+                   forecast_date::timestamp AS ForecastDate,
+                   temperature_c AS TemperatureC,
+                   summary AS Summary,
+                   is_deleted AS IsDeleted,
+                   _last_sortable_unique_id AS LastSortableUniqueId
+            FROM sekiban_mv_weatherforecast_v1_forecasts
+            WHERE forecast_id = @ForecastId;
+            """,
+            new { ForecastId = forecastId });
+
+        Assert.Equal(3, catchUp.AppliedEvents);
+        Assert.Equal(forecastId, row.ForecastId);
+        Assert.Equal("Osaka", row.Location);
+        Assert.Equal(forecastDate.AddDays(1).ToDateTime(TimeOnly.MinValue), row.ForecastDate.Date);
+        Assert.Equal(18, row.TemperatureC);
+        Assert.Equal("Cloudy", row.Summary);
+        Assert.False(row.IsDeleted);
+        Assert.False(string.IsNullOrWhiteSpace(row.LastSortableUniqueId));
+    }
+
+    private sealed class OrderQueryRow
+    {
+        public Guid Id { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public decimal Total { get; set; }
+        public string LastSortableUniqueId { get; set; } = string.Empty;
+        public DateTimeOffset LastAppliedAt { get; set; }
+    }
+
+    private sealed class ItemQueryRow
+    {
+        public Guid Id { get; set; }
+        public Guid OrderId { get; set; }
+        public string LastSortableUniqueId { get; set; } = string.Empty;
+        public DateTimeOffset LastAppliedAt { get; set; }
+    }
+
+    private sealed class WeatherForecastQueryRow
+    {
+        public Guid ForecastId { get; set; }
+        public string Location { get; set; } = string.Empty;
+        public DateTime ForecastDate { get; set; }
+        public int TemperatureC { get; set; }
+        public string? Summary { get; set; }
+        public bool IsDeleted { get; set; }
+        public string LastSortableUniqueId { get; set; } = string.Empty;
+    }
+
+    private sealed class RegistryQueryRow
+    {
+        public string? CurrentPosition { get; set; }
+        public string? LastSortableUniqueId { get; set; }
+        public long AppliedEventVersion { get; set; }
+        public string? LastAppliedSource { get; set; }
+        public DateTimeOffset? LastAppliedAt { get; set; }
+        public string? LastStreamReceivedSortableUniqueId { get; set; }
+        public string? LastStreamAppliedSortableUniqueId { get; set; }
+        public string? LastCatchUpSortableUniqueId { get; set; }
+    }
 
     private sealed class FailingMvProjector : IMaterializedViewProjector
     {
