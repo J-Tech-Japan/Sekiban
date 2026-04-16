@@ -17,6 +17,7 @@
 > - [ResultBox](14_result_box.md)
 > - [バリューオブジェクト](15_value_object.md)
 > - [デプロイガイド](16_deployment.md)
+> - [マテリアライズドビュー基礎](20_materialized_view.md)
 
 タグプロジェクターがタグ単位の状態を構築するのに対し、マルチプロジェクションは複数タグを組み合わせた
 読み取りモデルを生成します。Orleans では各マルチプロジェクションが専用の Grain で動作し、大きな状態は
@@ -81,3 +82,13 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 - 複数タグを跨ぐ統計情報やランキング
 
 例: `internalUsages/Dcb.Domain/Student/StudentSummaries.cs` は複数タグから学生サマリーを組み立てています。
+
+## マルチプロジェクションとマテリアライズドビューの違い
+
+Sekiban には現在、2 種類の読み取りモデルがあります。
+
+- **マルチプロジェクション**: Orleans Grain 内に保持されるメモリ状態。`ISekibanExecutor.QueryAsync` と自然に接続されます。
+- **マテリアライズドビュー**: 同じイベントストリームから更新される DB テーブル。SQL の一覧取得、レポート、外部参照に向きます。
+
+Sekiban 内部だけで完結する読み取りならマルチプロジェクション、リレーショナル DB として見せたいなら
+マテリアライズドビューが適しています。詳細は [マテリアライズドビュー基礎](20_materialized_view.md) を参照してください。

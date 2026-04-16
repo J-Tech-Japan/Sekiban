@@ -2,13 +2,17 @@ using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
 using System.Text;
+using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.ClassRoom;
 using Dcb.Domain.WithoutResult.Enrollment;
+using Dcb.Domain.WithoutResult.MaterializedViews;
+using Dcb.Domain.WithoutResult.Order;
 using Dcb.Domain.WithoutResult.Queries;
 using Dcb.Domain.WithoutResult.Student;
 using Dcb.Domain.WithoutResult.Weather;
+using DcbOrleans.WithoutResult.ApiService;
 using DcbOrleans.WithoutResult.ApiService.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 using Orleans.Configuration;
@@ -28,7 +32,11 @@ using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
 using Sekiban.Dcb.ColdEvents;
+using Sekiban.Dcb.MaterializedView;
+using Sekiban.Dcb.MaterializedView.Orleans;
+using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.ServiceId;
+using Npgsql;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure logging to suppress Azure Storage warnings in development
@@ -395,6 +403,13 @@ builder.Services.AddSingleton(domainTypes);
 // Register native runtime abstraction interfaces
 builder.Services.AddSekibanDcbNativeRuntime();
 builder.Services.AddSekibanDcbColdEventDefaults();
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.BatchSize = 100;
+    options.PollInterval = TimeSpan.FromSeconds(1);
+});
+builder.Services.AddMaterializedView<OrderSummaryMvV1>();
+builder.Services.AddMaterializedView<WeatherForecastMvV1>();
 
 // Configure database storage based on configuration
 if (databaseType == "cosmos")
@@ -419,6 +434,11 @@ else
     builder.Services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
     builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
     builder.Services.AddSekibanDcbPostgresWithAspire();
+    builder.Services.AddSekibanDcbMaterializedViewPostgres(
+        builder.Configuration,
+        connectionStringName: "DcbMaterializedViewPostgres",
+        registerHostedWorker: false);
+    builder.Services.AddSekibanDcbMaterializedViewOrleans();
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Postgres.PostgresMultiProjectionStateStore>();
 }
 
@@ -489,6 +509,63 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 
 // Student endpoints
+apiRoute
+    .MapPost(
+        "/orders",
+        async ([FromBody] CreateOrder command, [FromServices] ISekibanExecutor executor) =>
+        {
+            var execution = await executor.ExecuteAsync(command);
+            var createdEvent = execution.Events.FirstOrDefault(item => item.Payload is OrderCreated)?.Payload as OrderCreated;
+            return Results.Ok(
+                new
+                {
+                    orderId = createdEvent?.OrderId ?? command.OrderId,
+                    eventId = execution.EventId,
+                    sortableUniqueId = execution.SortableUniqueId,
+                    message = "Order created successfully"
+                });
+        })
+    .WithOpenApi()
+    .WithName("CreateOrder");
+
+apiRoute
+    .MapPost(
+        "/orders/{orderId:guid}/items",
+        async (Guid orderId, [FromBody] AddOrderItem command, [FromServices] ISekibanExecutor executor) =>
+        {
+            var execution = await executor.ExecuteAsync(command with { OrderId = orderId });
+            var addedEvent = execution.Events.FirstOrDefault(item => item.Payload is OrderItemAdded)?.Payload as OrderItemAdded;
+            return Results.Ok(
+                new
+                {
+                    orderId,
+                    itemId = addedEvent?.ItemId ?? command.ItemId,
+                    eventId = execution.EventId,
+                    sortableUniqueId = execution.SortableUniqueId,
+                    message = "Order item added successfully"
+                });
+        })
+    .WithOpenApi()
+    .WithName("AddOrderItem");
+
+apiRoute
+    .MapPost(
+        "/orders/{orderId:guid}/cancel",
+        async (Guid orderId, [FromBody] CancelOrder command, [FromServices] ISekibanExecutor executor) =>
+        {
+            var execution = await executor.ExecuteAsync(command with { OrderId = orderId });
+            return Results.Ok(
+                new
+                {
+                    orderId,
+                    eventId = execution.EventId,
+                    sortableUniqueId = execution.SortableUniqueId,
+                    message = "Order cancelled successfully"
+                });
+        })
+    .WithOpenApi()
+    .WithName("CancelOrder");
+
 apiRoute
     .MapPost(
         "/students",
@@ -741,6 +818,226 @@ apiRoute
         })
     .WithOpenApi()
     .WithName("GetWeatherForecastSingle");
+
+apiRoute
+    .MapGet(
+        "/weatherforecastdb",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromQuery] bool? includeDeleted,
+            [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize,
+            [FromServices] IMvOrleansQueryAccessor mvQueryAccessor,
+            [FromServices] WeatherForecastMvV1 projector) =>
+        {
+            if (!string.Equals(databaseType, "postgres", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(databaseType))
+            {
+                return Results.BadRequest(
+                    new
+                    {
+                        message = "Weather DB projection endpoint is only available with PostgreSQL storage.",
+                        databaseType
+                    });
+            }
+
+            var context = await mvQueryAccessor.GetAsync(projector);
+
+            if (!string.IsNullOrWhiteSpace(waitForSortableUniqueId))
+            {
+                var reached = await WaitForMaterializedViewAsync(context.Grain, waitForSortableUniqueId, TimeSpan.FromSeconds(10));
+                if (!reached)
+                {
+                    return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
+                }
+            }
+
+            var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
+            await using var connection = new NpgsqlConnection(context.ConnectionString);
+            await connection.OpenAsync();
+
+            var rows = await QueryWeatherForecastDbRowsAsync(
+                connection,
+                context,
+                includeDeleted.GetValueOrDefault(),
+                pageNumber,
+                pageSize);
+
+            var status = await context.Grain.GetStatusAsync();
+            return Results.Ok(
+                new
+                {
+                    status,
+                    databaseType = context.DatabaseType,
+                    entries = context.Entries,
+                    table = forecastEntry.PhysicalTable,
+                    rows
+                });
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastDb");
+
+apiRoute
+    .MapGet(
+        "/weatherforecastdb/list",
+        async (
+            [FromQuery] string? waitForSortableUniqueId,
+            [FromQuery] bool? includeDeleted,
+            [FromQuery] int? pageNumber,
+            [FromQuery] int? pageSize,
+            [FromServices] IMvOrleansQueryAccessor mvQueryAccessor,
+            [FromServices] WeatherForecastMvV1 projector) =>
+        {
+            if (!string.Equals(databaseType, "postgres", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(databaseType))
+            {
+                return Results.BadRequest(
+                    new
+                    {
+                        message = "Weather DB projection endpoint is only available with PostgreSQL storage.",
+                        databaseType
+                    });
+            }
+
+            var context = await mvQueryAccessor.GetAsync(projector);
+
+            if (!string.IsNullOrWhiteSpace(waitForSortableUniqueId))
+            {
+                var reached = await WaitForMaterializedViewAsync(context.Grain, waitForSortableUniqueId, TimeSpan.FromSeconds(10));
+                if (!reached)
+                {
+                    return Results.StatusCode(StatusCodes.Status504GatewayTimeout);
+                }
+            }
+
+            await using var connection = new NpgsqlConnection(context.ConnectionString);
+            await connection.OpenAsync();
+
+            var rows = await QueryWeatherForecastDbRowsAsync(
+                connection,
+                context,
+                includeDeleted.GetValueOrDefault(),
+                pageNumber,
+                pageSize);
+
+            var items = rows
+                .Select(
+                    row => new Dcb.Domain.WithoutResult.Projections.WeatherForecastItem(
+                        row.ForecastId,
+                        row.Location,
+                        DateTime.SpecifyKind(row.ForecastDate, DateTimeKind.Utc),
+                        row.TemperatureC,
+                        row.Summary,
+                        row.LastAppliedAt.UtcDateTime))
+                .ToList();
+
+            return Results.Ok(items);
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastDbList");
+
+apiRoute
+    .MapGet(
+        "/weatherforecastdb/count",
+        async (
+            [FromServices] IMvOrleansQueryAccessor mvQueryAccessor,
+            [FromServices] WeatherForecastMvV1 projector) =>
+        {
+            try
+            {
+                var context = await mvQueryAccessor.GetAsync(projector);
+                var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
+
+                await using var connection = new NpgsqlConnection(context.ConnectionString);
+                await connection.OpenAsync();
+                var totalCount = await connection.ExecuteScalarAsync<int>(
+                    $"SELECT COUNT(*) FROM {forecastEntry.PhysicalTable} WHERE is_deleted = FALSE;");
+                var status = await context.Grain.GetStatusAsync();
+
+                return Results.Ok(
+                    new
+                    {
+                        totalCount,
+                        databaseType = context.DatabaseType,
+                        table = forecastEntry.PhysicalTable,
+                        status,
+                        entry = forecastEntry,
+                        entries = context.Entries
+                    });
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(ex.Message);
+            }
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastDbCount");
+
+apiRoute
+    .MapGet(
+        "/weatherforecastdb/status",
+        async (
+            [FromServices] IMvOrleansQueryAccessor mvQueryAccessor,
+            [FromServices] WeatherForecastMvV1 projector) =>
+        {
+            try
+            {
+                var context = await mvQueryAccessor.GetAsync(projector);
+                var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
+                var status = await context.Grain.GetStatusAsync();
+                return Results.Ok(new { databaseType = context.DatabaseType, table = forecastEntry.PhysicalTable, status, entry = forecastEntry, entries = context.Entries });
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(ex.Message);
+            }
+        })
+    .WithOpenApi()
+    .WithName("GetWeatherForecastDbStatus");
+
+apiRoute
+    .MapPost(
+        "/weatherforecastdb/refresh",
+        async (
+            [FromServices] IMvOrleansQueryAccessor mvQueryAccessor,
+            [FromServices] WeatherForecastMvV1 projector) =>
+        {
+            try
+            {
+                var context = await mvQueryAccessor.GetAsync(projector);
+                var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
+                await context.Grain.RefreshAsync();
+                return Results.Ok(new { success = true, databaseType = context.DatabaseType, table = forecastEntry.PhysicalTable });
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(ex.Message);
+            }
+        })
+    .WithOpenApi()
+    .WithName("RefreshWeatherForecastDb");
+
+apiRoute
+    .MapPost(
+        "/weatherforecastdb/deactivate",
+        async (
+            [FromServices] IMvOrleansQueryAccessor mvQueryAccessor,
+            [FromServices] WeatherForecastMvV1 projector) =>
+        {
+            try
+            {
+                var context = await mvQueryAccessor.GetAsync(projector);
+                var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
+                await context.Grain.RequestDeactivationAsync();
+                return Results.Ok(new { success = true, databaseType = context.DatabaseType, table = forecastEntry.PhysicalTable });
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(ex.Message);
+            }
+        })
+    .WithOpenApi()
+    .WithName("DeactivateWeatherForecastDb");
 
 apiRoute
     .MapPost(
@@ -1187,3 +1484,61 @@ apiRoute
 app.MapDefaultEndpoints();
 
 app.Run();
+
+static async Task<bool> WaitForMaterializedViewAsync(
+    IMaterializedViewGrain grain,
+    string sortableUniqueId,
+    TimeSpan timeout)
+{
+    var until = DateTime.UtcNow.Add(timeout);
+    while (DateTime.UtcNow < until)
+    {
+        if (await grain.IsSortableUniqueIdReceived(sortableUniqueId))
+        {
+            return true;
+        }
+
+        await Task.Delay(100);
+    }
+
+    return false;
+}
+
+static async Task<List<WeatherForecastDbRow>> QueryWeatherForecastDbRowsAsync(
+    NpgsqlConnection connection,
+    MvOrleansQueryContext context,
+    bool includeDeleted,
+    int? pageNumber,
+    int? pageSize)
+{
+    var forecastEntry = context.GetRequiredTable(WeatherForecastDbProjection.LogicalTable);
+    var whereClause = includeDeleted ? string.Empty : "WHERE is_deleted = FALSE";
+    var pagingClause = string.Empty;
+    var parameters = new DynamicParameters();
+
+    if (pageSize is > 0)
+    {
+        var normalizedPageSize = pageSize.Value;
+        var normalizedPageNumber = Math.Max(1, pageNumber ?? 1);
+        parameters.Add("Limit", normalizedPageSize);
+        parameters.Add("Offset", (normalizedPageNumber - 1) * normalizedPageSize);
+        pagingClause = " LIMIT @Limit OFFSET @Offset";
+    }
+
+    return (await connection.QueryAsync<WeatherForecastDbRow>(
+        $"""
+         SELECT forecast_id AS ForecastId,
+                location AS Location,
+                forecast_date::timestamp AS ForecastDate,
+                temperature_c AS TemperatureC,
+                summary AS Summary,
+                is_deleted AS IsDeleted,
+                _last_sortable_unique_id AS LastSortableUniqueId,
+                _last_applied_at AS LastAppliedAt
+         FROM {forecastEntry.PhysicalTable}
+         {whereClause}
+         ORDER BY forecast_date DESC, forecast_id
+         {pagingClause};
+         """,
+        parameters)).ToList();
+}

@@ -18,6 +18,7 @@
 > - [バリューオブジェクト](15_value_object.md)
 > - [デプロイガイド](16_deployment.md)
 > - [コールドイベントとキャッチアップ](19_cold_events.md) (現在位置)
+> - [マテリアライズドビュー基礎](20_materialized_view.md)
 
 このドキュメントでは、現在のインターナルユースで使っているコールドイベント実装を説明します。対象は Orleans サンプルで使われているエクスポート処理、ハイブリッドリード、キャッチアップワーカー、設定項目です。
 
@@ -242,3 +243,4 @@ builder.Services.AddSekibanDcbColdExport(
 - [ストレージプロバイダー](11_storage_providers.md)
 - [Orleans構成](10_orleans_setup.md)
 - [API実装](08_api_implementation.md)
+- [マテリアライズドビュー基礎](20_materialized_view.md)

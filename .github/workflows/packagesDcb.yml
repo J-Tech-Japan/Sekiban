@@ -53,6 +53,9 @@ jobs:
           dotnet pack dcb/src/Sekiban.Dcb.WithoutResult.Model/Sekiban.Dcb.WithoutResult.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.WithResult/Sekiban.Dcb.WithResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.WithoutResult/Sekiban.Dcb.WithoutResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.MaterializedView/Sekiban.Dcb.MaterializedView.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.MaterializedView.Postgres/Sekiban.Dcb.MaterializedView.Postgres.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.MaterializedView.Orleans/Sekiban.Dcb.MaterializedView.Orleans.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.Orleans.WithResult/Sekiban.Dcb.Orleans.WithResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.Orleans.WithoutResult/Sekiban.Dcb.Orleans.WithoutResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build

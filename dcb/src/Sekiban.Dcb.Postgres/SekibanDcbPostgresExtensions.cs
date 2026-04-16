@@ -27,17 +27,12 @@ public static class SekibanDcbPostgresExtensions
 
     public static IServiceCollection AddSekibanDcbPostgres(this IServiceCollection services, string connectionString)
     {
-        // Add DbContext factory
         services.AddDbContextFactory<SekibanDcbDbContext>(options =>
         {
             options.UseNpgsql(connectionString);
         });
 
-        // Add DbContext for migrations
-        services.AddDbContext<SekibanDcbDbContext>(options =>
-        {
-            options.UseNpgsql(connectionString);
-        });
+        services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<SekibanDcbDbContext>>().CreateDbContext());
 
         // Register IEventTypes from DcbDomainTypes (if not already registered)
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);

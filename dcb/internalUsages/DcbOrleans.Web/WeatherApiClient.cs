@@ -10,21 +10,7 @@ public class WeatherApiClient(HttpClient httpClient)
         string? waitForSortableUniqueId = null,
         CancellationToken cancellationToken = default)
     {
-        var queryParams = new List<string>();
-
-        if (!string.IsNullOrEmpty(waitForSortableUniqueId))
-            queryParams.Add($"waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}");
-
-        if (pageNumber.HasValue)
-            queryParams.Add($"pageNumber={pageNumber.Value}");
-
-        if (pageSize.HasValue)
-            queryParams.Add($"pageSize={pageSize.Value}");
-
-        var requestUri = queryParams.Count > 0
-            ? $"/api/weatherforecast?{string.Join("&", queryParams)}"
-            : "/api/weatherforecast";
-
+        var requestUri = BuildWeatherRequestUri("/api/weatherforecast", pageNumber, pageSize, waitForSortableUniqueId);
         var forecasts = await httpClient.GetFromJsonAsync<List<WeatherForecastItem>>(requestUri, cancellationToken);
 
         return forecasts?.ToArray() ?? [];
@@ -35,8 +21,19 @@ public class WeatherApiClient(HttpClient httpClient)
         int maxItems = 10,
         string? waitForSortableUniqueId = null,
         CancellationToken cancellationToken = default) =>
-        // Use pagination with the maxItems as pageSize
         await GetWeatherAsync(1, maxItems, waitForSortableUniqueId, cancellationToken);
+
+    public async Task<WeatherForecastItem[]> GetWeatherFromDatabaseAsync(
+        int? pageNumber = null,
+        int? pageSize = null,
+        string? waitForSortableUniqueId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var requestUri = BuildWeatherRequestUri("/api/weatherforecastdb/list", pageNumber, pageSize, waitForSortableUniqueId);
+        var forecasts = await httpClient.GetFromJsonAsync<List<WeatherForecastItem>>(requestUri, cancellationToken);
+
+        return forecasts?.ToArray() ?? [];
+    }
 
     public async Task<CommandResponse> InputWeatherAsync(
         CreateWeatherForecast command,
@@ -69,5 +66,27 @@ public class WeatherApiClient(HttpClient httpClient)
             cancellationToken);
         return await response.Content.ReadFromJsonAsync<CommandResponse>(cancellationToken) ??
             throw new InvalidOperationException("Failed to deserialize CommandResponse");
+    }
+
+    private static string BuildWeatherRequestUri(
+        string basePath,
+        int? pageNumber,
+        int? pageSize,
+        string? waitForSortableUniqueId)
+    {
+        var queryParams = new List<string>();
+
+        if (!string.IsNullOrEmpty(waitForSortableUniqueId))
+            queryParams.Add($"waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}");
+
+        if (pageNumber.HasValue)
+            queryParams.Add($"pageNumber={pageNumber.Value}");
+
+        if (pageSize.HasValue)
+            queryParams.Add($"pageSize={pageSize.Value}");
+
+        return queryParams.Count > 0
+            ? $"{basePath}?{string.Join("&", queryParams)}"
+            : basePath;
     }
 }

@@ -18,6 +18,7 @@
 > - [Value Objects](15_value_object.md)
 > - [Deployment Guide](16_deployment.md)
 > - [Cold Events and Catch-up](19_cold_events.md) (You are here)
+> - [Materialized View Basics](20_materialized_view.md)
 
 This document describes the cold event implementation currently used by the internal Orleans samples. It covers what gets written to cold storage, how export runs are coordinated, how hybrid read works, and how the dedicated catch-up worker is configured.
 
@@ -241,3 +242,4 @@ The selection logic is centralized in `ColdObjectStorageFactory`.
 - [Storage Providers](11_storage_providers.md)
 - [Orleans Setup](10_orleans_setup.md)
 - [API Implementation](08_api_implementation.md)
+- [Materialized View Basics](20_materialized_view.md)

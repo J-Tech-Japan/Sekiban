@@ -17,6 +17,7 @@
 > - [ResultBox](14_result_box.md)
 > - [Value Objects](15_value_object.md)
 > - [Deployment Guide](16_deployment.md)
+> - [Materialized View Basics](20_materialized_view.md)
 
 ## What is DCB?
 
@@ -72,6 +73,10 @@ intermediate queues, and eventual reconciliation. DCB removes that friction:
   grains wrap these actors for distributed execution (`src/Sekiban.Dcb.Orleans/Grains/TagStateGrain.cs`).
 - **Event Store**: Provides ordered persistence and tag lookup. Postgres (`src/Sekiban.Dcb.Postgres/PostgresEventStore.cs`),
   Cosmos DB (`src/Sekiban.Dcb.CosmosDb/CosmosDbEventStore.cs`), and DynamoDB (`src/Sekiban.Dcb.DynamoDB/DynamoDbEventStore.cs`) share the same contract.
+- **Materialized View Runtime**: A database-backed read model pipeline that applies ordered events into SQL tables.
+  Core contracts live in `src/Sekiban.Dcb.MaterializedView`, PostgreSQL execution lives in
+  `src/Sekiban.Dcb.MaterializedView.Postgres`, and Orleans orchestration lives in
+  `src/Sekiban.Dcb.MaterializedView.Orleans`.
 
 ## Benefits
 
@@ -80,7 +85,9 @@ intermediate queues, and eventual reconciliation. DCB removes that friction:
 3. **Scalability Through Actors**: Tags become grains: hot tags are isolated, cold tags consume zero resources.
 4. **Rich Query Capabilities**: MultiProjection and tag state projections deliver fast read models without coupling to the
    write path.
-5. **Observability**: `EventMetadata` carries correlation/causation identifiers so you can trace a command through the
+5. **Database Read Models When Needed**: Materialized views let you publish the same ordered event stream into relational
+   tables for SQL filtering, paging, and external integration.
+6. **Observability**: `EventMetadata` carries correlation/causation identifiers so you can trace a command through the
    runtime.
 
 ## Design Principles
