@@ -11,7 +11,7 @@ public record ColdEventStoreOptions
     public int ExportMaxEventsPerRun { get; init; } = 100_000;
     public long SegmentMaxBytes { get; init; } = 512L * 1024 * 1024;
     public bool EnableTailMerge { get; init; } = true;
-    public long? TailMergeMaxLocalBytes { get; init; } = 64L * 1024 * 1024;
+    public long? TailMergeMaxLocalBytes { get; init; }
     public int ColdCatchUpBatchSize { get; init; } = 100_000;
     public bool AlignCatchUpReadsToSegmentBoundary { get; init; } = true;
     public bool PersistSnapshotOnColdSegmentBoundary { get; init; } = true;

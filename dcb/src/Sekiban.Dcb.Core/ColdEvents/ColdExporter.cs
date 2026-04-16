@@ -456,7 +456,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     {
         if (!_options.EnableTailMerge)
         {
-            return new TailMergeDecision(false, "disabled", null, _options.TailMergeMaxLocalBytes);
+            return new TailMergeDecision(false, TailMergeSkipReason.Disabled, null, _options.TailMergeMaxLocalBytes);
         }
 
         if (firstStagedSegment.EventCount <= 0
@@ -465,7 +465,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             || existingTail.EventCount + firstStagedSegment.EventCount > _options.SegmentMaxEvents
             || existingTail.SizeBytes + firstStagedSegment.SizeBytes > _options.SegmentMaxBytes)
         {
-            return new TailMergeDecision(false, "segment_limits", null, _options.TailMergeMaxLocalBytes);
+            return new TailMergeDecision(false, TailMergeSkipReason.SegmentLimits, null, _options.TailMergeMaxLocalBytes);
         }
 
         var estimatedLocalBytes = EstimateTailMergeLocalBytes(existingTail, firstStagedSegment);
@@ -473,7 +473,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
         {
             return new TailMergeDecision(
                 false,
-                "local_budget_exceeded",
+                TailMergeSkipReason.LocalBudgetExceeded,
                 estimatedLocalBytes,
                 _options.TailMergeMaxLocalBytes);
         }
@@ -487,7 +487,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
     {
         try
         {
-            return checked(existingTail.SizeBytes + firstStagedSegment.SizeBytes);
+            return checked(existingTail.SizeBytes + firstStagedSegment.SizeBytes + firstStagedSegment.SizeBytes);
         }
         catch (OverflowException)
         {
@@ -502,7 +502,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             return;
         }
 
-        if (decision.Reason == "local_budget_exceeded")
+        if (decision.Reason == TailMergeSkipReason.LocalBudgetExceeded)
         {
             _logger.LogInformation(
                 "Skipping tail merge for {ServiceId}: estimated local merge size {EstimatedBytes} exceeds budget {BudgetBytes}",
@@ -512,7 +512,7 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
             return;
         }
 
-        if (decision.Reason == "disabled")
+        if (decision.Reason == TailMergeSkipReason.Disabled)
         {
             _logger.LogInformation(
                 "Skipping tail merge for {ServiceId}: tail merge is disabled by configuration",
@@ -976,9 +976,16 @@ public sealed class ColdExporter : IColdEventExporter, IColdEventProgressReader
 
     private sealed record TailMergeDecision(
         bool CanMerge,
-        string? Reason,
+        TailMergeSkipReason? Reason,
         long? EstimatedLocalBytes,
         long? LocalBudgetBytes);
+
+    private enum TailMergeSkipReason
+    {
+        Disabled = 1,
+        SegmentLimits = 2,
+        LocalBudgetExceeded = 3
+    }
 
     public sealed class MergeCapacityExceededException : Exception;
 
