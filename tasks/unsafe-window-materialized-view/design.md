@@ -102,7 +102,7 @@ MultiProjection の `SafeUnsafeProjectionState` は、一定期間を unsafe と
 
 ## 5. 提案アーキテクチャ
 
-## 5.1 3層構成
+### 5.1 3層構成
 
 ### Safe Table
 
@@ -125,7 +125,7 @@ read 側はこの merged view だけを見ればよい。
 
 ---
 
-## 5.2 推奨 DDL イメージ
+### 5.2 推奨 DDL イメージ
 
 以下は概念例であり、実際の naming はライブラリ側で統一する。
 
@@ -142,7 +142,10 @@ CREATE TABLE weather_forecast_safe (
     _last_sortable_unique_id TEXT NOT NULL,
     _last_event_version BIGINT NOT NULL,
     _last_applied_at TIMESTAMPTZ NOT NULL,
-    _safe_confirmed_at TIMESTAMPTZ NOT NULL
+    _safe_confirmed_at TIMESTAMPTZ NOT NULL,
+
+    CONSTRAINT weather_forecast_safe_projection_key_unique
+        UNIQUE (_projection_key)
 );
 
 CREATE TABLE weather_forecast_unsafe (
@@ -159,14 +162,45 @@ CREATE TABLE weather_forecast_unsafe (
     _last_applied_at TIMESTAMPTZ NOT NULL,
     _unsafe_since TIMESTAMPTZ NOT NULL,
     _safe_due_at TIMESTAMPTZ NOT NULL,
-    _needs_rebuild BOOLEAN NOT NULL DEFAULT FALSE
+    _needs_rebuild BOOLEAN NOT NULL DEFAULT FALSE,
+
+    CONSTRAINT weather_forecast_unsafe_projection_key_unique
+        UNIQUE (_projection_key)
 );
 
 CREATE VIEW weather_forecast_current AS
-SELECT *
-FROM weather_forecast_unsafe
+SELECT
+    u.forecast_id,
+    u.location,
+    u.forecast_date,
+    u.temperature_c,
+    u.summary,
+    u._projection_key,
+    u._is_deleted,
+    u._last_sortable_unique_id,
+    u._last_event_version,
+    u._last_applied_at,
+    NULL::TIMESTAMPTZ AS _safe_confirmed_at,
+    u._unsafe_since,
+    u._safe_due_at,
+    u._needs_rebuild
+FROM weather_forecast_unsafe u
 UNION ALL
-SELECT s.*
+SELECT
+    s.forecast_id,
+    s.location,
+    s.forecast_date,
+    s.temperature_c,
+    s.summary,
+    s._projection_key,
+    s._is_deleted,
+    s._last_sortable_unique_id,
+    s._last_event_version,
+    s._last_applied_at,
+    s._safe_confirmed_at,
+    NULL::TIMESTAMPTZ AS _unsafe_since,
+    NULL::TIMESTAMPTZ AS _safe_due_at,
+    FALSE AS _needs_rebuild
 FROM weather_forecast_safe s
 WHERE NOT EXISTS (
     SELECT 1
@@ -183,6 +217,7 @@ WHERE _is_deleted = FALSE;
 `UNION ALL + NOT EXISTS` を使うか、`LEFT JOIN` で unsafe 優先にするかは DB に応じて選べる。
 
 `current` は内部・診断向けの完全表現、`current_live` は通常 API 向けの live row 表現である。
+また、`_projection_key` が business PK と一致しない projector も想定し、DDL 例では PK とは別に `UNIQUE (_projection_key)` で `1 key = 1 row` を担保している。
 
 ---
 
@@ -427,11 +462,13 @@ unsafe-window MV のテーブルには、最低限次の列を必須にするの
 
 warning は補助としては有効だが、correctness は warning ではなく runtime guarantee で守るべきである。
 
+なお、unsafe-window MV では削除状態も framework 管理メタデータとして扱うため、既存 MV の business column `is_deleted` ではなく `_is_deleted` を標準列名とする。
+
 ---
 
 ## 10. 書き込みフロー
 
-## 10.1 Stream 受信時
+### 10.1 Stream 受信時
 
 1. イベントを受信
 2. projector が `projection key` を決定
@@ -484,7 +521,7 @@ delete event の場合も同様であり、
 
 ---
 
-## 10.2 Safe Promotion
+### 10.2 Safe Promotion
 
 バックグラウンド worker が `unsafe` から promotion 対象を拾う。
 
@@ -550,7 +587,7 @@ read 側は merged view だけを見る。
 
 ## 12. パフォーマンス評価
 
-## 12.1 Read
+### 12.1 Read
 
 良い。
 
@@ -582,7 +619,7 @@ unsafe 急増時には merged view の plan が崩れ得るため、次の備え
 
 も検討対象になる。
 
-## 12.2 Write
+### 12.2 Write
 
 現行 MV より重くなる。
 
@@ -594,7 +631,7 @@ unsafe 急増時には merged view の plan が崩れ得るため、次の備え
 
 ただし、unsafe table が 1 key 1 row であるため、write amplification は比較的抑えられる。
 
-## 12.3 Replay / Promotion
+### 12.3 Replay / Promotion
 
 ここが correctness の対価。
 
