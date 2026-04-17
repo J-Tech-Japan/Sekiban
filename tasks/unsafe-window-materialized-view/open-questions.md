@@ -2,10 +2,10 @@
 
 ## 1. Contract
 
-- 新しい contract は `IMaterializedViewProjector` の拡張にするか、別 interface にするか
+- 新しい contract を `Unsafe Window MV` の唯一の public contract としてどう整えるか
 - `BuildUnsafeRowAsync` と `RebuildSafeRowAsync` を分けるか、1 メソッドに統合するか
 - `Apply(TRow? current, Event ev, ApplyContext ctx)` の単一 primitive に寄せるか
-- `TRow` を POCO に限定するか、SQL statement return も許容するか
+- `TRow` を POCO に限定するか
 - 1 event から 0..n 個の `ProjectionKey` を返す fan-out を v1 contract に入れるか
 
 ## 2. Key モデル
@@ -35,7 +35,7 @@
 ## 5. SQL Authoring
 
 - v1 はテンプレートベースに制限すべきか
-- 完全自由 SQL を unsafe-window mode でも許容するか
+- 完全自由 SQL を public contract でどこまで許容するか
 - startup schema validation を fail-fast にするか
 - `[MvColumn]` 付き POCO から DDL を生成する方向に寄せるか
 
@@ -59,6 +59,6 @@
 ## 8. Rollout
 
 - まず Postgres 限定にするか
-- 既存 materialized view 実装と同じ package に置くか
-- experimental package / namespace に分離するか
+- 既存 materialized view 実装を legacy / bridge としてどう扱うか
+- package / namespace を最初から Unsafe Window MV 前提でどう切るか
 - PoC を `WeatherForecast` で始めた後、`ClassRoomEnrollmentMvV1` の fan-out projector で検証するか
