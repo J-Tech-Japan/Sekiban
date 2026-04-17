@@ -138,6 +138,20 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         return result.UnwrapBox();
     }
 
+    public async Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync(
+        string projectorName,
+        string? expectedProjectorVersion = null)
+    {
+        var result = await _core.GetProjectionHeadStatusAsync(projectorName, expectedProjectorVersion);
+        return result.UnwrapBox();
+    }
+
+    public async Task<EventStoreHeadStatus> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false)
+    {
+        var result = await _core.GetEventStoreHeadStatusAsync(includeTotalEventCount);
+        return result.UnwrapBox();
+    }
+
     public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _core.GetSerializableTagStateAsync(tagStateId);
 

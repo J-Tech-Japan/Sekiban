@@ -238,6 +238,9 @@ public class MultiProjectionGrainPersistPolicyTests
         public Task<ResultBox<ProjectionStateMetadata>> GetStateMetadataAsync(bool includeUnsafe = true) =>
             throw new NotSupportedException();
 
+        public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync() =>
+            throw new NotSupportedException();
+
         public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true) =>
             throw new NotSupportedException();
 

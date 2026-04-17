@@ -54,6 +54,11 @@ host.Run();
 static bool ResolveColdEventEnabled(IConfiguration configuration)
 {
     var coldConfig = configuration.GetSection("Sekiban:ColdEvent");
+    if (!coldConfig.Exists())
+    {
+        return false;
+    }
+
     var configuredOptions = coldConfig.Get<ColdEventStoreOptions>() ?? new ColdEventStoreOptions();
-    return string.IsNullOrWhiteSpace(coldConfig["Enabled"]) || configuredOptions.Enabled;
+    return configuredOptions.Enabled;
 }

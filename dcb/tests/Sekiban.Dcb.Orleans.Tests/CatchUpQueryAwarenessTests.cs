@@ -148,6 +148,72 @@ public class CatchUpQueryAwarenessTests : IAsyncLifetime
         Assert.True(sw.ElapsedMilliseconds < 25000, "Default behavior should not block for catch-up");
     }
 
+    [Fact]
+    public async Task ExecutorProjectionHeadStatus_ShouldExposeCatchUpAndStoreHead()
+    {
+        const int eventCount = 4000;
+        var grain = _client.GetGrain<IMultiProjectionGrain>("catchup-counter");
+        ISekibanExecutor executor = new OrleansDcbExecutor(_client, SharedEventStore, CreateDomainTypes());
+
+        var events = CreateTestEvents(eventCount);
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
+
+        var storeHeadResult = await executor.GetEventStoreHeadStatusAsync(includeTotalEventCount: true);
+        Assert.True(storeHeadResult.IsSuccess);
+        var storeHead = storeHeadResult.GetValue();
+        var latestSortableUniqueId = events
+            .MaxBy(static evt => evt.SortableUniqueIdValue, StringComparer.Ordinal)!
+            .SortableUniqueIdValue;
+        Assert.Equal(eventCount, storeHead.TotalEventCount);
+        Assert.Equal(latestSortableUniqueId, storeHead.LatestSortableUniqueId);
+
+        var initialStatusResult = await executor.GetProjectionHeadStatusAsync<CatchUpCountingProjector>();
+        Assert.True(initialStatusResult.IsSuccess, DescribeFailure(initialStatusResult));
+        var initialStatus = initialStatusResult.GetValue();
+        Assert.True(initialStatus.Current.EventVersion >= initialStatus.Consistent.EventVersion);
+
+        var refreshTask = grain.RefreshAsync();
+
+        ProjectionHeadStatus? finalStatus = null;
+        ProjectionHeadStatus? lastObservedStatus = null;
+        var sawCatchUpInProgress = false;
+        var completionDeadline = DateTime.UtcNow.AddSeconds(20);
+        while (DateTime.UtcNow < completionDeadline)
+        {
+            var statusResult = await executor.GetProjectionHeadStatusAsync<CatchUpCountingProjector>();
+            Assert.True(statusResult.IsSuccess, DescribeFailure(statusResult));
+            var status = statusResult.GetValue();
+            lastObservedStatus = status;
+            sawCatchUpInProgress |= status.CatchUp.IsInProgress;
+            if (string.Equals(status.Current.LastSortableUniqueId, latestSortableUniqueId, StringComparison.Ordinal))
+            {
+                finalStatus = status;
+                break;
+            }
+
+            await Task.Delay(100);
+        }
+
+        await refreshTask;
+        if (finalStatus is null)
+        {
+            var finalStatusResult = await executor.GetProjectionHeadStatusAsync<CatchUpCountingProjector>();
+            Assert.True(finalStatusResult.IsSuccess, DescribeFailure(finalStatusResult));
+            finalStatus = finalStatusResult.GetValue();
+            lastObservedStatus = finalStatus;
+            sawCatchUpInProgress |= finalStatus.CatchUp.IsInProgress;
+        }
+
+        Assert.True(
+            sawCatchUpInProgress,
+            $"Expected catch-up to be observable. Last observed: current={lastObservedStatus?.Current.EventVersion}:{lastObservedStatus?.Current.LastSortableUniqueId}, consistent={lastObservedStatus?.Consistent.EventVersion}:{lastObservedStatus?.Consistent.LastSortableUniqueId}, catchup={lastObservedStatus?.CatchUp.IsInProgress}:{lastObservedStatus?.CatchUp.CurrentSortableUniqueId}->{lastObservedStatus?.CatchUp.TargetSortableUniqueId}");
+        Assert.True(
+            finalStatus is not null,
+            $"Last observed: current={lastObservedStatus?.Current.EventVersion}:{lastObservedStatus?.Current.LastSortableUniqueId}, consistent={lastObservedStatus?.Consistent.EventVersion}:{lastObservedStatus?.Consistent.LastSortableUniqueId}, catchup={lastObservedStatus?.CatchUp.IsInProgress}:{lastObservedStatus?.CatchUp.CurrentSortableUniqueId}->{lastObservedStatus?.CatchUp.TargetSortableUniqueId}");
+        Assert.Equal(eventCount, finalStatus!.Current.EventVersion);
+        Assert.Equal(latestSortableUniqueId, finalStatus!.Current.LastSortableUniqueId);
+    }
+
     // --- Test domain types ---
 
     private static List<Event> CreateTestEvents(int count)
@@ -179,6 +245,16 @@ public class CatchUpQueryAwarenessTests : IAsyncLifetime
                 e.Tags.ToList(),
                 e.EventType))
             .ToList();
+
+    private static string DescribeFailure<T>(ResultBox<T> result) where T : notnull
+    {
+        if (result.IsSuccess)
+        {
+            return string.Empty;
+        }
+
+        return result.GetException().ToString();
+    }
 
     internal static DcbDomainTypes CreateDomainTypes()
     {

@@ -99,6 +99,14 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
         _core.GetLatestSortableUniqueIdAsync();
 
+    public Task<ResultBox<ProjectionHeadStatus>> GetProjectionHeadStatusAsync(
+        string projectorName,
+        string? expectedProjectorVersion = null) =>
+        _core.GetProjectionHeadStatusAsync(projectorName, expectedProjectorVersion);
+
+    public Task<ResultBox<EventStoreHeadStatus>> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false) =>
+        _core.GetEventStoreHeadStatusAsync(includeTotalEventCount);
+
     public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _core.GetSerializableTagStateAsync(tagStateId);
 

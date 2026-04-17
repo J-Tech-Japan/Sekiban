@@ -2,6 +2,7 @@ using Projects;
 
 var builder = DistributedApplication.CreateBuilder(args);
 var benchHttpPort = GetEnvInt("BENCH_HTTP_PORT", 5411);
+const string ColdEventBatchLimit = "30000";
 
 // Add Azure Storage emulator for Orleans
 var storage = builder
@@ -74,6 +75,13 @@ var withoutResultApiService = builder
     .WithReference(orleans)
     .WithReference(multiProjectionOffload)
     .WithEnvironment("Sekiban:Database", "postgres")
+    .WithEnvironment("Sekiban:ColdEvent:Enabled", "true")
+    .WithEnvironment("Sekiban:ColdEvent:SegmentMaxEvents", ColdEventBatchLimit)
+    .WithEnvironment("Sekiban:ColdEvent:ExportMaxEventsPerRun", ColdEventBatchLimit)
+    .WithEnvironment("Sekiban:ColdEvent:Storage:Provider", "azureblob")
+    .WithEnvironment("Sekiban:ColdEvent:Storage:Format", "jsonl")
+    .WithEnvironment("Sekiban:ColdEvent:Storage:AzureBlobClientName", "MultiProjectionOffload")
+    .WithEnvironment("Sekiban:ColdEvent:Storage:AzureContainerName", "multiprojection-cold-events")
     .WaitFor(postgres)
     .WaitFor(materializedViewPostgres);
 
@@ -84,8 +92,8 @@ builder
     .WithReference(multiProjectionOffload)
     .WithEnvironment("ColdExportTimerSchedule", "0 */10 * * * *")
     .WithEnvironment("Sekiban:ColdEvent:Enabled", "true")
-    .WithEnvironment("Sekiban:ColdEvent:SegmentMaxEvents", "30000")
-    .WithEnvironment("Sekiban:ColdEvent:ExportMaxEventsPerRun", "30000")
+    .WithEnvironment("Sekiban:ColdEvent:SegmentMaxEvents", ColdEventBatchLimit)
+    .WithEnvironment("Sekiban:ColdEvent:ExportMaxEventsPerRun", ColdEventBatchLimit)
     .WithEnvironment("Sekiban:ColdEvent:Storage:Provider", "azureblob")
     .WithEnvironment("Sekiban:ColdEvent:Storage:Format", "jsonl")
     .WithEnvironment("Sekiban:ColdEvent:Storage:AzureBlobClientName", "MultiProjectionOffload")
@@ -108,6 +116,7 @@ var bench = builder
     .WithEnvironment("ApiBaseUrl", withoutResultApiService.GetEndpoint("http"))
     .WithEnvironment("BENCH_TOTAL", "10000")
     .WithEnvironment("BENCH_CONCURRENCY", "32")
+    .WithEnvironment("BENCH_PROJECTION_CONTROL_TIMEOUT_SECONDS", "120")
     .WithHttpEndpoint(port: benchHttpPort);
 
 #endif

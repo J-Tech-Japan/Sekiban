@@ -100,6 +100,11 @@ public class NativeProjectionActorHost : IProjectionActorHost
         return _actor.GetStateAsync(canGetUnsafeState);
     }
 
+    public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync()
+    {
+        return _actor.GetProjectionHeadStatusAsync();
+    }
+
     public Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
         Stream target,
         bool canGetUnsafeState,

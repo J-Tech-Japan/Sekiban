@@ -1,0 +1,236 @@
+@page "/projection-monitor"
+@attribute [StreamRendering()]
+@rendermode InteractiveServer
+
+@inject ProjectionStatusApiClient ProjectionStatusApiClient
+@inject ILogger<ProjectionMonitor> Logger
+
+<PageTitle>Projection Monitor</PageTitle>
+
+<div class="monitor-page">
+    <div class="monitor-header">
+        <div>
+            <h1>Projection Monitor</h1>
+            <p class="text-muted mb-0">Weather の multi projection と materialized view の catch-up 状態を確認します。</p>
+        </div>
+        <div class="monitor-actions">
+            <button class="btn btn-primary" @onclick="RefreshAsync" disabled="@isLoading">Refresh</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <div class="alert alert-danger mt-3" role="alert">
+            @loadError
+        </div>
+    }
+
+    <p class="text-muted mt-3 mb-4">Last updated: @FormatDateTime(lastLoadedAt)</p>
+
+    <section class="monitor-section">
+        <div class="section-heading">
+            <h2>1. Multi Projection</h2>
+            <p class="text-muted">standard / single / generic の Orleans projection 状態です。</p>
+        </div>
+
+        <div class="status-grid">
+            @foreach (var projection in multiProjectionCards)
+            {
+                <article class="status-card">
+                    <div class="status-card-header">
+                        <h3>@projection.Label</h3>
+                        <span class="badge @(projection.Status?.IsCaughtUp == true ? "text-bg-success" : "text-bg-warning")">
+                            @(projection.Status?.IsCaughtUp == true ? "Caught Up" : "Catching Up")
+                        </span>
+                    </div>
+
+                    @if (projection.Status is null)
+                    {
+                        <p class="text-muted mb-0">No data</p>
+                    }
+                    else
+                    {
+                        <dl class="status-metrics">
+                            <div><dt>Projector</dt><dd>@projection.Status.ProjectorName</dd></div>
+                            <div><dt>Subscription</dt><dd>@BoolLabel(projection.Status.IsSubscriptionActive)</dd></div>
+                            <div><dt>Position</dt><dd>@ValueOrDash(projection.Status.CurrentPosition)</dd></div>
+                            <div><dt>Events</dt><dd>@projection.Status.EventsProcessed</dd></div>
+                            <div><dt>State Size</dt><dd>@projection.Status.StateSize</dd></div>
+                            <div><dt>Safe Size</dt><dd>@projection.Status.SafeStateSize</dd></div>
+                            <div><dt>Unsafe Size</dt><dd>@projection.Status.UnsafeStateSize</dd></div>
+                            <div><dt>Last Event</dt><dd>@FormatDateTime(projection.Status.LastEventTime)</dd></div>
+                            <div><dt>Last Persist</dt><dd>@FormatDateTime(projection.Status.LastPersistTime)</dd></div>
+                            <div><dt>Error</dt><dd class="status-error">@ValueOrDash(projection.Status.LastError)</dd></div>
+                        </dl>
+                    }
+                </article>
+            }
+        </div>
+    </section>
+
+    <section class="monitor-section">
+        <div class="section-heading">
+            <h2>2. Materialized View</h2>
+            <p class="text-muted">Weather DB projection の catch-up / stream 反映状況です。</p>
+        </div>
+
+        <div class="status-card">
+            @if (databaseStatus?.Status is null)
+            {
+                <p class="text-muted mb-0">No data</p>
+            }
+            else
+            {
+                <div class="status-card-header">
+                    <h3>@databaseStatus.Status.ViewName v@databaseStatus.Status.ViewVersion</h3>
+                    <span class="badge @(databaseStatus.Status.CatchUpInProgress ? "text-bg-warning" : "text-bg-success")">
+                        @(databaseStatus.Status.CatchUpInProgress ? "Catch Up In Progress" : "Ready")
+                    </span>
+                </div>
+
+                <dl class="status-metrics">
+                    <div><dt>Database</dt><dd>@FormatDatabaseType(databaseStatus.DatabaseType)</dd></div>
+                    <div><dt>Table</dt><dd>@ValueOrDash(databaseStatus.Table)</dd></div>
+                    <div><dt>Started</dt><dd>@BoolLabel(databaseStatus.Status.Started)</dd></div>
+                    <div><dt>Subscription</dt><dd>@BoolLabel(databaseStatus.Status.SubscriptionActive)</dd></div>
+                    <div><dt>Buffered</dt><dd>@databaseStatus.Status.BufferedEventCount</dd></div>
+                    <div><dt>Current Position</dt><dd>@ValueOrDash(databaseStatus.Status.CurrentPosition)</dd></div>
+                    <div><dt>Last Received</dt><dd>@ValueOrDash(databaseStatus.Status.LastReceivedSortableUniqueId)</dd></div>
+                    <div><dt>Catch Up Started</dt><dd>@FormatDateTime(databaseStatus.Status.LastCatchUpStartedAt)</dd></div>
+                    <div><dt>Catch Up Completed</dt><dd>@FormatDateTime(databaseStatus.Status.LastCatchUpCompletedAt)</dd></div>
+                    <div><dt>Error</dt><dd class="status-error">@ValueOrDash(databaseStatus.Status.LastError)</dd></div>
+                </dl>
+
+                @if (databaseStatus.Entry is not null)
+                {
+                    <div class="entry-section">
+                        <h4>Active Registry Entry</h4>
+                        <dl class="status-metrics">
+                            <div><dt>Applied Version</dt><dd>@databaseStatus.Entry.AppliedEventVersion</dd></div>
+                            <div><dt>Status</dt><dd>@databaseStatus.Entry.Status</dd></div>
+                            <div><dt>Last SortableUniqueId</dt><dd>@ValueOrDash(databaseStatus.Entry.LastSortableUniqueId)</dd></div>
+                            <div><dt>Last Applied Source</dt><dd>@ValueOrDash(databaseStatus.Entry.LastAppliedSource)</dd></div>
+                            <div><dt>Last Applied At</dt><dd>@FormatDateTime(databaseStatus.Entry.LastAppliedAt)</dd></div>
+                            <div><dt>Last Stream Received</dt><dd>@ValueOrDash(databaseStatus.Entry.LastStreamReceivedSortableUniqueId)</dd></div>
+                            <div><dt>Last Stream Applied</dt><dd>@ValueOrDash(databaseStatus.Entry.LastStreamAppliedSortableUniqueId)</dd></div>
+                            <div><dt>Last Catch Up</dt><dd>@ValueOrDash(databaseStatus.Entry.LastCatchUpSortableUniqueId)</dd></div>
+                            <div><dt>Updated</dt><dd>@FormatDateTime(databaseStatus.Entry.LastUpdated)</dd></div>
+                        </dl>
+                    </div>
+                }
+
+                @if (databaseStatus.Entries.Count > 0)
+                {
+                    <div class="entry-section">
+                        <h4>Registry Entries</h4>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle">
+                                <thead>
+                                <tr>
+                                    <th>Logical</th>
+                                    <th>Physical</th>
+                                    <th>Status</th>
+                                    <th>Applied Version</th>
+                                    <th>Last SortableUniqueId</th>
+                                    <th>Last Catch Up</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                @foreach (var entry in databaseStatus.Entries)
+                                {
+                                    <tr>
+                                        <td>@entry.LogicalTable</td>
+                                        <td><code>@entry.PhysicalTable</code></td>
+                                        <td>@entry.Status</td>
+                                        <td>@entry.AppliedEventVersion</td>
+                                        <td>@ValueOrDash(entry.LastSortableUniqueId)</td>
+                                        <td>@ValueOrDash(entry.LastCatchUpSortableUniqueId)</td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </section>
+</div>
+
+@code {
+    private readonly List<ProjectionCardModel> multiProjectionCards =
+    [
+        new("standard"),
+        new("single"),
+        new("generic")
+    ];
+
+    private WeatherForecastDbStatusDto? databaseStatus;
+    private bool isLoading;
+    private string? loadError;
+    private DateTimeOffset? lastLoadedAt;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        if (isLoading)
+        {
+            return;
+        }
+
+        isLoading = true;
+        loadError = null;
+
+        try
+        {
+            var standardTask = ProjectionStatusApiClient.GetStandardWeatherProjectionStatusAsync();
+            var singleTask = ProjectionStatusApiClient.GetSingleWeatherProjectionStatusAsync();
+            var genericTask = ProjectionStatusApiClient.GetGenericWeatherProjectionStatusAsync();
+            var databaseTask = ProjectionStatusApiClient.GetWeatherDatabaseProjectionStatusAsync();
+
+            await Task.WhenAll(standardTask, singleTask, genericTask, databaseTask);
+
+            multiProjectionCards[0].Status = standardTask.Result;
+            multiProjectionCards[1].Status = singleTask.Result;
+            multiProjectionCards[2].Status = genericTask.Result;
+            databaseStatus = databaseTask.Result;
+            lastLoadedAt = DateTimeOffset.Now;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load projection monitor status.");
+            loadError = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string BoolLabel(bool value) => value ? "Yes" : "No";
+
+    private static string ValueOrDash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string FormatDatabaseType(int? value) => value switch
+    {
+        1 => "Postgres",
+        null => "-",
+        _ => value.Value.ToString()
+    };
+
+    private static string FormatDateTime(DateTime? value) =>
+        value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
+
+    private static string FormatDateTime(DateTimeOffset? value) =>
+        value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "-";
+
+    private static string FormatDateTime(DateTimeOffset value) =>
+        value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz");
+
+    private sealed class ProjectionCardModel(string label)
+    {
+        public string Label { get; } = label;
+        public MultiProjectionStatusDto? Status { get; set; }
+    }
+}

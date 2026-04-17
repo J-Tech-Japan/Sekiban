@@ -31,6 +31,11 @@ public interface IProjectionActorHost
     Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true);
 
     /// <summary>
+    ///     Get projection head information without materializing projector payloads.
+    /// </summary>
+    Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync();
+
+    /// <summary>
      ///     Write the snapshot directly to the provided stream, avoiding byte[] allocation.
      /// </summary>
     Task<ResultBox<bool>> WriteSnapshotToStreamAsync(

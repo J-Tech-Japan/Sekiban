@@ -530,7 +530,7 @@ app.MapPost("/projection/persist", async (string? mode) =>
     var name = GetProjectorName(m);
     try
     {
-        using var http = CreateApiClient(apiBase!);
+        using var http = CreateProjectionControlApiClient(apiBase!);
         var res = await http.PostAsync($"/api/projections/persist?name={Uri.EscapeDataString(name)}", null);
         var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
@@ -552,7 +552,7 @@ app.MapPost("/projection/deactivate", async (string? mode) =>
     {
         try
         {
-            using var http = CreateApiClient(apiBase!);
+            using var http = CreateProjectionControlApiClient(apiBase!);
             var res = await http.PostAsync("/api/weatherforecastdb/deactivate", null);
             var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
             if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
@@ -566,7 +566,7 @@ app.MapPost("/projection/deactivate", async (string? mode) =>
     var name = GetProjectorName(m);
     try
     {
-        using var http = CreateApiClient(apiBase!);
+        using var http = CreateProjectionControlApiClient(apiBase!);
         var res = await http.PostAsync($"/api/projections/deactivate?name={Uri.EscapeDataString(name)}", null);
         var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
@@ -592,7 +592,7 @@ app.MapGet("/projection/snapshot", async (string? mode, bool? unsafeState) =>
     var unsafeFlag = unsafeState ?? true;
     try
     {
-        using var http = CreateApiClient(apiBase!);
+        using var http = CreateProjectionControlApiClient(apiBase!);
         var res = await http.GetAsync($"/api/projections/snapshot?name={Uri.EscapeDataString(name)}&unsafeState={(unsafeFlag ? "true" : "false")}");
         var txt = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = txt });
@@ -614,7 +614,7 @@ app.MapPost("/projection/refresh", async (string? mode) =>
     {
         try
         {
-            using var http = CreateApiClient(apiBase!);
+            using var http = CreateProjectionControlApiClient(apiBase!);
             var res = await http.PostAsync("/api/weatherforecastdb/refresh", null);
             var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
             if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
@@ -628,7 +628,7 @@ app.MapPost("/projection/refresh", async (string? mode) =>
     var name = GetProjectorName(m);
     try
     {
-        using var http = CreateApiClient(apiBase!);
+        using var http = CreateProjectionControlApiClient(apiBase!);
         var res = await http.PostAsync($"/api/projections/refresh?name={Uri.EscapeDataString(name)}", null);
         var json = await Helpers.SafeReadAsync(res, CancellationToken.None);
         if (!res.IsSuccessStatusCode) return Results.BadRequest(new { error = json });
@@ -724,6 +724,9 @@ static HttpClient CreateApiClient(string apiBase, int? timeoutSeconds = null)
         BaseAddress = new Uri(apiBase),
         Timeout = TimeSpan.FromSeconds(timeoutSeconds ?? GetEnvInt("BENCH_API_TIMEOUT_SECONDS", 15))
     };
+
+static HttpClient CreateProjectionControlApiClient(string apiBase) =>
+    CreateApiClient(apiBase, GetEnvInt("BENCH_PROJECTION_CONTROL_TIMEOUT_SECONDS", 120));
 
 static bool IsDatabaseMode(string mode) => string.Equals(mode, DatabaseMode, StringComparison.Ordinal);
 
