@@ -1,9 +1,12 @@
+using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.MaterializedViews;
 using Dcb.Domain.WithoutResult.Order;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MaterializedView;
+using Sekiban.Dcb.Tags;
 using Xunit;
 
 namespace Sekiban.Dcb.MaterializedView.Tests;
@@ -138,9 +141,9 @@ public class MaterializedViewUnitTests
     public async Task CatchUpWorker_UsesPollDelayWhenNothingProcessed()
     {
         var executor = new FakeMvExecutor();
-        var projector = new FakeProjector();
+        var hostFactory = new FakeApplyHostFactory(new FakeApplyHost("Fake", 1));
         using var worker = new MvCatchUpWorker(
-            [projector],
+            hostFactory,
             executor,
             Options.Create(new MvOptions { PollInterval = TimeSpan.FromMilliseconds(10) }),
             NullLogger<MvCatchUpWorker>.Instance);
@@ -152,6 +155,91 @@ public class MaterializedViewUnitTests
 
         Assert.True(executor.InitializeCalls >= 1);
         Assert.True(executor.CatchUpCalls >= 1);
+    }
+
+    [Fact]
+    public async Task NativeMvApplyHost_AdaptsExistingProjector_ToTypedStatements()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        var host = new NativeMvApplyHost(new OrderSummaryMvV1(), domainTypes.EventTypes);
+        var bindings = new MvTableBindings("OrderSummary", 1, new MvOptions());
+
+        var initStatements = await host.InitializeAsync(bindings, CancellationToken.None);
+
+        Assert.NotEmpty(initStatements);
+        Assert.Contains(bindings.Tables, table => table.LogicalName == "orders");
+        Assert.Contains(bindings.Tables, table => table.LogicalName == "items");
+
+        var evt = new Event(
+            new OrderCreated(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), DateTimeOffset.UtcNow),
+            "100",
+            nameof(OrderCreated),
+            Guid.NewGuid(),
+            new EventMetadata("cause", "corr", "tester"),
+            []);
+        var serializable = evt.ToSerializableEvent(domainTypes.EventTypes);
+        var statements = await host.ApplyEventAsync(
+            serializable,
+            bindings,
+            new FakeApplyQueryPort(),
+            "999",
+            CancellationToken.None);
+
+        Assert.Single(statements);
+        Assert.Contains("INSERT INTO sekiban_mv_ordersummary_v1_orders", statements[0].Sql);
+        Assert.Contains(statements[0].Parameters, parameter => parameter.Name == "SortableUniqueId" && parameter.Kind == MvParamKind.String);
+    }
+
+    [Fact]
+    public void MvParamConverter_RoundTripsTypedParameters()
+    {
+        var when = new DateTimeOffset(2026, 4, 17, 10, 0, 0, TimeSpan.Zero);
+        var id = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var parameters = MvParamConverter.FromObject(new
+        {
+            Name = "sekiban",
+            Count = 3,
+            Amount = 12.5m,
+            Active = true,
+            When = when,
+            Id = id
+        });
+
+        Assert.Equal(MvParamKind.String, parameters.Single(parameter => parameter.Name == "Name").Kind);
+        Assert.Equal(MvParamKind.Int32, parameters.Single(parameter => parameter.Name == "Count").Kind);
+        Assert.Equal(MvParamKind.Decimal, parameters.Single(parameter => parameter.Name == "Amount").Kind);
+        Assert.Equal(MvParamKind.Boolean, parameters.Single(parameter => parameter.Name == "Active").Kind);
+        Assert.Equal(MvParamKind.DateTimeOffset, parameters.Single(parameter => parameter.Name == "When").Kind);
+        Assert.Equal(MvParamKind.Guid, parameters.Single(parameter => parameter.Name == "Id").Kind);
+        Assert.Equal(3, MvParamConverter.ToClrValue(parameters.Single(parameter => parameter.Name == "Count")));
+        Assert.Equal(when, MvParamConverter.ToClrValue(parameters.Single(parameter => parameter.Name == "When")));
+        Assert.Equal(id, MvParamConverter.ToClrValue(parameters.Single(parameter => parameter.Name == "Id")));
+    }
+
+    [Fact]
+    public void MvParamConverter_RejectsNullPayloadForNonNullKind()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => MvParamConverter.ToClrValue(new MvParam("Name", MvParamKind.String, null)));
+
+        Assert.Contains("Name", exception.Message);
+    }
+
+    [Fact]
+    public void SerializableTagState_ResolvedPayloadName_PrefersActualPayloadName()
+    {
+        var state = new SerializableTagState(
+            [],
+            1,
+            "0001",
+            "group",
+            "content",
+            "projector",
+            "UnionPayload",
+            "v1",
+            "ActualPayload");
+
+        Assert.Equal("ActualPayload", state.ResolvedPayloadName);
     }
 
     [Fact]
@@ -272,7 +360,7 @@ public class MaterializedViewUnitTests
         public int CatchUpCalls { get; private set; }
 
         public Task InitializeAsync(
-            IMaterializedViewProjector projector,
+            IMvApplyHost host,
             string? serviceId = null,
             CancellationToken cancellationToken = default)
         {
@@ -281,7 +369,7 @@ public class MaterializedViewUnitTests
         }
 
         public Task<MvCatchUpResult> CatchUpOnceAsync(
-            IMaterializedViewProjector projector,
+            IMvApplyHost host,
             string? serviceId = null,
             CancellationToken cancellationToken = default)
         {
@@ -290,10 +378,71 @@ public class MaterializedViewUnitTests
         }
 
         public Task<int> ApplySerializableEventsAsync(
-            IMaterializedViewProjector projector,
+            IMvApplyHost host,
             IReadOnlyList<SerializableEvent> events,
             string? serviceId = null,
             CancellationToken cancellationToken = default) => Task.FromResult(0);
+    }
+
+    private sealed class FakeApplyHostFactory : IMvApplyHostFactory
+    {
+        private readonly IMvApplyHost _host;
+
+        public FakeApplyHostFactory(IMvApplyHost host) => _host = host;
+
+        public IReadOnlyList<MvApplyHostRegistration> GetRegistrations() => [new(_host.ViewName, _host.ViewVersion)];
+
+        public IMvApplyHost Create(string viewName, int viewVersion)
+        {
+            if (_host.ViewName != viewName || _host.ViewVersion != viewVersion)
+            {
+                throw new InvalidOperationException("Unexpected host lookup.");
+            }
+
+            return _host;
+        }
+    }
+
+    private sealed class FakeApplyHost : IMvApplyHost
+    {
+        public FakeApplyHost(string viewName, int viewVersion)
+        {
+            ViewName = viewName;
+            ViewVersion = viewVersion;
+        }
+
+        public string ViewName { get; }
+        public int ViewVersion { get; }
+        public IReadOnlyList<string> LogicalTables => ["main"];
+
+        public Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(IMvTableBindings tables, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<MvSqlStatementDto>>([]);
+
+        public Task<IReadOnlyList<MvSqlStatementDto>> ApplyEventAsync(
+            SerializableEvent ev,
+            IMvTableBindings tables,
+            IMvApplyQueryPort queryPort,
+            string sortableUniqueId,
+            CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<MvSqlStatementDto>>([]);
+    }
+
+    private sealed class FakeApplyQueryPort : IMvApplyQueryPort
+    {
+        public Task<IReadOnlyList<System.Text.Json.JsonElement>> QueryRowsAsync(
+            string sql,
+            IReadOnlyList<MvParam> parameters,
+            CancellationToken ct) => Task.FromResult<IReadOnlyList<System.Text.Json.JsonElement>>([]);
+
+        public Task<System.Text.Json.JsonElement?> QuerySingleOrDefaultAsync(
+            string sql,
+            IReadOnlyList<MvParam> parameters,
+            CancellationToken ct) => Task.FromResult<System.Text.Json.JsonElement?>(null);
+
+        public Task<string?> ExecuteScalarJsonAsync(
+            string sql,
+            IReadOnlyList<MvParam> parameters,
+            CancellationToken ct) => Task.FromResult<string?>(null);
     }
 
     private sealed class FakeProjector : IMaterializedViewProjector

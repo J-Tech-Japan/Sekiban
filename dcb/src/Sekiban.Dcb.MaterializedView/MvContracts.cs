@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Sekiban.Dcb.Events;
 
 namespace Sekiban.Dcb.MaterializedView;
@@ -41,7 +42,27 @@ public sealed class MvTable
     public int ViewVersion { get; }
 }
 
+public enum MvParamKind
+{
+    // Wire contract for non-CLR hosts. Values are append-only and must not be reordered.
+    Null = 0,
+    String = 1,
+    Int32 = 2,
+    Int64 = 3,
+    Boolean = 4,
+    Guid = 5,
+    DateTimeOffset = 6,
+    Decimal = 7,
+    Double = 8,
+    Bytes = 9,
+    DateTime = 10
+}
+
+public readonly record struct MvParam(string Name, MvParamKind Kind, string? ValueJson);
+
 public readonly record struct MvSqlStatement(string Sql, object? Parameters = null);
+public readonly record struct MvSqlStatementDto(string Sql, IReadOnlyList<MvParam> Parameters);
+public readonly record struct MvApplyHostRegistration(string ViewName, int ViewVersion);
 
 public sealed record MvRegistryEntry
 {
@@ -78,6 +99,64 @@ public sealed record MvPositionUpdate(
     string SortableUniqueId,
     MvApplySource Source,
     long AppliedEventVersionDelta = 1);
+
+public interface IMvTableBindings
+{
+    string GetPhysicalName(string logicalName);
+    IReadOnlyDictionary<string, string> LogicalToPhysical { get; }
+    MvTable RegisterTable(string logicalName, string? physicalName = null);
+}
+
+public interface IMvApplyQueryPort
+{
+    Task<IReadOnlyList<JsonElement>> QueryRowsAsync(
+        string sql,
+        IReadOnlyList<MvParam> parameters,
+        CancellationToken ct);
+
+    Task<JsonElement?> QuerySingleOrDefaultAsync(
+        string sql,
+        IReadOnlyList<MvParam> parameters,
+        CancellationToken ct);
+
+    Task<string?> ExecuteScalarJsonAsync(
+        string sql,
+        IReadOnlyList<MvParam> parameters,
+        CancellationToken ct);
+}
+
+public interface IMvApplyDbConnectionPort : IMvApplyQueryPort
+{
+    IDbConnection Connection { get; }
+    IDbTransaction Transaction { get; }
+}
+
+public interface IMvApplyHost
+{
+    string ViewName { get; }
+    int ViewVersion { get; }
+    /// <summary>
+    ///     Some hosts only discover logical tables during <see cref="InitializeAsync" /> and may return an empty list before initialization.
+    /// </summary>
+    IReadOnlyList<string> LogicalTables { get; }
+
+    Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(
+        IMvTableBindings tables,
+        CancellationToken ct);
+
+    Task<IReadOnlyList<MvSqlStatementDto>> ApplyEventAsync(
+        SerializableEvent ev,
+        IMvTableBindings tables,
+        IMvApplyQueryPort queryPort,
+        string sortableUniqueId,
+        CancellationToken ct);
+}
+
+public interface IMvApplyHostFactory
+{
+    IReadOnlyList<MvApplyHostRegistration> GetRegistrations();
+    IMvApplyHost Create(string viewName, int viewVersion);
+}
 
 public interface IMvInitContext
 {
@@ -168,17 +247,17 @@ public interface IMvStorageInfoProvider
 public interface IMvExecutor
 {
     Task InitializeAsync(
-        IMaterializedViewProjector projector,
+        IMvApplyHost host,
         string? serviceId = null,
         CancellationToken cancellationToken = default);
 
     Task<MvCatchUpResult> CatchUpOnceAsync(
-        IMaterializedViewProjector projector,
+        IMvApplyHost host,
         string? serviceId = null,
         CancellationToken cancellationToken = default);
 
     Task<int> ApplySerializableEventsAsync(
-        IMaterializedViewProjector projector,
+        IMvApplyHost host,
         IReadOnlyList<SerializableEvent> events,
         string? serviceId = null,
         CancellationToken cancellationToken = default);

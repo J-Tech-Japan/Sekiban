@@ -26,4 +26,7 @@ public struct SerializableTagStateSurrogate
 
     [Id(7)]
     public string ProjectorVersion { get; set; }
+
+    [Id(8)]
+    public string? ActualPayloadName { get; set; }
 }

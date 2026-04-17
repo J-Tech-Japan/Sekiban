@@ -68,7 +68,8 @@ public class TagStateGrain : Grain, ITagStateGrain
                 string.Empty,
                 string.Empty,
                 nameof(EmptyTagStatePayload),
-                string.Empty);
+                string.Empty,
+                nameof(EmptyTagStatePayload));
         }
 
         var latestSortableUniqueId = await GetLatestSortableUniqueIdAsync(_tagStateId);
@@ -132,7 +133,7 @@ public class TagStateGrain : Grain, ITagStateGrain
         }
 
         var serialized = await GetStateAsync();
-        if (serialized.TagPayloadName == nameof(EmptyTagStatePayload))
+        if (serialized.ResolvedPayloadName == nameof(EmptyTagStatePayload))
         {
             return new TagState(
                 new EmptyTagStatePayload(),
@@ -145,12 +146,12 @@ public class TagStateGrain : Grain, ITagStateGrain
         }
 
         var deserializeResult = _tagStatePayloadTypes.DeserializePayload(
-            serialized.TagPayloadName,
+            serialized.ResolvedPayloadName,
             serialized.Payload);
         if (!deserializeResult.IsSuccess)
         {
             throw new InvalidOperationException(
-                $"Failed to deserialize payload '{serialized.TagPayloadName}': {deserializeResult.GetException().Message}",
+                $"Failed to deserialize payload '{serialized.ResolvedPayloadName}': {deserializeResult.GetException().Message}",
                 deserializeResult.GetException());
         }
 
@@ -190,7 +191,8 @@ public class TagStateGrain : Grain, ITagStateGrain
                 newState.TagContent,
                 newState.TagProjector,
                 nameof(EmptyTagStatePayload),
-                newState.ProjectorVersion);
+                newState.ProjectorVersion,
+                nameof(EmptyTagStatePayload));
         }
         else
         {
@@ -210,7 +212,8 @@ public class TagStateGrain : Grain, ITagStateGrain
                 newState.TagContent,
                 newState.TagProjector,
                 newState.Payload.GetType().Name,
-                newState.ProjectorVersion);
+                newState.ProjectorVersion,
+                newState.Payload.GetType().Name);
         }
 
         _cache.State = new TagStateCacheState { CachedState = serialized };

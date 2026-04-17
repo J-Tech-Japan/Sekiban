@@ -14,7 +14,8 @@ public sealed class
             surrogate.TagContent,
             surrogate.TagProjector,
             surrogate.TagPayloadName,
-            surrogate.ProjectorVersion);
+            surrogate.ProjectorVersion,
+            surrogate.ActualPayloadName);
 
     public SerializableTagStateSurrogate ConvertToSurrogate(in SerializableTagState value) =>
         new()
@@ -26,6 +27,7 @@ public sealed class
             TagContent = value.TagContent,
             TagProjector = value.TagProjector,
             TagPayloadName = value.TagPayloadName,
-            ProjectorVersion = value.ProjectorVersion
+            ProjectorVersion = value.ProjectorVersion,
+            ActualPayloadName = value.ActualPayloadName
         };
 }

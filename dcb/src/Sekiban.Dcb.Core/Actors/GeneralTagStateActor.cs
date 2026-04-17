@@ -346,7 +346,8 @@ public class GeneralTagStateActor : ITagStateActorCommon
                 tagState.TagContent,
                 tagState.TagProjector,
                 "EmptyTagStatePayload",
-                tagState.ProjectorVersion);
+                tagState.ProjectorVersion,
+                nameof(EmptyTagStatePayload));
         }
 
         // Use ITagStatePayloadTypes for serialization
@@ -365,12 +366,13 @@ public class GeneralTagStateActor : ITagStateActorCommon
             tagState.TagContent,
             tagState.TagProjector,
             tagState.Payload.GetType().Name,
-            tagState.ProjectorVersion);
+            tagState.ProjectorVersion,
+            tagState.Payload.GetType().Name);
     }
 
     private TagState DeserializeTagState(SerializableTagState state)
     {
-        if (state.TagPayloadName == nameof(EmptyTagStatePayload))
+        if (state.ResolvedPayloadName == nameof(EmptyTagStatePayload))
         {
             return new TagState(
                 new EmptyTagStatePayload(),
@@ -382,11 +384,11 @@ public class GeneralTagStateActor : ITagStateActorCommon
                 state.ProjectorVersion);
         }
 
-        var deserializeResult = _tagStatePayloadTypes.DeserializePayload(state.TagPayloadName, state.Payload);
+        var deserializeResult = _tagStatePayloadTypes.DeserializePayload(state.ResolvedPayloadName, state.Payload);
         if (!deserializeResult.IsSuccess)
         {
             throw new InvalidOperationException(
-                $"Failed to deserialize payload '{state.TagPayloadName}': {deserializeResult.GetException().Message}");
+                $"Failed to deserialize payload '{state.ResolvedPayloadName}': {deserializeResult.GetException().Message}");
         }
 
         return new TagState(

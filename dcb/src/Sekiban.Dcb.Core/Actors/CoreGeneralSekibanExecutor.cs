@@ -270,7 +270,7 @@ public class CoreGeneralSekibanExecutor
 
             // Convert SerializableTagState to TagState
             // We need to deserialize the payload from the serializable state
-            if (state.TagPayloadName == nameof(EmptyTagStatePayload))
+            if (state.ResolvedPayloadName == nameof(EmptyTagStatePayload))
             {
                 return ResultBox.FromValue(
                     new TagState(
@@ -284,15 +284,15 @@ public class CoreGeneralSekibanExecutor
             }
 
             // Deserialize the payload using domain types
-            var payloadTypeResult = _domainTypes.TagStatePayloadTypes.GetPayloadType(state.TagPayloadName);
+            var payloadTypeResult = _domainTypes.TagStatePayloadTypes.GetPayloadType(state.ResolvedPayloadName);
             if (payloadTypeResult == null)
             {
                 return ResultBox.Error<TagState>(
-                    new InvalidOperationException($"Unknown payload type: {state.TagPayloadName}"));
+                    new InvalidOperationException($"Unknown payload type: {state.ResolvedPayloadName}"));
             }
 
             var deserializeResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
-                state.TagPayloadName,
+                state.ResolvedPayloadName,
                 state.Payload);
 
             if (!deserializeResult.IsSuccess)

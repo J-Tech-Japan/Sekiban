@@ -4,6 +4,7 @@ using Orleans.Streams;
 using Orleans.TestingHost;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.Orleans;
@@ -122,6 +123,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
                 .ConfigureServices(services =>
                 {
                     services.AddSekibanDcbMaterializedView();
+                    services.AddSingleton<IEventTypes>(_ => new SimpleEventTypes());
                     services.Configure<MvOptions>(options =>
                     {
                         options.PollInterval = TimeSpan.FromMilliseconds(20);
@@ -186,23 +188,23 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         public void SeedInitial(params SerializableEvent[] events) => InitialEvents.AddRange(events);
 
         public Task InitializeAsync(
-            IMaterializedViewProjector projector,
+            IMvApplyHost host,
             string? serviceId = null,
             CancellationToken cancellationToken = default)
         {
             serviceId ??= DefaultServiceIdProvider.DefaultServiceId;
-            return _registry.RegisterViewAsync(serviceId, projector.ViewName, projector.ViewVersion, cancellationToken);
+            return _registry.RegisterViewAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken);
         }
 
         public async Task<MvCatchUpResult> CatchUpOnceAsync(
-            IMaterializedViewProjector projector,
+            IMvApplyHost host,
             string? serviceId = null,
             CancellationToken cancellationToken = default)
         {
             serviceId ??= DefaultServiceIdProvider.DefaultServiceId;
-            await InitializeAsync(projector, serviceId, cancellationToken);
+            await InitializeAsync(host, serviceId, cancellationToken);
 
-            var currentPosition = await _registry.GetCurrentPositionAsync(serviceId, projector.ViewName, projector.ViewVersion, cancellationToken);
+            var currentPosition = await _registry.GetCurrentPositionAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken);
             var batch = InitialEvents
                 .Where(serializableEvent =>
                     string.IsNullOrWhiteSpace(currentPosition) ||
@@ -224,8 +226,8 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             await _registry.UpdatePositionAsync(
                 new MvPositionUpdate(
                     serviceId,
-                    projector.ViewName,
-                    projector.ViewVersion,
+                    host.ViewName,
+                    host.ViewVersion,
                     batch[^1].SortableUniqueIdValue,
                     MvApplySource.CatchUp,
                     batch.Count),
@@ -234,15 +236,15 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         }
 
         public async Task<int> ApplySerializableEventsAsync(
-            IMaterializedViewProjector projector,
+            IMvApplyHost host,
             IReadOnlyList<SerializableEvent> events,
             string? serviceId = null,
             CancellationToken cancellationToken = default)
         {
             serviceId ??= DefaultServiceIdProvider.DefaultServiceId;
-            await InitializeAsync(projector, serviceId, cancellationToken);
+            await InitializeAsync(host, serviceId, cancellationToken);
 
-            var currentPosition = await _registry.GetCurrentPositionAsync(serviceId, projector.ViewName, projector.ViewVersion, cancellationToken);
+            var currentPosition = await _registry.GetCurrentPositionAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken);
             var ordered = events
                 .Where(serializableEvent =>
                     string.IsNullOrWhiteSpace(currentPosition) ||
@@ -263,8 +265,8 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             await _registry.UpdatePositionAsync(
                 new MvPositionUpdate(
                     serviceId,
-                    projector.ViewName,
-                    projector.ViewVersion,
+                    host.ViewName,
+                    host.ViewVersion,
                     ordered[^1].SortableUniqueIdValue,
                     MvApplySource.Stream,
                     ordered.Count),

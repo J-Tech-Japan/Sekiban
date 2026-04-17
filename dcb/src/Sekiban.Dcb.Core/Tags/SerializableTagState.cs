@@ -8,4 +8,11 @@ public record SerializableTagState(
     string TagContent,
     string TagProjector,
     string TagPayloadName,
-    string ProjectorVersion);
+    string ProjectorVersion,
+    string? ActualPayloadName = null)
+{
+    public string ResolvedPayloadName =>
+        string.IsNullOrWhiteSpace(ActualPayloadName)
+            ? TagPayloadName
+            : ActualPayloadName;
+}

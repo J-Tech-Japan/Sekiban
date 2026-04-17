@@ -7,11 +7,11 @@ internal sealed class MaterializedViewGrainActivator : BackgroundService
 {
     private readonly IGrainFactory _grainFactory;
     private readonly ILogger<MaterializedViewGrainActivator> _logger;
-    private readonly IReadOnlyList<IMaterializedViewProjector> _projectors;
+    private readonly IReadOnlyList<MvApplyHostRegistration> _registrations;
     private readonly Sekiban.Dcb.ServiceId.IServiceIdProvider _serviceIdProvider;
 
     public MaterializedViewGrainActivator(
-        IEnumerable<IMaterializedViewProjector> projectors,
+        IMvApplyHostFactory hostFactory,
         IGrainFactory grainFactory,
         Sekiban.Dcb.ServiceId.IServiceIdProvider serviceIdProvider,
         ILogger<MaterializedViewGrainActivator> logger)
@@ -19,17 +19,17 @@ internal sealed class MaterializedViewGrainActivator : BackgroundService
         _grainFactory = grainFactory;
         _serviceIdProvider = serviceIdProvider;
         _logger = logger;
-        _projectors = projectors.ToList();
+        _registrations = hostFactory.GetRegistrations();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var serviceId = _serviceIdProvider.GetCurrentServiceId();
-        foreach (var projector in _projectors)
+        foreach (var registration in _registrations)
         {
             try
             {
-                var grainKey = MvGrainKey.Build(serviceId, projector.ViewName, projector.ViewVersion);
+                var grainKey = MvGrainKey.Build(serviceId, registration.ViewName, registration.ViewVersion);
                 var grain = _grainFactory.GetGrain<IMaterializedViewGrain>(grainKey);
                 await grain.EnsureStartedAsync().ConfigureAwait(false);
             }
@@ -38,8 +38,8 @@ internal sealed class MaterializedViewGrainActivator : BackgroundService
                 _logger.LogError(
                     ex,
                     "Failed to activate materialized view grain for {ViewName}/{ViewVersion}.",
-                    projector.ViewName,
-                    projector.ViewVersion);
+                    registration.ViewName,
+                    registration.ViewVersion);
             }
         }
     }
