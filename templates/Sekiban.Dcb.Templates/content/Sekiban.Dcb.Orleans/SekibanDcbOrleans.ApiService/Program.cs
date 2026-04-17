@@ -1192,10 +1192,17 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                 await connection.OpenAsync(ct);
 
                 var view = (includeDeleted ?? false) ? resolver.CurrentView : resolver.CurrentLiveView;
-                var rows = await Dapper.SqlMapper.QueryAsync(
+                // Select only business columns (plus opt-in metadata) so the response shape is
+                // stable even if the framework adds or renames internal UWMV metadata columns.
+                var rows = await Dapper.SqlMapper.QueryAsync<WeatherForecastUnsafeMvReadModel>(
                     connection,
                     new Dapper.CommandDefinition(
-                        $"SELECT * FROM {view} ORDER BY forecast_date DESC, forecast_id",
+                        $"""
+                        SELECT forecast_id, location, forecast_date, temperature_c, summary,
+                               _is_deleted, _last_event_version, _last_sortable_unique_id
+                        FROM {view}
+                        ORDER BY forecast_date DESC, forecast_id
+                        """,
                         cancellationToken: ct));
                 return Results.Ok(rows);
             })
@@ -1246,3 +1253,16 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
 
 app.MapDefaultEndpoints();
 app.Run();
+
+// Response shape for /api/weatherforecast-uwmv. Declared as a file-scoped record so the
+// endpoint can avoid `SELECT *` (which would couple the API to framework-managed metadata
+// columns in the underlying UWMV view).
+public sealed record WeatherForecastUnsafeMvReadModel(
+    Guid ForecastId,
+    string Location,
+    DateOnly ForecastDate,
+    int TemperatureC,
+    string? Summary,
+    bool IsDeleted,
+    long LastEventVersion,
+    string LastSortableUniqueId);
