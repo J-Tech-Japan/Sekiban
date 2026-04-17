@@ -153,17 +153,29 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
     {
         const string sql = """
             UPDATE sekiban_mv_registry
-            SET current_position = @SortableUniqueId,
-                last_sortable_unique_id = @SortableUniqueId,
+            SET current_position = CASE
+                    WHEN current_position IS NULL
+                      OR current_position < @SortableUniqueId THEN @SortableUniqueId
+                    ELSE current_position
+                END,
+                last_sortable_unique_id = CASE
+                    WHEN last_sortable_unique_id IS NULL
+                      OR last_sortable_unique_id < @SortableUniqueId THEN @SortableUniqueId
+                    ELSE last_sortable_unique_id
+                END,
                 applied_event_version = applied_event_version + @AppliedEventVersionDelta,
                 last_applied_source = @Source,
                 last_applied_at = NOW(),
                 last_stream_applied_sortable_unique_id = CASE
-                    WHEN @Source = 'stream' THEN @SortableUniqueId
+                    WHEN @Source = 'stream'
+                      AND (last_stream_applied_sortable_unique_id IS NULL
+                        OR last_stream_applied_sortable_unique_id < @SortableUniqueId) THEN @SortableUniqueId
                     ELSE last_stream_applied_sortable_unique_id
                 END,
                 last_catch_up_sortable_unique_id = CASE
-                    WHEN @Source = 'catchup' THEN @SortableUniqueId
+                    WHEN @Source = 'catchup'
+                      AND (last_catch_up_sortable_unique_id IS NULL
+                        OR last_catch_up_sortable_unique_id < @SortableUniqueId) THEN @SortableUniqueId
                     ELSE last_catch_up_sortable_unique_id
                 END,
                 last_updated = NOW()

@@ -311,6 +311,379 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Null(registryRow.LastCatchUpSortableUniqueId);
     }
 
+    [Fact]
+    public async Task Grain_Delayed_Create_After_Streamed_Update_DoesNotAdvance_Past_Missing_Row()
+    {
+        if (!fixture.IsAvailable)
+        {
+            fixture.EnsureAvailable();
+            return;
+        }
+
+        var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "WeatherForecast", 1);
+        var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        try
+        {
+            await grain.RequestDeactivationAsync();
+            await Task.Delay(200);
+        }
+        catch
+        {
+            // The grain may not be active yet; that's fine for this reset path.
+        }
+
+        await fixture.ResetAsync();
+        await grain.EnsureStartedAsync();
+
+        var executor = fixture.CreateExecutor(publishToStream: false);
+        var forecastId = Guid.CreateVersion7();
+        await executor.ExecuteAsync(new CreateWeatherForecast
+        {
+            ForecastId = forecastId,
+            Location = "Loc-delayed",
+            Date = new DateOnly(2026, 4, 16),
+            TemperatureC = 23,
+            Summary = "Delayed create"
+        });
+        await executor.ExecuteAsync(new ChangeLocationName
+        {
+            ForecastId = forecastId,
+            NewLocationName = "Loc-delayed-U"
+        });
+
+        var events = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+            .Where(serializableEvent =>
+            {
+                var eventResult = serializableEvent.ToEvent(fixture.DomainTypes.EventTypes);
+                if (!eventResult.IsSuccess)
+                {
+                    return false;
+                }
+
+                return eventResult.GetValue().Payload switch
+                {
+                    WeatherForecastCreated created => created.ForecastId == forecastId,
+                    LocationNameChanged changed => changed.ForecastId == forecastId,
+                    _ => false
+                };
+            })
+            .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(2, events.Count);
+
+        var createEvent = events[0];
+        var updateEvent = events[1];
+
+        var streamNamespace = ServiceIdGrainKey.BuildStreamNamespace("AllEvents", DefaultServiceIdProvider.DefaultServiceId);
+        var stream = fixture.Client
+            .GetStreamProvider("EventStreamProvider")
+            .GetStream<SerializableEvent>(StreamId.Create(streamNamespace, Guid.Empty));
+
+        await stream.OnNextAsync(updateEvent);
+        await Task.Delay(TimeSpan.FromMilliseconds(1300));
+
+        var statusAfterUpdateOnly = await grain.GetStatusAsync();
+        await using (var interimConnection = await fixture.OpenConnectionAsync())
+        {
+            var interimCount = await interimConnection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM sekiban_mv_weatherforecast_v1_forecasts WHERE forecast_id = @ForecastId;",
+                new { ForecastId = forecastId });
+            Assert.Equal(0, interimCount);
+        }
+        Assert.True(
+            string.IsNullOrWhiteSpace(statusAfterUpdateOnly.CurrentPosition) ||
+            string.Compare(statusAfterUpdateOnly.CurrentPosition, updateEvent.SortableUniqueIdValue, StringComparison.Ordinal) < 0);
+
+        await stream.OnNextAsync(createEvent);
+
+        await WaitUntilAsync(async () =>
+        {
+            var status = await grain.GetStatusAsync();
+            if (status.CurrentPosition != updateEvent.SortableUniqueIdValue)
+            {
+                return false;
+            }
+
+            await using var connection = await fixture.OpenConnectionAsync();
+            var row = await connection.QuerySingleOrDefaultAsync<WeatherProjectionRow>(
+                """
+                SELECT forecast_id AS ForecastId,
+                       location AS Location,
+                       _last_sortable_unique_id AS LastSortableUniqueId
+                FROM sekiban_mv_weatherforecast_v1_forecasts
+                WHERE forecast_id = @ForecastId;
+                """,
+                new { ForecastId = forecastId });
+
+            return row is not null &&
+                   row.Location == "Loc-delayed-U" &&
+                   row.LastSortableUniqueId == updateEvent.SortableUniqueIdValue;
+        }, timeoutMs: 15000);
+
+        await using var verifyConnection = await fixture.OpenConnectionAsync();
+        var registryRow = await verifyConnection.QuerySingleAsync<RegistryProjectionRow>(
+            """
+            SELECT current_position AS CurrentPosition,
+                   last_sortable_unique_id AS LastSortableUniqueId,
+                   applied_event_version AS AppliedEventVersion,
+                   last_applied_source AS LastAppliedSource,
+                   last_applied_at AS LastAppliedAt,
+                   last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
+                   last_stream_received_at AS LastStreamReceivedAt,
+                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                   last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId
+            FROM sekiban_mv_registry
+            WHERE view_name = 'WeatherForecast' AND logical_table = 'forecasts';
+            """);
+
+        var rowCount = await verifyConnection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM sekiban_mv_weatherforecast_v1_forecasts WHERE forecast_id = @ForecastId;",
+            new { ForecastId = forecastId });
+        var updatedLocation = await verifyConnection.ExecuteScalarAsync<string>(
+            "SELECT location FROM sekiban_mv_weatherforecast_v1_forecasts WHERE forecast_id = @ForecastId;",
+            new { ForecastId = forecastId });
+
+        Assert.Equal(1, rowCount);
+        Assert.Equal("Loc-delayed-U", updatedLocation);
+        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.CurrentPosition);
+        Assert.Equal(2, registryRow.AppliedEventVersion);
+        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastStreamAppliedSortableUniqueId);
+    }
+
+    [Fact]
+    public async Task Grain_Streamed_Create_Then_Update_For_Same_Aggregate_Applies_Both_Events()
+    {
+        if (!fixture.IsAvailable)
+        {
+            fixture.EnsureAvailable();
+            return;
+        }
+
+        var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "WeatherForecast", 1);
+        var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        try
+        {
+            await grain.RequestDeactivationAsync();
+            await Task.Delay(200);
+        }
+        catch
+        {
+            // The grain may not be active yet; that's fine for this reset path.
+        }
+
+        await fixture.ResetAsync();
+        await grain.EnsureStartedAsync();
+
+        var executor = fixture.CreateExecutor(publishToStream: false);
+        var forecastId = Guid.CreateVersion7();
+        await executor.ExecuteAsync(new CreateWeatherForecast
+        {
+            ForecastId = forecastId,
+            Location = "Loc-buffered",
+            Date = new DateOnly(2026, 4, 16),
+            TemperatureC = 25,
+            Summary = "Buffered create"
+        });
+        await executor.ExecuteAsync(new ChangeLocationName
+        {
+            ForecastId = forecastId,
+            NewLocationName = "Loc-buffered-U"
+        });
+
+        var events = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+            .Where(serializableEvent =>
+            {
+                var eventResult = serializableEvent.ToEvent(fixture.DomainTypes.EventTypes);
+                if (!eventResult.IsSuccess)
+                {
+                    return false;
+                }
+
+                return eventResult.GetValue().Payload switch
+                {
+                    WeatherForecastCreated created => created.ForecastId == forecastId,
+                    LocationNameChanged changed => changed.ForecastId == forecastId,
+                    _ => false
+                };
+            })
+            .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Equal(2, events.Count);
+
+        var createEvent = events[0];
+        var updateEvent = events[1];
+        var streamNamespace = ServiceIdGrainKey.BuildStreamNamespace("AllEvents", DefaultServiceIdProvider.DefaultServiceId);
+        var stream = fixture.Client
+            .GetStreamProvider("EventStreamProvider")
+            .GetStream<SerializableEvent>(StreamId.Create(streamNamespace, Guid.Empty));
+
+        await stream.OnNextAsync(createEvent);
+        await stream.OnNextAsync(updateEvent);
+
+        await WaitUntilAsync(async () =>
+        {
+            var status = await grain.GetStatusAsync();
+            if (status.CurrentPosition != updateEvent.SortableUniqueIdValue)
+            {
+                return false;
+            }
+
+            await using var connection = await fixture.OpenConnectionAsync();
+            var row = await connection.QuerySingleOrDefaultAsync<WeatherProjectionRow>(
+                """
+                SELECT forecast_id AS ForecastId,
+                       location AS Location,
+                       _last_sortable_unique_id AS LastSortableUniqueId
+                FROM sekiban_mv_weatherforecast_v1_forecasts
+                WHERE forecast_id = @ForecastId;
+                """,
+                new { ForecastId = forecastId });
+
+            return row is not null &&
+                   row.Location == "Loc-buffered-U" &&
+                   row.LastSortableUniqueId == updateEvent.SortableUniqueIdValue;
+        }, timeoutMs: 15000);
+
+        await using var verifyConnection = await fixture.OpenConnectionAsync();
+        var registryRow = await verifyConnection.QuerySingleAsync<RegistryProjectionRow>(
+            """
+            SELECT current_position AS CurrentPosition,
+                   applied_event_version AS AppliedEventVersion,
+                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId
+            FROM sekiban_mv_registry
+            WHERE view_name = 'WeatherForecast' AND logical_table = 'forecasts';
+            """);
+
+        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.CurrentPosition);
+        Assert.Equal(2, registryRow.AppliedEventVersion);
+        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastStreamAppliedSortableUniqueId);
+    }
+
+    [Fact]
+    public async Task Grain_Late_Create_Older_Than_CurrentPosition_Is_Applied_Without_Stalling_Other_Aggregates()
+    {
+        if (!fixture.IsAvailable)
+        {
+            fixture.EnsureAvailable();
+            return;
+        }
+
+        var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "WeatherForecast", 1);
+        var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        try
+        {
+            await grain.RequestDeactivationAsync();
+            await Task.Delay(200);
+        }
+        catch
+        {
+            // The grain may not be active yet; that's fine for this reset path.
+        }
+
+        await fixture.ResetAsync();
+        await grain.EnsureStartedAsync();
+
+        var executor = fixture.CreateExecutor(publishToStream: false);
+        var delayedForecastId = Guid.CreateVersion7();
+        var advancedForecastId = Guid.CreateVersion7();
+
+        await executor.ExecuteAsync(new CreateWeatherForecast
+        {
+            ForecastId = delayedForecastId,
+            Location = "Loc-late",
+            Date = new DateOnly(2026, 4, 16),
+            TemperatureC = 11,
+            Summary = "Late create"
+        });
+        await executor.ExecuteAsync(new CreateWeatherForecast
+        {
+            ForecastId = advancedForecastId,
+            Location = "Loc-advance",
+            Date = new DateOnly(2026, 4, 17),
+            TemperatureC = 12,
+            Summary = "Advance position"
+        });
+        await executor.ExecuteAsync(new ChangeLocationName
+        {
+            ForecastId = delayedForecastId,
+            NewLocationName = "Loc-late-U"
+        });
+
+        var allEvents = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+            .Select(serializableEvent => new
+            {
+                SerializableEvent = serializableEvent,
+                Event = serializableEvent.ToEvent(fixture.DomainTypes.EventTypes).GetValue()
+            })
+            .ToList();
+
+        var delayedCreate = allEvents
+            .Single(item => item.Event.Payload is WeatherForecastCreated created && created.ForecastId == delayedForecastId)
+            .SerializableEvent;
+        var delayedUpdate = allEvents
+            .Single(item => item.Event.Payload is LocationNameChanged changed && changed.ForecastId == delayedForecastId)
+            .SerializableEvent;
+        var advancedCreate = allEvents
+            .Single(item => item.Event.Payload is WeatherForecastCreated created && created.ForecastId == advancedForecastId)
+            .SerializableEvent;
+
+        Assert.True(
+            string.Compare(delayedCreate.SortableUniqueIdValue, advancedCreate.SortableUniqueIdValue, StringComparison.Ordinal) < 0);
+        Assert.True(
+            string.Compare(advancedCreate.SortableUniqueIdValue, delayedUpdate.SortableUniqueIdValue, StringComparison.Ordinal) < 0);
+
+        var streamNamespace = ServiceIdGrainKey.BuildStreamNamespace("AllEvents", DefaultServiceIdProvider.DefaultServiceId);
+        var stream = fixture.Client
+            .GetStreamProvider("EventStreamProvider")
+            .GetStream<SerializableEvent>(StreamId.Create(streamNamespace, Guid.Empty));
+
+        await stream.OnNextAsync(advancedCreate);
+        await stream.OnNextAsync(delayedUpdate);
+        await Task.Delay(TimeSpan.FromMilliseconds(1300));
+
+        var blockedStatus = await grain.GetStatusAsync();
+        Assert.Equal(advancedCreate.SortableUniqueIdValue, blockedStatus.CurrentPosition);
+
+        await stream.OnNextAsync(delayedCreate);
+
+        await WaitUntilAsync(async () =>
+        {
+            var status = await grain.GetStatusAsync();
+            if (status.CurrentPosition != delayedUpdate.SortableUniqueIdValue)
+            {
+                return false;
+            }
+
+            await using var connection = await fixture.OpenConnectionAsync();
+            var delayedRow = await connection.QuerySingleOrDefaultAsync<WeatherProjectionRow>(
+                """
+                SELECT forecast_id AS ForecastId,
+                       location AS Location,
+                       _last_sortable_unique_id AS LastSortableUniqueId
+                FROM sekiban_mv_weatherforecast_v1_forecasts
+                WHERE forecast_id = @ForecastId;
+                """,
+                new { ForecastId = delayedForecastId });
+            var advancedRow = await connection.QuerySingleOrDefaultAsync<WeatherProjectionRow>(
+                """
+                SELECT forecast_id AS ForecastId,
+                       location AS Location,
+                       _last_sortable_unique_id AS LastSortableUniqueId
+                FROM sekiban_mv_weatherforecast_v1_forecasts
+                WHERE forecast_id = @ForecastId;
+                """,
+                new { ForecastId = advancedForecastId });
+
+            return delayedRow is not null &&
+                   delayedRow.Location == "Loc-late-U" &&
+                   delayedRow.LastSortableUniqueId == delayedUpdate.SortableUniqueIdValue &&
+                   advancedRow is not null &&
+                   advancedRow.LastSortableUniqueId == advancedCreate.SortableUniqueIdValue;
+        }, timeoutMs: 15000);
+    }
+
     private static async Task WaitUntilAsync(Func<Task<bool>> predicate, int timeoutMs = 10000, int pollMs = 100)
     {
         var until = DateTime.UtcNow.AddMilliseconds(timeoutMs);
@@ -346,5 +719,12 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         public DateTimeOffset? LastStreamReceivedAt { get; set; }
         public string? LastStreamAppliedSortableUniqueId { get; set; }
         public string? LastCatchUpSortableUniqueId { get; set; }
+    }
+
+    private sealed class WeatherProjectionRow
+    {
+        public Guid ForecastId { get; set; }
+        public string Location { get; set; } = string.Empty;
+        public string LastSortableUniqueId { get; set; } = string.Empty;
     }
 }

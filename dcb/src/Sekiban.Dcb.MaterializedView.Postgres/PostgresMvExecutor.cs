@@ -155,8 +155,10 @@ public sealed class PostgresMvExecutor : IMvExecutor
             .ConfigureAwait(false);
 
         var lastAppliedSortableUniqueId = appliedEvents > 0
-            ? safeBatch[^1].SortableUniqueIdValue
+            ? safeBatch[appliedEvents - 1].SortableUniqueIdValue
             : null;
+
+        reachedUnsafeWindow |= appliedEvents < safeBatch.Count;
 
         return new MvCatchUpResult(appliedEvents, reachedUnsafeWindow, lastAppliedSortableUniqueId);
     }
@@ -196,9 +198,10 @@ public sealed class PostgresMvExecutor : IMvExecutor
             .Select(entry => entry.CurrentPosition)
             .FirstOrDefault(position => !string.IsNullOrWhiteSpace(position));
         var orderedEvents = events
-            .GroupBy(serializableEvent => serializableEvent.Id)
-            .Select(group => group.OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal).Last())
+            .GroupBy(serializableEvent => serializableEvent.SortableUniqueIdValue)
+            .Select(group => group.First())
             .Where(serializableEvent =>
+                source == MvApplySource.Stream ||
                 string.IsNullOrWhiteSpace(currentPosition) ||
                 string.Compare(serializableEvent.SortableUniqueIdValue, currentPosition, StringComparison.Ordinal) > 0)
             .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
@@ -215,19 +218,32 @@ public sealed class PostgresMvExecutor : IMvExecutor
 
         foreach (var serializableEvent in orderedEvents)
         {
-            await ApplySerializableEventAsync(connection, projector, serviceId, serializableEvent, source, cancellationToken)
+            var applied = await ApplySerializableEventAsync(
+                    connection,
+                    projector,
+                    serviceId,
+                    serializableEvent,
+                    currentPosition,
+                    source,
+                    cancellationToken)
                 .ConfigureAwait(false);
+            if (!applied)
+            {
+                break;
+            }
+
             appliedEvents += 1;
         }
 
         return appliedEvents;
     }
 
-    private async Task ApplySerializableEventAsync(
+    private async Task<bool> ApplySerializableEventAsync(
         NpgsqlConnection connection,
         IMaterializedViewProjector projector,
         string serviceId,
         SerializableEvent serializableEvent,
+        string? currentPosition,
         MvApplySource source,
         CancellationToken cancellationToken)
     {
@@ -241,14 +257,28 @@ public sealed class PostgresMvExecutor : IMvExecutor
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var applyContext = new PostgresMvApplyContext(connection, transaction, ev, serializableEvent.SortableUniqueIdValue);
         var statements = await projector.ApplyToViewAsync(ev, applyContext, cancellationToken).ConfigureAwait(false);
+        var affectedRows = 0;
         foreach (var statement in statements)
         {
-            await connection.ExecuteAsync(
+            affectedRows += await connection.ExecuteAsync(
                 new CommandDefinition(
                     statement.Sql,
                     statement.Parameters,
                     transaction,
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+
+        if (source == MvApplySource.Stream && statements.Count > 0 && affectedRows == 0)
+        {
+            if (!string.IsNullOrWhiteSpace(currentPosition) &&
+                string.Compare(serializableEvent.SortableUniqueIdValue, currentPosition, StringComparison.Ordinal) <= 0)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return false;
         }
 
         await _registryStore.UpdatePositionAsync(
@@ -262,6 +292,7 @@ public sealed class PostgresMvExecutor : IMvExecutor
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     private string ResolveServiceId(string? serviceId) =>
