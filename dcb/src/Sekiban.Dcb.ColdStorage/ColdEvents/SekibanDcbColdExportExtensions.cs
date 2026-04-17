@@ -79,9 +79,7 @@ public static class SekibanDcbColdExportExtensions
            ?? configuration[$"{connectionName}:ConnectionString"];
 
     private static bool ResolveEnabled(IConfigurationSection coldConfig, ColdEventStoreOptions configuredColdOptions)
-        => string.IsNullOrWhiteSpace(coldConfig["Enabled"])
-            ? true
-            : configuredColdOptions.Enabled;
+        => coldConfig.Exists() && configuredColdOptions.Enabled;
 
     private static TimeSpan? ParsePositiveTimeSpan(string? raw)
         => !string.IsNullOrWhiteSpace(raw)

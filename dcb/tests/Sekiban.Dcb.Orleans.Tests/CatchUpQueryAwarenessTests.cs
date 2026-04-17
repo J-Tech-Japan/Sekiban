@@ -172,7 +172,7 @@ public class CatchUpQueryAwarenessTests : IAsyncLifetime
         var initialStatus = initialStatusResult.GetValue();
         Assert.True(initialStatus.Current.EventVersion >= initialStatus.Consistent.EventVersion);
 
-        var refreshTask = Task.Run(async () => await grain.RefreshAsync());
+        var refreshTask = grain.RefreshAsync();
 
         ProjectionHeadStatus? finalStatus = null;
         ProjectionHeadStatus? lastObservedStatus = null;
