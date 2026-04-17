@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb;
@@ -41,4 +42,25 @@ public interface ISekibanExecutor : ICommandExecutor
     ///     Returns empty string if no events exist.
     /// </summary>
     Task<ResultBox<string>> GetLatestSortableUniqueIdAsync();
+
+    /// <summary>
+    ///     Gets projection head/catch-up status for a specific multi-projector type.
+    /// </summary>
+    Task<ResultBox<ProjectionHeadStatus>> GetProjectionHeadStatusAsync<TProjector>()
+        where TProjector : IMultiProjector<TProjector> =>
+        GetProjectionHeadStatusAsync(TProjector.MultiProjectorName, TProjector.MultiProjectorVersion);
+
+    /// <summary>
+    ///     Gets projection head/catch-up status for a specific projector name.
+    ///     When expectedProjectorVersion is provided, the executor validates it against the registered projector version.
+    /// </summary>
+    Task<ResultBox<ProjectionHeadStatus>> GetProjectionHeadStatusAsync(
+        string projectorName,
+        string? expectedProjectorVersion = null);
+
+    /// <summary>
+    ///     Gets the global event-store head.
+    ///     TotalEventCount is opt-in because some stores may implement counting with non-trivial cost.
+    /// </summary>
+    Task<ResultBox<EventStoreHeadStatus>> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false);
 }

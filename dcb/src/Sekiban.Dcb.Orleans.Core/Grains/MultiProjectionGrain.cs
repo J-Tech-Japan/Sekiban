@@ -363,6 +363,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _lastHybridReadBatchMetadata = null;
     }
 
+    private static string? NormalizeSortableUniqueId(string? sortableUniqueId) =>
+        string.IsNullOrWhiteSpace(sortableUniqueId) ? null : sortableUniqueId;
+
     /// <summary>
     ///     Returns the event store used for catch-up reads.
     ///     Preference order:
@@ -763,6 +766,61 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _catchUpProgress.LastAttempt,
             _pendingStreamEvents.Count);
         return Task.FromResult(status);
+    }
+
+    public async Task<MultiProjectionHeadStatusSnapshot> GetProjectionHeadStatusAsync()
+    {
+        await EnsureInitializedAsync();
+
+        if (_host != null)
+        {
+            await StartSubscriptionAsync();
+            _ = CatchUpFromEventStoreAsync();
+        }
+
+        var (_, projectorName, _) = GetIdentity();
+        var projectorVersion = _state.State?.ProjectorVersion;
+        MultiProjectionState? currentState = null;
+        MultiProjectionState? consistentState = null;
+
+        if (_host != null)
+        {
+            var currentStateResult = await _host.GetStateAsync(canGetUnsafeState: true);
+            if (currentStateResult.IsSuccess)
+            {
+                currentState = currentStateResult.GetValue();
+            }
+
+            var consistentStateResult = await _host.GetStateAsync(canGetUnsafeState: false);
+            if (consistentStateResult.IsSuccess)
+            {
+                consistentState = consistentStateResult.GetValue();
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentState?.ProjectorVersion))
+        {
+            projectorVersion = currentState.ProjectorVersion;
+        }
+        else if (!string.IsNullOrWhiteSpace(consistentState?.ProjectorVersion))
+        {
+            projectorVersion = consistentState.ProjectorVersion;
+        }
+
+        return new MultiProjectionHeadStatusSnapshot(
+            ProjectorName: projectorName,
+            ProjectorVersion: projectorVersion,
+            CurrentEventVersion: currentState?.Version ?? consistentState?.Version ?? _state.State?.LastGoodSafeVersion ?? 0,
+            CurrentLastSortableUniqueId: NormalizeSortableUniqueId(currentState?.LastSortableUniqueId)
+                ?? NormalizeSortableUniqueId(_catchUpProgress.CurrentPosition?.Value)
+                ?? NormalizeSortableUniqueId(_state.State?.LastSortableUniqueId),
+            ConsistentEventVersion: consistentState?.Version ?? _state.State?.LastGoodSafeVersion ?? 0,
+            ConsistentLastSortableUniqueId: NormalizeSortableUniqueId(consistentState?.LastSortableUniqueId)
+                ?? NormalizeSortableUniqueId(_state.State?.LastSortableUniqueId),
+            IsCatchUpInProgress: _catchUpProgress.IsActive,
+            CatchUpCurrentSortableUniqueId: NormalizeSortableUniqueId(_catchUpProgress.CurrentPosition?.Value),
+            CatchUpTargetSortableUniqueId: NormalizeSortableUniqueId(_catchUpProgress.TargetPosition?.Value),
+            PendingStreamEventCount: _pendingStreamEvents.Count);
     }
 
     /// <summary>

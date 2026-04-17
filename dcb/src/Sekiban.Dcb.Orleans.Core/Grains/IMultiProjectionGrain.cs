@@ -129,6 +129,12 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     Task<MultiProjectionCatchUpStatus> GetCatchUpStatusAsync();
 
     /// <summary>
+    ///     Get lightweight projection head status without serializing projector payloads.
+    /// </summary>
+    [AlwaysInterleave]
+    Task<MultiProjectionHeadStatusSnapshot> GetProjectionHeadStatusAsync();
+
+    /// <summary>
     ///     Get health status for monitoring and diagnostics.
     ///     This method is safe to call even before initialization completes.
     /// </summary>

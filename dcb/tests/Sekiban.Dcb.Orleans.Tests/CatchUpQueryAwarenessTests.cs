@@ -148,6 +148,60 @@ public class CatchUpQueryAwarenessTests : IAsyncLifetime
         Assert.True(sw.ElapsedMilliseconds < 25000, "Default behavior should not block for catch-up");
     }
 
+    [Fact]
+    public async Task ExecutorProjectionHeadStatus_ShouldExposeCatchUpAndStoreHead()
+    {
+        const int eventCount = 4000;
+        var grain = _client.GetGrain<IMultiProjectionGrain>("catchup-counter");
+        ISekibanExecutor executor = new OrleansDcbExecutor(_client, SharedEventStore, CreateDomainTypes());
+
+        var events = CreateTestEvents(eventCount);
+        await grain.SeedEventsAsync(ToSerializableEvents(events));
+
+        var storeHeadResult = await executor.GetEventStoreHeadStatusAsync(includeTotalEventCount: true);
+        Assert.True(storeHeadResult.IsSuccess);
+        var storeHead = storeHeadResult.GetValue();
+        var latestSortableUniqueId = events
+            .MaxBy(static evt => evt.SortableUniqueIdValue, StringComparer.Ordinal)!
+            .SortableUniqueIdValue;
+        Assert.Equal(eventCount, storeHead.TotalEventCount);
+        Assert.Equal(latestSortableUniqueId, storeHead.LatestSortableUniqueId);
+
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(2000);
+
+        var initialStatusResult = await executor.GetProjectionHeadStatusAsync<CatchUpCountingProjector>();
+        Assert.True(initialStatusResult.IsSuccess, initialStatusResult.IsSuccess ? string.Empty : initialStatusResult.GetException().ToString());
+        var initialStatus = initialStatusResult.GetValue();
+        Assert.True(initialStatus.Current.EventVersion >= initialStatus.Consistent.EventVersion);
+
+        await grain.RefreshAsync();
+
+        ProjectionHeadStatus? finalStatus = null;
+        ProjectionHeadStatus? lastObservedStatus = null;
+        var completionDeadline = DateTime.UtcNow.AddSeconds(20);
+        while (DateTime.UtcNow < completionDeadline)
+        {
+            var statusResult = await executor.GetProjectionHeadStatusAsync<CatchUpCountingProjector>();
+            Assert.True(statusResult.IsSuccess, statusResult.IsSuccess ? string.Empty : statusResult.GetException().ToString());
+            var status = statusResult.GetValue();
+            lastObservedStatus = status;
+            if (string.Equals(status.Current.LastSortableUniqueId, latestSortableUniqueId, StringComparison.Ordinal))
+            {
+                finalStatus = status;
+                break;
+            }
+
+            await Task.Delay(200);
+        }
+
+        Assert.True(
+            finalStatus is not null,
+            $"Last observed: current={lastObservedStatus?.Current.EventVersion}:{lastObservedStatus?.Current.LastSortableUniqueId}, consistent={lastObservedStatus?.Consistent.EventVersion}:{lastObservedStatus?.Consistent.LastSortableUniqueId}, catchup={lastObservedStatus?.CatchUp.IsInProgress}:{lastObservedStatus?.CatchUp.CurrentSortableUniqueId}->{lastObservedStatus?.CatchUp.TargetSortableUniqueId}");
+        Assert.Equal(eventCount, finalStatus!.Current.EventVersion);
+        Assert.Equal(latestSortableUniqueId, finalStatus!.Current.LastSortableUniqueId);
+    }
+
     // --- Test domain types ---
 
     private static List<Event> CreateTestEvents(int count)

@@ -2,6 +2,7 @@ using ResultBoxes;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -749,6 +750,90 @@ public class CoreGeneralSekibanExecutor
     public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
         _eventStore.GetLatestSortableUniqueIdAsync();
 
+    public async Task<ResultBox<ProjectionHeadStatus>> GetProjectionHeadStatusAsync(
+        string projectorName,
+        string? expectedProjectorVersion = null)
+    {
+        try
+        {
+            var projectorVersionResult = ValidateProjectorVersion(projectorName, expectedProjectorVersion);
+            if (!projectorVersionResult.IsSuccess)
+            {
+                return ResultBox.Error<ProjectionHeadStatus>(projectorVersionResult.GetException());
+            }
+
+            var actorResult = await _actorAccessor.GetActorAsync<GeneralMultiProjectionActor>(projectorName);
+            if (!actorResult.IsSuccess)
+            {
+                return ResultBox.Error<ProjectionHeadStatus>(actorResult.GetException());
+            }
+
+            var actor = actorResult.GetValue();
+
+            var currentStateResult = await actor.GetStateAsync(canGetUnsafeState: true);
+            if (!currentStateResult.IsSuccess)
+            {
+                return ResultBox.Error<ProjectionHeadStatus>(currentStateResult.GetException());
+            }
+
+            var consistentStateResult = await actor.GetStateAsync(canGetUnsafeState: false);
+            if (!consistentStateResult.IsSuccess)
+            {
+                return ResultBox.Error<ProjectionHeadStatus>(consistentStateResult.GetException());
+            }
+
+            var currentState = currentStateResult.GetValue();
+            var consistentState = consistentStateResult.GetValue();
+
+            return ResultBox.FromValue(new ProjectionHeadStatus(
+                currentState.ProjectorName,
+                projectorVersionResult.GetValue(),
+                ToProjectionPosition(currentState),
+                ToProjectionPosition(consistentState),
+                new ProjectionCatchUpStatus(
+                    IsInProgress: false,
+                    CurrentSortableUniqueId: null,
+                    TargetSortableUniqueId: null,
+                    PendingStreamEventCount: 0)));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<ProjectionHeadStatus>(ex);
+        }
+    }
+
+    public async Task<ResultBox<EventStoreHeadStatus>> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false)
+    {
+        try
+        {
+            var latestSortableUniqueIdResult = await _eventStore.GetLatestSortableUniqueIdAsync();
+            if (!latestSortableUniqueIdResult.IsSuccess)
+            {
+                return ResultBox.Error<EventStoreHeadStatus>(latestSortableUniqueIdResult.GetException());
+            }
+
+            long? totalEventCount = null;
+            if (includeTotalEventCount)
+            {
+                var totalEventCountResult = await _eventStore.GetEventCountAsync();
+                if (!totalEventCountResult.IsSuccess)
+                {
+                    return ResultBox.Error<EventStoreHeadStatus>(totalEventCountResult.GetException());
+                }
+
+                totalEventCount = totalEventCountResult.GetValue();
+            }
+
+            return ResultBox.FromValue(new EventStoreHeadStatus(
+                NormalizeSortableUniqueId(latestSortableUniqueIdResult.GetValue()),
+                totalEventCount));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<EventStoreHeadStatus>(ex);
+        }
+    }
+
     /// <summary>
     ///     Parses a tag string into an ITag for serialized commit.
     ///     Consistency tags are wrapped in ConsistencyTag, others in FallbackTag.
@@ -767,4 +852,37 @@ public class CoreGeneralSekibanExecutor
 
         return innerTag;
     }
+
+    private ResultBox<string> ValidateProjectorVersion(string projectorName, string? expectedProjectorVersion)
+    {
+        if (string.IsNullOrWhiteSpace(projectorName))
+        {
+            return ResultBox.Error<string>(new ArgumentException("Projector name cannot be empty.", nameof(projectorName)));
+        }
+
+        var projectorVersionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
+        if (!projectorVersionResult.IsSuccess)
+        {
+            return ResultBox.Error<string>(projectorVersionResult.GetException());
+        }
+
+        var currentProjectorVersion = projectorVersionResult.GetValue();
+        if (!string.IsNullOrWhiteSpace(expectedProjectorVersion)
+            && !string.Equals(currentProjectorVersion, expectedProjectorVersion, StringComparison.Ordinal))
+        {
+            return ResultBox.Error<string>(
+                new InvalidOperationException(
+                    $"Projector version mismatch for '{projectorName}'. Expected '{expectedProjectorVersion}', but registered version is '{currentProjectorVersion}'."));
+        }
+
+        return ResultBox.FromValue(currentProjectorVersion);
+    }
+
+    private static ProjectionPosition ToProjectionPosition(MultiProjectionState state) =>
+        new(
+            state.Version,
+            NormalizeSortableUniqueId(state.LastSortableUniqueId));
+
+    private static string? NormalizeSortableUniqueId(string? sortableUniqueId) =>
+        string.IsNullOrWhiteSpace(sortableUniqueId) ? null : sortableUniqueId;
 }
