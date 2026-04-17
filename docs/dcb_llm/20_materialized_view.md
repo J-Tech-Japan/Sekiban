@@ -19,6 +19,7 @@
 > - [Deployment Guide](16_deployment.md)
 > - [Cold Events and Catch-up](19_cold_events.md)
 > - [Materialized View Basics](20_materialized_view.md) (You are here)
+> - [Unsafe Window Materialized View](21_unsafe_window_materialized_view.md)
 
 Materialized views are database-backed read models for DCB. Instead of keeping the read model only in Orleans memory,
 Sekiban can apply the ordered event stream into SQL tables and let the application query those tables directly.
