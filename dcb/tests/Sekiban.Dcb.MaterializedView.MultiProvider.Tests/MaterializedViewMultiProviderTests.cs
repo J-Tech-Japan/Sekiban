@@ -6,6 +6,7 @@ using Sekiban.Dcb.MaterializedView.MySql;
 using Sekiban.Dcb.MaterializedView.Sqlite;
 using Sekiban.Dcb.MaterializedView.SqlServer;
 using Xunit;
+using Xunit.Sdk;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
@@ -82,7 +83,6 @@ internal static class MultiProviderAssertions
         if (!fixture.IsAvailable)
         {
             fixture.EnsureAvailable();
-            return;
         }
 
         await fixture.ResetAsync().ConfigureAwait(false);

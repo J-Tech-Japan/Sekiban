@@ -139,18 +139,35 @@ public static class MvParamConverter
 
 public sealed class NativeMvApplyHostFactory : IMvApplyHostFactory
 {
+    private readonly MvDbType? _defaultDatabaseType;
     private readonly IEventTypes _eventTypes;
     private readonly Dictionary<(string ViewName, int ViewVersion), IMaterializedViewProjector> _projectors;
     private readonly IReadOnlyList<MvApplyHostRegistration> _registrations;
-    private readonly IServiceProvider _services;
+    private readonly IMvStorageInfoProvider? _storageInfoProvider;
+
+    public NativeMvApplyHostFactory(
+        IEnumerable<IMaterializedViewProjector> projectors,
+        IEventTypes eventTypes)
+    {
+        _eventTypes = eventTypes;
+        _defaultDatabaseType = MvDbType.Postgres;
+        _projectors = projectors.ToDictionary(
+            projector => (projector.ViewName, projector.ViewVersion),
+            projector => projector);
+        _registrations = _projectors.Keys
+            .Select(key => new MvApplyHostRegistration(key.ViewName, key.ViewVersion))
+            .OrderBy(registration => registration.ViewName, StringComparer.Ordinal)
+            .ThenBy(registration => registration.ViewVersion)
+            .ToList();
+    }
 
     public NativeMvApplyHostFactory(
         IEnumerable<IMaterializedViewProjector> projectors,
         IEventTypes eventTypes,
-        IServiceProvider services)
+        IMvStorageInfoProvider storageInfoProvider)
     {
         _eventTypes = eventTypes;
-        _services = services;
+        _storageInfoProvider = storageInfoProvider;
         _projectors = projectors.ToDictionary(
             projector => (projector.ViewName, projector.ViewVersion),
             projector => projector);
@@ -173,11 +190,9 @@ public sealed class NativeMvApplyHostFactory : IMvApplyHostFactory
         return new NativeMvApplyHost(projector, _eventTypes, ResolveDatabaseType());
     }
 
-    private MvDbType ResolveDatabaseType() =>
-        (_services.GetService(typeof(IMvStorageInfoProvider)) as IMvStorageInfoProvider)
-            ?.GetStorageInfo()
-            .DatabaseType
-        ?? MvDbType.Postgres;
+    private MvDbType ResolveDatabaseType() => _storageInfoProvider?.GetStorageInfo().DatabaseType ??
+        _defaultDatabaseType ??
+        throw new InvalidOperationException("Materialized view storage info is not configured.");
 }
 
 public sealed class NativeMvApplyHost : IMvApplyHost

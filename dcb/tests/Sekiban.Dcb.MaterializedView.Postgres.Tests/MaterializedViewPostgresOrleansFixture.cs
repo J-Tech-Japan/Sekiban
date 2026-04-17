@@ -21,6 +21,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Testcontainers.PostgreSql;
 using Xunit;
+using Xunit.Sdk;
 
 namespace Sekiban.Dcb.MaterializedView.Postgres.Tests;
 
@@ -175,7 +176,7 @@ public sealed class MaterializedViewPostgresOrleansFixture : IAsyncLifetime
     {
         if (_skipReason is not null)
         {
-            Console.WriteLine(_skipReason);
+            throw SkipException.ForSkip(_skipReason);
         }
     }
 

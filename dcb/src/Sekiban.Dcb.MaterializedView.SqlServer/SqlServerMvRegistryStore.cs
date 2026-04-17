@@ -62,66 +62,25 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
     public async Task RegisterAsync(MvRegistryEntry entry, IDbTransaction? transaction = null, CancellationToken cancellationToken = default)
     {
         const string sql = """
-            MERGE sekiban_mv_registry AS target
-            USING (
-                VALUES (
-                    @ServiceId,
-                    @ViewName,
-                    @ViewVersion,
-                    @LogicalTable,
-                    @PhysicalTable,
-                    @Status,
-                    @CurrentPosition,
-                    @TargetPosition,
-                    @LastSortableUniqueId,
-                    @AppliedEventVersion,
-                    @LastAppliedSource,
-                    @LastAppliedAt,
-                    @LastStreamReceivedSortableUniqueId,
-                    @LastStreamReceivedAt,
-                    @LastStreamAppliedSortableUniqueId,
-                    @LastCatchUpSortableUniqueId,
-                    @LastUpdated,
-                    @Metadata
-                )
-            ) AS source (
-                service_id,
-                view_name,
-                view_version,
-                logical_table,
-                physical_table,
-                status,
-                current_position,
-                target_position,
-                last_sortable_unique_id,
-                applied_event_version,
-                last_applied_source,
-                last_applied_at,
-                last_stream_received_sortable_unique_id,
-                last_stream_received_at,
-                last_stream_applied_sortable_unique_id,
-                last_catch_up_sortable_unique_id,
-                last_updated,
-                metadata
-            )
-            ON target.service_id = source.service_id
-               AND target.view_name = source.view_name
-               AND target.view_version = source.view_version
-               AND target.logical_table = source.logical_table
-            WHEN MATCHED THEN
-                UPDATE SET
-                    physical_table = source.physical_table,
-                    last_updated = source.last_updated,
-                    applied_event_version = target.applied_event_version,
-                    last_applied_source = COALESCE(target.last_applied_source, source.last_applied_source),
-                    last_applied_at = COALESCE(target.last_applied_at, source.last_applied_at),
-                    last_stream_received_sortable_unique_id = COALESCE(target.last_stream_received_sortable_unique_id, source.last_stream_received_sortable_unique_id),
-                    last_stream_received_at = COALESCE(target.last_stream_received_at, source.last_stream_received_at),
-                    last_stream_applied_sortable_unique_id = COALESCE(target.last_stream_applied_sortable_unique_id, source.last_stream_applied_sortable_unique_id),
-                    last_catch_up_sortable_unique_id = COALESCE(target.last_catch_up_sortable_unique_id, source.last_catch_up_sortable_unique_id),
-                    metadata = COALESCE(source.metadata, target.metadata)
-            WHEN NOT MATCHED THEN
-                INSERT (
+            UPDATE sekiban_mv_registry WITH (UPDLOCK, HOLDLOCK)
+            SET physical_table = @PhysicalTable,
+                last_updated = @LastUpdated,
+                applied_event_version = applied_event_version,
+                last_applied_source = COALESCE(last_applied_source, @LastAppliedSource),
+                last_applied_at = COALESCE(last_applied_at, @LastAppliedAt),
+                last_stream_received_sortable_unique_id = COALESCE(last_stream_received_sortable_unique_id, @LastStreamReceivedSortableUniqueId),
+                last_stream_received_at = COALESCE(last_stream_received_at, @LastStreamReceivedAt),
+                last_stream_applied_sortable_unique_id = COALESCE(last_stream_applied_sortable_unique_id, @LastStreamAppliedSortableUniqueId),
+                last_catch_up_sortable_unique_id = COALESCE(last_catch_up_sortable_unique_id, @LastCatchUpSortableUniqueId),
+                metadata = COALESCE(@Metadata, metadata)
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ViewVersion
+              AND logical_table = @LogicalTable;
+
+            IF @@ROWCOUNT = 0
+            BEGIN
+                INSERT INTO sekiban_mv_registry (
                     service_id,
                     view_name,
                     view_version,
@@ -142,25 +101,26 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
                     metadata
                 )
                 VALUES (
-                    source.service_id,
-                    source.view_name,
-                    source.view_version,
-                    source.logical_table,
-                    source.physical_table,
-                    source.status,
-                    source.current_position,
-                    source.target_position,
-                    source.last_sortable_unique_id,
-                    source.applied_event_version,
-                    source.last_applied_source,
-                    source.last_applied_at,
-                    source.last_stream_received_sortable_unique_id,
-                    source.last_stream_received_at,
-                    source.last_stream_applied_sortable_unique_id,
-                    source.last_catch_up_sortable_unique_id,
-                    source.last_updated,
-                    source.metadata
+                    @ServiceId,
+                    @ViewName,
+                    @ViewVersion,
+                    @LogicalTable,
+                    @PhysicalTable,
+                    @Status,
+                    @CurrentPosition,
+                    @TargetPosition,
+                    @LastSortableUniqueId,
+                    @AppliedEventVersion,
+                    @LastAppliedSource,
+                    @LastAppliedAt,
+                    @LastStreamReceivedSortableUniqueId,
+                    @LastStreamReceivedAt,
+                    @LastStreamAppliedSortableUniqueId,
+                    @LastCatchUpSortableUniqueId,
+                    @LastUpdated,
+                    @Metadata
                 );
+            END;
             """;
 
         var parameters = new
@@ -370,17 +330,17 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            MERGE sekiban_mv_active AS target
-            USING (VALUES (@ServiceId, @ViewName, @ActiveVersion, SYSUTCDATETIME())) AS source (service_id, view_name, active_version, activated_at)
-            ON target.service_id = source.service_id
-               AND target.view_name = source.view_name
-            WHEN MATCHED THEN
-                UPDATE SET
-                    active_version = source.active_version,
-                    activated_at = source.activated_at
-            WHEN NOT MATCHED THEN
-                INSERT (service_id, view_name, active_version, activated_at)
-                VALUES (source.service_id, source.view_name, source.active_version, source.activated_at);
+            UPDATE sekiban_mv_active WITH (UPDLOCK, HOLDLOCK)
+            SET active_version = @ActiveVersion,
+                activated_at = SYSUTCDATETIME()
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName;
+
+            IF @@ROWCOUNT = 0
+            BEGIN
+                INSERT INTO sekiban_mv_active (service_id, view_name, active_version, activated_at)
+                VALUES (@ServiceId, @ViewName, @ActiveVersion, SYSUTCDATETIME());
+            END;
             """;
 
         await ExecuteAsync(

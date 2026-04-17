@@ -19,6 +19,7 @@ using Sekiban.Dcb.Storage;
 using Testcontainers.MsSql;
 using Testcontainers.MySql;
 using Xunit;
+using Xunit.Sdk;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
@@ -304,7 +305,7 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
     {
         if (_skipReason is not null)
         {
-            Console.WriteLine(_skipReason);
+            throw SkipException.ForSkip(_skipReason);
         }
     }
 }

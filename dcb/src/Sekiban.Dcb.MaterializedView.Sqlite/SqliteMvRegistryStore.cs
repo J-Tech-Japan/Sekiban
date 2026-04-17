@@ -18,6 +18,11 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
+        const string pragmaSql = """
+            PRAGMA journal_mode=WAL;
+            PRAGMA synchronous=NORMAL;
+            """;
+
         const string registrySql = """
             CREATE TABLE IF NOT EXISTS sekiban_mv_registry (
                 service_id TEXT NOT NULL,
@@ -52,6 +57,7 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
             );
             """;
 
+        await connection.ExecuteAsync(new CommandDefinition(pragmaSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(registrySql, cancellationToken: cancellationToken)).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(activeSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
