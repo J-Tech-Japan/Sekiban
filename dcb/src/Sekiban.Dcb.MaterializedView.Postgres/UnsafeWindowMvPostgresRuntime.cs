@@ -62,6 +62,10 @@ internal static class UnsafeWindowMvColumns
 
 public sealed class UnsafeWindowMvSchemaResolver
 {
+    // PostgreSQL identifier limit minus the "_current_live" suffix (13 chars). Keeping the common
+    // prefix under this budget guarantees that every derived table / view name still fits.
+    private const int MaxSharedPrefixLength = 63 - 13;
+
     public UnsafeWindowMvSchemaResolver(string viewName, int viewVersion, UnsafeWindowMvSchema schema)
     {
         if (string.IsNullOrWhiteSpace(viewName))
@@ -89,13 +93,33 @@ public sealed class UnsafeWindowMvSchemaResolver
                 throw new InvalidOperationException(
                     $"Unsafe window MV '{viewName}' declares a business column '{column.Name}' that clashes with a framework-managed metadata column. Rename the business column.");
             }
+
+            // Business column names are interpolated raw into CREATE TABLE / upsert SQL.
+            // Run them through the same strict identifier check the rest of the MV stack uses
+            // so a malformed projector definition fails fast instead of producing a SQL-injection
+            // footgun for library consumers.
+            MvPhysicalName.ValidateIdentifier(column.Name);
+            ValidateSqlType(column.Name, column.SqlType);
         }
 
-        var prefix = $"sekiban_uwmv_{SanitizeSegment(viewName)}_v{viewVersion}";
+        var sanitized = MvPhysicalName.SanitizeSegment(viewName);
+        var rawPrefix = $"sekiban_uwmv_{sanitized}_v{viewVersion}";
+        var prefix = rawPrefix.Length <= MaxSharedPrefixLength
+            ? rawPrefix
+            : BuildBoundedPrefix(sanitized, viewVersion);
+
         SafeTable = $"{prefix}_safe";
         UnsafeTable = $"{prefix}_unsafe";
         CurrentView = $"{prefix}_current";
         CurrentLiveView = $"{prefix}_current_live";
+
+        // The derived names are all at most "{prefix}_current_live" (13 chars), so bounding the
+        // prefix above keeps every identifier under 63 bytes — re-assert it with the shared helper.
+        foreach (var identifier in new[] { SafeTable, UnsafeTable, CurrentView, CurrentLiveView })
+        {
+            MvPhysicalName.ValidateIdentifier(identifier);
+        }
+
         Schema = schema;
         ViewName = viewName;
         ViewVersion = viewVersion;
@@ -109,23 +133,48 @@ public sealed class UnsafeWindowMvSchemaResolver
     public string CurrentLiveView { get; }
     public UnsafeWindowMvSchema Schema { get; }
 
-    private static string SanitizeSegment(string value)
+    private static string BuildBoundedPrefix(string sanitized, int viewVersion)
     {
-        var builder = new StringBuilder(value.Length);
-        foreach (var ch in value.ToLowerInvariant())
+        // Deterministic shortening: truncate the sanitized name and append an 8-char SHA1
+        // hash of the original. Hash stays stable across runs so identifiers remain stable
+        // for the same projector between deploys.
+        var versionSuffix = $"_v{viewVersion}";
+        var hash = Convert.ToHexString(
+                System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(sanitized)))
+            .Substring(0, 8)
+            .ToLowerInvariant();
+
+        var headroom = MaxSharedPrefixLength - ("sekiban_uwmv__".Length + hash.Length + versionSuffix.Length);
+        if (headroom < 1)
         {
-            if (char.IsLetterOrDigit(ch) || ch == '_')
+            headroom = 1;
+        }
+        var head = sanitized.Substring(0, Math.Min(headroom, sanitized.Length));
+        return $"sekiban_uwmv_{head}_{hash}{versionSuffix}";
+    }
+
+    private static void ValidateSqlType(string columnName, string sqlType)
+    {
+        // SqlType is concatenated straight into DDL ("<column> <sqlType>"). We reject any character
+        // that would let a projector author (or an upstream refactor) escape the column definition
+        // into arbitrary DDL — semicolons, comment starters, embedded newlines, etc.
+        if (string.IsNullOrWhiteSpace(sqlType))
+        {
+            throw new ArgumentException($"Business column '{columnName}' has an empty SQL type.");
+        }
+        foreach (var ch in sqlType)
+        {
+            if (ch == ';' || ch == '\r' || ch == '\n')
             {
-                builder.Append(ch);
-            }
-            else
-            {
-                builder.Append('_');
+                throw new ArgumentException(
+                    $"Business column '{columnName}' declares a SQL type containing illegal characters (semicolon / newline). Type: '{sqlType}'.");
             }
         }
-
-        var sanitized = builder.ToString().Trim('_');
-        return string.IsNullOrEmpty(sanitized) ? "view" : sanitized;
+        if (sqlType.Contains("--", StringComparison.Ordinal) || sqlType.Contains("/*", StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"Business column '{columnName}' declares a SQL type containing SQL comment markers. Type: '{sqlType}'.");
+        }
     }
 }
 
@@ -210,12 +259,15 @@ internal static class UnsafeWindowMvValidator
     {
         foreach (var table in new[] { resolver.SafeTable, resolver.UnsafeTable })
         {
+            // Filter by current_schema() so validation is deterministic when the
+            // connection's search_path includes more than the default schema.
             var columns = (await connection.QueryAsync<(string column_name, string data_type)>(
                 new CommandDefinition(
                     """
                     SELECT column_name, data_type
                     FROM information_schema.columns
-                    WHERE table_name = @Table
+                    WHERE table_schema = current_schema()
+                      AND table_name = @Table
                     """,
                     new { Table = table },
                     cancellationToken: ct))).ToList();
@@ -297,7 +349,7 @@ public sealed class UnsafeWindowMvInitializer
     }
 }
 
-internal static class UnsafeWindowMvRowHydrator<TRow> where TRow : class
+internal static class UnsafeWindowMvRowHydrator<TRow> where TRow : class, new()
 {
     public static TRow Hydrate(UnsafeWindowMvSchema schema, IDictionary<string, object> dbRow)
     {
@@ -373,7 +425,7 @@ internal static class UnsafeWindowMvRowHydrator<TRow> where TRow : class
     }
 }
 
-public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class
+public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class, new()
 {
     private readonly UnsafeWindowMvSchemaResolver _resolver;
     private readonly IUnsafeWindowMvProjector<TRow> _projector;
@@ -427,45 +479,118 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class
         }
 
         // If the unsafe row is empty, the previous state for this key may
-        // already have been promoted to safe. Hydrate from safe so partial
-        // updates (e.g. a field-rename event that depends on the current row)
-        // can fold correctly.
+        // already have been promoted to safe. Load with `FOR UPDATE` so
+        // promotion for the same key cannot race with this fold and publish a
+        // stale unsafe row. Partial events (e.g. a field rename) need the safe
+        // row to fold against; ordering guards still apply to this fallback.
         TRow? current = null;
         IDictionary<string, object>? fallbackBusinessValues = null;
+        long existingEventVersion = 0;
         if (existingRow is IDictionary<string, object> existing)
         {
             current = UnsafeWindowMvRowHydrator<TRow>.Hydrate(_projector.Schema, existing);
+            existingEventVersion = Convert.ToInt64(existing[UnsafeWindowMvColumns.LastEventVersion]);
         }
         else
         {
             var safeRow = await connection.QueryFirstOrDefaultAsync(new CommandDefinition(
-                $"SELECT * FROM {_resolver.SafeTable} WHERE {UnsafeWindowMvColumns.ProjectionKey} = @Key",
+                $"SELECT * FROM {_resolver.SafeTable} WHERE {UnsafeWindowMvColumns.ProjectionKey} = @Key FOR UPDATE",
                 new { Key = projectionKey },
                 transaction: transaction,
                 cancellationToken: ct)).ConfigureAwait(false);
             if (safeRow is IDictionary<string, object> safeDict)
             {
-                // Events that land before their create (or well after a previous
-                // promotion has completed) can reference a key that lives only in
-                // safe. Fold against the safe row so the unsafe upsert reflects
-                // the full state.
+                // Reorder guard against safe: if the incoming event predates the
+                // safe row, we must NOT overwrite the safe-derived state in
+                // unsafe. Mirror safe into unsafe with `_needs_rebuild = true`
+                // so the current / current_live views stay consistent with safe
+                // until the promoter full-replays the key. Without this the
+                // merged view would temporarily roll back to a stale state.
+                var safeSuid = (string)safeDict[UnsafeWindowMvColumns.LastSortableUniqueId];
+                existingEventVersion = Convert.ToInt64(safeDict[UnsafeWindowMvColumns.LastEventVersion]);
+                if (string.CompareOrdinal(ev.SortableUniqueIdValue, safeSuid) <= 0)
+                {
+                    await MirrorSafeIntoUnsafeForRebuildAsync(
+                            connection,
+                            transaction,
+                            projectionKey,
+                            safeDict,
+                            ct)
+                        .ConfigureAwait(false);
+                    return;
+                }
+
                 current = UnsafeWindowMvRowHydrator<TRow>.Hydrate(_projector.Schema, safeDict);
                 fallbackBusinessValues = safeDict;
             }
         }
 
         var outcome = _projector.Apply(current, ev);
+        var newEventVersion = existingEventVersion + 1;
         switch (outcome)
         {
             case UnsafeWindowMvApplyOutcome.NoChange:
                 return;
             case UnsafeWindowMvApplyOutcome.Upsert up:
-                await UpsertUnsafeAsync(connection, transaction, up.ProjectionKey, up.Row, isDeleted: false, ev, ct).ConfigureAwait(false);
+                if (!string.Equals(up.ProjectionKey, projectionKey, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Projector '{_projector.ViewName}' returned a different projection key from Apply ('{up.ProjectionKey}') than GetProjectionKey ('{projectionKey}'). The two must agree; otherwise the runtime would lock one row and write another.");
+                }
+                await UpsertUnsafeAsync(connection, transaction, projectionKey, up.Row, isDeleted: false, ev, newEventVersion, ct).ConfigureAwait(false);
                 break;
             case UnsafeWindowMvApplyOutcome.Delete del:
-                await UpsertDeletionAsync(connection, transaction, del.ProjectionKey, current, fallbackBusinessValues, ev, ct).ConfigureAwait(false);
+                if (!string.Equals(del.ProjectionKey, projectionKey, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Projector '{_projector.ViewName}' returned a different projection key from Apply ('{del.ProjectionKey}') than GetProjectionKey ('{projectionKey}'). The two must agree; otherwise the runtime would lock one row and write another.");
+                }
+                await UpsertDeletionAsync(connection, transaction, projectionKey, current, fallbackBusinessValues, ev, newEventVersion, ct).ConfigureAwait(false);
                 break;
         }
+    }
+
+    private async Task MirrorSafeIntoUnsafeForRebuildAsync(
+        NpgsqlConnection connection,
+        IDbTransaction transaction,
+        string projectionKey,
+        IDictionary<string, object> safeDict,
+        CancellationToken ct)
+    {
+        var businessCols = _projector.Schema.Columns.Select(c => c.Name).ToList();
+        var businessValueParams = string.Join(", ", businessCols.Select(c => "@" + c));
+
+        // Copy safe's business columns + SUID + event_version verbatim; set
+        // _safe_due_at = NOW() so the promoter picks this key up on the very
+        // next tick and rebuilds it with a full-history replay.
+        var sql = $"""
+            INSERT INTO {_resolver.UnsafeTable}
+                ({UnsafeWindowMvColumns.ProjectionKey},
+                 {string.Join(", ", businessCols)},
+                 {UnsafeWindowMvColumns.IsDeleted},
+                 {UnsafeWindowMvColumns.LastSortableUniqueId},
+                 {UnsafeWindowMvColumns.LastEventVersion},
+                 {UnsafeWindowMvColumns.LastAppliedAt},
+                 {UnsafeWindowMvColumns.UnsafeSince},
+                 {UnsafeWindowMvColumns.SafeDueAt},
+                 {UnsafeWindowMvColumns.NeedsRebuild})
+            VALUES (@__projectionKey, {businessValueParams}, @__isDeleted, @__suid, @__eventVersion, NOW(), NOW(), NOW(), TRUE)
+            ON CONFLICT ({UnsafeWindowMvColumns.ProjectionKey}) DO UPDATE SET
+                {UnsafeWindowMvColumns.NeedsRebuild} = TRUE;
+            """;
+
+        var parameters = new DynamicParameters();
+        parameters.Add("__projectionKey", projectionKey);
+        parameters.Add("__isDeleted", safeDict[UnsafeWindowMvColumns.IsDeleted]);
+        parameters.Add("__suid", safeDict[UnsafeWindowMvColumns.LastSortableUniqueId]);
+        parameters.Add("__eventVersion", Convert.ToInt64(safeDict[UnsafeWindowMvColumns.LastEventVersion]));
+        foreach (var column in _projector.Schema.Columns)
+        {
+            parameters.Add(column.Name, safeDict.TryGetValue(column.Name, out var v) ? (v ?? DBNull.Value) : DBNull.Value);
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: ct))
+            .ConfigureAwait(false);
     }
 
     private async Task UpsertUnsafeAsync(
@@ -475,6 +600,7 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class
         object row,
         bool isDeleted,
         Event ev,
+        long eventVersion,
         CancellationToken ct)
     {
         var businessCols = _projector.Schema.Columns.Select(c => c.Name).ToList();
@@ -508,7 +634,7 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class
         parameters.Add("__projectionKey", projectionKey);
         parameters.Add("__isDeleted", isDeleted);
         parameters.Add("__suid", ev.SortableUniqueIdValue);
-        parameters.Add("__eventVersion", 0L);
+        parameters.Add("__eventVersion", eventVersion);
         parameters.Add("__safeDueAt", safeDueAt);
 
         foreach (var column in _projector.Schema.Columns)
@@ -527,6 +653,7 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class
         TRow? currentRow,
         IDictionary<string, object>? fallbackBusinessValues,
         Event ev,
+        long eventVersion,
         CancellationToken ct)
     {
         // Tombstones retain the last-known business values so the user's
@@ -571,7 +698,7 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class
         var parameters = new DynamicParameters();
         parameters.Add("__projectionKey", projectionKey);
         parameters.Add("__suid", ev.SortableUniqueIdValue);
-        parameters.Add("__eventVersion", 0L);
+        parameters.Add("__eventVersion", eventVersion);
         parameters.Add("__safeDueAt", safeDueAt);
 
         foreach (var column in _projector.Schema.Columns)
@@ -597,7 +724,7 @@ public sealed class UnsafeWindowMvStreamApplier<TRow> where TRow : class
     }
 }
 
-public sealed class UnsafeWindowMvPromoter<TRow> where TRow : class
+public sealed class UnsafeWindowMvPromoter<TRow> where TRow : class, new()
 {
     private readonly UnsafeWindowMvSchemaResolver _resolver;
     private readonly IUnsafeWindowMvProjector<TRow> _projector;
@@ -631,9 +758,15 @@ public sealed class UnsafeWindowMvPromoter<TRow> where TRow : class
         await connection.OpenAsync(ct).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(ct).ConfigureAwait(false);
 
-        var due = (await connection.QueryAsync<string>(new CommandDefinition(
+        // Read the needs_rebuild flag alongside the projection key. A key
+        // whose unsafe row has `_needs_rebuild = true` triggers a full replay
+        // (since = null) so late-arriving events that sit before the safe row's
+        // SUID are actually folded in — the default `since = safe.suid` replay
+        // would otherwise miss them and the view would stay incorrect forever.
+        var dueRows = (await connection.QueryAsync<(string key, bool needs_rebuild)>(new CommandDefinition(
             $"""
-             SELECT {UnsafeWindowMvColumns.ProjectionKey}
+             SELECT {UnsafeWindowMvColumns.ProjectionKey} AS key,
+                    {UnsafeWindowMvColumns.NeedsRebuild} AS needs_rebuild
              FROM {_resolver.UnsafeTable}
              WHERE {UnsafeWindowMvColumns.SafeDueAt} <= NOW()
              ORDER BY {UnsafeWindowMvColumns.SafeDueAt}
@@ -644,26 +777,27 @@ public sealed class UnsafeWindowMvPromoter<TRow> where TRow : class
             transaction: transaction,
             cancellationToken: ct))).ToList();
 
-        if (due.Count == 0)
+        if (dueRows.Count == 0)
         {
             await transaction.RollbackAsync(ct).ConfigureAwait(false);
             return 0;
         }
 
-        foreach (var projectionKey in due)
+        foreach (var (projectionKey, needsRebuild) in dueRows)
         {
-            await PromoteKeyAsync(connection, transaction, projectionKey, ct).ConfigureAwait(false);
+            await PromoteKeyAsync(connection, transaction, projectionKey, needsRebuild, ct).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
-        _logger.LogDebug("Unsafe window MV '{View}' promoted {Count} key(s).", _projector.ViewName, due.Count);
-        return due.Count;
+        _logger.LogDebug("Unsafe window MV '{View}' promoted {Count} key(s).", _projector.ViewName, dueRows.Count);
+        return dueRows.Count;
     }
 
     private async Task PromoteKeyAsync(
         NpgsqlConnection connection,
         IDbTransaction transaction,
         string projectionKey,
+        bool needsRebuild,
         CancellationToken ct)
     {
         var safeRow = await connection.QueryFirstOrDefaultAsync(new CommandDefinition(
@@ -677,7 +811,11 @@ public sealed class UnsafeWindowMvPromoter<TRow> where TRow : class
         long startVersion = 0;
         var isDeleted = false;
 
-        if (safeRow is IDictionary<string, object> safeDict)
+        // needsRebuild replays every event for the key from scratch. This is
+        // the recovery path for reorder: an older-than-safe event that has
+        // already arrived and marked this key; fold the whole history so the
+        // result reflects all events in SUID order.
+        if (!needsRebuild && safeRow is IDictionary<string, object> safeDict)
         {
             current = UnsafeWindowMvRowHydrator<TRow>.Hydrate(_projector.Schema, safeDict);
             startSuid = (string)safeDict[UnsafeWindowMvColumns.LastSortableUniqueId];
@@ -832,7 +970,7 @@ public sealed class UnsafeWindowMvPromoter<TRow> where TRow : class
 ///     the latest SUID applied to unsafe and streams events since that point
 ///     through <see cref="UnsafeWindowMvStreamApplier{TRow}" />.
 /// </summary>
-public sealed class UnsafeWindowMvCatchUpWorker<TRow> where TRow : class
+public sealed class UnsafeWindowMvCatchUpWorker<TRow> where TRow : class, new()
 {
     private readonly UnsafeWindowMvSchemaResolver _resolver;
     private readonly IUnsafeWindowMvProjector<TRow> _projector;
@@ -916,7 +1054,7 @@ public sealed class UnsafeWindowMvCatchUpWorker<TRow> where TRow : class
 ///     BackgroundService that loops the catch-up + promotion cycle forever.
 ///     Owns a single projector instance; register one per projector type.
 /// </summary>
-public sealed class UnsafeWindowMvHostedService<TRow> : BackgroundService where TRow : class
+public sealed class UnsafeWindowMvHostedService<TRow> : BackgroundService where TRow : class, new()
 {
     private readonly UnsafeWindowMvInitializer _initializer;
     private readonly UnsafeWindowMvCatchUpWorker<TRow> _catchUp;
@@ -943,17 +1081,40 @@ public sealed class UnsafeWindowMvHostedService<TRow> : BackgroundService where 
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        try
-        {
-            await _initializer.InitializeAsync(stoppingToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unsafe window MV '{View}' initialization failed; the background service will retry on the next iteration.", _viewName);
-        }
+        var initialized = false;
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            if (!initialized)
+            {
+                // Initialization can fail if the database is not yet reachable
+                // at boot. Retry on the loop cadence instead of bailing out so
+                // the service recovers as soon as Postgres comes up, without
+                // requiring the entire host to be restarted.
+                try
+                {
+                    await _initializer.InitializeAsync(stoppingToken).ConfigureAwait(false);
+                    initialized = true;
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Unsafe window MV '{View}' initialization failed; retrying after {Delay}.", _viewName, _idleDelay);
+                    try
+                    {
+                        await Task.Delay(_idleDelay, stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    continue;
+                }
+            }
+
             var did = 0;
             try
             {

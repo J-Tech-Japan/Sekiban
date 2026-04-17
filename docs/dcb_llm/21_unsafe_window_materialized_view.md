@@ -36,6 +36,19 @@ public sealed class WeatherForecastUnsafeWindowMvV1 : IUnsafeWindowMvProjector<W
         // …
     );
 
+    // The runtime asks for the projection key before it loads any row, so it
+    // can look up the current `unsafe` / `safe` row and pass it to `Apply` as
+    // `current`. Partial-update events (e.g. a field rename that returns
+    // NoChange when `current` is null) rely on this separation working.
+    public string? GetProjectionKey(Event ev) => ev.Payload switch
+    {
+        WeatherForecastCreated c => c.ForecastId.ToString(),
+        WeatherForecastUpdated u => u.ForecastId.ToString(),
+        LocationNameChanged l => l.ForecastId.ToString(),
+        WeatherForecastDeleted d => d.ForecastId.ToString(),
+        _ => null
+    };
+
     public UnsafeWindowMvApplyOutcome Apply(WeatherForecastUnsafeRow? current, Event ev) =>
         ev.Payload switch
         {
@@ -56,11 +69,12 @@ public sealed class WeatherForecastUnsafeWindowMvV1 : IUnsafeWindowMvProjector<W
 }
 ```
 
-Three responsibilities:
+Four responsibilities:
 
 1. **Schema** — business columns (framework adds metadata columns on top).
-2. **Apply** — deterministic fold `(TRow?, Event) → Outcome`. The framework calls it in two places: the stream apply path and the safe-promotion replay loop. One implementation, two call sites, so the two cannot drift.
-3. **TagsForProjectionKey** — the tags the promotion worker uses to fetch all events that affect a projection key during replay. For an aggregate-centric view this is usually one tag per row.
+2. **GetProjectionKey** — extract the target row's projection key from an event payload so the framework can look up the current row before folding. Returns `null` for events the projector does not care about.
+3. **Apply** — deterministic fold `(TRow?, Event) → Outcome`. The framework calls it in two places: the stream apply path and the safe-promotion replay loop. One implementation, two call sites, so the two cannot drift. The `ProjectionKey` returned by an `Upsert` / `Delete` outcome must match the one returned by `GetProjectionKey` for the same event — the runtime fails fast if they differ.
+4. **TagsForProjectionKey** — the tags the promotion worker uses to fetch all events that affect a projection key during replay. For an aggregate-centric view this is usually one tag per row.
 
 `Outcome` is a closed union: `NoChange`, `Upsert(key, row)`, or `Delete(key)`. A `Delete` outcome logically retires the row — the framework writes a tombstone in `safe` and hides the row from `current_live`.
 
@@ -112,32 +126,59 @@ Business columns are validated at startup (`information_schema.columns`): missin
 
 ```
 event arrives
-  └─ probe Apply(null, ev) → extract projection key, skip if NoChange
+  └─ projectionKey = projector.GetProjectionKey(ev)
+     └─ null → projector is not interested, skip
   └─ SELECT … FROM unsafe WHERE _projection_key = @key FOR UPDATE
-  └─ if incoming SUID <= existing unsafe SUID:
-         mark `_needs_rebuild = true` and return
-         (do NOT overwrite with an older event — promotion will fix it)
-     else:
-         fold Apply(currentRow, ev), upsert to unsafe,
-         set `_safe_due_at = NOW() + SafeWindow`
+     ├─ row exists AND incoming SUID <= unsafe SUID:
+     │     set `_needs_rebuild = true` and return
+     │     (do NOT overwrite the newer row with an older event)
+     ├─ row exists AND incoming SUID  > unsafe SUID:
+     │     hydrate `current` from the unsafe row
+     └─ row does not exist:
+        └─ SELECT … FROM safe WHERE _projection_key = @key FOR UPDATE
+           ├─ safe row exists AND incoming SUID <= safe SUID:
+           │     mirror safe into unsafe with `_needs_rebuild = true`
+           │     (keeps current / current_live consistent with safe; the
+           │      promoter will full-replay on its next pass)
+           └─ safe row exists AND incoming SUID  > safe SUID:
+                 hydrate `current` from the safe row
+  └─ outcome = projector.Apply(current, ev)
+     ├─ NoChange → return
+     ├─ Upsert (key, row)   → upsert unsafe with business columns,
+     │                        _last_event_version = previous + 1,
+     │                        _safe_due_at = NOW() + SafeWindow
+     └─ Delete (key)        → upsert tombstone in unsafe,
+                              retaining the last-known business columns
+                              (from current / safe) so NOT NULL
+                              constraints still hold
 ```
 
-Older-SUID events never silently overwrite newer rows; they set `_needs_rebuild` so the promotion worker knows this key needs a full replay on its next pass.
+Older-SUID events never silently overwrite newer rows; they set `_needs_rebuild` so the promotion worker knows this key needs a full replay on its next pass. The `_last_event_version` column increments on every stream apply so reads of `unsafe` during the safe window still carry a monotonic version.
 
 ## Safe promotion (correctness path)
 
 ```
 every N seconds (hosted service loop):
   BEGIN;
-    SELECT _projection_key FROM unsafe
+    SELECT _projection_key, _needs_rebuild FROM unsafe
     WHERE _safe_due_at <= NOW()
     ORDER BY _safe_due_at
     LIMIT @batch
     FOR UPDATE SKIP LOCKED;
 
-    for each key:
-      read current safe row (may be null)
-      read events via ReadSerializableEventsByTagAsync(tag, since = safe._last_sortable_unique_id)
+    for each (key, needsRebuild):
+      if needsRebuild:
+          # Full replay: recover from reordered / late-arriving events.
+          current    = null
+          startSuid  = null
+          isDeleted  = false
+      else:
+          read current safe row (may be null)
+          current    = hydrate(safeRow)
+          startSuid  = safe._last_sortable_unique_id
+          isDeleted  = safe._is_deleted
+
+      read events via ReadSerializableEventsByTagAsync(tag, since = startSuid)
       for each event in SUID order: Apply(current, ev) → update current / tombstone flag
       upsert safe (including tombstones — _is_deleted survives)
       delete corresponding unsafe row
@@ -152,7 +193,8 @@ Key design decisions:
 
 ## Delete / recreate
 
-- `Apply` returns `Delete(key)` → framework writes an unsafe row with every business column `NULL` and `_is_deleted = true`.
+- `Apply` returns `Delete(key)` → framework writes a tombstone into unsafe. Business columns are **retained** from whichever of the unsafe row or (when unsafe is empty) the safe row existed, so user-declared `NOT NULL` constraints keep holding and diagnostics tooling that reads `current` still sees the last known state alongside `_is_deleted = true`.
+- If neither a prior unsafe row nor a prior safe row exists, the delete is a no-op (there is nothing to tombstone yet; any later-arriving create for the same id becomes the first Upsert).
 - After promotion, safe holds the tombstone (business columns preserved from the last Upsert before the delete, `_is_deleted = true`).
 - `current_live` filters `_is_deleted = true`, so normal reads no longer see the row.
 - If a later event recreates the same projection key (e.g. `WeatherForecastCreated` with the same id), `Apply` returns an Upsert. The stream apply path overwrites the tombstone in unsafe; promotion folds the recreate on top of the tombstone safe row, flipping `_is_deleted` back to false and writing the new business columns.

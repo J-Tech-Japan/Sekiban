@@ -11,6 +11,27 @@ namespace Sekiban.Dcb.MaterializedView.Postgres;
 public static class UnsafeWindowMvRegistration
 {
     /// <summary>
+    ///     Returns the keyed-singleton lookup name sample / test code can use
+    ///     to resolve the Postgres connection string that the runtime wired
+    ///     for the projector <typeparamref name="TProjector" />. Keyed by the
+    ///     projector type so multiple projectors (including v1/v2 side-by-side
+    ///     or projectors that share a common row DTO) register without
+    ///     colliding.
+    /// </summary>
+    public static string ConnectionStringKey<TProjector>() =>
+        "UnsafeWindowMv:" + (typeof(TProjector).FullName ?? typeof(TProjector).Name);
+
+    /// <summary>
+    ///     Returns the keyed-singleton lookup name sample / test code can use
+    ///     to resolve the <see cref="UnsafeWindowMvSchemaResolver" /> wired
+    ///     for the projector <typeparamref name="TProjector" />. Using the
+    ///     projector type as the key avoids collisions when several views
+    ///     share a single row DTO.
+    /// </summary>
+    public static string SchemaResolverKey<TProjector>() =>
+        "UnsafeWindowMvResolver:" + (typeof(TProjector).FullName ?? typeof(TProjector).Name);
+
+    /// <summary>
     ///     Registers an unsafe-window materialized view projector and all the
     ///     supporting runtime pieces (initializer, catch-up worker, promoter,
     ///     hosted service). Pulls the Postgres connection string from
@@ -24,7 +45,7 @@ public static class UnsafeWindowMvRegistration
         int catchUpBatchSize = 256,
         int promotionBatchSize = 32)
         where TProjector : class, IUnsafeWindowMvProjector<TRow>
-        where TRow : class
+        where TRow : class, new()
     {
         if (string.IsNullOrWhiteSpace(connectionStringName))
         {
@@ -38,22 +59,27 @@ public static class UnsafeWindowMvRegistration
 
         services.AddSingleton<TProjector>();
         services.AddSingleton<IUnsafeWindowMvProjector<TRow>>(sp => sp.GetRequiredService<TProjector>());
-        services.AddSingleton(sp =>
+
+        // Keyed by TProjector so multiple projectors can coexist even if they
+        // share a TRow DTO. Callers resolve via `ConnectionStringKey<TProjector>()`
+        // and `SchemaResolverKey<TProjector>()`.
+        services.AddKeyedSingleton(SchemaResolverKey<TProjector>(), (sp, _) =>
         {
-            var projector = sp.GetRequiredService<IUnsafeWindowMvProjector<TRow>>();
+            var projector = sp.GetRequiredService<TProjector>();
             return new UnsafeWindowMvSchemaResolver(projector.ViewName, projector.ViewVersion, projector.Schema);
         });
+        services.AddKeyedSingleton(ConnectionStringKey<TProjector>(), (_, _) => connectionString);
 
         services.AddSingleton(sp =>
         {
-            var resolver = sp.GetRequiredService<UnsafeWindowMvSchemaResolver>();
+            var resolver = sp.GetRequiredKeyedService<UnsafeWindowMvSchemaResolver>(SchemaResolverKey<TProjector>());
             var logger = sp.GetRequiredService<ILogger<UnsafeWindowMvInitializer>>();
             return new UnsafeWindowMvInitializer(resolver, connectionString, logger);
         });
 
         services.AddSingleton(sp =>
         {
-            var resolver = sp.GetRequiredService<UnsafeWindowMvSchemaResolver>();
+            var resolver = sp.GetRequiredKeyedService<UnsafeWindowMvSchemaResolver>(SchemaResolverKey<TProjector>());
             var projector = sp.GetRequiredService<IUnsafeWindowMvProjector<TRow>>();
             var eventStore = sp.GetRequiredService<IEventStore>();
             var eventTypes = sp.GetRequiredService<IEventTypes>();
@@ -63,7 +89,7 @@ public static class UnsafeWindowMvRegistration
 
         services.AddSingleton(sp =>
         {
-            var resolver = sp.GetRequiredService<UnsafeWindowMvSchemaResolver>();
+            var resolver = sp.GetRequiredKeyedService<UnsafeWindowMvSchemaResolver>(SchemaResolverKey<TProjector>());
             var projector = sp.GetRequiredService<IUnsafeWindowMvProjector<TRow>>();
             var eventStore = sp.GetRequiredService<IEventStore>();
             var eventTypes = sp.GetRequiredService<IEventTypes>();
@@ -81,10 +107,6 @@ public static class UnsafeWindowMvRegistration
             return new UnsafeWindowMvHostedService<TRow>(initializer, catchUp, promoter, projector.ViewName, logger, idleDelay);
         });
 
-        // Connection string exposed via a keyed singleton so samples / tests
-        // (e.g. a direct `/api/uwmv/weather` endpoint) can read rows from
-        // `current_live` without re-resolving it from configuration.
-        services.AddKeyedSingleton("UnsafeWindowMv:" + typeof(TRow).FullName, (_, _) => connectionString);
         return services;
     }
 }

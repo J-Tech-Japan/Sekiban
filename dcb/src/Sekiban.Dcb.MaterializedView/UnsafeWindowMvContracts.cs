@@ -88,7 +88,7 @@ public abstract record UnsafeWindowMvApplyOutcome
 ///     expose a parameterless constructor and public settable properties that
 ///     match the column names in <see cref="Schema" /> (snake_case column → PascalCase property).
 /// </typeparam>
-public interface IUnsafeWindowMvProjector<TRow> where TRow : class
+public interface IUnsafeWindowMvProjector<TRow> where TRow : class, new()
 {
     string ViewName { get; }
     int ViewVersion { get; }
