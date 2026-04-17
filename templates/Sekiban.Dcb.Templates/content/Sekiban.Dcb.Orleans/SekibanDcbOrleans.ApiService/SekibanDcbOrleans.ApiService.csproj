@@ -28,14 +28,14 @@
     <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.1" />
     <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="10.0.1" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
-    <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.1.18" />
-    <PackageReference Include="Sekiban.Dcb.Orleans.WithResult" Version="10.1.18" />
-    <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.1.18" />
-    <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.1.18" />
-    <PackageReference Include="Sekiban.Dcb.Sqlite" Version="10.1.18" />
-    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="10.1.18" />
-    <PackageReference Include="Sekiban.Dcb.MaterializedView.Postgres" Version="10.1.18" />
-    <PackageReference Include="Sekiban.Dcb.MaterializedView.Orleans" Version="10.1.18" />
+    <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.2.0" />
+    <PackageReference Include="Sekiban.Dcb.Orleans.WithResult" Version="10.2.0" />
+    <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.2.0" />
+    <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.2.0" />
+    <PackageReference Include="Sekiban.Dcb.Sqlite" Version="10.2.0" />
+    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="10.2.0" />
+    <PackageReference Include="Sekiban.Dcb.MaterializedView.Postgres" Version="10.2.0" />
+    <PackageReference Include="Sekiban.Dcb.MaterializedView.Orleans" Version="10.2.0" />
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
