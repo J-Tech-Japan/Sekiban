@@ -185,24 +185,48 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         string projectorName,
         string? expectedProjectorVersion = null)
     {
-        var projectorVersion = ValidateProjectorVersion(projectorName, expectedProjectorVersion);
+        var projectorVersionResult = ProjectionHeadStatusUtilities.ValidateProjectorVersion(
+            _domainTypes,
+            projectorName,
+            expectedProjectorVersion);
+        if (!projectorVersionResult.IsSuccess)
+        {
+            throw projectorVersionResult.GetException();
+        }
+
         var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), projectorName);
         var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(grainId);
         var grainStatus = await grain.GetProjectionHeadStatusAsync();
 
-        return new ProjectionHeadStatus(
+        var projectorNameResult = ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
             projectorName,
-            string.IsNullOrWhiteSpace(grainStatus.ProjectorVersion) ? projectorVersion : grainStatus.ProjectorVersion,
+            grainStatus.ProjectorName);
+        if (!projectorNameResult.IsSuccess)
+        {
+            throw projectorNameResult.GetException();
+        }
+
+        var projectorVersionConsistencyResult = ProjectionHeadStatusUtilities.EnsureProjectorVersionConsistency(
+            projectorVersionResult.GetValue(),
+            grainStatus.ProjectorVersion);
+        if (!projectorVersionConsistencyResult.IsSuccess)
+        {
+            throw projectorVersionConsistencyResult.GetException();
+        }
+
+        return new ProjectionHeadStatus(
+            projectorNameResult.GetValue(),
+            projectorVersionConsistencyResult.GetValue(),
             new ProjectionPosition(
                 grainStatus.CurrentEventVersion,
-                NormalizeSortableUniqueId(grainStatus.CurrentLastSortableUniqueId)),
+                ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.CurrentLastSortableUniqueId)),
             new ProjectionPosition(
                 grainStatus.ConsistentEventVersion,
-                NormalizeSortableUniqueId(grainStatus.ConsistentLastSortableUniqueId)),
+                ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.ConsistentLastSortableUniqueId)),
             new ProjectionCatchUpStatus(
                 grainStatus.IsCatchUpInProgress,
-                NormalizeSortableUniqueId(grainStatus.CatchUpCurrentSortableUniqueId),
-                NormalizeSortableUniqueId(grainStatus.CatchUpTargetSortableUniqueId),
+                ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.CatchUpCurrentSortableUniqueId),
+                ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.CatchUpTargetSortableUniqueId),
                 grainStatus.PendingStreamEventCount));
     }
 
@@ -220,64 +244,24 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     private string ResolveProjectorName(IQueryCommon queryCommon)
     {
         var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-        return ResolveProjectorName(projectorTypeResult);
+        var projectorNameResult = ProjectionHeadStatusUtilities.ResolveProjectorName(projectorTypeResult);
+        if (!projectorNameResult.IsSuccess)
+        {
+            throw projectorNameResult.GetException();
+        }
+
+        return projectorNameResult.GetValue();
     }
 
     private string ResolveProjectorName(IListQueryCommon queryCommon)
     {
         var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-        return ResolveProjectorName(projectorTypeResult);
+        var projectorNameResult = ProjectionHeadStatusUtilities.ResolveProjectorName(projectorTypeResult);
+        if (!projectorNameResult.IsSuccess)
+        {
+            throw projectorNameResult.GetException();
+        }
+
+        return projectorNameResult.GetValue();
     }
-
-    private static string ResolveProjectorName(ResultBox<Type> projectorTypeResult)
-    {
-        if (!projectorTypeResult.IsSuccess)
-        {
-            throw projectorTypeResult.GetException();
-        }
-
-        var projectorType = projectorTypeResult.GetValue();
-        var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
-        if (projectorNameProperty == null)
-        {
-            throw new InvalidOperationException(
-                $"Projector type {projectorType.Name} does not have MultiProjectorName property");
-        }
-
-        var projectorName = projectorNameProperty.GetValue(null) as string;
-        if (string.IsNullOrWhiteSpace(projectorName))
-        {
-            throw new InvalidOperationException(
-                $"Projector type {projectorType.Name} has invalid MultiProjectorName");
-        }
-
-        return projectorName;
-    }
-
-    private string ValidateProjectorVersion(string projectorName, string? expectedProjectorVersion)
-    {
-        if (string.IsNullOrWhiteSpace(projectorName))
-        {
-            throw new ArgumentException("Projector name cannot be empty.", nameof(projectorName));
-        }
-
-        var projectorVersionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
-        if (!projectorVersionResult.IsSuccess)
-        {
-            throw projectorVersionResult.GetException();
-        }
-
-        var currentProjectorVersion = projectorVersionResult.GetValue();
-        if (!string.IsNullOrWhiteSpace(expectedProjectorVersion)
-            && !string.Equals(currentProjectorVersion, expectedProjectorVersion, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"Projector version mismatch for '{projectorName}'. Expected '{expectedProjectorVersion}', but registered version is '{currentProjectorVersion}'.");
-        }
-
-        return currentProjectorVersion;
-    }
-
-    private static string? NormalizeSortableUniqueId(string? sortableUniqueId) =>
-        string.IsNullOrWhiteSpace(sortableUniqueId) ? null : sortableUniqueId;
 }

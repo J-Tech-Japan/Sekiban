@@ -39,7 +39,9 @@ public class ProjectionHeadStatusTests
                 StringComparison.Ordinal) >= 0);
         Assert.True(projectionStatus.Consistent.EventVersion <= projectionStatus.Current.EventVersion);
         Assert.False(projectionStatus.CatchUp.IsInProgress);
-        Assert.Equal(0, projectionStatus.CatchUp.PendingStreamEventCount);
+        Assert.Equal(
+            projectionStatus.Current.EventVersion - projectionStatus.Consistent.EventVersion,
+            projectionStatus.CatchUp.PendingStreamEventCount);
     }
 
     [Fact]

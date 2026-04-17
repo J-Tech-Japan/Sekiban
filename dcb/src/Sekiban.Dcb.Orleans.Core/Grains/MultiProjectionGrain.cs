@@ -364,7 +364,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     }
 
     private static string? NormalizeSortableUniqueId(string? sortableUniqueId) =>
-        string.IsNullOrWhiteSpace(sortableUniqueId) ? null : sortableUniqueId;
+        ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(sortableUniqueId);
 
     /// <summary>
     ///     Returns the event store used for catch-up reads.
@@ -772,55 +772,53 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         await EnsureInitializedAsync();
 
-        if (_host != null)
-        {
-            await StartSubscriptionAsync();
-            _ = CatchUpFromEventStoreAsync();
-        }
-
         var (_, projectorName, _) = GetIdentity();
         var projectorVersion = _state.State?.ProjectorVersion;
-        MultiProjectionState? currentState = null;
-        MultiProjectionState? consistentState = null;
+        ProjectionHeadStatus? hostStatus = null;
 
         if (_host != null)
         {
-            var currentStateResult = await _host.GetStateAsync(canGetUnsafeState: true);
-            if (currentStateResult.IsSuccess)
+            hostStatus = await _host.GetProjectionHeadStatusAsync();
+            var projectorNameResult = ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
+                projectorName,
+                hostStatus.ProjectorName);
+            if (!projectorNameResult.IsSuccess)
             {
-                currentState = currentStateResult.GetValue();
+                throw projectorNameResult.GetException();
             }
 
-            var consistentStateResult = await _host.GetStateAsync(canGetUnsafeState: false);
-            if (consistentStateResult.IsSuccess)
+            projectorName = projectorNameResult.GetValue();
+            if (!string.IsNullOrWhiteSpace(hostStatus.ProjectorVersion))
             {
-                consistentState = consistentStateResult.GetValue();
+                projectorVersion = hostStatus.ProjectorVersion;
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(currentState?.ProjectorVersion))
-        {
-            projectorVersion = currentState.ProjectorVersion;
-        }
-        else if (!string.IsNullOrWhiteSpace(consistentState?.ProjectorVersion))
-        {
-            projectorVersion = consistentState.ProjectorVersion;
-        }
+        var currentPosition = hostStatus?.Current;
+        var consistentPosition = hostStatus?.Consistent;
+        var catchUpStatus = hostStatus?.CatchUp;
+        var currentLastSortableUniqueId = NormalizeSortableUniqueId(currentPosition?.LastSortableUniqueId)
+            ?? NormalizeSortableUniqueId(_catchUpProgress.CurrentPosition?.Value)
+            ?? NormalizeSortableUniqueId(_state.State?.LastSortableUniqueId);
+        var consistentLastSortableUniqueId = NormalizeSortableUniqueId(consistentPosition?.LastSortableUniqueId)
+            ?? NormalizeSortableUniqueId(_state.State?.LastSortableUniqueId);
 
         return new MultiProjectionHeadStatusSnapshot(
             ProjectorName: projectorName,
             ProjectorVersion: projectorVersion,
-            CurrentEventVersion: currentState?.Version ?? consistentState?.Version ?? _state.State?.LastGoodSafeVersion ?? 0,
-            CurrentLastSortableUniqueId: NormalizeSortableUniqueId(currentState?.LastSortableUniqueId)
-                ?? NormalizeSortableUniqueId(_catchUpProgress.CurrentPosition?.Value)
-                ?? NormalizeSortableUniqueId(_state.State?.LastSortableUniqueId),
-            ConsistentEventVersion: consistentState?.Version ?? _state.State?.LastGoodSafeVersion ?? 0,
-            ConsistentLastSortableUniqueId: NormalizeSortableUniqueId(consistentState?.LastSortableUniqueId)
-                ?? NormalizeSortableUniqueId(_state.State?.LastSortableUniqueId),
-            IsCatchUpInProgress: _catchUpProgress.IsActive,
-            CatchUpCurrentSortableUniqueId: NormalizeSortableUniqueId(_catchUpProgress.CurrentPosition?.Value),
-            CatchUpTargetSortableUniqueId: NormalizeSortableUniqueId(_catchUpProgress.TargetPosition?.Value),
-            PendingStreamEventCount: _pendingStreamEvents.Count);
+            CurrentEventVersion: currentPosition?.EventVersion ?? consistentPosition?.EventVersion ?? _state.State?.LastGoodSafeVersion ?? 0,
+            CurrentLastSortableUniqueId: currentLastSortableUniqueId,
+            ConsistentEventVersion: consistentPosition?.EventVersion ?? _state.State?.LastGoodSafeVersion ?? 0,
+            ConsistentLastSortableUniqueId: consistentLastSortableUniqueId,
+            IsCatchUpInProgress: _catchUpProgress.IsActive || catchUpStatus?.IsInProgress == true,
+            CatchUpCurrentSortableUniqueId: NormalizeSortableUniqueId(_catchUpProgress.CurrentPosition?.Value)
+                ?? NormalizeSortableUniqueId(catchUpStatus?.CurrentSortableUniqueId),
+            CatchUpTargetSortableUniqueId: NormalizeSortableUniqueId(_catchUpProgress.TargetPosition?.Value)
+                ?? NormalizeSortableUniqueId(catchUpStatus?.TargetSortableUniqueId)
+                ?? currentLastSortableUniqueId,
+            PendingStreamEventCount: _pendingStreamEvents.Count > 0
+                ? _pendingStreamEvents.Count
+                : catchUpStatus?.PendingStreamEventCount ?? 0);
     }
 
     /// <summary>

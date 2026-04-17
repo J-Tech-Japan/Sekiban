@@ -74,6 +74,13 @@ var withoutResultApiService = builder
     .WithReference(orleans)
     .WithReference(multiProjectionOffload)
     .WithEnvironment("Sekiban:Database", "postgres")
+    .WithEnvironment("Sekiban:ColdEvent:Enabled", "true")
+    .WithEnvironment("Sekiban:ColdEvent:SegmentMaxEvents", "30000")
+    .WithEnvironment("Sekiban:ColdEvent:ExportMaxEventsPerRun", "30000")
+    .WithEnvironment("Sekiban:ColdEvent:Storage:Provider", "azureblob")
+    .WithEnvironment("Sekiban:ColdEvent:Storage:Format", "jsonl")
+    .WithEnvironment("Sekiban:ColdEvent:Storage:AzureBlobClientName", "MultiProjectionOffload")
+    .WithEnvironment("Sekiban:ColdEvent:Storage:AzureContainerName", "multiprojection-cold-events")
     .WaitFor(postgres)
     .WaitFor(materializedViewPostgres);
 
@@ -108,6 +115,7 @@ var bench = builder
     .WithEnvironment("ApiBaseUrl", withoutResultApiService.GetEndpoint("http"))
     .WithEnvironment("BENCH_TOTAL", "10000")
     .WithEnvironment("BENCH_CONCURRENCY", "32")
+    .WithEnvironment("BENCH_PROJECTION_CONTROL_TIMEOUT_SECONDS", "120")
     .WithHttpEndpoint(port: benchHttpPort);
 
 #endif

@@ -62,6 +62,8 @@ public interface ISekibanExecutor : ICommandExecutor
     /// <summary>
     ///     Gets projection head/catch-up status for a specific projector name.
     ///     When expectedProjectorVersion is provided, the executor validates it against the registered projector version.
+    ///     Backends without background catch-up may still report `CatchUp.IsInProgress == false`;
+    ///     compare `Current` and `Consistent` to detect safe-window lag in that case.
     /// </summary>
     Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync(
         string projectorName,
@@ -69,7 +71,8 @@ public interface ISekibanExecutor : ICommandExecutor
 
     /// <summary>
     ///     Gets the global event-store head.
-    ///     TotalEventCount is opt-in because some stores may implement counting with non-trivial cost.
+    ///     TotalEventCount is opt-in because providers such as Postgres/SQLite may execute `COUNT(*)`,
+    ///     while Cosmos DB or DynamoDB may require additional query work across partitions or shards.
     /// </summary>
     Task<EventStoreHeadStatus> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false);
 }

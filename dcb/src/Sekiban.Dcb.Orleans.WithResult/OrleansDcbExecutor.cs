@@ -209,7 +209,10 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     {
         try
         {
-            var projectorVersionResult = ValidateProjectorVersion(projectorName, expectedProjectorVersion);
+            var projectorVersionResult = ProjectionHeadStatusUtilities.ValidateProjectorVersion(
+                _domainTypes,
+                projectorName,
+                expectedProjectorVersion);
             if (!projectorVersionResult.IsSuccess)
             {
                 return ResultBox.Error<ProjectionHeadStatus>(projectorVersionResult.GetException());
@@ -218,23 +221,36 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
             var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), projectorName);
             var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(grainId);
             var grainStatus = await grain.GetProjectionHeadStatusAsync();
-            var projectorVersion = string.IsNullOrWhiteSpace(grainStatus.ProjectorVersion)
-                ? projectorVersionResult.GetValue()
-                : grainStatus.ProjectorVersion;
+
+            var projectorNameResult = ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
+                projectorName,
+                grainStatus.ProjectorName);
+            if (!projectorNameResult.IsSuccess)
+            {
+                return ResultBox.Error<ProjectionHeadStatus>(projectorNameResult.GetException());
+            }
+
+            var projectorVersionConsistencyResult = ProjectionHeadStatusUtilities.EnsureProjectorVersionConsistency(
+                projectorVersionResult.GetValue(),
+                grainStatus.ProjectorVersion);
+            if (!projectorVersionConsistencyResult.IsSuccess)
+            {
+                return ResultBox.Error<ProjectionHeadStatus>(projectorVersionConsistencyResult.GetException());
+            }
 
             return ResultBox.FromValue(new ProjectionHeadStatus(
-                projectorName,
-                projectorVersion,
+                projectorNameResult.GetValue(),
+                projectorVersionConsistencyResult.GetValue(),
                 new ProjectionPosition(
                     grainStatus.CurrentEventVersion,
-                    NormalizeSortableUniqueId(grainStatus.CurrentLastSortableUniqueId)),
+                    ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.CurrentLastSortableUniqueId)),
                 new ProjectionPosition(
                     grainStatus.ConsistentEventVersion,
-                    NormalizeSortableUniqueId(grainStatus.ConsistentLastSortableUniqueId)),
+                    ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.ConsistentLastSortableUniqueId)),
                 new ProjectionCatchUpStatus(
                     grainStatus.IsCatchUpInProgress,
-                    NormalizeSortableUniqueId(grainStatus.CatchUpCurrentSortableUniqueId),
-                    NormalizeSortableUniqueId(grainStatus.CatchUpTargetSortableUniqueId),
+                    ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.CatchUpCurrentSortableUniqueId),
+                    ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.CatchUpTargetSortableUniqueId),
                     grainStatus.PendingStreamEventCount)));
         }
         catch (Exception ex)
@@ -257,67 +273,12 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     private ResultBox<string> ResolveProjectorName(IQueryCommon queryCommon)
     {
         var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-        return ResolveProjectorName(projectorTypeResult);
+        return ProjectionHeadStatusUtilities.ResolveProjectorName(projectorTypeResult);
     }
 
     private ResultBox<string> ResolveProjectorName(IListQueryCommon queryCommon)
     {
         var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-        return ResolveProjectorName(projectorTypeResult);
+        return ProjectionHeadStatusUtilities.ResolveProjectorName(projectorTypeResult);
     }
-
-    private static ResultBox<string> ResolveProjectorName(ResultBox<Type> projectorTypeResult)
-    {
-        if (!projectorTypeResult.IsSuccess)
-        {
-            return ResultBox.Error<string>(projectorTypeResult.GetException());
-        }
-
-        var projectorType = projectorTypeResult.GetValue();
-        var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
-        if (projectorNameProperty == null)
-        {
-            return ResultBox.Error<string>(
-                new InvalidOperationException(
-                    $"Projector type {projectorType.Name} does not have MultiProjectorName property"));
-        }
-
-        var projectorName = projectorNameProperty.GetValue(null) as string;
-        if (string.IsNullOrWhiteSpace(projectorName))
-        {
-            return ResultBox.Error<string>(
-                new InvalidOperationException(
-                    $"Projector type {projectorType.Name} has invalid MultiProjectorName"));
-        }
-
-        return ResultBox.FromValue(projectorName);
-    }
-
-    private ResultBox<string> ValidateProjectorVersion(string projectorName, string? expectedProjectorVersion)
-    {
-        if (string.IsNullOrWhiteSpace(projectorName))
-        {
-            return ResultBox.Error<string>(new ArgumentException("Projector name cannot be empty.", nameof(projectorName)));
-        }
-
-        var projectorVersionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
-        if (!projectorVersionResult.IsSuccess)
-        {
-            return ResultBox.Error<string>(projectorVersionResult.GetException());
-        }
-
-        var currentProjectorVersion = projectorVersionResult.GetValue();
-        if (!string.IsNullOrWhiteSpace(expectedProjectorVersion)
-            && !string.Equals(currentProjectorVersion, expectedProjectorVersion, StringComparison.Ordinal))
-        {
-            return ResultBox.Error<string>(
-                new InvalidOperationException(
-                    $"Projector version mismatch for '{projectorName}'. Expected '{expectedProjectorVersion}', but registered version is '{currentProjectorVersion}'."));
-        }
-
-        return ResultBox.FromValue(currentProjectorVersion);
-    }
-
-    private static string? NormalizeSortableUniqueId(string? sortableUniqueId) =>
-        string.IsNullOrWhiteSpace(sortableUniqueId) ? null : sortableUniqueId;
 }

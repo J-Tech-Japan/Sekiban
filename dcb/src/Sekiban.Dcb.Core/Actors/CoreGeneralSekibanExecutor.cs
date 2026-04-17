@@ -756,7 +756,10 @@ public class CoreGeneralSekibanExecutor
     {
         try
         {
-            var projectorVersionResult = ValidateProjectorVersion(projectorName, expectedProjectorVersion);
+            var projectorVersionResult = ProjectionHeadStatusUtilities.ValidateProjectorVersion(
+                _domainTypes,
+                projectorName,
+                expectedProjectorVersion);
             if (!projectorVersionResult.IsSuccess)
             {
                 return ResultBox.Error<ProjectionHeadStatus>(projectorVersionResult.GetException());
@@ -769,32 +772,29 @@ public class CoreGeneralSekibanExecutor
             }
 
             var actor = actorResult.GetValue();
+            var status = await actor.GetProjectionHeadStatusAsync();
 
-            var currentStateResult = await actor.GetStateAsync(canGetUnsafeState: true);
-            if (!currentStateResult.IsSuccess)
+            var projectorNameResult = ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
+                projectorName,
+                status.ProjectorName);
+            if (!projectorNameResult.IsSuccess)
             {
-                return ResultBox.Error<ProjectionHeadStatus>(currentStateResult.GetException());
+                return ResultBox.Error<ProjectionHeadStatus>(projectorNameResult.GetException());
             }
 
-            var consistentStateResult = await actor.GetStateAsync(canGetUnsafeState: false);
-            if (!consistentStateResult.IsSuccess)
-            {
-                return ResultBox.Error<ProjectionHeadStatus>(consistentStateResult.GetException());
-            }
-
-            var currentState = currentStateResult.GetValue();
-            var consistentState = consistentStateResult.GetValue();
-
-            return ResultBox.FromValue(new ProjectionHeadStatus(
-                currentState.ProjectorName,
+            var projectorVersionConsistencyResult = ProjectionHeadStatusUtilities.EnsureProjectorVersionConsistency(
                 projectorVersionResult.GetValue(),
-                ToProjectionPosition(currentState),
-                ToProjectionPosition(consistentState),
-                new ProjectionCatchUpStatus(
-                    IsInProgress: false,
-                    CurrentSortableUniqueId: null,
-                    TargetSortableUniqueId: null,
-                    PendingStreamEventCount: 0)));
+                status.ProjectorVersion);
+            if (!projectorVersionConsistencyResult.IsSuccess)
+            {
+                return ResultBox.Error<ProjectionHeadStatus>(projectorVersionConsistencyResult.GetException());
+            }
+
+            return ResultBox.FromValue(status with
+            {
+                ProjectorName = projectorNameResult.GetValue(),
+                ProjectorVersion = projectorVersionConsistencyResult.GetValue()
+            });
         }
         catch (Exception ex)
         {
@@ -825,7 +825,7 @@ public class CoreGeneralSekibanExecutor
             }
 
             return ResultBox.FromValue(new EventStoreHeadStatus(
-                NormalizeSortableUniqueId(latestSortableUniqueIdResult.GetValue()),
+                ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(latestSortableUniqueIdResult.GetValue()),
                 totalEventCount));
         }
         catch (Exception ex)
@@ -853,36 +853,4 @@ public class CoreGeneralSekibanExecutor
         return innerTag;
     }
 
-    private ResultBox<string> ValidateProjectorVersion(string projectorName, string? expectedProjectorVersion)
-    {
-        if (string.IsNullOrWhiteSpace(projectorName))
-        {
-            return ResultBox.Error<string>(new ArgumentException("Projector name cannot be empty.", nameof(projectorName)));
-        }
-
-        var projectorVersionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
-        if (!projectorVersionResult.IsSuccess)
-        {
-            return ResultBox.Error<string>(projectorVersionResult.GetException());
-        }
-
-        var currentProjectorVersion = projectorVersionResult.GetValue();
-        if (!string.IsNullOrWhiteSpace(expectedProjectorVersion)
-            && !string.Equals(currentProjectorVersion, expectedProjectorVersion, StringComparison.Ordinal))
-        {
-            return ResultBox.Error<string>(
-                new InvalidOperationException(
-                    $"Projector version mismatch for '{projectorName}'. Expected '{expectedProjectorVersion}', but registered version is '{currentProjectorVersion}'."));
-        }
-
-        return ResultBox.FromValue(currentProjectorVersion);
-    }
-
-    private static ProjectionPosition ToProjectionPosition(MultiProjectionState state) =>
-        new(
-            state.Version,
-            NormalizeSortableUniqueId(state.LastSortableUniqueId));
-
-    private static string? NormalizeSortableUniqueId(string? sortableUniqueId) =>
-        string.IsNullOrWhiteSpace(sortableUniqueId) ? null : sortableUniqueId;
 }

@@ -77,6 +77,7 @@ if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmo
 
 var cfgGrainDefault = builder.Configuration["ORLEANS_GRAIN_DEFAULT_TYPE"]?.ToLower() ?? "blob";
 var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>("Database")?.ToLower();
+var coldEventEnabled = ResolveColdEventEnabled(builder.Configuration);
 
 // Configure Orleans
 builder.UseOrleans(config =>
@@ -442,16 +443,12 @@ else
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Postgres.PostgresMultiProjectionStateStore>();
 }
 
-if (builder.Configuration.GetSection("Sekiban:ColdEvent").GetValue<bool>("Enabled"))
+if (coldEventEnabled)
 {
-    var coldConfig = builder.Configuration.GetSection("Sekiban:ColdEvent");
-    var storageOptions = coldConfig.GetSection("Storage").Get<ColdStorageOptions>() ?? new ColdStorageOptions();
-    var storageRoot = ColdObjectStorageFactory.ResolveStorageRoot(storageOptions, Directory.GetCurrentDirectory());
-    builder.Services.AddSingleton(storageOptions);
-    builder.Services.AddSingleton<IColdObjectStorage>(sp =>
-        ColdObjectStorageFactory.Create(storageOptions, storageRoot, sp));
-    builder.Services.AddSingleton<IColdLeaseManager, StorageBackedColdLeaseManager>();
-    builder.Services.AddSekibanDcbColdEvents(options => coldConfig.Bind(options));
+    builder.Services.AddSekibanDcbColdExport(
+        builder.Configuration,
+        builder.Environment.ContentRootPath,
+        addBackgroundService: false);
     builder.Services.AddSekibanDcbColdEventHybridRead();
 }
 
@@ -1484,6 +1481,13 @@ apiRoute
 app.MapDefaultEndpoints();
 
 app.Run();
+
+static bool ResolveColdEventEnabled(IConfiguration configuration)
+{
+    var coldConfig = configuration.GetSection("Sekiban:ColdEvent");
+    var configuredOptions = coldConfig.Get<ColdEventStoreOptions>() ?? new ColdEventStoreOptions();
+    return string.IsNullOrWhiteSpace(coldConfig["Enabled"]) || configuredOptions.Enabled;
+}
 
 static async Task<bool> WaitForMaterializedViewAsync(
     IMaterializedViewGrain grain,
