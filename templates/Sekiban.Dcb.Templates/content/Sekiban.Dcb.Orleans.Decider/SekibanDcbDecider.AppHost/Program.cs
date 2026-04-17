@@ -38,6 +38,10 @@ var postgres = postgresServer.AddDatabase("DcbPostgres");
 // Identity database (separate from Sekiban to avoid EnsureCreated conflicts)
 var identityPostgres = postgresServer.AddDatabase("IdentityPostgres");
 
+// Materialized view database (kept separate from the event store so that the
+// read-side schema can evolve without touching the source-of-truth event log).
+var materializedViewPostgres = postgresServer.AddDatabase("DcbMaterializedViewPostgres");
+
 // Configure Orleans
 var orleans = builder
     .AddOrleans("default")
@@ -53,9 +57,11 @@ var apiService = builder
     .AddProject<SekibanDcbDecider_ApiService>("apiservice")
     .WithReference(postgres)
     .WithReference(identityPostgres)
+    .WithReference(materializedViewPostgres)
     .WithReference(multiProjectionOffload)
     .WaitFor(postgres)
     .WaitFor(identityPostgres)
+    .WaitFor(materializedViewPostgres)
     .WithEndpoint("http", endpoint =>
     {
         endpoint.Port = apiServicePort;
