@@ -22,6 +22,11 @@ builder.Services.AddHttpClient<WeatherApiClient>(client =>
     client.BaseAddress = new Uri("https+http://apiservice");
 });
 
+builder.Services.AddHttpClient<ProjectionStatusApiClient>(client =>
+{
+    client.BaseAddress = new Uri("https+http://apiservice");
+});
+
 // Add StudentApiClient
 builder.Services.AddHttpClient<StudentApiClient>(client =>
 {
