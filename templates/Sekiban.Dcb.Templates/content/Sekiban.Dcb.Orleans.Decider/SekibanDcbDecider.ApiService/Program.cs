@@ -262,7 +262,14 @@ apiRoute.MapApprovalEndpoints();
 apiRoute.MapUserDirectoryEndpoints();
 apiRoute.MapStreamEndpoints();
 apiRoute.MapTestDataEndpoints();
-apiRoute.MapMaterializedViewEndpoints();
+
+// Materialized view endpoints depend on the Orleans MV runtime, which is only registered when a
+// `DcbMaterializedViewPostgres` connection string is provided. When MV is not configured, skip the
+// route registration so requests get a clean 404 instead of a DI resolution failure at request time.
+if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
+{
+    apiRoute.MapMaterializedViewEndpoints();
+}
 
 app.MapDefaultEndpoints();
 

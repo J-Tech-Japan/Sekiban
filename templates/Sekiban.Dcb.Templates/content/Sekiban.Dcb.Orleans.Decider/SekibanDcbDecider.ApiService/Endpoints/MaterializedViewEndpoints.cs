@@ -17,18 +17,20 @@ namespace SekibanDcbDecider.ApiService.Endpoints;
 /// </summary>
 public static class MaterializedViewEndpoints
 {
+    private const string OpenApiTag = "Materialized View";
+
     public static void MapMaterializedViewEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var students = endpoints.MapGroup("/mv/students").WithTags("Materialized View");
+        var students = endpoints.MapGroup("/mv/students").WithTags(OpenApiTag);
         students.MapGet("/", GetStudentListAsync).WithName("GetStudentListMv");
 
-        var classrooms = endpoints.MapGroup("/mv/classrooms").WithTags("Materialized View");
+        var classrooms = endpoints.MapGroup("/mv/classrooms").WithTags(OpenApiTag);
         classrooms.MapGet("/", GetClassRoomListAsync).WithName("GetClassRoomListMv");
 
-        var enrollments = endpoints.MapGroup("/mv/enrollments").WithTags("Materialized View");
+        var enrollments = endpoints.MapGroup("/mv/enrollments").WithTags(OpenApiTag);
         enrollments.MapGet("/", GetEnrollmentListAsync).WithName("GetEnrollmentListMv");
 
-        var status = endpoints.MapGroup("/mv").WithTags("Materialized View");
+        var status = endpoints.MapGroup("/mv").WithTags(OpenApiTag);
         status.MapGet("/status", GetStatusAsync).WithName("GetMaterializedViewStatus");
     }
 

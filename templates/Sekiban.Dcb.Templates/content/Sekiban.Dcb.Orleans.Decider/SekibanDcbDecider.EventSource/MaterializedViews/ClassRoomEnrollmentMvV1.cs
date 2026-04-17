@@ -71,10 +71,34 @@ public sealed class ClassRoomEnrollmentMvV1 : IMaterializedViewProjector
 
         await ctx.ExecuteAsync(
             $"""
-             CREATE INDEX IF NOT EXISTS idx_{Enrollments.PhysicalName}_class_room
+             CREATE INDEX IF NOT EXISTS {BuildIndexName(Enrollments.PhysicalName, "class_room")}
              ON {Enrollments.PhysicalName} (class_room_id);
              """,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    // PostgreSQL identifier length limit is 63 bytes. The materialized view runtime already
+    // truncates physical table names to fit, but a naive `idx_{table}_{col}` template can still
+    // overflow once the prefix and suffix are added. Build a name that fits by shortening the
+    // table portion and appending a short stable hash so it stays unique.
+    private static string BuildIndexName(string physicalTable, string suffix)
+    {
+        const int maxLength = 63;
+        var prefix = "idx_";
+        var tail = "_" + suffix;
+        var available = maxLength - prefix.Length - tail.Length;
+
+        if (physicalTable.Length <= available)
+        {
+            return prefix + physicalTable + tail;
+        }
+
+        // Reserve 9 chars for "_" + 8-char hex hash so the truncated table name still has room.
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(physicalTable))).Substring(0, 8).ToLowerInvariant();
+        var headroom = available - 9;
+        if (headroom < 1) headroom = 1;
+        var head = physicalTable.Substring(0, Math.Min(headroom, physicalTable.Length));
+        return prefix + head + "_" + hash + tail;
     }
 
     public Task<IReadOnlyList<MvSqlStatement>> ApplyToViewAsync(

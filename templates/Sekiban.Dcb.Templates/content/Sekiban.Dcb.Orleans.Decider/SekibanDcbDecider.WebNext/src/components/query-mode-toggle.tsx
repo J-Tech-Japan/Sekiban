@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 export type QueryMode = "memory" | "materialized";
 
 interface QueryModeToggleProps {
-  value: QueryMode;
-  onChange: (mode: QueryMode) => void;
-  className?: string;
+  readonly value: QueryMode;
+  readonly onChange: (mode: QueryMode) => void;
+  readonly className?: string;
 }
 
 /**
@@ -18,7 +18,7 @@ interface QueryModeToggleProps {
  * freshness and query-shape characteristics, so making the selection visible
  * helps when comparing them side by side.
  */
-export function QueryModeToggle({ value, onChange, className }: QueryModeToggleProps) {
+export function QueryModeToggle({ value, onChange, className }: Readonly<QueryModeToggleProps>) {
   return (
     <div className={`inline-flex items-center gap-2 ${className ?? ""}`}>
       <span className="text-sm text-muted-foreground">Query source:</span>
