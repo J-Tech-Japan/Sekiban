@@ -71,6 +71,14 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
     Task<string> ISekibanExecutor.GetLatestSortableUniqueIdAsync() =>
         _inner.GetLatestSortableUniqueIdAsync();
 
+    Task<ProjectionHeadStatus> ISekibanExecutor.GetProjectionHeadStatusAsync(
+        string projectorName,
+        string? expectedProjectorVersion) =>
+        _inner.GetProjectionHeadStatusAsync(projectorName, expectedProjectorVersion);
+
+    Task<EventStoreHeadStatus> ISekibanExecutor.GetEventStoreHeadStatusAsync(bool includeTotalEventCount) =>
+        _inner.GetEventStoreHeadStatusAsync(includeTotalEventCount);
+
     Task<ResultBox<SerializableTagState>> ISerializedSekibanDcbExecutor.GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _inner.GetSerializableTagStateAsync(tagStateId);
 

@@ -117,6 +117,57 @@ public class GeneralMultiProjectionActor
         return GetStateFromSingleAccessorAsync(canGetUnsafeState);
     }
 
+    public async Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync()
+    {
+        InitializeProjectorsIfNeeded();
+
+        var versionResult = _types.GetProjectorVersion(_projectorName);
+        if (!versionResult.IsSuccess)
+        {
+            throw versionResult.GetException();
+        }
+
+        var safeWindowThreshold = GetSafeWindowThreshold();
+
+        if (_singleStateAccessor is IDualStateAccessor dualAccessor)
+        {
+            try
+            {
+                dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain);
+            }
+            catch (Exception)
+            {
+                // Head-status reads are observational; ignore best-effort safe-window promotion failures here.
+            }
+
+            var current = new ProjectionPosition(
+                dualAccessor.UnsafeVersion,
+                ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(dualAccessor.UnsafeLastSortableUniqueId));
+            var consistent = new ProjectionPosition(
+                dualAccessor.SafeVersion,
+                ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(dualAccessor.SafeLastSortableUniqueId));
+
+            return CreateProjectionHeadStatus(versionResult.GetValue(), current, consistent);
+        }
+
+        var currentStateResult = await GetStateAsync(canGetUnsafeState: true);
+        if (!currentStateResult.IsSuccess)
+        {
+            throw currentStateResult.GetException();
+        }
+
+        var consistentStateResult = await GetStateAsync(canGetUnsafeState: false);
+        if (!consistentStateResult.IsSuccess)
+        {
+            throw consistentStateResult.GetException();
+        }
+
+        return CreateProjectionHeadStatus(
+            versionResult.GetValue(),
+            ToProjectionPosition(currentStateResult.GetValue()),
+            ToProjectionPosition(consistentStateResult.GetValue()));
+    }
+
     public Task SetCurrentState(SerializableMultiProjectionState state)
     {
         // Validate projector version before restoring state
@@ -1010,5 +1061,30 @@ public class GeneralMultiProjectionActor
         var factor = Math.Pow(decay, seconds);
         return Math.Max(0, _maxLagMs * factor);
     }
+
+    private ProjectionHeadStatus CreateProjectionHeadStatus(
+        string projectorVersion,
+        ProjectionPosition current,
+        ProjectionPosition consistent)
+    {
+        var pendingUnsafeEventCount = Math.Max(0, current.EventVersion - consistent.EventVersion);
+        var isCatchUpInProgress = !_isCatchedUp;
+
+        return new ProjectionHeadStatus(
+            _projectorName,
+            projectorVersion,
+            current,
+            consistent,
+            new ProjectionCatchUpStatus(
+                isCatchUpInProgress,
+                isCatchUpInProgress ? consistent.LastSortableUniqueId : null,
+                isCatchUpInProgress ? current.LastSortableUniqueId : null,
+                pendingUnsafeEventCount));
+    }
+
+    private static ProjectionPosition ToProjectionPosition(MultiProjectionState state) =>
+        new(
+            state.Version,
+            ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(state.LastSortableUniqueId));
 
 }

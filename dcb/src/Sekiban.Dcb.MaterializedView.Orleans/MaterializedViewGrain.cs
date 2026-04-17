@@ -257,8 +257,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         while (true)
         {
             var orderedBuffered = _pendingStreamEvents
-                .GroupBy(serializableEvent => serializableEvent.Id)
-                .Select(group => group.OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal).Last())
+                .GroupBy(serializableEvent => serializableEvent.SortableUniqueIdValue)
+                .Select(group => group.First())
                 .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
                 .ToList();
             if (orderedBuffered.Count == 0)
@@ -275,10 +275,36 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 return;
             }
 
-            await ApplyStreamEventsAsync(dueEvents, cancellationToken);
+            var appliedSortableUniqueIds = new HashSet<string>(StringComparer.Ordinal);
+            SerializableEvent? firstBlocked = null;
 
-            var dueIds = dueEvents.Select(serializableEvent => serializableEvent.Id).ToHashSet();
-            _pendingStreamEvents.RemoveAll(serializableEvent => dueIds.Contains(serializableEvent.Id));
+            foreach (var dueEvent in dueEvents)
+            {
+                var appliedEvents = await ApplyStreamEventsAsync([dueEvent], cancellationToken);
+                if (appliedEvents > 0)
+                {
+                    appliedSortableUniqueIds.Add(dueEvent.SortableUniqueIdValue);
+                    continue;
+                }
+
+                firstBlocked ??= dueEvent;
+            }
+
+            if (appliedSortableUniqueIds.Count == 0)
+            {
+                var blocked = firstBlocked ?? dueEvents[0];
+                _logger.LogWarning(
+                    "Materialized view grain stream apply made no progress for {ViewName}/{ViewVersion}. Pending={PendingCount}, FirstBlockedSortableUniqueId={SortableUniqueId}, FirstBlockedEventId={EventId}, FirstBlockedEventType={EventType}.",
+                    _viewName,
+                    _viewVersion,
+                    _pendingStreamEvents.Count,
+                    blocked.SortableUniqueIdValue,
+                    blocked.Id,
+                    blocked.EventPayloadName);
+                return;
+            }
+
+            _pendingStreamEvents.RemoveAll(serializableEvent => appliedSortableUniqueIds.Contains(serializableEvent.SortableUniqueIdValue));
         }
     }
 
@@ -309,12 +335,6 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
         foreach (var serializableEvent in batch)
         {
-            if (!string.IsNullOrWhiteSpace(_lastAppliedSortableUniqueId) &&
-                string.Compare(serializableEvent.SortableUniqueIdValue, _lastAppliedSortableUniqueId, StringComparison.Ordinal) <= 0)
-            {
-                continue;
-            }
-
             _pendingStreamEvents.Add(serializableEvent);
         }
 
@@ -326,11 +346,11 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         await DrainPendingStreamEventsAsync(CancellationToken.None);
     }
 
-    private async Task ApplyStreamEventsAsync(IReadOnlyList<SerializableEvent> events, CancellationToken cancellationToken)
+    private async Task<int> ApplyStreamEventsAsync(IReadOnlyList<SerializableEvent> events, CancellationToken cancellationToken)
     {
         if (events.Count == 0)
         {
-            return;
+            return 0;
         }
 
         ResolveProjector();
@@ -340,6 +360,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         {
             await RefreshPositionFromRegistryAsync(cancellationToken);
         }
+
+        return applied;
     }
 
     private async Task RefreshPositionFromRegistryAsync(CancellationToken cancellationToken)

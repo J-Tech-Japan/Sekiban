@@ -58,3 +58,93 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+.monitor-page {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.monitor-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: end;
+    flex-wrap: wrap;
+}
+
+.monitor-section {
+    display: grid;
+    gap: 1rem;
+}
+
+.section-heading p {
+    margin-bottom: 0;
+}
+
+.status-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.status-card {
+    border: 1px solid #d9e2ec;
+    border-radius: 0.75rem;
+    padding: 1rem 1.1rem;
+    background: #fff;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.status-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: start;
+    margin-bottom: 1rem;
+}
+
+.status-card-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.status-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem 1rem;
+    margin: 0;
+}
+
+.status-metrics div {
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.6rem;
+    background: #f8fafc;
+}
+
+.status-metrics dt {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #64748b;
+    margin-bottom: 0.2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.status-metrics dd {
+    margin: 0;
+    color: #0f172a;
+    word-break: break-word;
+}
+
+.status-error {
+    color: #b91c1c;
+}
+
+.entry-section {
+    margin-top: 1.25rem;
+}
+
+.entry-section h4 {
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+}

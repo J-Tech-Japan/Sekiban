@@ -3,6 +3,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Queries;
@@ -79,34 +80,14 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     {
         try
         {
-            // Get the multi-projector type for this query
-            var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-            if (!projectorTypeResult.IsSuccess)
+            var projectorNameResult = ResolveProjectorName(queryCommon);
+            if (!projectorNameResult.IsSuccess)
             {
-                return ResultBox.Error<TResult>(projectorTypeResult.GetException());
-            }
-
-            var projectorType = projectorTypeResult.GetValue();
-
-            // Get the multi-projector name
-            var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
-            if (projectorNameProperty == null)
-            {
-                return ResultBox.Error<TResult>(
-                    new InvalidOperationException(
-                        $"Projector type {projectorType.Name} does not have MultiProjectorName property"));
-            }
-
-            var projectorName = projectorNameProperty.GetValue(null) as string;
-            if (string.IsNullOrEmpty(projectorName))
-            {
-                return ResultBox.Error<TResult>(
-                    new InvalidOperationException(
-                        $"Projector type {projectorType.Name} has invalid MultiProjectorName"));
+                return ResultBox.Error<TResult>(projectorNameResult.GetException());
             }
 
             // Get the multi-projection grain directly
-            var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), projectorName);
+            var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), projectorNameResult.GetValue());
             var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(grainId);
 
             // Wait for sortable unique ID if needed
@@ -134,34 +115,14 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     {
         try
         {
-            // Get the multi-projector type for this query
-            var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
-            if (!projectorTypeResult.IsSuccess)
+            var projectorNameResult = ResolveProjectorName(queryCommon);
+            if (!projectorNameResult.IsSuccess)
             {
-                return ResultBox.Error<ListQueryResult<TResult>>(projectorTypeResult.GetException());
-            }
-
-            var projectorType = projectorTypeResult.GetValue();
-
-            // Get the multi-projector name
-            var projectorNameProperty = projectorType.GetProperty("MultiProjectorName");
-            if (projectorNameProperty == null)
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(
-                    new InvalidOperationException(
-                        $"Projector type {projectorType.Name} does not have MultiProjectorName property"));
-            }
-
-            var projectorName = projectorNameProperty.GetValue(null) as string;
-            if (string.IsNullOrEmpty(projectorName))
-            {
-                return ResultBox.Error<ListQueryResult<TResult>>(
-                    new InvalidOperationException(
-                        $"Projector type {projectorType.Name} has invalid MultiProjectorName"));
+                return ResultBox.Error<ListQueryResult<TResult>>(projectorNameResult.GetException());
             }
 
             // Get the multi-projection grain directly
-            var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), projectorName);
+            var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), projectorNameResult.GetValue());
             var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(grainId);
 
             // Wait for sortable unique ID if needed
@@ -242,6 +203,65 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
         _generalExecutor.GetLatestSortableUniqueIdAsync();
 
+    public async Task<ResultBox<ProjectionHeadStatus>> GetProjectionHeadStatusAsync(
+        string projectorName,
+        string? expectedProjectorVersion = null)
+    {
+        try
+        {
+            var projectorVersionResult = ProjectionHeadStatusUtilities.ValidateProjectorVersion(
+                _domainTypes,
+                projectorName,
+                expectedProjectorVersion);
+            if (!projectorVersionResult.IsSuccess)
+            {
+                return ResultBox.Error<ProjectionHeadStatus>(projectorVersionResult.GetException());
+            }
+
+            var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), projectorName);
+            var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(grainId);
+            var grainStatus = await grain.GetProjectionHeadStatusAsync();
+
+            var projectorNameResult = ProjectionHeadStatusUtilities.EnsureProjectorNameConsistency(
+                projectorName,
+                grainStatus.ProjectorName);
+            if (!projectorNameResult.IsSuccess)
+            {
+                return ResultBox.Error<ProjectionHeadStatus>(projectorNameResult.GetException());
+            }
+
+            var projectorVersionConsistencyResult = ProjectionHeadStatusUtilities.EnsureProjectorVersionConsistency(
+                projectorVersionResult.GetValue(),
+                grainStatus.ProjectorVersion);
+            if (!projectorVersionConsistencyResult.IsSuccess)
+            {
+                return ResultBox.Error<ProjectionHeadStatus>(projectorVersionConsistencyResult.GetException());
+            }
+
+            return ResultBox.FromValue(new ProjectionHeadStatus(
+                projectorNameResult.GetValue(),
+                projectorVersionConsistencyResult.GetValue(),
+                new ProjectionPosition(
+                    grainStatus.CurrentEventVersion,
+                    ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.CurrentLastSortableUniqueId)),
+                new ProjectionPosition(
+                    grainStatus.ConsistentEventVersion,
+                    ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.ConsistentLastSortableUniqueId)),
+                new ProjectionCatchUpStatus(
+                    grainStatus.IsCatchUpInProgress,
+                    ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.CatchUpCurrentSortableUniqueId),
+                    ProjectionHeadStatusUtilities.NormalizeSortableUniqueId(grainStatus.CatchUpTargetSortableUniqueId),
+                    grainStatus.PendingStreamEventCount)));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<ProjectionHeadStatus>(ex);
+        }
+    }
+
+    public Task<ResultBox<EventStoreHeadStatus>> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false) =>
+        _generalExecutor.GetEventStoreHeadStatusAsync(includeTotalEventCount);
+
     public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
         _generalExecutor.GetSerializableTagStateAsync(tagStateId);
 
@@ -249,4 +269,16 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         SerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
         _generalExecutor.CommitSerializableEventsAsync(request, cancellationToken);
+
+    private ResultBox<string> ResolveProjectorName(IQueryCommon queryCommon)
+    {
+        var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
+        return ProjectionHeadStatusUtilities.ResolveProjectorName(projectorTypeResult);
+    }
+
+    private ResultBox<string> ResolveProjectorName(IListQueryCommon queryCommon)
+    {
+        var projectorTypeResult = _domainTypes.QueryTypes.GetMultiProjectorType(queryCommon);
+        return ProjectionHeadStatusUtilities.ResolveProjectorName(projectorTypeResult);
+    }
 }
