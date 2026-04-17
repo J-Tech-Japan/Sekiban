@@ -33,5 +33,5 @@
 - replay API に `ProjectionKey -> tag(s)` と incremental replay 開始点を追加
 - `Simple MV` / `Unsafe MV` の併存ではなく、single public model + internal fast path を推奨と明記
 - v1 でも key ごとに独立 replay できる fan-out projector を許容
-- delete は tombstone row を標準表現とし、`current` / `current_live` の責務を分離
+- delete は `unsafe = 論理削除`, `safe = tombstone 保持` を標準とし、`current` / `current_live` の責務を分離
 - template 依存ではなく、schema validation / fail-fast / DDL 生成案を主軸に整理

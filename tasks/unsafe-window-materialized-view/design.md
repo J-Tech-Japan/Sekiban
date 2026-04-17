@@ -358,7 +358,7 @@ public interface IUnsafeWindowMaterializedViewProjector<TRow>
 
 delete も更新と同じ event として扱い、
 
-- projector は row 消滅を物理 delete ではなく tombstone row (`_is_deleted = true`) で表現する
+- `unsafe` では row 消滅を物理 delete ではなく tombstone row (`_is_deleted = true`) で表現する
 - `null` は「row が存在しない」のではなく「projector がまだ何も構築していない」ケースに寄せる
 
 方が安全である。
@@ -514,8 +514,10 @@ Postgres では `FOR UPDATE SKIP LOCKED` を使う設計が自然。
 delete が最終状態である場合も扱いは同じである。
 
 - replay 結果が delete なら、`safe` に tombstone row を upsert する
-- `safe` の物理 row を消さない
+- v1 では `safe` の物理 row を消さない
 - `unsafe` だけを delete する
+
+`safe` を即物理削除しない理由は、削除済み key の最終 `SortableUniqueId` / `EventVersion` / deleted 状態を保持し、遅延到着イベントの skip 判定と recreate 判定を単純に保つためである。
 
 こうしておくと、遅延到着イベントの比較、再作成、idempotent replay が単純になる。
 
@@ -541,6 +543,7 @@ read 側は merged view だけを見る。
 - internal な `current` view では tombstone row (`_is_deleted = true`) を保持する
 - consumer 向け API は原則 `current_live` 相当を使い、`WHERE NOT _is_deleted` を標準で掛ける
 - delete 後の recreate は、より新しい `Create` / `Upsert` event が tombstone を上書きする通常更新として扱う
+- `unsafe` は論理削除、`safe` は tombstone 保持を標準とする
 - tombstone は replay / idempotency のため `safe` に保持し、物理 purge は別ジョブの将来拡張として扱う
 
 ---
