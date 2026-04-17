@@ -21,9 +21,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { QueryModeToggle, type QueryMode } from "@/components/query-mode-toggle";
 
 export default function EnrollmentsPage() {
   const [lastSortableUniqueId, setLastSortableUniqueId] = useState<string | undefined>();
+  const [queryMode, setQueryMode] = useState<QueryMode>("memory");
 
   // Selection state
   const [selectedStudentId, setSelectedStudentId] = useState("");
@@ -40,16 +42,19 @@ export default function EnrollmentsPage() {
     pageNumber: 1,
     pageSize: 100,
     waitForSortableUniqueId: lastSortableUniqueId,
+    queryMode,
   });
 
   const { data: classrooms, refetch: refetchClassrooms } = trpc.classrooms.list.useQuery({
     pageNumber: 1,
     pageSize: 100,
     waitForSortableUniqueId: lastSortableUniqueId,
+    queryMode,
   });
 
   const { data: enrollments, isLoading, refetch: refetchEnrollments } = trpc.enrollments.list.useQuery({
     waitForSortableUniqueId: lastSortableUniqueId,
+    queryMode,
   });
 
   const enrollMutation = trpc.enrollments.enroll.useMutation({
@@ -117,11 +122,14 @@ export default function EnrollmentsPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Enrollment Management</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage student enrollments in classrooms
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Enrollment Management</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage student enrollments in classrooms
+          </p>
+        </div>
+        <QueryModeToggle value={queryMode} onChange={setQueryMode} />
       </div>
 
       {/* Stats Cards */}

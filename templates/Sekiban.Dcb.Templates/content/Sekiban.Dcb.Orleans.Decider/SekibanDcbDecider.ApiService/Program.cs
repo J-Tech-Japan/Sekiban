@@ -22,13 +22,22 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
 using Sekiban.Dcb.ColdEvents;
+using Sekiban.Dcb.MaterializedView;
+using Sekiban.Dcb.MaterializedView.Orleans;
+using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.ServiceId;
+using Dcb.EventSource.MaterializedViews;
+using Dapper;
 using SekibanDcbDecider.ApiService.Endpoints;
 using SekibanDcbDecider.ApiService.Auth;
 using SekibanDcbDecider.ApiService;
 using SekibanDcbDecider.ApiService.Exceptions;
 using SekibanDcbDecider.ApiService.Health;
 using SekibanDcbDecider.ApiService.Realtime;
+
+// Map snake_case Postgres columns onto PascalCase row properties when Dapper hydrates rows
+// returned from the materialized view tables.
+DefaultTypeMap.MatchNamesWithUnderscores = true;
 
 const string InMemoryStreamsConfigKey = "Orleans:UseInMemoryStreams";
 const string InMemoryGrainStorageConfigKey = "Orleans:UseInMemoryGrainStorage";
@@ -79,15 +88,18 @@ var orleansQueueType = builder.Configuration["ORLEANS_QUEUE_TYPE"]?.ToLower() ??
 var useInMemoryStreams = builder.Configuration.GetValue<bool>(InMemoryStreamsConfigKey);
 var useInMemoryGrainStorage = builder.Configuration.GetValue<bool>(InMemoryGrainStorageConfigKey);
 
-// Add Azure Storage clients for Orleans only when NOT using Cosmos for clustering
-// (Aspire clients add health checks that require connection strings)
-if (!builder.Environment.IsDevelopment() && orleansClusterType != "cosmos")
+// Add Azure Storage clients for Orleans (Aspire's WithReference(orleans).WithClustering(...)
+// injects connection strings and expects a keyed TableServiceClient — even in development —
+// so always register unless we are clustering through Cosmos DB).
+if (orleansClusterType != "cosmos")
 {
     builder.AddKeyedAzureTableServiceClient("DcbOrleansClusteringTable");
 }
 
-// Table client for grain storage (used for checkpointer, PubSub, etc.)
-if (!useInMemoryGrainStorage && orleansGrainType != "cosmos")
+// Table/blob clients for grain storage (used for checkpointer, PubSub, etc.).
+// These keyed clients must be registered whenever the AppHost wires the matching Aspire resources,
+// even when development overrides switch the silo to in-memory storage.
+if (orleansGrainType != "cosmos")
 {
     builder.AddKeyedAzureTableServiceClient("DcbOrleansGrainTable");
     builder.AddKeyedAzureBlobServiceClient("DcbOrleansGrainState");
@@ -96,8 +108,9 @@ if (!useInMemoryGrainStorage && orleansGrainType != "cosmos")
 // Blob storage for projection offload (always needed)
 builder.AddKeyedAzureBlobServiceClient("MultiProjectionOffload");
 
-// Queue client only when using Azure Storage queues
-if (!useInMemoryStreams && orleansQueueType != "eventhub")
+// Queue client only when using Azure Storage queues. Required even with in-memory streams,
+// because Aspire's WithStreaming(queue) still injects the queue connection string.
+if (orleansQueueType != "eventhub")
 {
     builder.AddKeyedAzureQueueServiceClient("DcbOrleansQueue");
 }
@@ -148,6 +161,14 @@ builder.Services.AddSingleton(domainTypes);
 builder.Services.AddSekibanDcbNativeRuntime();
 builder.Services.AddSekibanDcbColdEventDefaults();
 
+// Register materialized view runtime (only effective when Postgres is the storage backend)
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.BatchSize = 100;
+    options.PollInterval = TimeSpan.FromSeconds(1);
+});
+builder.Services.AddMaterializedView<ClassRoomEnrollmentMvV1>();
+
 builder.Services.AddSingleton<SseTopicHub>();
 builder.Services.AddHostedService<OrleansStreamEventRouter>();
 
@@ -168,6 +189,17 @@ else
     builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
     builder.Services.AddSekibanDcbPostgresWithAspire();
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Postgres.PostgresMultiProjectionStateStore>();
+
+    // Wire materialized views to the dedicated Postgres database. This is only attempted when a
+    // connection string named "DcbMaterializedViewPostgres" is provided by the host.
+    if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DcbMaterializedViewPostgres")))
+    {
+        builder.Services.AddSekibanDcbMaterializedViewPostgres(
+            builder.Configuration,
+            connectionStringName: "DcbMaterializedViewPostgres",
+            registerHostedWorker: false);
+        builder.Services.AddSekibanDcbMaterializedViewOrleans();
+    }
 }
 
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
@@ -230,6 +262,7 @@ apiRoute.MapApprovalEndpoints();
 apiRoute.MapUserDirectoryEndpoints();
 apiRoute.MapStreamEndpoints();
 apiRoute.MapTestDataEndpoints();
+apiRoute.MapMaterializedViewEndpoints();
 
 app.MapDefaultEndpoints();
 
