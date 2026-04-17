@@ -387,16 +387,18 @@ else
     builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
     builder.Services.AddSekibanDcbPostgresWithAspire();
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Postgres.PostgresMultiProjectionStateStore>();
+}
 
-    // Wire the materialized view to a dedicated Postgres database when supplied by the host.
-    if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DcbMaterializedViewPostgres")))
-    {
-        builder.Services.AddSekibanDcbMaterializedViewPostgres(
-            builder.Configuration,
-            connectionStringName: "DcbMaterializedViewPostgres",
-            registerHostedWorker: false);
-        builder.Services.AddSekibanDcbMaterializedViewOrleans();
-    }
+// Wire the materialized view to a dedicated Postgres database when the host supplies the
+// connection string. This is independent of the event-store backend — a host that runs the
+// event store on Cosmos or SQLite can still project into a Postgres-backed materialized view.
+if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DcbMaterializedViewPostgres")))
+{
+    builder.Services.AddSekibanDcbMaterializedViewPostgres(
+        builder.Configuration,
+        connectionStringName: "DcbMaterializedViewPostgres",
+        registerHostedWorker: false);
+    builder.Services.AddSekibanDcbMaterializedViewOrleans();
 }
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
