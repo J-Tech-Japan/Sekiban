@@ -89,7 +89,7 @@
                 </div>
 
                 <dl class="status-metrics">
-                    <div><dt>Database</dt><dd>@ValueOrDash(databaseStatus.DatabaseType)</dd></div>
+                    <div><dt>Database</dt><dd>@FormatDatabaseType(databaseStatus.DatabaseType)</dd></div>
                     <div><dt>Table</dt><dd>@ValueOrDash(databaseStatus.Table)</dd></div>
                     <div><dt>Started</dt><dd>@BoolLabel(databaseStatus.Status.Started)</dd></div>
                     <div><dt>Subscription</dt><dd>@BoolLabel(databaseStatus.Status.SubscriptionActive)</dd></div>
@@ -211,6 +211,13 @@
     private static string BoolLabel(bool value) => value ? "Yes" : "No";
 
     private static string ValueOrDash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string FormatDatabaseType(int? value) => value switch
+    {
+        1 => "Postgres",
+        null => "-",
+        _ => value.Value.ToString()
+    };
 
     private static string FormatDateTime(DateTime? value) =>
         value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";

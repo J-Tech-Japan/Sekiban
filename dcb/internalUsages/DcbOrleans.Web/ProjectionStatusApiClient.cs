@@ -33,7 +33,7 @@ public sealed class MultiProjectionStatusDto
 
 public sealed class WeatherForecastDbStatusDto
 {
-    public string? DatabaseType { get; set; }
+    public int? DatabaseType { get; set; }
     public string? Table { get; set; }
     public MaterializedViewStatusDto? Status { get; set; }
     public MvRegistryEntryDto? Entry { get; set; }
