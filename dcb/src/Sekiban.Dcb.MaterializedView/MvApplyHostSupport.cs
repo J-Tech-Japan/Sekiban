@@ -9,6 +9,7 @@ namespace Sekiban.Dcb.MaterializedView;
 public sealed class MvTableBindings : IMvTableBindings
 {
     private readonly Dictionary<string, MvTable> _tables = new(StringComparer.Ordinal);
+    private readonly List<MvTable> _tableList = [];
     private readonly MvOptions _options;
     private readonly string _viewName;
     private readonly int _viewVersion;
@@ -25,7 +26,7 @@ public sealed class MvTableBindings : IMvTableBindings
 
     public string GetPhysicalName(string logicalName) => RegisterTable(logicalName).PhysicalName;
 
-    public IReadOnlyList<MvTable> Tables => _tables.Values.ToList();
+    public IReadOnlyList<MvTable> Tables => _tableList;
 
     public MvTable RegisterTable(string logicalName, string? physicalName = null)
     {
@@ -40,6 +41,7 @@ public sealed class MvTableBindings : IMvTableBindings
             _viewName,
             _viewVersion);
         _tables[logicalName] = table;
+        _tableList.Add(table);
         return table;
     }
 }
@@ -288,6 +290,7 @@ public sealed class NativeMvApplyHost : IMvApplyHost
     private sealed class JsonElementMvRow : IMvRow
     {
         private readonly IReadOnlyDictionary<string, JsonElement> _values;
+        private readonly IReadOnlyList<string> _columnNames;
 
         public JsonElementMvRow(JsonElement row)
         {
@@ -298,10 +301,11 @@ public sealed class NativeMvApplyHost : IMvApplyHost
 
             _values = row.EnumerateObject()
                 .ToDictionary(property => property.Name, property => property.Value, StringComparer.OrdinalIgnoreCase);
+            _columnNames = _values.Keys.ToList();
         }
 
         public int ColumnCount => _values.Count;
-        public IReadOnlyList<string> ColumnNames => _values.Keys.ToList();
+        public IReadOnlyList<string> ColumnNames => _columnNames;
         public bool IsNull(string columnName) => !_values.TryGetValue(columnName, out var value) || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined;
         public Guid GetGuid(string columnName) => GetAs<Guid>(columnName);
         public string GetString(string columnName) => GetAs<string>(columnName);
