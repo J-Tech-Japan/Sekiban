@@ -64,7 +64,7 @@ MultiProjection の `SafeUnsafeProjectionState` は、一定期間を unsafe と
 
 - 現行 `IMaterializedViewProjector` の完全互換 unsafe 化
 - 任意 SQL をストレージ層が自動的に巻き戻して整合させること
-- 初期段階から複数 key / 複数 aggregate / 複数 table をまたぐ複雑 projection を完全サポートすること
+- 初期段階から複数 aggregate / 複数 table をまたぐ複雑 projection を完全サポートすること
 - PostgreSQL の native `MATERIALIZED VIEW` を使うこと
 
 ---
@@ -206,19 +206,51 @@ safe 化の際に、
 
 したがって event store 側にも、少なくとも logical key / aggregate key / projection key ベースの read 経路が必要になる。
 
+Sekiban DCB では event が複数 tag を持ち得るため、unsafe-window MV の contract には
+
+- `projection key -> どの tag 群を読むか`
+
+の対応も必要になる。
+
+少なくとも framework からは次の情報が見える必要がある。
+
+- `IEnumerable<ITag> TagsForProjectionKey(string projectionKey)`
+- `EventStore.ReadEventsForTagsAsync(tags, sinceSortableUniqueId)` 相当の API
+
+また replay は毎回先頭から行うのではなく、
+
+- `safe row` の `_last_sortable_unique_id`
+- `safe row` の `_last_event_version`
+
+を起点に、その続きだけを incremental replay できる必要がある。
+
+つまり `SafeRowRebuildContext` は概念的に、
+
+- `StartingRow`
+- `EventsSince(startingRow.LastSortableUniqueId)`
+
+を持つ形に寄せるのがよい。
+
 ### 6.3 1 key = 1 current row に近いこと
 
 v1 の unsafe-window MV は、次のような projector に向く。
 
 - 1 key -> 1 row
-- 1 aggregate -> 1 row
 - row state が key 単位 replay で閉じる
+- 1 event から複数 key へ fan-out しても、各 key が独立に replay できる
+
+したがって v1 でも、`ClassRoomEnrollmentMvV1` のように
+
+- 1 event が複数 logical key を更新する
+- ただし各 key ごとの current row は独立に再構築できる
+
+モデルまでは射程に入れてよい。
 
 逆に難しいもの:
 
-- 1 イベントで複数 unrelated row を更新する
 - 複数 aggregate を join して 1 row を形成する
 - 1 key に対して複数 table を同時に強整合更新したい
+- 1 event が複数 key に波及するが、各 key ごとの replay 境界が切れない
 
 これらは将来拡張としてはあり得るが、unsafe-window v1 の対象から外した方が良い。
 
@@ -227,6 +259,17 @@ v1 の unsafe-window MV は、次のような projector に向く。
 ## 7. 現行 Materialized View との関係
 
 今回の提案は、現行 `MaterializedView` に「透過的に後付けする」よりも、**別モードとして追加する** 方が適切である。
+
+ただし、分離対象は主に **authoring contract** であり、runtime 全体を完全に分けることまでは意味しない。
+
+共有候補:
+
+- registry
+- grain / actor
+- catch-up / promotion worker 基盤
+- diagnostics / monitoring
+
+つまり「別モード = 別 package / 別 grain / 別 runtime」とは限らず、利用者が実装する projector contract と correctness 制約を分ける、という整理が適切である。
 
 ### 推奨分離
 
@@ -263,6 +306,8 @@ v1 の unsafe-window MV は、次のような projector に向く。
 - `ViewVersion`
 - `SafeWindow`
 - `ProjectionKey` の定義
+- event から 0..n 個の `ProjectionKey` を導出できること
+- `ProjectionKey -> tag(s)` の対応
 - row の primary key
 - replay 可能性 (`CanReplayByKey`)
 
@@ -277,7 +322,9 @@ public interface IUnsafeWindowMaterializedViewProjector<TRow>
 
     Task InitializeAsync(IUnsafeWindowMvInitContext ctx, CancellationToken ct);
 
-    string GetProjectionKey(IEvent ev);
+    IEnumerable<string> GetProjectionKeys(IEvent ev);
+
+    IEnumerable<ITag> TagsForProjectionKey(string projectionKey);
 
     Task<TRow?> BuildUnsafeRowAsync(
         UnsafeRowBuildContext<TRow> ctx,
@@ -299,6 +346,38 @@ public interface IUnsafeWindowMaterializedViewProjector<TRow>
   - correctness path
 
 この 2 経路を明示的に分けると、unsafe 更新と safe promotion の責任分界が明確になる。
+
+一方で、review で指摘された通り `BuildUnsafeRowAsync` と `RebuildSafeRowAsync` にロジック drift が起きやすい懸念もある。
+
+そのため contract の本命候補としては、次のような **単一 Apply primitive** も有力である。
+
+```csharp
+public interface IUnsafeWindowMaterializedViewProjector<TRow>
+{
+    string ViewName { get; }
+    int ViewVersion { get; }
+    TimeSpan SafeWindow { get; }
+
+    IEnumerable<string> GetProjectionKeys(IEvent ev);
+
+    IEnumerable<ITag> TagsForProjectionKey(string projectionKey);
+
+    Task<TRow?> ApplyAsync(
+        TRow? current,
+        IEvent ev,
+        UnsafeWindowApplyContext ctx,
+        CancellationToken ct);
+}
+```
+
+この場合は、
+
+- fast path: `unsafe row` に対して `ApplyAsync` を 1 回適用
+- rebuild path: `safe row` を起点に event 列を fold
+
+となり、MultiProjection の `Project` に近い mental model に揃えられる。
+
+現時点では split / unified の最終判断は open question としつつも、**runtime は unified primitive を内部表現に寄せられるよう設計すべき** である。
 
 ---
 
@@ -326,9 +405,11 @@ unsafe-window MV のテーブルには、最低限次の列を必須にするの
 
 これらがない場合は:
 
-- unsafe-window モードとしては build warning
-- 可能なら runtime startup warning
-- 必須列欠如時は unsafe-window モードを fail-fast にする選択肢もある
+- unsafe-window モードでは startup 時の schema validation を行う
+- 必須列欠如 / 型不整合は fail-fast にする
+- `_projection_key` が null / empty を返す projector は登録拒否にする
+
+warning は補助としては有効だが、correctness は warning ではなく runtime guarantee で守るべきである。
 
 ---
 
@@ -363,9 +444,15 @@ unsafe-window MV のテーブルには、最低限次の列を必須にするの
 
 処理:
 
-- `_needs_rebuild = true`
+- `_needs_rebuild = true` を **必ず** 立てる
 - 可能ならその場で key replay により unsafe row を再構成
 - 少なくとも safe promotion 前には必ず rebuild
+
+重要なのは、`incoming SUID < unsafe SUID` を「古いから無視」で終わらせないことである。
+
+例えば `Update(v=2)` が先に届いて unsafe row を作った後に `Create(v=1)` が遅延到着した場合、古いイベントを skip すると create 時の default 値や existence 条件を失ったまま safe promotion まで進んでしまう。
+
+したがって **古い SUID の到着自体が repair シグナル** であり、即時 rebuild しない実装を選ぶ場合でも `_needs_rebuild` を立てることは規約にする必要がある。
 
 ポイント:
 
@@ -386,12 +473,20 @@ worker は次のように動く。
 
 1. promotion 対象 key を lock 付きで取得
 2. その key の `safe` row を読む
-3. event store から key に関係するイベントを正順で取得
+3. event store から key に関係するイベントを、`safe row._last_sortable_unique_id` 以降だけ正順で取得
 4. `RebuildSafeRowAsync` で正しい row を再構成
 5. `safe` に upsert
 6. 対応する `unsafe` row を delete
 
 Postgres では `FOR UPDATE SKIP LOCKED` を使う設計が自然。
+
+さらに correctness のためには次も必要である。
+
+- `read safe -> read events -> rebuild -> upsert safe -> delete unsafe` を 1 transaction に収める
+- promotion 中状態を検出するための `_in_promotion_at` などを持ち、crashed worker の stale lock を回収できるようにする
+- promotion 完了後に遅延 stream event が到着したときは、`incoming.SUID <= safe._last_sortable_unique_id` なら skip、より新しければ unsafe に再投入する
+
+これにより promotion worker の冪等性と crash 耐性を確保できる。
 
 ---
 
@@ -408,6 +503,12 @@ read 側は merged view だけを見る。
 このため、クライアントや API は safe/unsafe の存在を意識せずに `current` view を読める。
 
 必要なら管理画面・診断 API からだけ safe/unsafe の両方を見られるようにする。
+
+Delete の扱いは v1 で明示しておく必要がある。
+
+- internal な current view では tombstone row (`_is_deleted = true`) を保持する
+- consumer 向け API では `WHERE NOT _is_deleted` を掛けた公開 view を別に持つこともできる
+- delete 後の recreate、tombstone retention は contract と運用ポリシーの両面で決める必要がある
 
 ---
 
@@ -429,6 +530,21 @@ read 側は merged view だけを見る。
 - `unsafe(_projection_key)`
 - `unsafe(_safe_due_at)`
 - 必要に応じて business key index
+
+unsafe 急増時には merged view の plan が崩れ得るため、次の備えも必要である。
+
+- `unsafe_count`
+- `oldest_unsafe_age`
+- `promotion_lag`
+
+を必須メトリクスとして露出する。
+
+加えて将来的には、
+
+- `unsafe_count > threshold` 時に safe only を返す degraded mode
+- `unsafe WHERE _needs_rebuild = false` の partial index
+
+も検討対象になる。
 
 ## 12.2 Write
 
@@ -462,10 +578,11 @@ read 側は merged view だけを見る。
 
 そのため、unsafe-window MV は次の方針が必要。
 
-- テンプレートベースに寄せる
+- key / replay / metadata の contract を framework 側で強制する
+- runtime schema validation を fail-fast で行う
+- テンプレートはサンプルとして提供する
 - 必須メタ列を持たせる
 - key-aware projector contract を明示する
-- 対応できない projector には warning を出す
 
 これは「自由度を少し落とす代わりに correctness を得る」設計であり、妥当な trade-off である。
 
@@ -474,6 +591,8 @@ read 側は merged view だけを見る。
 ## 14. テンプレート戦略
 
 利用者が AI コーディングで実装しやすいよう、unsafe-window MV はテンプレートを標準で持つべきである。
+
+ただしテンプレートは補助であり、correctness の本体は framework 側の生成・検証に置くべきである。
 
 少なくとも次を提供したい。
 
@@ -489,14 +608,21 @@ read 側は merged view だけを見る。
 
 ### 14.2 warning / validation
 
-ビルド時または startup 時に次をチェックする。
+startup 時を主として、次をチェックする。
 
 - 必須列があるか
 - `_projection_key` と PK の対応が取れているか
-- `RebuildSafeRowAsync` が実装されているか
+- `RebuildSafeRowAsync` または unified `ApplyAsync` が実装されているか
 - replay by key が可能と宣言されているか
+- `_projection_key` が null / empty を返さないか
 
-この validation があると、自由 SQL を完全禁止しなくても unsafe-window モードの事故率を下げられる。
+さらに有力案として、
+
+- `[MvColumn]` 付き POCO から `safe table` / `unsafe table` / `current view` を framework が生成する
+
+方式を検討する。
+
+warning は補助だが、必須要件違反は fail-fast にすべきである。
 
 ---
 
@@ -507,6 +633,7 @@ read 側は merged view だけを見る。
 - key-aware projector contract を決める
 - 必須 metadata 列を決める
 - key-based replay の event store API 要件を決める
+- fixed safe window と dynamic extra safe window の役割分担を決める
 
 ### Phase 2: 1 row / 1 key の最小 PoC
 
@@ -523,8 +650,14 @@ read 側は merged view だけを見る。
 - oldest unsafe age
 - promotion lag
 - rebuild count
+- degraded mode 判定材料
 
-### Phase 4: 複数 table / 複数 key の拡張判断
+### Phase 4: 複数 key fan-out の検証
+
+- 1 event -> 複数 projection key の projector を試す
+- key ごとの replay 境界が守れる contract を詰める
+
+### Phase 5: 複数 table / 複数 key の拡張判断
 
 - ここで初めて高度な projector に広げる
 
