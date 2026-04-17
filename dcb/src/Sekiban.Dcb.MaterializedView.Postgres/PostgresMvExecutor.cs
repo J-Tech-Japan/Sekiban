@@ -220,6 +220,7 @@ public sealed class PostgresMvExecutor : IMvExecutor
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         var appliedEvents = 0;
+        var bindings = CreateBindings(host, entries);
 
         foreach (var serializableEvent in orderedEvents)
         {
@@ -227,6 +228,7 @@ public sealed class PostgresMvExecutor : IMvExecutor
                     connection,
                     host,
                     serviceId,
+                    bindings,
                     serializableEvent,
                     currentPosition,
                     source,
@@ -247,6 +249,7 @@ public sealed class PostgresMvExecutor : IMvExecutor
         NpgsqlConnection connection,
         IMvApplyHost host,
         string serviceId,
+        MvTableBindings bindings,
         SerializableEvent serializableEvent,
         string? currentPosition,
         MvApplySource source,
@@ -254,7 +257,6 @@ public sealed class PostgresMvExecutor : IMvExecutor
     {
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var queryPort = new PostgresMvApplyQueryPort(connection, transaction);
-        var bindings = await GetBindingsAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
         var statements = await host.ApplyEventAsync(
             serializableEvent,
             bindings,
@@ -304,11 +306,9 @@ public sealed class PostgresMvExecutor : IMvExecutor
             ? _serviceIdProvider.GetCurrentServiceId()
             : serviceId;
 
-    private async Task<MvTableBindings> GetBindingsAsync(IMvApplyHost host, string serviceId, CancellationToken cancellationToken)
+    private MvTableBindings CreateBindings(IMvApplyHost host, IReadOnlyList<MvRegistryEntry> entries)
     {
         var bindings = new MvTableBindings(host.ViewName, host.ViewVersion, _options);
-        var entries = await _registryStore.GetEntriesAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken)
-            .ConfigureAwait(false);
         foreach (var entry in entries)
         {
             bindings.RegisterTable(entry.LogicalTable, entry.PhysicalTable);
