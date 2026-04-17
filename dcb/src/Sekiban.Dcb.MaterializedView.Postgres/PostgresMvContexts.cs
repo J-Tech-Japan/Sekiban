@@ -115,7 +115,7 @@ internal static class PostgresMvValueAdapter
     }
 }
 
-internal sealed class PostgresMvApplyQueryPort : IMvApplyQueryPort
+internal sealed class PostgresMvApplyQueryPort : IMvApplyDbConnectionPort
 {
     private readonly IDbConnection _connection;
     private readonly IDbTransaction _transaction;
@@ -125,6 +125,9 @@ internal sealed class PostgresMvApplyQueryPort : IMvApplyQueryPort
         _connection = connection;
         _transaction = transaction;
     }
+
+    public IDbConnection Connection => _connection;
+    public IDbTransaction Transaction => _transaction;
 
     public async Task<IReadOnlyList<JsonElement>> QueryRowsAsync(
         string sql,

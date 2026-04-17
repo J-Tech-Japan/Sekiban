@@ -9,6 +9,7 @@ namespace Sekiban.Dcb.MaterializedView;
 public sealed class MvTableBindings : IMvTableBindings
 {
     private readonly Dictionary<string, MvTable> _tables = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _logicalToPhysical = new(StringComparer.Ordinal);
     private readonly List<MvTable> _tableList = [];
     private readonly MvOptions _options;
     private readonly string _viewName;
@@ -21,8 +22,7 @@ public sealed class MvTableBindings : IMvTableBindings
         _options = options;
     }
 
-    public IReadOnlyDictionary<string, string> LogicalToPhysical =>
-        _tables.ToDictionary(pair => pair.Key, pair => pair.Value.PhysicalName, StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, string> LogicalToPhysical => _logicalToPhysical;
 
     public string GetPhysicalName(string logicalName) => RegisterTable(logicalName).PhysicalName;
 
@@ -41,6 +41,7 @@ public sealed class MvTableBindings : IMvTableBindings
             _viewName,
             _viewVersion);
         _tables[logicalName] = table;
+        _logicalToPhysical[logicalName] = table.PhysicalName;
         _tableList.Add(table);
         return table;
     }
@@ -78,7 +79,10 @@ public static class MvParamConverter
     }
 
     public static object? ToClrValue(MvParam param) =>
-        param.Kind switch
+        param.Kind != MvParamKind.Null && param.ValueJson is null
+            ? throw new InvalidOperationException(
+                $"Materialized view parameter '{param.Name}' has kind '{param.Kind}' but no serialized value.")
+            : param.Kind switch
         {
             MvParamKind.Null => DBNull.Value,
             MvParamKind.String => Deserialize<string>(param.ValueJson),
@@ -183,16 +187,11 @@ public sealed class NativeMvApplyHost : IMvApplyHost
 
     public async Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(IMvTableBindings tables, CancellationToken ct)
     {
-        if (tables is not MvTableBindings tableBindings)
-        {
-            throw new InvalidOperationException("Native materialized view apply host requires mutable table bindings.");
-        }
-
-        var recordingContext = new RecordingMvInitContext(tableBindings);
+        var recordingContext = new RecordingMvInitContext(tables);
         await _projector.InitializeAsync(recordingContext, ct).ConfigureAwait(false);
 
         _logicalTables.Clear();
-        _logicalTables.AddRange(tableBindings.Tables.Select(table => table.LogicalName));
+        _logicalTables.AddRange(tables.LogicalToPhysical.Keys.Order(StringComparer.Ordinal));
         return recordingContext.Statements;
     }
 
@@ -219,10 +218,10 @@ public sealed class NativeMvApplyHost : IMvApplyHost
 
     private sealed class RecordingMvInitContext : IMvInitContext
     {
-        private readonly MvTableBindings _bindings;
+        private readonly IMvTableBindings _bindings;
         private readonly List<MvSqlStatementDto> _statements = [];
 
-        public RecordingMvInitContext(MvTableBindings bindings) => _bindings = bindings;
+        public RecordingMvInitContext(IMvTableBindings bindings) => _bindings = bindings;
 
         public IReadOnlyList<MvSqlStatementDto> Statements => _statements;
         public MvDbType DatabaseType => MvDbType.Postgres;
@@ -249,8 +248,14 @@ public sealed class NativeMvApplyHost : IMvApplyHost
         }
 
         public MvDbType DatabaseType => MvDbType.Postgres;
-        public System.Data.IDbConnection Connection => throw new NotSupportedException("Native MV apply host does not expose raw connections.");
-        public System.Data.IDbTransaction Transaction => throw new NotSupportedException("Native MV apply host does not expose raw transactions.");
+        public System.Data.IDbConnection Connection =>
+            _queryPort is IMvApplyDbConnectionPort dbConnectionPort
+                ? dbConnectionPort.Connection
+                : throw new NotSupportedException("Native MV apply host does not expose raw connections.");
+        public System.Data.IDbTransaction Transaction =>
+            _queryPort is IMvApplyDbConnectionPort dbConnectionPort
+                ? dbConnectionPort.Transaction
+                : throw new NotSupportedException("Native MV apply host does not expose raw transactions.");
         public Event CurrentEvent { get; }
         public string CurrentSortableUniqueId { get; }
 

@@ -304,6 +304,34 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         Assert.False(string.IsNullOrWhiteSpace(row.LastSortableUniqueId));
     }
 
+    [Fact]
+    public async Task CatchUp_NativeHost_PreservesConnectionAndTransactionAccess_OnPostgresPath()
+    {
+        if (!fixture.IsAvailable)
+        {
+            fixture.EnsureAvailable();
+            return;
+        }
+
+        await fixture.ResetAsync();
+        var projector = new RawConnectionMvProjector();
+        await fixture.Executor.InitializeAsync(ApplyHost(projector));
+
+        var executor = new GeneralSekibanExecutor(fixture.EventStore, fixture.ActorAccessor, fixture.DomainTypes);
+        var orderId = Guid.CreateVersion7();
+        await executor.ExecuteAsync(new CreateOrder { OrderId = orderId, CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-1) });
+
+        var catchUp = await fixture.Executor.CatchUpOnceAsync(ApplyHost(projector));
+
+        await using var connection = await fixture.OpenConnectionAsync();
+        var insertedId = await connection.ExecuteScalarAsync<Guid?>(
+            $"SELECT id FROM {RawConnectionMvProjector.TableName} WHERE id = @Id;",
+            new { Id = orderId });
+
+        Assert.Equal(1, catchUp.AppliedEvents);
+        Assert.Equal(orderId, insertedId);
+    }
+
     private sealed class OrderQueryRow
     {
         public Guid Id { get; set; }
@@ -381,6 +409,54 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
                     new { Id = created.OrderId, SortableUniqueId = ctx.CurrentSortableUniqueId }),
                 new MvSqlStatement("INSERT INTO definitely_missing_table(id) VALUES (1);")
             ]);
+        }
+    }
+
+    private sealed class RawConnectionMvProjector : IMaterializedViewProjector
+    {
+        public const string TableName = "sekiban_mv_rawconnection_v1_orders";
+
+        public string ViewName => "RawConnection";
+        public int ViewVersion => 1;
+
+        public async Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default)
+        {
+            ctx.RegisterTable("orders");
+            await ctx.ExecuteAsync(
+                $"""
+                 CREATE TABLE IF NOT EXISTS {TableName} (
+                     id UUID PRIMARY KEY,
+                     _last_sortable_unique_id TEXT NOT NULL,
+                     _last_applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                 );
+                 """,
+                cancellationToken: cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<MvSqlStatement>> ApplyToViewAsync(
+            Event ev,
+            IMvApplyContext ctx,
+            CancellationToken cancellationToken = default)
+        {
+            if (ev.Payload is not OrderCreated created)
+            {
+                return [];
+            }
+
+            await ctx.Connection.ExecuteAsync(
+                new CommandDefinition(
+                    $"""
+                     INSERT INTO {TableName} (id, _last_sortable_unique_id, _last_applied_at)
+                     VALUES (@Id, @SortableUniqueId, NOW())
+                     ON CONFLICT (id) DO UPDATE
+                     SET _last_sortable_unique_id = EXCLUDED._last_sortable_unique_id,
+                         _last_applied_at = EXCLUDED._last_applied_at;
+                     """,
+                    new { Id = created.OrderId, SortableUniqueId = ctx.CurrentSortableUniqueId },
+                    ctx.Transaction,
+                    cancellationToken: cancellationToken));
+
+            return [];
         }
     }
 

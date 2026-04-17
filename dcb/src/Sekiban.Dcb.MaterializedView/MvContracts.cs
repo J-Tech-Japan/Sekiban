@@ -44,6 +44,7 @@ public sealed class MvTable
 
 public enum MvParamKind
 {
+    // Wire contract for non-CLR hosts. Values are append-only and must not be reordered.
     Null = 0,
     String = 1,
     Int32 = 2,
@@ -103,6 +104,7 @@ public interface IMvTableBindings
 {
     string GetPhysicalName(string logicalName);
     IReadOnlyDictionary<string, string> LogicalToPhysical { get; }
+    MvTable RegisterTable(string logicalName, string? physicalName = null);
 }
 
 public interface IMvApplyQueryPort
@@ -123,10 +125,19 @@ public interface IMvApplyQueryPort
         CancellationToken ct);
 }
 
+public interface IMvApplyDbConnectionPort : IMvApplyQueryPort
+{
+    IDbConnection Connection { get; }
+    IDbTransaction Transaction { get; }
+}
+
 public interface IMvApplyHost
 {
     string ViewName { get; }
     int ViewVersion { get; }
+    /// <summary>
+    ///     Some hosts only discover logical tables during <see cref="InitializeAsync" /> and may return an empty list before initialization.
+    /// </summary>
     IReadOnlyList<string> LogicalTables { get; }
 
     Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(

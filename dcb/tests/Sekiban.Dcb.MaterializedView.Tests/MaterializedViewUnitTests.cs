@@ -217,6 +217,15 @@ public class MaterializedViewUnitTests
     }
 
     [Fact]
+    public void MvParamConverter_RejectsNullPayloadForNonNullKind()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => MvParamConverter.ToClrValue(new MvParam("Name", MvParamKind.String, null)));
+
+        Assert.Contains("Name", exception.Message);
+    }
+
+    [Fact]
     public void SerializableTagState_ResolvedPayloadName_PrefersActualPayloadName()
     {
         var state = new SerializableTagState(
