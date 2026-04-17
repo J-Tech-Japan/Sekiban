@@ -22,6 +22,7 @@ export const classroomsRouter = router({
         pageNumber: z.number().default(1),
         pageSize: z.number().default(10),
         waitForSortableUniqueId: z.string().optional(),
+        queryMode: z.enum(["memory", "materialized"]).default("memory"),
       })
     )
     .query(async ({ input }) => {
@@ -32,8 +33,9 @@ export const classroomsRouter = router({
         params.set("waitForSortableUniqueId", input.waitForSortableUniqueId);
       }
 
+      const path = input.queryMode === "materialized" ? "/api/mv/classrooms" : "/api/classrooms";
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/classrooms?${params.toString()}`
+        `${process.env.API_BASE_URL}${path}?${params.toString()}`
       );
       if (!res.ok) {
         throw new Error("Failed to fetch classrooms");

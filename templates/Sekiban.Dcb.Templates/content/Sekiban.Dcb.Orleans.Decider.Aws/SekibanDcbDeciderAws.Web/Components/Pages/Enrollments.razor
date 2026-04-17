@@ -14,6 +14,16 @@
 
 <h1>Enrollment Management</h1>
 
+<div class="mb-3">
+    <label class="me-2"><strong>Query source:</strong></label>
+    <div class="btn-group" role="group" aria-label="Query source">
+        <input type="radio" class="btn-check" name="enroll-query-source" id="enroll-qs-mem" autocomplete="off" checked="@(!useMaterializedView)" @onchange="() => OnQueryModeChanged(false)">
+        <label class="btn btn-outline-primary" for="enroll-qs-mem">Memory projection</label>
+        <input type="radio" class="btn-check" name="enroll-query-source" id="enroll-qs-mv" autocomplete="off" checked="@useMaterializedView" @onchange="() => OnQueryModeChanged(true)">
+        <label class="btn btn-outline-primary" for="enroll-qs-mv">Materialized view</label>
+    </div>
+</div>
+
 <div class="row">
     <div class="col-md-6">
         <div class="card">
@@ -162,6 +172,16 @@
     private bool dropError;
 
     private string? lastSortableUniqueId;
+    private bool useMaterializedView;
+
+    private string StudentsBasePath => useMaterializedView ? "api/mv/students" : "api/students";
+    private string ClassroomsBasePath => useMaterializedView ? "api/mv/classrooms" : "api/classrooms";
+
+    private async Task OnQueryModeChanged(bool useMv)
+    {
+        useMaterializedView = useMv;
+        await LoadData(lastSortableUniqueId);
+    }
 
     public class StudentView
     {
@@ -213,8 +233,8 @@
         {
             var httpClient = HttpClientFactory.CreateClient("ApiService");
             var requestUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
-                ? $"api/students?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
-                : "api/students";
+                ? $"{StudentsBasePath}?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : StudentsBasePath;
             var response = await httpClient.GetFromJsonAsync<List<StudentState>>(requestUri);
             if (response != null)
             {
@@ -243,8 +263,8 @@
         {
             var httpClient = HttpClientFactory.CreateClient("ApiService");
             var requestUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
-                ? $"api/classrooms?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
-                : "api/classrooms";
+                ? $"{ClassroomsBasePath}?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : ClassroomsBasePath;
             var response = await httpClient.GetFromJsonAsync<List<ClassRoomItem>>(requestUri);
             if (response != null)
             {
@@ -279,11 +299,11 @@
             
             // Build query string with waitForSortableUniqueId if provided
             var studentsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
-                ? $"api/students?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
-                : "api/students";
+                ? $"{StudentsBasePath}?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : StudentsBasePath;
             var classroomsUri = !string.IsNullOrEmpty(waitForSortableUniqueId)
-                ? $"api/classrooms?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
-                : "api/classrooms";
+                ? $"{ClassroomsBasePath}?waitForSortableUniqueId={Uri.EscapeDataString(waitForSortableUniqueId)}"
+                : ClassroomsBasePath;
             
             // Get all students with their enrolled classrooms, waiting for the sortableUniqueId if provided
             var studentsResponse = await httpClient.GetFromJsonAsync<List<StudentState>>(studentsUri);

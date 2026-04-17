@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using Sekiban.Dcb.MaterializedView.Orleans;
 
-namespace SekibanDcbDecider.ApiService.Endpoints;
+namespace SekibanDcbDeciderAws.ApiService.Endpoints;
 
 /// <summary>
 ///     Read-side endpoints backed by the PostgreSQL materialized view.

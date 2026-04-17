@@ -15,12 +15,16 @@ var queue = storage.AddQueues("DcbOrleansQueue");
 var multiProjectionOffload = storage.AddBlobs("MultiProjectionOffload");
 
 // Add PostgreSQL for event storage (optional - can use in-memory for development)
-var postgres = builder
+var postgresServer = builder
     .AddPostgres("dcbOrleansPostgres")
     .WithPgAdmin()
-    .WithDbGate()
-    // .WithDataVolume()
-    .AddDatabase("DcbPostgres");
+    .WithDbGate();
+// .WithDataVolume()
+var postgres = postgresServer.AddDatabase("DcbPostgres");
+
+// Materialized view database (kept separate from the event store so that the read-side schema can
+// evolve without touching the source-of-truth event log).
+var materializedViewPostgres = postgresServer.AddDatabase("DcbMaterializedViewPostgres");
 
 // Configure Orleans
 var orleans = builder
@@ -36,9 +40,11 @@ var orleans = builder
 var apiService = builder
     .AddProject<SekibanDcbOrleans_ApiService>("apiservice")
     .WithReference(postgres)
+    .WithReference(materializedViewPostgres)
     .WithReference(orleans)
     .WithReference(multiProjectionOffload)
-    .WaitFor(postgres);
+    .WaitFor(postgres)
+    .WaitFor(materializedViewPostgres);
 
 // Add the Web frontend
 builder

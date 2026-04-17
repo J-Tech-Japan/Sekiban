@@ -1,13 +1,13 @@
 using Dapper;
-using Dcb.EventSource.ClassRoom;
-using Dcb.EventSource.MaterializedViews;
-using Dcb.ImmutableModels.States.Student;
+using Dcb.Domain.ClassRoom;
+using Dcb.Domain.MaterializedViews;
+using Dcb.Domain.Student;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using Sekiban.Dcb.MaterializedView.Orleans;
 
-namespace SekibanDcbDecider.ApiService.Endpoints;
+namespace SekibanDcbOrleans.ApiService.Endpoints;
 
 /// <summary>
 ///     Read-side endpoints backed by the PostgreSQL materialized view.

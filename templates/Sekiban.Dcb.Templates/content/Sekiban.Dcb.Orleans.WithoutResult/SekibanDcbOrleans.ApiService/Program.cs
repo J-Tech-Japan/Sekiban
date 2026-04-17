@@ -27,8 +27,14 @@ using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.BlobStorage.AzureStorage;
 using Sekiban.Dcb.ColdEvents;
+using Sekiban.Dcb.MaterializedView;
+using Sekiban.Dcb.MaterializedView.Orleans;
+using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.ServiceId;
+using SekibanDcbOrleans.ApiService.Endpoints;
 using SekibanDcbOrleans.ApiService.Health;
+using Dcb.Domain.WithoutResult.MaterializedViews;
+using Dapper;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -349,6 +355,18 @@ builder.Services.AddSingleton(domainTypes);
 builder.Services.AddSekibanDcbNativeRuntime();
 builder.Services.AddSekibanDcbColdEventDefaults();
 
+// Register the materialized view runtime. The Postgres + Orleans pieces are wired only when a
+// dedicated `DcbMaterializedViewPostgres` connection string is supplied (see below).
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.BatchSize = 100;
+    options.PollInterval = TimeSpan.FromSeconds(1);
+});
+builder.Services.AddMaterializedView<ClassRoomEnrollmentMvV1>();
+
+// Map snake_case Postgres columns onto PascalCase row classes used by the materialized view endpoints.
+DefaultTypeMap.MatchNamesWithUnderscores = true;
+
 // Configure database storage based on configuration
 string? configuredDatabasePath = null;
 if (databaseType == "cosmos")
@@ -369,6 +387,18 @@ else
     builder.Services.AddSingleton<IEventStore, PostgresEventStore>();
     builder.Services.AddSekibanDcbPostgresWithAspire();
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Postgres.PostgresMultiProjectionStateStore>();
+}
+
+// Wire the materialized view to a dedicated Postgres database when the host supplies the
+// connection string. This is independent of the event-store backend — a host that runs the
+// event store on Cosmos or SQLite can still project into a Postgres-backed materialized view.
+if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DcbMaterializedViewPostgres")))
+{
+    builder.Services.AddSekibanDcbMaterializedViewPostgres(
+        builder.Configuration,
+        connectionStringName: "DcbMaterializedViewPostgres",
+        registerHostedWorker: false);
+    builder.Services.AddSekibanDcbMaterializedViewOrleans();
 }
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
@@ -958,6 +988,14 @@ apiRoute
                 });
         })
         .WithName("TestOrleans");
+
+// Materialized view endpoints depend on the Orleans MV runtime, which is registered only when a
+// `DcbMaterializedViewPostgres` connection string is supplied. Skip the route when MV is off so
+// requests get a clean 404 rather than a DI resolution failure.
+if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
+{
+    apiRoute.MapMaterializedViewEndpoints();
+}
 
 app.MapDefaultEndpoints();
 

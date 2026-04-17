@@ -17,12 +17,19 @@ var postgresServer = builder
 
 var identityPostgres = postgresServer.AddDatabase("IdentityPostgres");
 
+// Materialized view database (kept separate from the DynamoDB event store so the read-side schema
+// can evolve independently). Optional — the ApiService only enables the MV runtime when this
+// connection string is wired through.
+var materializedViewPostgres = postgresServer.AddDatabase("DcbMaterializedViewPostgres");
+
 // Add the API Service with DynamoDB configuration
 var apiService = builder
     .AddProject<SekibanDcbDeciderAws_ApiService>("apiservice")
     .WaitFor(localstack)
     .WaitFor(identityPostgres)
+    .WaitFor(materializedViewPostgres)
     .WithReference(identityPostgres)
+    .WithReference(materializedViewPostgres)
     .WithEnvironment("Sekiban__Database", "dynamodb")
     .WithEnvironment("Orleans__UseInMemoryStreams", "true")
     .WithEnvironment("AWS__Region", "us-east-1")

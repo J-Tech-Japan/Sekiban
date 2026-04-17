@@ -18,8 +18,14 @@ using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.ColdEvents;
+using Sekiban.Dcb.MaterializedView;
+using Sekiban.Dcb.MaterializedView.Orleans;
+using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.Tags;
 using DcbOrleans.WithoutResult.ApiService;
+using DcbOrleans.WithoutResult.ApiService.Endpoints;
+using Dcb.Domain.WithoutResult.MaterializedViews;
+using Dapper;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -256,6 +262,28 @@ builder.Services.AddSingleton(domainTypes);
 // Register native runtime abstraction interfaces
 builder.Services.AddSekibanDcbNativeRuntime();
 builder.Services.AddSekibanDcbColdEventDefaults();
+
+// Register the materialized view runtime. The Postgres + Orleans pieces are wired only when a
+// `DcbMaterializedViewPostgres` connection string is supplied — the AWS template runs with
+// DynamoDB by default but can opt into a Postgres-backed read model.
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.BatchSize = 100;
+    options.PollInterval = TimeSpan.FromSeconds(1);
+});
+builder.Services.AddMaterializedView<ClassRoomEnrollmentMvV1>();
+
+if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DcbMaterializedViewPostgres")))
+{
+    builder.Services.AddSekibanDcbMaterializedViewPostgres(
+        builder.Configuration,
+        connectionStringName: "DcbMaterializedViewPostgres",
+        registerHostedWorker: false);
+    builder.Services.AddSekibanDcbMaterializedViewOrleans();
+}
+
+// Map snake_case Postgres columns onto PascalCase row classes used by the materialized view endpoints.
+DefaultTypeMap.MatchNamesWithUnderscores = true;
 
 // Configure database storage based on configuration
 if (databaseType != "dynamodb")
@@ -867,6 +895,14 @@ apiRoute
         })
     .WithOpenApi()
     .WithName("TestOrleans");
+
+// Materialized view endpoints depend on the Orleans MV runtime, which is registered only when a
+// `DcbMaterializedViewPostgres` connection string is supplied. Skip the route when MV is off so
+// requests get a clean 404 rather than a DI resolution failure.
+if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
+{
+    apiRoute.MapMaterializedViewEndpoints();
+}
 
 app.MapDefaultEndpoints();
 
