@@ -478,6 +478,13 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DcbMat
         connectionStringName: "DcbMaterializedViewPostgres",
         registerHostedWorker: false);
     builder.Services.AddSekibanDcbMaterializedViewOrleans();
+
+    // Unsafe Window materialized view (v10.2.0) — safe/unsafe split read model
+    // with automatic safe promotion. Shares the `DcbMaterializedViewPostgres`
+    // database; the runtime owns DDL, catchup and promotion as a hosted service.
+    builder.Services.AddSekibanDcbUnsafeWindowMv<WeatherForecastUnsafeWindowMvV1, WeatherForecastUnsafeRow>(
+        builder.Configuration,
+        connectionStringName: "DcbMaterializedViewPostgres");
 }
 
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
@@ -1161,6 +1168,80 @@ apiRoute
 if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
 {
     apiRoute.MapMaterializedViewEndpoints();
+
+    // Unsafe Window MV sample endpoints — unsafe-first reads via the generated
+    // `current` / `current_live` Postgres views plus a diagnostics counter.
+    // Registered only when the UWMV runtime was wired above.
+    var uwmvResolverKey = Sekiban.Dcb.MaterializedView.Postgres.UnsafeWindowMvRegistration
+        .SchemaResolverKey<WeatherForecastUnsafeWindowMvV1>();
+    var uwmvConnectionKey = Sekiban.Dcb.MaterializedView.Postgres.UnsafeWindowMvRegistration
+        .ConnectionStringKey<WeatherForecastUnsafeWindowMvV1>();
+
+    apiRoute
+        .MapGet(
+            "/weatherforecast-uwmv",
+            async (
+                [FromServices] IServiceProvider sp,
+                [FromQuery] bool? includeDeleted,
+                CancellationToken ct) =>
+            {
+                var resolver = sp.GetRequiredKeyedService<Sekiban.Dcb.MaterializedView.Postgres.UnsafeWindowMvSchemaResolver>(uwmvResolverKey);
+                var connectionString = sp.GetRequiredKeyedService<string>(uwmvConnectionKey);
+
+                await using var connection = new Npgsql.NpgsqlConnection(connectionString);
+                await connection.OpenAsync(ct);
+
+                var view = (includeDeleted ?? false) ? resolver.CurrentView : resolver.CurrentLiveView;
+                var rows = await Dapper.SqlMapper.QueryAsync(
+                    connection,
+                    new Dapper.CommandDefinition(
+                        $"SELECT * FROM {view} ORDER BY forecast_date DESC, forecast_id",
+                        cancellationToken: ct));
+                return Results.Ok(rows);
+            })
+        .WithOpenApi()
+        .WithName("GetWeatherForecastUnsafeWindowMv");
+
+    apiRoute
+        .MapGet(
+            "/weatherforecast-uwmv/diagnostics",
+            async (
+                [FromServices] IServiceProvider sp,
+                CancellationToken ct) =>
+            {
+                var resolver = sp.GetRequiredKeyedService<Sekiban.Dcb.MaterializedView.Postgres.UnsafeWindowMvSchemaResolver>(uwmvResolverKey);
+                var connectionString = sp.GetRequiredKeyedService<string>(uwmvConnectionKey);
+
+                await using var connection = new Npgsql.NpgsqlConnection(connectionString);
+                await connection.OpenAsync(ct);
+
+                var safeCount = await Dapper.SqlMapper.ExecuteScalarAsync<long>(
+                    connection,
+                    new Dapper.CommandDefinition($"SELECT COUNT(*) FROM {resolver.SafeTable}", cancellationToken: ct));
+                var unsafeCount = await Dapper.SqlMapper.ExecuteScalarAsync<long>(
+                    connection,
+                    new Dapper.CommandDefinition($"SELECT COUNT(*) FROM {resolver.UnsafeTable}", cancellationToken: ct));
+                var needsRebuildCount = await Dapper.SqlMapper.ExecuteScalarAsync<long>(
+                    connection,
+                    new Dapper.CommandDefinition($"SELECT COUNT(*) FROM {resolver.UnsafeTable} WHERE _needs_rebuild = TRUE", cancellationToken: ct));
+                var tombstoneCount = await Dapper.SqlMapper.ExecuteScalarAsync<long>(
+                    connection,
+                    new Dapper.CommandDefinition($"SELECT COUNT(*) FROM {resolver.SafeTable} WHERE _is_deleted = TRUE", cancellationToken: ct));
+
+                return Results.Ok(new
+                {
+                    safeTable = resolver.SafeTable,
+                    unsafeTable = resolver.UnsafeTable,
+                    currentView = resolver.CurrentView,
+                    currentLiveView = resolver.CurrentLiveView,
+                    safeCount,
+                    unsafeCount,
+                    needsRebuildCount,
+                    tombstoneCount
+                });
+            })
+        .WithOpenApi()
+        .WithName("GetWeatherForecastUnsafeWindowMvDiagnostics");
 }
 
 app.MapDefaultEndpoints();
