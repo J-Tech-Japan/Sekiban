@@ -142,10 +142,15 @@ public sealed class NativeMvApplyHostFactory : IMvApplyHostFactory
     private readonly IEventTypes _eventTypes;
     private readonly Dictionary<(string ViewName, int ViewVersion), IMaterializedViewProjector> _projectors;
     private readonly IReadOnlyList<MvApplyHostRegistration> _registrations;
+    private readonly IServiceProvider _services;
 
-    public NativeMvApplyHostFactory(IEnumerable<IMaterializedViewProjector> projectors, IEventTypes eventTypes)
+    public NativeMvApplyHostFactory(
+        IEnumerable<IMaterializedViewProjector> projectors,
+        IEventTypes eventTypes,
+        IServiceProvider services)
     {
         _eventTypes = eventTypes;
+        _services = services;
         _projectors = projectors.ToDictionary(
             projector => (projector.ViewName, projector.ViewVersion),
             projector => projector);
@@ -165,20 +170,31 @@ public sealed class NativeMvApplyHostFactory : IMvApplyHostFactory
             throw new InvalidOperationException($"Materialized view apply host '{viewName}/{viewVersion}' is not registered.");
         }
 
-        return new NativeMvApplyHost(projector, _eventTypes);
+        return new NativeMvApplyHost(projector, _eventTypes, ResolveDatabaseType());
     }
+
+    private MvDbType ResolveDatabaseType() =>
+        (_services.GetService(typeof(IMvStorageInfoProvider)) as IMvStorageInfoProvider)
+            ?.GetStorageInfo()
+            .DatabaseType
+        ?? MvDbType.Postgres;
 }
 
 public sealed class NativeMvApplyHost : IMvApplyHost
 {
+    private readonly MvDbType _databaseType;
     private readonly IEventTypes _eventTypes;
     private readonly IMaterializedViewProjector _projector;
     private readonly List<string> _logicalTables = [];
 
-    public NativeMvApplyHost(IMaterializedViewProjector projector, IEventTypes eventTypes)
+    public NativeMvApplyHost(
+        IMaterializedViewProjector projector,
+        IEventTypes eventTypes,
+        MvDbType databaseType = MvDbType.Postgres)
     {
         _projector = projector;
         _eventTypes = eventTypes;
+        _databaseType = databaseType;
     }
 
     public string ViewName => _projector.ViewName;
@@ -187,7 +203,7 @@ public sealed class NativeMvApplyHost : IMvApplyHost
 
     public async Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(IMvTableBindings tables, CancellationToken ct)
     {
-        var recordingContext = new RecordingMvInitContext(tables);
+        var recordingContext = new RecordingMvInitContext(tables, _databaseType);
         await _projector.InitializeAsync(recordingContext, ct).ConfigureAwait(false);
 
         _logicalTables.Clear();
@@ -211,20 +227,26 @@ public sealed class NativeMvApplyHost : IMvApplyHost
         var applyContext = new NativeMvApplyContextAdapter(
             eventResult.GetValue(),
             sortableUniqueId,
-            queryPort);
+            queryPort,
+            _databaseType);
         var statements = await _projector.ApplyToViewAsync(eventResult.GetValue(), applyContext, ct).ConfigureAwait(false);
         return statements.Select(statement => new MvSqlStatementDto(statement.Sql, MvParamConverter.FromObject(statement.Parameters))).ToList();
     }
 
     private sealed class RecordingMvInitContext : IMvInitContext
     {
+        private readonly MvDbType _databaseType;
         private readonly IMvTableBindings _bindings;
         private readonly List<MvSqlStatementDto> _statements = [];
 
-        public RecordingMvInitContext(IMvTableBindings bindings) => _bindings = bindings;
+        public RecordingMvInitContext(IMvTableBindings bindings, MvDbType databaseType)
+        {
+            _bindings = bindings;
+            _databaseType = databaseType;
+        }
 
         public IReadOnlyList<MvSqlStatementDto> Statements => _statements;
-        public MvDbType DatabaseType => MvDbType.Postgres;
+        public MvDbType DatabaseType => _databaseType;
         public System.Data.IDbConnection Connection => throw new NotSupportedException("Native MV init host does not expose raw connections.");
 
         public MvTable RegisterTable(string logicalName) => _bindings.RegisterTable(logicalName);
@@ -238,16 +260,22 @@ public sealed class NativeMvApplyHost : IMvApplyHost
 
     private sealed class NativeMvApplyContextAdapter : IMvApplyContext
     {
+        private readonly MvDbType _databaseType;
         private readonly IMvApplyQueryPort _queryPort;
 
-        public NativeMvApplyContextAdapter(Event currentEvent, string sortableUniqueId, IMvApplyQueryPort queryPort)
+        public NativeMvApplyContextAdapter(
+            Event currentEvent,
+            string sortableUniqueId,
+            IMvApplyQueryPort queryPort,
+            MvDbType databaseType)
         {
             CurrentEvent = currentEvent;
             CurrentSortableUniqueId = sortableUniqueId;
             _queryPort = queryPort;
+            _databaseType = databaseType;
         }
 
-        public MvDbType DatabaseType => MvDbType.Postgres;
+        public MvDbType DatabaseType => _databaseType;
         public System.Data.IDbConnection Connection =>
             _queryPort is IMvApplyDbConnectionPort dbConnectionPort
                 ? dbConnectionPort.Connection

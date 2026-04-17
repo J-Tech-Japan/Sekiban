@@ -67,8 +67,9 @@ Dynamic Consistency Boundary (DCB) は Sekiban が採用する次世代のイベ
   - Cosmos DB: `src/Sekiban.Dcb.CosmosDb/CosmosDbEventStore.cs`
   - DynamoDB: `src/Sekiban.Dcb.DynamoDB/DynamoDbEventStore.cs`
 - **マテリアライズドビュー runtime**: 順序付きイベントを SQL テーブルへ反映する DB リードモデル基盤です。
-  共通契約は `src/Sekiban.Dcb.MaterializedView`、Postgres 実装は
-  `src/Sekiban.Dcb.MaterializedView.Postgres`、Orleans 側の制御は
+  共通契約は `src/Sekiban.Dcb.MaterializedView`、classic provider 実装は
+  `src/Sekiban.Dcb.MaterializedView.Postgres`、`src/Sekiban.Dcb.MaterializedView.SqlServer`、
+  `src/Sekiban.Dcb.MaterializedView.MySql`、`src/Sekiban.Dcb.MaterializedView.Sqlite`、Orleans 側の制御は
   `src/Sekiban.Dcb.MaterializedView.Orleans` にあります。
 
 ## メリット

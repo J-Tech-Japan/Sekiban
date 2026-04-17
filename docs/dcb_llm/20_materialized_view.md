@@ -38,13 +38,19 @@ database.
 
 ## Runtime Shape
 
-The current runtime is split into three packages:
+The current runtime is split into provider-neutral core plus provider packages:
 
 - `Sekiban.Dcb.MaterializedView`
   Core contracts such as `IMaterializedViewProjector`, `IMvInitContext`, `IMvApplyContext`, `MvRegistryEntry`, and the
   catch-up worker.
 - `Sekiban.Dcb.MaterializedView.Postgres`
   PostgreSQL implementation for table registration, row access, registry persistence, and event application.
+- `Sekiban.Dcb.MaterializedView.SqlServer`
+  SQL Server implementation for registry persistence and ordered event application.
+- `Sekiban.Dcb.MaterializedView.MySql`
+  MySQL implementation for registry persistence and ordered event application.
+- `Sekiban.Dcb.MaterializedView.Sqlite`
+  SQLite implementation for registry persistence and ordered event application.
 - `Sekiban.Dcb.MaterializedView.Orleans`
   Orleans grain orchestration, startup activation, and `IMvOrleansQueryAccessor`.
 
@@ -89,7 +95,20 @@ Notes:
 - `AddSekibanDcbMaterializedView` registers shared options.
 - `AddMaterializedView<TView>` registers one projector.
 - `AddSekibanDcbMaterializedViewPostgres` wires the registry and executor.
+- `AddSekibanDcbMaterializedViewSqlServer`, `AddSekibanDcbMaterializedViewMySql`, and `AddSekibanDcbMaterializedViewSqlite`
+  provide the same classic MV runtime for their respective databases.
 - `AddSekibanDcbMaterializedViewOrleans` adds Orleans-side activation and query access.
+
+Provider-specific registration examples:
+
+```csharp
+builder.Services.AddSekibanDcbMaterializedViewSqlServer(configuration, "DcbMaterializedViewSqlServer");
+builder.Services.AddSekibanDcbMaterializedViewMySql(configuration, "DcbMaterializedViewMySql");
+builder.Services.AddSekibanDcbMaterializedViewSqlite(configuration, "DcbMaterializedViewSqlite");
+```
+
+Projectors still emit SQL directly. For portable projectors, branch on `ctx.DatabaseType` and emit the SQL dialect that
+matches the selected provider. Unsafe Window MV remains PostgreSQL-only in v1.
 
 ## Writing a Projector
 
