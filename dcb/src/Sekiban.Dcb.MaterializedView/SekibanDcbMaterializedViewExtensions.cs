@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sekiban.Dcb.Domains;
 namespace Sekiban.Dcb.MaterializedView;
 
 public static class SekibanDcbMaterializedViewExtensions
@@ -9,6 +10,8 @@ public static class SekibanDcbMaterializedViewExtensions
         Action<MvOptions>? configure = null)
     {
         services.AddOptions<MvOptions>();
+        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+        services.TryAddSingleton<IMvApplyHostFactory, NativeMvApplyHostFactory>();
         if (configure is not null)
         {
             services.Configure(configure);

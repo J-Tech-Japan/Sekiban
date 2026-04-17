@@ -94,7 +94,7 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
                 return true;
             }
 
-            if (_cachedState.TagPayloadName == nameof(EmptyTagStatePayload))
+            if (_cachedState.ResolvedPayloadName == nameof(EmptyTagStatePayload))
             {
                 _currentPayload = new EmptyTagStatePayload();
                 _version = _cachedState.Version;
@@ -102,7 +102,7 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
                 return true;
             }
 
-            var deserializeResult = _tagStatePayloadTypes.DeserializePayload(_cachedState.TagPayloadName, _cachedState.Payload);
+            var deserializeResult = _tagStatePayloadTypes.DeserializePayload(_cachedState.ResolvedPayloadName, _cachedState.Payload);
             if (!deserializeResult.IsSuccess)
             {
                 return false;
@@ -185,7 +185,8 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
                 _tagContent,
                 _tagProjector,
                 serializationResult.GetValue().PayloadName,
-                _projectorVersion);
+                _projectorVersion,
+                serializationResult.GetValue().PayloadName);
         }
 
         public void Dispose()
@@ -218,5 +219,6 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
             tagStateId.TagContent,
             tagStateId.TagProjectorName,
             nameof(EmptyTagStatePayload),
-            projectorVersion);
+            projectorVersion,
+            nameof(EmptyTagStatePayload));
 }

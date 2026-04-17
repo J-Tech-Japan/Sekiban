@@ -26,7 +26,7 @@ public class OrleansTagStatePersistent : ITagStatePersistent, ISerializableTagSt
         {
             // Deserialize payload from SerializableTagState
             var deserializeResult = _tagStatePayloadTypes.DeserializePayload(
-                serializable.TagPayloadName,
+                serializable.ResolvedPayloadName,
                 serializable.Payload);
 
             if (!deserializeResult.IsSuccess)
@@ -67,7 +67,8 @@ public class OrleansTagStatePersistent : ITagStatePersistent, ISerializableTagSt
             state.TagContent,
             state.TagProjector,
             state.Payload.GetType().Name,
-            state.ProjectorVersion);
+            state.ProjectorVersion,
+            state.Payload.GetType().Name);
 
         _cache.State = new TagStateCacheState { CachedState = serializable };
         await _cache.WriteStateAsync();

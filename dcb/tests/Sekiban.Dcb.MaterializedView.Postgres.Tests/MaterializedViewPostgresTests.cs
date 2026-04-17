@@ -27,7 +27,7 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         }
         await fixture.ResetAsync();
 
-        await fixture.Executor.InitializeAsync(fixture.Projector);
+        await fixture.Executor.InitializeAsync(ApplyHost(fixture.Projector));
 
         await using var connection = await fixture.OpenConnectionAsync();
         var registryCount = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM sekiban_mv_registry;");
@@ -52,7 +52,7 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
             return;
         }
         await fixture.ResetAsync();
-        await fixture.Executor.InitializeAsync(fixture.Projector);
+        await fixture.Executor.InitializeAsync(ApplyHost(fixture.Projector));
 
         var executor = new GeneralSekibanExecutor(fixture.EventStore, fixture.ActorAccessor, fixture.DomainTypes);
         var orderId = Guid.CreateVersion7();
@@ -70,8 +70,8 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         });
         await executor.ExecuteAsync(new CancelOrder { OrderId = orderId, CancelledAt = DateTimeOffset.UtcNow.AddSeconds(-10) });
 
-        var firstCatchUp = await fixture.Executor.CatchUpOnceAsync(fixture.Projector);
-        var secondCatchUp = await fixture.Executor.CatchUpOnceAsync(fixture.Projector);
+        var firstCatchUp = await fixture.Executor.CatchUpOnceAsync(ApplyHost(fixture.Projector));
+        var secondCatchUp = await fixture.Executor.CatchUpOnceAsync(ApplyHost(fixture.Projector));
 
         await using var connection = await fixture.OpenConnectionAsync();
         var orderRow = await connection.QuerySingleAsync<OrderQueryRow>(
@@ -151,7 +151,7 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
             return;
         }
         await fixture.ResetAsync();
-        await fixture.Executor.InitializeAsync(fixture.Projector);
+        await fixture.Executor.InitializeAsync(ApplyHost(fixture.Projector));
 
         var executor = new GeneralSekibanExecutor(fixture.EventStore, fixture.ActorAccessor, fixture.DomainTypes);
         var orderId = Guid.CreateVersion7();
@@ -169,7 +169,7 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         });
         await executor.ExecuteAsync(new CancelOrder { OrderId = orderId, CancelledAt = DateTimeOffset.UtcNow.AddSeconds(-10) });
 
-        await fixture.Executor.CatchUpOnceAsync(fixture.Projector);
+        await fixture.Executor.CatchUpOnceAsync(ApplyHost(fixture.Projector));
 
         await using (var rewindConnection = await fixture.OpenConnectionAsync())
         {
@@ -182,7 +182,7 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
                 """);
         }
 
-        var replayCatchUp = await fixture.Executor.CatchUpOnceAsync(fixture.Projector);
+        var replayCatchUp = await fixture.Executor.CatchUpOnceAsync(ApplyHost(fixture.Projector));
 
         await using var connection = await fixture.OpenConnectionAsync();
         var orderRow = await connection.QuerySingleAsync<OrderQueryRow>(
@@ -217,13 +217,13 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         }
         await fixture.ResetAsync();
         var failingProjector = new FailingMvProjector();
-        await fixture.Executor.InitializeAsync(failingProjector);
+        await fixture.Executor.InitializeAsync(ApplyHost(failingProjector));
 
         var executor = new GeneralSekibanExecutor(fixture.EventStore, fixture.ActorAccessor, fixture.DomainTypes);
         var orderId = Guid.CreateVersion7();
         await executor.ExecuteAsync(new CreateOrder { OrderId = orderId, CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-1) });
 
-        await Assert.ThrowsAnyAsync<PostgresException>(() => fixture.Executor.CatchUpOnceAsync(failingProjector));
+        await Assert.ThrowsAnyAsync<PostgresException>(() => fixture.Executor.CatchUpOnceAsync(ApplyHost(failingProjector)));
 
         await using var connection = await fixture.OpenConnectionAsync();
         var rowCount = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM sekiban_mv_failure_v1_orders;");
@@ -249,7 +249,7 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
 
         await fixture.ResetAsync();
         var projector = new WeatherForecastMvV1();
-        await fixture.Executor.InitializeAsync(projector);
+        await fixture.Executor.InitializeAsync(ApplyHost(projector));
 
         var executor = new GeneralSekibanExecutor(fixture.EventStore, fixture.ActorAccessor, fixture.DomainTypes);
         var forecastId = Guid.CreateVersion7();
@@ -277,7 +277,7 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
             Summary = "Cloudy"
         });
 
-        var catchUp = await fixture.Executor.CatchUpOnceAsync(projector);
+        var catchUp = await fixture.Executor.CatchUpOnceAsync(ApplyHost(projector));
 
         await using var connection = await fixture.OpenConnectionAsync();
         var row = await connection.QuerySingleAsync<WeatherForecastQueryRow>(
@@ -383,4 +383,7 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
             ]);
         }
     }
+
+    private NativeMvApplyHost ApplyHost(IMaterializedViewProjector projector) =>
+        new(projector, fixture.DomainTypes.EventTypes);
 }

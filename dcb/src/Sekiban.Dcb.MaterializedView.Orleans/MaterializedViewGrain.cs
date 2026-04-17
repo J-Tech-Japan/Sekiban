@@ -11,9 +11,9 @@ namespace Sekiban.Dcb.MaterializedView.Orleans;
 public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 {
     private readonly IMvExecutor _executor;
+    private readonly IMvApplyHostFactory _hostFactory;
     private readonly ILogger<MaterializedViewGrain> _logger;
     private readonly MvOptions _options;
-    private readonly IReadOnlyList<IMaterializedViewProjector> _projectors;
     private readonly IMvRegistryStore _registryStore;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
 
@@ -27,7 +27,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private string? _serviceId;
     private string? _viewName;
     private int _viewVersion;
-    private IMaterializedViewProjector? _projector;
+    private IMvApplyHost? _host;
     private string? _lastAppliedSortableUniqueId;
     private string? _lastReceivedSortableUniqueId;
     private string? _lastError;
@@ -36,19 +36,19 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private bool _started;
 
     public MaterializedViewGrain(
-        IEnumerable<IMaterializedViewProjector> projectors,
+        IMvApplyHostFactory hostFactory,
         IMvExecutor executor,
         IMvRegistryStore registryStore,
         IEventSubscriptionResolver subscriptionResolver,
         IOptions<MvOptions> options,
         ILogger<MaterializedViewGrain> logger)
     {
+        _hostFactory = hostFactory;
         _executor = executor;
         _registryStore = registryStore;
         _subscriptionResolver = subscriptionResolver;
         _logger = logger;
         _options = options.Value;
-        _projectors = projectors.ToList();
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -77,8 +77,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             return;
         }
 
-        ResolveProjector();
-        await _executor.InitializeAsync(_projector!, _serviceId, CancellationToken.None);
+        ResolveHost();
+        await _executor.InitializeAsync(_host!, _serviceId, CancellationToken.None);
         await RefreshPositionFromRegistryAsync(CancellationToken.None);
         await StartSubscriptionAsync();
         await CatchUpAndDrainAsync(CancellationToken.None);
@@ -196,7 +196,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             return;
         }
 
-        ResolveProjector();
+        ResolveHost();
         _catchUpInProgress = true;
         _lastCatchUpStartedAt = DateTimeOffset.UtcNow;
         _lastError = null;
@@ -205,15 +205,15 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         {
             await _registryStore.UpdateStatusAsync(
                     _serviceId!,
-                    _projector!.ViewName,
-                    _projector.ViewVersion,
+                    _host!.ViewName,
+                    _host.ViewVersion,
                     MvStatus.CatchingUp,
                     cancellationToken: cancellationToken)
                 ;
 
             while (true)
             {
-                var result = await _executor.CatchUpOnceAsync(_projector, _serviceId, cancellationToken);
+                var result = await _executor.CatchUpOnceAsync(_host, _serviceId, cancellationToken);
                 if (!string.IsNullOrWhiteSpace(result.LastAppliedSortableUniqueId))
                 {
                     _lastAppliedSortableUniqueId = result.LastAppliedSortableUniqueId;
@@ -229,8 +229,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             await RefreshPositionFromRegistryAsync(cancellationToken);
             await _registryStore.UpdateStatusAsync(
                     _serviceId!,
-                    _projector.ViewName,
-                    _projector.ViewVersion,
+                    _host.ViewName,
+                    _host.ViewVersion,
                     MvStatus.Ready,
                     cancellationToken: cancellationToken)
                 ;
@@ -353,8 +353,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             return 0;
         }
 
-        ResolveProjector();
-        var applied = await _executor.ApplySerializableEventsAsync(_projector!, events, _serviceId, cancellationToken)
+        ResolveHost();
+        var applied = await _executor.ApplySerializableEventsAsync(_host!, events, _serviceId, cancellationToken)
             ;
         if (applied > 0)
         {
@@ -366,8 +366,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
     private async Task RefreshPositionFromRegistryAsync(CancellationToken cancellationToken)
     {
-        ResolveProjector();
-        var entries = await _registryStore.GetEntriesAsync(_serviceId!, _projector!.ViewName, _projector.ViewVersion, cancellationToken)
+        ResolveHost();
+        var entries = await _registryStore.GetEntriesAsync(_serviceId!, _host!.ViewName, _host.ViewVersion, cancellationToken)
             ;
         var currentPosition = entries
             .Select(entry => entry.CurrentPosition)
@@ -427,22 +427,15 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _viewVersion = viewVersion;
     }
 
-    private void ResolveProjector()
+    private void ResolveHost()
     {
         ResolveIdentity();
-        if (_projector is not null)
+        if (_host is not null)
         {
             return;
         }
 
-        _projector = _projectors.SingleOrDefault(candidate =>
-            string.Equals(candidate.ViewName, _viewName, StringComparison.Ordinal) &&
-            candidate.ViewVersion == _viewVersion);
-        if (_projector is null)
-        {
-            throw new InvalidOperationException(
-                $"Materialized view projector '{_viewName}/{_viewVersion}' is not registered.");
-        }
+        _host = _hostFactory.Create(_viewName!, _viewVersion);
     }
 
     private sealed class StreamBatchObserver : IAsyncBatchObserver<SerializableEvent>

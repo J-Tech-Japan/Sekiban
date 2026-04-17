@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Sekiban.Dcb.Common;
-using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
@@ -14,7 +13,6 @@ namespace Sekiban.Dcb.MaterializedView.Postgres;
 public sealed class PostgresMvExecutor : IMvExecutor
 {
     private readonly IEventStore _eventStore;
-    private readonly IEventTypes _eventTypes;
     private readonly ILogger<PostgresMvExecutor> _logger;
     private readonly MvOptions _options;
     private readonly IMvRegistryStore _registryStore;
@@ -23,7 +21,6 @@ public sealed class PostgresMvExecutor : IMvExecutor
 
     public PostgresMvExecutor(
         IEventStore eventStore,
-        IEventTypes eventTypes,
         IServiceIdProvider serviceIdProvider,
         IMvRegistryStore registryStore,
         IOptions<MvOptions> options,
@@ -31,7 +28,6 @@ public sealed class PostgresMvExecutor : IMvExecutor
         string connectionString)
     {
         _eventStore = eventStore;
-        _eventTypes = eventTypes;
         _serviceIdProvider = serviceIdProvider;
         _registryStore = registryStore;
         _logger = logger;
@@ -40,7 +36,7 @@ public sealed class PostgresMvExecutor : IMvExecutor
     }
 
     public async Task InitializeAsync(
-        IMaterializedViewProjector projector,
+        IMvApplyHost host,
         string? serviceId = null,
         CancellationToken cancellationToken = default)
     {
@@ -51,17 +47,26 @@ public sealed class PostgresMvExecutor : IMvExecutor
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-        var initContext = new PostgresMvInitContext(connection, transaction, projector.ViewName, projector.ViewVersion, _options);
-        await projector.InitializeAsync(initContext, cancellationToken).ConfigureAwait(false);
+        var bindings = new MvTableBindings(host.ViewName, host.ViewVersion, _options);
+        var statements = await host.InitializeAsync(bindings, cancellationToken).ConfigureAwait(false);
+        foreach (var statement in statements)
+        {
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    statement.Sql,
+                    ToDynamicParameters(statement.Parameters),
+                    transaction,
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
 
-        foreach (var table in initContext.RegisteredTables)
+        foreach (var table in bindings.Tables)
         {
             await _registryStore.RegisterAsync(
                 new MvRegistryEntry
                 {
                     ServiceId = serviceId,
-                    ViewName = projector.ViewName,
-                    ViewVersion = projector.ViewVersion,
+                    ViewName = host.ViewName,
+                    ViewVersion = host.ViewVersion,
                     LogicalTable = table.LogicalName,
                     PhysicalTable = table.PhysicalName,
                     Status = MvStatus.CatchingUp,
@@ -72,10 +77,10 @@ public sealed class PostgresMvExecutor : IMvExecutor
                 cancellationToken).ConfigureAwait(false);
         }
 
-        var active = await _registryStore.GetActiveAsync(serviceId, projector.ViewName, cancellationToken).ConfigureAwait(false);
+        var active = await _registryStore.GetActiveAsync(serviceId, host.ViewName, cancellationToken).ConfigureAwait(false);
         if (active is null)
         {
-            await _registryStore.SetActiveAsync(serviceId, projector.ViewName, projector.ViewVersion, transaction, cancellationToken)
+            await _registryStore.SetActiveAsync(serviceId, host.ViewName, host.ViewVersion, transaction, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -83,17 +88,17 @@ public sealed class PostgresMvExecutor : IMvExecutor
     }
 
     public async Task<MvCatchUpResult> CatchUpOnceAsync(
-        IMaterializedViewProjector projector,
+        IMvApplyHost host,
         string? serviceId = null,
         CancellationToken cancellationToken = default)
     {
         serviceId = ResolveServiceId(serviceId);
-        var entries = await _registryStore.GetEntriesAsync(serviceId, projector.ViewName, projector.ViewVersion, cancellationToken)
+        var entries = await _registryStore.GetEntriesAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken)
             .ConfigureAwait(false);
         if (entries.Count == 0)
         {
-            await InitializeAsync(projector, serviceId, cancellationToken).ConfigureAwait(false);
-            entries = await _registryStore.GetEntriesAsync(serviceId, projector.ViewName, projector.ViewVersion, cancellationToken)
+            await InitializeAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+            entries = await _registryStore.GetEntriesAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -115,8 +120,8 @@ public sealed class PostgresMvExecutor : IMvExecutor
             _logger.LogWarning(
                 exception,
                 "Failed to read events for materialized view {ViewName}/{ViewVersion}.",
-                projector.ViewName,
-                projector.ViewVersion);
+                host.ViewName,
+                host.ViewVersion);
             return new MvCatchUpResult(0, false);
         }
 
@@ -147,7 +152,7 @@ public sealed class PostgresMvExecutor : IMvExecutor
         }
 
         var appliedEvents = await ApplySerializableEventsCoreAsync(
-                projector,
+                host,
                 safeBatch,
                 serviceId,
                 MvApplySource.CatchUp,
@@ -164,7 +169,7 @@ public sealed class PostgresMvExecutor : IMvExecutor
     }
 
     public async Task<int> ApplySerializableEventsAsync(
-        IMaterializedViewProjector projector,
+        IMvApplyHost host,
         IReadOnlyList<SerializableEvent> events,
         string? serviceId = null,
         CancellationToken cancellationToken = default)
@@ -175,22 +180,22 @@ public sealed class PostgresMvExecutor : IMvExecutor
         }
 
         serviceId = ResolveServiceId(serviceId);
-        return await ApplySerializableEventsCoreAsync(projector, events, serviceId, MvApplySource.Stream, cancellationToken).ConfigureAwait(false);
+        return await ApplySerializableEventsCoreAsync(host, events, serviceId, MvApplySource.Stream, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<int> ApplySerializableEventsCoreAsync(
-        IMaterializedViewProjector projector,
+        IMvApplyHost host,
         IReadOnlyList<SerializableEvent> events,
         string serviceId,
         MvApplySource source,
         CancellationToken cancellationToken)
     {
-        var entries = await _registryStore.GetEntriesAsync(serviceId, projector.ViewName, projector.ViewVersion, cancellationToken)
+        var entries = await _registryStore.GetEntriesAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken)
             .ConfigureAwait(false);
         if (entries.Count == 0)
         {
-            await InitializeAsync(projector, serviceId, cancellationToken).ConfigureAwait(false);
-            entries = await _registryStore.GetEntriesAsync(serviceId, projector.ViewName, projector.ViewVersion, cancellationToken)
+            await InitializeAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+            entries = await _registryStore.GetEntriesAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -220,7 +225,7 @@ public sealed class PostgresMvExecutor : IMvExecutor
         {
             var applied = await ApplySerializableEventAsync(
                     connection,
-                    projector,
+                    host,
                     serviceId,
                     serializableEvent,
                     currentPosition,
@@ -240,30 +245,29 @@ public sealed class PostgresMvExecutor : IMvExecutor
 
     private async Task<bool> ApplySerializableEventAsync(
         NpgsqlConnection connection,
-        IMaterializedViewProjector projector,
+        IMvApplyHost host,
         string serviceId,
         SerializableEvent serializableEvent,
         string? currentPosition,
         MvApplySource source,
         CancellationToken cancellationToken)
     {
-        var eventResult = serializableEvent.ToEvent(_eventTypes);
-        if (!eventResult.IsSuccess)
-        {
-            throw eventResult.GetException();
-        }
-
-        var ev = eventResult.GetValue();
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        var applyContext = new PostgresMvApplyContext(connection, transaction, ev, serializableEvent.SortableUniqueIdValue);
-        var statements = await projector.ApplyToViewAsync(ev, applyContext, cancellationToken).ConfigureAwait(false);
+        var queryPort = new PostgresMvApplyQueryPort(connection, transaction);
+        var bindings = await GetBindingsAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+        var statements = await host.ApplyEventAsync(
+            serializableEvent,
+            bindings,
+            queryPort,
+            serializableEvent.SortableUniqueIdValue,
+            cancellationToken).ConfigureAwait(false);
         var affectedRows = 0;
         foreach (var statement in statements)
         {
             affectedRows += await connection.ExecuteAsync(
                 new CommandDefinition(
                     statement.Sql,
-                    statement.Parameters,
+                    ToDynamicParameters(statement.Parameters),
                     transaction,
                     cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
@@ -284,8 +288,8 @@ public sealed class PostgresMvExecutor : IMvExecutor
         await _registryStore.UpdatePositionAsync(
             new MvPositionUpdate(
                 serviceId,
-                projector.ViewName,
-                projector.ViewVersion,
+                host.ViewName,
+                host.ViewVersion,
                 serializableEvent.SortableUniqueIdValue,
                 source),
             transaction: transaction,
@@ -299,6 +303,30 @@ public sealed class PostgresMvExecutor : IMvExecutor
         string.IsNullOrWhiteSpace(serviceId)
             ? _serviceIdProvider.GetCurrentServiceId()
             : serviceId;
+
+    private async Task<MvTableBindings> GetBindingsAsync(IMvApplyHost host, string serviceId, CancellationToken cancellationToken)
+    {
+        var bindings = new MvTableBindings(host.ViewName, host.ViewVersion, _options);
+        var entries = await _registryStore.GetEntriesAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var entry in entries)
+        {
+            bindings.RegisterTable(entry.LogicalTable, entry.PhysicalTable);
+        }
+
+        return bindings;
+    }
+
+    private static DynamicParameters ToDynamicParameters(IReadOnlyList<MvParam> parameters)
+    {
+        var dynamicParameters = new DynamicParameters();
+        foreach (var parameter in parameters)
+        {
+            dynamicParameters.Add(parameter.Name, MvParamConverter.ToClrValue(parameter));
+        }
+
+        return dynamicParameters;
+    }
 
     private static SortableUniqueId CreateSafeThreshold(int safeWindowMs) =>
         new(SortableUniqueId.Generate(DateTime.UtcNow.AddMilliseconds(-safeWindowMs), Guid.Empty));

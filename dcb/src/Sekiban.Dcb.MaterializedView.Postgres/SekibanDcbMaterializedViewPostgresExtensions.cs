@@ -34,7 +34,6 @@ public static class SekibanDcbMaterializedViewPostgresExtensions
         services.TryAddSingleton<IMvExecutor>(sp =>
             new PostgresMvExecutor(
                 sp.GetRequiredService<Sekiban.Dcb.Storage.IEventStore>(),
-                sp.GetRequiredService<Sekiban.Dcb.Domains.IEventTypes>(),
                 sp.GetRequiredService<IServiceIdProvider>(),
                 sp.GetRequiredService<IMvRegistryStore>(),
                 sp.GetRequiredService<IOptions<MvOptions>>(),

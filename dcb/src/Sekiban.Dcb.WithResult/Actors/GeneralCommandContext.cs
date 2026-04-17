@@ -63,7 +63,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
 
             // Deserialize the payload
             var payloadResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
-                serializableState.TagPayloadName,
+                serializableState.ResolvedPayloadName,
                 serializableState.Payload);
 
             if (!payloadResult.IsSuccess)
@@ -142,7 +142,7 @@ public class GeneralCommandContext : ICommandContext, ICommandContextResultAcces
 
             // Deserialize the payload
             var payloadResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
-                serializableState.TagPayloadName,
+                serializableState.ResolvedPayloadName,
                 serializableState.Payload);
 
             if (!payloadResult.IsSuccess)

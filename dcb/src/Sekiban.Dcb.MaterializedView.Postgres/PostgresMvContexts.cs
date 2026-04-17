@@ -1,5 +1,6 @@
 using System.Data;
 using Dapper;
+using System.Text.Json;
 using Sekiban.Dcb.Events;
 
 namespace Sekiban.Dcb.MaterializedView.Postgres;
@@ -65,14 +66,14 @@ internal sealed class PostgresMvApplyContext : IMvApplyContext
     {
         var row = await Connection.QuerySingleOrDefaultAsync(
             new CommandDefinition(sql, param, Transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
-        return row is null ? null : new PostgresMvRow(ToDictionary(row));
+        return row is null ? null : new PostgresMvRow(PostgresMvValueAdapter.ToDictionary(row));
     }
 
     public async Task<IMvRowSet> QueryRowsAsync(string sql, object? param = null, CancellationToken cancellationToken = default)
     {
         var rows = await Connection.QueryAsync(
             new CommandDefinition(sql, param, Transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
-        return new PostgresMvRowSet(rows.Select(row => (IMvRow)new PostgresMvRow(ToDictionary(row))).ToList());
+        return new PostgresMvRowSet(rows.Select(row => (IMvRow)new PostgresMvRow(PostgresMvValueAdapter.ToDictionary(row))).ToList());
     }
 
     public Task<TScalar> ExecuteScalarAsync<TScalar>(string sql, object? param = null, CancellationToken cancellationToken = default) =>
@@ -85,7 +86,11 @@ internal sealed class PostgresMvApplyContext : IMvApplyContext
     public MvTable GetDependencyViewTable<TView>(string logicalTable) where TView : IMaterializedViewProjector =>
         throw new NotSupportedException("Cross-view reads are out of scope for the materialized view PoC and are planned for a later phase.");
 
-    private static IReadOnlyDictionary<string, object?> ToDictionary(object row)
+}
+
+internal static class PostgresMvValueAdapter
+{
+    public static IReadOnlyDictionary<string, object?> ToDictionary(object row)
     {
         if (row is IReadOnlyDictionary<string, object?> readOnlyDictionary)
         {
@@ -107,5 +112,74 @@ internal sealed class PostgresMvApplyContext : IMvApplyContext
         return row.GetType()
             .GetProperties()
             .ToDictionary(property => property.Name, property => property.GetValue(row), StringComparer.OrdinalIgnoreCase);
+    }
+}
+
+internal sealed class PostgresMvApplyQueryPort : IMvApplyQueryPort
+{
+    private readonly IDbConnection _connection;
+    private readonly IDbTransaction _transaction;
+
+    public PostgresMvApplyQueryPort(IDbConnection connection, IDbTransaction transaction)
+    {
+        _connection = connection;
+        _transaction = transaction;
+    }
+
+    public async Task<IReadOnlyList<JsonElement>> QueryRowsAsync(
+        string sql,
+        IReadOnlyList<MvParam> parameters,
+        CancellationToken ct)
+    {
+        var rows = await _connection.QueryAsync(
+            new CommandDefinition(
+                sql,
+                ToDynamicParameters(parameters),
+                _transaction,
+                cancellationToken: ct)).ConfigureAwait(false);
+        return rows
+            .Select(row => (JsonElement)JsonSerializer.SerializeToElement(PostgresMvValueAdapter.ToDictionary(row)))
+            .ToList();
+    }
+
+    public async Task<JsonElement?> QuerySingleOrDefaultAsync(
+        string sql,
+        IReadOnlyList<MvParam> parameters,
+        CancellationToken ct)
+    {
+        var row = await _connection.QuerySingleOrDefaultAsync(
+            new CommandDefinition(
+                sql,
+                ToDynamicParameters(parameters),
+                _transaction,
+                cancellationToken: ct)).ConfigureAwait(false);
+        return row is null
+            ? null
+            : JsonSerializer.SerializeToElement(PostgresMvValueAdapter.ToDictionary(row));
+    }
+
+    public async Task<string?> ExecuteScalarJsonAsync(
+        string sql,
+        IReadOnlyList<MvParam> parameters,
+        CancellationToken ct)
+    {
+        var scalar = await _connection.ExecuteScalarAsync(
+            new CommandDefinition(
+                sql,
+                ToDynamicParameters(parameters),
+                _transaction,
+                cancellationToken: ct)).ConfigureAwait(false);
+        return MvParamConverter.SerializeScalar(scalar);
+    }
+
+    private static DynamicParameters ToDynamicParameters(IReadOnlyList<MvParam> parameters)
+    {
+        var dynamicParameters = new DynamicParameters();
+        foreach (var parameter in parameters)
+        {
+            dynamicParameters.Add(parameter.Name, MvParamConverter.ToClrValue(parameter));
+        }
+
+        return dynamicParameters;
     }
 }
