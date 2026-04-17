@@ -44,8 +44,7 @@
 - merged view のみ公開するか
 - safe / unsafe を診断 API で分けて返すか
 - current row が safe 由来か unsafe 由来かのフラグを公開するか
-- `_is_deleted` tombstone を current view で返すか、consumer 向け view で隠すか
-- delete 後の recreate と tombstone retention をどう定義するか
+- `current` と `current_live` の 2 view を framework 標準にするか
 
 ## 7. Performance
 
@@ -62,3 +61,4 @@
 - 既存 materialized view 実装を legacy / bridge としてどう扱うか
 - package / namespace を最初から Unsafe Window MV 前提でどう切るか
 - PoC を `WeatherForecast` で始めた後、`ClassRoomEnrollmentMvV1` の fan-out projector で検証するか
+- tombstone purge job を v1 に含めるか、後続拡張に回すか

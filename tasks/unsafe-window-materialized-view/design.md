@@ -55,6 +55,7 @@ MultiProjection の `SafeUnsafeProjectionState` は、一定期間を unsafe と
 
 - 現行 materialized view に safe/unsafe の考え方を持ち込む
 - 遅延イベント・順序逆転イベントに対して、最終的に正しい row を確定できる
+- delete / recreate を順序逆転込みで正しく扱える
 - read 側からは常に「今見せるべき最新 row」を 1 view として参照できる
 - unsafe が小さい前提で read コストを低く保つ
 - public API / contract / ドキュメントは 1 系統に寄せる
@@ -135,9 +136,9 @@ CREATE TABLE weather_forecast_safe (
     forecast_date DATE NOT NULL,
     temperature_c INT NOT NULL,
     summary TEXT,
-    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
 
     _projection_key TEXT NOT NULL,
+    _is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     _last_sortable_unique_id TEXT NOT NULL,
     _last_event_version BIGINT NOT NULL,
     _last_applied_at TIMESTAMPTZ NOT NULL,
@@ -150,9 +151,9 @@ CREATE TABLE weather_forecast_unsafe (
     forecast_date DATE NOT NULL,
     temperature_c INT NOT NULL,
     summary TEXT,
-    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
 
     _projection_key TEXT NOT NULL,
+    _is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     _last_sortable_unique_id TEXT NOT NULL,
     _last_event_version BIGINT NOT NULL,
     _last_applied_at TIMESTAMPTZ NOT NULL,
@@ -172,9 +173,16 @@ WHERE NOT EXISTS (
     FROM weather_forecast_unsafe u
     WHERE u._projection_key = s._projection_key
 );
+
+CREATE VIEW weather_forecast_current_live AS
+SELECT *
+FROM weather_forecast_current
+WHERE _is_deleted = FALSE;
 ```
 
 `UNION ALL + NOT EXISTS` を使うか、`LEFT JOIN` で unsafe 優先にするかは DB に応じて選べる。
+
+`current` は内部・診断向けの完全表現、`current_live` は通常 API 向けの live row 表現である。
 
 ---
 
@@ -310,6 +318,7 @@ v1 の unsafe-window MV は、次のような projector に向く。
 - `ProjectionKey -> tag(s)` の対応
 - row の primary key
 - replay 可能性 (`CanReplayByKey`)
+- delete を tombstone row として表現できること
 
 ### 8.2 必須メソッド案
 
@@ -346,6 +355,13 @@ public interface IUnsafeWindowMaterializedViewProjector<TRow>
   - correctness path
 
 この 2 経路を明示的に分けると、unsafe 更新と safe promotion の責任分界が明確になる。
+
+delete も更新と同じ event として扱い、
+
+- projector は row 消滅を物理 delete ではなく tombstone row (`_is_deleted = true`) で表現する
+- `null` は「row が存在しない」のではなく「projector がまだ何も構築していない」ケースに寄せる
+
+方が安全である。
 
 一方で、review で指摘された通り `BuildUnsafeRowAsync` と `RebuildSafeRowAsync` にロジック drift が起きやすい懸念もある。
 
@@ -435,6 +451,13 @@ warning は補助としては有効だが、correctness は warning ではなく
 - `unsafe` を upsert
 - `_safe_due_at = event.occurred_at + SafeWindow`
 
+delete event の場合も同様であり、
+
+- `unsafe` に tombstone row (`_is_deleted = true`) を upsert する
+- current から即座に消すのではなく、まず tombstone を current に見せる
+
+ことで、順序逆転した create/update/delete を同じ規約で扱えるようにする
+
 ### Repair path
 
 条件:
@@ -488,6 +511,14 @@ Postgres では `FOR UPDATE SKIP LOCKED` を使う設計が自然。
 
 これにより promotion worker の冪等性と crash 耐性を確保できる。
 
+delete が最終状態である場合も扱いは同じである。
+
+- replay 結果が delete なら、`safe` に tombstone row を upsert する
+- `safe` の物理 row を消さない
+- `unsafe` だけを delete する
+
+こうしておくと、遅延到着イベントの比較、再作成、idempotent replay が単純になる。
+
 ---
 
 ## 11. Query 側の見え方
@@ -499,16 +530,18 @@ read 側は merged view だけを見る。
 - 通常時: safe row が見える
 - 直近更新後: unsafe row が優先して見える
 - safe promotion 後: safe row に戻る
+- delete 後: tombstone row が current に見え、live view からは消える
 
 このため、クライアントや API は safe/unsafe の存在を意識せずに `current` view を読める。
 
 必要なら管理画面・診断 API からだけ safe/unsafe の両方を見られるようにする。
 
-Delete の扱いは v1 で明示しておく必要がある。
+削除対応は v1 の標準機能として固定する。
 
-- internal な current view では tombstone row (`_is_deleted = true`) を保持する
-- consumer 向け API では `WHERE NOT _is_deleted` を掛けた公開 view を別に持つこともできる
-- delete 後の recreate、tombstone retention は contract と運用ポリシーの両面で決める必要がある
+- internal な `current` view では tombstone row (`_is_deleted = true`) を保持する
+- consumer 向け API は原則 `current_live` 相当を使い、`WHERE NOT _is_deleted` を標準で掛ける
+- delete 後の recreate は、より新しい `Create` / `Upsert` event が tombstone を上書きする通常更新として扱う
+- tombstone は replay / idempotency のため `safe` に保持し、物理 purge は別ジョブの将来拡張として扱う
 
 ---
 
