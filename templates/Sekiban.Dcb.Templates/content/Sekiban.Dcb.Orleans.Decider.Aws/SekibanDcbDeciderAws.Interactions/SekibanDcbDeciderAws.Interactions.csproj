@@ -10,7 +10,7 @@
     <ProjectReference Include="..\SekibanDcbDeciderAws.EventSource\SekibanDcbDeciderAws.EventSource.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.17" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.18" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
 </Project>
