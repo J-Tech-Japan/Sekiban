@@ -22,6 +22,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { QueryModeToggle, type QueryMode } from "@/components/query-mode-toggle";
 
 export default function ClassroomsPage() {
   const [pageSize, setPageSize] = useState(10);
@@ -31,11 +32,13 @@ export default function ClassroomsPage() {
   const [newClassName, setNewClassName] = useState("");
   const [newMaxCapacity, setNewMaxCapacity] = useState(20);
   const [formError, setFormError] = useState("");
+  const [queryMode, setQueryMode] = useState<QueryMode>("memory");
 
   const { data: classrooms, isLoading, refetch } = trpc.classrooms.list.useQuery({
     pageNumber: currentPage,
     pageSize,
     waitForSortableUniqueId: lastSortableUniqueId,
+    queryMode,
   });
 
   const createMutation = trpc.classrooms.create.useMutation({
@@ -96,12 +99,15 @@ export default function ClassroomsPage() {
             Manage classrooms and their capacity settings
           </p>
         </div>
-        <Button onClick={() => setIsAddModalOpen(true)} className="gap-2">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Classroom
-        </Button>
+        <div className="flex items-center gap-3">
+          <QueryModeToggle value={queryMode} onChange={setQueryMode} />
+          <Button onClick={() => setIsAddModalOpen(true)} className="gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Classroom
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}

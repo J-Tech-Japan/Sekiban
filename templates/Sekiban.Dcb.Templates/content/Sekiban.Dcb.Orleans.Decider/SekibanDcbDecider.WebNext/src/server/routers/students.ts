@@ -20,6 +20,8 @@ export const studentsRouter = router({
         pageNumber: z.number().default(1),
         pageSize: z.number().default(10),
         waitForSortableUniqueId: z.string().optional(),
+        // "memory" → in-memory MultiProjection; "materialized" → SQL materialized view
+        queryMode: z.enum(["memory", "materialized"]).default("memory"),
       })
     )
     .query(async ({ input }) => {
@@ -30,8 +32,9 @@ export const studentsRouter = router({
         params.set("waitForSortableUniqueId", input.waitForSortableUniqueId);
       }
 
+      const path = input.queryMode === "materialized" ? "/api/mv/students" : "/api/students";
       const res = await fetch(
-        `${process.env.API_BASE_URL}/api/students?${params.toString()}`
+        `${process.env.API_BASE_URL}${path}?${params.toString()}`
       );
       if (!res.ok) {
         throw new Error("Failed to fetch students");

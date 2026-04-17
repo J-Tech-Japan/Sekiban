@@ -11,6 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.12" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.17" />
   </ItemGroup>
 </Project>

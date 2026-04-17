@@ -14,6 +14,7 @@
     <PackageReference Include="ResultBoxes" Version="0.4.0" />
     <PackageReference Include="Microsoft.Orleans.Serialization" Version="10.0.1" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.12" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.1.17" />
+    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="10.1.17" />
   </ItemGroup>
 </Project>
