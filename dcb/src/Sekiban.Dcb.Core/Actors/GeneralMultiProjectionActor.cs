@@ -131,7 +131,14 @@ public class GeneralMultiProjectionActor
 
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)
         {
-            try { dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain); } catch { }
+            try
+            {
+                dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain);
+            }
+            catch (Exception)
+            {
+                // Head-status reads are observational; ignore best-effort safe-window promotion failures here.
+            }
 
             var current = new ProjectionPosition(
                 dualAccessor.UnsafeVersion,
