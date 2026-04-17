@@ -10,10 +10,19 @@ var localstack = builder
     .WithEnvironment("PERSISTENCE", "1")
     .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1");
 
+// Materialized view database (kept separate from the DynamoDB event store so the read-side schema
+// can evolve independently). Optional — the ApiService only enables the MV runtime when the
+// connection string is wired through.
+var materializedViewPostgres = builder
+    .AddPostgres("dcbOrleansAwsPostgres")
+    .AddDatabase("DcbMaterializedViewPostgres");
+
 // Add the API Service with DynamoDB configuration
 var apiService = builder
     .AddProject<SekibanDcbOrleansAws_ApiService>("apiservice")
     .WaitFor(localstack)
+    .WaitFor(materializedViewPostgres)
+    .WithReference(materializedViewPostgres)
     .WithEnvironment("Sekiban__Database", "dynamodb")
     .WithEnvironment("Orleans__UseInMemoryStreams", "true")
     .WithEnvironment("AWS__Region", "us-east-1")

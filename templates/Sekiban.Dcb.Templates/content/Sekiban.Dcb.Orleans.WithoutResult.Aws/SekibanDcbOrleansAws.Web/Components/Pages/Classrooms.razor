@@ -16,6 +16,16 @@
     <button class="btn btn-primary mb-3" @onclick="OpenAddClassroomModal">Add New Classroom</button>
 </div>
 
+<div class="mb-3">
+    <label class="me-2"><strong>Query source:</strong></label>
+    <div class="btn-group" role="group" aria-label="Query source">
+        <input type="radio" class="btn-check" name="query-source" id="qs-mem" autocomplete="off" checked="@(!useMaterializedView)" @onchange="() => OnQueryModeChanged(false)">
+        <label class="btn btn-outline-primary" for="qs-mem">Memory projection</label>
+        <input type="radio" class="btn-check" name="query-source" id="qs-mv" autocomplete="off" checked="@useMaterializedView" @onchange="() => OnQueryModeChanged(true)">
+        <label class="btn btn-outline-primary" for="qs-mv">Materialized view</label>
+    </div>
+</div>
+
 <h3>Classroom List</h3>
 
 <div class="row mb-3">
@@ -154,6 +164,14 @@
     private ClassroomModel classroomModel = new();
     private string errorMessage = string.Empty;
     private string? lastSortableUniqueId;
+    private bool useMaterializedView;
+
+    private async Task OnQueryModeChanged(bool useMv)
+    {
+        useMaterializedView = useMv;
+        currentPage = 1;
+        await LoadClassrooms(lastSortableUniqueId);
+    }
 
     // Pagination fields
     private int currentPage = 1;
@@ -177,7 +195,7 @@
     {
         try
         {
-            var result = await ClassRoomApiClient.GetClassRoomsAsync(currentPage, pageSize, waitForSortableUniqueId);
+            var result = await ClassRoomApiClient.GetClassRoomsAsync(currentPage, pageSize, waitForSortableUniqueId, useMaterializedView);
             classrooms = result?.ToList() ?? new List<ClassRoomItem>();
 
             // For now, estimate total pages based on if we got a full page

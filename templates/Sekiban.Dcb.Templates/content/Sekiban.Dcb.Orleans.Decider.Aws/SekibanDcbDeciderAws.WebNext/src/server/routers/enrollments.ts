@@ -24,18 +24,23 @@ export const enrollmentsRouter = router({
     .input(
       z.object({
         waitForSortableUniqueId: z.string().optional(),
+        queryMode: z.enum(["memory", "materialized"]).default("memory"),
       })
     )
     .query(async ({ input }) => {
-      // Build enrollments from students and classrooms data
       const params = new URLSearchParams();
       if (input.waitForSortableUniqueId) {
         params.set("waitForSortableUniqueId", input.waitForSortableUniqueId);
       }
 
+      const studentsPath =
+        input.queryMode === "materialized" ? "/api/mv/students" : "/api/students";
+      const classroomsPath =
+        input.queryMode === "materialized" ? "/api/mv/classrooms" : "/api/classrooms";
+
       const [studentsRes, classroomsRes] = await Promise.all([
-        fetch(`${process.env.API_BASE_URL}/api/students?${params.toString()}`),
-        fetch(`${process.env.API_BASE_URL}/api/classrooms?${params.toString()}`),
+        fetch(`${process.env.API_BASE_URL}${studentsPath}?${params.toString()}`),
+        fetch(`${process.env.API_BASE_URL}${classroomsPath}?${params.toString()}`),
       ]);
 
       if (!studentsRes.ok || !classroomsRes.ok) {

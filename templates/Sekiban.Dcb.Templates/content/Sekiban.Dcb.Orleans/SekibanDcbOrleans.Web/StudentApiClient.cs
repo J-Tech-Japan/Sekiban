@@ -21,6 +21,7 @@ public class StudentApiClient(HttpClient httpClient)
         int? pageNumber = null,
         int? pageSize = null,
         string? waitForSortableUniqueId = null,
+        bool useMaterializedView = false,
         CancellationToken cancellationToken = default)
     {
         var queryParams = new List<string>();
@@ -34,9 +35,10 @@ public class StudentApiClient(HttpClient httpClient)
         if (pageSize.HasValue)
             queryParams.Add($"pageSize={pageSize.Value}");
 
+        var basePath = useMaterializedView ? "/api/mv/students" : "/api/students";
         var requestUri = queryParams.Count > 0
-            ? $"/api/students?{string.Join("&", queryParams)}"
-            : "/api/students";
+            ? $"{basePath}?{string.Join("&", queryParams)}"
+            : basePath;
 
         var students = await httpClient.GetFromJsonAsync<List<StudentState>>(requestUri, cancellationToken);
 

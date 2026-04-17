@@ -16,6 +16,16 @@
     <button class="btn btn-primary mb-3" @onclick="OpenAddStudentModal">Add New Student</button>
 </div>
 
+<div class="mb-3">
+    <label class="me-2"><strong>Query source:</strong></label>
+    <div class="btn-group" role="group" aria-label="Query source">
+        <input type="radio" class="btn-check" name="query-source" id="qs-mem" autocomplete="off" checked="@(!useMaterializedView)" @onchange="() => OnQueryModeChanged(false)">
+        <label class="btn btn-outline-primary" for="qs-mem">Memory projection</label>
+        <input type="radio" class="btn-check" name="query-source" id="qs-mv" autocomplete="off" checked="@useMaterializedView" @onchange="() => OnQueryModeChanged(true)">
+        <label class="btn btn-outline-primary" for="qs-mv">Materialized view</label>
+    </div>
+</div>
+
 <h3>Student List</h3>
 
 <div class="row mb-3">
@@ -147,6 +157,14 @@
     private List<StudentState>? students;
     private StudentModel studentModel = new();
     private string? lastSortableUniqueId;
+    private bool useMaterializedView;
+
+    private async Task OnQueryModeChanged(bool useMv)
+    {
+        useMaterializedView = useMv;
+        currentPage = 1;
+        await LoadStudents(lastSortableUniqueId);
+    }
 
     // Pagination fields
     private int currentPage = 1;
@@ -174,7 +192,7 @@
     {
         try
         {
-            var result = await StudentApiClient.GetStudentsAsync(currentPage, pageSize, waitForSortableUniqueId);
+            var result = await StudentApiClient.GetStudentsAsync(currentPage, pageSize, waitForSortableUniqueId, useMaterializedView);
 
             students = result?.ToList() ?? new List<StudentState>();
 
