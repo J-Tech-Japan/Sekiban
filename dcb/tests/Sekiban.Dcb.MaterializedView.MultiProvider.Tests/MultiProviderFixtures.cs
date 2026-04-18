@@ -244,6 +244,11 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
     public string? AvailabilityMessage => _skipReason;
     protected string ConnectionString => _connectionString ?? throw new InvalidOperationException("Fixture not initialized.");
 
+    // Public alias exposed to sibling test files that need the raw connection
+    // string (the unsafe-window MV harnesses wire their own initializer /
+    // catch-up / promoter rather than going through IMvExecutor).
+    public string ConnectionStringForTests => ConnectionString;
+
     protected abstract MvDbType DatabaseType { get; }
     protected abstract Task<string> CreateConnectionStringAsync();
     protected abstract void RegisterProvider(IServiceCollection services, string connectionString);
