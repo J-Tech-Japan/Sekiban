@@ -1,6 +1,7 @@
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.MaterializedViews;
 using Dcb.Domain.WithoutResult.Order;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb.Domains;
@@ -251,6 +252,35 @@ public class MaterializedViewUnitTests
 
         Assert.Equal(MvDbType.Postgres, resolved.DatabaseType);
         Assert.Equal("Host=test;Database=mv;", resolved.ConnectionString);
+    }
+
+    [Fact]
+    public void AddSekibanDcbMaterializedView_WithoutStorageInfoProvider_ThrowsOnFactoryResolution()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(DomainType.GetDomainTypes());
+        services.AddSekibanDcbMaterializedView();
+        services.AddMaterializedView<OrderSummaryMvV1>();
+
+        using var provider = services.BuildServiceProvider();
+        var exception = Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IMvApplyHostFactory>());
+
+        Assert.Contains("IMvStorageInfoProvider", exception.Message);
+    }
+
+    [Fact]
+    public async Task NativeMvApplyHostFactory_LegacyConstructor_RemainsUsable()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        var factory = new NativeMvApplyHostFactory([new OrderSummaryMvV1()], domainTypes.EventTypes);
+
+        var host = factory.Create("OrderSummary", 1);
+        var bindings = new MvTableBindings("OrderSummary", 1, new MvOptions());
+        var statements = await host.InitializeAsync(bindings, CancellationToken.None);
+
+        Assert.NotEmpty(statements);
+        Assert.Equal("OrderSummary", host.ViewName);
+        Assert.Equal(1, host.ViewVersion);
     }
 
     private sealed record RecordTarget(

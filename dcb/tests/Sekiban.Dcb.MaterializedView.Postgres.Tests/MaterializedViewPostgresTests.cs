@@ -17,14 +17,10 @@ public sealed class MaterializedViewPostgresCollection : ICollectionFixture<Mate
 [Collection(nameof(MaterializedViewPostgresCollection))]
 public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixture fixture)
 {
-    [Fact]
+    [SkippableFact]
     public async Task Initialize_CreatesRegistryAndTables()
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres fixture is unavailable.");
         await fixture.ResetAsync();
 
         await fixture.Executor.InitializeAsync(ApplyHost(fixture.Projector));
@@ -43,14 +39,10 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         Assert.True(itemsExists);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task CatchUp_MaterializesRowsAndIsIdempotent()
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres fixture is unavailable.");
         await fixture.ResetAsync();
         await fixture.Executor.InitializeAsync(ApplyHost(fixture.Projector));
 
@@ -142,14 +134,10 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         Assert.NotEqual(default, itemRow.LastAppliedAt);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task CatchUp_RemainsIdempotentWhenRegistryPositionIsRewound()
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres fixture is unavailable.");
         await fixture.ResetAsync();
         await fixture.Executor.InitializeAsync(ApplyHost(fixture.Projector));
 
@@ -207,14 +195,10 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         Assert.NotEqual(default, orderRow.LastAppliedAt);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task CatchUp_RollsBackWhenApplyStatementFails()
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres fixture is unavailable.");
         await fixture.ResetAsync();
         var failingProjector = new FailingMvProjector();
         await fixture.Executor.InitializeAsync(ApplyHost(failingProjector));
@@ -238,14 +222,10 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         Assert.Null(registryPosition);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task CatchUp_WeatherForecastMaterializesSingleForecastTable()
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres fixture is unavailable.");
 
         await fixture.ResetAsync();
         var projector = new WeatherForecastMvV1();
@@ -304,14 +284,10 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
         Assert.False(string.IsNullOrWhiteSpace(row.LastSortableUniqueId));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task CatchUp_NativeHost_PreservesConnectionAndTransactionAccess_OnPostgresPath()
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres fixture is unavailable.");
 
         await fixture.ResetAsync();
         var projector = new RawConnectionMvProjector();

@@ -74,9 +74,10 @@ intermediate queues, and eventual reconciliation. DCB removes that friction:
 - **Event Store**: Provides ordered persistence and tag lookup. Postgres (`src/Sekiban.Dcb.Postgres/PostgresEventStore.cs`),
   Cosmos DB (`src/Sekiban.Dcb.CosmosDb/CosmosDbEventStore.cs`), and DynamoDB (`src/Sekiban.Dcb.DynamoDB/DynamoDbEventStore.cs`) share the same contract.
 - **Materialized View Runtime**: A database-backed read model pipeline that applies ordered events into SQL tables.
-  Core contracts live in `src/Sekiban.Dcb.MaterializedView`, PostgreSQL execution lives in
-  `src/Sekiban.Dcb.MaterializedView.Postgres`, and Orleans orchestration lives in
-  `src/Sekiban.Dcb.MaterializedView.Orleans`.
+  Core contracts live in `src/Sekiban.Dcb.MaterializedView`, classic provider packages live in
+  `src/Sekiban.Dcb.MaterializedView.Postgres`, `src/Sekiban.Dcb.MaterializedView.SqlServer`,
+  `src/Sekiban.Dcb.MaterializedView.MySql`, and `src/Sekiban.Dcb.MaterializedView.Sqlite`, and Orleans orchestration
+  lives in `src/Sekiban.Dcb.MaterializedView.Orleans`.
 
 ## Benefits
 

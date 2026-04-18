@@ -11,7 +11,16 @@ public static class SekibanDcbMaterializedViewExtensions
     {
         services.AddOptions<MvOptions>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.TryAddSingleton<IMvApplyHostFactory, NativeMvApplyHostFactory>();
+        services.TryAddSingleton<IMvApplyHostFactory>(sp =>
+        {
+            var storageInfoProvider = sp.GetService<IMvStorageInfoProvider>() ??
+                throw new InvalidOperationException(
+                    "IMvStorageInfoProvider is not registered. Call a concrete materialized view provider extension such as AddSekibanDcbMaterializedViewPostgres, AddSekibanDcbMaterializedViewSqlServer, AddSekibanDcbMaterializedViewMySql, or AddSekibanDcbMaterializedViewSqlite.");
+            return new NativeMvApplyHostFactory(
+                sp.GetServices<IMaterializedViewProjector>(),
+                sp.GetRequiredService<IEventTypes>(),
+                storageInfoProvider);
+        });
         if (configure is not null)
         {
             services.Configure(configure);

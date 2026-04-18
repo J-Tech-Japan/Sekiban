@@ -12,6 +12,11 @@ on:
       - 'dcb/src/Sekiban.Dcb.Orleans.Core/**'
       - 'dcb/src/Sekiban.Dcb.Orleans.WithResult/**'
       - 'dcb/src/Sekiban.Dcb.Orleans.WithoutResult/**'
+      - 'dcb/src/Sekiban.Dcb.MaterializedView/**'
+      - 'dcb/src/Sekiban.Dcb.MaterializedView.Postgres/**'
+      - 'dcb/src/Sekiban.Dcb.MaterializedView.SqlServer/**'
+      - 'dcb/src/Sekiban.Dcb.MaterializedView.MySql/**'
+      - 'dcb/src/Sekiban.Dcb.MaterializedView.Sqlite/**'
       - 'dcb/src/Sekiban.Dcb.BlobStorage.AzureStorage/**'
       - 'dcb/src/Sekiban.Dcb.BlobStorage.S3/**'
       - 'dcb/src/Sekiban.Dcb.CosmosDb/**'
@@ -20,6 +25,7 @@ on:
       - 'dcb/src/Sekiban.Dcb.Postgres.MigrationHost/**'
       - 'dcb/tests/Sekiban.Dcb.Orleans.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.Postgres.Tests/**'
+      - 'dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.WithResult.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.WithoutResult.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/**'
@@ -63,6 +69,7 @@ jobs:
           dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
 
   dcbTestsNet10:
@@ -99,4 +106,5 @@ jobs:
           dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1

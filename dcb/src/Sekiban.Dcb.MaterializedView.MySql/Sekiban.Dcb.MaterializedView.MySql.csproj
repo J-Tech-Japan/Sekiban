@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <LangVersion>preview</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AssemblyName>Sekiban.Dcb.MaterializedView.MySql</AssemblyName>
+        <RootNamespace>Sekiban.Dcb.MaterializedView.MySql</RootNamespace>
+        <PackageId>Sekiban.Dcb.MaterializedView.MySql</PackageId>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
+        <PackageDescription>Sekiban - MySQL implementation for DCB materialized views</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
+        <PackageVersion>10.0.2-preview03</PackageVersion>
+        <Description>MySQL registry, apply context, and executor for Sekiban DCB materialized views</Description>
+        <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;mysql;materialized-view</PackageTags>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <GenerateSBOM>true</GenerateSBOM>
+        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+        <PackageReference Include="Dapper" Version="2.1.66"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="MySqlConnector" Version="2.4.0"/>
+        <None Include="../../README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj"/>
+        <ProjectReference Include="..\Sekiban.Dcb.MaterializedView\Sekiban.Dcb.MaterializedView.csproj"/>
+    </ItemGroup>
+
+</Project>

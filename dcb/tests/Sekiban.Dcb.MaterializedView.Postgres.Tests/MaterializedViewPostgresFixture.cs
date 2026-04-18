@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.MaterializedViews;
 using Dapper;
@@ -122,9 +123,12 @@ public sealed class MaterializedViewPostgresFixture : IAsyncLifetime
     {
         if (_skipReason is not null)
         {
-            Console.WriteLine(_skipReason);
+            ThrowUnavailable();
         }
     }
+
+    [DoesNotReturn]
+    private void ThrowUnavailable() => throw new InvalidOperationException(_skipReason);
 
     private static string? ResolveExternalConnectionString() =>
         Environment.GetEnvironmentVariable("SEKIBAN_TEST_POSTGRES_CONNECTION_STRING") ??

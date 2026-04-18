@@ -39,13 +39,19 @@
 
 ## ランタイム構成
 
-現在の実装は 3 つのパッケージに分かれています。
+現在の実装は、共通 core と provider package に分かれています。
 
 - `Sekiban.Dcb.MaterializedView`
   共通契約。`IMaterializedViewProjector`、`IMvInitContext`、`IMvApplyContext`、`MvRegistryEntry`、
   キャッチアップワーカーなどを含みます。
 - `Sekiban.Dcb.MaterializedView.Postgres`
   PostgreSQL 向けのテーブル登録、レジストリ保存、イベント適用、行アクセス実装です。
+- `Sekiban.Dcb.MaterializedView.SqlServer`
+  SQL Server 向け classic MV 実装です。
+- `Sekiban.Dcb.MaterializedView.MySql`
+  MySQL 向け classic MV 実装です。
+- `Sekiban.Dcb.MaterializedView.Sqlite`
+  SQLite 向け classic MV 実装です。
 - `Sekiban.Dcb.MaterializedView.Orleans`
   Orleans Grain による起動、状態確認、`IMvOrleansQueryAccessor` を提供します。
 
@@ -93,8 +99,21 @@ builder.Services.AddSekibanDcbMaterializedViewOrleans();
   1 つのプロジェクター登録
 - `AddSekibanDcbMaterializedViewPostgres`
   PostgreSQL 向けレジストリと executor の登録
+- `AddSekibanDcbMaterializedViewSqlServer` / `AddSekibanDcbMaterializedViewMySql` / `AddSekibanDcbMaterializedViewSqlite`
+  各 DB 向けの classic MV runtime 登録
 - `AddSekibanDcbMaterializedViewOrleans`
   Orleans 側の起動と query accessor の登録
+
+provider ごとの登録例:
+
+```csharp
+builder.Services.AddSekibanDcbMaterializedViewSqlServer(configuration, "DcbMaterializedViewSqlServer");
+builder.Services.AddSekibanDcbMaterializedViewMySql(configuration, "DcbMaterializedViewMySql");
+builder.Services.AddSekibanDcbMaterializedViewSqlite(configuration, "DcbMaterializedViewSqlite");
+```
+
+プロジェクターは引き続き SQL を直接返します。複数 provider で 1 つの projector を使いたい場合は、
+`ctx.DatabaseType` を見て SQL 方言を切り替えてください。Unsafe Window MV は v1 時点では PostgreSQL のみです。
 
 ## プロジェクターの書き方
 

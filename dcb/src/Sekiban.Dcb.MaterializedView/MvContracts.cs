@@ -6,7 +6,10 @@ namespace Sekiban.Dcb.MaterializedView;
 
 public enum MvDbType
 {
-    Postgres = 1
+    Postgres = 1,
+    SqlServer = 2,
+    MySql = 3,
+    Sqlite = 4
 }
 
 public enum MvStatus
