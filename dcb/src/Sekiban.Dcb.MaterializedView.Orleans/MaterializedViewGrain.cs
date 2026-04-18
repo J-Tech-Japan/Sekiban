@@ -13,7 +13,10 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     // Global catch-up concurrency gate. Shared across all MaterializedViewGrain activations
     // in the current process/silo to protect the event store and MV relational store from
     // concurrent catch-up floods when many grains activate together.
-    private static readonly SemaphoreSlim CatchUpBatchSemaphore = new(1, 1);
+    // Constructed with no maxCount so Release(delta) is safe when grains raise the limit
+    // via MvOptions.CatchUpMaxConcurrentBatches. Narrowing is not supported.
+    private static readonly SemaphoreSlim CatchUpBatchSemaphore = new(1);
+    private static readonly object s_catchUpSemaphoreSync = new();
     private static int s_catchUpMaxConcurrentBatches = 1;
 
     private readonly IMvExecutor _executor;
@@ -129,17 +132,37 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         // classic RefreshAsync semantics used by integration tests).
         // Orleans grain single-threading guarantees the scheduled timer will
         // not interleave with this loop inside the same grain.
+        //
+        // A tick may return madeProgress=false because (a) catch-up settled
+        // in that tick, (b) the global concurrency gate was busy, or (c)
+        // another grain turn has a batch in flight. Only (a) means "done";
+        // for (b) and (c) we must wait briefly and retry, otherwise
+        // RefreshAsync returns while catch-up is still active.
+        var settleDeadline = DateTime.UtcNow + _options.CatchUpStallThreshold;
         while (_isCatchUpActive)
         {
             var madeProgress = await RunCatchUpTickAsync(ignoreImmediateFlag: true, CancellationToken.None);
-            if (!madeProgress && !_isCatchUpActive)
+            if (!_isCatchUpActive)
             {
                 break;
             }
 
             if (!madeProgress)
             {
-                break;
+                if (DateTime.UtcNow >= settleDeadline)
+                {
+                    _logger.LogWarning(
+                        "RefreshAsync timed out waiting for catch-up to settle for {ViewName}/{ViewVersion}. IsCatchUpActive={IsCatchUpActive}, BatchInFlight={BatchInFlight}.",
+                        _viewName,
+                        _viewVersion,
+                        _isCatchUpActive,
+                        _batchInFlight);
+                    break;
+                }
+
+                // Brief back-off when a tick was gated/in-flight; keeps this
+                // loop from spinning while another turn owns the semaphore.
+                await Task.Delay(TimeSpan.FromMilliseconds(10), CancellationToken.None);
             }
         }
 
@@ -172,7 +195,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 _viewName!,
                 _viewVersion,
                 _started,
-                _batchInFlight,
+                _isCatchUpActive || _batchInFlight,
                 _streamHandle is not null,
                 _pendingStreamEvents.Count,
                 _lastAppliedSortableUniqueId,
@@ -194,11 +217,11 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         return Task.CompletedTask;
     }
 
-    private async Task PrepareStreamAsync()
+    private Task PrepareStreamAsync()
     {
         if (_stream is not null)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         var streamInfo = _subscriptionResolver.Resolve(_grainKey!);
@@ -211,7 +234,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         var streamProvider = this.GetStreamProvider(orleansStream.ProviderName);
         _stream = streamProvider.GetStream<SerializableEvent>(
             StreamId.Create(orleansStream.StreamNamespace, orleansStream.StreamId));
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
     private async Task StartSubscriptionAsync()
@@ -253,9 +276,12 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             return;
         }
 
+        // Start the first tick immediately so initial backlog catch-up does
+        // not wait for an entire PollInterval before beginning. This also
+        // makes NeedsImmediateCatchUp effective on the very first cycle.
         _catchUpTimer = this.RegisterGrainTimer(
             _ => ProcessCatchUpTickAsync(),
-            _options.PollInterval,
+            TimeSpan.Zero,
             _options.PollInterval);
     }
 
@@ -439,16 +465,33 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             return;
         }
 
+        // If a batch is still truly in-flight (the grain is yielded on an
+        // awaited DB/executor call), leave _batchInFlight alone. The batch's
+        // finally block will release the semaphore and clear the flag.
+        // Clearing _batchInFlight here would let OnStreamBatchAsync drain
+        // stream events while catch-up is still writing to the MV store,
+        // breaking single-flight ordering. If the underlying task is hung,
+        // the grain is hung regardless, so clearing the flag would not help.
+        if (_batchInFlight)
+        {
+            _logger.LogWarning(
+                "Materialized view catch-up appears stalled for {ViewName}/{ViewVersion} but a batch is still marked in-flight; leaving single-flight state intact. LastAttemptAt={LastAttempt}, PendingStreamEvents={PendingStreamEvents}.",
+                _viewName,
+                _viewVersion,
+                lastAttempt,
+                _pendingStreamEvents.Count);
+            _lastCatchUpAttemptAt = DateTimeOffset.UtcNow;
+            return;
+        }
+
         _logger.LogWarning(
-            "Recovering stale materialized view catch-up state for {ViewName}/{ViewVersion}. LastAttemptAt={LastAttempt}, BatchInFlight={BatchInFlight}, PendingStreamEvents={PendingStreamEvents}.",
+            "Recovering stale materialized view catch-up state for {ViewName}/{ViewVersion}. LastAttemptAt={LastAttempt}, PendingStreamEvents={PendingStreamEvents}.",
             _viewName,
             _viewVersion,
             lastAttempt,
-            _batchInFlight,
             _pendingStreamEvents.Count);
 
         // Reset orchestration-only state. Registry state stays authoritative.
-        _batchInFlight = false;
         _consecutiveEmptyBatches = 0;
         _needsImmediateCatchUp = true;
         _lastCatchUpAttemptAt = DateTimeOffset.UtcNow;
@@ -622,8 +665,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private static void ReconfigureCatchUpSemaphore(int desiredConcurrency)
     {
         var target = Math.Max(1, desiredConcurrency);
-        var current = Volatile.Read(ref s_catchUpMaxConcurrentBatches);
-        if (target == current)
+        if (Volatile.Read(ref s_catchUpMaxConcurrentBatches) >= target)
         {
             return;
         }
@@ -631,10 +673,18 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         // The concurrency limit is process-wide. We only raise it here; the
         // effective bound is 1 by default, which matches the documented goal
         // of protecting the event store / relational store during backlog.
-        if (target > current)
+        // The semaphore is constructed without a maxCount so Release(delta)
+        // will not throw when multiple grains raise the limit concurrently.
+        lock (s_catchUpSemaphoreSync)
         {
+            var current = s_catchUpMaxConcurrentBatches;
+            if (target <= current)
+            {
+                return;
+            }
+
             var delta = target - current;
-            Interlocked.Exchange(ref s_catchUpMaxConcurrentBatches, target);
+            s_catchUpMaxConcurrentBatches = target;
             CatchUpBatchSemaphore.Release(delta);
         }
     }
