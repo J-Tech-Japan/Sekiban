@@ -205,8 +205,6 @@ internal static class UnsafeWindowMvSqlServerDdl
             END;
             """;
 
-        var businessSelect = string.Join(", ", resolver.Schema.Columns.Select(c => c.Name));
-
         var dropCurrentView = $"IF OBJECT_ID(N'{resolver.CurrentView}', N'V') IS NOT NULL DROP VIEW {resolver.CurrentView};";
         var createCurrentView = $"""
             EXEC(N'CREATE VIEW {resolver.CurrentView} AS

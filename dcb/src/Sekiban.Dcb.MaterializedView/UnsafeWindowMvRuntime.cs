@@ -316,24 +316,26 @@ public static class UnsafeWindowMvLogicalTypes
         }
 
         var trimmed = declaredType.TrimStart();
-        // Find the first whitespace boundary after the type keyword (if any).
-        var end = 0;
-        while (end < trimmed.Length && !char.IsWhiteSpace(trimmed[end]))
-        {
-            end++;
-        }
+        var leadingWhitespace = declaredType[..(declaredType.Length - trimmed.Length)];
 
-        if (end == 0)
+        // Match against the longest keyword in the map first so multi-word
+        // logical types like "DOUBLE PRECISION" are translated ahead of the
+        // shorter "DOUBLE" form. A trailing word-boundary check keeps
+        // "INTEGER_SOMETHING" from matching "INTEGER".
+        foreach (var keyword in keywordMap.Keys.OrderByDescending(static key => key.Length))
         {
-            return declaredType;
-        }
+            if (!trimmed.StartsWith(keyword, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
 
-        var keyword = trimmed[..end];
-        var rest = trimmed[end..];
-        if (keywordMap.TryGetValue(keyword.ToUpperInvariant(), out var replacement))
-        {
-            var leadingWhitespace = declaredType[..(declaredType.Length - trimmed.Length)];
-            return $"{leadingWhitespace}{replacement}{rest}";
+            if (trimmed.Length > keyword.Length && !char.IsWhiteSpace(trimmed[keyword.Length]))
+            {
+                continue;
+            }
+
+            var rest = trimmed[keyword.Length..];
+            return $"{leadingWhitespace}{keywordMap[keyword]}{rest}";
         }
 
         return declaredType;

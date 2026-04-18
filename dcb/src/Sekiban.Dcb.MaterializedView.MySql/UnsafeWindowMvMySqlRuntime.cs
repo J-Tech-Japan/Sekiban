@@ -191,8 +191,6 @@ internal static class UnsafeWindowMvMySqlDdl
             );
             """;
 
-        var businessSelect = string.Join(", ", resolver.Schema.Columns.Select(c => c.Name));
-
         // CREATE OR REPLACE VIEW is supported by MySQL 5.x+.
         var currentView = $"""
             CREATE OR REPLACE VIEW {resolver.CurrentView} AS
