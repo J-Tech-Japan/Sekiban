@@ -340,8 +340,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             return false;
         }
 
-        // Honour the immediate-catch-up flag only on the first tick after start;
-        // subsequent ticks always run when the gate is available.
+        // The immediate-catch-up flag is honoured only on the first tick after
+        // startup. On later ticks we run whenever the gate is available.
         if (!ignoreImmediateFlag && !_needsImmediateCatchUp && _lastCatchUpAttemptAt is { } lastAttempt &&
             DateTimeOffset.UtcNow - lastAttempt < _options.PollInterval.Divide(2))
         {
