@@ -14,6 +14,28 @@ public sealed class MvOptions
     public int MaxConsecutiveFailuresBeforeStop { get; set; } = 3;
     public string TablePrefix { get; set; } = DefaultTablePrefix;
     public PhysicalNameResolver? PhysicalNameResolver { get; set; }
+
+    /// <summary>
+    ///     Number of consecutive empty catch-up batches that will cause the grain
+    ///     to mark catch-up as ready and stop the per-tick batch execution.
+    ///     The default (1) preserves the original "loop until AppliedEvents == 0"
+    ///     semantics so that background catch-up does not race with fresh stream
+    ///     deliveries once the initial backlog is drained.
+    /// </summary>
+    public int MaxConsecutiveEmptyBatches { get; set; } = 1;
+
+    /// <summary>
+    ///     Duration without catch-up progress after which the orchestration state
+    ///     is considered stale and reset so the next scheduled cycle can retry.
+    /// </summary>
+    public TimeSpan CatchUpStallThreshold { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    ///     Maximum number of MV catch-up batches that may execute concurrently
+    ///     inside the same process/silo. When the limit is busy, a grain will
+    ///     skip its scheduled cycle and retry on the next tick.
+    /// </summary>
+    public int CatchUpMaxConcurrentBatches { get; set; } = 1;
 }
 
 public static class MvSchemaHelper

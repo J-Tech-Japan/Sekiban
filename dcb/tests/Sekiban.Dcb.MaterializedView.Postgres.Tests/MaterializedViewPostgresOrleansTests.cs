@@ -58,7 +58,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             AddedAt = DateTimeOffset.UtcNow.AddMinutes(-1)
         });
 
-        await grain.EnsureStartedAsync();
+        // Drive initial catch-up to idle so subsequent direct writes do not
+        // race with the background catch-up tick. Startup itself is now
+        // non-blocking; RefreshAsync() explicitly waits for catch-up settle.
+        await grain.RefreshAsync();
 
         var latestBeforeStream = await GetLatestSortableUniqueIdAsync();
         await WaitUntilAsync(async () =>
@@ -176,7 +179,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         }
 
         await fixture.ResetAsync();
-        await grain.EnsureStartedAsync();
+        // Drive initial catch-up to idle so subsequent direct writes do not
+        // race with the background catch-up tick. Startup itself is now
+        // non-blocking; RefreshAsync() explicitly waits for catch-up settle.
+        await grain.RefreshAsync();
 
         var executor = fixture.CreateExecutor(publishToStream: false);
         const int forecastCount = 64;
@@ -321,7 +327,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         }
 
         await fixture.ResetAsync();
-        await grain.EnsureStartedAsync();
+        // Drive initial catch-up to idle so subsequent direct writes do not
+        // race with the background catch-up tick. Startup itself is now
+        // non-blocking; RefreshAsync() explicitly waits for catch-up settle.
+        await grain.RefreshAsync();
 
         var executor = fixture.CreateExecutor(publishToStream: false);
         var forecastId = Guid.CreateVersion7();
@@ -457,7 +466,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         }
 
         await fixture.ResetAsync();
-        await grain.EnsureStartedAsync();
+        // Drive initial catch-up to idle so subsequent direct writes do not
+        // race with the background catch-up tick. Startup itself is now
+        // non-blocking; RefreshAsync() explicitly waits for catch-up settle.
+        await grain.RefreshAsync();
 
         var executor = fixture.CreateExecutor(publishToStream: false);
         var forecastId = Guid.CreateVersion7();
@@ -563,7 +575,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         }
 
         await fixture.ResetAsync();
-        await grain.EnsureStartedAsync();
+        // Drive initial catch-up to idle so subsequent direct writes do not
+        // race with the background catch-up tick. Startup itself is now
+        // non-blocking; RefreshAsync() explicitly waits for catch-up settle.
+        await grain.RefreshAsync();
 
         var executor = fixture.CreateExecutor(publishToStream: false);
         var delayedForecastId = Guid.CreateVersion7();
