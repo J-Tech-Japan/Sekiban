@@ -25,4 +25,16 @@ public sealed record MaterializedViewGrainStatus(
     [property: Id(10)]
     DateTimeOffset? LastCatchUpStartedAt,
     [property: Id(11)]
-    DateTimeOffset? LastCatchUpCompletedAt);
+    DateTimeOffset? LastCatchUpCompletedAt,
+    [property: Id(12)]
+    bool IsCatchUpActive = false,
+    [property: Id(13)]
+    DateTimeOffset? LastCatchUpAttemptAt = null,
+    [property: Id(14)]
+    int ConsecutiveEmptyBatches = 0,
+    [property: Id(15)]
+    string? LastProgressSortableUniqueId = null,
+    [property: Id(16)]
+    bool NeedsImmediateCatchUp = false,
+    [property: Id(17)]
+    long CatchUpBatchSkipCount = 0);
