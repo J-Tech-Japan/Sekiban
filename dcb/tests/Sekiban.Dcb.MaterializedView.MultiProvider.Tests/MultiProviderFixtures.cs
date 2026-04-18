@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Data.Common;
 using Dapper;
 using Dcb.Domain.WithoutResult;
@@ -19,7 +20,6 @@ using Sekiban.Dcb.Storage;
 using Testcontainers.MsSql;
 using Testcontainers.MySql;
 using Xunit;
-using Xunit.Sdk;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
@@ -305,9 +305,12 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
     {
         if (_skipReason is not null)
         {
-            throw SkipException.ForSkip(_skipReason);
+            ThrowUnavailable();
         }
     }
+
+    [DoesNotReturn]
+    private void ThrowUnavailable() => throw new InvalidOperationException(_skipReason);
 }
 
 public sealed class MySqlMvFixture : MultiProviderFixtureBase

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Dapper;
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.MaterializedViews;
@@ -21,7 +22,6 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Testcontainers.PostgreSql;
 using Xunit;
-using Xunit.Sdk;
 
 namespace Sekiban.Dcb.MaterializedView.Postgres.Tests;
 
@@ -176,9 +176,12 @@ public sealed class MaterializedViewPostgresOrleansFixture : IAsyncLifetime
     {
         if (_skipReason is not null)
         {
-            throw SkipException.ForSkip(_skipReason);
+            ThrowUnavailable();
         }
     }
+
+    [DoesNotReturn]
+    private void ThrowUnavailable() => throw new InvalidOperationException(_skipReason);
 
     private static string? ResolveExternalConnectionString() =>
         Environment.GetEnvironmentVariable("SEKIBAN_TEST_POSTGRES_CONNECTION_STRING") ??

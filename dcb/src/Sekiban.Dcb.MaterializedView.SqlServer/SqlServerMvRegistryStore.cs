@@ -65,7 +65,6 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
             UPDATE sekiban_mv_registry WITH (UPDLOCK, HOLDLOCK)
             SET physical_table = @PhysicalTable,
                 last_updated = @LastUpdated,
-                applied_event_version = applied_event_version,
                 last_applied_source = COALESCE(last_applied_source, @LastAppliedSource),
                 last_applied_at = COALESCE(last_applied_at, @LastAppliedAt),
                 last_stream_received_sortable_unique_id = COALESCE(last_stream_received_sortable_unique_id, @LastStreamReceivedSortableUniqueId),
@@ -145,7 +144,17 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
             entry.Metadata
         };
 
-        await ExecuteAsync(sql, parameters, transaction, cancellationToken).ConfigureAwait(false);
+        if (transaction is not null)
+        {
+            await ExecuteAsync(sql, parameters, transaction, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var localTransaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(sql, parameters, localTransaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await localTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task UpdatePositionAsync(
@@ -343,11 +352,18 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
             END;
             """;
 
-        await ExecuteAsync(
-            sql,
-            new { ServiceId = serviceId, ViewName = viewName, ActiveVersion = activeVersion },
-            transaction,
-            cancellationToken).ConfigureAwait(false);
+        var parameters = new { ServiceId = serviceId, ViewName = viewName, ActiveVersion = activeVersion };
+        if (transaction is not null)
+        {
+            await ExecuteAsync(sql, parameters, transaction, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var localTransaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(sql, parameters, localTransaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await localTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ExecuteAsync(

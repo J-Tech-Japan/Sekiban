@@ -17,14 +17,10 @@ public sealed class MaterializedViewPostgresOrleansCollection : ICollectionFixtu
 [Collection(nameof(MaterializedViewPostgresOrleansCollection))]
 public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgresOrleansFixture fixture)
 {
-    [Fact]
+    [SkippableFact]
     public async Task Grain_CatchesUp_Then_Applies_Streamed_Event_To_Postgres_View()
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
 
         var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "OrderSummary", 1);
         var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
@@ -162,14 +158,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Grain_OutOfOrder_StreamDelivery_DoesNotLose_WeatherForecastRows()
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
 
         var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "WeatherForecast", 1);
         var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
@@ -311,14 +303,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Null(registryRow.LastCatchUpSortableUniqueId);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Grain_Delayed_Create_After_Streamed_Update_DoesNotAdvance_Past_Missing_Row()
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
 
         var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "WeatherForecast", 1);
         var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
@@ -451,14 +439,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastStreamAppliedSortableUniqueId);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Grain_Streamed_Create_Then_Update_For_Same_Aggregate_Applies_Both_Events()
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
 
         var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "WeatherForecast", 1);
         var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
@@ -561,14 +545,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastStreamAppliedSortableUniqueId);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Grain_Late_Create_Older_Than_CurrentPosition_Is_Applied_Without_Stalling_Other_Aggregates()
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-            return;
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
 
         var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "WeatherForecast", 1);
         var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);

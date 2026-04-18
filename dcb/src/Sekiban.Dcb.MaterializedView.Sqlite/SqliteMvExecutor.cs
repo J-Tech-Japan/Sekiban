@@ -42,8 +42,7 @@ public sealed class SqliteMvExecutor : IMvExecutor
         await _registryStore.EnsureInfrastructureAsync(cancellationToken).ConfigureAwait(false);
         serviceId = ResolveServiceId(serviceId);
 
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
         var bindings = new MvTableBindings(host.ViewName, host.ViewVersion, _options);
@@ -216,8 +215,7 @@ public sealed class SqliteMvExecutor : IMvExecutor
             return 0;
         }
 
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         var appliedEvents = 0;
         var bindings = CreateBindings(host, entries);
 
@@ -329,4 +327,12 @@ public sealed class SqliteMvExecutor : IMvExecutor
 
     private static SortableUniqueId CreateSafeThreshold(int safeWindowMs) =>
         new(SortableUniqueId.Generate(DateTime.UtcNow.AddMilliseconds(-safeWindowMs), Guid.Empty));
+
+    private async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
+    {
+        var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition("PRAGMA synchronous=NORMAL;", cancellationToken: cancellationToken)).ConfigureAwait(false);
+        return connection;
+    }
 }

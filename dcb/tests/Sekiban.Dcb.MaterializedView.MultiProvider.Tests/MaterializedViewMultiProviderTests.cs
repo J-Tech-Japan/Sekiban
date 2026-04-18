@@ -6,7 +6,6 @@ using Sekiban.Dcb.MaterializedView.MySql;
 using Sekiban.Dcb.MaterializedView.Sqlite;
 using Sekiban.Dcb.MaterializedView.SqlServer;
 using Xunit;
-using Xunit.Sdk;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
@@ -58,21 +57,21 @@ public sealed class MaterializedViewMultiProviderRegistrationTests
 [Collection(nameof(MySqlMvCollection))]
 public sealed class MySqlMvIntegrationTests(MySqlMvFixture fixture)
 {
-    [Fact]
+    [SkippableFact]
     public Task CatchUp_MaterializesRowsAndRegistry() => MultiProviderAssertions.AssertProviderWorksAsync(fixture);
 }
 
 [Collection(nameof(SqlServerMvCollection))]
 public sealed class SqlServerMvIntegrationTests(SqlServerMvFixture fixture)
 {
-    [Fact]
+    [SkippableFact]
     public Task CatchUp_MaterializesRowsAndRegistry() => MultiProviderAssertions.AssertProviderWorksAsync(fixture);
 }
 
 [Collection(nameof(SqliteMvCollection))]
 public sealed class SqliteMvIntegrationTests(SqliteMvFixture fixture)
 {
-    [Fact]
+    [SkippableFact]
     public Task CatchUp_MaterializesRowsAndRegistry() => MultiProviderAssertions.AssertProviderWorksAsync(fixture);
 }
 
@@ -80,10 +79,7 @@ internal static class MultiProviderAssertions
 {
     public static async Task AssertProviderWorksAsync(MultiProviderFixtureBase fixture)
     {
-        if (!fixture.IsAvailable)
-        {
-            fixture.EnsureAvailable();
-        }
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Integration fixture is unavailable.");
 
         await fixture.ResetAsync().ConfigureAwait(false);
 

@@ -14,7 +14,7 @@
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
         <PackageReference Include="Testcontainers.MsSql" Version="4.10.0" />
         <PackageReference Include="Testcontainers.MySql" Version="4.10.0" />
-        <PackageReference Include="xunit" Version="2.9.3"/>
+        <PackageReference Include="xunit" Version="2.9.3" />
         <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
@@ -23,6 +23,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
+        <PackageReference Include="Xunit.SkippableFact" Version="1.5.61" />
     </ItemGroup>
 
     <ItemGroup>
@@ -30,12 +31,12 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView\Sekiban.Dcb.MaterializedView.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.MySql\Sekiban.Dcb.MaterializedView.MySql.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.Sqlite\Sekiban.Dcb.MaterializedView.Sqlite.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.SqlServer\Sekiban.Dcb.MaterializedView.SqlServer.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj"/>
-        <ProjectReference Include="..\..\internalUsages\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView\Sekiban.Dcb.MaterializedView.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.MySql\Sekiban.Dcb.MaterializedView.MySql.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.Sqlite\Sekiban.Dcb.MaterializedView.Sqlite.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.SqlServer\Sekiban.Dcb.MaterializedView.SqlServer.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
+        <ProjectReference Include="..\..\internalUsages\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj" />
     </ItemGroup>
 
 </Project>
