@@ -42,7 +42,7 @@
     }
   ],
   "primaryOutputs": [
-    { "path": "SekibanDcbOrleans.sln" }
+    { "path": "SekibanDcbOrleans.slnx" }
   ],
   "postActions": [
     {

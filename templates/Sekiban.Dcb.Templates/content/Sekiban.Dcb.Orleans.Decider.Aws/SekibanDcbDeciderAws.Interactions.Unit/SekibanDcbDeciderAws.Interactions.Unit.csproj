@@ -28,7 +28,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.2.0" />
+      <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.2.2" />
     </ItemGroup>
 
 </Project>
