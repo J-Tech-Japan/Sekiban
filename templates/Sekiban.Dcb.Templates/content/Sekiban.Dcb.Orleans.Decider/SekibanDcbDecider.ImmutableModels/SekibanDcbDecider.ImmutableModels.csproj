@@ -10,6 +10,6 @@
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Sekiban.Dcb.Core.Model" Version="10.2.0" />
+    <PackageReference Include="Sekiban.Dcb.Core.Model" Version="10.2.2" />
   </ItemGroup>
 </Project>
