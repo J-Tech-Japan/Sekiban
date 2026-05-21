@@ -50,7 +50,7 @@ public class AzureOpenAIService
     /// <summary>
     ///     Answer a question about Sekiban using Azure OpenAI
     /// </summary>
-    public async Task<string> AnswerQuestionAsync(string question)
+    public async Task<string> AnswerQuestionAsync(string question, string documentSet)
     {
         if (_client == null || string.IsNullOrEmpty(_options.DeploymentName))
         {
@@ -61,13 +61,13 @@ public class AzureOpenAIService
         try
         {
             // Search for relevant documents
-            var searchResults = await _documentService.SearchAsync(question);
+            var searchResults = await _documentService.SearchAsync(question, documentSet);
 
             // Prepare context from search results
             var context = new StringBuilder();
             foreach (var result in searchResults.Take(3))
             {
-                var document = await _documentService.GetDocumentAsync(result.FileName);
+                var document = await _documentService.GetDocumentAsync(result.FileName, documentSet);
                 if (document != null)
                 {
                     context.AppendLine($"# {document.Title}");
@@ -83,10 +83,13 @@ public class AzureOpenAIService
             // If no search results, include basic information
             if (searchResults.Count == 0)
             {
-                var firstDocument = await _documentService.GetDocumentByIndexAsync(0);
+                var firstDocument = await _documentService.GetDocumentByIndexAsync(0, documentSet);
                 if (firstDocument != null)
                 {
                     context.AppendLine(firstDocument.Content);
+                } else
+                {
+                    return $"Document set '{documentSet}' was not found or has no documents.";
                 }
             }
 

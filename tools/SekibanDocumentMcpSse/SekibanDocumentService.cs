@@ -148,10 +148,10 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Get all document titles
     /// </summary>
-    public async Task<List<DocumentInfo>> GetAllDocumentsAsync()
+    public async Task<List<DocumentInfo>> GetAllDocumentsAsync(string documentSet)
     {
         await InitializeAsync();
-        return _documents
+        return GetDocumentsForSet(documentSet)
             .Select(d => new DocumentInfo
             {
                 FileName = d.FileName,
@@ -164,28 +164,28 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Get a document by filename
     /// </summary>
-    public async Task<MarkdownDocument?> GetDocumentAsync(string fileName)
+    public async Task<MarkdownDocument?> GetDocumentAsync(string fileName, string documentSet)
     {
         await InitializeAsync();
-        var exact = _documents.FirstOrDefault(d => d.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
-        if (exact != null)
+        var normalizedFileName = NormalizeFileNameForSet(fileName, documentSet);
+        if (normalizedFileName == null)
         {
-            return exact;
+            return null;
         }
 
-        return _documents.FirstOrDefault(
-            d => Path.GetFileName(d.FileName).Equals(fileName, StringComparison.OrdinalIgnoreCase));
+        return _documents.FirstOrDefault(d => d.FileName.Equals(normalizedFileName, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
     ///     Get a document by index
     /// </summary>
-    public async Task<MarkdownDocument?> GetDocumentByIndexAsync(int index)
+    public async Task<MarkdownDocument?> GetDocumentByIndexAsync(int index, string documentSet)
     {
         await InitializeAsync();
-        if (index >= 0 && index < _documents.Count)
+        var documents = GetDocumentsForSet(documentSet).ToList();
+        if (index >= 0 && index < documents.Count)
         {
-            return _documents[index];
+            return documents[index];
         }
         return null;
     }
@@ -193,12 +193,12 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Get the navigation structure
     /// </summary>
-    public async Task<List<NavigationItem>> GetNavigationAsync()
+    public async Task<List<NavigationItem>> GetNavigationAsync(string documentSet)
     {
         await InitializeAsync();
         var navigation = new List<NavigationItem>();
 
-        foreach (var doc in _documents)
+        foreach (var doc in GetDocumentsForSet(documentSet))
         {
             navigation.Add(
                 new NavigationItem
@@ -221,10 +221,10 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Get a specific section from a document
     /// </summary>
-    public async Task<SectionContent?> GetSectionContentAsync(string fileName, string sectionTitle)
+    public async Task<SectionContent?> GetSectionContentAsync(string fileName, string sectionTitle, string documentSet)
     {
         await InitializeAsync();
-        var document = _documents.FirstOrDefault(d => d.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+        var document = await GetDocumentAsync(fileName, documentSet);
         if (document == null) return null;
 
         var content = document.GetSectionContent(sectionTitle);
@@ -241,13 +241,13 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Search across all documents
     /// </summary>
-    public async Task<List<SearchResult>> SearchAsync(string query)
+    public async Task<List<SearchResult>> SearchAsync(string query, string documentSet)
     {
         await InitializeAsync();
         var results = new List<SearchResult>();
         var searchTerms = query.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-        foreach (var document in _documents)
+        foreach (var document in GetDocumentsForSet(documentSet))
         {
             // Search in title
             var titleMatched = searchTerms.All(term => document.Title.ToLower().Contains(term));
@@ -330,6 +330,40 @@ public class SekibanDocumentService : IDisposable
 
     private static IReadOnlyList<string> GetConfiguredBasePaths(DocumentationOptions options) =>
         options.BasePaths.Count > 0 ? options.BasePaths : [options.BasePath];
+
+    private IEnumerable<MarkdownDocument> GetDocumentsForSet(string documentSet)
+    {
+        var normalizedDocumentSet = NormalizeDocumentSet(documentSet);
+        if (string.IsNullOrWhiteSpace(normalizedDocumentSet))
+        {
+            return [];
+        }
+
+        return _documents.Where(
+            d => d.FileName.StartsWith($"{normalizedDocumentSet}/", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string? NormalizeFileNameForSet(string fileName, string documentSet)
+    {
+        var normalizedDocumentSet = NormalizeDocumentSet(documentSet);
+        if (string.IsNullOrWhiteSpace(normalizedDocumentSet) || string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        var normalizedFileName = fileName.Replace('\\', '/').TrimStart('/');
+        if (normalizedFileName.Contains('/'))
+        {
+            return normalizedFileName.StartsWith($"{normalizedDocumentSet}/", StringComparison.OrdinalIgnoreCase)
+                ? normalizedFileName
+                : null;
+        }
+
+        return $"{normalizedDocumentSet}/{Path.GetFileName(normalizedFileName)}";
+    }
+
+    private static string NormalizeDocumentSet(string documentSet) =>
+        documentSet?.Trim().Trim('/', '\\') ?? string.Empty;
 
     private static string ResolveDocsBasePath(string configuredPath) =>
         Path.IsPathRooted(configuredPath)
