@@ -60,37 +60,10 @@ public class AzureOpenAIService
 
         try
         {
-            // Search for relevant documents
-            var searchResults = await _documentService.SearchAsync(question, documentSet);
-
-            // Prepare context from search results
-            var context = new StringBuilder();
-            foreach (var result in searchResults.Take(3))
+            var context = await BuildQuestionContextAsync(question, documentSet);
+            if (context == null)
             {
-                var document = await _documentService.GetDocumentAsync(result.FileName, documentSet);
-                if (document != null)
-                {
-                    context.AppendLine($"# {document.Title}");
-                    foreach (var section in result.MatchedSections.Take(2))
-                    {
-                        var sectionContent = document.GetSectionContent(section);
-                        context.AppendLine($"## {section}");
-                        context.AppendLine(sectionContent);
-                    }
-                }
-            }
-
-            // If no search results, include basic information
-            if (searchResults.Count == 0)
-            {
-                var firstDocument = await _documentService.GetDocumentByIndexAsync(0, documentSet);
-                if (firstDocument != null)
-                {
-                    context.AppendLine(firstDocument.Content);
-                } else
-                {
-                    return $"Document set '{documentSet}' was not found or has no documents.";
-                }
+                return $"Document set '{documentSet}' was not found or has no documents.";
             }
 
             // Get the chat client
@@ -106,30 +79,60 @@ public class AzureOpenAIService
             // Complete chat
             var response = await chatClient.CompleteChatAsync(messages);
 
-            try
-            {
-                var contentProperty = response.Value.GetType().GetProperty("Content");
-                if (contentProperty != null)
-                {
-                    var content = response.Value.Content.FirstOrDefault()?.Text;
-                    if (!string.IsNullOrEmpty(content))
-                    {
-                        return content;
-                    }
-                }
-
-                return response.Value.Content.FirstOrDefault()?.Text ?? "No response content";
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error extracting content from Azure OpenAI response");
-                return "Error processing response from Azure OpenAI";
-            }
+            return ExtractResponseContent(response.Value);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error answering question");
             return $"I'm sorry, but an error occurred when trying to answer your question: {ex.Message}";
+        }
+    }
+
+    private async Task<StringBuilder?> BuildQuestionContextAsync(string question, string documentSet)
+    {
+        var searchResults = await _documentService.SearchAsync(question, documentSet);
+        if (searchResults.Count == 0)
+        {
+            var firstDocument = await _documentService.GetDocumentByIndexAsync(0, documentSet);
+            return firstDocument == null ? null : new StringBuilder(firstDocument.Content);
+        }
+
+        var context = new StringBuilder();
+        foreach (var result in searchResults.Take(3))
+        {
+            await AppendSearchResultContextAsync(context, result, documentSet);
+        }
+
+        return context;
+    }
+
+    private async Task AppendSearchResultContextAsync(StringBuilder context, SearchResult result, string documentSet)
+    {
+        var document = await _documentService.GetDocumentAsync(result.FileName, documentSet);
+        if (document == null)
+        {
+            return;
+        }
+
+        context.AppendLine($"# {document.Title}");
+        foreach (var section in result.MatchedSections.Take(2))
+        {
+            var sectionContent = document.GetSectionContent(section);
+            context.AppendLine($"## {section}");
+            context.AppendLine(sectionContent);
+        }
+    }
+
+    private string ExtractResponseContent(ChatCompletion response)
+    {
+        try
+        {
+            return response.Content.FirstOrDefault()?.Text ?? "No response content";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error extracting content from Azure OpenAI response");
+            return "Error processing response from Azure OpenAI";
         }
     }
 }

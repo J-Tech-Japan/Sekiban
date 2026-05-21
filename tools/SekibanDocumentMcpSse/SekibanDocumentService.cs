@@ -369,7 +369,7 @@ public class SekibanDocumentService : IDisposable
 
         return prefixes
             .Select(prefix => $"{prefix}/{Path.GetFileName(normalizedFileName)}")
-            .FirstOrDefault();
+            .First();
     }
 
     private static IReadOnlyList<string> GetDocumentSetPrefixes(string documentSet)
