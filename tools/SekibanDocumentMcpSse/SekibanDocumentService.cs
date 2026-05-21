@@ -6,13 +6,20 @@ namespace SekibanDocumentMcpSse;
 /// </summary>
 public class SekibanDocumentService : IDisposable
 {
+    private static readonly Dictionary<string, string[]> DocumentSetPrefixes =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Dcb"] = ["dcb_llm", "dcb_llm_ja"],
+            ["Pure"] = ["llm", "llm_ja"]
+        };
+
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<SekibanDocumentService> _logger;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly MarkdownReader _markdownReader;
+    private readonly List<MarkdownReader> _markdownReaders = [];
     private readonly DocumentationOptions _options;
     private List<MarkdownDocument> _documents = new();
-    private FileSystemWatcher? _fileWatcher;
+    private readonly List<FileSystemWatcher> _fileWatchers = [];
     private bool _isInitialized;
 
     /// <summary>
@@ -29,17 +36,17 @@ public class SekibanDocumentService : IDisposable
         _options = options.Value;
         _environment = environment;
 
-        // Resolve base path - use absolute path if provided, otherwise combine with content root
-        var docsBasePath = _options.BasePath;
-        if (!Path.IsPathRooted(docsBasePath))
+        foreach (var configuredPath in GetConfiguredBasePaths(_options))
         {
-            // For Azure deployment, use WebRootPath first, then fall back to ContentRootPath
-            var basePath = AppContext.BaseDirectory;
-            logger.LogInformation("AppContext.BaseDirectory: {BasePath}", basePath);
-            docsBasePath = Path.Combine(basePath, docsBasePath);
+            var docsBasePath = ResolveDocsBasePath(configuredPath);
+            var documentSet = GetDocumentSetName(configuredPath);
+            logger.LogInformation(
+                "Registering documentation path {DocsBasePath} as document set {DocumentSet}",
+                docsBasePath,
+                documentSet);
+            _markdownReaders.Add(
+                new MarkdownReader(_loggerFactory.CreateLogger<MarkdownReader>(), docsBasePath, documentSet));
         }
-
-        _markdownReader = new MarkdownReader(_loggerFactory.CreateLogger<MarkdownReader>(), docsBasePath);
     }
 
     /// <summary>
@@ -47,14 +54,16 @@ public class SekibanDocumentService : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_fileWatcher != null)
+        foreach (var fileWatcher in _fileWatchers)
         {
-            _fileWatcher.Changed -= OnFileChanged;
-            _fileWatcher.Created -= OnFileChanged;
-            _fileWatcher.Deleted -= OnFileChanged;
-            _fileWatcher.Renamed -= OnFileChanged;
-            _fileWatcher.Dispose();
+            fileWatcher.Changed -= OnFileChanged;
+            fileWatcher.Created -= OnFileChanged;
+            fileWatcher.Deleted -= OnFileChanged;
+            fileWatcher.Renamed -= OnFileChanged;
+            fileWatcher.Dispose();
         }
+
+        _fileWatchers.Clear();
     }
 
     /// <summary>
@@ -66,12 +75,18 @@ public class SekibanDocumentService : IDisposable
 
         try
         {
-            _documents = await _markdownReader.ReadAllDocumentsAsync();
+            var documents = new List<MarkdownDocument>();
+            foreach (var reader in _markdownReaders)
+            {
+                documents.AddRange(await reader.ReadAllDocumentsAsync());
+            }
+
+            _documents = documents.OrderBy(d => d.FileName, StringComparer.OrdinalIgnoreCase).ToList();
             _logger.LogInformation("Loaded {Count} Markdown documents", _documents.Count);
 
             if (_options.EnableFileWatcher)
             {
-                SetupFileWatcher();
+                SetupFileWatchers();
             }
 
             _isInitialized = true;
@@ -86,29 +101,31 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Setup file watcher to reload documents when they change
     /// </summary>
-    private void SetupFileWatcher()
+    private void SetupFileWatchers()
     {
-        try
+        foreach (var directory in _markdownReaders.Select(reader => reader._docsBasePath))
         {
-            var directory = Path.GetDirectoryName(_markdownReader._docsBasePath) ?? _markdownReader._docsBasePath;
-
-            _fileWatcher = new FileSystemWatcher(directory)
+            try
             {
-                Filter = "*.md",
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName,
-                EnableRaisingEvents = true
-            };
+                var fileWatcher = new FileSystemWatcher(directory)
+                {
+                    Filter = "*.md",
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName,
+                    EnableRaisingEvents = true
+                };
 
-            _fileWatcher.Changed += OnFileChanged;
-            _fileWatcher.Created += OnFileChanged;
-            _fileWatcher.Deleted += OnFileChanged;
-            _fileWatcher.Renamed += OnFileChanged;
+                fileWatcher.Changed += OnFileChanged;
+                fileWatcher.Created += OnFileChanged;
+                fileWatcher.Deleted += OnFileChanged;
+                fileWatcher.Renamed += OnFileChanged;
+                _fileWatchers.Add(fileWatcher);
 
-            _logger.LogInformation("File watcher set up for directory: {Directory}", directory);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to set up file watcher");
+                _logger.LogInformation("File watcher set up for directory: {Directory}", directory);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to set up file watcher");
+            }
         }
     }
 
@@ -121,7 +138,13 @@ public class SekibanDocumentService : IDisposable
         {
             _logger.LogInformation("Document file changed: {FullPath}, reloading documents", e.FullPath);
             await Task.Delay(500); // Small delay to ensure file is fully written
-            _documents = await _markdownReader.ReadAllDocumentsAsync();
+            var documents = new List<MarkdownDocument>();
+            foreach (var reader in _markdownReaders)
+            {
+                documents.AddRange(await reader.ReadAllDocumentsAsync());
+            }
+
+            _documents = documents.OrderBy(d => d.FileName, StringComparer.OrdinalIgnoreCase).ToList();
         }
         catch (Exception ex)
         {
@@ -132,10 +155,10 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Get all document titles
     /// </summary>
-    public async Task<List<DocumentInfo>> GetAllDocumentsAsync()
+    public async Task<List<DocumentInfo>> GetAllDocumentsAsync(string documentSet)
     {
         await InitializeAsync();
-        return _documents
+        return GetDocumentsForSet(documentSet)
             .Select(d => new DocumentInfo
             {
                 FileName = d.FileName,
@@ -148,21 +171,29 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Get a document by filename
     /// </summary>
-    public async Task<MarkdownDocument?> GetDocumentAsync(string fileName)
+    public async Task<MarkdownDocument?> GetDocumentAsync(string fileName, string documentSet)
     {
         await InitializeAsync();
-        return _documents.FirstOrDefault(d => d.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+        var normalizedFileName = NormalizeFileNameForSet(fileName, documentSet);
+        if (normalizedFileName == null)
+        {
+            return null;
+        }
+
+        return GetDocumentsForSet(documentSet)
+            .FirstOrDefault(d => d.FileName.Equals(normalizedFileName, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
     ///     Get a document by index
     /// </summary>
-    public async Task<MarkdownDocument?> GetDocumentByIndexAsync(int index)
+    public async Task<MarkdownDocument?> GetDocumentByIndexAsync(int index, string documentSet)
     {
         await InitializeAsync();
-        if (index >= 0 && index < _documents.Count)
+        var documents = GetDocumentsForSet(documentSet).ToList();
+        if (index >= 0 && index < documents.Count)
         {
-            return _documents[index];
+            return documents[index];
         }
         return null;
     }
@@ -170,12 +201,12 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Get the navigation structure
     /// </summary>
-    public async Task<List<NavigationItem>> GetNavigationAsync()
+    public async Task<List<NavigationItem>> GetNavigationAsync(string documentSet)
     {
         await InitializeAsync();
         var navigation = new List<NavigationItem>();
 
-        foreach (var doc in _documents)
+        foreach (var doc in GetDocumentsForSet(documentSet))
         {
             navigation.Add(
                 new NavigationItem
@@ -198,10 +229,10 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Get a specific section from a document
     /// </summary>
-    public async Task<SectionContent?> GetSectionContentAsync(string fileName, string sectionTitle)
+    public async Task<SectionContent?> GetSectionContentAsync(string fileName, string sectionTitle, string documentSet)
     {
         await InitializeAsync();
-        var document = _documents.FirstOrDefault(d => d.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+        var document = await GetDocumentAsync(fileName, documentSet);
         if (document == null) return null;
 
         var content = document.GetSectionContent(sectionTitle);
@@ -218,13 +249,13 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Search across all documents
     /// </summary>
-    public async Task<List<SearchResult>> SearchAsync(string query)
+    public async Task<List<SearchResult>> SearchAsync(string query, string documentSet)
     {
         await InitializeAsync();
         var results = new List<SearchResult>();
         var searchTerms = query.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-        foreach (var document in _documents)
+        foreach (var document in GetDocumentsForSet(documentSet))
         {
             // Search in title
             var titleMatched = searchTerms.All(term => document.Title.ToLower().Contains(term));
@@ -303,5 +334,63 @@ public class SekibanDocumentService : IDisposable
         return allSamples
             .Where(s => searchTerms.All(term => s.Title.ToLower().Contains(term) || s.Code.ToLower().Contains(term)))
             .ToList();
+    }
+
+    private static IReadOnlyList<string> GetConfiguredBasePaths(DocumentationOptions options) =>
+        options.BasePaths.Count > 0 ? options.BasePaths : [options.BasePath];
+
+    private IEnumerable<MarkdownDocument> GetDocumentsForSet(string documentSet)
+    {
+        var prefixes = GetDocumentSetPrefixes(documentSet);
+        if (prefixes.Count == 0)
+        {
+            return [];
+        }
+
+        return _documents.Where(
+            d => prefixes.Any(prefix => d.FileName.StartsWith($"{prefix}/", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static string? NormalizeFileNameForSet(string fileName, string documentSet)
+    {
+        var prefixes = GetDocumentSetPrefixes(documentSet);
+        if (prefixes.Count == 0 || string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        var normalizedFileName = fileName.Replace('\\', '/').TrimStart('/');
+        if (normalizedFileName.Contains('/'))
+        {
+            return prefixes.Any(prefix => normalizedFileName.StartsWith($"{prefix}/", StringComparison.OrdinalIgnoreCase))
+                ? normalizedFileName
+                : null;
+        }
+
+        return prefixes
+            .Select(prefix => $"{prefix}/{Path.GetFileName(normalizedFileName)}")
+            .First();
+    }
+
+    private static IReadOnlyList<string> GetDocumentSetPrefixes(string documentSet)
+    {
+        var normalized = documentSet?.Trim() ?? string.Empty;
+        return DocumentSetPrefixes.TryGetValue(normalized, out var prefixes) ? prefixes : [];
+    }
+
+    private static string ResolveDocsBasePath(string configuredPath) =>
+        Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.Combine(AppContext.BaseDirectory, configuredPath);
+
+    private static string GetDocumentSetName(string configuredPath)
+    {
+        var normalized = configuredPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return string.Empty;
+        }
+
+        return Path.GetFileName(normalized);
     }
 }

@@ -7,12 +7,14 @@ namespace SekibanDocumentMcpSse;
 public class MarkdownReader
 {
     public readonly string _docsBasePath;
+    private readonly string _documentSet;
     private readonly ILogger<MarkdownReader> _logger;
 
-    public MarkdownReader(ILogger<MarkdownReader> logger, string docsBasePath)
+    public MarkdownReader(ILogger<MarkdownReader> logger, string docsBasePath, string documentSet)
     {
         _logger = logger;
         _docsBasePath = docsBasePath;
+        _documentSet = documentSet;
     }
 
     /// <summary>
@@ -32,7 +34,7 @@ public class MarkdownReader
             var files = Directory.GetFiles(_docsBasePath, "*.md", SearchOption.TopDirectoryOnly);
             foreach (var file in files)
             {
-                var fileName = Path.GetFileName(file);
+                var fileName = GetExposedFileName(Path.GetFileName(file));
                 var content = await File.ReadAllTextAsync(file);
                 var doc = ParseDocument(fileName, content);
                 documents.Add(doc);
@@ -138,7 +140,14 @@ public class MarkdownReader
     {
         try
         {
-            var filePath = Path.Combine(_docsBasePath, fileName);
+            var requestedFileName = fileName;
+            if (!string.IsNullOrWhiteSpace(_documentSet) &&
+                requestedFileName.StartsWith($"{_documentSet}/", StringComparison.OrdinalIgnoreCase))
+            {
+                requestedFileName = requestedFileName[(_documentSet.Length + 1)..];
+            }
+
+            var filePath = Path.Combine(_docsBasePath, Path.GetFileName(requestedFileName));
             if (!File.Exists(filePath))
             {
                 _logger.LogWarning("Document not found: {FilePath}", filePath);
@@ -154,4 +163,7 @@ public class MarkdownReader
             return null;
         }
     }
+
+    private string GetExposedFileName(string fileName) =>
+        string.IsNullOrWhiteSpace(_documentSet) ? fileName : $"{_documentSet}/{fileName}";
 }
