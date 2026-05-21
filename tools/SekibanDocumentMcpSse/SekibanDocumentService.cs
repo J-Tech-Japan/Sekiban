@@ -9,10 +9,10 @@ public class SekibanDocumentService : IDisposable
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<SekibanDocumentService> _logger;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly MarkdownReader _markdownReader;
+    private readonly List<MarkdownReader> _markdownReaders = [];
     private readonly DocumentationOptions _options;
     private List<MarkdownDocument> _documents = new();
-    private FileSystemWatcher? _fileWatcher;
+    private readonly List<FileSystemWatcher> _fileWatchers = [];
     private bool _isInitialized;
 
     /// <summary>
@@ -29,17 +29,17 @@ public class SekibanDocumentService : IDisposable
         _options = options.Value;
         _environment = environment;
 
-        // Resolve base path - use absolute path if provided, otherwise combine with content root
-        var docsBasePath = _options.BasePath;
-        if (!Path.IsPathRooted(docsBasePath))
+        foreach (var configuredPath in GetConfiguredBasePaths(_options))
         {
-            // For Azure deployment, use WebRootPath first, then fall back to ContentRootPath
-            var basePath = AppContext.BaseDirectory;
-            logger.LogInformation("AppContext.BaseDirectory: {BasePath}", basePath);
-            docsBasePath = Path.Combine(basePath, docsBasePath);
+            var docsBasePath = ResolveDocsBasePath(configuredPath);
+            var documentSet = GetDocumentSetName(configuredPath);
+            logger.LogInformation(
+                "Registering documentation path {DocsBasePath} as document set {DocumentSet}",
+                docsBasePath,
+                documentSet);
+            _markdownReaders.Add(
+                new MarkdownReader(_loggerFactory.CreateLogger<MarkdownReader>(), docsBasePath, documentSet));
         }
-
-        _markdownReader = new MarkdownReader(_loggerFactory.CreateLogger<MarkdownReader>(), docsBasePath);
     }
 
     /// <summary>
@@ -47,14 +47,16 @@ public class SekibanDocumentService : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_fileWatcher != null)
+        foreach (var fileWatcher in _fileWatchers)
         {
-            _fileWatcher.Changed -= OnFileChanged;
-            _fileWatcher.Created -= OnFileChanged;
-            _fileWatcher.Deleted -= OnFileChanged;
-            _fileWatcher.Renamed -= OnFileChanged;
-            _fileWatcher.Dispose();
+            fileWatcher.Changed -= OnFileChanged;
+            fileWatcher.Created -= OnFileChanged;
+            fileWatcher.Deleted -= OnFileChanged;
+            fileWatcher.Renamed -= OnFileChanged;
+            fileWatcher.Dispose();
         }
+
+        _fileWatchers.Clear();
     }
 
     /// <summary>
@@ -66,12 +68,18 @@ public class SekibanDocumentService : IDisposable
 
         try
         {
-            _documents = await _markdownReader.ReadAllDocumentsAsync();
+            var documents = new List<MarkdownDocument>();
+            foreach (var reader in _markdownReaders)
+            {
+                documents.AddRange(await reader.ReadAllDocumentsAsync());
+            }
+
+            _documents = documents.OrderBy(d => d.FileName, StringComparer.OrdinalIgnoreCase).ToList();
             _logger.LogInformation("Loaded {Count} Markdown documents", _documents.Count);
 
             if (_options.EnableFileWatcher)
             {
-                SetupFileWatcher();
+                SetupFileWatchers();
             }
 
             _isInitialized = true;
@@ -86,29 +94,33 @@ public class SekibanDocumentService : IDisposable
     /// <summary>
     ///     Setup file watcher to reload documents when they change
     /// </summary>
-    private void SetupFileWatcher()
+    private void SetupFileWatchers()
     {
-        try
+        foreach (var reader in _markdownReaders)
         {
-            var directory = Path.GetDirectoryName(_markdownReader._docsBasePath) ?? _markdownReader._docsBasePath;
-
-            _fileWatcher = new FileSystemWatcher(directory)
+            try
             {
-                Filter = "*.md",
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName,
-                EnableRaisingEvents = true
-            };
+                var directory = reader._docsBasePath;
 
-            _fileWatcher.Changed += OnFileChanged;
-            _fileWatcher.Created += OnFileChanged;
-            _fileWatcher.Deleted += OnFileChanged;
-            _fileWatcher.Renamed += OnFileChanged;
+                var fileWatcher = new FileSystemWatcher(directory)
+                {
+                    Filter = "*.md",
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName,
+                    EnableRaisingEvents = true
+                };
 
-            _logger.LogInformation("File watcher set up for directory: {Directory}", directory);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to set up file watcher");
+                fileWatcher.Changed += OnFileChanged;
+                fileWatcher.Created += OnFileChanged;
+                fileWatcher.Deleted += OnFileChanged;
+                fileWatcher.Renamed += OnFileChanged;
+                _fileWatchers.Add(fileWatcher);
+
+                _logger.LogInformation("File watcher set up for directory: {Directory}", directory);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to set up file watcher");
+            }
         }
     }
 
@@ -121,7 +133,13 @@ public class SekibanDocumentService : IDisposable
         {
             _logger.LogInformation("Document file changed: {FullPath}, reloading documents", e.FullPath);
             await Task.Delay(500); // Small delay to ensure file is fully written
-            _documents = await _markdownReader.ReadAllDocumentsAsync();
+            var documents = new List<MarkdownDocument>();
+            foreach (var reader in _markdownReaders)
+            {
+                documents.AddRange(await reader.ReadAllDocumentsAsync());
+            }
+
+            _documents = documents.OrderBy(d => d.FileName, StringComparer.OrdinalIgnoreCase).ToList();
         }
         catch (Exception ex)
         {
@@ -151,7 +169,14 @@ public class SekibanDocumentService : IDisposable
     public async Task<MarkdownDocument?> GetDocumentAsync(string fileName)
     {
         await InitializeAsync();
-        return _documents.FirstOrDefault(d => d.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+        var exact = _documents.FirstOrDefault(d => d.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+        if (exact != null)
+        {
+            return exact;
+        }
+
+        return _documents.FirstOrDefault(
+            d => Path.GetFileName(d.FileName).Equals(fileName, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -303,5 +328,24 @@ public class SekibanDocumentService : IDisposable
         return allSamples
             .Where(s => searchTerms.All(term => s.Title.ToLower().Contains(term) || s.Code.ToLower().Contains(term)))
             .ToList();
+    }
+
+    private static IReadOnlyList<string> GetConfiguredBasePaths(DocumentationOptions options) =>
+        options.BasePaths.Count > 0 ? options.BasePaths : [options.BasePath];
+
+    private static string ResolveDocsBasePath(string configuredPath) =>
+        Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.Combine(AppContext.BaseDirectory, configuredPath);
+
+    private static string GetDocumentSetName(string configuredPath)
+    {
+        var normalized = configuredPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return string.Empty;
+        }
+
+        return Path.GetFileName(normalized);
     }
 }

@@ -9,15 +9,24 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Azure.AI.OpenAI" Version="2.2.0-beta.4"/>
-        <PackageReference Include="OpenAI" Version="2.3.0"/>
+        <PackageReference Include="Azure.AI.OpenAI" Version="2.2.0-beta.5"/>
+        <PackageReference Include="OpenAI" Version="2.2.0"/>
         <PackageReference Include="Markdig" Version="0.41.3"/>
         <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.2.0-preview.1"/>
         <PackageReference Include="System.Text.Json" Version="9.0.8"/>
     </ItemGroup>
 
     <ItemGroup>
-        <Content Include="../../docs/llm/*.md">
+        <Content Include="../../docs/dcb_llm/*.md" Link="docs/dcb_llm/%(Filename)%(Extension)">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="../../docs/dcb_llm_ja/*.md" Link="docs/dcb_llm_ja/%(Filename)%(Extension)">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="../../docs/llm/*.md" Link="docs/llm/%(Filename)%(Extension)">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="../../docs/llm_ja/*.md" Link="docs/llm_ja/%(Filename)%(Extension)">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
     </ItemGroup>
