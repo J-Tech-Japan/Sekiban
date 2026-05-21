@@ -96,12 +96,10 @@ public class SekibanDocumentService : IDisposable
     /// </summary>
     private void SetupFileWatchers()
     {
-        foreach (var reader in _markdownReaders)
+        foreach (var directory in _markdownReaders.Select(reader => reader._docsBasePath))
         {
             try
             {
-                var directory = reader._docsBasePath;
-
                 var fileWatcher = new FileSystemWatcher(directory)
                 {
                     Filter = "*.md",

@@ -16,7 +16,7 @@ public class DocumentationOptions
     ///     Base paths for document sets. Each path is exposed under its directory name
     ///     (for example, docs/dcb_llm/01_core_concepts.md becomes dcb_llm/01_core_concepts.md).
     /// </summary>
-    public List<string> BasePaths { get; set; } = ["docs/dcb_llm", "docs/dcb_llm_ja", "docs/llm", "docs/llm_ja"];
+    public List<string> BasePaths { get; set; } = [];
 
     /// <summary>
     ///     Enable file watcher to automatically reload docs when changed
