@@ -6,6 +6,13 @@ namespace SekibanDocumentMcpSse;
 /// </summary>
 public class SekibanDocumentService : IDisposable
 {
+    private static readonly Dictionary<string, string[]> DocumentSetPrefixes =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Dcb"] = ["dcb_llm", "dcb_llm_ja"],
+            ["Pure"] = ["llm", "llm_ja"]
+        };
+
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<SekibanDocumentService> _logger;
     private readonly ILoggerFactory _loggerFactory;
@@ -173,7 +180,8 @@ public class SekibanDocumentService : IDisposable
             return null;
         }
 
-        return _documents.FirstOrDefault(d => d.FileName.Equals(normalizedFileName, StringComparison.OrdinalIgnoreCase));
+        return GetDocumentsForSet(documentSet)
+            .FirstOrDefault(d => d.FileName.Equals(normalizedFileName, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -333,20 +341,20 @@ public class SekibanDocumentService : IDisposable
 
     private IEnumerable<MarkdownDocument> GetDocumentsForSet(string documentSet)
     {
-        var normalizedDocumentSet = NormalizeDocumentSet(documentSet);
-        if (string.IsNullOrWhiteSpace(normalizedDocumentSet))
+        var prefixes = GetDocumentSetPrefixes(documentSet);
+        if (prefixes.Count == 0)
         {
             return [];
         }
 
         return _documents.Where(
-            d => d.FileName.StartsWith($"{normalizedDocumentSet}/", StringComparison.OrdinalIgnoreCase));
+            d => prefixes.Any(prefix => d.FileName.StartsWith($"{prefix}/", StringComparison.OrdinalIgnoreCase)));
     }
 
     private static string? NormalizeFileNameForSet(string fileName, string documentSet)
     {
-        var normalizedDocumentSet = NormalizeDocumentSet(documentSet);
-        if (string.IsNullOrWhiteSpace(normalizedDocumentSet) || string.IsNullOrWhiteSpace(fileName))
+        var prefixes = GetDocumentSetPrefixes(documentSet);
+        if (prefixes.Count == 0 || string.IsNullOrWhiteSpace(fileName))
         {
             return null;
         }
@@ -354,16 +362,21 @@ public class SekibanDocumentService : IDisposable
         var normalizedFileName = fileName.Replace('\\', '/').TrimStart('/');
         if (normalizedFileName.Contains('/'))
         {
-            return normalizedFileName.StartsWith($"{normalizedDocumentSet}/", StringComparison.OrdinalIgnoreCase)
+            return prefixes.Any(prefix => normalizedFileName.StartsWith($"{prefix}/", StringComparison.OrdinalIgnoreCase))
                 ? normalizedFileName
                 : null;
         }
 
-        return $"{normalizedDocumentSet}/{Path.GetFileName(normalizedFileName)}";
+        return prefixes
+            .Select(prefix => $"{prefix}/{Path.GetFileName(normalizedFileName)}")
+            .FirstOrDefault();
     }
 
-    private static string NormalizeDocumentSet(string documentSet) =>
-        documentSet?.Trim().Trim('/', '\\') ?? string.Empty;
+    private static IReadOnlyList<string> GetDocumentSetPrefixes(string documentSet)
+    {
+        var normalized = documentSet?.Trim() ?? string.Empty;
+        return DocumentSetPrefixes.TryGetValue(normalized, out var prefixes) ? prefixes : [];
+    }
 
     private static string ResolveDocsBasePath(string configuredPath) =>
         Path.IsPathRooted(configuredPath)

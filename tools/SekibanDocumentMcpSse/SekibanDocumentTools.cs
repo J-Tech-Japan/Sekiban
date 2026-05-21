@@ -27,7 +27,7 @@ public sealed class SekibanDocumentTools
     [McpServerTool]
     [Description("Get the navigation structure of Sekiban documentation.")]
     public async Task<string> GetDocumentNavigation(
-        [Description("The document set to use: dcb_llm, dcb_llm_ja, llm, or llm_ja")] string documentSet)
+        [Description("The document set to use. Required value: Dcb or Pure.")] string documentSet)
     {
         var navigation = await _documentService.GetNavigationAsync(documentSet);
         return JsonSerializer.Serialize(navigation, SekibanContext.Default.ListNavigationItem);
@@ -39,7 +39,7 @@ public sealed class SekibanDocumentTools
     [McpServerTool]
     [Description("Get a list of all available Sekiban documents.")]
     public async Task<string> GetAllDocuments(
-        [Description("The document set to use: dcb_llm, dcb_llm_ja, llm, or llm_ja")] string documentSet)
+        [Description("The document set to use. Required value: Dcb or Pure.")] string documentSet)
     {
         var documents = await _documentService.GetAllDocumentsAsync(documentSet);
         return JsonSerializer.Serialize(documents, SekibanContext.Default.ListDocumentInfo);
@@ -51,7 +51,7 @@ public sealed class SekibanDocumentTools
     [McpServerTool]
     [Description("Get a specific Sekiban document by filename.")]
     public async Task<string> GetDocument(
-        [Description("The document set to use: dcb_llm, dcb_llm_ja, llm, or llm_ja")] string documentSet,
+        [Description("The document set to use. Required value: Dcb or Pure.")] string documentSet,
         [Description("The filename of the document (e.g., '01_core_concepts.md')")] string fileName)
     {
         var document = await _documentService.GetDocumentAsync(fileName, documentSet);
@@ -75,7 +75,7 @@ public sealed class SekibanDocumentTools
     [McpServerTool]
     [Description("Get a specific section from a Sekiban document.")]
     public async Task<string> GetDocumentSection(
-        [Description("The document set to use: dcb_llm, dcb_llm_ja, llm, or llm_ja")] string documentSet,
+        [Description("The document set to use. Required value: Dcb or Pure.")] string documentSet,
         [Description("The filename of the document (e.g., '01_core_concepts.md')")] string fileName,
         [Description("The title of the section")] string sectionTitle)
     {
@@ -95,7 +95,7 @@ public sealed class SekibanDocumentTools
     [McpServerTool]
     [Description("Search Sekiban documentation by keyword.")]
     public async Task<string> SearchDocumentation(
-        [Description("The document set to use: dcb_llm, dcb_llm_ja, llm, or llm_ja")] string documentSet,
+        [Description("The document set to use. Required value: Dcb or Pure.")] string documentSet,
         [Description("The search keyword or phrase")] string query)
     {
         var results = await _documentService.SearchAsync(query, documentSet);
@@ -139,7 +139,7 @@ public sealed class SekibanDocumentTools
     [McpServerTool]
     [Description("Ask a question about Sekiban and get an answer using AI.")]
     public async Task<string> AskQuestion(
-        [Description("The document set to use: dcb_llm, dcb_llm_ja, llm, or llm_ja")] string documentSet,
+        [Description("The document set to use. Required value: Dcb or Pure.")] string documentSet,
         [Description("Your question about Sekiban")] string question)
     {
         var answer = await _openAiService.AnswerQuestionAsync(question, documentSet);
