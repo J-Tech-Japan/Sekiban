@@ -107,6 +107,12 @@ Sekiban is Apache 2.0 open source. Support us via [GitHub Sponsors](https://gith
   </a>
 </p>
 
+## Community
+
+Join the **J-Tech JAPAN OSS Discord** to ask questions, share ideas, and connect with other Sekiban users. There is a dedicated channel for the Sekiban community.
+
+👉 [Join our Discord](https://discord.gg/kMdv978X)
+
 ## Support
 
 For training or support, contact [sekibanadmin@jtechs.com](mailto:sekibanadmin@jtechs.com).
