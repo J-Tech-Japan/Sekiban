@@ -58,6 +58,7 @@ internal class Program
             Console.WriteLine("  4. pure           - Sekiban Pure Orleans Aspire Template");
             Console.WriteLine("  5. decider-aws    - Sekiban Dcb Decider AWS Template (DynamoDB)");
             Console.WriteLine("  6. withoutresult-aws - Sekiban Dcb Orleans AWS Template (DynamoDB)");
+            Console.WriteLine("  7. wasm-decider   - Sekiban WASM Runtime Decider Template (public-container stack)");
             Console.Write("Enter choice [default: decider]: ");
             var input = Console.ReadLine();
             templateType = string.IsNullOrWhiteSpace(input) ? "decider" : input.Trim();
@@ -73,10 +74,11 @@ internal class Program
             "4" => "pure",
             "5" => "decider-aws",
             "6" => "withoutresult-aws",
+            "7" => "wasm-decider",
             _ => templateType
         };
 
-        var validTypes = new[] { "decider", "dcb", "withoutresult", "pure", "decider-aws", "withoutresult-aws" };
+        var validTypes = new[] { "decider", "dcb", "withoutresult", "pure", "decider-aws", "withoutresult-aws", "wasm-decider" };
         if (!validTypes.Contains(templateType))
         {
              Console.Error.WriteLine($"❌ Invalid template type: {templateType}. Allowed values are: {string.Join(", ", validTypes.Select(t => $"'{t}'"))}.");
@@ -115,6 +117,11 @@ internal class Program
              installCommand = "new install Sekiban.Dcb.Templates";
              createCommand = $"new sekiban-dcb-orleans-aws -n {projectName}";
         }
+        else if (templateType == "wasm-decider")
+        {
+             installCommand = "new install Sekiban.Dcb.WasmRuntime.Templates";
+             createCommand = $"new sekiban-wasm-decider -n {projectName}";
+        }
         else // dcb
         {
              installCommand = "new install Sekiban.Dcb.Templates";
@@ -127,6 +134,15 @@ internal class Program
         {
             Console.Error.WriteLine();
             Console.Error.WriteLine($"❌ dotnet {installCommand} failed with exit code {installExitCode}.");
+            if (templateType == "wasm-decider")
+            {
+                Console.Error.WriteLine();
+                Console.Error.WriteLine("The Sekiban.Dcb.WasmRuntime.Templates package could not be installed.");
+                Console.Error.WriteLine("It is published from the SekibanWasmRuntime repository's templates-v* release lane;");
+                Console.Error.WriteLine("if it has not been published to NuGet.org yet, this install will fail with a not-found error.");
+                Console.Error.WriteLine("See https://github.com/J-Tech-Japan/SekibanWasmRuntime for the release status, or install a");
+                Console.Error.WriteLine("locally packed nupkg with: dotnet new install <path-to-Sekiban.Dcb.WasmRuntime.Templates.nupkg>");
+            }
             return installExitCode;
         }
 
@@ -148,6 +164,19 @@ internal class Program
         Console.WriteLine($"📁 Project created: {projectName}");
         Console.WriteLine();
 
+        if (templateType == "wasm-decider")
+        {
+            Console.WriteLine("Next steps:");
+            Console.WriteLine($"  cd {projectName}");
+            Console.WriteLine("  bash scripts/build-wasm.sh          # builds the WASM module + runtime manifest");
+            Console.WriteLine($"  dotnet restore");
+            Console.WriteLine($"  dotnet build");
+            Console.WriteLine($"  dotnet run --project {projectName}.AppHost   # starts Postgres + the public runtime container");
+            Console.WriteLine("  # or run the end-to-end smoke instead (starts the AppHost itself):");
+            Console.WriteLine("  bash scripts/smoke.sh");
+            Console.WriteLine();
+        }
+
         return 0;
     }
 
@@ -168,6 +197,7 @@ internal class Program
         Console.WriteLine("                 pure             - Sekiban Pure Orleans Aspire Template");
         Console.WriteLine("                 decider-aws      - Sekiban Dcb Decider AWS Template (DynamoDB)");
         Console.WriteLine("                 withoutresult-aws - Sekiban Dcb Orleans AWS Template (DynamoDB)");
+        Console.WriteLine("                 wasm-decider     - Sekiban WASM Runtime Decider Template (public-container stack)");
         Console.WriteLine("  -h, --help   Show this help message.");
         Console.WriteLine();
         Console.WriteLine("Examples:");
@@ -178,6 +208,7 @@ internal class Program
         Console.WriteLine("  create-sekiban-dcb-template MyProject -t pure");
         Console.WriteLine("  create-sekiban-dcb-template MyProject -t decider-aws");
         Console.WriteLine("  create-sekiban-dcb-template MyProject -t withoutresult-aws");
+        Console.WriteLine("  create-sekiban-dcb-template MyProject -t wasm-decider");
     }
 
     /// <summary>
