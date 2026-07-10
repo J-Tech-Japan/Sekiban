@@ -57,6 +57,12 @@ Learn more at [dcb.events](https://dcb.events)
 - **Pure Docs**: [docs/llm](https://github.com/J-Tech-Japan/Sekiban/tree/main/docs/llm) (EN) | [docs/llm_ja](https://github.com/J-Tech-Japan/Sekiban/tree/main/docs/llm_ja) (JP)
 - **DCB Docs**: [docs/dcb_llm](https://github.com/J-Tech-Japan/Sekiban/tree/main/docs/dcb_llm) (EN) | [docs/dcb_llm_ja](https://github.com/J-Tech-Japan/Sekiban/tree/main/docs/dcb_llm_ja) (JP)
 
+## Community
+
+Join the **J-Tech JAPAN OSS Discord** to ask questions and connect with other Sekiban users. There is a dedicated channel for the Sekiban community.
+
+👉 [Join our Discord](https://discord.gg/kMdv978X)
+
 ## License
 
 Apache 2.0 - Copyright (c) 2022- J-Tech Japan

@@ -6,6 +6,12 @@ We're glad you're interested in contributing to our project! While the maintaine
 
 This document outlines how you can contribute to our project and what you can expect during this process. Please read it thoroughly before you begin.
 
+## Community
+
+Join the **J-Tech JAPAN OSS Discord** to ask questions, discuss ideas, and connect with other Sekiban users and contributors. There is a dedicated channel for the Sekiban community.
+
+👉 [Join our Discord](https://discord.gg/kMdv978X)
+
 ## Code of Conduct
 
 First and foremost, participants in this project are expected to respect our [Code of Conduct](CODE_OF_CONDUCT.md). We're committed to providing a welcoming and positive experience for all contributors, so please respect these guidelines.

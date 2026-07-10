@@ -112,6 +112,12 @@ Before publishing, ensure you have:
 5. Create a changeset
 6. Submit a pull request
 
+## Community
+
+Join the **J-Tech JAPAN OSS Discord** to ask questions and connect with other Sekiban users. There is a dedicated channel for the Sekiban community.
+
+👉 [Join our Discord](https://discord.gg/kMdv978X)
+
 ## License
 
 MIT
