@@ -166,6 +166,39 @@ builder.Services.AddSekibanDcbPostgres("Host=localhost;Database=sekiban_dcb;User
 
 DCB の Dapr 版は開発中です。現時点では Orleans ベースの実行環境をご利用ください。
 
+## 整合性契約
+
+このセクションでは `IEventStore.WriteSerializableEventsAsync` / `WriteEventsAsync` の、プロバイダーごとの実際のアトミック性保証を説明します。以下で説明するギャップを埋めるための後続スライス(冪等なタグ書き込み、ロールフォワードリトライ、タグインデックス修復API、opt-inのスタートアップスイープ)が計画されていますが、Cosmos の二段階書き込み設計自体はこのドキュメント更新では変更していません。
+
+### Postgres — 現在の保証
+
+`PostgresEventStore.WriteEventsAsync` はイベント行とタグ行を単一のデータベーストランザクション内で書き込みます。**イベントセットのアトミック性**(`WriteEventsAsync` 呼び出し内のすべてのイベントがコミットされるか、まったくコミットされないか)と、**イベント/タグのアトミック性**(タグ行を伴わずにイベントが可視化されることはない)の両方が保証されます。
+
+### Cosmos DB — 現在の保証
+
+`CosmosDbEventStore.WriteSerializableEventsAsync` は、**2つのフェーズにまたがるトランザクションを持たない**、2段階の書き込みを行います:
+
+1. イベントドキュメントを並列に作成(`CreateItemAsync`)。イベントごとに1件、`{serviceId}|{eventId}` でパーティション分割。
+2. その後、タグ行を per-tag-partition の `TransactionalBatch`(`{serviceId}|{tag}`)で書き込み。
+
+これにより、現在次の2つの問題があります:
+
+- **イベント/タグのクラッシュウィンドウ**: フェーズ1とフェーズ2の間、またはフェーズ2のタグバッチ処理中にクラッシュやホスト終了が発生すると、タグ行を伴わない永続化済みイベントが残ります。これらのイベントは `ReadAllEventsAsync` からは可視ですが、`ReadEventsByTagAsync`、タグプロジェクター、および(`GeneralTagConsistentActor` の楽観的並行性制御のベースラインにも使われる)`GetLatestTagAsync` からは不可視です。
+- **複数イベントの部分的な可視化**: 複数イベントの `WriteEventsAsync` 呼び出しは、並列のイベント作成の途中で失敗することがあります。作成に成功したイベントは all-events リーダーに即座に可視化されますが、同じ呼び出し内の書き込みに失敗した兄弟イベントはどこにも記録されません。
+
+`TryRollbackSerializableEventsAsync` はプロセス内の `catch` ブロックからのみ実行され、クラッシュ後には実行されません。また、永続的な補償レコードもありません。
+
+**計画中の改善(未リリース)**: 冪等なタグ書き込み、ロールフォワードリトライ、タグインデックス修復API、opt-in のスタートアップスイープ。これらは現行リリースには含まれておらず、パッケージをアップグレードするだけでは修復/スイープの動作は有効になりません。今後、明示的な opt-in として提供される予定です。
+
+Cosmos のイベントドキュメントは完全な `tags` 配列を保持しているため(`Models/CosmosEvent.cs` 参照)、`tags` コンテナーは **派生可能なインデックス** であり、常に `events` コンテナーから再構築できます。これが計画中の修復戦略の基礎になっています。なお、将来的に修復/スイープがリリースされた後も、修復直後の読み取りは、設定された Cosmos の整合性レベルによっては古い状態を観測する可能性がある点に注意してください。
+
+### プロバイダーの選び方
+
+アトミックなイベント/タグの可視性やイベントセットのアトミック性を必要とするワークロード(例: 金銭に関わるワークフロー)には **Postgres** を推奨します。Sekiban エコシステムにおける具体例:
+
+- [SekibanWasmRuntime](https://github.com/J-Tech-Japan/SekibanWasmRuntime) はイベントストアのデフォルトが Postgres で、Cosmos は opt-in です。
+- SekibanAsAService は管理系(management)とランタイム系(runtime)で別系統のコンテナーを使用しており、それぞれ独立してプロバイダーを選択できます。コンテナーごとに上記と同じ「アトミック性が必要なら Postgres」というガイドラインを適用してください。
+
 ## マテリアライズドビュー用ストレージ
 
 マテリアライズドビューは現在 PostgreSQL 向けに実装されています。

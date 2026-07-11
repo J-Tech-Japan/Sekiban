@@ -142,6 +142,39 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 | DynamoDB | `Sekiban.Dcb.DynamoDB` | `Sekiban.Dcb.BlobStorage.S3` | Production |
 | SQLite | `Sekiban.Dcb.Sqlite` | N/A | Development |
 
+## Consistency Contract
+
+This section documents the actual atomicity guarantees of `IEventStore.WriteSerializableEventsAsync` / `WriteEventsAsync` per provider. Follow-up slices are planned to close the gaps described below (idempotent tag writes, roll-forward retry, a tag-index repair API, an opt-in startup sweep) — the two-phase Cosmos write design itself is not changed by this document update.
+
+### Postgres — current guarantee
+
+`PostgresEventStore.WriteEventsAsync` writes event rows and tag rows inside a single database transaction. Both **event-set atomicity** (all events in a `WriteEventsAsync` call commit, or none do) and **event/tag atomicity** (an event is never visible without its tag rows) are guaranteed.
+
+### Cosmos DB — current guarantee
+
+`CosmosDbEventStore.WriteSerializableEventsAsync` performs a two-phase write with **no transaction spanning the two phases**:
+
+1. Event documents are created in parallel (`CreateItemAsync`), one per event, partitioned by `{serviceId}|{eventId}`.
+2. Tag rows are then written via per-tag-partition `TransactionalBatch` (`{serviceId}|{tag}`).
+
+This has two consequences today:
+
+- **Event/tag crash window**: a crash or host termination between phase 1 and phase 2 (or mid-way through the phase 2 tag batches) leaves durable events without their tag rows. Those events are visible via `ReadAllEventsAsync`, but invisible to `ReadEventsByTagAsync`, tag projectors, and `GetLatestTagAsync` — which also feeds `GeneralTagConsistentActor`'s optimistic-concurrency baseline.
+- **Multi-event partial visibility**: a multi-event `WriteEventsAsync` call can fail partway through its parallel event creates. Successfully created events become immediately visible to all-events readers even though sibling events from the same call may never get written.
+
+`TryRollbackSerializableEventsAsync` only runs from an in-process `catch` block; it never runs after a crash, and there is no durable compensation record.
+
+**Planned improvements (not yet released)**: idempotent tag writes, roll-forward retry, a tag-index repair API, and an opt-in startup sweep. None of these ship in the current release — upgrading the package alone does not enable any repair or sweep behavior; they will land later as explicit opt-ins.
+
+Because Cosmos event documents carry the complete `tags` array (see `Models/CosmosEvent.cs`), the `tags` container is a **derivable index**: it can always be reconstructed from the `events` container. This is the basis for the planned repair strategy. Note that once a repair/sweep ships, reads immediately after a repair may still observe stale state depending on the configured Cosmos consistency level.
+
+### Choosing a provider
+
+Recommend **Postgres** for any workload that requires atomic event/tag visibility or event-set atomicity — for example money-sensitive workflows. Concrete examples in the Sekiban ecosystem:
+
+- [SekibanWasmRuntime](https://github.com/J-Tech-Japan/SekibanWasmRuntime) defaults to Postgres for its event store, with Cosmos as an opt-in.
+- SekibanAsAService uses separate management and runtime container lineages; each can select its provider independently, so apply the same Postgres-for-atomicity guidance per container.
+
 ## Materialized View Storage
 
 Materialized views are currently implemented for PostgreSQL:
