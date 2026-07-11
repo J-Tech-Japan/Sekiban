@@ -68,8 +68,11 @@ public interface IEventStore
     Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null);
 
     /// <summary>
-    ///     Writes multiple pre-serialized events to the event store atomically.
-    ///     Also updates tag states for all affected tags.
+    ///     Writes multiple pre-serialized events to the event store and updates tag states
+    ///     for all affected tags. Atomicity of the event write, the tag write, and the
+    ///     visibility of a multi-event batch is provider-dependent — see the
+    ///     "Consistency Contract" section in docs/dcb_llm/11_storage_providers.md for the
+    ///     guarantees of each storage provider.
     /// </summary>
     /// <returns>ResultBox containing the written serializable events and tag write results</returns>
     Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
