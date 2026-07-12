@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.CosmosDb.Repair;
+using Sekiban.Dcb.CosmosDb.Sweep;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
@@ -280,6 +281,46 @@ public static class SekibanDcbCosmosDbExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<CosmosDbTagRepairServiceFactory>();
+        return services;
+    }
+
+    /// <summary>
+    ///     Registers the automatic tag-index sweep, which runs the non-destructive repair over a recent
+    ///     window shortly after startup and optionally on an interval.
+    ///     Opt-in twice over: this method is not called by <c>AddSekibanDcbCosmosDb</c>, and the sweep stays
+    ///     inert until <see cref="CosmosTagSweepOptions.Enabled" /> is set — so neither referencing the
+    ///     package nor upgrading it can start scanning anyone's containers.
+    ///     The sweep is EVENTUAL repair. It does not gate tag readers, and a missing-tag window stays open
+    ///     until a run reaches it. See the storage-provider docs before relying on it.
+    ///     Measure the RU cost with a manual dry run before enabling an interval.
+    /// </summary>
+    public static IServiceCollection AddSekibanDcbCosmosDbTagSweep(
+        this IServiceCollection services,
+        Action<CosmosTagSweepOptions>? configureOptions = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        var sweepOptions = new CosmosTagSweepOptions();
+        configureOptions?.Invoke(sweepOptions);
+
+        services.AddSekibanDcbCosmosDbTagRepair();
+        services.AddSingleton(sweepOptions);
+        services.AddHostedService(provider =>
+        {
+            var factory = provider.GetRequiredService<CosmosDbTagRepairServiceFactory>();
+
+            // Empty means the host's own lineage — the right default for a single-tenant deployment.
+            var serviceIds = sweepOptions.ServiceIds.Count > 0
+                ? sweepOptions.ServiceIds.ToList()
+                : new List<string> { provider.GetRequiredService<IServiceIdProvider>().GetCurrentServiceId() };
+
+            return new CosmosTagSweepService(
+                sweepOptions,
+                serviceIds,
+                new CosmosTagRepairRunner(factory),
+                logger: provider.GetService<ILogger<CosmosTagSweepService>>());
+        });
+
         return services;
     }
 
