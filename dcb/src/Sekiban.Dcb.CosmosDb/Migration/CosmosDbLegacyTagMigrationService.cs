@@ -478,7 +478,20 @@ public sealed class CosmosDbLegacyTagMigrationService
                 $"more than {options.MaxRowsPerKey} rows index this key; not reduced"));
         }
 
-        var planned = CosmosTagSurvivorPolicy.Plan(rows, derived);
+        var planned = CosmosTagSurvivorPolicy.Plan(rows, derived, out var canonicalCorruption);
+
+        // The canonical row itself disagrees with its event. Nothing about this key is planned: the run must
+        // never rewrite a corrupt row, and it must not remove the other rows that index the event while one
+        // of them is wrong.
+        if (canonicalCorruption != null)
+        {
+            return (null, new CosmosTagMigrationSkip(
+                eventId,
+                tag,
+                CosmosTagMigrationSkipReason.Corrupt,
+                canonicalCorruption));
+        }
+
         if (planned == null)
         {
             return (null, null);

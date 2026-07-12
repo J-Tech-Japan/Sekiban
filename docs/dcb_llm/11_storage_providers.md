@@ -335,7 +335,7 @@ That shape is the point. Proving the survivor with a read and *then* deleting is
 
 A key needing more than a transaction can carry (100 operations: 1 survivor + 99 victims) is **refused at plan time** — splitting it across transactions would put the gap straight back.
 
-**What it will not touch.** A row that disagrees with its event is not a duplicate — it is corruption, and this tool does not get to decide what to do about it: reported as `Skipped`, never deleted. Same for a key with more rows than the per-key cap (`Overflow`).
+**What it will not touch.** A row that disagrees with its event is not a duplicate — it is corruption, and this tool does not get to decide what to do about it: reported as `Skipped`, never deleted. That includes the **canonical row itself**: if the row at the deterministic id disagrees with its event, the whole key is left alone and no action is planned for it. Planning around it would be worse than useless — the run conditions the survivor with a replace, so it would quietly rewrite the corrupt row into what the event says, "fixing" it, and then delete the legacy rows that were the only other record of the key. Same treatment for a key with more rows than the per-key cap (`Overflow`).
 
 **Audit.** Every key produces an audit entry — survivor, rows removed, outcome — including the keys it declined to touch.
 

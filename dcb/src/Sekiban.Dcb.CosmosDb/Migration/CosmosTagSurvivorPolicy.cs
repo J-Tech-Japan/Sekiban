@@ -1,5 +1,6 @@
 using Sekiban.Dcb.CosmosDb.Models;
 using Sekiban.Dcb.CosmosDb.Repair;
+using Sekiban.Dcb.CosmosDb.Tags;
 namespace Sekiban.Dcb.CosmosDb.Migration;
 
 /// <summary>
@@ -38,8 +39,11 @@ internal static class CosmosTagSurvivorPolicy
     /// </summary>
     public static (CosmosTag Survivor, bool SurvivorExists, IReadOnlyList<CosmosTag> ToRemove)? Plan(
         IReadOnlyList<CosmosTag> rows,
-        CosmosTag derived)
+        CosmosTag derived,
+        out string? corruptDetail)
     {
+        corruptDetail = null;
+
         if (rows.Count == 0)
         {
             // Nothing indexes this key. Backfilling it is the non-destructive repair's job.
@@ -49,6 +53,21 @@ internal static class CosmosTagSurvivorPolicy
         var deterministic = rows.FirstOrDefault(row =>
             string.Equals(row.Id, derived.Id, StringComparison.Ordinal));
 
+        // A row sitting at the canonical id that DISAGREES with its event is corruption, and this service
+        // does not get to decide what to do about corruption. Planning around it would be worse than
+        // useless: the run conditions the survivor with a replace, so it would quietly rewrite the corrupt
+        // row into what the event says — "fixing" it — and then delete the legacy rows that were the only
+        // other record of the key. So the key is not planned at all.
+        if (deterministic != null && !CosmosTagIdentity.ContentEquals(derived, deterministic))
+        {
+            corruptDetail =
+                $"the row at the canonical id '{derived.Id}' disagrees with its event. Expected " +
+                $"[{CosmosTagIdentity.Describe(derived)}], found [{CosmosTagIdentity.Describe(deterministic)}]. " +
+                "This key is left entirely alone — the migration does not rewrite a corrupt row, and it does " +
+                "not remove the other rows that index the event while one is wrong.";
+            return null;
+        }
+
         var legacy = rows
             .Where(row => !string.Equals(row.Id, derived.Id, StringComparison.Ordinal))
             .OrderBy(row => row.Id, StringComparer.Ordinal) // stable order, so the artifact is reproducible
@@ -56,12 +75,12 @@ internal static class CosmosTagSurvivorPolicy
 
         if (legacy.Count == 0)
         {
-            // Only the canonical row is here. Already migrated.
+            // Only the canonical row is here, and it agrees with its event. Already migrated.
             return null;
         }
 
-        // The survivor is the canonical row: the existing one if it is there, otherwise the one derived from
-        // the event — which is exactly what the write path would produce.
+        // The survivor is the canonical row: the existing one when it is there AND correct, otherwise the
+        // one derived from the event — which is exactly what the write path would produce.
         return (deterministic ?? derived, deterministic != null, legacy);
     }
 

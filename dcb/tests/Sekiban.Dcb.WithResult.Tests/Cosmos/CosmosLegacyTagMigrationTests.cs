@@ -1,4 +1,5 @@
 using Dcb.Domain;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb;
@@ -771,6 +772,123 @@ public class CosmosLegacyTagMigrationTests
         Assert.Equal(1, report.Reduced);
         Assert.Equal(99, report.RowsRemoved);
         Assert.Single(lineage.Tags.Items);
+    }
+
+    [Fact]
+    public async Task A_Corrupt_Canonical_Row_Should_Leave_The_Whole_Key_Alone()
+    {
+        var lineage = NewLineage();
+
+        // The canonical row is there — and it disagrees with its event. Legacy duplicates sit alongside it.
+        var written = NewEvent(Tag);
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        lineage.Tags.MutateInPlace(
+            $"{ServiceId}|{Tag}",
+            written.Id.ToString(),
+            row => row["eventType"] = "SomethingElse");
+
+        lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
+        lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
+
+        var writesBefore = lineage.Tags.Creates;
+
+        var migration = await lineage.MigrationAsync();
+        var plan = await migration.PlanAsync(new CosmosTagMigrationPlanOptions());
+
+        // No action at all. Planning around a corrupt canonical row would be worse than useless: the run
+        // conditions the survivor with a replace, so it would quietly rewrite the corrupt row into what the
+        // event says — "fixing" it — and then delete the legacy rows that were the only other record of the
+        // key. Corruption is not this service's to decide about.
+        Assert.Empty(plan.Actions);
+        var skip = Assert.Single(plan.Skipped);
+        Assert.Equal(CosmosTagMigrationSkipReason.Corrupt, skip.Reason);
+
+        var backup = new RecordingBackupWriter();
+        var report = await migration.ApplyAsync(plan, Authorized(backup));
+
+        // Nothing created, nothing replaced, nothing deleted, and nothing even backed up.
+        Assert.Equal(0, report.RowsRemoved);
+        Assert.Equal(0, report.Reduced);
+        Assert.Equal(1, report.Skipped);
+        Assert.Equal(0, lineage.Tags.Deletes);
+        Assert.Equal(writesBefore, lineage.Tags.Creates);
+        Assert.Empty(backup.Rows);
+
+        // The corrupt row is exactly as it was, and both legacy rows are still there.
+        Assert.Equal(3, lineage.Tags.Items.Count);
+        var canonical = Assert.Single(
+            lineage.Tags.Items.Where(row => row["id"]!.ToString() == written.Id.ToString()));
+        Assert.Equal("SomethingElse", canonical["eventType"]!.ToString());
+
+        // And the audit says the key was skipped — it never claims a migration action was taken.
+        var entry = Assert.Single(report.Audit);
+        Assert.Equal(CosmosTagMigrationOutcome.Skipped, entry.Outcome);
+        Assert.Empty(entry.RemovedIds);
+        Assert.False(entry.SurvivorCreated);
+    }
+
+    // ── The transaction cannot reach outside its partition ──────────────────────────────────────────
+
+    [Fact]
+    public void A_Batch_Should_Reject_A_Document_Belonging_To_Another_Partition()
+    {
+        var container = new InMemoryCosmosContainer("tags");
+        container.Seed(new CosmosTag { Pk = "svc|A", Id = "keep-me", Tag = "A" });
+
+        var batch = container.CreateTransactionalBatch(new PartitionKey("svc|A"));
+
+        // A create whose document says it lives somewhere else. Cosmos refuses the request; so must the
+        // double, or a test could pass while production rejected the very same batch.
+        batch.CreateItem(new CosmosTag { Pk = "svc|B", Id = "smuggled", Tag = "B" });
+        batch.DeleteItem("keep-me", new TransactionalBatchItemRequestOptions());
+
+        var response = batch.ExecuteAsync().GetAwaiter().GetResult();
+
+        Assert.False(response.IsSuccessStatusCode);
+
+        // All-or-nothing: the delete that WAS valid did not happen either.
+        Assert.Single(container.Items);
+        Assert.Equal(0, container.Deletes);
+    }
+
+    [Fact]
+    public void A_Batch_Should_Not_Delete_An_Id_That_Lives_In_Another_Partition()
+    {
+        var container = new InMemoryCosmosContainer("tags");
+
+        // The same document id in two different tag partitions — which is normal: an event is indexed once
+        // per tag, and the canonical id IS the event id.
+        container.Seed(new CosmosTag { Pk = "svc|A", Id = "shared-id", Tag = "A" });
+        container.Seed(new CosmosTag { Pk = "svc|B", Id = "shared-id", Tag = "B" });
+
+        var batch = container.CreateTransactionalBatch(new PartitionKey("svc|A"));
+        batch.DeleteItem("shared-id", new TransactionalBatchItemRequestOptions());
+
+        var response = batch.ExecuteAsync().GetAwaiter().GetResult();
+
+        Assert.True(response.IsSuccessStatusCode);
+
+        // Exactly the one in partition A. A double that resolved the id by scanning every partition could
+        // have taken the wrong one — and would have stopped proving the confinement the migration leans on.
+        var survivor = Assert.Single(container.Items);
+        Assert.Equal("svc|B", survivor["pk"]!.ToString());
+    }
+
+    [Fact]
+    public void A_Batch_Should_Refuse_A_Delete_Whose_Id_Is_Absent_From_Its_Own_Partition()
+    {
+        var container = new InMemoryCosmosContainer("tags");
+        container.Seed(new CosmosTag { Pk = "svc|B", Id = "elsewhere", Tag = "B" });
+
+        // Scoped to partition A, deleting an id that only exists in B.
+        var batch = container.CreateTransactionalBatch(new PartitionKey("svc|A"));
+        batch.DeleteItem("elsewhere", new TransactionalBatchItemRequestOptions());
+
+        var response = batch.ExecuteAsync().GetAwaiter().GetResult();
+
+        Assert.False(response.IsSuccessStatusCode);
+        Assert.Single(container.Items);
+        Assert.Equal(0, container.Deletes);
     }
 
     // ── The fingerprint cannot be fooled ────────────────────────────────────────────────────────────
