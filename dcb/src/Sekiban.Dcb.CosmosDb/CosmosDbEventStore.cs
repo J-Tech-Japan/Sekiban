@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb.Models;
+using Sekiban.Dcb.CosmosDb.Tags;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
@@ -43,6 +44,12 @@ public partial class CosmosDbEventStore : IHotEventStore
         _containerResolver = containerResolver ?? throw new ArgumentNullException(nameof(containerResolver));
         _logger = logger;
     }
+
+    /// <summary>
+    ///     Test-only hook to fail the tag-write stage deterministically after a given number of batches.
+    ///     Always null in production; the public construction paths cannot set it.
+    /// </summary>
+    internal ICosmosTagWriteFaultInjector? TagWriteFaultInjector { get; set; }
 
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
 
@@ -547,110 +554,30 @@ public partial class CosmosDbEventStore : IHotEventStore
     }
 
     /// <summary>
-    ///     Writes tags using TransactionalBatch for efficiency.
-    ///     Tags with the same partition key (tag string) are batched together.
+    ///     Writes tags idempotently, batched per tag partition.
+    ///     See <see cref="CosmosTagWriteStage" /> — re-executing this for the same events is safe.
     /// </summary>
-    private static async Task<List<TagWriteResult>> WriteTagsWithBatchAsync(
+    private async Task<List<TagWriteResult>> WriteTagsWithBatchAsync(
         List<Event> writtenEvents,
         Container tagsContainer,
         CosmosDbEventStoreOptions options,
         string serviceId,
         CosmosContainerSettings settings)
     {
-        var tagWriteResults = new List<TagWriteResult>();
+        var sources = writtenEvents
+            .SelectMany(ev => ev.Tags.Select(tagString => new CosmosTagRowSource(
+                tagString,
+                ev.Id,
+                ev.SortableUniqueIdValue,
+                ev.EventType)))
+            .ToList();
 
-        // Group all tag entries by tag string (partition key)
-        var tagEntries = writtenEvents
-            .SelectMany(ev => ev.Tags.Select(tagString => (TagString: tagString, Event: ev)))
-            .GroupBy(x => $"{serviceId}|{x.TagString}");
-
-        foreach (var group in tagEntries)
-        {
-            var tagPk = group.Key;
-            var tagString = group.First().TagString;
-            var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
-                ? tagString.Split(':')[0]
-                : tagString;
-            var items = group.ToList();
-
-            if (options.UseTransactionalBatchForTags && items.Count <= options.MaxBatchOperations)
-            {
-                // Use TransactionalBatch for same-partition writes
-                var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagPk));
-
-                foreach (var item in items)
-                {
-                    var cosmosTag = CosmosTag.FromEventTag(
-                        tagString,
-                        tagGroup,
-                        item.Event.SortableUniqueIdValue,
-                        item.Event.Id,
-                        item.Event.EventType,
-                        serviceId);
-
-                    batch.CreateItem(cosmosTag);
-                }
-
-                var response = await batch.ExecuteAsync().ConfigureAwait(false);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    throw new CosmosException(
-                        $"TransactionalBatch failed for tag '{tagString}' with status {response.StatusCode}",
-                        response.StatusCode,
-                        (int)response.StatusCode,
-                        response.ActivityId,
-                        response.RequestCharge);
-                }
-
-                // Add results for all items in batch
-                foreach (var item in items)
-                {
-                    tagWriteResults.Add(new TagWriteResult(tagString, 1, DateTimeOffset.UtcNow));
-                }
-            }
-            else
-            {
-                // Fallback: Split into multiple batches if exceeding limit
-                for (var i = 0; i < items.Count; i += options.MaxBatchOperations)
-                {
-                    var batchItems = items.Skip(i).Take(options.MaxBatchOperations).ToList();
-                    var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagPk));
-
-                    foreach (var item in batchItems)
-                    {
-                        var cosmosTag = CosmosTag.FromEventTag(
-                            tagString,
-                            tagGroup,
-                            item.Event.SortableUniqueIdValue,
-                            item.Event.Id,
-                            item.Event.EventType,
-                            serviceId);
-
-                        batch.CreateItem(cosmosTag);
-                    }
-
-                    var response = await batch.ExecuteAsync().ConfigureAwait(false);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        throw new CosmosException(
-                            $"TransactionalBatch failed for tag '{tagString}' (batch {i / options.MaxBatchOperations + 1}) with status {response.StatusCode}",
-                            response.StatusCode,
-                            (int)response.StatusCode,
-                            response.ActivityId,
-                            response.RequestCharge);
-                    }
-
-                    foreach (var item in batchItems)
-                    {
-                        tagWriteResults.Add(new TagWriteResult(tagString, 1, DateTimeOffset.UtcNow));
-                    }
-                }
-            }
-        }
-
-        return tagWriteResults;
+        return await CosmosTagWriteStage.WriteAsync(
+            sources,
+            new CosmosContainerTagRowStore(tagsContainer),
+            options,
+            serviceId,
+            TagWriteFaultInjector).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1360,106 +1287,30 @@ public partial class CosmosDbEventStore : IHotEventStore
     }
 
     /// <summary>
-    ///     Writes tags for serializable events using TransactionalBatch.
+    ///     Writes tags for serializable events idempotently, batched per tag partition.
+    ///     See <see cref="CosmosTagWriteStage" /> — re-executing this for the same events is safe.
     /// </summary>
-    private static async Task<List<TagWriteResult>> WriteSerializableTagsWithBatchAsync(
+    private async Task<List<TagWriteResult>> WriteSerializableTagsWithBatchAsync(
         List<SerializableEvent> writtenEvents,
         Container tagsContainer,
         CosmosDbEventStoreOptions options,
         string serviceId,
         CosmosContainerSettings settings)
     {
-        var tagWriteResults = new List<TagWriteResult>();
+        var sources = writtenEvents
+            .SelectMany(se => se.Tags.Select(tagString => new CosmosTagRowSource(
+                tagString,
+                se.Id,
+                se.SortableUniqueIdValue,
+                se.EventPayloadName)))
+            .ToList();
 
-        // Group all tag entries by tag string (partition key)
-        var tagEntries = writtenEvents
-            .SelectMany(se => se.Tags.Select(tagString => (TagString: tagString, Event: se)))
-            .GroupBy(x => $"{serviceId}|{x.TagString}");
-
-        foreach (var group in tagEntries)
-        {
-            var tagPk = group.Key;
-            var tagString = group.First().TagString;
-            var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
-                ? tagString.Split(':')[0]
-                : tagString;
-            var items = group.ToList();
-
-            if (options.UseTransactionalBatchForTags && items.Count <= options.MaxBatchOperations)
-            {
-                var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagPk));
-
-                foreach (var item in items)
-                {
-                    var cosmosTag = CosmosTag.FromEventTag(
-                        tagString,
-                        tagGroup,
-                        item.Event.SortableUniqueIdValue,
-                        item.Event.Id,
-                        item.Event.EventPayloadName,
-                        serviceId);
-
-                    batch.CreateItem(cosmosTag);
-                }
-
-                var response = await batch.ExecuteAsync().ConfigureAwait(false);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    throw new CosmosException(
-                        $"TransactionalBatch failed for tag '{tagString}' with status {response.StatusCode}",
-                        response.StatusCode,
-                        (int)response.StatusCode,
-                        response.ActivityId,
-                        response.RequestCharge);
-                }
-
-                foreach (var item in items)
-                {
-                    tagWriteResults.Add(new TagWriteResult(tagString, 1, DateTimeOffset.UtcNow));
-                }
-            }
-            else
-            {
-                for (var i = 0; i < items.Count; i += options.MaxBatchOperations)
-                {
-                    var batchItems = items.Skip(i).Take(options.MaxBatchOperations).ToList();
-                    var batch = tagsContainer.CreateTransactionalBatch(new PartitionKey(tagPk));
-
-                    foreach (var item in batchItems)
-                    {
-                        var cosmosTag = CosmosTag.FromEventTag(
-                            tagString,
-                            tagGroup,
-                            item.Event.SortableUniqueIdValue,
-                            item.Event.Id,
-                            item.Event.EventPayloadName,
-                            serviceId);
-
-                        batch.CreateItem(cosmosTag);
-                    }
-
-                    var response = await batch.ExecuteAsync().ConfigureAwait(false);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        throw new CosmosException(
-                            $"TransactionalBatch failed for tag '{tagString}' (batch {i / options.MaxBatchOperations + 1}) with status {response.StatusCode}",
-                            response.StatusCode,
-                            (int)response.StatusCode,
-                            response.ActivityId,
-                            response.RequestCharge);
-                    }
-
-                    foreach (var item in batchItems)
-                    {
-                        tagWriteResults.Add(new TagWriteResult(tagString, 1, DateTimeOffset.UtcNow));
-                    }
-                }
-            }
-        }
-
-        return tagWriteResults;
+        return await CosmosTagWriteStage.WriteAsync(
+            sources,
+            new CosmosContainerTagRowStore(tagsContainer),
+            options,
+            serviceId,
+            TagWriteFaultInjector).ConfigureAwait(false);
     }
 
     /// <summary>
