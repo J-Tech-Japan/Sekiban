@@ -43,14 +43,35 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     public void Seed(object document)
     {
         var item = JObject.FromObject(document);
+        Stamp(item);
         _items[(Pk(item), Id_(item))] = item;
+    }
+
+    /// <summary>Removes a document behind the code's back, as a concurrent operator would.</summary>
+    public void Remove(string partitionKey, string id) => _items.Remove((partitionKey, id));
+
+    /// <summary>
+    ///     Rewrites a stored document in place, as a concurrent writer would — which moves its ETag, so a
+    ///     delete pinned to the old one is refused. This is how an ETag race is staged deterministically.
+    /// </summary>
+    public void MutateInPlace(string partitionKey, string id, Action<JObject> mutate)
+    {
+        var item = _items[(partitionKey, id)];
+        mutate(item);
+        Stamp(item);
     }
 
     public IEnumerable<JObject> ItemsIn(string partitionKey) =>
         _items.Where(entry => entry.Key.PartitionKey == partitionKey).Select(entry => entry.Value);
 
+    /// <summary>Gives the document a fresh ETag, as Cosmos does on every write.</summary>
+    private void Stamp(JObject item) => item["_etag"] = $"etag-{++_etagSequence}";
+
+    private int _etagSequence;
+
     private static string Pk(JObject item) => item["pk"]?.Value<string>() ?? string.Empty;
     private static string Id_(JObject item) => item["id"]?.Value<string>() ?? string.Empty;
+    private static string? ETagOf(JObject item) => item["_etag"]?.Value<string>();
 
     private void ThrowIfFaulted()
     {
@@ -78,6 +99,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             throw CosmosFailures.Conflict();
         }
 
+        Stamp(document);
         _items[key] = document;
         return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.Created));
     }
@@ -116,40 +138,122 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             throw CosmosFailures.NotFound();
         }
 
+        // An ETag-guarded delete names the version it was planned against. If the row has moved since,
+        // Cosmos refuses it — and so does this double, or the guard would be untested.
+        var ifMatch = requestOptions?.IfMatchEtag;
+        if (!string.IsNullOrEmpty(ifMatch) &&
+            !string.Equals(ifMatch, ETagOf(_items[key]), StringComparison.Ordinal))
+        {
+            throw CosmosFailures.PreconditionFailed();
+        }
+
         _items.Remove(key);
         return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(default!, HttpStatusCode.NoContent));
     }
 
     public override TransactionalBatch CreateTransactionalBatch(PartitionKey partitionKey) =>
-        new InMemoryTransactionalBatch(this);
+        new InMemoryTransactionalBatch(this, UnwrapPartitionKey(partitionKey));
+
+    /// <summary>PartitionKey renders as a JSON array (["value"]); the double needs the value itself.</summary>
+    private static string UnwrapPartitionKey(PartitionKey partitionKey) =>
+        JArray.Parse(partitionKey.ToString())[0].Value<string>() ?? string.Empty;
 
     /// <summary>
-    ///     All-or-nothing within one partition, exactly as Cosmos behaves: if any create conflicts, nothing
-    ///     is written. The crash-window contracts depend on this, so the double has to get it right.
+    ///     All-or-nothing within ONE partition, exactly as Cosmos behaves.
+    ///     Two things are enforced here, and both matter. Every operation must belong to the partition the
+    ///     batch was scoped to — a document whose <c>pk</c> is elsewhere, or a delete whose id lives in another
+    ///     partition, is a request Cosmos would refuse, and so does this. And every operation's condition is
+    ///     judged BEFORE anything is written: one failure and not a single staged operation is applied.
+    ///     A double that resolved a delete by scanning every partition for the id would let a test pass while
+    ///     production, which is partition-scoped, behaved differently — and would quietly stop proving the
+    ///     confinement the migration leans on.
     /// </summary>
-    internal TransactionalBatchResponse ExecuteBatch(IReadOnlyList<JObject> documents)
+    internal TransactionalBatchResponse ExecuteBatch(
+        string partitionKey,
+        IReadOnlyList<InMemoryTransactionalBatch.Operation> operations)
     {
         ThrowIfFaulted();
 
-        var conflicted = documents.Any(document => _items.ContainsKey((Pk(document), Id_(document))));
-        if (conflicted)
+        var statuses = new List<HttpStatusCode>();
+        var rejected = false;
+
+        // Pass 1 — judge every operation against the store as it is now. Nothing is written yet.
+        foreach (var operation in operations)
         {
-            return new FakeBatchResponse(
-                HttpStatusCode.Conflict,
-                documents.Select(_ => HttpStatusCode.Conflict).ToList());
+            var status = Judge(partitionKey, operation);
+
+            if ((int)status is < 200 or > 299)
+            {
+                rejected = true;
+            }
+
+            statuses.Add(status);
         }
 
-        foreach (var document in documents)
+        if (rejected)
         {
-            OnWrite?.Invoke(Creates);
-            Creates++;
-            _items[(Pk(document), Id_(document))] = document;
+            // Not one write. This is the guarantee the migration is built on.
+            return new FakeBatchResponse(HttpStatusCode.FailedDependency, statuses);
         }
 
-        return new FakeBatchResponse(
-            HttpStatusCode.OK,
-            documents.Select(_ => HttpStatusCode.Created).ToList());
+        // Pass 2 — every condition held, so commit. Always against the batch's own partition.
+        foreach (var operation in operations)
+        {
+            var key = (partitionKey, operation.Id);
+
+            switch (operation.Kind)
+            {
+                case InMemoryTransactionalBatch.Kind.Delete:
+                    Deletes++;
+                    _items.Remove(key);
+                    break;
+
+                default:
+                    OnWrite?.Invoke(Creates);
+                    Creates++;
+                    Stamp(operation.Document!);
+                    _items[key] = operation.Document!;
+                    break;
+            }
+        }
+
+        return new FakeBatchResponse(HttpStatusCode.OK, statuses);
     }
+
+    private HttpStatusCode Judge(string partitionKey, InMemoryTransactionalBatch.Operation operation)
+    {
+        // A create or replace carries a document, and that document must belong to this batch's partition.
+        // Cosmos would reject it outright; so does this, and the whole transaction goes with it.
+        if (operation.Document != null &&
+            !string.Equals(Pk(operation.Document), partitionKey, StringComparison.Ordinal))
+        {
+            return HttpStatusCode.BadRequest;
+        }
+
+        // Resolved against (this batch's partition, id) — never by scanning for the id across partitions.
+        var exists = _items.TryGetValue((partitionKey, operation.Id), out var live);
+
+        return operation.Kind switch
+        {
+            InMemoryTransactionalBatch.Kind.Create =>
+                exists ? HttpStatusCode.Conflict : HttpStatusCode.Created,
+
+            InMemoryTransactionalBatch.Kind.Replace => !exists
+                ? HttpStatusCode.NotFound
+                : EtagMatches(operation.IfMatchEtag, live!)
+                    ? HttpStatusCode.OK
+                    : HttpStatusCode.PreconditionFailed,
+
+            _ => !exists
+                ? HttpStatusCode.NotFound
+                : EtagMatches(operation.IfMatchEtag, live!)
+                    ? HttpStatusCode.NoContent
+                    : HttpStatusCode.PreconditionFailed
+        };
+    }
+
+    private static bool EtagMatches(string? ifMatch, JObject live) =>
+        string.IsNullOrEmpty(ifMatch) || string.Equals(ifMatch, ETagOf(live), StringComparison.Ordinal);
 
     public override FeedIterator<T> GetItemQueryIterator<T>(
         QueryDefinition queryDefinition,
@@ -289,6 +393,10 @@ public static class CosmosFailures
     public static CosmosException NotFound() =>
         new("not found", HttpStatusCode.NotFound, 404, "activity", 1.0);
 
+    /// <summary>412: the row moved since the caller last saw it. The delete did not happen.</summary>
+    public static CosmosException PreconditionFailed() =>
+        new("etag mismatch", HttpStatusCode.PreconditionFailed, 412, "activity", 1.0);
+
     /// <summary>A 429 carrying the server's Retry-After, which the production code must honor in full.</summary>
     public static CosmosException Throttled(TimeSpan retryAfter) => new ThrottledException(retryAfter);
 
@@ -304,21 +412,66 @@ public static class CosmosFailures
     }
 }
 
+/// <summary>
+///     A transactional batch that models what the migration depends on: create / replace / delete, each with
+///     an optional ETag condition, applied all-or-nothing within one partition. If any operation's condition
+///     fails, NOTHING is written — which is the whole point of the atomic reduce, so the double has to get it
+///     exactly right or the guarantee is untested.
+/// </summary>
 internal sealed class InMemoryTransactionalBatch : TransactionalBatch
 {
-    private readonly InMemoryCosmosContainer _container;
-    private readonly List<JObject> _documents = new();
+    internal enum Kind { Create, Replace, Delete }
 
-    public InMemoryTransactionalBatch(InMemoryCosmosContainer container) => _container = container;
+    internal sealed record Operation(Kind Kind, string Id, JObject? Document, string? IfMatchEtag);
+
+    private readonly InMemoryCosmosContainer _container;
+    private readonly List<Operation> _operations = new();
+
+    /// <summary>
+    ///     The partition this batch is scoped to. Cosmos scopes a transaction to exactly one partition, and
+    ///     every operation in it must belong there — so the double carries the key and enforces it, or the
+    ///     partition confinement the migration depends on would be untested.
+    /// </summary>
+    public string PartitionKey { get; }
+
+    public InMemoryTransactionalBatch(InMemoryCosmosContainer container, string partitionKey)
+    {
+        _container = container;
+        PartitionKey = partitionKey;
+    }
 
     public override TransactionalBatch CreateItem<T>(T item, TransactionalBatchItemRequestOptions? requestOptions = null)
     {
-        _documents.Add(JObject.FromObject(item!));
+        var document = JObject.FromObject(item!);
+        _operations.Add(new Operation(
+            Kind.Create,
+            document["id"]!.Value<string>()!,
+            document,
+            requestOptions?.IfMatchEtag));
+        return this;
+    }
+
+    public override TransactionalBatch ReplaceItem<T>(
+        string id,
+        T item,
+        TransactionalBatchItemRequestOptions? requestOptions = null)
+    {
+        _operations.Add(new Operation(
+            Kind.Replace,
+            id,
+            JObject.FromObject(item!),
+            requestOptions?.IfMatchEtag));
+        return this;
+    }
+
+    public override TransactionalBatch DeleteItem(string id, TransactionalBatchItemRequestOptions? requestOptions = null)
+    {
+        _operations.Add(new Operation(Kind.Delete, id, null, requestOptions?.IfMatchEtag));
         return this;
     }
 
     public override Task<TransactionalBatchResponse> ExecuteAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(_container.ExecuteBatch(_documents));
+        Task.FromResult(_container.ExecuteBatch(PartitionKey, _operations));
 
     public override Task<TransactionalBatchResponse> ExecuteAsync(
         TransactionalBatchRequestOptions requestOptions,
@@ -329,9 +482,6 @@ internal sealed class InMemoryTransactionalBatch : TransactionalBatch
         Stream streamPayload,
         TransactionalBatchItemRequestOptions? requestOptions = null) => throw new NotSupportedException();
 
-    public override TransactionalBatch DeleteItem(string id, TransactionalBatchItemRequestOptions? requestOptions = null) =>
-        throw new NotSupportedException("The write path never deletes through a batch.");
-
     public override TransactionalBatch PatchItem(
         string id,
         IReadOnlyList<PatchOperation> patchOperations,
@@ -340,19 +490,13 @@ internal sealed class InMemoryTransactionalBatch : TransactionalBatch
     public override TransactionalBatch ReadItem(string id, TransactionalBatchItemRequestOptions? requestOptions = null) =>
         throw new NotSupportedException();
 
-    public override TransactionalBatch ReplaceItem<T>(
-        string id,
-        T item,
-        TransactionalBatchItemRequestOptions? requestOptions = null) =>
-        throw new NotSupportedException("The write path never replaces through a batch.");
-
     public override TransactionalBatch ReplaceItemStream(
         string id,
         Stream streamPayload,
         TransactionalBatchItemRequestOptions? requestOptions = null) => throw new NotSupportedException();
 
     public override TransactionalBatch UpsertItem<T>(T item, TransactionalBatchItemRequestOptions? requestOptions = null) =>
-        throw new NotSupportedException("The write path never upserts.");
+        throw new NotSupportedException("The migration never upserts.");
 
     public override TransactionalBatch UpsertItemStream(
         Stream streamPayload,

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.CosmosDb.Migration;
 using Sekiban.Dcb.CosmosDb.Repair;
 using Sekiban.Dcb.CosmosDb.Sweep;
 using Sekiban.Dcb.Domains;
@@ -321,6 +322,23 @@ public static class SekibanDcbCosmosDbExtensions
                 logger: provider.GetService<ILogger<CosmosTagSweepService>>());
         });
 
+        return services;
+    }
+
+    /// <summary>
+    ///     Registers the DESTRUCTIVE legacy tag-row migration factory
+    ///     (<see cref="CosmosDbLegacyTagMigrationServiceFactory" />).
+    ///     This is the only surface in the provider that can delete a tag row. It is not registered by
+    ///     <c>AddSekibanDcbCosmosDb</c>, it is not reachable from the automatic sweep, and even once
+    ///     registered it does nothing until an operator plans a migration, reads the artifact, confirms, and
+    ///     supplies a backup writer.
+    ///     Migration is optional: legacy rows index their events perfectly well and the repair service
+    ///     recognizes them. Register this only when an operator is going to tidy them up on purpose.
+    /// </summary>
+    public static IServiceCollection AddSekibanDcbCosmosDbLegacyTagMigration(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddSingleton<CosmosDbLegacyTagMigrationServiceFactory>();
         return services;
     }
 

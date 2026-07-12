@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Sekiban.Dcb.CosmosDb.TagMigration</RootNamespace>
+        <AssemblyName>sekiban-dcb-tag-migration</AssemblyName>
+        <IsPackable>false</IsPackable>
+        <AnalysisLevel>latest-Recommended</AnalysisLevel>
+        <!-- A console tool talks to a console: literal strings and synchronous writes are the point. -->
+        <NoWarn>$(NoWarn);CA1303;CA1849</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\dcb\src\Sekiban.Dcb.CosmosDb\Sekiban.Dcb.CosmosDb.csproj" />
+    </ItemGroup>
+
+</Project>

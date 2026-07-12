@@ -288,7 +288,60 @@ Read this before relying on it. The sweep is **eventual repair, not a safety net
 
 Readiness gating, read-time verification, and a commit protocol that would close these windows are **future work**, deliberately out of scope here. If your workload cannot tolerate the window — money-sensitive workflows above all — **use the Postgres provider**, which gives you event/tag atomicity in a single transaction and has none of these gaps.
 
-**Still planned (not yet released)**: destructive reduction of duplicate legacy rows (a separate, separately-authorized concern that the sweep cannot reach), and readiness gating.
+#### Legacy tag-row migration (destructive, operator-only)
+
+Rows written before the deterministic-id scheme sit at a random document id. **They work.** The repair service recognizes them by semantic key, tag reads find them, and nothing about correctness depends on migrating them. This tool exists to tidy them up — reducing the rows of an `(event, tag)` to the single canonical row — and it does that by **deleting documents**. It is the only thing in Sekiban that does.
+
+It is not registered by `AddSekibanDcbCosmosDb`, it is **not reachable from the automatic sweep**, and it never runs by itself.
+
+**The CLI** (`tools/SekibanDcbTagMigration`) is a thin front-end over the same service — no destructive logic of its own, and it could not have any: the seam that expresses a tag-row delete is `internal` to `Sekiban.Dcb.CosmosDb`, so no other assembly can issue one.
+
+```bash
+# 1. Plan. Read-only. Writes an artifact naming exactly which rows would die.
+sekiban-dcb-tag-migration plan \
+  --connection "<cs>" --database SekibanDcb --service-id <id> \
+  --plan tag-migration-plan.json
+
+# 2. READ IT. This is the point of the two-step flow.
+
+# 3. Apply. Refuses without --confirm and --backup.
+sekiban-dcb-tag-migration apply \
+  --connection "<cs>" --database SekibanDcb --service-id <id> \
+  --plan tag-migration-plan.json --backup removed-rows.json --confirm
+```
+
+The service API is the same two calls: `PlanAsync` then `ApplyAsync(plan, options)` (`AddSekibanDcbCosmosDbLegacyTagMigration()` to register the factory).
+
+**What stops a mistake.** Every one of these refuses *before* touching a document:
+
+| Gate | Behavior |
+|---|---|
+| No plan | `ApplyAsync` takes a plan and nothing else. You cannot delete rows you were not first shown. |
+| No `Confirm` | `CosmosTagMigrationNotAuthorizedException`. The flag has no permissive default. |
+| No backup writer | `CosmosTagMigrationNotAuthorizedException`. Cosmos has no undo, so the export *is* the recovery path. |
+| Plan altered since it was produced | Its fingerprint no longer matches its contents → `CosmosTagMigrationPlanRejectedException`. An artifact that was not reviewed authorizes nothing. |
+| Plan from another lineage | Refused. An instance is bound to one `(serviceId, events, tags)` at construction. |
+| Backup write fails | Nothing is deleted. The backup is written first, before the first delete, on purpose. |
+
+**Survivor policy.** The SEK-G2 deterministic-id row always wins — the one whose document id is the event id, which is what the write path produces today and what every future write would produce. If no such row exists, the migration **creates it from the event** (so the survivor's content is what the write path would have written — no legacy quirk outlives the migration) *before* removing the legacy rows, so the key is never left unindexed even for an instant. Legacy rows are never promoted, only removed, so there is no tiebreak to get wrong. Planning the same unchanged world twice produces a byte-identical artifact.
+
+**Concurrency — one transaction, not a proof followed by a delete.** Every row of an `(event, tag)` lives in the same partition, so the reduce is a **single Cosmos transactional batch**: the canonical survivor is conditioned (created when the plan found none, or replaced-if-match on its exact version when it found one) and every victim is deleted-if-match, all in one atomic boundary.
+
+That shape is the point. Proving the survivor with a read and *then* deleting is a check followed by a use, and the world can move in between: the survivor could be removed after the proof and the deletes would still commit, leaving the key indexed by nothing. Re-reading more often narrows that window; it does not close it. Here there is no window — **either the key ends up canonical, or nothing about it changed**:
+
+- survivor appeared / vanished / was rewritten since the plan → transaction refused → **not one victim deleted** → `StaleSurvivor`
+- any victim moved since the plan → transaction refused → **not one victim deleted, not even the ones that had not moved** → `LostRaceContentChanged`
+- the audit never claims a row died in a transaction that did not commit.
+
+A key needing more than a transaction can carry (100 operations: 1 survivor + 99 victims) is **refused at plan time** — splitting it across transactions would put the gap straight back.
+
+**What it will not touch.** A row that disagrees with its event is not a duplicate — it is corruption, and this tool does not get to decide what to do about it: reported as `Skipped`, never deleted. That includes the **canonical row itself**: if the row at the deterministic id disagrees with its event, the whole key is left alone and no action is planned for it. Planning around it would be worse than useless — the run conditions the survivor with a replace, so it would quietly rewrite the corrupt row into what the event says, "fixing" it, and then delete the legacy rows that were the only other record of the key. Same treatment for a key with more rows than the per-key cap (`Overflow`).
+
+**Audit.** Every key produces an audit entry — survivor, rows removed, outcome — including the keys it declined to touch.
+
+**Recovery.** The backup file holds the removed rows as complete documents in the shape the tags container stores them. Restoring is creating them again: no transformation, nothing to reconstruct.
+
+**Still planned (not yet released)**: readiness gating.
 
 ### Choosing a provider
 
