@@ -45,8 +45,59 @@ public static class CosmosDbTelemetry
     internal static void RecordTagWriteRetryOutcome(TagWriteRetryOutcome outcome) =>
         TagWriteRetryOutcomes.Add(1, new KeyValuePair<string, object?>("outcome", ToLabel(outcome)));
 
+    private static readonly Counter<long> SweepRuns = Meter.CreateCounter<long>(
+        "sekiban.dcb.cosmos.tag_sweep.runs",
+        description: "Tag-sweep runs. Label 'outcome' is one of: completed, budget_exhausted, failed.");
+
+    private static readonly Counter<long> SweepRepairedRows = Meter.CreateCounter<long>(
+        "sekiban.dcb.cosmos.tag_sweep.repaired_rows",
+        description: "Missing tag rows backfilled by the sweep.");
+
+    private static readonly Counter<long> SweepCorruptKeys = Meter.CreateCounter<long>(
+        "sekiban.dcb.cosmos.tag_sweep.corrupt_keys",
+        description: "Keys the sweep found corrupt. Reported only — the sweep never rewrites or removes a row.");
+
+    private static readonly Counter<long> SweepOverflowKeys = Meter.CreateCounter<long>(
+        "sekiban.dcb.cosmos.tag_sweep.overflow_keys",
+        description: "Keys with more rows than the sweep's per-key cap allowed it to classify.");
+
     /// <summary>Records a partially-failed multi-event write.</summary>
     internal static void RecordPartialEventWrite() => PartialEventWrites.Add(1);
+
+    /// <summary>Records how a sweep run ended. <paramref name="outcome" /> must be a bounded label.</summary>
+    internal static void RecordSweepRun(SweepRunOutcome outcome) =>
+        SweepRuns.Add(1, new KeyValuePair<string, object?>("outcome", ToLabel(outcome)));
+
+    /// <summary>Records rows the sweep backfilled.</summary>
+    internal static void RecordSweepRepairedRows(int repaired)
+    {
+        if (repaired > 0)
+        {
+            SweepRepairedRows.Add(repaired);
+        }
+    }
+
+    /// <summary>Records what the sweep found but is not allowed to act on.</summary>
+    internal static void RecordSweepAttention(int corrupt, int overflow)
+    {
+        if (corrupt > 0)
+        {
+            SweepCorruptKeys.Add(corrupt);
+        }
+
+        if (overflow > 0)
+        {
+            SweepOverflowKeys.Add(overflow);
+        }
+    }
+
+    private static string ToLabel(SweepRunOutcome outcome) =>
+        outcome switch
+        {
+            SweepRunOutcome.Completed => "completed",
+            SweepRunOutcome.BudgetExhausted => "budget_exhausted",
+            _ => "failed"
+        };
 
     private static string ToLabel(TagWriteFailureReason reason) =>
         reason switch
@@ -71,6 +122,19 @@ internal enum TagWriteFailureReason
 
     /// <summary>An existing tag row disagreed with the event. Never retried.</summary>
     Corruption
+}
+
+/// <summary>Bounded set of terminal outcomes for a sweep run, used as a metric label.</summary>
+internal enum SweepRunOutcome
+{
+    /// <summary>The run finished its budget of events.</summary>
+    Completed,
+
+    /// <summary>The run's wall-clock budget elapsed; it resumes from its checkpoint next turn.</summary>
+    BudgetExhausted,
+
+    /// <summary>The run threw. Logged; the host is unaffected and the next run retries.</summary>
+    Failed
 }
 
 /// <summary>Bounded set of terminal outcomes for a retried tag write, used as a metric label.</summary>

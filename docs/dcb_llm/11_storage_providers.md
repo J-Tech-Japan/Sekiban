@@ -187,7 +187,7 @@ The default stays `Compatible` through the current release line so that **upgrad
 
 #### Telemetry
 
-The `Sekiban.Dcb.CosmosDb` meter (`CosmosDbTelemetry.MeterName`) publishes `tag_write.failures` (label `reason`: `transient` | `corruption`), `tag_write.retries`, `tag_write.retry_outcomes` (label `outcome`: `recovered` | `exhausted`), and `event_write.partial_failures`. Metric labels are drawn from small fixed sets; raw event ids and tag strings are unbounded and therefore appear only in the structured logs and in the exceptions above.
+The `Sekiban.Dcb.CosmosDb` meter (`CosmosDbTelemetry.MeterName`) publishes `sekiban.dcb.cosmos.tag_write.failures` (label `reason`: `transient` | `corruption`), `sekiban.dcb.cosmos.tag_write.retries`, `sekiban.dcb.cosmos.tag_write.retry_outcomes` (label `outcome`: `recovered` | `exhausted`), and `sekiban.dcb.cosmos.event_write.partial_failures`. Metric labels are drawn from small fixed sets; raw event ids and tag strings are unbounded and therefore appear only in the structured logs and in the exceptions above.
 
 #### Tag index repair (`CosmosDbTagRepairService`)
 
@@ -246,7 +246,49 @@ The service can also be constructed manually — `new CosmosDbTagRepairServiceFa
 - **Concurrency**: a run is safe alongside live writes and alongside another run. If a normal write lands the very row a run classified as missing, the run recognizes it as the row it was about to write and moves on — no duplicate, no error.
 - **Consistency caveat**: reads issued immediately after a repair may still observe stale state depending on the Cosmos consistency level configured on the account. Under session or eventual consistency, a tag-scoped read from a different session can lag the repair's writes.
 
-**Still planned (not yet released)**: an opt-in startup/periodic sweep, and destructive reduction of duplicate legacy rows (a separate, separately-authorized concern). Upgrading the package does not enable any sweep behavior.
+#### Automatic sweep (`AddSekibanDcbCosmosDbTagSweep`) — opt-in
+
+The repair service only runs when an operator runs it, so routine crash residue sits unrepaired until somebody notices. The sweep closes that gap: it runs the repair over a recent window shortly after startup, and optionally on an interval.
+
+```csharp
+services.AddSekibanDcbCosmosDb(configuration);
+services.AddSekibanDcbCosmosDbTagSweep(sweep =>
+{
+    sweep.Enabled = true;                          // off by default — see below
+    sweep.Window = TimeSpan.FromHours(24);         // crash residue is recent; a full backfill is a manual job
+    sweep.Interval = TimeSpan.FromHours(6);        // omit to sweep only at startup
+    sweep.MaxParallelism = 2;                      // yield to live traffic
+    sweep.MaxEventsPerRun = 10_000;                // bounds one run's RU cost
+    sweep.RunBudget = TimeSpan.FromMinutes(5);     // a run that overruns resumes next turn
+});
+```
+
+A run that hits `RunBudget` keeps the progress it settled: its checkpoint advances past the events it finished, and the next turn starts from there. So a budget too tight to finish the window in one turn still makes forward progress each turn instead of re-scanning the same prefix forever. A host shutdown is not a budget overrun — it simply stops the sweep, and nothing is persisted.
+
+**Opt-in twice over.** `AddSekibanDcbCosmosDb` does not register the sweep, and even when registered it stays inert until `Enabled` is set. Referencing or upgrading the package adds **no hosted service, no network scan, no startup delay, and no configuration you must fill in**. Startup is never blocked: the sweep runs in the background, and `RunBudget` bounds any single run. A failing sweep is logged and retried on its next turn — it never takes the host down.
+
+Options and checkpoints are **per lineage**. `ServiceIds` selects which lineages to sweep (empty means the host's own service id); each is swept independently with its own window and its own resume point.
+
+**It cannot be configured into destructiveness.** The sweep's only route to storage is the repair service, whose store cannot express a delete, a replace, or an upsert. It backfills missing rows and classifies everything else — repeated sweeps over `LegacyPresent` or `Duplicate` sets create **zero** rows and delete **zero** rows. `Corrupt` and `Overflow` are surfaced via telemetry and logs without any attempt to migrate or reduce them. There is no setting, and no code path, that changes this.
+
+**Before enabling an interval**: run a manual **dry run** and watch the RU cost (see the RU guidance above). Then keep `MaxParallelism` at 2–4 and schedule the interval to land in a quiet window.
+
+**Replicated services**: every replica starts at roughly the same moment, so they would all sweep at once and spike RU together. `MaxStartupJitter` (default 30s) spreads the startup runs apart. For an interval sweep across many replicas, prefer electing a leader (or taking a lease) and sweeping from one instance — jitter alone thins a stampede, it does not prevent duplicated work. Duplicated work is *safe* (runs are idempotent and overlap-safe with each other and with live writes); it is just RU you did not need to spend.
+
+**Sweep telemetry** (meter `Sekiban.Dcb.CosmosDb`): `sekiban.dcb.cosmos.tag_sweep.runs` (label `outcome`: `completed` | `budget_exhausted` | `failed`), `sekiban.dcb.cosmos.tag_sweep.repaired_rows`, `sekiban.dcb.cosmos.tag_sweep.corrupt_keys`, `sekiban.dcb.cosmos.tag_sweep.overflow_keys`.
+
+#### What the sweep does NOT guarantee
+
+Read this before relying on it. The sweep is **eventual repair, not a safety net**:
+
+- **It does not gate tag readers.** Nothing waits for a sweep. `ReadEventsByTagAsync`, tag projectors, and `GetLatestTagAsync` serve whatever is in the tags container at the moment they are called.
+- **A missing-tag window remains.** A crash can leave residue at any moment; the sweep only reaches it on its next run. Between the crash and that run, the affected events are visible to all-events readers and invisible to tag-scoped ones.
+- **The tag-consistent actor's baseline can be regressed for that whole window.** `GeneralTagConsistentActor` rebuilds its optimistic-concurrency baseline from the tags container, so a missing tag row silently lowers it until repair lands. This is a known limitation, not an oversight.
+- **Post-repair reads can still be stale**, depending on the Cosmos consistency level configured on the account.
+
+Readiness gating, read-time verification, and a commit protocol that would close these windows are **future work**, deliberately out of scope here. If your workload cannot tolerate the window — money-sensitive workflows above all — **use the Postgres provider**, which gives you event/tag atomicity in a single transaction and has none of these gaps.
+
+**Still planned (not yet released)**: destructive reduction of duplicate legacy rows (a separate, separately-authorized concern that the sweep cannot reach), and readiness gating.
 
 ### Choosing a provider
 
