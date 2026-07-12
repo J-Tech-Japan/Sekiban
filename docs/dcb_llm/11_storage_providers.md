@@ -189,7 +189,64 @@ The default stays `Compatible` through the current release line so that **upgrad
 
 The `Sekiban.Dcb.CosmosDb` meter (`CosmosDbTelemetry.MeterName`) publishes `tag_write.failures` (label `reason`: `transient` | `corruption`), `tag_write.retries`, `tag_write.retry_outcomes` (label `outcome`: `recovered` | `exhausted`), and `event_write.partial_failures`. Metric labels are drawn from small fixed sets; raw event ids and tag strings are unbounded and therefore appear only in the structured logs and in the exceptions above.
 
-**Still planned (not yet released)**: a tag-index repair API and an opt-in startup sweep. Upgrading the package does not enable any repair or sweep behavior; those land later as explicit opt-ins. Note that reads immediately after a future repair may observe stale state depending on the configured Cosmos consistency level.
+#### Tag index repair (`CosmosDbTagRepairService`)
+
+Because a tag row is fully derivable from its event, the tags container can be rebuilt from the events container. `CosmosDbTagRepairService` is the operator surface for that: it scans events over a `sortableUniqueId` range, derives the expected row for each `(event, tag)` pair, and creates the ones that are missing.
+
+It is **strictly non-destructive**. It only ever creates rows that do not exist — it never deletes, rewrites, or canonicalizes one. It is deliberately not part of `IEventStore`: run it as an operator job, never expose it from a request path.
+
+```csharp
+services.AddSekibanDcbCosmosDb(configuration);
+services.AddSekibanDcbCosmosDbTagRepair();   // opt-in; not registered by AddSekibanDcbCosmosDb alone
+
+// In an operator-only job:
+var repair = await factory.CreateAsync(serviceId);   // one instance == one (serviceId, events, tags) lineage
+
+// Always look before you write.
+var report = await repair.RepairAsync(new CosmosTagRepairOptions
+{
+    DryRun = true,                                    // the default
+    ToSortableUniqueIdInclusive = lastSettledId,      // pin the upper bound; live writes repair themselves
+    MaxEventsToScan = 10_000,
+});
+
+// Then repair, resuming across bounded runs.
+string? checkpoint = null;
+do
+{
+    var run = await repair.RepairAsync(new CosmosTagRepairOptions
+    {
+        DryRun = false,
+        ToSortableUniqueIdInclusive = lastSettledId,
+        Checkpoint = checkpoint,
+    }, cancellationToken);
+
+    checkpoint = run.HasMore ? run.Checkpoint : null;
+} while (checkpoint != null);
+```
+
+The service can also be constructed manually — `new CosmosDbTagRepairServiceFactory(context, containerResolver)` — for hosts that build their stores through a custom factory instead of DI. Either way, an instance is bound to one `(serviceId, events container, tags container)` lineage at construction, so repairing across lineages is structurally impossible rather than merely discouraged.
+
+**Report categories.** Every `(event, tag)` key lands in exactly one:
+
+| Category | Meaning | Does repair write? |
+|---|---|---|
+| `Present` | The derived row exists and matches the event. | No |
+| `Missing` | Nothing indexes this pair. | **Yes** — this is the only category it writes |
+| `LegacyPresent` | A row written before the deterministic-id scheme indexes this pair. Its random id and wall-clock `createdAt` are expected differences, reported as migration metadata. | No — and the legacy row is never touched |
+| `Duplicate` | More than one legacy row indexes this pair (residue of a pre-deterministic re-execution). | No — reported only; reducing them is destructive and out of scope |
+| `Corrupt` | A row occupies this pair but disagrees with the event (`sortableUniqueId`, `eventType`, or `tagGroup` drift; or a row at the derived id whose content differs). | No — never overwritten |
+| `Overflow` | More rows index this pair than `MaxRowsPerKey` allowed the scan to examine. | No — raise the cap to look deeper |
+
+**Operational guidance.**
+
+- **Least privilege**: the job needs read on the events container and *create* on the tags container. It never deletes or replaces, so a Cosmos role without `deleteItem`/`replaceItem` on the tags container is sufficient — and is the recommended way to enforce non-destructiveness at the platform level rather than trusting the code.
+- **RU cost**: the events scan is cross-partition (events are partitioned per event), and each `(event, tag)` key costs one partition-confined query against the tags container. So RU scales with *keys*, not events: roughly `events × tags-per-event` point-ish queries plus the scan itself. `MaxParallelism` (default 4) is the RU-rate dial; `MaxEventsToScan` (default 10,000) bounds one run's total cost. Throttling is expected — the service honors Cosmos `Retry-After` in full rather than retrying early.
+- **Pin the upper bound**: set `ToSortableUniqueIdInclusive` to an event you know is settled. Events written while the scan runs are indexed by the write path itself; the repair is for crash residue, not for live traffic.
+- **Concurrency**: a run is safe alongside live writes and alongside another run. If a normal write lands the very row a run classified as missing, the run recognizes it as the row it was about to write and moves on — no duplicate, no error.
+- **Consistency caveat**: reads issued immediately after a repair may still observe stale state depending on the Cosmos consistency level configured on the account. Under session or eventual consistency, a tag-scoped read from a different session can lag the repair's writes.
+
+**Still planned (not yet released)**: an opt-in startup/periodic sweep, and destructive reduction of duplicate legacy rows (a separate, separately-authorized concern). Upgrading the package does not enable any sweep behavior.
 
 ### Choosing a provider
 

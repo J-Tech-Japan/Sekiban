@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.CosmosDb.Repair;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
@@ -265,6 +266,20 @@ public static class SekibanDcbCosmosDbExtensions
         services.AddScoped<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddScoped<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 
+        return services;
+    }
+
+    /// <summary>
+    ///     Registers the administrative tag-repair factory (<see cref="CosmosDbTagRepairServiceFactory" />)
+    ///     alongside an existing Cosmos registration.
+    ///     Kept out of <c>AddSekibanDcbCosmosDb</c> deliberately: repair is an operator tool, so an
+    ///     application only gets it if it asks. Resolve the factory in an operator-only job and create a
+    ///     service for the one service id you intend to repair — never expose it from a request path.
+    /// </summary>
+    public static IServiceCollection AddSekibanDcbCosmosDbTagRepair(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddSingleton<CosmosDbTagRepairServiceFactory>();
         return services;
     }
 
