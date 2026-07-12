@@ -84,10 +84,10 @@ internal sealed class CosmosContainerRepairStore : ICosmosTagRepairStore
         int maxRows,
         CancellationToken cancellationToken)
     {
-        // Partition-confined and event-scoped: rows of other events carrying the same tag are never read.
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.pk = @pk AND c.eventId = @eventId")
-            .WithParameter("@pk", partitionKey)
-            .WithParameter("@eventId", eventId.ToString());
+        // The query is a superset prefilter, confined to the tag's partition. It is NOT what decides which
+        // rows index this event — a row stored with a different Guid rendering must not be able to slip past
+        // the server and be mistaken for a missing row. See CosmosRepairRowQuery.
+        var query = CosmosRepairRowQuery.BuildCandidateQuery(partitionKey, eventId);
 
         var requestOptions = new QueryRequestOptions
         {
@@ -104,7 +104,10 @@ internal sealed class CosmosContainerRepairStore : ICosmosTagRepairStore
         {
             var response = await iterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
             requestCharge += response.RequestCharge;
-            rows.AddRange(response);
+
+            // The correctness gate: canonical Guid comparison, client-side. Format and casing cannot change
+            // the answer, and anything the prefilter over-returned is rejected here.
+            rows.AddRange(response.Where(row => CosmosRepairRowQuery.IsRowForEvent(row, eventId)));
         }
 
         if (rows.Count > maxRows)
