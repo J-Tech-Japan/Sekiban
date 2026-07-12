@@ -113,6 +113,11 @@ internal static class CosmosTagWriteRetryExecutor
     /// <summary>
     ///     Exponential backoff with jitter. When Cosmos throttles and tells us how long to wait, that hint
     ///     wins — it knows better than our curve does.
+    ///     A server-sent Retry-After is deliberately NOT capped by <see cref="CosmosTagWriteRetryOptions.MaxBackoff" />:
+    ///     shortening it would retry before the server is ready and simply earn another 429. The client cap
+    ///     bounds our own curve, not the server's instruction. What still bounds the wait is
+    ///     <see cref="CosmosTagWriteRetryOptions.MaxTotalDuration" /> — if honoring the hint would cross the
+    ///     deadline, the caller stops retrying rather than retrying early.
     /// </summary>
     private static TimeSpan ComputeDelay(
         int attempt,
@@ -124,7 +129,7 @@ internal static class CosmosTagWriteRetryExecutor
             throttled.RetryAfter is { } retryAfter &&
             retryAfter > TimeSpan.Zero)
         {
-            return Cap(retryAfter, retryOptions.MaxBackoff);
+            return retryAfter;
         }
 
         var initial = retryOptions.InitialBackoff > TimeSpan.Zero

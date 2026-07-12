@@ -184,6 +184,48 @@ public class CosmosTagWriteRetryExecutorTests
     }
 
     [Fact]
+    public async Task Should_Not_Shorten_A_RetryAfter_That_Exceeds_MaxBackoff()
+    {
+        var scheduler = new FakeRetryScheduler();
+        var options = new CosmosTagWriteRetryOptions
+        {
+            MaxAttempts = 2,
+            InitialBackoff = TimeSpan.FromMilliseconds(50),
+            MaxBackoff = TimeSpan.FromSeconds(5),
+            MaxTotalDuration = TimeSpan.FromMinutes(5),
+            JitterRatio = 0
+        };
+
+        await Assert.ThrowsAsync<CosmosTagWriteExhaustedException>(
+            () => ExecuteAsync(() => throw Throttled(TimeSpan.FromSeconds(30)), options, scheduler));
+
+        // MaxBackoff caps our own curve, not the server's instruction. Retrying at 5s when Cosmos asked for
+        // 30s would just earn another 429.
+        Assert.Equal(TimeSpan.FromSeconds(30), Assert.Single(scheduler.Delays));
+    }
+
+    [Fact]
+    public async Task Should_Stop_Rather_Than_Retry_Early_When_A_Long_RetryAfter_Would_Cross_The_Deadline()
+    {
+        var scheduler = new FakeRetryScheduler();
+        var options = new CosmosTagWriteRetryOptions
+        {
+            MaxAttempts = 5,
+            InitialBackoff = TimeSpan.FromMilliseconds(50),
+            MaxBackoff = TimeSpan.FromSeconds(5),
+            MaxTotalDuration = TimeSpan.FromSeconds(10),
+            JitterRatio = 0
+        };
+
+        var exception = await Assert.ThrowsAsync<CosmosTagWriteExhaustedException>(
+            () => ExecuteAsync(() => throw Throttled(TimeSpan.FromSeconds(30)), options, scheduler));
+
+        // Honoring the 30s hint would cross the 10s deadline, so it gives up instead of retrying early.
+        Assert.Empty(scheduler.Delays);
+        Assert.Equal(1, exception.Attempts);
+    }
+
+    [Fact]
     public async Task Should_Exhaust_After_MaxAttempts_And_Name_The_Affected_Events()
     {
         var scheduler = new FakeRetryScheduler();

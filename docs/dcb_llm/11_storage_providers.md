@@ -173,6 +173,8 @@ Tag rows are **derived deterministically** from the (event, tag) pair — `pk = 
 | `Compatible` (**default**) | The behavior of earlier releases: the tag write is not retried, and if the (now `[Obsolete]`) `TryRollbackOnFailure` is set — it defaults to `true` — the already-written event documents are best-effort **deleted**. |
 | `RollForward` (opt-in) | The tag write is **retried** (exponential backoff with jitter, an overall deadline, Cosmos `Retry-After` honored on 429, `CancellationToken` observed), converging on whatever rows a partial write left missing. Events are **never deleted**. If the retries run out, `CosmosTagWriteExhaustedException` names the events whose tag rows may be missing, and those events stay durable for a later repair. |
 
+A server-sent `Retry-After` is honored in full: `MaxBackoff` caps the client's own backoff curve, not the server's instruction, so a `Retry-After` longer than `MaxBackoff` is **not** shortened — retrying before the server is ready would only earn another 429. `MaxTotalDuration` still bounds the whole sequence: if honoring the hint would cross the deadline, the write stops with `CosmosTagWriteExhaustedException` rather than retrying early.
+
 **Rollback deletes durable events that all-events consumers — multi-projections above all — may already have read**, which contaminates their state irreversibly, and it only runs on an in-process exception, so it never runs after a crash. `RollForward` is the recommended setting for new deployments:
 
 ```csharp
