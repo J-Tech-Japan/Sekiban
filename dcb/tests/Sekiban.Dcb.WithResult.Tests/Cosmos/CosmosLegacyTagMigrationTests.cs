@@ -270,7 +270,12 @@ public class CosmosLegacyTagMigrationTests
                 .Select(action => action with
                 {
                     RowsToRemove = action.RowsToRemove
-                        .Append(new CosmosTagRowRef("some-other-row", "etag-1"))
+                        .Append(new CosmosTagRowRef
+                        {
+                            Id = "some-other-row",
+                            ETag = "etag-1",
+                            Snapshot = new CosmosTagRowSnapshot { Id = "some-other-row" }
+                        })
                         .ToList()
                 })
                 .ToList()
@@ -487,6 +492,199 @@ public class CosmosLegacyTagMigrationTests
             await _inner.WriteAsync(plan, rowsToRemove, cancellationToken);
             _lineage.Tags.MutateInPlace(_partitionKey, _rowId, row => row["tagGroup"] = "MovedUnderUs");
         }
+    }
+
+    // ── The canonical survivor is PROVEN before any delete ──────────────────────────────────────────
+
+    [Fact]
+    public async Task A_Survivor_Deleted_Between_Plan_And_Apply_Should_Be_Recreated_Before_Any_Delete()
+    {
+        var lineage = NewLineage();
+
+        // A normal write lands the canonical row; legacy rows sit alongside it, so the plan sees a survivor.
+        var written = NewEvent(Tag);
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
+
+        var migration = await lineage.MigrationAsync();
+        var plan = await migration.PlanAsync(new CosmosTagMigrationPlanOptions());
+        Assert.True(Assert.Single(plan.Actions).SurvivorExists);
+
+        // Then it is deleted out from under the plan.
+        lineage.Tags.Remove($"{ServiceId}|{Tag}", written.Id.ToString());
+        Assert.Single(lineage.Tags.Items); // only the legacy row is left
+
+        var report = await migration.ApplyAsync(plan, Authorized(new RecordingBackupWriter()));
+
+        // The run does not trust the plan: it re-reads, finds the survivor gone, recreates it from the event,
+        // and only then removes the legacy row. The key is never left unindexed.
+        Assert.Equal(1, report.Reduced);
+        Assert.Equal(1, report.SurvivorsCreated);
+        Assert.Equal(1, report.RowsRemoved);
+
+        var survivor = Assert.Single(lineage.Tags.Items);
+        Assert.Equal(written.Id.ToString(), survivor["id"]!.ToString());
+    }
+
+    [Fact]
+    public async Task A_Survivor_Changed_Between_Plan_And_Apply_Should_Delete_Nothing()
+    {
+        var lineage = NewLineage();
+
+        var written = NewEvent(Tag);
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
+        lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
+
+        var migration = await lineage.MigrationAsync();
+        var plan = await migration.PlanAsync(new CosmosTagMigrationPlanOptions());
+
+        // The canonical row is corrupted after the plan was reviewed. Deleting the legacy rows now would
+        // leave the key indexed by a row that disagrees with its event — worse than leaving the duplicates.
+        lineage.Tags.MutateInPlace(
+            $"{ServiceId}|{Tag}",
+            written.Id.ToString(),
+            row => row["eventType"] = "SomethingElse");
+
+        var report = await migration.ApplyAsync(plan, Authorized(new RecordingBackupWriter()));
+
+        Assert.Equal(0, report.Reduced);
+        Assert.Equal(0, report.RowsRemoved);
+        Assert.Equal(1, report.StaleSurvivors);
+        Assert.Equal(0, lineage.Tags.Deletes);
+        Assert.Equal(3, lineage.Tags.Items.Count); // corrupted survivor + both legacy rows, all intact
+
+        var entry = Assert.Single(report.Audit);
+        Assert.Equal(CosmosTagMigrationOutcome.StaleSurvivor, entry.Outcome);
+    }
+
+    [Fact]
+    public async Task A_Legacy_Row_Whose_CreatedAt_Moved_Should_Not_Be_Deleted()
+    {
+        var lineage = NewLineage();
+        await SeedLegacyOnlyEventAsync(lineage, legacyRows: 1);
+
+        var migration = await lineage.MigrationAsync();
+        var plan = await migration.PlanAsync(new CosmosTagMigrationPlanOptions());
+        var partitionKey = plan.Actions[0].PartitionKey;
+        var victim = plan.Actions[0].RowsToRemove[0].Id;
+
+        // Only createdAt moves — a field the legacy comparator ignores by design, because a legacy row is
+        // ALLOWED to have a wall-clock createdAt. But this is not a classification question: the row is not
+        // what the operator reviewed, so it does not get deleted.
+        var backup = new MutateOnBackup(
+            lineage,
+            partitionKey,
+            victim,
+            row => row["createdAt"] = new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        var report = await migration.ApplyAsync(plan, Authorized(backup));
+
+        Assert.Equal(1, report.LostRaces);
+        Assert.Equal(0, report.RowsRemoved);
+        Assert.Contains(lineage.Tags.Items, row => row["id"]!.ToString() == victim);
+    }
+
+    /// <summary>Rewrites a row at the last possible moment: after the backup, before the deletes.</summary>
+    private sealed class MutateOnBackup : ICosmosTagMigrationBackupWriter
+    {
+        private readonly Lineage _lineage;
+        private readonly Action<Newtonsoft.Json.Linq.JObject> _mutate;
+        private readonly string _partitionKey;
+        private readonly string _rowId;
+
+        public MutateOnBackup(
+            Lineage lineage,
+            string partitionKey,
+            string rowId,
+            Action<Newtonsoft.Json.Linq.JObject> mutate)
+        {
+            _lineage = lineage;
+            _partitionKey = partitionKey;
+            _rowId = rowId;
+            _mutate = mutate;
+        }
+
+        public Task WriteAsync(
+            CosmosTagMigrationPlan plan,
+            IReadOnlyList<CosmosTag> rowsToRemove,
+            CancellationToken cancellationToken)
+        {
+            _lineage.Tags.MutateInPlace(_partitionKey, _rowId, _mutate);
+            return Task.CompletedTask;
+        }
+    }
+
+    // ── The fingerprint cannot be fooled ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Tampering_With_A_Plans_Tag_Should_Invalidate_Its_Fingerprint()
+    {
+        var lineage = NewLineage();
+        await SeedLegacyOnlyEventAsync(lineage, legacyRows: 1);
+
+        var migration = await lineage.MigrationAsync();
+        var plan = await migration.PlanAsync(new CosmosTagMigrationPlanOptions());
+
+        // The tag is what decides which partition gets touched. If it were not fingerprinted, an edited
+        // artifact could point the deletion at a different partition and still look authentic.
+        var tampered = plan with
+        {
+            Actions = plan.Actions.Select(action => action with { Tag = "Student:999" }).ToList()
+        };
+
+        await Assert.ThrowsAsync<CosmosTagMigrationPlanRejectedException>(
+            () => migration.ApplyAsync(tampered, Authorized(new RecordingBackupWriter())));
+
+        Assert.Equal(0, lineage.Tags.Deletes);
+    }
+
+    [Fact]
+    public void The_Fingerprint_Should_Not_Collide_Across_A_Field_Boundary()
+    {
+        // Concatenating fields with a separator is ambiguous the moment a value can contain that separator.
+        // These two plans are DIFFERENT — they name different partitions and different tags — but under
+        // naive `value + ";"` concatenation their fingerprint inputs are the same string:
+        //
+        //   left  : partitionKey "svc|Student:1"    tag "a;b"   ->  "svc|Student:1;" + "a;b;"
+        //   right : partitionKey "svc|Student:1;a"  tag "b"     ->  "svc|Student:1;a;" + "b;"
+        //
+        //   both  : "svc|Student:1;a;b;"
+        //
+        // A fingerprint that cannot tell those apart would authenticate an artifact that deletes from the
+        // wrong partition. Length-prefixing every field removes the ambiguity: there is nothing to collide.
+        var left = new CosmosTagMigrationPlan
+        {
+            ServiceId = "svc",
+            EventsContainer = "events",
+            TagsContainer = "tags",
+            Actions = new[]
+            {
+                new CosmosTagMigrationAction
+                {
+                    PartitionKey = "svc|Student:1",
+                    Tag = "a;b",
+                    EventId = Guid.Empty,
+                    SurvivorId = "survivor",
+                    SurvivorExpected = new CosmosTagRowSnapshot()
+                }
+            }
+        };
+
+        var right = left with
+        {
+            Actions = new[]
+            {
+                left.Actions[0] with
+                {
+                    PartitionKey = "svc|Student:1;a",
+                    Tag = "b"
+                }
+            }
+        };
+
+        // Different plans, different fingerprints — as they must be.
+        Assert.NotEqual(left.ComputeFingerprint(), right.ComputeFingerprint());
     }
 
     // ── Corruption and overflow are never deleted ───────────────────────────────────────────────────

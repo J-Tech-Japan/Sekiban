@@ -38,14 +38,22 @@ public enum CosmosTagMigrationOutcome
     Reduced,
 
     /// <summary>
-    ///     The rows moved under us between the plan and the run — an ETag no longer matched, or the row set
-    ///     changed. Nothing was forced: the key is left as it is, and a fresh plan will pick it up.
+    ///     A removable row's CONTENT changed between the plan and the delete — not just its version. It is
+    ///     no longer the row the operator reviewed, so it was left exactly as it is. Nothing was forced. A
+    ///     fresh plan will pick the key up.
     /// </summary>
-    LostRace,
+    LostRaceContentChanged,
 
     /// <summary>
-    ///     The key no longer looks like it did when the plan was built, so the plan's authority over it has
-    ///     lapsed. Left alone.
+    ///     The canonical row is not what it must be: it exists but does not match the content derived from
+    ///     the event, or it could not be created and read back. Deleting the legacy rows would leave the key
+    ///     wrongly indexed — or not indexed at all — so NOTHING was deleted.
+    /// </summary>
+    StaleSurvivor,
+
+    /// <summary>
+    ///     A removable row had already changed before the run even began, so the plan's authority over the
+    ///     key had lapsed before the first delete. Left alone.
     /// </summary>
     Stale,
 
@@ -70,8 +78,14 @@ public record CosmosTagMigrationReport
     /// <summary>Canonical rows created because only legacy rows indexed the key.</summary>
     public int SurvivorsCreated { get; init; }
 
-    /// <summary>Keys whose rows moved under us. Nothing forced.</summary>
+    /// <summary>Keys where a removable row's content changed mid-run. Nothing forced.</summary>
     public int LostRaces { get; init; }
+
+    /// <summary>
+    ///     Keys whose canonical row was missing-and-unrecreatable or did not match the event. Nothing was
+    ///     deleted for these — deleting would have left the key wrongly indexed or unindexed.
+    /// </summary>
+    public int StaleSurvivors { get; init; }
 
     /// <summary>Keys the plan no longer describes.</summary>
     public int Stale { get; init; }

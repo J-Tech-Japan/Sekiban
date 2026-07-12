@@ -168,11 +168,12 @@ namespace Sekiban.Dcb.CosmosDb.TagMigration
             Console.WriteLine($"  reduced     : {report.Reduced} key(s)");
             Console.WriteLine($"  rows removed: {report.RowsRemoved}");
             Console.WriteLine($"  survivors   : {report.SurvivorsCreated} created");
-            Console.WriteLine($"  lost races  : {report.LostRaces} (left alone; re-plan to pick them up)");
+            Console.WriteLine($"  lost races  : {report.LostRaces} (content changed mid-run; left alone)");
+            Console.WriteLine($"  bad survivor: {report.StaleSurvivors} (canonical row missing/wrong; NOTHING deleted for these)");
             Console.WriteLine($"  stale       : {report.Stale} (the rows moved since the plan; re-plan)");
             Console.WriteLine($"  skipped     : {report.Skipped} (corrupt or over the cap; never touched)");
 
-            return report.LostRaces > 0 || report.Stale > 0 ? 4 : 0;
+            return report.LostRaces > 0 || report.Stale > 0 || report.StaleSurvivors > 0 ? 4 : 0;
         }
 
         private static bool IsHelp(string argument) =>

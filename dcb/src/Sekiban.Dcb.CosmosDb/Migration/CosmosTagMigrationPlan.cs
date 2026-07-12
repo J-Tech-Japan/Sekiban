@@ -1,5 +1,3 @@
-using Sekiban.Dcb.CosmosDb.Models;
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -7,9 +5,23 @@ using System.Text.Json.Serialization;
 namespace Sekiban.Dcb.CosmosDb.Migration;
 
 /// <summary>
-///     One row the migration intends to delete, pinned to the exact version it was planned against.
+///     One row the migration intends to delete, pinned to the exact version AND the exact content it was
+///     planned against.
+///     The ETag guards the version; the snapshot guards the content. Both are needed: Cosmos will happily let
+///     you delete a row whose ETag you re-read, so a version check alone degenerates into "delete whatever is
+///     there now".
 /// </summary>
-public record CosmosTagRowRef(string Id, string? ETag);
+public record CosmosTagRowRef
+{
+    /// <summary>Document id.</summary>
+    public string Id { get; init; } = string.Empty;
+
+    /// <summary>The version the plan pinned. A delete names it, so Cosmos refuses if the row has moved.</summary>
+    public string? ETag { get; init; }
+
+    /// <summary>The content the plan pinned. A delete happens only against exactly this.</summary>
+    public CosmosTagRowSnapshot Snapshot { get; init; } = new();
+}
 
 /// <summary>
 ///     What the migration intends to do to one (event, tag) key: keep one canonical row, remove the rest.
@@ -25,27 +37,26 @@ public record CosmosTagMigrationAction
     /// <summary>Partition key of every row below.</summary>
     public string PartitionKey { get; init; } = string.Empty;
 
-    /// <summary>
-    ///     Document id of the row that will survive: the SEK-G2 deterministic id, always.
-    /// </summary>
+    /// <summary>Document id of the row that will survive: the SEK-G2 deterministic id, always.</summary>
     public string SurvivorId { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Whether the survivor already exists. When false, the migration creates it before removing the
-    ///     legacy rows — the pair is never left unindexed, not even momentarily.
+    ///     Whether the survivor already existed when the plan was built. Either way the run proves the
+    ///     canonical row is present and correct immediately before it deletes anything.
     /// </summary>
     public bool SurvivorExists { get; init; }
 
     /// <summary>
-    ///     The event's SortableUniqueId. Carried so the run can re-derive the canonical row rather than
-    ///     promoting a legacy one: the survivor's content is what the write path would have written.
+    ///     The exact content the canonical row must have: derived from the event, so it is what the write
+    ///     path would have written. The run creates it from this when absent, and refuses to delete a single
+    ///     legacy row unless the live survivor matches it exactly.
     /// </summary>
-    public string SurvivorSortableUniqueId { get; init; } = string.Empty;
+    public CosmosTagRowSnapshot SurvivorExpected { get; init; } = new();
 
-    /// <summary>The event's type, for the same reason.</summary>
-    public string SurvivorEventType { get; init; } = string.Empty;
+    /// <summary>The survivor's version when the plan was built, when it existed. Informational.</summary>
+    public string? SurvivorETag { get; init; }
 
-    /// <summary>Rows that will be deleted, each with the ETag it was planned against.</summary>
+    /// <summary>Rows that will be deleted, each pinned to its version and its content.</summary>
     public IReadOnlyList<CosmosTagRowRef> RowsToRemove { get; init; } = Array.Empty<CosmosTagRowRef>();
 }
 
@@ -54,8 +65,9 @@ public record CosmosTagMigrationAction
 ///     touched, and required as the input to the run itself.
 ///     This is not paperwork. A destructive run takes a plan and nothing else, so an operator cannot delete
 ///     rows they have not first been shown. The <see cref="Fingerprint" /> covers the lineage and every
-///     action, so an artifact that has been edited, truncated, or built for a different lineage is rejected
-///     rather than half-applied.
+///     mutation-relevant field of every action — under a length-prefixed encoding, so no arrangement of
+///     characters inside a tag or an id can make two different plans hash the same. An artifact that has been
+///     edited, truncated, or built for a different lineage is rejected rather than half-applied.
 /// </summary>
 public record CosmosTagMigrationPlan
 {
@@ -105,8 +117,8 @@ public record CosmosTagMigrationPlan
     public string? Checkpoint { get; init; }
 
     /// <summary>
-    ///     Covers the lineage and every action. Recomputed when the plan is applied: an artifact that no
-    ///     longer hashes to this has been altered, and is refused.
+    ///     Covers the lineage and every mutation-relevant field. Recomputed when the plan is applied: an
+    ///     artifact that no longer hashes to this has been altered, and is refused.
     /// </summary>
     public string Fingerprint { get; init; } = string.Empty;
 
@@ -126,35 +138,44 @@ public record CosmosTagMigrationPlan
     }
 
     /// <summary>
-    ///     Hashes the lineage and the actions. Deterministic: the same plan always fingerprints the same, so
-    ///     a re-planned identical world produces an identical artifact.
+    ///     Hashes the lineage and every field that decides what gets deleted — the tag, the partition key,
+    ///     the event, the survivor's expected content, and each removable row's id, version and full content.
+    ///     Every field is length-prefixed, so no value containing a separator can shift the ones after it and
+    ///     make two different plans collide. Deterministic: the same plan always fingerprints the same, so
+    ///     re-planning an unchanged world produces an identical artifact.
     /// </summary>
     public string ComputeFingerprint()
     {
         var builder = new StringBuilder();
-        builder.Append(ServiceId).Append('|')
-            .Append(EventsContainer).Append('|')
-            .Append(TagsContainer).Append('|')
-            .Append(FromSortableUniqueIdExclusive ?? string.Empty).Append('|')
-            .Append(ToSortableUniqueIdInclusive ?? string.Empty).Append('\n');
+
+        CosmosCanonicalEncoding.AppendField(builder, ServiceId);
+        CosmosCanonicalEncoding.AppendField(builder, EventsContainer);
+        CosmosCanonicalEncoding.AppendField(builder, TagsContainer);
+        CosmosCanonicalEncoding.AppendField(builder, FromSortableUniqueIdExclusive);
+        CosmosCanonicalEncoding.AppendField(builder, ToSortableUniqueIdInclusive);
+        CosmosCanonicalEncoding.AppendField(builder, Actions.Count.ToString(null as IFormatProvider));
 
         foreach (var action in Actions
             .OrderBy(action => action.PartitionKey, StringComparer.Ordinal)
             .ThenBy(action => action.EventId.ToString(), StringComparer.Ordinal))
         {
-            builder.Append(action.PartitionKey).Append('|')
-                .Append(action.EventId.ToString()).Append('|')
-                .Append(action.SurvivorId).Append('|')
-                .Append(action.SurvivorExists.ToString(CultureInfo.InvariantCulture)).Append('|')
-                .Append(action.SurvivorSortableUniqueId).Append('|')
-                .Append(action.SurvivorEventType).Append('|');
+            CosmosCanonicalEncoding.AppendField(builder, action.PartitionKey);
+            CosmosCanonicalEncoding.AppendField(builder, action.Tag);
+            CosmosCanonicalEncoding.AppendField(builder, action.EventId.ToString());
+            CosmosCanonicalEncoding.AppendField(builder, action.SurvivorId);
+            CosmosCanonicalEncoding.AppendField(builder, action.SurvivorExists);
+            CosmosCanonicalEncoding.AppendField(builder, action.SurvivorETag);
+            CosmosCanonicalEncoding.AppendField(builder, CosmosTagRowSnapshot.Canonical(action.SurvivorExpected));
+            CosmosCanonicalEncoding.AppendField(
+                builder,
+                action.RowsToRemove.Count.ToString(null as IFormatProvider));
 
             foreach (var row in action.RowsToRemove.OrderBy(row => row.Id, StringComparer.Ordinal))
             {
-                builder.Append(row.Id).Append(':').Append(row.ETag ?? string.Empty).Append(',');
+                CosmosCanonicalEncoding.AppendField(builder, row.Id);
+                CosmosCanonicalEncoding.AppendField(builder, row.ETag);
+                CosmosCanonicalEncoding.AppendField(builder, CosmosTagRowSnapshot.Canonical(row.Snapshot));
             }
-
-            builder.Append('\n');
         }
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));

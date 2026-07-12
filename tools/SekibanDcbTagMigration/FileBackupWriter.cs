@@ -28,7 +28,14 @@ internal sealed class FileBackupWriter : ICosmosTagMigrationBackupWriter
             EventsContainer = plan.EventsContainer,
             TagsContainer = plan.TagsContainer,
             PlanFingerprint = plan.Fingerprint,
-            Rows = rowsToRemove
+            Rows = rowsToRemove,
+
+            // The snapshots the run compared against, alongside the rows it actually read. If the two ever
+            // disagree, the file says so — you can see what was reviewed and what was found, not just what
+            // was deleted.
+            PlannedSnapshots = plan.Actions
+                .SelectMany(action => action.RowsToRemove.Select(row => row.Snapshot))
+                .ToList()
         };
 
         // Newtonsoft, to match the serializer the Cosmos SDK uses for these documents: what comes out of here
@@ -59,4 +66,9 @@ internal sealed class CosmosTagMigrationBackup
 
     [JsonProperty("rows")]
     public IReadOnlyList<CosmosTag> Rows { get; set; } = Array.Empty<CosmosTag>();
+
+    /// <summary>The exact content the plan pinned for each removable row — what the run compared against.</summary>
+    [JsonProperty("plannedSnapshots")]
+    public IReadOnlyList<CosmosTagRowSnapshot> PlannedSnapshots { get; set; } =
+        Array.Empty<CosmosTagRowSnapshot>();
 }

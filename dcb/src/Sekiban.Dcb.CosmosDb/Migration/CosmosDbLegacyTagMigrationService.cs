@@ -263,7 +263,8 @@ public sealed class CosmosDbLegacyTagMigrationService
             Reduced = audit.Count(entry => entry.Outcome == CosmosTagMigrationOutcome.Reduced),
             RowsRemoved = audit.Sum(entry => entry.RemovedIds.Count),
             SurvivorsCreated = audit.Count(entry => entry.SurvivorCreated),
-            LostRaces = audit.Count(entry => entry.Outcome == CosmosTagMigrationOutcome.LostRace),
+            LostRaces = audit.Count(entry => entry.Outcome == CosmosTagMigrationOutcome.LostRaceContentChanged),
+            StaleSurvivors = audit.Count(entry => entry.Outcome == CosmosTagMigrationOutcome.StaleSurvivor),
             Stale = audit.Count(entry => entry.Outcome == CosmosTagMigrationOutcome.Stale),
             Skipped = audit.Count(entry => entry.Outcome == CosmosTagMigrationOutcome.Skipped),
             Audit = audit
@@ -343,7 +344,9 @@ public sealed class CosmosDbLegacyTagMigrationService
                     continue;
                 }
 
-                if (!string.Equals(live.ETag, planned.ETag, StringComparison.Ordinal))
+                // Content is what decides. A row whose ETag moved but whose content is untouched is still
+                // the row the operator reviewed; a row whose content moved is not, whatever its ETag says.
+                if (!planned.Snapshot.Matches(live))
                 {
                     isStale = true;
                     continue;
@@ -363,55 +366,37 @@ public sealed class CosmosDbLegacyTagMigrationService
         CosmosTagMigrationApplyOptions options,
         CancellationToken cancellationToken)
     {
-        var survivorCreated = false;
-
-        // The canonical row must exist before a single legacy row is removed, so the key is never left
-        // unindexed — not even for an instant. A reader mid-migration always finds the event.
+        // ── The invariant that makes any of this safe ───────────────────────────────────────────────
         //
-        // It is DERIVED from the event, not promoted from a legacy row: the survivor's content is exactly
-        // what the write path would have written, so no legacy quirk outlives the migration.
-        if (!action.SurvivorExists)
+        // Before ONE legacy row is removed, the canonical row must be PROVEN present and PROVEN to say
+        // exactly what the event says — re-read now, compared strictly, every time. Not assumed from the
+        // plan, which is a snapshot of a world that may have moved since.
+        //
+        // If the survivor is gone, we recreate it from the event and read it back. If it is THERE BUT
+        // DIFFERENT — corrupted, or rewritten by something else — deleting the legacy rows would leave the
+        // key wrongly indexed. So we delete nothing and say so.
+        var derived = CosmosTagIdentity.DeriveRow(
+            _serviceId,
+            action.Tag,
+            action.EventId,
+            action.SurvivorExpected.SortableUniqueId,
+            action.SurvivorExpected.EventType);
+
+        var survivor = await EnsureCanonicalSurvivorAsync(action, derived, options, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!survivor.Proven)
         {
-            var derived = CosmosTagIdentity.DeriveRow(
-                _serviceId,
-                action.Tag,
-                action.EventId,
-                action.SurvivorSortableUniqueId,
-                action.SurvivorEventType);
-
-            var created = await ThrottleAware.ExecuteAsync(
-                () => _store.TryCreateRowAsync(action.PartitionKey, derived, cancellationToken),
-                options.MaxThrottleRetries,
-                cancellationToken).ConfigureAwait(false);
-
-            if (created)
+            return new CosmosTagMigrationAuditEntry
             {
-                survivorCreated = true;
-            }
-            else
-            {
-                // Someone — a normal write, or a previous run of this plan — got there first. That is fine,
-                // but only if what they wrote is what we would have written.
-                var existing = await ThrottleAware.ExecuteAsync(
-                    () => _store.TryReadRowAsync(action.PartitionKey, action.SurvivorId, cancellationToken),
-                    options.MaxThrottleRetries,
-                    cancellationToken).ConfigureAwait(false);
-
-                if (existing == null || !CosmosTagIdentity.ContentEquals(derived, existing))
-                {
-                    return new CosmosTagMigrationAuditEntry
-                    {
-                        EventId = action.EventId,
-                        Tag = action.Tag,
-                        PartitionKey = action.PartitionKey,
-                        SurvivorId = action.SurvivorId,
-                        Outcome = CosmosTagMigrationOutcome.LostRace,
-                        Detail = existing == null
-                            ? "the canonical row could neither be created nor read back"
-                            : "a row appeared at the canonical id that disagrees with the event; nothing was removed"
-                    };
-                }
-            }
+                EventId = action.EventId,
+                Tag = action.Tag,
+                PartitionKey = action.PartitionKey,
+                SurvivorId = action.SurvivorId,
+                SurvivorCreated = survivor.Created,
+                Outcome = CosmosTagMigrationOutcome.StaleSurvivor,
+                Detail = survivor.Detail
+            };
         }
 
         var removed = new List<string>();
@@ -430,18 +415,18 @@ public sealed class CosmosDbLegacyTagMigrationService
                     // Someone else removed it, or a previous run of this plan did. Converged either way.
                     break;
                 default:
-                    // The row moved under us and we will not force it.
+                    // The row's content moved under us and we will not force it.
                     return new CosmosTagMigrationAuditEntry
                     {
                         EventId = action.EventId,
                         Tag = action.Tag,
                         PartitionKey = action.PartitionKey,
                         SurvivorId = action.SurvivorId,
-                        SurvivorCreated = survivorCreated,
+                        SurvivorCreated = survivor.Created,
                         RemovedIds = removed,
-                        Outcome = CosmosTagMigrationOutcome.LostRace,
-                        Detail = $"row '{planned.Id}' changed under the migration; it was left alone. " +
-                            "Re-plan and review again."
+                        Outcome = CosmosTagMigrationOutcome.LostRaceContentChanged,
+                        Detail = $"row '{planned.Id}' no longer matches the content the plan pinned; it was " +
+                            "left exactly as it is. Re-plan and review again."
                     };
             }
         }
@@ -452,20 +437,79 @@ public sealed class CosmosDbLegacyTagMigrationService
             Tag = action.Tag,
             PartitionKey = action.PartitionKey,
             SurvivorId = action.SurvivorId,
-            SurvivorCreated = survivorCreated,
+            SurvivorCreated = survivor.Created,
             RemovedIds = removed,
             Outcome = CosmosTagMigrationOutcome.Reduced
         };
     }
 
     /// <summary>
-    ///     Deletes a row only at the version the plan pinned.
+    ///     Proves the canonical row is there and is exactly what the event derives, creating it if it is
+    ///     absent and reading it back strictly. Called immediately before any delete, every time.
+    ///     Nothing about this is taken on trust from the plan. The plan says what the survivor MUST be; this
+    ///     establishes that it IS.
+    /// </summary>
+    private async Task<(bool Proven, bool Created, string? Detail)> EnsureCanonicalSurvivorAsync(
+        CosmosTagMigrationAction action,
+        CosmosTag derived,
+        CosmosTagMigrationApplyOptions options,
+        CancellationToken cancellationToken)
+    {
+        var live = await ThrottleAware.ExecuteAsync(
+            () => _store.TryReadRowAsync(action.PartitionKey, action.SurvivorId, cancellationToken),
+            options.MaxThrottleRetries,
+            cancellationToken).ConfigureAwait(false);
+
+        var created = false;
+
+        if (live == null)
+        {
+            // Absent — whether the plan expected that or the row was removed since. Create it from the event,
+            // so the survivor's content is what the write path would have written.
+            var wasCreated = await ThrottleAware.ExecuteAsync(
+                () => _store.TryCreateRowAsync(action.PartitionKey, derived, cancellationToken),
+                options.MaxThrottleRetries,
+                cancellationToken).ConfigureAwait(false);
+
+            created = wasCreated;
+
+            // Read back, always: a create we did not observe landing is not a survivor we may rely on.
+            live = await ThrottleAware.ExecuteAsync(
+                () => _store.TryReadRowAsync(action.PartitionKey, action.SurvivorId, cancellationToken),
+                options.MaxThrottleRetries,
+                cancellationToken).ConfigureAwait(false);
+
+            if (live == null)
+            {
+                return (false, created,
+                    "the canonical row could neither be created nor read back; nothing was deleted");
+            }
+        }
+
+        // Strict: id, partition key, every event-derived field, and createdAt. Anything less would let a
+        // survivor that has drifted from its event stand in for one that has not.
+        if (!CosmosTagIdentity.ContentEquals(derived, live))
+        {
+            return (false, created,
+                $"the canonical row at '{action.SurvivorId}' does not match the event. Expected " +
+                $"[{CosmosTagIdentity.Describe(derived)}], found [{CosmosTagIdentity.Describe(live)}]. " +
+                "Nothing was deleted — removing the legacy rows would have left this key wrongly indexed.");
+        }
+
+        return (true, created, null);
+    }
+
+    /// <summary>
+    ///     Deletes a row only at the version the plan pinned, and only while it is still, byte for byte, the
+    ///     row the plan pinned.
     ///     If the ETag no longer matches, the row has been written to since the operator reviewed it, and the
-    ///     delete does not happen. It is re-read, and it is only retried at the new version if the row still
-    ///     says exactly what it said when the plan called it a removable duplicate. If ANY of its content
-    ///     changed — the event it indexes, the type, the ordering id, its group — then whatever it is now, it
-    ///     is not the row that was reviewed, and the migration leaves it alone and reports the race.
-    ///     It is never force-deleted. There is no code path here that ignores an ETag.
+    ///     delete does not happen. It is re-read and compared against the FULL SNAPSHOT the plan froze —
+    ///     every field except <c>_etag</c> and <c>_ts</c>, the two Cosmos rewrites on its own. A retry at the
+    ///     new version is licensed only when the content is identical; if anything at all changed — its
+    ///     createdAt, its tag group, the event it names — it is no longer the row that was reviewed, and the
+    ///     migration leaves it exactly as it is.
+    ///     It is never force-deleted. There is no code path here that ignores an ETag, and none that deletes a
+    ///     row whose content has moved.
     /// </summary>
     private async Task<CosmosDeleteOutcome> DeleteWithEtagGuardAsync(
         CosmosTagMigrationAction action,
@@ -473,13 +517,6 @@ public sealed class CosmosDbLegacyTagMigrationService
         CosmosTagMigrationApplyOptions options,
         CancellationToken cancellationToken)
     {
-        var derived = CosmosTagIdentity.DeriveRow(
-            _serviceId,
-            action.Tag,
-            action.EventId,
-            action.SurvivorSortableUniqueId,
-            action.SurvivorEventType);
-
         var etag = planned.ETag;
 
         for (var attempt = 0; attempt <= Math.Max(0, options.MaxEtagRaceRetries); attempt++)
@@ -505,9 +542,9 @@ public sealed class CosmosDbLegacyTagMigrationService
                 return CosmosDeleteOutcome.AlreadyGone;
             }
 
-            // The only thing that licenses a retry is that the row is STILL a legacy duplicate of this exact
-            // event, agreeing with it in every event-derived field. Anything else and we stop.
-            if (CosmosLegacyTagRowMatcher.Classify(live, derived, out _) != LegacyRowMatch.LegacyPresent)
+            // The ONLY thing that licenses a retry: the row's content is exactly the content the plan froze.
+            // Not "semantically equivalent", not "still a legacy duplicate" — identical.
+            if (!planned.Snapshot.Matches(live))
             {
                 return CosmosDeleteOutcome.EtagMismatch;
             }
@@ -569,6 +606,9 @@ public sealed class CosmosDbLegacyTagMigrationService
                 detail));
         }
 
+        var liveSurvivor = rows.FirstOrDefault(row =>
+            string.Equals(row.Id, derived.Id, StringComparison.Ordinal));
+
         return (new CosmosTagMigrationAction
         {
             EventId = eventId,
@@ -576,10 +616,20 @@ public sealed class CosmosDbLegacyTagMigrationService
             PartitionKey = derived.Pk,
             SurvivorId = derived.Id,
             SurvivorExists = survivorExists,
-            SurvivorSortableUniqueId = cosmosEvent.SortableUniqueId,
-            SurvivorEventType = cosmosEvent.EventType,
+
+            // What the canonical row MUST be, derived from the event. The run proves the live survivor
+            // matches this before it deletes anything.
+            SurvivorExpected = CosmosTagRowSnapshot.From(derived),
+            SurvivorETag = liveSurvivor?.ETag,
+
+            // Each removable row pinned to its version AND its full content.
             RowsToRemove = toRemove
-                .Select(row => new CosmosTagRowRef(row.Id, row.ETag))
+                .Select(row => new CosmosTagRowRef
+                {
+                    Id = row.Id,
+                    ETag = row.ETag,
+                    Snapshot = CosmosTagRowSnapshot.From(row)
+                })
                 .ToList()
         }, null);
     }

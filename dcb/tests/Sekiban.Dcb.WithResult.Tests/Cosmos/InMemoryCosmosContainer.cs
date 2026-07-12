@@ -47,6 +47,9 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         _items[(Pk(item), Id_(item))] = item;
     }
 
+    /// <summary>Removes a document behind the code's back, as a concurrent operator would.</summary>
+    public void Remove(string partitionKey, string id) => _items.Remove((partitionKey, id));
+
     /// <summary>
     ///     Rewrites a stored document in place, as a concurrent writer would — which moves its ETag, so a
     ///     delete pinned to the old one is refused. This is how an ETag race is staged deterministically.
