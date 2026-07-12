@@ -51,6 +51,12 @@ public partial class CosmosDbEventStore : IHotEventStore
     /// </summary>
     internal ICosmosTagWriteFaultInjector? TagWriteFaultInjector { get; set; }
 
+    /// <summary>
+    ///     Clock, delay and jitter used while retrying the tag write. Substituted in tests so retry behavior
+    ///     can be asserted without real waiting. The public construction paths cannot change it.
+    /// </summary>
+    internal ICosmosRetryScheduler RetryScheduler { get; set; } = SystemCosmosRetryScheduler.Instance;
+
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
 
     private static string GetEventPartitionKey(string eventId, string serviceId) =>
@@ -432,8 +438,16 @@ public partial class CosmosDbEventStore : IHotEventStore
     ///     Events are written in parallel (distributed partition keys).
     ///     Tags are written using TransactionalBatch (same partition key per tag).
     /// </summary>
+    public Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        WriteEventsAsync(IEnumerable<Event> events) =>
+        WriteEventsAsync(events, CancellationToken.None);
+
+    /// <summary>
+    ///     Writes events and associated tags, observing <paramref name="cancellationToken" /> while the
+    ///     tag write is being retried under <see cref="CosmosWriteFailurePolicy.RollForward" />.
+    /// </summary>
     public async Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
-        WriteEventsAsync(IEnumerable<Event> events)
+        WriteEventsAsync(IEnumerable<Event> events, CancellationToken cancellationToken)
     {
         var options = _context.Options;
         var serviceId = CurrentServiceId;
@@ -462,57 +476,134 @@ public partial class CosmosDbEventStore : IHotEventStore
                 serviceId,
                 eventsSettings).ConfigureAwait(false);
 
-            // Step 2: Write tags using TransactionalBatch (grouped by tag = same partition key)
-            List<TagWriteResult> tagWriteResults;
-            try
-            {
-                tagWriteResults = await WriteTagsWithBatchAsync(
-                    writtenEvents,
-                    tagsContainer,
-                    options,
-                    serviceId,
-                    tagsSettings).ConfigureAwait(false);
-            }
-            catch (Exception tagEx)
-            {
-                // Tag write failed - attempt to rollback written events
-                if (options.TryRollbackOnFailure)
-                {
-                    await TryRollbackEventsAsync(writtenEvents, eventsContainer, serviceId, eventsSettings).ConfigureAwait(false);
-                }
-
-                throw new InvalidOperationException(
-                    $"Tag write failed after {writtenEvents.Count} events were written. " +
-                    $"Rollback attempted: {options.TryRollbackOnFailure}",
-                    tagEx);
-            }
+            // Step 2: Write tags, batched per tag partition
+            var tagWriteResults = await ExecuteTagWritePhaseAsync(
+                () => WriteTagsWithBatchAsync(writtenEvents, tagsContainer, options, serviceId, tagsSettings),
+                writtenEvents.Select(ev => ev.Id).ToList(),
+                options,
+                () => TryRollbackEventsAsync(writtenEvents, eventsContainer, serviceId, eventsSettings),
+                cancellationToken).ConfigureAwait(false);
 
             return ResultBox.FromValue(
                 (Events: (IReadOnlyList<Event>)writtenEvents,
                     TagWrites: (IReadOnlyList<TagWriteResult>)tagWriteResults));
         }
-        catch (CosmosException ex)
+        catch (Exception ex) when (IsWriteFailure(ex))
         {
-            if (_logger != null)
-                LogWriteEventsCosmosError(_logger, ex, ex.Message);
-            return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
-        }
-        catch (InvalidOperationException ex)
-        {
-            if (_logger != null)
-                LogWriteEventsFailed(_logger, ex, ex.Message);
-            return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
-        }
-        catch (ArgumentException ex)
-        {
-            if (_logger != null)
-                LogWriteEventsFailed(_logger, ex, ex.Message);
+            LogWriteFailure(ex);
             return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
         }
     }
 
     /// <summary>
+    ///     Runs the tag-write phase under the configured failure policy.
+    ///     Under <see cref="CosmosWriteFailurePolicy.RollForward" /> the write is retried — safe because tag
+    ///     rows derive deterministically from the events, so a retry converges on whatever a partial write
+    ///     left missing — and events are never deleted.
+    ///     Under the compatible default the behavior of earlier releases is preserved exactly: no retry, and
+    ///     a best-effort rollback when <c>TryRollbackOnFailure</c> is set.
+    /// </summary>
+    private async Task<List<TagWriteResult>> ExecuteTagWritePhaseAsync(
+        Func<Task<List<TagWriteResult>>> writeTags,
+        List<Guid> eventIds,
+        CosmosDbEventStoreOptions options,
+        Func<Task> rollback,
+        CancellationToken cancellationToken)
+    {
+        if (options.WriteFailurePolicy == CosmosWriteFailurePolicy.RollForward)
+        {
+            return await CosmosTagWriteRetryExecutor.ExecuteAsync(
+                writeTags,
+                eventIds,
+                options.TagWriteRetry,
+                RetryScheduler,
+                (attempt, delay, ex) =>
+                {
+                    if (_logger != null)
+                        LogTagWriteRetry(_logger, ex, attempt, delay.TotalMilliseconds, FormatEventIds(eventIds));
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        try
+        {
+            return await writeTags().ConfigureAwait(false);
+        }
+        catch (Exception tagEx)
+        {
+            CosmosDbTelemetry.RecordTagWriteFailure(
+                tagEx is CosmosTagIndexCorruptionException
+                    ? TagWriteFailureReason.Corruption
+                    : TagWriteFailureReason.Transient);
+
+#pragma warning disable CS0618 // The legacy option is honored under the compatible policy by design.
+            var rollbackRequested = options.TryRollbackOnFailure;
+#pragma warning restore CS0618
+
+            if (rollbackRequested)
+            {
+                await rollback().ConfigureAwait(false);
+            }
+
+            throw new InvalidOperationException(
+                $"Tag write failed after {eventIds.Count} events were written. " +
+                $"Rollback attempted: {rollbackRequested}",
+                tagEx);
+        }
+    }
+
+    private static bool IsWriteFailure(Exception ex) =>
+        ex is CosmosException or InvalidOperationException or ArgumentException or
+            CosmosTagWriteExhaustedException or CosmosTagIndexCorruptionException or
+            CosmosPartialEventWriteException;
+
+    private void LogWriteFailure(Exception ex)
+    {
+        if (_logger == null)
+        {
+            return;
+        }
+
+        switch (ex)
+        {
+            case CosmosTagWriteExhaustedException exhausted:
+                LogTagWriteExhausted(
+                    _logger,
+                    exhausted,
+                    exhausted.Attempts,
+                    FormatEventIds(exhausted.EventIds));
+                break;
+            case CosmosTagIndexCorruptionException corruption:
+                LogTagIndexCorruption(
+                    _logger,
+                    corruption,
+                    corruption.Tag ?? string.Empty,
+                    corruption.DocumentId ?? string.Empty);
+                break;
+            case CosmosPartialEventWriteException partial:
+                LogPartialEventWrite(
+                    _logger,
+                    partial,
+                    FormatEventIds(partial.WrittenEventIds),
+                    FormatEventIds(partial.FailedEventIds));
+                break;
+            case CosmosException cosmos:
+                LogWriteEventsCosmosError(_logger, cosmos, cosmos.Message);
+                break;
+            default:
+                LogWriteEventsFailed(_logger, ex, ex.Message);
+                break;
+        }
+    }
+
+    private static string FormatEventIds(IReadOnlyList<Guid> eventIds) => string.Join(", ", eventIds);
+
+    /// <summary>
     ///     Writes events in parallel with concurrency control.
+    ///     Event documents live in distributed partitions and are created independently, so a multi-event
+    ///     write can fail partway through: the events already created are durable and immediately visible to
+    ///     all-events readers. They are never deleted in response — a multi-projection may already have read
+    ///     them — so a partial failure is reported instead, naming both the visible and the failed set.
     /// </summary>
     private async Task<List<Event>> WriteEventsInParallelAsync(
         List<Event> eventsList,
@@ -541,7 +632,11 @@ public partial class CosmosDbEventStore : IHotEventStore
                     new PartitionKey(eventPk),
                     itemRequestOptions).ConfigureAwait(false);
 
-                return ev;
+                return (Event: ev, Error: (Exception?)null);
+            }
+            catch (Exception ex) when (ex is CosmosException or InvalidOperationException or ArgumentException or JsonException)
+            {
+                return (Event: ev, Error: (Exception?)ex);
             }
             finally
             {
@@ -550,7 +645,19 @@ public partial class CosmosDbEventStore : IHotEventStore
         });
 
         var results = await Task.WhenAll(eventTasks).ConfigureAwait(false);
-        return results.ToList();
+        var failures = results.Where(result => result.Error != null).ToList();
+
+        if (failures.Count == 0)
+        {
+            return results.Select(result => result.Event).ToList();
+        }
+
+        CosmosDbTelemetry.RecordPartialEventWrite();
+
+        throw new CosmosPartialEventWriteException(
+            results.Where(result => result.Error == null).Select(result => result.Event.Id).ToList(),
+            failures.Select(result => result.Event.Id).ToList(),
+            failures[0].Error!);
     }
 
     /// <summary>
@@ -1170,8 +1277,16 @@ public partial class CosmosDbEventStore : IHotEventStore
     ///     Events are written in parallel (distributed partition keys).
     ///     Tags are written using TransactionalBatch (same partition key per tag).
     /// </summary>
+    public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) =>
+        WriteSerializableEventsAsync(events, CancellationToken.None);
+
+    /// <summary>
+    ///     Writes pre-serialized events and associated tags, observing <paramref name="cancellationToken" />
+    ///     while the tag write is being retried under <see cref="CosmosWriteFailurePolicy.RollForward" />.
+    /// </summary>
     public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
-        WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+        WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events, CancellationToken cancellationToken)
     {
         var options = _context.Options;
         var serviceId = CurrentServiceId;
@@ -1226,7 +1341,11 @@ public partial class CosmosDbEventStore : IHotEventStore
                         new PartitionKey(eventPk),
                         itemRequestOptions).ConfigureAwait(false);
 
-                    return se;
+                    return (Event: se, Error: (Exception?)null);
+                }
+                catch (Exception ex) when (ex is CosmosException or InvalidOperationException or ArgumentException or JsonException)
+                {
+                    return (Event: se, Error: (Exception?)ex);
                 }
                 finally
                 {
@@ -1235,53 +1354,37 @@ public partial class CosmosDbEventStore : IHotEventStore
             });
 
             var results = await Task.WhenAll(eventTasks).ConfigureAwait(false);
-            var writtenEvents = results.ToList();
+            var eventFailures = results.Where(result => result.Error != null).ToList();
 
-            // Step 2: Write tags using TransactionalBatch (grouped by tag = same partition key)
-            List<TagWriteResult> tagWriteResults;
-            try
+            // A partially-failed event write leaves the created events durable and already visible to
+            // all-events readers. They are not deleted — the failure is reported with both sets instead.
+            if (eventFailures.Count > 0)
             {
-                tagWriteResults = await WriteSerializableTagsWithBatchAsync(
-                    writtenEvents,
-                    tagsContainer,
-                    options,
-                    serviceId,
-                    tagsSettings).ConfigureAwait(false);
-            }
-            catch (Exception tagEx)
-            {
-                // Tag write failed - attempt to rollback written events
-                if (options.TryRollbackOnFailure)
-                {
-                    await TryRollbackSerializableEventsAsync(writtenEvents, eventsContainer, serviceId, eventsSettings).ConfigureAwait(false);
-                }
+                CosmosDbTelemetry.RecordPartialEventWrite();
 
-                throw new InvalidOperationException(
-                    $"Tag write failed after {writtenEvents.Count} events were written. " +
-                    $"Rollback attempted: {options.TryRollbackOnFailure}",
-                    tagEx);
+                throw new CosmosPartialEventWriteException(
+                    results.Where(result => result.Error == null).Select(result => result.Event.Id).ToList(),
+                    eventFailures.Select(result => result.Event.Id).ToList(),
+                    eventFailures[0].Error!);
             }
+
+            var writtenEvents = results.Select(result => result.Event).ToList();
+
+            // Step 2: Write tags, batched per tag partition
+            var tagWriteResults = await ExecuteTagWritePhaseAsync(
+                () => WriteSerializableTagsWithBatchAsync(writtenEvents, tagsContainer, options, serviceId, tagsSettings),
+                writtenEvents.Select(se => se.Id).ToList(),
+                options,
+                () => TryRollbackSerializableEventsAsync(writtenEvents, eventsContainer, serviceId, eventsSettings),
+                cancellationToken).ConfigureAwait(false);
 
             return ResultBox.FromValue(
                 (Events: (IReadOnlyList<SerializableEvent>)writtenEvents,
                     TagWrites: (IReadOnlyList<TagWriteResult>)tagWriteResults));
         }
-        catch (CosmosException ex)
+        catch (Exception ex) when (IsWriteFailure(ex))
         {
-            if (_logger != null)
-                LogWriteEventsCosmosError(_logger, ex, ex.Message);
-            return ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
-        }
-        catch (InvalidOperationException ex)
-        {
-            if (_logger != null)
-                LogWriteEventsFailed(_logger, ex, ex.Message);
-            return ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
-        }
-        catch (ArgumentException ex)
-        {
-            if (_logger != null)
-                LogWriteEventsFailed(_logger, ex, ex.Message);
+            LogWriteFailure(ex);
             return ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(ex);
         }
     }
@@ -1406,4 +1509,34 @@ public partial class CosmosDbEventStore : IHotEventStore
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Successfully rolled back {Count} events after tag write failure")]
     private static partial void LogRollbackSucceeded(ILogger logger, int count);
+
+    // Raw event ids and tags are unbounded, so they belong here in structured logs — never as metric labels.
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Tag write attempt {Attempt} failed; retrying in {DelayMs}ms. Event IDs: {EventIds}")]
+    private static partial void LogTagWriteRetry(
+        ILogger logger,
+        Exception ex,
+        int attempt,
+        double delayMs,
+        string eventIds);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Tag write exhausted after {Attempts} attempt(s). Events remain durable but their tag rows may be missing until repaired. Event IDs: {EventIds}")]
+    private static partial void LogTagWriteExhausted(ILogger logger, Exception ex, int attempts, string eventIds);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Tag index corruption detected for tag '{Tag}' at document '{DocumentId}'. The existing row was left untouched. This is not retryable.")]
+    private static partial void LogTagIndexCorruption(ILogger logger, Exception ex, string tag, string documentId);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Event write partially failed; created events were NOT deleted. Visible event IDs: {WrittenEventIds}. Failed event IDs: {FailedEventIds}")]
+    private static partial void LogPartialEventWrite(
+        ILogger logger,
+        Exception ex,
+        string writtenEventIds,
+        string failedEventIds);
 }

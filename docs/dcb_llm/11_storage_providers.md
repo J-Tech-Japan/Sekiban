@@ -144,7 +144,7 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 
 ## Consistency Contract
 
-This section documents the actual atomicity guarantees of `IEventStore.WriteSerializableEventsAsync` / `WriteEventsAsync` per provider. Follow-up slices are planned to close the gaps described below (idempotent tag writes, roll-forward retry, a tag-index repair API, an opt-in startup sweep) — the two-phase Cosmos write design itself is not changed by this document update.
+This section documents the actual atomicity guarantees of `IEventStore.WriteSerializableEventsAsync` / `WriteEventsAsync` per provider. The two-phase Cosmos write design itself is unchanged; what has changed is how a failure of that write is handled.
 
 ### Postgres — current guarantee
 
@@ -159,14 +159,35 @@ This section documents the actual atomicity guarantees of `IEventStore.WriteSeri
 
 This has two consequences today:
 
-- **Event/tag crash window**: a crash or host termination between phase 1 and phase 2 (or mid-way through the phase 2 tag batches) leaves durable events without their tag rows. Those events are visible via `ReadAllEventsAsync`, but invisible to `ReadEventsByTagAsync`, tag projectors, and `GetLatestTagAsync` — which also feeds `GeneralTagConsistentActor`'s optimistic-concurrency baseline.
-- **Multi-event partial visibility**: a multi-event `WriteEventsAsync` call can fail partway through its parallel event creates. Successfully created events become immediately visible to all-events readers even though sibling events from the same call may never get written.
+- **Event/tag crash window**: a crash or host termination between phase 1 and phase 2 (or mid-way through the phase 2 tag batches) leaves durable events without their tag rows. Those events are visible via `ReadAllEventsAsync`, but invisible to `ReadEventsByTagAsync`, tag projectors, and `GetLatestTagAsync` — which also feeds `GeneralTagConsistentActor`'s optimistic-concurrency baseline. A crash is not an in-process failure, so no policy below can prevent this window; only a repair pass can close it.
+- **Multi-event partial visibility**: a multi-event `WriteEventsAsync` call can fail partway through its parallel event creates. Successfully created events become immediately visible to all-events readers even though sibling events from the same call may never get written. This is now reported as a `CosmosPartialEventWriteException` naming both the visible and the failed event ids, and **nothing is deleted** in response.
 
-`TryRollbackSerializableEventsAsync` only runs from an in-process `catch` block; it never runs after a crash, and there is no durable compensation record.
+Tag rows are **derived deterministically** from the (event, tag) pair — `pk = {serviceId}|{tag}`, `id = {eventId}`, and the remaining fields from the event document, which carries the complete `tags` array (see `Models/CosmosEvent.cs` and `Tags/CosmosTagIdentity.cs`). Two things follow. Re-executing a tag write is safe: it re-derives identical rows, accepts the ones already present, and fills in the ones a partial write missed. And the `tags` container is a **derivable index** that can always be rebuilt from the `events` container. An existing tag row whose content disagrees with the event raises `CosmosTagIndexCorruptionException` and is never overwritten; that error is **not retryable** — the same content is derived on every attempt.
 
-**Planned improvements (not yet released)**: idempotent tag writes, roll-forward retry, a tag-index repair API, and an opt-in startup sweep. None of these ship in the current release — upgrading the package alone does not enable any repair or sweep behavior; they will land later as explicit opt-ins.
+#### Write failure policy
 
-Because Cosmos event documents carry the complete `tags` array (see `Models/CosmosEvent.cs`), the `tags` container is a **derivable index**: it can always be reconstructed from the `events` container. This is the basis for the planned repair strategy. Note that once a repair/sweep ships, reads immediately after a repair may still observe stale state depending on the configured Cosmos consistency level.
+`CosmosDbEventStoreOptions.WriteFailurePolicy` selects what happens when the tag-write phase fails in-process:
+
+| Policy | Behavior |
+|---|---|
+| `Compatible` (**default**) | The behavior of earlier releases: the tag write is not retried, and if the (now `[Obsolete]`) `TryRollbackOnFailure` is set — it defaults to `true` — the already-written event documents are best-effort **deleted**. |
+| `RollForward` (opt-in) | The tag write is **retried** (exponential backoff with jitter, an overall deadline, Cosmos `Retry-After` honored on 429, `CancellationToken` observed), converging on whatever rows a partial write left missing. Events are **never deleted**. If the retries run out, `CosmosTagWriteExhaustedException` names the events whose tag rows may be missing, and those events stay durable for a later repair. |
+
+**Rollback deletes durable events that all-events consumers — multi-projections above all — may already have read**, which contaminates their state irreversibly, and it only runs on an in-process exception, so it never runs after a crash. `RollForward` is the recommended setting for new deployments:
+
+```csharp
+services.AddSekibanDcbCosmosDb(
+    configuration,
+    options => options.WriteFailurePolicy = CosmosWriteFailurePolicy.RollForward);
+```
+
+The default stays `Compatible` through the current release line so that **upgrading the package alone changes nothing** for an existing deployment. It flips to `RollForward` only at a major version boundary, with a documented migration.
+
+#### Telemetry
+
+The `Sekiban.Dcb.CosmosDb` meter (`CosmosDbTelemetry.MeterName`) publishes `tag_write.failures` (label `reason`: `transient` | `corruption`), `tag_write.retries`, `tag_write.retry_outcomes` (label `outcome`: `recovered` | `exhausted`), and `event_write.partial_failures`. Metric labels are drawn from small fixed sets; raw event ids and tag strings are unbounded and therefore appear only in the structured logs and in the exceptions above.
+
+**Still planned (not yet released)**: a tag-index repair API and an opt-in startup sweep. Upgrading the package does not enable any repair or sweep behavior; those land later as explicit opt-ins. Note that reads immediately after a future repair may observe stale state depending on the configured Cosmos consistency level.
 
 ### Choosing a provider
 

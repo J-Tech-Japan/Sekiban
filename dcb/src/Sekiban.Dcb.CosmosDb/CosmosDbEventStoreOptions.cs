@@ -34,8 +34,35 @@ public class CosmosDbEventStoreOptions
     /// <summary>
     ///     Whether to attempt rollback (delete written events) on failure.
     ///     Default: true
+    ///     WARNING: rollback DELETES durable event documents that all-events consumers — multi-projections
+    ///     above all — may already have read, which contaminates their state irreversibly. It also only runs
+    ///     on an in-process exception, so it never runs after a crash and cannot be relied on for atomicity.
+    ///     Set <see cref="WriteFailurePolicy" /> to <see cref="CosmosWriteFailurePolicy.RollForward" />
+    ///     instead: the tag write is retried, no event is ever deleted, and an unrecoverable failure names
+    ///     the events whose tag rows may be missing so they can be repaired.
+    ///     Kept as-is (and still honored under the compatible default) so that upgrading the package alone
+    ///     does not change the behavior of an existing deployment.
     /// </summary>
+    [Obsolete(
+        "Rollback deletes durable events that all-events consumers may already have observed, and never runs after a crash. " +
+        "Set WriteFailurePolicy = CosmosWriteFailurePolicy.RollForward instead. " +
+        "This option is honored under the compatible default and will be removed at a major version boundary.")]
     public bool TryRollbackOnFailure { get; set; } = true;
+
+    /// <summary>
+    ///     What happens when the tag-write phase fails.
+    ///     Default: <see cref="CosmosWriteFailurePolicy.Compatible" /> — the behavior of earlier releases, so
+    ///     that a package upgrade alone changes nothing. Opt into
+    ///     <see cref="CosmosWriteFailurePolicy.RollForward" /> to retry tag writes instead of deleting events.
+    ///     The default flips to roll-forward only at a major version boundary, with a documented migration.
+    /// </summary>
+    public CosmosWriteFailurePolicy WriteFailurePolicy { get; set; } = CosmosWriteFailurePolicy.Compatible;
+
+    /// <summary>
+    ///     Retry policy for the tag-write phase. Only consulted under
+    ///     <see cref="CosmosWriteFailurePolicy.RollForward" />.
+    /// </summary>
+    public CosmosTagWriteRetryOptions TagWriteRetry { get; set; } = new();
 
     /// <summary>
     ///     Maximum retry attempts for rate-limited requests.
