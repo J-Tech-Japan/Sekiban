@@ -35,21 +35,28 @@ internal static class CosmosRepairRowQuery
     /// <summary>
     ///     Every format <see cref="Guid.ToString(string)" /> can emit. Together with case-insensitive
     ///     comparison, these cover every string <see cref="Guid.TryParse(string, out Guid)" /> accepts.
+    ///     Each one gets its own parameter in <see cref="CandidateQueryText" />, in this order.
     /// </summary>
     private static readonly string[] GuidFormats = { "D", "N", "B", "P", "X" };
+
+    /// <summary>
+    ///     The prefilter, as a constant. Nothing is formatted into it — every value the query compares
+    ///     against arrives as a bound parameter.
+    /// </summary>
+    private const string CandidateQueryText =
+        "SELECT * FROM c WHERE c.pk = @pk AND (" +
+        "STRINGEQUALS(c.eventId, @eventId0, true) OR " +
+        "STRINGEQUALS(c.eventId, @eventId1, true) OR " +
+        "STRINGEQUALS(c.eventId, @eventId2, true) OR " +
+        "STRINGEQUALS(c.eventId, @eventId3, true) OR " +
+        "STRINGEQUALS(c.eventId, @eventId4, true))";
 
     /// <summary>
     ///     Builds the partition-confined superset prefilter for the rows indexing <paramref name="eventId" />.
     /// </summary>
     public static QueryDefinition BuildCandidateQuery(string partitionKey, Guid eventId)
     {
-        var predicates = GuidFormats
-            .Select((_, index) => $"STRINGEQUALS(c.eventId, @eventId{index}, true)")
-            .ToList();
-
-        var query = new QueryDefinition(
-                $"SELECT * FROM c WHERE c.pk = @pk AND ({string.Join(" OR ", predicates)})")
-            .WithParameter("@pk", partitionKey);
+        var query = new QueryDefinition(CandidateQueryText).WithParameter("@pk", partitionKey);
 
         for (var index = 0; index < GuidFormats.Length; index++)
         {

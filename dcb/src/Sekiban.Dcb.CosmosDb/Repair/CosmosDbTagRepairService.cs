@@ -265,8 +265,8 @@ public sealed class CosmosDbTagRepairService
                 case LegacyRowMatch.LegacyPresent:
                     legacyRows.Add(row);
                     break;
-                case LegacyRowMatch.NotOurKey:
                 default:
+                    // NotOurKey: the row indexes a different event. Ignore it.
                     break;
             }
         }
@@ -457,8 +457,8 @@ public sealed class CosmosDbTagRepairService
                     case CosmosTagRepairCategory.Overflow:
                         _overflow++;
                         break;
-                    case CosmosTagRepairCategory.Present:
                     default:
+                        // Present.
                         _present++;
                         break;
                 }

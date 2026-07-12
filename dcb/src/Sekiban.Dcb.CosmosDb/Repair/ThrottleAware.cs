@@ -18,10 +18,12 @@ internal static class ThrottleAware
         CancellationToken cancellationToken,
         Func<TimeSpan, CancellationToken, Task>? wait = null)
     {
-        var attempts = Math.Max(0, maxRetries);
+        var retries = Math.Max(0, maxRetries);
         wait ??= (delay, ct) => Task.Delay(delay, ct);
 
-        for (var attempt = 0; ; attempt++)
+        // The first call is not a retry, so the bound is retries + 1 attempts. The final attempt does not
+        // catch a 429 — it lets it out, which is what ends the loop.
+        for (var attempt = 0; attempt <= retries; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -29,7 +31,7 @@ internal static class ThrottleAware
             {
                 return await operation().ConfigureAwait(false);
             }
-            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests && attempt < attempts)
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests && attempt < retries)
             {
                 var delay = ex.RetryAfter is { } retryAfter && retryAfter > TimeSpan.Zero
                     ? retryAfter
@@ -38,5 +40,8 @@ internal static class ThrottleAware
                 await wait(delay, cancellationToken).ConfigureAwait(false);
             }
         }
+
+        throw new InvalidOperationException(
+            "Unreachable: the final attempt either returns its result or lets its exception out.");
     }
 }
