@@ -213,7 +213,64 @@ services.AddSekibanDcbCosmosDb(
 
 `Sekiban.Dcb.CosmosDb` メーター(`CosmosDbTelemetry.MeterName`)は、`tag_write.failures`(ラベル `reason`: `transient` | `corruption`)、`tag_write.retries`、`tag_write.retry_outcomes`(ラベル `outcome`: `recovered` | `exhausted`)、`event_write.partial_failures` を発行します。メトリクスのラベルは小さな固定集合から取られます。生のイベントIDやタグ文字列は非有界であるため、構造化ログと上記の例外にのみ含まれます。
 
-**引き続き計画中(未リリース)**: タグインデックス修復API、opt-in のスタートアップスイープ。パッケージをアップグレードするだけでは修復/スイープの動作は有効になりません。今後、明示的な opt-in として提供されます。なお、将来的に修復がリリースされた後も、修復直後の読み取りは、設定された Cosmos の整合性レベルによっては古い状態を観測する可能性がある点に注意してください。
+#### タグインデックスの修復 (`CosmosDbTagRepairService`)
+
+タグ行はイベントから完全に導出できるため、`tags` コンテナーは `events` コンテナーから再構築できます。`CosmosDbTagRepairService` はそのための運用者向けサーフェスです。`sortableUniqueId` の範囲でイベントをスキャンし、各 (イベント, タグ) ペアについて期待されるタグ行を導出し、欠けているものだけを作成します。
+
+このサービスは **厳密に非破壊** です。存在しない行を作成することしかせず、行の削除・書き換え・正規化は決して行いません。また意図的に `IEventStore` の一部にはしていません — 運用者専用のジョブとして実行し、リクエストパスから公開しないでください。
+
+```csharp
+services.AddSekibanDcbCosmosDb(configuration);
+services.AddSekibanDcbCosmosDbTagRepair();   // opt-in。AddSekibanDcbCosmosDb だけでは登録されない
+
+// 運用者専用ジョブ内で:
+var repair = await factory.CreateAsync(serviceId);   // 1インスタンス == 1つの (serviceId, events, tags) 系統
+
+// 書き込む前に必ず確認する
+var report = await repair.RepairAsync(new CosmosTagRepairOptions
+{
+    DryRun = true,                                    // デフォルト
+    ToSortableUniqueIdInclusive = lastSettledId,      // 上限を固定。稼働中の書き込みは書き込みパス自身が処理する
+    MaxEventsToScan = 10_000,
+});
+
+// その後、有界な run を再開しながら修復する
+string? checkpoint = null;
+do
+{
+    var run = await repair.RepairAsync(new CosmosTagRepairOptions
+    {
+        DryRun = false,
+        ToSortableUniqueIdInclusive = lastSettledId,
+        Checkpoint = checkpoint,
+    }, cancellationToken);
+
+    checkpoint = run.HasMore ? run.Checkpoint : null;
+} while (checkpoint != null);
+```
+
+DI ではなくカスタムファクトリでストアを組み立てるホスト向けに、手動構築も可能です(`new CosmosDbTagRepairServiceFactory(context, containerResolver)`)。いずれの場合も、インスタンスは構築時に1つの `(serviceId, events コンテナー, tags コンテナー)` 系統に束縛されるため、系統をまたぐ修復は「非推奨」ではなく **構造的に不可能** です。
+
+**レポートの分類**。すべての (イベント, タグ) キーは必ずいずれか1つに分類されます:
+
+| 分類 | 意味 | 修復は書き込む? |
+|---|---|---|
+| `Present` | 導出された行が存在し、イベントと一致している。 | いいえ |
+| `Missing` | このペアを索引する行が存在しない。 | **はい** — 書き込むのはこの分類のみ |
+| `LegacyPresent` | 決定論的ID方式より前に書かれた行がこのペアを索引している。ランダムIDと壁時計の `createdAt` は想定内の差異であり、移行メタデータとして報告される。 | いいえ — レガシー行には一切触れない |
+| `Duplicate` | 複数のレガシー行が同じペアを索引している(決定論的ID以前の再実行の残骸)。 | いいえ — 報告のみ。削減は破壊的操作でありスコープ外 |
+| `Corrupt` | 行は存在するがイベントと矛盾している(`sortableUniqueId` / `eventType` / `tagGroup` のドリフト、または導出IDの位置にある行の内容不一致)。 | いいえ — 決して上書きしない |
+| `Overflow` | `MaxRowsPerKey` の上限を超える数の行がこのペアを索引しており、分類できなかった。 | いいえ — 上限を上げて再確認する |
+
+**運用ガイダンス**
+
+- **最小権限**: ジョブに必要なのは `events` コンテナーの読み取りと、`tags` コンテナーの *作成* だけです。削除も置換も行わないため、`tags` コンテナーに対して `deleteItem` / `replaceItem` を持たない Cosmos ロールで十分です。コードを信頼するのではなく、プラットフォーム側で非破壊性を強制する方法として推奨します。
+- **RUコスト**: イベントのスキャンはクロスパーティションクエリ(イベントはイベントごとにパーティション分割されるため)で、さらに (イベント, タグ) キーごとに `tags` コンテナーへのパーティション限定クエリが1回かかります。したがって RU はイベント数ではなく **キー数** に比例します(概ね `イベント数 × 1イベントあたりのタグ数`)。`MaxParallelism`(既定 4)が RU レートの調整ダイヤル、`MaxEventsToScan`(既定 10,000)が1回の run のコスト上限です。スロットリングは想定内で、サービスは Cosmos の `Retry-After` を短縮せずそのまま尊重します。
+- **上限を固定する**: `ToSortableUniqueIdInclusive` には、確定済みと分かっているイベントを指定してください。スキャン中に書き込まれるイベントは書き込みパス自身が索引します。修復はクラッシュの残骸のためのものであり、稼働中のトラフィックのためのものではありません。
+- **並行性**: run は稼働中の書き込みとも、別の run とも同時に安全に実行できます。通常の書き込みが「missing と分類したまさにその行」を先に書き込んだ場合、run はそれを「自分が書こうとしていた行」と認識して先へ進みます — 重複も、エラーも発生しません。
+- **整合性の注意点**: 修復直後の読み取りは、アカウントに設定された Cosmos の整合性レベルによっては古い状態を観測する可能性があります。セッション整合性や結果整合性のもとでは、別セッションからのタグ検索が修復の書き込みに遅れることがあります。
+
+**引き続き計画中(未リリース)**: opt-in のスタートアップ/定期スイープ、および重複レガシー行の破壊的な削減(別途承認が必要な、独立した関心事)。パッケージをアップグレードするだけではスイープの動作は有効になりません。
 
 ### プロバイダーの選び方
 
