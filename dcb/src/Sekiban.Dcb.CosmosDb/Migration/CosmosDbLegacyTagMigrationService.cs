@@ -361,198 +361,89 @@ public sealed class CosmosDbLegacyTagMigrationService
         return (rows, stale);
     }
 
+    /// <summary>
+    ///     Reduces one key — atomically.
+    ///     The survivor's guarantee and the victims' deletion are ONE transaction, not a proof followed by a
+    ///     removal. Proving the survivor with a read and then deleting is a check followed by a use, and the
+    ///     world can move in between: the survivor could be removed after the proof and the deletes would
+    ///     still commit, leaving the key indexed by nothing. Re-reading more often narrows that window; it
+    ///     does not close it. So there is no window. Either the key ends up canonical, or nothing about it
+    ///     changed.
+    /// </summary>
     private async Task<CosmosTagMigrationAuditEntry> ApplyActionAsync(
         CosmosTagMigrationAction action,
         CosmosTagMigrationApplyOptions options,
         CancellationToken cancellationToken)
     {
-        // ── The invariant that makes any of this safe ───────────────────────────────────────────────
-        //
-        // Before ONE legacy row is removed, the canonical row must be PROVEN present and PROVEN to say
-        // exactly what the event says — re-read now, compared strictly, every time. Not assumed from the
-        // plan, which is a snapshot of a world that may have moved since.
-        //
-        // If the survivor is gone, we recreate it from the event and read it back. If it is THERE BUT
-        // DIFFERENT — corrupted, or rewritten by something else — deleting the legacy rows would leave the
-        // key wrongly indexed. So we delete nothing and say so.
-        var derived = CosmosTagIdentity.DeriveRow(
+        // The canonical row, derived from the event: what the write path would have written, and therefore
+        // what survives. Never a promoted legacy row.
+        var survivor = CosmosTagIdentity.DeriveRow(
             _serviceId,
             action.Tag,
             action.EventId,
             action.SurvivorExpected.SortableUniqueId,
             action.SurvivorExpected.EventType);
 
-        var survivor = await EnsureCanonicalSurvivorAsync(action, derived, options, cancellationToken)
-            .ConfigureAwait(false);
+        var outcome = await ThrottleAware.ExecuteAsync(
+            () => _store.ExecuteReduceAsync(
+                action.PartitionKey,
+                survivor,
+                action.SurvivorExists,
+                action.SurvivorETag,
+                action.RowsToRemove,
+                cancellationToken),
+            options.MaxThrottleRetries,
+            cancellationToken).ConfigureAwait(false);
 
-        if (!survivor.Proven)
+        return outcome switch
         {
-            return new CosmosTagMigrationAuditEntry
+            CosmosReduceOutcome.Committed => new CosmosTagMigrationAuditEntry
             {
                 EventId = action.EventId,
                 Tag = action.Tag,
                 PartitionKey = action.PartitionKey,
                 SurvivorId = action.SurvivorId,
-                SurvivorCreated = survivor.Created,
+                SurvivorCreated = !action.SurvivorExists,
+                RemovedIds = action.RowsToRemove.Select(row => row.Id).ToList(),
+                Outcome = CosmosTagMigrationOutcome.Reduced
+            },
+
+            CosmosReduceOutcome.SurvivorRejected => new CosmosTagMigrationAuditEntry
+            {
+                EventId = action.EventId,
+                Tag = action.Tag,
+                PartitionKey = action.PartitionKey,
+                SurvivorId = action.SurvivorId,
+                // The transaction was refused, so nothing was created and nothing was removed. The audit says
+                // exactly that — it never claims a row died in a transaction that did not commit.
                 Outcome = CosmosTagMigrationOutcome.StaleSurvivor,
-                Detail = survivor.Detail
-            };
-        }
+                Detail = "the canonical row is not what the plan required — it has appeared, vanished, or " +
+                    "been rewritten since. The transaction was refused, so NOT ONE row was deleted. Re-plan."
+            },
 
-        var removed = new List<string>();
-
-        foreach (var planned in action.RowsToRemove)
-        {
-            var outcome = await DeleteWithEtagGuardAsync(action, planned, options, cancellationToken)
-                .ConfigureAwait(false);
-
-            switch (outcome)
+            CosmosReduceOutcome.TooManyOperations => new CosmosTagMigrationAuditEntry
             {
-                case CosmosDeleteOutcome.Deleted:
-                    removed.Add(planned.Id);
-                    break;
-                case CosmosDeleteOutcome.AlreadyGone:
-                    // Someone else removed it, or a previous run of this plan did. Converged either way.
-                    break;
-                default:
-                    // The row's content moved under us and we will not force it.
-                    return new CosmosTagMigrationAuditEntry
-                    {
-                        EventId = action.EventId,
-                        Tag = action.Tag,
-                        PartitionKey = action.PartitionKey,
-                        SurvivorId = action.SurvivorId,
-                        SurvivorCreated = survivor.Created,
-                        RemovedIds = removed,
-                        Outcome = CosmosTagMigrationOutcome.LostRaceContentChanged,
-                        Detail = $"row '{planned.Id}' no longer matches the content the plan pinned; it was " +
-                            "left exactly as it is. Re-plan and review again."
-                    };
-            }
-        }
+                EventId = action.EventId,
+                Tag = action.Tag,
+                PartitionKey = action.PartitionKey,
+                SurvivorId = action.SurvivorId,
+                Outcome = CosmosTagMigrationOutcome.Skipped,
+                Detail = $"this key needs {action.RowsToRemove.Count + 1} operations, more than one Cosmos " +
+                    "transaction can carry. Splitting it would reintroduce the gap between the survivor's " +
+                    "guarantee and the deletes, so it is refused. Nothing was touched."
+            },
 
-        return new CosmosTagMigrationAuditEntry
-        {
-            EventId = action.EventId,
-            Tag = action.Tag,
-            PartitionKey = action.PartitionKey,
-            SurvivorId = action.SurvivorId,
-            SurvivorCreated = survivor.Created,
-            RemovedIds = removed,
-            Outcome = CosmosTagMigrationOutcome.Reduced
+            _ => new CosmosTagMigrationAuditEntry
+            {
+                EventId = action.EventId,
+                Tag = action.Tag,
+                PartitionKey = action.PartitionKey,
+                SurvivorId = action.SurvivorId,
+                Outcome = CosmosTagMigrationOutcome.LostRaceContentChanged,
+                Detail = "a row to remove no longer matches the version the plan pinned. The transaction was " +
+                    "refused, so NOT ONE row was deleted — not even the ones that had not moved. Re-plan."
+            }
         };
-    }
-
-    /// <summary>
-    ///     Proves the canonical row is there and is exactly what the event derives, creating it if it is
-    ///     absent and reading it back strictly. Called immediately before any delete, every time.
-    ///     Nothing about this is taken on trust from the plan. The plan says what the survivor MUST be; this
-    ///     establishes that it IS.
-    /// </summary>
-    private async Task<(bool Proven, bool Created, string? Detail)> EnsureCanonicalSurvivorAsync(
-        CosmosTagMigrationAction action,
-        CosmosTag derived,
-        CosmosTagMigrationApplyOptions options,
-        CancellationToken cancellationToken)
-    {
-        var live = await ThrottleAware.ExecuteAsync(
-            () => _store.TryReadRowAsync(action.PartitionKey, action.SurvivorId, cancellationToken),
-            options.MaxThrottleRetries,
-            cancellationToken).ConfigureAwait(false);
-
-        var created = false;
-
-        if (live == null)
-        {
-            // Absent — whether the plan expected that or the row was removed since. Create it from the event,
-            // so the survivor's content is what the write path would have written.
-            var wasCreated = await ThrottleAware.ExecuteAsync(
-                () => _store.TryCreateRowAsync(action.PartitionKey, derived, cancellationToken),
-                options.MaxThrottleRetries,
-                cancellationToken).ConfigureAwait(false);
-
-            created = wasCreated;
-
-            // Read back, always: a create we did not observe landing is not a survivor we may rely on.
-            live = await ThrottleAware.ExecuteAsync(
-                () => _store.TryReadRowAsync(action.PartitionKey, action.SurvivorId, cancellationToken),
-                options.MaxThrottleRetries,
-                cancellationToken).ConfigureAwait(false);
-
-            if (live == null)
-            {
-                return (false, created,
-                    "the canonical row could neither be created nor read back; nothing was deleted");
-            }
-        }
-
-        // Strict: id, partition key, every event-derived field, and createdAt. Anything less would let a
-        // survivor that has drifted from its event stand in for one that has not.
-        if (!CosmosTagIdentity.ContentEquals(derived, live))
-        {
-            return (false, created,
-                $"the canonical row at '{action.SurvivorId}' does not match the event. Expected " +
-                $"[{CosmosTagIdentity.Describe(derived)}], found [{CosmosTagIdentity.Describe(live)}]. " +
-                "Nothing was deleted — removing the legacy rows would have left this key wrongly indexed.");
-        }
-
-        return (true, created, null);
-    }
-
-    /// <summary>
-    ///     Deletes a row only at the version the plan pinned, and only while it is still, byte for byte, the
-    ///     row the plan pinned.
-    ///     If the ETag no longer matches, the row has been written to since the operator reviewed it, and the
-    ///     delete does not happen. It is re-read and compared against the FULL SNAPSHOT the plan froze —
-    ///     every field except <c>_etag</c> and <c>_ts</c>, the two Cosmos rewrites on its own. A retry at the
-    ///     new version is licensed only when the content is identical; if anything at all changed — its
-    ///     createdAt, its tag group, the event it names — it is no longer the row that was reviewed, and the
-    ///     migration leaves it exactly as it is.
-    ///     It is never force-deleted. There is no code path here that ignores an ETag, and none that deletes a
-    ///     row whose content has moved.
-    /// </summary>
-    private async Task<CosmosDeleteOutcome> DeleteWithEtagGuardAsync(
-        CosmosTagMigrationAction action,
-        CosmosTagRowRef planned,
-        CosmosTagMigrationApplyOptions options,
-        CancellationToken cancellationToken)
-    {
-        var etag = planned.ETag;
-
-        for (var attempt = 0; attempt <= Math.Max(0, options.MaxEtagRaceRetries); attempt++)
-        {
-            var outcome = await ThrottleAware.ExecuteAsync(
-                () => _store.TryDeleteRowAsync(action.PartitionKey, planned.Id, etag, cancellationToken),
-                options.MaxThrottleRetries,
-                cancellationToken).ConfigureAwait(false);
-
-            if (outcome != CosmosDeleteOutcome.EtagMismatch)
-            {
-                return outcome;
-            }
-
-            var live = await ThrottleAware.ExecuteAsync(
-                () => _store.TryReadRowAsync(action.PartitionKey, planned.Id, cancellationToken),
-                options.MaxThrottleRetries,
-                cancellationToken).ConfigureAwait(false);
-
-            if (live == null)
-            {
-                // Someone else removed it. Converged.
-                return CosmosDeleteOutcome.AlreadyGone;
-            }
-
-            // The ONLY thing that licenses a retry: the row's content is exactly the content the plan froze.
-            // Not "semantically equivalent", not "still a legacy duplicate" — identical.
-            if (!planned.Snapshot.Matches(live))
-            {
-                return CosmosDeleteOutcome.EtagMismatch;
-            }
-
-            etag = live.ETag;
-        }
-
-        return CosmosDeleteOutcome.EtagMismatch;
     }
 
     private async Task<(CosmosTagMigrationAction? Action, CosmosTagMigrationSkip? Skip)> PlanKeyAsync(
@@ -604,6 +495,21 @@ public sealed class CosmosDbLegacyTagMigrationService
                 tag,
                 CosmosTagMigrationSkipReason.Corrupt,
                 detail));
+        }
+
+        // The reduce is one transaction — survivor plus every victim — so a key that needs more operations
+        // than a transaction can carry is refused HERE, before anything is planned, let alone mutated.
+        // Splitting it into several transactions would give back exactly the window the atomic boundary
+        // removes.
+        if (toRemove.Count > CosmosContainerMigrationStore.MaxVictimsPerBatch)
+        {
+            return (null, new CosmosTagMigrationSkip(
+                eventId,
+                tag,
+                CosmosTagMigrationSkipReason.BatchLimit,
+                $"{toRemove.Count} rows to remove plus the survivor exceeds the " +
+                $"{CosmosContainerMigrationStore.MaxBatchOperations}-operation limit of one Cosmos " +
+                "transaction; the key is left alone rather than reduced non-atomically"));
         }
 
         var liveSurvivor = rows.FirstOrDefault(row =>

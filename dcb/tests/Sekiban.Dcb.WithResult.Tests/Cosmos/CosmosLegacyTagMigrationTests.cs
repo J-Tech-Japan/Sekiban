@@ -375,8 +375,6 @@ public class CosmosLegacyTagMigrationTests
         lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
         lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
 
-        var createsBefore = lineage.Tags.Creates;
-
         var migration = await lineage.MigrationAsync();
         var plan = await migration.PlanAsync(new CosmosTagMigrationPlanOptions());
 
@@ -387,10 +385,14 @@ public class CosmosLegacyTagMigrationTests
         Assert.Equal(1, report.Reduced);
         Assert.Equal(2, report.RowsRemoved);
         Assert.Equal(0, report.SurvivorsCreated);
-        Assert.Equal(createsBefore, lineage.Tags.Creates); // the survivor was already there; nothing rewritten
 
+        // The survivor is conditioned inside the transaction by replacing it with the row the event derives —
+        // its own content. So it is written, but nothing about it changes; that write IS the guarantee that
+        // it was still there, and still correct, at the instant the victims died.
         var survivor = Assert.Single(lineage.Tags.Items);
         Assert.Equal(written.Id.ToString(), survivor["id"]!.ToString());
+        Assert.Equal(written.SortableUniqueIdValue, survivor["sortableUniqueId"]!.ToString());
+        Assert.Equal("TestEventPayload", survivor["eventType"]!.ToString());
     }
 
     [Fact]
@@ -497,11 +499,12 @@ public class CosmosLegacyTagMigrationTests
     // ── The canonical survivor is PROVEN before any delete ──────────────────────────────────────────
 
     [Fact]
-    public async Task A_Survivor_Deleted_Between_Plan_And_Apply_Should_Be_Recreated_Before_Any_Delete()
+    public async Task A_Survivor_Removed_After_The_Plan_Should_Commit_No_Delete_At_All()
     {
         var lineage = NewLineage();
 
-        // A normal write lands the canonical row; legacy rows sit alongside it, so the plan sees a survivor.
+        // A normal write lands the canonical row; a legacy row sits alongside it, so the plan sees a survivor
+        // and conditions the transaction on its exact version.
         var written = NewEvent(Tag);
         await lineage.Store.WriteSerializableEventsAsync(new[] { written });
         lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
@@ -510,20 +513,37 @@ public class CosmosLegacyTagMigrationTests
         var plan = await migration.PlanAsync(new CosmosTagMigrationPlanOptions());
         Assert.True(Assert.Single(plan.Actions).SurvivorExists);
 
-        // Then it is deleted out from under the plan.
+        // The survivor is removed out from under the plan — after it was reviewed, before the run.
+        //
+        // Under a proof-then-delete design this is the fatal window: the proof passed, the survivor vanished,
+        // and the deletes committed anyway, leaving the key indexed by nothing. Here the survivor's condition
+        // and the deletes are ONE transaction, so the transaction is simply refused.
         lineage.Tags.Remove($"{ServiceId}|{Tag}", written.Id.ToString());
-        Assert.Single(lineage.Tags.Items); // only the legacy row is left
 
         var report = await migration.ApplyAsync(plan, Authorized(new RecordingBackupWriter()));
 
-        // The run does not trust the plan: it re-reads, finds the survivor gone, recreates it from the event,
-        // and only then removes the legacy row. The key is never left unindexed.
-        Assert.Equal(1, report.Reduced);
-        Assert.Equal(1, report.SurvivorsCreated);
-        Assert.Equal(1, report.RowsRemoved);
+        Assert.Equal(1, report.StaleSurvivors);
+        Assert.Equal(0, report.Reduced);
+        Assert.Equal(0, report.RowsRemoved);
+        Assert.Equal(0, lineage.Tags.Deletes);
 
-        var survivor = Assert.Single(lineage.Tags.Items);
-        Assert.Equal(written.Id.ToString(), survivor["id"]!.ToString());
+        // The legacy row is untouched — the key is still indexed, which is the whole point.
+        var survivingRow = Assert.Single(lineage.Tags.Items);
+        Assert.Equal(written.Id.ToString(), survivingRow["eventId"]!.ToString());
+
+        // And the system still converges: a fresh plan sees no survivor, so its transaction CREATES the
+        // canonical row and removes the legacy one — atomically.
+        var replanned = await migration.PlanAsync(new CosmosTagMigrationPlanOptions());
+        Assert.False(Assert.Single(replanned.Actions).SurvivorExists);
+
+        var second = await migration.ApplyAsync(replanned, Authorized(new RecordingBackupWriter()));
+
+        Assert.Equal(1, second.Reduced);
+        Assert.Equal(1, second.SurvivorsCreated);
+        Assert.Equal(1, second.RowsRemoved);
+
+        var canonical = Assert.Single(lineage.Tags.Items);
+        Assert.Equal(written.Id.ToString(), canonical["id"]!.ToString());
     }
 
     [Fact]
@@ -613,6 +633,144 @@ public class CosmosLegacyTagMigrationTests
             _lineage.Tags.MutateInPlace(_partitionKey, _rowId, _mutate);
             return Task.CompletedTask;
         }
+    }
+
+    [Fact]
+    public async Task A_Victim_That_Moves_Should_Not_Take_The_Other_Victims_With_It()
+    {
+        var lineage = NewLineage();
+        await SeedLegacyOnlyEventAsync(lineage, legacyRows: 3);
+
+        var migration = await lineage.MigrationAsync();
+        var plan = await migration.PlanAsync(new CosmosTagMigrationPlanOptions());
+        var partitionKey = plan.Actions[0].PartitionKey;
+        var victims = plan.Actions[0].RowsToRemove;
+        Assert.Equal(3, victims.Count);
+
+        // ONE of the three victims is rewritten after the plan. Under a row-by-row design the other two
+        // would already be gone by the time we noticed — a partial deletion nobody asked for. The reduce is
+        // one transaction, so one bad condition means none of them die.
+        var backup = new MutateOnBackup(
+            lineage,
+            partitionKey,
+            victims[1].Id,
+            row => row["tagGroup"] = "MovedUnderUs");
+
+        var report = await migration.ApplyAsync(plan, Authorized(backup));
+
+        Assert.Equal(1, report.LostRaces);
+        Assert.Equal(0, report.Reduced);
+        Assert.Equal(0, report.RowsRemoved);
+        Assert.Equal(0, lineage.Tags.Deletes);
+
+        // All three victims survive — not just the one that moved.
+        foreach (var victim in victims)
+        {
+            Assert.Contains(lineage.Tags.Items, row => row["id"]!.ToString() == victim.Id);
+        }
+
+        // And the audit does not claim a single row died in a transaction that never committed.
+        var entry = Assert.Single(report.Audit);
+        Assert.Equal(CosmosTagMigrationOutcome.LostRaceContentChanged, entry.Outcome);
+        Assert.Empty(entry.RemovedIds);
+    }
+
+    [Fact]
+    public async Task A_Refused_Transaction_Should_Be_Idempotently_Retryable_After_A_Re_Plan()
+    {
+        var lineage = NewLineage();
+        await SeedLegacyOnlyEventAsync(lineage, legacyRows: 2);
+
+        var migration = await lineage.MigrationAsync();
+        var plan = await migration.PlanAsync(new CosmosTagMigrationPlanOptions());
+        var partitionKey = plan.Actions[0].PartitionKey;
+        var moved = plan.Actions[0].RowsToRemove[0].Id;
+
+        // The first run is refused because a victim moved.
+        var first = await migration.ApplyAsync(
+            plan,
+            Authorized(new MutateOnBackup(lineage, partitionKey, moved, row => row["tagGroup"] = "Moved")));
+
+        Assert.Equal(1, first.LostRaces);
+        Assert.Equal(0, lineage.Tags.Deletes);
+
+        // Re-planning sees the world as it now is. The moved row no longer agrees with its event, so it is
+        // corruption, not a duplicate — and the migration will not delete what it does not understand.
+        var replanned = await migration.PlanAsync(new CosmosTagMigrationPlanOptions());
+
+        Assert.Empty(replanned.Actions);
+        Assert.Equal(CosmosTagMigrationSkipReason.Corrupt, Assert.Single(replanned.Skipped).Reason);
+
+        var second = await migration.ApplyAsync(replanned, Authorized(new RecordingBackupWriter()));
+
+        Assert.Equal(0, second.RowsRemoved);
+        Assert.Equal(1, second.Skipped);
+        Assert.Equal(0, lineage.Tags.Deletes);
+
+        // Both legacy rows are still there — the one that moved, and the one that never did. Nothing was
+        // half-deleted on the way to discovering the problem.
+        Assert.Equal(2, lineage.Tags.Items.Count);
+    }
+
+    [Fact]
+    public async Task A_Key_Too_Big_For_One_Transaction_Should_Be_Refused_Before_Anything_Is_Touched()
+    {
+        var lineage = NewLineage();
+
+        // Cosmos carries 100 operations in a transaction; one of ours is always the survivor, so 99 victims
+        // is the ceiling. A key with 100 cannot be reduced atomically — and it will not be reduced any other
+        // way, because splitting it would put the gap back.
+        var written = NewEvent(Tag);
+        lineage.Store.TagWriteFaultInjector = new NeverWriteTags();
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        lineage.Store.TagWriteFaultInjector = null;
+
+        for (var i = 0; i < 100; i++)
+        {
+            lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
+        }
+
+        var migration = await lineage.MigrationAsync();
+        var plan = await migration.PlanAsync(new CosmosTagMigrationPlanOptions { MaxRowsPerKey = 200 });
+
+        // Refused at plan time — before a run is even possible, let alone attempted.
+        Assert.Empty(plan.Actions);
+        var skip = Assert.Single(plan.Skipped);
+        Assert.Equal(CosmosTagMigrationSkipReason.BatchLimit, skip.Reason);
+
+        var report = await migration.ApplyAsync(plan, Authorized(new RecordingBackupWriter()));
+
+        Assert.Equal(0, report.RowsRemoved);
+        Assert.Equal(0, lineage.Tags.Deletes);
+        Assert.Equal(100, lineage.Tags.Items.Count);
+    }
+
+    [Fact]
+    public async Task A_Key_At_The_Transaction_Limit_Should_Still_Reduce()
+    {
+        var lineage = NewLineage();
+
+        // 99 victims + 1 survivor = exactly 100 operations. The boundary must work, not merely not crash.
+        var written = NewEvent(Tag);
+        lineage.Store.TagWriteFaultInjector = new NeverWriteTags();
+        await lineage.Store.WriteSerializableEventsAsync(new[] { written });
+        lineage.Store.TagWriteFaultInjector = null;
+
+        for (var i = 0; i < 99; i++)
+        {
+            lineage.Tags.Seed(LegacyRow(ServiceId, Tag, written));
+        }
+
+        var migration = await lineage.MigrationAsync();
+        var plan = await migration.PlanAsync(new CosmosTagMigrationPlanOptions { MaxRowsPerKey = 200 });
+
+        Assert.Equal(99, Assert.Single(plan.Actions).RowsToRemove.Count);
+
+        var report = await migration.ApplyAsync(plan, Authorized(new RecordingBackupWriter()));
+
+        Assert.Equal(1, report.Reduced);
+        Assert.Equal(99, report.RowsRemoved);
+        Assert.Single(lineage.Tags.Items);
     }
 
     // ── The fingerprint cannot be fooled ────────────────────────────────────────────────────────────
@@ -861,12 +1019,18 @@ public class CosmosLegacyTagMigrationTests
             .GetType("Sekiban.Dcb.CosmosDb.Migration.ICosmosTagMigrationStore");
 
         Assert.NotNull(migrationStore);
-        Assert.Contains(
-            migrationStore!.GetMethods(),
-            method => method.Name.Contains("Delete", StringComparison.OrdinalIgnoreCase));
+
+        var migrationMembers = migrationStore!.GetMethods().Select(method => method.Name).ToList();
+
+        // Not even the MIGRATION's seam can express a standalone delete. Its only mutation is the atomic
+        // reduce, which carries the survivor's guarantee and the victims' removal in one transaction — so
+        // there is no operation anywhere in this provider that can remove a tag row on its own.
+        Assert.DoesNotContain(migrationMembers, name => name.Contains("Delete", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(migrationMembers, name => name.Contains("Upsert", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(migrationMembers, name => name == "ExecuteReduceAsync");
 
         // And it is internal: no assembly outside the provider — the operator CLI included — can implement it
-        // or call it. The only public way to delete a tag row is ApplyAsync, behind every gate above.
+        // or call it. The only public way to remove a tag row is ApplyAsync, behind every gate above.
         Assert.False(migrationStore.IsPublic);
     }
 

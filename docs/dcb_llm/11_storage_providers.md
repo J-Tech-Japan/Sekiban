@@ -325,7 +325,15 @@ The service API is the same two calls: `PlanAsync` then `ApplyAsync(plan, option
 
 **Survivor policy.** The SEK-G2 deterministic-id row always wins — the one whose document id is the event id, which is what the write path produces today and what every future write would produce. If no such row exists, the migration **creates it from the event** (so the survivor's content is what the write path would have written — no legacy quirk outlives the migration) *before* removing the legacy rows, so the key is never left unindexed even for an instant. Legacy rows are never promoted, only removed, so there is no tiebreak to get wrong. Planning the same unchanged world twice produces a byte-identical artifact.
 
-**Concurrency.** Deletes are **ETag-guarded**: each names the exact version the plan pinned. If a row was written to since the operator reviewed it, Cosmos refuses the delete — and so does the migration. It re-reads, and it only retries at the new version if the row *still* says exactly what it said when the plan called it a removable duplicate. If any of its content changed, the row is left alone and the race is reported (`LostRace`). **There is no code path that forces a delete past a moved row.**
+**Concurrency — one transaction, not a proof followed by a delete.** Every row of an `(event, tag)` lives in the same partition, so the reduce is a **single Cosmos transactional batch**: the canonical survivor is conditioned (created when the plan found none, or replaced-if-match on its exact version when it found one) and every victim is deleted-if-match, all in one atomic boundary.
+
+That shape is the point. Proving the survivor with a read and *then* deleting is a check followed by a use, and the world can move in between: the survivor could be removed after the proof and the deletes would still commit, leaving the key indexed by nothing. Re-reading more often narrows that window; it does not close it. Here there is no window — **either the key ends up canonical, or nothing about it changed**:
+
+- survivor appeared / vanished / was rewritten since the plan → transaction refused → **not one victim deleted** → `StaleSurvivor`
+- any victim moved since the plan → transaction refused → **not one victim deleted, not even the ones that had not moved** → `LostRaceContentChanged`
+- the audit never claims a row died in a transaction that did not commit.
+
+A key needing more than a transaction can carry (100 operations: 1 survivor + 99 victims) is **refused at plan time** — splitting it across transactions would put the gap straight back.
 
 **What it will not touch.** A row that disagrees with its event is not a duplicate — it is corruption, and this tool does not get to decide what to do about it: reported as `Skipped`, never deleted. Same for a key with more rows than the per-key cap (`Overflow`).
 

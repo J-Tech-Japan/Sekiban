@@ -192,5 +192,12 @@ public enum CosmosTagMigrationSkipReason
     Corrupt,
 
     /// <summary>More rows than the per-key cap allowed the scan to examine.</summary>
-    Overflow
+    Overflow,
+
+    /// <summary>
+    ///     The key needs more operations than one Cosmos transaction can carry. Refused at plan time:
+    ///     splitting it across transactions would put a gap back between the survivor's guarantee and the
+    ///     deletes, which is precisely what the atomic reduce exists to remove.
+    /// </summary>
+    BatchLimit
 }
