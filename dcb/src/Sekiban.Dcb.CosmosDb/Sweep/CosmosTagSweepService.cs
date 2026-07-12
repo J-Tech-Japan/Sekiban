@@ -223,18 +223,39 @@ public sealed class CosmosTagSweepService : IHostedService, IDisposable
                     LogSweepNeedsAttention(_logger, serviceId, report.Corrupt, report.Overflow, null);
             }
         }
+        // Shutdown first: the host going away is not a resumable budget overrun, and must not be recorded as
+        // one. Nothing is persisted — the sweep simply stops.
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
+        catch (CosmosTagRepairCancelledException ex)
+        {
+            // The run's own budget elapsed. Expected under load — and the events it settled before the budget
+            // ran out are real progress, so its checkpoint is persisted. Without this, a budget too tight to
+            // finish the window would re-scan the same prefix every turn and never advance.
+            _checkpoints[serviceId] = ex.PartialReport.Checkpoint;
+
+            CosmosDbTelemetry.RecordSweepRun(SweepRunOutcome.BudgetExhausted);
+            CosmosDbTelemetry.RecordSweepRepairedRows(ex.PartialReport.Repaired);
+
+            if (_logger != null)
+                LogSweepBudgetExhausted(
+                    _logger,
+                    serviceId,
+                    _options.RunBudget.TotalSeconds,
+                    ex.PartialReport.EventsScanned,
+                    ex.PartialReport.Repaired,
+                    null);
+        }
         catch (OperationCanceledException)
         {
-            // The run's own budget elapsed. Expected under load; the checkpoint is not advanced, so the next
-            // run re-scans from the same place.
+            // The budget elapsed somewhere that could not report progress. Nothing to persist; the next run
+            // re-scans from the same place, which is safe because repair is idempotent.
             CosmosDbTelemetry.RecordSweepRun(SweepRunOutcome.BudgetExhausted);
 
             if (_logger != null)
-                LogSweepBudgetExhausted(_logger, serviceId, _options.RunBudget.TotalSeconds, null);
+                LogSweepBudgetExhausted(_logger, serviceId, _options.RunBudget.TotalSeconds, 0, 0, null);
         }
 #pragma warning disable CA1031 // A failed sweep is logged and retried next turn — it must never take the host down.
         catch (Exception ex)
@@ -282,11 +303,12 @@ public sealed class CosmosTagSweepService : IHostedService, IDisposable
             "Tag sweep for service '{ServiceId}' found {Corrupt} corrupt and {Overflow} overflowed key(s). " +
             "These are reported only — the sweep never rewrites or removes a row. Investigate with a manual dry run.");
 
-    private static readonly Action<ILogger, string, double, Exception?> LogSweepBudgetExhausted =
-        LoggerMessage.Define<string, double>(
+    private static readonly Action<ILogger, string, double, int, int, Exception?> LogSweepBudgetExhausted =
+        LoggerMessage.Define<string, double, int, int>(
             LogLevel.Information,
             new EventId(3, nameof(LogSweepBudgetExhausted)),
-            "Tag sweep for service '{ServiceId}' hit its {BudgetSeconds}s run budget and will resume next turn");
+            "Tag sweep for service '{ServiceId}' hit its {BudgetSeconds}s run budget after settling " +
+            "{EventsScanned} event(s) and repairing {Repaired}; it resumes from there next turn");
 
     private static readonly Action<ILogger, string, Exception?> LogSweepFailed =
         LoggerMessage.Define<string>(

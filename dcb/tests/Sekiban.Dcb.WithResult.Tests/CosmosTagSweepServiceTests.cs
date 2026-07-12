@@ -510,6 +510,211 @@ public class CosmosTagSweepServiceTests
         }
     }
 
+    /// <summary>
+    ///     Simulates a run whose budget elapses partway: it settles <c>settleBeforeBudget</c> events, then
+    ///     throws with the partial progress, exactly as the repair service does when its budget CTS fires.
+    /// </summary>
+    private sealed class BudgetExhaustingRunner : ITagRepairRunner
+    {
+        private readonly List<CosmosEvent> _events;
+        private readonly Dictionary<(string PartitionKey, string Id), CosmosTag> _rows;
+        private readonly int _settleBeforeBudget;
+
+        public BudgetExhaustingRunner(
+            List<CosmosEvent> events,
+            Dictionary<(string, string), CosmosTag> rows,
+            int settleBeforeBudget)
+        {
+            _events = events.OrderBy(e => e.SortableUniqueId, StringComparer.Ordinal).ToList();
+            _rows = rows;
+            _settleBeforeBudget = settleBeforeBudget;
+        }
+
+        public List<string?> CheckpointsSeen { get; } = new();
+        public int TotalRepaired { get; private set; }
+
+        public async Task<CosmosTagRepairReport> RunAsync(
+            string serviceId,
+            CosmosTagRepairOptions options,
+            CancellationToken cancellationToken)
+        {
+            CheckpointsSeen.Add(options.Checkpoint);
+
+            // Only the events past the checkpoint are still this run's business.
+            var remaining = _events
+                .Where(e => options.Checkpoint == null ||
+                    string.CompareOrdinal(e.SortableUniqueId, DecodeLast(options.Checkpoint)) > 0)
+                .ToList();
+
+            var settled = remaining.Take(_settleBeforeBudget).ToList();
+            var store = new SweepFakeRepairStore(_rows, () => { });
+            var service = new CosmosDbTagRepairService(serviceId, new SweepFakeEventSource(settled), store);
+
+            var report = await service.RepairAsync(
+                new CosmosTagRepairOptions { DryRun = false, MaxEventsToScan = settled.Count + 1 },
+                cancellationToken);
+
+            TotalRepaired += report.Repaired;
+
+            if (remaining.Count <= _settleBeforeBudget)
+            {
+                // Everything left fitted in this turn.
+                return report with { HasMore = false, Checkpoint = null };
+            }
+
+            // The budget ran out with work still to do. The events settled above are real progress, so the
+            // exception carries a checkpoint pointing just past them.
+            throw new CosmosTagRepairCancelledException(
+                report with
+                {
+                    HasMore = true,
+                    Checkpoint = Encode(settled[^1].SortableUniqueId)
+                },
+                new CancellationToken(true));
+        }
+
+        // The checkpoint is opaque to callers, so the test encodes and decodes it the same way the service
+        // does rather than reaching inside it.
+        private static string Encode(string lastSortableUniqueId) =>
+            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                $"{{\"LastSortableUniqueId\":\"{lastSortableUniqueId}\"}}"));
+
+        private static string DecodeLast(string checkpoint)
+        {
+            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(checkpoint));
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            return document.RootElement.GetProperty("LastSortableUniqueId").GetString()!;
+        }
+    }
+
+    [Fact]
+    public async Task A_Budget_Exhausted_Turn_Should_Persist_Its_Progress_So_The_Next_Turn_Advances()
+    {
+        var clock = new FakeSweepClock();
+        var rows = new Dictionary<(string, string), CosmosTag>();
+
+        // Five events with missing tag rows; a budget that only lets two settle per turn.
+        var events = Enumerable
+            .Range(0, 5)
+            .Select(i => Event(Guid.NewGuid(), SortableId(clock.UtcNow.AddHours(-5 + i))))
+            .OrderBy(e => e.SortableUniqueId, StringComparer.Ordinal)
+            .ToList();
+
+        var runner = new BudgetExhaustingRunner(events, rows, settleBeforeBudget: 2);
+        var options = new CosmosTagSweepOptions { Enabled = true };
+        var sweep = Sweep(options, runner, clock);
+
+        // Turn 1: budget runs out after two events.
+        await RunSweepAsync(sweep);
+
+        Assert.Null(runner.CheckpointsSeen[0]); // started from the window
+        Assert.Equal(2, runner.TotalRepaired);
+        Assert.Equal(2, rows.Count);
+
+        // Turn 2: the same sweep instance, resuming. This is the whole point — the checkpoint the budget-
+        // exhausted turn produced must be carried forward, or the sweep re-scans the same prefix forever.
+        await RunSweepAsync(sweep);
+
+        Assert.NotNull(runner.CheckpointsSeen[1]);
+        Assert.Equal(4, runner.TotalRepaired);
+        Assert.Equal(4, rows.Count);
+
+        // Turn 3 finishes the window and clears the checkpoint.
+        await RunSweepAsync(sweep);
+
+        Assert.Equal(5, runner.TotalRepaired);
+        Assert.Equal(5, rows.Count);
+    }
+
+    [Fact]
+    public async Task A_Cancelled_Repair_Should_Carry_The_Progress_It_Settled()
+    {
+        var clock = new FakeSweepClock();
+        var rows = new Dictionary<(string, string), CosmosTag>();
+        var events = Enumerable
+            .Range(0, 4)
+            .Select(i => Event(Guid.NewGuid(), SortableId(clock.UtcNow.AddHours(-4 + i))))
+            .OrderBy(e => e.SortableUniqueId, StringComparer.Ordinal)
+            .ToList();
+
+        using var cts = new CancellationTokenSource();
+        var settled = 0;
+        var store = new SweepFakeRepairStore(rows, () =>
+        {
+            // Cancel once two events have been repaired, as a budget would.
+            if (++settled == 2)
+            {
+                cts.Cancel();
+            }
+        });
+
+        var service = new CosmosDbTagRepairService(
+            ServiceId,
+            new SweepFakeEventSource(events),
+            store);
+
+        var exception = await Assert.ThrowsAsync<CosmosTagRepairCancelledException>(
+            () => service.RepairAsync(new CosmosTagRepairOptions { DryRun = false, PageSize = 1 }, cts.Token));
+
+        // Cancellation still cancels — but the events it finished are not thrown away with the exception.
+        Assert.IsAssignableFrom<OperationCanceledException>(exception);
+        Assert.Equal(2, exception.PartialReport.Repaired);
+        Assert.Equal(2, exception.PartialReport.EventsScanned);
+        Assert.True(exception.PartialReport.HasMore);
+        Assert.NotNull(exception.PartialReport.Checkpoint);
+
+        // Resuming from that checkpoint picks up exactly where it stopped.
+        var resumed = await new CosmosDbTagRepairService(ServiceId, new SweepFakeEventSource(events), store)
+            .RepairAsync(new CosmosTagRepairOptions
+            {
+                DryRun = false,
+                Checkpoint = exception.PartialReport.Checkpoint
+            });
+
+        Assert.Equal(2, resumed.EventsScanned);
+        Assert.Equal(2, resumed.Repaired);
+        Assert.Equal(4, rows.Count);
+    }
+
+    [Fact]
+    public async Task Host_Shutdown_Should_Not_Masquerade_As_Budget_Exhaustion()
+    {
+        var runner = new ShutdownObservingRunner();
+        var sweep = Sweep(
+            new CosmosTagSweepOptions { Enabled = true, MaxStartupJitter = TimeSpan.Zero },
+            runner);
+
+        await sweep.StartAsync(CancellationToken.None);
+        await runner.Started.Task;
+
+        // Shutting the host down is not a resumable overrun: no checkpoint is persisted, and the sweep just
+        // stops rather than scheduling itself to "resume".
+        await sweep.StopAsync(CancellationToken.None);
+
+        Assert.True(sweep.Sweeping!.IsCompleted);
+        Assert.Equal(1, runner.Runs);
+    }
+
+    private sealed class ShutdownObservingRunner : ITagRepairRunner
+    {
+        public TaskCompletionSource Started { get; } = new();
+        public int Runs { get; private set; }
+
+        public async Task<CosmosTagRepairReport> RunAsync(
+            string serviceId,
+            CosmosTagRepairOptions options,
+            CancellationToken cancellationToken)
+        {
+            Runs++;
+            Started.SetResult();
+
+            // Block until the host cancels, then surface it as a cancellation — which the sweep must treat
+            // as shutdown, not as a budget overrun.
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return new CosmosTagRepairReport();
+        }
+    }
+
     [Fact]
     public void The_Sweeps_Only_Route_To_Storage_Should_Have_No_Destructive_Operation()
     {

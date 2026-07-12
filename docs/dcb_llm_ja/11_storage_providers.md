@@ -211,7 +211,7 @@ services.AddSekibanDcbCosmosDb(
 
 #### テレメトリ
 
-`Sekiban.Dcb.CosmosDb` メーター(`CosmosDbTelemetry.MeterName`)は、`tag_write.failures`(ラベル `reason`: `transient` | `corruption`)、`tag_write.retries`、`tag_write.retry_outcomes`(ラベル `outcome`: `recovered` | `exhausted`)、`event_write.partial_failures` を発行します。メトリクスのラベルは小さな固定集合から取られます。生のイベントIDやタグ文字列は非有界であるため、構造化ログと上記の例外にのみ含まれます。
+`Sekiban.Dcb.CosmosDb` メーター(`CosmosDbTelemetry.MeterName`)は、`sekiban.dcb.cosmos.tag_write.failures`(ラベル `reason`: `transient` | `corruption`)、`sekiban.dcb.cosmos.tag_write.retries`、`sekiban.dcb.cosmos.tag_write.retry_outcomes`(ラベル `outcome`: `recovered` | `exhausted`)、`sekiban.dcb.cosmos.event_write.partial_failures` を発行します。メトリクスのラベルは小さな固定集合から取られます。生のイベントIDやタグ文字列は非有界であるため、構造化ログと上記の例外にのみ含まれます。
 
 #### タグインデックスの修復 (`CosmosDbTagRepairService`)
 
@@ -287,6 +287,8 @@ services.AddSekibanDcbCosmosDbTagSweep(sweep =>
 });
 ```
 
+`RunBudget` に達した run は、それまでに処理し終えた分の進捗を保持します。チェックポイントは完了したイベントの先まで進み、次回はそこから始まります。したがって、1回でウィンドウを走査しきれないほど厳しいバジェットでも、同じ先頭を延々と再スキャンするのではなく、毎回確実に前進します。なお、ホストの停止はバジェット超過ではありません。スイープは単に停止し、何も保存しません。
+
 **二重の opt-in**。`AddSekibanDcbCosmosDb` はスイープを登録せず、登録したとしても `Enabled` を設定するまで何も動きません。パッケージの参照やアップグレードだけでは、**ホステッドサービスも、ネットワークスキャンも、起動遅延も、必須の設定項目も一切増えません**。起動がブロックされることもありません(スイープはバックグラウンドで動き、`RunBudget` が1回の run を制約します)。スイープが失敗してもログに記録して次回リトライするだけで、**ホストを落とすことはありません**。
 
 オプションとチェックポイントは **系統(lineage)ごと** です。`ServiceIds` でスイープ対象の系統を選択し(空ならホスト自身の service id)、各系統は独立したウィンドウと再開位置で処理されます。
@@ -297,7 +299,7 @@ services.AddSekibanDcbCosmosDbTagSweep(sweep =>
 
 **レプリカ構成の場合**: すべてのレプリカはほぼ同時に起動するため、そのままでは一斉にスイープして RU を同時に跳ね上げます。`MaxStartupJitter`(既定30秒)が起動時の実行を分散させます。多数のレプリカで定期スイープを行う場合は、リーダー選出(またはリース取得)を行い1インスタンスからのみスイープすることを推奨します。ジッターは集中を薄めるだけで、作業の重複自体は防ぎません。なお重複実行は **安全** です(run は冪等で、run 同士とも稼働中の書き込みとも競合しません)。単に不要な RU を消費するだけです。
 
-**スイープのテレメトリ**: `tag_sweep.runs`(ラベル `outcome`: `completed` | `budget_exhausted` | `failed`)、`tag_sweep.repaired_rows`、`tag_sweep.corrupt_keys`、`tag_sweep.overflow_keys`。
+**スイープのテレメトリ**(メーター `Sekiban.Dcb.CosmosDb`): `sekiban.dcb.cosmos.tag_sweep.runs`(ラベル `outcome`: `completed` | `budget_exhausted` | `failed`)、`sekiban.dcb.cosmos.tag_sweep.repaired_rows`、`sekiban.dcb.cosmos.tag_sweep.corrupt_keys`、`sekiban.dcb.cosmos.tag_sweep.overflow_keys`。
 
 #### スイープが保証 **しない** こと
 

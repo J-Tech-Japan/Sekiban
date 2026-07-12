@@ -187,7 +187,7 @@ The default stays `Compatible` through the current release line so that **upgrad
 
 #### Telemetry
 
-The `Sekiban.Dcb.CosmosDb` meter (`CosmosDbTelemetry.MeterName`) publishes `tag_write.failures` (label `reason`: `transient` | `corruption`), `tag_write.retries`, `tag_write.retry_outcomes` (label `outcome`: `recovered` | `exhausted`), and `event_write.partial_failures`. Metric labels are drawn from small fixed sets; raw event ids and tag strings are unbounded and therefore appear only in the structured logs and in the exceptions above.
+The `Sekiban.Dcb.CosmosDb` meter (`CosmosDbTelemetry.MeterName`) publishes `sekiban.dcb.cosmos.tag_write.failures` (label `reason`: `transient` | `corruption`), `sekiban.dcb.cosmos.tag_write.retries`, `sekiban.dcb.cosmos.tag_write.retry_outcomes` (label `outcome`: `recovered` | `exhausted`), and `sekiban.dcb.cosmos.event_write.partial_failures`. Metric labels are drawn from small fixed sets; raw event ids and tag strings are unbounded and therefore appear only in the structured logs and in the exceptions above.
 
 #### Tag index repair (`CosmosDbTagRepairService`)
 
@@ -263,6 +263,8 @@ services.AddSekibanDcbCosmosDbTagSweep(sweep =>
 });
 ```
 
+A run that hits `RunBudget` keeps the progress it settled: its checkpoint advances past the events it finished, and the next turn starts from there. So a budget too tight to finish the window in one turn still makes forward progress each turn instead of re-scanning the same prefix forever. A host shutdown is not a budget overrun — it simply stops the sweep, and nothing is persisted.
+
 **Opt-in twice over.** `AddSekibanDcbCosmosDb` does not register the sweep, and even when registered it stays inert until `Enabled` is set. Referencing or upgrading the package adds **no hosted service, no network scan, no startup delay, and no configuration you must fill in**. Startup is never blocked: the sweep runs in the background, and `RunBudget` bounds any single run. A failing sweep is logged and retried on its next turn — it never takes the host down.
 
 Options and checkpoints are **per lineage**. `ServiceIds` selects which lineages to sweep (empty means the host's own service id); each is swept independently with its own window and its own resume point.
@@ -273,7 +275,7 @@ Options and checkpoints are **per lineage**. `ServiceIds` selects which lineages
 
 **Replicated services**: every replica starts at roughly the same moment, so they would all sweep at once and spike RU together. `MaxStartupJitter` (default 30s) spreads the startup runs apart. For an interval sweep across many replicas, prefer electing a leader (or taking a lease) and sweeping from one instance — jitter alone thins a stampede, it does not prevent duplicated work. Duplicated work is *safe* (runs are idempotent and overlap-safe with each other and with live writes); it is just RU you did not need to spend.
 
-**Sweep telemetry**: `tag_sweep.runs` (label `outcome`: `completed` | `budget_exhausted` | `failed`), `tag_sweep.repaired_rows`, `tag_sweep.corrupt_keys`, `tag_sweep.overflow_keys`.
+**Sweep telemetry** (meter `Sekiban.Dcb.CosmosDb`): `sekiban.dcb.cosmos.tag_sweep.runs` (label `outcome`: `completed` | `budget_exhausted` | `failed`), `sekiban.dcb.cosmos.tag_sweep.repaired_rows`, `sekiban.dcb.cosmos.tag_sweep.corrupt_keys`, `sekiban.dcb.cosmos.tag_sweep.overflow_keys`.
 
 #### What the sweep does NOT guarantee
 

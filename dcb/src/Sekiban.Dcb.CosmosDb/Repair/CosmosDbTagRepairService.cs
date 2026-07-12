@@ -67,42 +67,66 @@ public sealed class CosmosDbTagRepairService
         var pageSize = Math.Max(1, options.PageSize);
         var maxEvents = Math.Max(1, options.MaxEventsToScan);
 
-        while (state.EventsScanned < maxEvents)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var page = await ThrottleAware.ExecuteAsync(
-                () => _eventSource.ReadEventPageAsync(
-                    from,
-                    options.ToSortableUniqueIdInclusive,
-                    Math.Min(pageSize, maxEvents - state.EventsScanned),
-                    continuationToken,
-                    cancellationToken),
-                options.MaxThrottleRetries,
-                cancellationToken).ConfigureAwait(false);
-
-            state.AddRequestCharge(page.RequestCharge);
-
-            foreach (var cosmosEvent in page.Events)
+            while (state.EventsScanned < maxEvents)
             {
-                await ClassifyAndRepairEventAsync(cosmosEvent, options, state, cancellationToken)
-                    .ConfigureAwait(false);
-                state.MarkEventScanned(cosmosEvent.SortableUniqueId);
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            continuationToken = page.ContinuationToken;
+                var page = await ThrottleAware.ExecuteAsync(
+                    () => _eventSource.ReadEventPageAsync(
+                        from,
+                        options.ToSortableUniqueIdInclusive,
+                        Math.Min(pageSize, maxEvents - state.EventsScanned),
+                        continuationToken,
+                        cancellationToken),
+                    options.MaxThrottleRetries,
+                    cancellationToken).ConfigureAwait(false);
 
-            if (continuationToken == null)
-            {
-                // The range is fully scanned; there is nothing to resume from.
-                return state.ToReport(hasMore: false, checkpoint: null);
+                state.AddRequestCharge(page.RequestCharge);
+
+                foreach (var cosmosEvent in page.Events)
+                {
+                    await ClassifyAndRepairEventAsync(cosmosEvent, options, state, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    // Only counted once the event is fully classified and repaired, so a checkpoint never
+                    // points past work that did not finish.
+                    state.MarkEventScanned(cosmosEvent.SortableUniqueId);
+                }
+
+                continuationToken = page.ContinuationToken;
+
+                if (continuationToken == null)
+                {
+                    // The range is fully scanned; there is nothing to resume from.
+                    return state.ToReport(hasMore: false, checkpoint: null);
+                }
             }
+        }
+        catch (OperationCanceledException ex)
+        {
+            // Cancelling does not undo the events this run already settled. Throwing that progress away
+            // would leave a caller with a tight budget restarting from the same place every turn, never
+            // advancing — so the partial report, checkpoint included, rides out on the exception.
+            throw new CosmosTagRepairCancelledException(
+                state.ToReport(hasMore: true, checkpoint: BuildResumeCheckpoint(state, from)),
+                ex.CancellationToken);
         }
 
         // The next run starts after the last event this one settled. Resuming by sortableUniqueId rather
         // than by continuation token means an expired token cannot lose our place.
-        var resume = new CosmosTagRepairCheckpoint(state.LastSortableUniqueId ?? from);
-        return state.ToReport(hasMore: true, checkpoint: resume.Encode());
+        return state.ToReport(hasMore: true, checkpoint: BuildResumeCheckpoint(state, from));
+    }
+
+    /// <summary>
+    ///     Where the next run should pick up: after the last event this one fully settled. Null when nothing
+    ///     was settled — there is no progress to resume from, so the next run starts where this one did.
+    /// </summary>
+    private static string? BuildResumeCheckpoint(RepairState state, string? from)
+    {
+        var last = state.LastSortableUniqueId ?? from;
+        return last == null ? null : new CosmosTagRepairCheckpoint(last).Encode();
     }
 
     private async Task ClassifyAndRepairEventAsync(
