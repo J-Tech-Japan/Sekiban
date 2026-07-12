@@ -69,6 +69,10 @@ public class CosmosTag
 
     /// <summary>
     ///     Creates a tag document from event metadata.
+    ///     Every field is derived from the (event, tag) pair, so the same pair always produces the same
+    ///     document — see <see cref="Tags.CosmosTagIdentity" /> for the derivation rule. The
+    ///     <paramref name="tagGroup" /> argument is accepted for source compatibility but the group is
+    ///     derived from <paramref name="tag" />, so it cannot drift from the tag it belongs to.
     /// </summary>
     public static CosmosTag FromEventTag(
         string tag,
@@ -77,16 +81,5 @@ public class CosmosTag
         Guid eventId,
         string eventType,
         string serviceId) =>
-        new()
-        {
-            Pk = $"{serviceId}|{tag}",
-            ServiceId = serviceId,
-            Id = Guid.NewGuid().ToString(), // Generate unique ID for the document
-            Tag = tag,
-            TagGroup = tagGroup,
-            EventType = eventType,
-            SortableUniqueId = sortableUniqueId,
-            EventId = eventId.ToString(),
-            CreatedAt = DateTime.UtcNow
-        };
+        Tags.CosmosTagIdentity.DeriveRow(serviceId, tag, eventId, sortableUniqueId, eventType);
 }
