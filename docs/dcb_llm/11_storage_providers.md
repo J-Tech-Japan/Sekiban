@@ -288,7 +288,52 @@ Read this before relying on it. The sweep is **eventual repair, not a safety net
 
 Readiness gating, read-time verification, and a commit protocol that would close these windows are **future work**, deliberately out of scope here. If your workload cannot tolerate the window — money-sensitive workflows above all — **use the Postgres provider**, which gives you event/tag atomicity in a single transaction and has none of these gaps.
 
-**Still planned (not yet released)**: destructive reduction of duplicate legacy rows (a separate, separately-authorized concern that the sweep cannot reach), and readiness gating.
+#### Legacy tag-row migration (destructive, operator-only)
+
+Rows written before the deterministic-id scheme sit at a random document id. **They work.** The repair service recognizes them by semantic key, tag reads find them, and nothing about correctness depends on migrating them. This tool exists to tidy them up — reducing the rows of an `(event, tag)` to the single canonical row — and it does that by **deleting documents**. It is the only thing in Sekiban that does.
+
+It is not registered by `AddSekibanDcbCosmosDb`, it is **not reachable from the automatic sweep**, and it never runs by itself.
+
+**The CLI** (`tools/SekibanDcbTagMigration`) is a thin front-end over the same service — no destructive logic of its own, and it could not have any: the seam that expresses a tag-row delete is `internal` to `Sekiban.Dcb.CosmosDb`, so no other assembly can issue one.
+
+```bash
+# 1. Plan. Read-only. Writes an artifact naming exactly which rows would die.
+sekiban-dcb-tag-migration plan \
+  --connection "<cs>" --database SekibanDcb --service-id <id> \
+  --plan tag-migration-plan.json
+
+# 2. READ IT. This is the point of the two-step flow.
+
+# 3. Apply. Refuses without --confirm and --backup.
+sekiban-dcb-tag-migration apply \
+  --connection "<cs>" --database SekibanDcb --service-id <id> \
+  --plan tag-migration-plan.json --backup removed-rows.json --confirm
+```
+
+The service API is the same two calls: `PlanAsync` then `ApplyAsync(plan, options)` (`AddSekibanDcbCosmosDbLegacyTagMigration()` to register the factory).
+
+**What stops a mistake.** Every one of these refuses *before* touching a document:
+
+| Gate | Behavior |
+|---|---|
+| No plan | `ApplyAsync` takes a plan and nothing else. You cannot delete rows you were not first shown. |
+| No `Confirm` | `CosmosTagMigrationNotAuthorizedException`. The flag has no permissive default. |
+| No backup writer | `CosmosTagMigrationNotAuthorizedException`. Cosmos has no undo, so the export *is* the recovery path. |
+| Plan altered since it was produced | Its fingerprint no longer matches its contents → `CosmosTagMigrationPlanRejectedException`. An artifact that was not reviewed authorizes nothing. |
+| Plan from another lineage | Refused. An instance is bound to one `(serviceId, events, tags)` at construction. |
+| Backup write fails | Nothing is deleted. The backup is written first, before the first delete, on purpose. |
+
+**Survivor policy.** The SEK-G2 deterministic-id row always wins — the one whose document id is the event id, which is what the write path produces today and what every future write would produce. If no such row exists, the migration **creates it from the event** (so the survivor's content is what the write path would have written — no legacy quirk outlives the migration) *before* removing the legacy rows, so the key is never left unindexed even for an instant. Legacy rows are never promoted, only removed, so there is no tiebreak to get wrong. Planning the same unchanged world twice produces a byte-identical artifact.
+
+**Concurrency.** Deletes are **ETag-guarded**: each names the exact version the plan pinned. If a row was written to since the operator reviewed it, Cosmos refuses the delete — and so does the migration. It re-reads, and it only retries at the new version if the row *still* says exactly what it said when the plan called it a removable duplicate. If any of its content changed, the row is left alone and the race is reported (`LostRace`). **There is no code path that forces a delete past a moved row.**
+
+**What it will not touch.** A row that disagrees with its event is not a duplicate — it is corruption, and this tool does not get to decide what to do about it: reported as `Skipped`, never deleted. Same for a key with more rows than the per-key cap (`Overflow`).
+
+**Audit.** Every key produces an audit entry — survivor, rows removed, outcome — including the keys it declined to touch.
+
+**Recovery.** The backup file holds the removed rows as complete documents in the shape the tags container stores them. Restoring is creating them again: no transformation, nothing to reconstruct.
+
+**Still planned (not yet released)**: readiness gating.
 
 ### Choosing a provider
 

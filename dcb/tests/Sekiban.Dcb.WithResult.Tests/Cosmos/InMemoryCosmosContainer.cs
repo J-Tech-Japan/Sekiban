@@ -43,14 +43,32 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     public void Seed(object document)
     {
         var item = JObject.FromObject(document);
+        Stamp(item);
         _items[(Pk(item), Id_(item))] = item;
+    }
+
+    /// <summary>
+    ///     Rewrites a stored document in place, as a concurrent writer would — which moves its ETag, so a
+    ///     delete pinned to the old one is refused. This is how an ETag race is staged deterministically.
+    /// </summary>
+    public void MutateInPlace(string partitionKey, string id, Action<JObject> mutate)
+    {
+        var item = _items[(partitionKey, id)];
+        mutate(item);
+        Stamp(item);
     }
 
     public IEnumerable<JObject> ItemsIn(string partitionKey) =>
         _items.Where(entry => entry.Key.PartitionKey == partitionKey).Select(entry => entry.Value);
 
+    /// <summary>Gives the document a fresh ETag, as Cosmos does on every write.</summary>
+    private void Stamp(JObject item) => item["_etag"] = $"etag-{++_etagSequence}";
+
+    private int _etagSequence;
+
     private static string Pk(JObject item) => item["pk"]?.Value<string>() ?? string.Empty;
     private static string Id_(JObject item) => item["id"]?.Value<string>() ?? string.Empty;
+    private static string? ETagOf(JObject item) => item["_etag"]?.Value<string>();
 
     private void ThrowIfFaulted()
     {
@@ -78,6 +96,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             throw CosmosFailures.Conflict();
         }
 
+        Stamp(document);
         _items[key] = document;
         return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.Created));
     }
@@ -116,6 +135,15 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             throw CosmosFailures.NotFound();
         }
 
+        // An ETag-guarded delete names the version it was planned against. If the row has moved since,
+        // Cosmos refuses it — and so does this double, or the guard would be untested.
+        var ifMatch = requestOptions?.IfMatchEtag;
+        if (!string.IsNullOrEmpty(ifMatch) &&
+            !string.Equals(ifMatch, ETagOf(_items[key]), StringComparison.Ordinal))
+        {
+            throw CosmosFailures.PreconditionFailed();
+        }
+
         _items.Remove(key);
         return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(default!, HttpStatusCode.NoContent));
     }
@@ -143,6 +171,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         {
             OnWrite?.Invoke(Creates);
             Creates++;
+            Stamp(document);
             _items[(Pk(document), Id_(document))] = document;
         }
 
@@ -288,6 +317,10 @@ public static class CosmosFailures
 
     public static CosmosException NotFound() =>
         new("not found", HttpStatusCode.NotFound, 404, "activity", 1.0);
+
+    /// <summary>412: the row moved since the caller last saw it. The delete did not happen.</summary>
+    public static CosmosException PreconditionFailed() =>
+        new("etag mismatch", HttpStatusCode.PreconditionFailed, 412, "activity", 1.0);
 
     /// <summary>A 429 carrying the server's Retry-After, which the production code must honor in full.</summary>
     public static CosmosException Throttled(TimeSpan retryAfter) => new ThrottledException(retryAfter);
