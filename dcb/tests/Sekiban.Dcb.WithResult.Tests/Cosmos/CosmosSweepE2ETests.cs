@@ -321,9 +321,15 @@ public class CosmosSweepE2ETests
         var lineage = new SweepLineage(RuntimeServiceId, client, "events", "tags");
         await lineage.WriteCrashResidueAsync(2);
 
-        var queriesBefore = lineage.Events.Queries;
+        // Both containers, both dimensions. A sweep that is off must not scan events, must not look a single
+        // tag key up, and must not write anywhere — so all four counters are pinned, not just the one that
+        // happened to be convenient.
+        var eventQueriesBefore = lineage.Events.Queries;
+        var tagQueriesBefore = lineage.Tags.Queries;
+        var eventCreatesBefore = lineage.Events.Creates;
+        var tagCreatesBefore = lineage.Tags.Creates;
 
-        // Registered but not enabled — the default. It must not read, let alone write.
+        // Registered but not enabled — the default.
         var sweep = new CosmosTagSweepService(
             new CosmosTagSweepOptions(),
             new[] { RuntimeServiceId },
@@ -332,8 +338,12 @@ public class CosmosSweepE2ETests
 
         await RunOneSweepTurnAsync(sweep);
 
-        Assert.Equal(queriesBefore, lineage.Events.Queries);
+        Assert.Equal(eventQueriesBefore, lineage.Events.Queries);
+        Assert.Equal(tagQueriesBefore, lineage.Tags.Queries);
+        Assert.Equal(eventCreatesBefore, lineage.Events.Creates);
+        Assert.Equal(tagCreatesBefore, lineage.Tags.Creates);
+        Assert.Equal(0, lineage.Events.Deletes);
+        Assert.Equal(0, lineage.Tags.Deletes);
         Assert.Empty(lineage.Tags.Items);
-        Assert.Equal(0, lineage.Tags.Creates);
     }
 }
