@@ -14,6 +14,7 @@ using Orleans.Configuration;
 using Microsoft.Extensions.Logging;
 using Orleans.Storage;
 using Scalar.AspNetCore;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Orleans;
@@ -459,6 +460,18 @@ if (builder.Environment.IsDevelopment())
         });
     });
 }
+// Fail closed in Production. The guard resolves what the container ACTUALLY built — the executor and both stores —
+// and refuses to start the host if what it finds would lose data: an in-process (testing) executor, which is never
+// allowed in Production and has no override, or a store that is Volatile or will not say what it is. Volatile storage
+// alone can be authorised deliberately, by name, with AllowVolatileStorageInProduction — storage only; it can never
+// authorise a testing executor.
+//
+// Development is unaffected: outside Production this only logs the startup banner (environment, executor runtime,
+// store providers and durability, overrides in use). Register it AFTER the Sekiban registrations above.
+//
+// https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md
+builder.Services.AddSekibanDcbProductionGuard();
+
 var app = builder.Build();
 
 // Log startup configuration

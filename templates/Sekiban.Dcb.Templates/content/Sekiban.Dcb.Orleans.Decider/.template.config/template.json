@@ -35,7 +35,10 @@
         {
           "condition": "(!IncludeTests)",
           "exclude": [
-            "SekibanDcbDecider.Unit/**/*"
+            "SekibanDcbDecider.Unit/**/*",
+            "SekibanDcbDecider.ImmutableModels.Unit/**/*",
+            "SekibanDcbDecider.Interactions.Unit/**/*",
+            "SekibanDcbDecider.MeetingRoomModels.Unit/**/*"
           ]
         }
       ]

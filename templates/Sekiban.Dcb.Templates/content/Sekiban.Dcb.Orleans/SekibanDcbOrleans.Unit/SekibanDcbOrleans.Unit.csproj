@@ -14,6 +14,12 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Sekiban.Dcb.WithResult" Version="10.4.0" />
+    <PackageReference Include="Sekiban.Dcb.Core.Testing" Version="10.4.0" />
+    <PackageReference Include="Sekiban.Dcb.WithResult.Testing" Version="10.4.0" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SekibanDcbOrleans.Domain\SekibanDcbOrleans.Domain.csproj" />
   </ItemGroup>
 </Project>
