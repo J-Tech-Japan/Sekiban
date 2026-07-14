@@ -527,15 +527,9 @@ if (builder.Environment.IsDevelopment())
     {
         options.AddPolicy("AllowAll", policy => { policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod(); });
     });
-// Fail closed in Production. The guard resolves what the container ACTUALLY built — the executor and both stores —
-// and refuses to start the host if what it finds would lose data: an in-process (testing) executor, which is never
-// allowed in Production and has no override, or a store that is Volatile or will not say what it is. Volatile storage
-// alone can be authorised deliberately, by name, with AllowVolatileStorageInProduction — storage only; it can never
-// authorise a testing executor.
-//
-// Development is unaffected: outside Production this only logs the startup banner (environment, executor runtime,
-// store providers and durability, overrides in use). Register it AFTER the Sekiban registrations above.
-//
+// Fail-closed startup guard: in Production, refuses to start on a testing executor (always — no override) or a
+// Volatile/Unknown store (Volatile authorisable by name via AllowVolatileStorageInProduction, storage only).
+// Development only logs the banner. Must come AFTER the Sekiban registrations. Contract:
 // https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md
 builder.Services.AddSekibanDcbProductionGuard();
 
