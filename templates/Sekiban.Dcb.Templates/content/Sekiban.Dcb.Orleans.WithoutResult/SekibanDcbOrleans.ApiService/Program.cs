@@ -385,16 +385,12 @@ if (databaseType == "cosmos")
     builder.Services.AddSekibanDcbCosmosDbWithAspire(options =>
         options.WriteFailurePolicy = CosmosWriteFailurePolicy.RollForward);
 
-    // Recovery surfaces, both opt-in. Left commented on purpose: neither should start scanning your
-    // containers because a template generated them.
-    //
-    //   Repair — rebuilds tag rows the crash window left missing. Operator-triggered; dry-run by default.
-    //   builder.Services.AddSekibanDcbCosmosDbTagRepair();
-    //
-    //   Sweep — runs that repair automatically over a recent window. Disabled unless Enabled = true, and
-    //   it is EVENTUAL repair: it does not gate tag readers, so the missing-tag window stays open until a
-    //   run reaches it. Measure the RU cost with a manual dry run first.
-    //   builder.Services.AddSekibanDcbCosmosDbTagSweep(sweep => sweep.Enabled = true);
+    // Two recovery surfaces exist for that window, and both are opt-in registrations this template
+    // deliberately does not make: a repair service (operator-triggered, dry-run by default) that rebuilds
+    // the missing tag rows, and a sweep that runs it automatically over a recent window — eventual repair
+    // that does not gate tag readers. Nothing should start scanning your containers because a template
+    // generated it, so enable them yourself, once you have read what they do and do not promise.
+    // Registration and options: docs/dcb_llm/11_storage_providers.md (Consistency Contract).
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.CosmosDb.CosmosMultiProjectionStateStore>();
 }
 else if (databaseType == "sqlite")
