@@ -3,11 +3,17 @@
 The volatile in-memory stores and helpers Sekiban's own tests are built on, in a package a runtime project has no
 reason to reference.
 
-They used to live in `Sekiban.Dcb.Core`, in the `Sekiban.Dcb.InMemory` namespace, where nothing stopped a production
-host from composing itself out of them — and something didn't. A production system registered the in-memory executor
-as its `ISekibanExecutor`, every command succeeded, and no event ever reached the database it had configured. Naming
-cannot prevent that. A package boundary can: a project that does not reference this package **cannot compile** against
-these types.
+They used to be available only from `Sekiban.Dcb.Core`, in the `Sekiban.Dcb.InMemory` namespace, where nothing stopped
+a production host from composing itself out of them — and something didn't. A production system registered the in-memory
+executor as its `ISekibanExecutor`, every command succeeded, and no event ever reached the database it had configured.
+
+**What this package changes, precisely.** These types now have a home a runtime project has no reason to reference: the
+`Sekiban.Dcb.Testing` entry points require this package, so a project without it cannot reach them. What it does **not**
+do is take the old ones away — `Sekiban.Dcb.InMemory` remains public in `Sekiban.Dcb.Core` for compatibility, and code
+that already uses it still compiles and still runs. The protection against *that* path is the `[Obsolete]` pointer, and
+the opt-in `AddSekibanDcbProductionGuard()`, which refuses to start a Production host that resolved a volatile store or
+an in-process executor however it was obtained. The compile-time boundary is a wall around the new door, not around the
+old one; the old one closes at the next major.
 
 ```csharp
 using Sekiban.Dcb.Testing;

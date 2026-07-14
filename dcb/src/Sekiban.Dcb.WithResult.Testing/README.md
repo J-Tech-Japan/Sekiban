@@ -13,8 +13,13 @@ using Sekiban.Dcb.Testing;
 var executor = new InMemoryDcbExecutorForTesting(domainTypes, new InMemoryEventStore(domainTypes.EventTypes));
 ```
 
-The old `Sekiban.Dcb.InMemory.InMemoryDcbExecutor` still works and behaves identically — it is `[Obsolete]`, not
-removed, and will not be removed before the next major version.
+**What the boundary buys, precisely.** `InMemoryDcbExecutorForTesting` cannot be reached without referencing this
+package, so the executor a new test composes is one a runtime project cannot even name. It does **not** take the old one
+away: `Sekiban.Dcb.InMemory.InMemoryDcbExecutor` stays public in the runtime package, still compiles, still behaves
+identically, and is `[Obsolete]` rather than removed — it will not be removed before the next major version. For that
+older path the backstop is the guard, not the compiler: both executors declare `TestingInProcess`, so
+`AddSekibanDcbProductionGuard()` refuses to start a Production host that resolved either of them, however it was
+obtained.
 
 **Do not reference this package from a runtime project.** For local development that behaves like production, use a
 single-silo localhost Orleans host — see

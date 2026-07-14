@@ -11,10 +11,14 @@ namespace Sekiban.Dcb.Testing;
 ///     to reference.
 ///     The old name — <c>Sekiban.Dcb.InMemory.InMemoryDcbExecutor</c>, in the production package — read like a test
 ///     type too, and a production system registered it as its <c>ISekibanExecutor</c> anyway: every command succeeded,
-///     and no event ever reached the database it had configured. Naming did not prevent that. A package boundary does:
-///     a project that does not reference Sekiban.Dcb.WithResult.Testing cannot compile against this type at all.
-///     It declares itself <see cref="ExecutorRuntimeKind.TestingInProcess" />, so a Production host that resolves it
-///     and has opted into <c>AddSekibanDcbProductionGuard</c> refuses to start.
+///     and no event ever reached the database it had configured. Naming did not prevent that.
+///     What the package boundary buys, exactly: <b>this</b> type cannot be reached without referencing
+///     Sekiban.Dcb.WithResult.Testing, so the executor a new test composes is one a runtime project cannot even name. It
+///     does not remove the old type — that stays public in the production package until the next major, and code using
+///     it still compiles.
+///     For the old path, and for this one, the backstop is the same: it declares itself
+///     <see cref="ExecutorRuntimeKind.TestingInProcess" />, so a Production host that resolves it and has opted into
+///     <c>AddSekibanDcbProductionGuard</c> refuses to start — however the executor was obtained.
 ///     Behaviour is identical to the type it replaces — this is a boundary, not a rewrite.
 /// </summary>
 public class InMemoryDcbExecutorForTesting : InMemoryDcbExecutor, IExecutorRuntimeDescriptorProvider

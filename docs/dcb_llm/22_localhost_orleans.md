@@ -124,8 +124,17 @@ var executor = new InMemoryDcbExecutorForTesting(domainTypes, eventStore);
 The two facades get their own packages on purpose. One "Sekiban.Dcb.Testing" holding both executors would be a package
 whose meaning depends on which one you happened to import.
 
-**A project that does not reference these packages cannot compile against these types.** That is the whole point:
-naming did not prevent the incident, and a boundary the compiler enforces does.
+**What the boundary is, precisely.** The `Sekiban.Dcb.Testing` entry points — `InMemoryDcbExecutorForTesting` and the
+stores beside it — require these packages: a project that does not reference them cannot reach those types. That is a
+real boundary around the *new* door, and it is why a runtime project can no longer pick the testing executor up by
+accident.
+
+It is not a wall around the old door. `Sekiban.Dcb.InMemory.InMemoryDcbExecutor` and the old stores stay public in the
+runtime packages for compatibility, and code that already uses them still compiles and still runs — that is the
+compatibility promise, and it is deliberate. For that path the protections are the `[Obsolete]` pointer and
+`AddSekibanDcbProductionGuard()`, which refuses to start a Production host that resolved an in-process executor or a
+volatile store **however it was obtained**. The old entry points close at the next major; until then the guard is the
+thing standing in the way, not the compiler.
 
 ## Migration
 

@@ -7,10 +7,14 @@ namespace Sekiban.Dcb.WithoutResult.Tests.Capabilities;
 
 /// <summary>
 ///     Deprecating something is a promise that it still works. These are that promise, written down.
-///     The old types are <c>[Obsolete]</c>, not removed: existing code compiles, existing behaviour is identical, and
-///     nothing has to be migrated on our schedule. The warning is a pointer, not a deadline.
+///     The old types are <c>[Obsolete]</c>, not removed, and not re-implemented: the implementation stayed exactly where
+///     it was, and the new <c>Sekiban.Dcb.Testing</c> types derive from it. So existing code compiles, existing
+///     behaviour is identical, and nothing has to be migrated on our schedule. The warning is a pointer, not a deadline
+///     — and, as these tests show, not a wall either: a project with no <c>*.Testing</c> reference can still compile and
+///     run the legacy volatile path. What stands in its way in a real environment is the production guard, not the
+///     compiler.
 /// </summary>
-public class ObsoleteForwarderCompatibilityTests
+public class LegacyInMemorySurfaceCompatibilityTests
 {
 #pragma warning disable CS0618 // the whole point of these tests is to use the obsolete surface
 
