@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.ServiceId;
@@ -11,8 +12,12 @@ namespace Sekiban.Dcb.Orleans;
 ///     Orleans-specific implementation of IActorObjectAccessor
 ///     Manages Orleans grains for tag consistency and state management
 /// </summary>
-public class OrleansActorObjectAccessor : IActorObjectAccessor
+public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntimeDescriptorProvider
 {
+    /// <summary>Actors are Orleans grains, placed and coordinated across the cluster.</summary>
+    public ExecutorRuntimeDescriptor DescribeRuntime() =>
+        new(ExecutorRuntimeKind.DistributedRuntime, "Orleans");
+
     private readonly IClusterClient _clusterClient;
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;

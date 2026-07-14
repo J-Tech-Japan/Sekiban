@@ -14,7 +14,7 @@ public class GetLatestSortableUniqueIdTests
     public async Task NoEvents_Should_Return_EmptyString()
     {
         var domain = DomainType.GetDomainTypes();
-        ISekibanExecutor executor = new InMemoryDcbExecutor(domain);
+        ISekibanExecutor executor = new InMemoryDcbExecutor(domain, new Sekiban.Dcb.InMemory.InMemoryEventStore(domain.EventTypes));
 
         var result = await executor.GetLatestSortableUniqueIdAsync();
 
@@ -26,7 +26,7 @@ public class GetLatestSortableUniqueIdTests
     public async Task AfterSingleCommand_Should_Return_CommandSortableUniqueId()
     {
         var domain = DomainType.GetDomainTypes();
-        ISekibanExecutor executor = new InMemoryDcbExecutor(domain);
+        ISekibanExecutor executor = new InMemoryDcbExecutor(domain, new Sekiban.Dcb.InMemory.InMemoryEventStore(domain.EventTypes));
 
         var commandResult = await executor.ExecuteAsync(new CreateStudent(Guid.NewGuid(), "Test Student", 5));
         Assert.True(commandResult.IsSuccess);
@@ -48,7 +48,7 @@ public class GetLatestSortableUniqueIdTests
     public async Task AfterMultipleCommands_Should_Return_Latest()
     {
         var domain = DomainType.GetDomainTypes();
-        ISekibanExecutor executor = new InMemoryDcbExecutor(domain);
+        ISekibanExecutor executor = new InMemoryDcbExecutor(domain, new Sekiban.Dcb.InMemory.InMemoryEventStore(domain.EventTypes));
 
         var result1 = await executor.ExecuteAsync(new CreateStudent(Guid.NewGuid(), "Student One", 3));
         Assert.True(result1.IsSuccess);

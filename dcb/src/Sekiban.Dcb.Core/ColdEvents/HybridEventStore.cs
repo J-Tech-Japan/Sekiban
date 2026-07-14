@@ -3,15 +3,27 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.ColdEvents;
 
-public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventStore
+public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventStore, IStorageDurabilityDescriptorProvider
 {
     private const string ReadAllSerializableEventsCall = nameof(ReadAllSerializableEventsAsync);
+
+    /// <summary>
+    ///     A wrapper is not a durability. Writes land in the hot store, so the hot store's answer is the answer — and if
+    ///     the hot store will not say, neither will we. Reporting "Durable" because a durable-sounding decorator was
+    ///     applied is precisely the mistake this whole mechanism exists to make impossible.
+    /// </summary>
+    public StorageDurabilityDescriptor DescribeStorage()
+    {
+        var hot = SekibanDcbCapabilityResolver.DescribeStorage(_hotStore, "hot event store");
+        return new StorageDurabilityDescriptor(hot.Durability, $"HybridEventStore({hot.ProviderName})");
+    }
     private readonly IEventStore _hotStore;
     private readonly IColdObjectStorage _coldStorage;
     private readonly IColdSegmentFormatHandler _segmentFormatHandler;

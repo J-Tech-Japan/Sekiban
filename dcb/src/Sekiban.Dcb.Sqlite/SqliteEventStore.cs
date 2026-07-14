@@ -8,6 +8,7 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Tags;
 
 namespace Sekiban.Dcb.Sqlite;
@@ -16,8 +17,22 @@ namespace Sekiban.Dcb.Sqlite;
 ///     SQLite implementation of IEventStore.
 ///     Can be used as a standalone event store or as a local cache for remote stores.
 /// </summary>
-public class SqliteEventStore : IHotEventStore
+public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider
 {
+    /// <summary>
+    ///     Sqlite is durable when it is a file, and volatile when it is <c>:memory:</c> — same type, same class name,
+    ///     opposite guarantee. This is the case that proves the descriptor has to be resolved from the live instance
+    ///     rather than inferred from the registration: only the instance knows which one it got.
+    /// </summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        IsInMemoryConnection(_connectionString)
+            ? new StorageDurabilityDescriptor(StorageDurability.Volatile, "Sqlite (in-memory)")
+            : new StorageDurabilityDescriptor(StorageDurability.Durable, "Sqlite");
+
+    private static bool IsInMemoryConnection(string connectionString) =>
+        connectionString.Contains(":memory:", StringComparison.OrdinalIgnoreCase)
+        || connectionString.Contains("Mode=Memory", StringComparison.OrdinalIgnoreCase);
+
     private const string SchemaVersion = "1.1";
     private const string SchemaVersionKey = "schemaVersion";
     private const string ParamServiceId = "@serviceId";

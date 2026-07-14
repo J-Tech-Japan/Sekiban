@@ -14,7 +14,7 @@ namespace Sekiban.Dcb.WithoutResult.Tests.Boundaries;
 /// </summary>
 public class StructQueryBoundaryTests
 {
-    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes());
+    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
 
     [Fact]
     public async Task FailedStructQuery_Throws_InsteadOfAnsweringZero()

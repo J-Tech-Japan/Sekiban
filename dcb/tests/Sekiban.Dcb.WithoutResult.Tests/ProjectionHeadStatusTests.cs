@@ -10,7 +10,7 @@ public class ProjectionHeadStatusTests
     [Fact]
     public async Task InMemoryExecutor_ShouldReturnProjectionAndEventStoreHeadStatus()
     {
-        var executor = (ISekibanExecutor)new InMemoryDcbExecutor(DomainType.GetDomainTypes());
+        var executor = (ISekibanExecutor)new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
         var executionResult = await executor.ExecuteAsync(new CreateStudent(Guid.NewGuid(), "WithoutResult", 2));
 
         var projectionStatus =

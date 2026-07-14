@@ -13,7 +13,7 @@ namespace SekibanDcbOrleans.Interactions.Unit.Workflows.Reservation;
 
 public class CreateAndHoldReservationWorkflowTests
 {
-    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes());
+    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
 
     private async Task<(Guid RoomId, Guid UserId)> SetupRoomAndUserAsync(bool requiresApproval = false)
     {

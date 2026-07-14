@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
@@ -11,8 +12,15 @@ namespace Sekiban.Dcb.InMemory;
 ///     In-memory implementation of IActorObjectAccessor
 ///     Manages and provides access to actor instances
 /// </summary>
-public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider
+public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider, IExecutorRuntimeDescriptorProvider
 {
+    /// <summary>
+    ///     Actors are objects in a dictionary in this process. No cluster, no placement, no coordination with anything
+    ///     else — which is exactly what a unit test wants, and exactly what production must not have.
+    /// </summary>
+    public ExecutorRuntimeDescriptor DescribeRuntime() =>
+        new(ExecutorRuntimeKind.TestingInProcess, "InMemory (in-process actors)");
+
     private readonly ConcurrentDictionary<string, object> _actors = new();
     private readonly object _creationLock = new();
     private readonly DcbDomainTypes _domainTypes;

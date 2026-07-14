@@ -6,14 +6,19 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Capabilities;
 
 namespace Sekiban.Dcb.CosmosDb;
 
 /// <summary>
 ///     Cosmos DB implementation of IMultiProjectionStateStore.
 /// </summary>
-public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore
+public class CosmosMultiProjectionStateStore : IMultiProjectionStateStore, IStorageDurabilityDescriptorProvider
 {
+    /// <summary>Projection state lands in Cosmos DB.</summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        new(StorageDurability.Durable, "CosmosDb");
+
     private readonly CosmosDbContext _context;
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
     private readonly IServiceIdProvider _serviceIdProvider;

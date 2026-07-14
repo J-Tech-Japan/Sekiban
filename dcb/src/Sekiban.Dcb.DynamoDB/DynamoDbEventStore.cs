@@ -8,6 +8,7 @@ using Sekiban.Dcb.DynamoDB.Models;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Tags;
 using System.Security.Cryptography;
 using System.Text;
@@ -19,8 +20,12 @@ namespace Sekiban.Dcb.DynamoDB;
 /// <summary>
 ///     DynamoDB-backed event store implementation.
 /// </summary>
-public class DynamoDbEventStore : IHotEventStore
+public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider
 {
+    /// <summary>Events land in DynamoDB.</summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        new(StorageDurability.Durable, "DynamoDB");
+
     private const string PartitionKeyConditionExpression = "gsi1pk = :pk";
     private const string PartitionKeySinceConditionExpression = "gsi1pk = :pk AND sortableUniqueId > :since";
 

@@ -25,7 +25,7 @@ public class ComprehensiveWithoutResultTests
     public ComprehensiveWithoutResultTests()
     {
         _domainTypes = DomainType.GetDomainTypes();
-        _executor = new InMemoryDcbExecutor(_domainTypes);
+        _executor = new InMemoryDcbExecutor(_domainTypes, new InMemoryEventStore(_domainTypes.EventTypes));
     }
 
     #region Command Tests

@@ -20,7 +20,7 @@ public class SerializedCommitTests
 
     private ISerializedSekibanDcbExecutor CreateExecutor()
     {
-        return (ISerializedSekibanDcbExecutor)new InMemoryDcbExecutor(_domainTypes);
+        return (ISerializedSekibanDcbExecutor)new InMemoryDcbExecutor(_domainTypes, new Sekiban.Dcb.InMemory.InMemoryEventStore(_domainTypes.EventTypes));
     }
 
     private static byte[] SerializePayload<T>(T payload)
@@ -284,7 +284,7 @@ public class SerializedCommitTests
     public async Task InMemoryDcbExecutor_Implements_ISerializedSekibanDcbExecutor()
     {
         // Given
-        var executor = new InMemoryDcbExecutor(_domainTypes);
+        var executor = new InMemoryDcbExecutor(_domainTypes, new Sekiban.Dcb.InMemory.InMemoryEventStore(_domainTypes.EventTypes));
 
         // Then
         Assert.IsAssignableFrom<ISerializedSekibanDcbExecutor>(executor);

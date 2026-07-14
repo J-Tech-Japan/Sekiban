@@ -5,14 +5,19 @@ using Sekiban.Dcb.Postgres.DbModels;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Capabilities;
 
 namespace Sekiban.Dcb.Postgres;
 
 /// <summary>
 ///     Postgres implementation of IMultiProjectionStateStore.
 /// </summary>
-public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore
+public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore, IStorageDurabilityDescriptorProvider
 {
+    /// <summary>Projection state lands in Postgres.</summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        new(StorageDurability.Durable, "Postgres");
+
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
     private readonly IServiceIdProvider _serviceIdProvider;

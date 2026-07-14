@@ -4,14 +4,29 @@ using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Capabilities;
 
 namespace Sekiban.Dcb.Sqlite;
 
 /// <summary>
 ///     SQLite implementation of IMultiProjectionStateStore
 /// </summary>
-public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore
+public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore, IStorageDurabilityDescriptorProvider
 {
+    /// <summary>
+    ///     Sqlite is durable when it is a file, and volatile when it is <c>:memory:</c> — same type, same class name,
+    ///     opposite guarantee. This is the case that proves the descriptor has to be resolved from the live instance
+    ///     rather than inferred from the registration: only the instance knows which one it got.
+    /// </summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        IsInMemoryConnection(_connectionString)
+            ? new StorageDurabilityDescriptor(StorageDurability.Volatile, "Sqlite (in-memory)")
+            : new StorageDurabilityDescriptor(StorageDurability.Durable, "Sqlite");
+
+    private static bool IsInMemoryConnection(string connectionString) =>
+        connectionString.Contains(":memory:", StringComparison.OrdinalIgnoreCase)
+        || connectionString.Contains("Mode=Memory", StringComparison.OrdinalIgnoreCase);
+
     private const string ParamServiceId = "@serviceId";
     private static readonly HashSet<string> AllowedTableNames = new(StringComparer.OrdinalIgnoreCase)
     {

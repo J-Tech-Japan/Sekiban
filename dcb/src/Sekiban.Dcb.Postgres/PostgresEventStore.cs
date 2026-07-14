@@ -6,6 +6,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Postgres.DbModels;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Tags;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,8 +15,12 @@ using System.Text;
 using System.Text.Json;
 namespace Sekiban.Dcb.Postgres;
 
-public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
+public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader, IStorageDurabilityDescriptorProvider
 {
+    /// <summary>Events land in Postgres and survive this process.</summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        new(StorageDurability.Durable, "Postgres");
+
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IEventTypes _eventTypes;
     private readonly IServiceIdProvider _serviceIdProvider;
