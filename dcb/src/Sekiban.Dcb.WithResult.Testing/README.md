@@ -4,8 +4,9 @@
 has no reason to reference.
 
 It declares itself `TestingInProcess`, so the production guard (`AddSekibanDcbProductionGuard`) refuses to start a
-Production host that resolved it. That is the intent: in-process actors are a unit-test runtime, not a small
-production runtime.
+Production host that resolved it — always, with no override, unlike volatile storage, which the operator can authorise
+by name. That asymmetry is the intent: a volatile store in Production can be a decision; in-process actors are a
+unit-test runtime, and never one.
 
 ```csharp
 using Sekiban.Dcb.Testing;

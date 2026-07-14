@@ -132,9 +132,9 @@ accident.
 It is not a wall around the old door. `Sekiban.Dcb.InMemory.InMemoryDcbExecutor` and the old stores stay public in the
 runtime packages for compatibility, and code that already uses them still compiles and still runs — that is the
 compatibility promise, and it is deliberate. For that path the protections are the `[Obsolete]` pointer and
-`AddSekibanDcbProductionGuard()`, which refuses to start a Production host that resolved an in-process executor or a
-volatile store **however it was obtained**. The old entry points close at the next major; until then the guard is the
-thing standing in the way, not the compiler.
+`AddSekibanDcbProductionGuard()`, whose two answers are not the same answer: **an in-process executor is rejected in Production, always** — there is no override for it, whichever name it was obtained under — while a **volatile store is rejected by default but can be authorised** by the named, storage-only `AllowVolatileStorageInProduction`. A store that will not say what it is (`Unknown`) stays fail-closed either way.
+The old entry points close at the next major; until then the guard is the thing standing in the way, not the compiler —
+and for a testing executor it is a wall, while for volatile storage it is a decision the operator has to make by name.
 
 ## Migration
 

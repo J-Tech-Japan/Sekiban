@@ -10,10 +10,9 @@ executor as its `ISekibanExecutor`, every command succeeded, and no event ever r
 **What this package changes, precisely.** These types now have a home a runtime project has no reason to reference: the
 `Sekiban.Dcb.Testing` entry points require this package, so a project without it cannot reach them. What it does **not**
 do is take the old ones away — `Sekiban.Dcb.InMemory` remains public in `Sekiban.Dcb.Core` for compatibility, and code
-that already uses it still compiles and still runs. The protection against *that* path is the `[Obsolete]` pointer, and
-the opt-in `AddSekibanDcbProductionGuard()`, which refuses to start a Production host that resolved a volatile store or
-an in-process executor however it was obtained. The compile-time boundary is a wall around the new door, not around the
-old one; the old one closes at the next major.
+that already uses it still compiles and still runs. The protection against *that* path is the `[Obsolete]` pointer, and the opt-in
+`AddSekibanDcbProductionGuard()`, whose two answers are not the same answer: **an in-process executor is rejected in Production, always** — there is no override for it, whichever name it was obtained under — while a **volatile store is rejected by default but can be authorised** by the named, storage-only `AllowVolatileStorageInProduction`. A store that will not say what it is (`Unknown`) stays fail-closed either way.
+The compile-time boundary is a wall around the new door, not around the old one; the old one closes at the next major.
 
 ```csharp
 using Sekiban.Dcb.Testing;
