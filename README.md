@@ -56,6 +56,7 @@ Learn more at [dcb.events](https://dcb.events)
 - **Website**: [sekiban.dev](https://www.sekiban.dev/)
 - **DCB Documentation**: [docs/dcb_llm](./docs/dcb_llm/) (English) | [docs/dcb_llm_ja](./docs/dcb_llm_ja/) (日本語)
 - **Pure Documentation**: [docs/llm](./docs/llm/) (English) | [docs/llm_ja](./docs/llm_ja/) (日本語)
+- **Storage consistency contract (DCB)** — what each event store guarantees, and what it does not: [English](./docs/dcb_llm/11_storage_providers.md#consistency-contract) | [日本語](./docs/dcb_llm_ja/11_storage_providers.md#整合性契約). Read this before choosing Cosmos DB for a workload that needs atomic event/tag visibility.
 
 ## MCP (Model Context Protocol)
 

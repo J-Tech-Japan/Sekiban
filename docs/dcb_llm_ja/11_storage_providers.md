@@ -318,23 +318,46 @@ services.AddSekibanDcbCosmosDbTagSweep(sweep =>
 
 `AddSekibanDcbCosmosDb` では登録されず、**自動スイープからは到達不能**で、決して自動実行されません。
 
-**CLI**(`tools/SekibanDcbTagMigration`)は同一サービスへの薄いフロントエンドで、独自の破壊的ロジックを持ちません。持ちようがありません — タグ行の削除を表現するシームは `Sekiban.Dcb.CosmosDb` に対して `internal` であり、他のアセンブリからは削除を発行できないためです。
+**サービスAPI** は `Sekiban.Dcb.CosmosDb` パッケージに含まれます。`AddSekibanDcbCosmosDbLegacyTagMigration()` でファクトリを登録し、`PlanAsync` → `ApplyAsync(plan, options)` を呼び出します。
+
+**サービスAPI を使用してください。** これがサポートされる経路であり、すでに参照しているパッケージに含まれています。CLI が呼び出しているのも、結局これと同じものです。
+
+**CLI は配布されておらず、それを含むリリースタグも現時点では存在しません。** `tools/SekibanDcbTagMigration` はパッケージ化も公開もされておらず、`dotnet tool` でもありません。インストール可能な実行ファイルを生成するリリースは存在しません。さらに、この CLI は**最新のリリースタグより後に**追加されたため、公開済みの `dcb-v*` タグをチェックアウトしても、そのツリーにツールは存在せず、`dotnet run --project tools/SekibanDcbTagMigration` は動作しません。CLI は同一サービスへの薄いフロントエンドで、独自の破壊的ロジックを持ちません(持ちようがありません — タグ行の削除を表現するシームは `Sekiban.Dcb.CosmosDb` に対して `internal` であり、他のアセンブリからは削除を発行できないためです)。
+
+それでも CLI を実行したい場合は、**自分で明示的にレビューしたソースリビジョンから実行**してください。そして**チェックアウトする前に**、そのリビジョンに実際にツールが含まれているかを確認してください。
 
 ```bash
-# 1. 計画。読み取り専用。どの行が削除されるかを正確に記した artifact を出力する。
-sekiban-dcb-tag-migration plan \
+git clone https://github.com/J-Tech-Japan/Sekiban.git
+cd Sekiban
+
+# この ref にツールは存在するか?(使用したい ref に置き換えてください)
+REF=main
+git cat-file -e "$REF:tools/SekibanDcbTagMigration/SekibanDcbTagMigration.csproj" \
+  && echo "tool present at $REF" \
+  || echo "tool ABSENT at $REF — この ref は使わないこと"
+
+git checkout "$REF"
+```
+
+将来 CLI を含むリリースタグが出たら、ブランチよりそのタグを優先し、信頼する前に同じ存在チェックで確認してください。**csproj の `<PackageVersion>` を grep してリリースを検証してはいけません** — タグ付きソース内のその値はビルド時のプレースホルダであり、公開されたバージョンではありません。
+
+これだけ慎重になる理由は単純です。行を書き込んだコードとは別のリビジョンでビルドしたツールは、手元に存在しない世界を記述した計画を平然と出力します。そしてその計画は**削除を承認するもの**です。
+
+レビュー済みのチェックアウトができたら、2段階フローは次のとおりです。
+
+```bash
+# 計画。読み取り専用。どの行が削除されるかを正確に記した artifact を出力する。
+dotnet run --project tools/SekibanDcbTagMigration -- plan \
   --connection "<cs>" --database SekibanDcb --service-id <id> \
   --plan tag-migration-plan.json
 
-# 2. それを読む。この2段階フローの要点はここにある。
+# それを読む。この2段階フローの要点はここにある。
 
-# 3. 適用。--confirm と --backup がなければ拒否される。
-sekiban-dcb-tag-migration apply \
+# 適用。--confirm と --backup がなければ拒否される。
+dotnet run --project tools/SekibanDcbTagMigration -- apply \
   --connection "<cs>" --database SekibanDcb --service-id <id> \
   --plan tag-migration-plan.json --backup removed-rows.json --confirm
 ```
-
-サービスAPIも同じ2つの呼び出しです(`PlanAsync` → `ApplyAsync(plan, options)`。ファクトリの登録は `AddSekibanDcbCosmosDbLegacyTagMigration()`)。
 
 **事故を防ぐもの**。以下はすべて、ドキュメントに触れる **前に** 拒否します。
 

@@ -294,23 +294,46 @@ Rows written before the deterministic-id scheme sit at a random document id. **T
 
 It is not registered by `AddSekibanDcbCosmosDb`, it is **not reachable from the automatic sweep**, and it never runs by itself.
 
-**The CLI** (`tools/SekibanDcbTagMigration`) is a thin front-end over the same service — no destructive logic of its own, and it could not have any: the seam that expresses a tag-row delete is `internal` to `Sekiban.Dcb.CosmosDb`, so no other assembly can issue one.
+**The service API** ships in the `Sekiban.Dcb.CosmosDb` package: register the factory with `AddSekibanDcbCosmosDbLegacyTagMigration()`, then call `PlanAsync` and `ApplyAsync(plan, options)`.
+
+**Use the service API.** It is the supported path, it ships in the package you already reference, and it is what the CLI calls anyway.
+
+**The CLI is not distributed, and no released tag contains it yet.** `tools/SekibanDcbTagMigration` is not packaged, not published, and not a `dotnet tool` — no release produces an executable you can install. It was added *after* the most recent release tag, so checking out any published `dcb-v*` tag gives you a tree in which the tool does not exist and `dotnet run --project tools/SekibanDcbTagMigration` cannot work. It is a thin front-end over the same service (no destructive logic of its own, and it could not have any: the seam that expresses a tag-row delete is `internal` to `Sekiban.Dcb.CosmosDb`, so no other assembly can issue one).
+
+If you nonetheless want to run it, **run it from a source revision you have explicitly reviewed** — and check that the revision actually contains it *before* you check it out:
 
 ```bash
-# 1. Plan. Read-only. Writes an artifact naming exactly which rows would die.
-sekiban-dcb-tag-migration plan \
+git clone https://github.com/J-Tech-Japan/Sekiban.git
+cd Sekiban
+
+# Does this ref contain the tool at all? (Substitute the ref you intend to use.)
+REF=main
+git cat-file -e "$REF:tools/SekibanDcbTagMigration/SekibanDcbTagMigration.csproj" \
+  && echo "tool present at $REF" \
+  || echo "tool ABSENT at $REF — do not use this ref"
+
+git checkout "$REF"
+```
+
+Once a release tag does contain the tool, prefer that tag over a branch, and use the same existence check to confirm it before you trust it. **Do not verify a release by grepping `<PackageVersion>` out of the csproj** — the value in the tagged source is a build-time placeholder, not the version that was published.
+
+Why any of this care: a tool built from a revision other than the code that wrote your rows will happily produce a plan describing a world you do not have — and that plan authorizes deletions.
+
+With a reviewed checkout, the two-step flow is:
+
+```bash
+# Plan. Read-only. Writes an artifact naming exactly which rows would die.
+dotnet run --project tools/SekibanDcbTagMigration -- plan \
   --connection "<cs>" --database SekibanDcb --service-id <id> \
   --plan tag-migration-plan.json
 
-# 2. READ IT. This is the point of the two-step flow.
+# READ IT. This is the point of the two-step flow.
 
-# 3. Apply. Refuses without --confirm and --backup.
-sekiban-dcb-tag-migration apply \
+# Apply. Refuses without --confirm and --backup.
+dotnet run --project tools/SekibanDcbTagMigration -- apply \
   --connection "<cs>" --database SekibanDcb --service-id <id> \
   --plan tag-migration-plan.json --backup removed-rows.json --confirm
 ```
-
-The service API is the same two calls: `PlanAsync` then `ApplyAsync(plan, options)` (`AddSekibanDcbCosmosDbLegacyTagMigration()` to register the factory).
 
 **What stops a mistake.** Every one of these refuses *before* touching a document:
 
