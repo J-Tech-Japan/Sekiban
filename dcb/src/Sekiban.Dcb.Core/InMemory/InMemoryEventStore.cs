@@ -14,6 +14,8 @@ namespace Sekiban.Dcb.InMemory;
 ///     In-memory implementation of IEventStore for testing and development
 ///     Stores events and tag streams only - no tag state management
 /// </summary>
+[Obsolete(
+    "Moved to Sekiban.Dcb.Core.Testing (namespace Sekiban.Dcb.Testing). This type is volatile/in-process and is for tests only; it lives in a production package for historical reasons, which is how it reached production once. Behaviour is unchanged and it will not be removed before the next major version.")]
 public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, IStorageDurabilityDescriptorProvider
 {
     private const string EventTypesRequiredMessage = "IEventTypes is required for SerializableEvent operations";

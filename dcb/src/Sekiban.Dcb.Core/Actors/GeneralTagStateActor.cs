@@ -163,7 +163,12 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
     private static IEventTypes ResolveEventTypes(IEventStore eventStore, IActorObjectAccessor actorAccessor)
     {
+        // Core still type-checks the volatile test store here. That coupling is exactly why the type
+        // cannot physically move out of this package before the next major version; the [Obsolete]
+        // pointer to Sekiban.Dcb.Core.Testing is the part that can ship now.
+#pragma warning disable CS0618
         if (eventStore is InMemoryEventStore inMemoryEventStore && inMemoryEventStore.EventTypes is not null)
+#pragma warning restore CS0618
         {
             return inMemoryEventStore.EventTypes;
         }

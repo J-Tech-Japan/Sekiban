@@ -1,6 +1,6 @@
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.Student;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.MultiProjections;
 
 namespace Sekiban.Dcb.WithoutResult.Tests;
@@ -10,7 +10,7 @@ public class ProjectionHeadStatusTests
     [Fact]
     public async Task InMemoryExecutor_ShouldReturnProjectionAndEventStoreHeadStatus()
     {
-        var executor = (ISekibanExecutor)new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
+        var executor = (ISekibanExecutor)new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
         var executionResult = await executor.ExecuteAsync(new CreateStudent(Guid.NewGuid(), "WithoutResult", 2));
 
         var projectionStatus =

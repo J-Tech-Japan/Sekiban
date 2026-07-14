@@ -58,6 +58,9 @@
     <Project Path="dcb/src/Sekiban.Dcb.WithoutResult.Model/Sekiban.Dcb.WithoutResult.Model.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.Sqlite/Sekiban.Dcb.Sqlite.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.WithoutResult/Sekiban.Dcb.WithoutResult.csproj" />
+    <Project Path="dcb/src/Sekiban.Dcb.Core.Testing/Sekiban.Dcb.Core.Testing.csproj" />
+    <Project Path="dcb/src/Sekiban.Dcb.WithResult.Testing/Sekiban.Dcb.WithResult.Testing.csproj" />
+    <Project Path="dcb/src/Sekiban.Dcb.WithoutResult.Testing/Sekiban.Dcb.WithoutResult.Testing.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.Orleans.WithResult/Sekiban.Dcb.Orleans.WithResult.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.Orleans.WithoutResult/Sekiban.Dcb.Orleans.WithoutResult.csproj" />

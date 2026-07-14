@@ -5,7 +5,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Streams;
@@ -191,7 +191,7 @@ public class SnapshotVersioningTests : IAsyncLifetime
                     });
 
                     services.AddSingleton<IEventStore, InMemoryEventStore>();
-                    services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.InMemory.InMemoryMultiProjectionStateStore>();
+                    services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore>();
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     // Add mock IBlobStorageSnapshotAccessor for tests

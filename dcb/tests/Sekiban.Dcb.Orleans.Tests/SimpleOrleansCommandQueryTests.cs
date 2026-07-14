@@ -17,7 +17,7 @@ using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Common;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -529,7 +529,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
                 {
                     services.AddSingleton<DcbDomainTypes>(provider => CreateDomainTypes());
                     services.AddSingleton<IEventStore>(SharedEventStore);
-                    services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.InMemory.InMemoryMultiProjectionStateStore>();
+                    services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore>();
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();

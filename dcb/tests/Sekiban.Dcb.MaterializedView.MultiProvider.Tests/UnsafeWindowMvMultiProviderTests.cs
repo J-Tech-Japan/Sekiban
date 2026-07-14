@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MySqlConnector;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.MySql;
 using Sekiban.Dcb.MaterializedView.Sqlite;

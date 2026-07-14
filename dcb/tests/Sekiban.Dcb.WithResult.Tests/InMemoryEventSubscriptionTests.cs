@@ -1,7 +1,7 @@
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 namespace Sekiban.Dcb.Tests;
 
 public class InMemoryEventSubscriptionTests

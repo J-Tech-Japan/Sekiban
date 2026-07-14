@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Snapshots;
+using Sekiban.Dcb.Testing;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -15,7 +16,7 @@ public class StreamOffloadHelperTests
         var data = new byte[500];
         Random.Shared.NextBytes(data);
         using var stream = new MemoryStream(data);
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         const int threshold = 1000;
 
         // When
@@ -41,7 +42,7 @@ public class StreamOffloadHelperTests
         var data = new byte[2000];
         Random.Shared.NextBytes(data);
         using var stream = new MemoryStream(data);
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         const int threshold = 1000;
 
         // When
@@ -67,7 +68,7 @@ public class StreamOffloadHelperTests
         var data = new byte[threshold];
         Random.Shared.NextBytes(data);
         using var stream = new MemoryStream(data);
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
 
         // When
         var result = await StreamOffloadHelper.ProcessAsync(
@@ -91,7 +92,7 @@ public class StreamOffloadHelperTests
         var data = new byte[threshold + 1];
         Random.Shared.NextBytes(data);
         using var stream = new MemoryStream(data);
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
 
         // When
         var result = await StreamOffloadHelper.ProcessAsync(
@@ -137,7 +138,7 @@ public class StreamOffloadHelperTests
     {
         // Given: an empty stream
         using var stream = new MemoryStream(Array.Empty<byte>());
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         const int threshold = 1000;
 
         // When
@@ -161,7 +162,7 @@ public class StreamOffloadHelperTests
         var data = new byte[2000];
         Random.Shared.NextBytes(data);
         using var stream = new MemoryStream(data);
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         const int threshold = 1000;
 
         // When

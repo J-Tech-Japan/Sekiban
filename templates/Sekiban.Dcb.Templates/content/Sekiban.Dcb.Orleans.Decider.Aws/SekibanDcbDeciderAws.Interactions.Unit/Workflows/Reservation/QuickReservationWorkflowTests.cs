@@ -6,14 +6,14 @@ using Dcb.Interactions.Workflows.Reservation;
 using Dcb.MeetingRoomModels.States.Reservation;
 using Dcb.MeetingRoomModels.Tags;
 using Sekiban.Dcb;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Tags;
 
 namespace SekibanDcbOrleans.Interactions.Unit.Workflows.Reservation;
 
 public class QuickReservationWorkflowTests
 {
-    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
+    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
 
     private async Task<(Guid RoomId, Guid UserId)> SetupRoomAndUserAsync(bool requiresApproval = false)
     {

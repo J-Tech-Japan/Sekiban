@@ -3,11 +3,11 @@ using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Student;
 using Sekiban.Dcb.Actors;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text;
-using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
+using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>

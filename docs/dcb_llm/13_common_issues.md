@@ -172,6 +172,23 @@ Row 3 is what issue #1045 hit. Row 2 is the one nobody hit yet, and it is worse,
 
 **What to do if you see `SekibanBoundaryException`**: it is not a domain error and there is nothing to retry. It says a Sekiban internal returned no result. Open an issue with the message — `Operation` and `Target` are on the exception.
 
+## The host refuses to start: "Production requires a distributed runtime"
+
+**Symptoms**: `SekibanDcbProductionGuardException` at startup after opting into `AddSekibanDcbProductionGuard()`.
+
+**This is the guard working.** It resolved your executor and asked what it is, and the answer was not a distributed
+runtime — you have an in-process (test) executor, or one that will not say what it is, registered in an environment the
+guard treats as Production. In-process actors mean no cluster coordination: two hosts do not see each other's tag
+reservations, so the invariants DCB exists to enforce are not enforced. There is no override for it.
+
+**Fix**: use a distributed-runtime executor. If this is a local environment that is *named* Production, either rename
+it, or use a single-silo localhost Orleans host — which is a real distributed runtime and needs nothing installed. See
+[Localhost Orleans](22_localhost_orleans.md).
+
+## The startup banner says my storage is Volatile
+
+That is data loss, everywhere except a test. See [Storage providers](11_storage_providers.md#durability-descriptors-and-the-production-guard).
+
 ## Serialization Exceptions
 
 **Symptoms**: `JsonException` during event replay or API responses.

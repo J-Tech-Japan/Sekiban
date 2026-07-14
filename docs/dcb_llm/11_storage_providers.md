@@ -445,6 +445,16 @@ Sekiban DCB startup. Environment=Production IsProduction=True
 
 It never logs a connection string. A banner that leaks a secret into every log sink would be a worse bug than the one it exists to prevent.
 
+### Where the in-memory stack lives now
+
+The volatile stores and the in-process executor moved to `Sekiban.Dcb.Core.Testing`, `Sekiban.Dcb.WithResult.Testing`
+and `Sekiban.Dcb.WithoutResult.Testing` (namespace `Sekiban.Dcb.Testing`). A project that does not reference those
+packages cannot compile against them — the descriptors above tell the guard what you composed, and the package boundary
+stops you composing it by accident in the first place.
+
+The old `Sekiban.Dcb.InMemory` types still work and are `[Obsolete]`, not removed. For local development that behaves
+like production, use a single-silo localhost Orleans host: [Localhost Orleans](22_localhost_orleans.md).
+
 ### The obsolete constructor
 
 `new InMemoryDcbExecutor(domainTypes)` is `[Obsolete]`. Its behaviour is unchanged — only its silence is deprecated. Pass the store you mean to use:

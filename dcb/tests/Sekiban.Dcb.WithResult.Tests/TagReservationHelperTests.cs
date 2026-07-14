@@ -5,7 +5,7 @@ using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Tags;
 using Xunit;
 
@@ -43,8 +43,8 @@ public class TagReservationHelperTests
     [Fact]
     public async Task RequestReservationAsync_Should_Fail_With_Stale_SortableId()
     {
-        // Given: commit an event via InMemoryDcbExecutor to establish real state
-        var executor = new InMemoryDcbExecutor(_domainTypes, new Sekiban.Dcb.InMemory.InMemoryEventStore(_domainTypes.EventTypes));
+        // Given: commit an event via InMemoryDcbExecutorForTesting to establish real state
+        var executor = new InMemoryDcbExecutorForTesting(_domainTypes, new Sekiban.Dcb.Testing.InMemoryEventStore(_domainTypes.EventTypes));
         var sekibanExecutor = (ISekibanExecutor)executor;
         var studentId = Guid.NewGuid();
         var tag = new ConsistencyTag(new StudentTag(studentId));

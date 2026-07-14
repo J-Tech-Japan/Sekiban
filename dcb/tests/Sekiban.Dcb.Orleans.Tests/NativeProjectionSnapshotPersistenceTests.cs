@@ -1,4 +1,5 @@
 using System.Text;
+using Sekiban.Dcb.Testing;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -23,7 +24,7 @@ public class NativeProjectionSnapshotPersistenceTests
     {
         // Stream-first persist path: register ISnapshotPayloadBufferProvider so the
         // NativeProjectionSnapshotHandler picks the spillable buffer path internally.
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         var tempDir = Path.Combine(Path.GetTempPath(), $"sekiban-native-streamfirst-{Guid.NewGuid():N}");
         var bufferProvider = new SpillableSnapshotPayloadBufferProvider(
             new SpillableSnapshotPayloadOptions
@@ -100,7 +101,7 @@ public class NativeProjectionSnapshotPersistenceTests
     [Fact]
     public async Task WriteSnapshotForPersistenceToStreamAsync_Should_Offload_Large_Payload_And_Restore()
     {
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         var services = new ServiceCollection()
             .AddSingleton<IBlobStorageSnapshotAccessor>(blobAccessor)
             .BuildServiceProvider();

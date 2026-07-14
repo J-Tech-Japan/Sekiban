@@ -1,7 +1,7 @@
 using Dcb.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Storage;
 using Testcontainers.PostgreSql;
 using Xunit;

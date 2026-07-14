@@ -8,7 +8,7 @@ using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Orleans.TestingHost;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
@@ -236,7 +236,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
                     });
 
                     services.AddSingleton<IEventStore>(SharedEventStore);
-                    services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.InMemory.InMemoryMultiProjectionStateStore>();
+                    services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore>();
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();

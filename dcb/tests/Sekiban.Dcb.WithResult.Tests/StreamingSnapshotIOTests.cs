@@ -1,6 +1,6 @@
 using System.Text;
 using Sekiban.Dcb.Actors;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
@@ -23,7 +23,7 @@ public class StreamingSnapshotIOTests
         // Given: a stream of data
         var data = Encoding.UTF8.GetBytes("snapshot-payload-data");
         using var stream = new MemoryStream(data);
-        var accessor = new InMemoryBlobStorageSnapshotAccessor();
+        var accessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
 
         // When: writing via stream overload
         var key = await accessor.WriteAsync(stream, "test-projector", CancellationToken.None);
@@ -38,7 +38,7 @@ public class StreamingSnapshotIOTests
         // Given: data written via stream
         var data = Encoding.UTF8.GetBytes("round-trip-stream-test");
         using var writeStream = new MemoryStream(data);
-        var accessor = new InMemoryBlobStorageSnapshotAccessor();
+        var accessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         var key = await accessor.WriteAsync(writeStream, "round-trip-projector", CancellationToken.None);
 
         // When: reading via stream
@@ -57,7 +57,7 @@ public class StreamingSnapshotIOTests
         // Given: data written via stream
         var data = Encoding.UTF8.GetBytes("cross-api-compat-test");
         using var writeStream = new MemoryStream(data);
-        var accessor = new InMemoryBlobStorageSnapshotAccessor();
+        var accessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         var key = await accessor.WriteAsync(writeStream, "compat-projector", CancellationToken.None);
 
         // When: reading via stream API
@@ -72,7 +72,7 @@ public class StreamingSnapshotIOTests
     {
         // Given: data written via stream API
         var data = Encoding.UTF8.GetBytes("byte-to-stream-compat");
-        var accessor = new InMemoryBlobStorageSnapshotAccessor();
+        var accessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         using var writeStream = new MemoryStream(data);
         var key = await accessor.WriteAsync(writeStream, "compat-projector", CancellationToken.None);
 
@@ -90,7 +90,7 @@ public class StreamingSnapshotIOTests
     public async Task BlobAccessor_OpenReadAsync_Should_Throw_For_NonExistent_Key()
     {
         // Given: an accessor with no stored data
-        var accessor = new InMemoryBlobStorageSnapshotAccessor();
+        var accessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
 
         // When/Then: reading a non-existent key throws
         await Assert.ThrowsAsync<FileNotFoundException>(
@@ -102,7 +102,7 @@ public class StreamingSnapshotIOTests
     {
         // Given: an empty stream
         using var stream = new MemoryStream(Array.Empty<byte>());
-        var accessor = new InMemoryBlobStorageSnapshotAccessor();
+        var accessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
 
         // When: writing empty stream
         var key = await accessor.WriteAsync(stream, "empty-projector", CancellationToken.None);
@@ -120,7 +120,7 @@ public class StreamingSnapshotIOTests
         var data = new byte[2 * 1024 * 1024];
         Random.Shared.NextBytes(data);
         using var stream = new MemoryStream(data);
-        var accessor = new InMemoryBlobStorageSnapshotAccessor();
+        var accessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
 
         // When
         var key = await accessor.WriteAsync(stream, "large-projector", CancellationToken.None);
@@ -271,7 +271,7 @@ public class StreamingSnapshotIOTests
         Assert.False(options.UseStreamingSnapshotIO);
     }
 
-    private static async Task<byte[]> ReadAllBytesAsync(InMemoryBlobStorageSnapshotAccessor accessor, string key)
+    private static async Task<byte[]> ReadAllBytesAsync(Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor accessor, string key)
     {
         await using var readStream = await accessor.OpenReadAsync(key, CancellationToken.None);
         using var ms = new MemoryStream();

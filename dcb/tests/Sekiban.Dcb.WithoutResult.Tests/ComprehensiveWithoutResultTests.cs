@@ -5,7 +5,7 @@ using Dcb.Domain.WithoutResult.Student;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Tags;
@@ -25,7 +25,7 @@ public class ComprehensiveWithoutResultTests
     public ComprehensiveWithoutResultTests()
     {
         _domainTypes = DomainType.GetDomainTypes();
-        _executor = new InMemoryDcbExecutor(_domainTypes, new InMemoryEventStore(_domainTypes.EventTypes));
+        _executor = new InMemoryDcbExecutorForTesting(_domainTypes, new InMemoryEventStore(_domainTypes.EventTypes));
     }
 
     #region Command Tests

@@ -7,7 +7,9 @@ namespace Sekiban.Dcb.Snapshots;
 /// <summary>
 ///     In-memory implementation for concept verification and unit tests.
 /// </summary>
-public sealed class InMemoryBlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
+[Obsolete(
+    "Moved to Sekiban.Dcb.Core.Testing (namespace Sekiban.Dcb.Testing). This type is volatile/in-process and is for tests only; it lives in a production package for historical reasons, which is how it reached production once. Behaviour is unchanged and it will not be removed before the next major version.")]
+public class InMemoryBlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
 {
     private readonly ConcurrentDictionary<string, byte[]> _store = new();
 

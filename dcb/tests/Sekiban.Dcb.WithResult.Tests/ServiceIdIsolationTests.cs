@@ -5,8 +5,8 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
-using CoreInMemoryMultiProjectionStateStore = Sekiban.Dcb.InMemory.InMemoryMultiProjectionStateStore;
+using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+using CoreInMemoryMultiProjectionStateStore = Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore;
 
 namespace Sekiban.Dcb.Tests;
 

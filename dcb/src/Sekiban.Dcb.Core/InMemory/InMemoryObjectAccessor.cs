@@ -12,6 +12,8 @@ namespace Sekiban.Dcb.InMemory;
 ///     In-memory implementation of IActorObjectAccessor
 ///     Manages and provides access to actor instances
 /// </summary>
+[Obsolete(
+    "Moved to Sekiban.Dcb.Core.Testing (namespace Sekiban.Dcb.Testing). This type is volatile/in-process and is for tests only; it lives in a production package for historical reasons, which is how it reached production once. Behaviour is unchanged and it will not be removed before the next major version.")]
 public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider, IExecutorRuntimeDescriptorProvider
 {
     /// <summary>

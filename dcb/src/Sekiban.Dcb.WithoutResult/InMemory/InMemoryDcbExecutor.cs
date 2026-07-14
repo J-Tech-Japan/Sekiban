@@ -18,6 +18,8 @@ namespace Sekiban.Dcb.InMemory;
 ///     Intended for lightweight tests / prototyping; not thread-safe for high concurrency scenarios.
 ///     Throws exceptions on errors instead of returning ResultBox.
 /// </summary>
+[Obsolete(
+    "Moved to Sekiban.Dcb.WithoutResult.Testing (namespace Sekiban.Dcb.Testing). This type is volatile/in-process and is for tests only; it lives in a production package for historical reasons, which is how it reached production once. Behaviour is unchanged and it will not be removed before the next major version.")]
 public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider
 {
     /// <summary>
