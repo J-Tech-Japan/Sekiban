@@ -296,27 +296,30 @@ It is not registered by `AddSekibanDcbCosmosDb`, it is **not reachable from the 
 
 **The service API** ships in the `Sekiban.Dcb.CosmosDb` package: register the factory with `AddSekibanDcbCosmosDbLegacyTagMigration()`, then call `PlanAsync` and `ApplyAsync(plan, options)`.
 
-**The CLI is not distributed.** `tools/SekibanDcbTagMigration` is not packaged, not published, and not a `dotnet tool` — no release produces an executable you can install. It is a thin front-end over the same service (no destructive logic of its own, and it could not have any: the seam that expresses a tag-row delete is `internal` to `Sekiban.Dcb.CosmosDb`, so no other assembly can issue one). To use it, **run it from source**.
+**Use the service API.** It is the supported path, it ships in the package you already reference, and it is what the CLI calls anyway.
 
-Run it from the release tag whose packages you actually deploy. A tool built from a different revision than the code that wrote your rows will happily produce a plan describing a world you do not have — and this plan authorizes deletions. So find the tag, do not guess it:
+**The CLI is not distributed, and no released tag contains it yet.** `tools/SekibanDcbTagMigration` is not packaged, not published, and not a `dotnet tool` — no release produces an executable you can install. It was added *after* the most recent release tag, so checking out any published `dcb-v*` tag gives you a tree in which the tool does not exist and `dotnet run --project tools/SekibanDcbTagMigration` cannot work. It is a thin front-end over the same service (no destructive logic of its own, and it could not have any: the seam that expresses a tag-row delete is `internal` to `Sekiban.Dcb.CosmosDb`, so no other assembly can issue one).
+
+If you nonetheless want to run it, **run it from a source revision you have explicitly reviewed** — and check that the revision actually contains it *before* you check it out:
 
 ```bash
-# 1. Which Sekiban.Dcb.CosmosDb version is your service running?
-dotnet list package | grep Sekiban.Dcb.CosmosDb
-#   > Sekiban.Dcb.CosmosDb      10.2.2   10.2.2
-
-# 2. Release tags are dcb-v<version>. List them and pick the one that matches.
 git clone https://github.com/J-Tech-Japan/Sekiban.git
 cd Sekiban
-git tag --list 'dcb-v*' | sort -V | tail -20
 
-# 3. Check it out, and VERIFY the source agrees with the package you deploy.
-git checkout dcb-v10.2.2        # ← substitute the version from step 1
-grep PackageVersion dcb/src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj
-#   > <PackageVersion>10.2.2</PackageVersion>   ← must match step 1
+# Does this ref contain the tool at all? (Substitute the ref you intend to use.)
+REF=main
+git cat-file -e "$REF:tools/SekibanDcbTagMigration/SekibanDcbTagMigration.csproj" \
+  && echo "tool present at $REF" \
+  || echo "tool ABSENT at $REF — do not use this ref"
+
+git checkout "$REF"
 ```
 
-With a verified checkout, the two-step flow is:
+Once a release tag does contain the tool, prefer that tag over a branch, and use the same existence check to confirm it before you trust it. **Do not verify a release by grepping `<PackageVersion>` out of the csproj** — the value in the tagged source is a build-time placeholder, not the version that was published.
+
+Why any of this care: a tool built from a revision other than the code that wrote your rows will happily produce a plan describing a world you do not have — and that plan authorizes deletions.
+
+With a reviewed checkout, the two-step flow is:
 
 ```bash
 # Plan. Read-only. Writes an artifact naming exactly which rows would die.
@@ -331,8 +334,6 @@ dotnet run --project tools/SekibanDcbTagMigration -- apply \
   --connection "<cs>" --database SekibanDcb --service-id <id> \
   --plan tag-migration-plan.json --backup removed-rows.json --confirm
 ```
-
-If running from source is not practical, drive the service API directly — it is the same two calls, behind the same gates.
 
 **What stops a mistake.** Every one of these refuses *before* touching a document:
 
