@@ -320,27 +320,41 @@ services.AddSekibanDcbCosmosDbTagSweep(sweep =>
 
 **サービスAPI** は `Sekiban.Dcb.CosmosDb` パッケージに含まれます。`AddSekibanDcbCosmosDbLegacyTagMigration()` でファクトリを登録し、`PlanAsync` → `ApplyAsync(plan, options)` を呼び出します。
 
-**CLI は配布されていません。** `tools/SekibanDcbTagMigration` はパッケージ化も公開もされておらず、`dotnet tool` でもありません。インストール可能な実行ファイルを生成するリリースは存在しません。CLI は同一サービスへの薄いフロントエンドで、独自の破壊的ロジックを持ちません(持ちようがありません — タグ行の削除を表現するシームは `Sekiban.Dcb.CosmosDb` に対して `internal` であり、他のアセンブリからは削除を発行できないためです)。使用するには、**実行中のパッケージに対応するリリースタグをチェックアウトし、ソースから実行**してください。
+**CLI は配布されていません。** `tools/SekibanDcbTagMigration` はパッケージ化も公開もされておらず、`dotnet tool` でもありません。インストール可能な実行ファイルを生成するリリースは存在しません。CLI は同一サービスへの薄いフロントエンドで、独自の破壊的ロジックを持ちません(持ちようがありません — タグ行の削除を表現するシームは `Sekiban.Dcb.CosmosDb` に対して `internal` であり、他のアセンブリからは削除を発行できないためです)。使用するには、**ソースから実行**してください。
+
+実際にデプロイしているパッケージに対応するリリースタグから実行してください。行を書き込んだコードとは別のリビジョンでビルドしたツールは、手元に存在しない世界を記述した計画を平然と出力します。そしてその計画は**削除を承認するもの**です。タグは推測せず、必ず特定してください。
 
 ```bash
+# 1. サービスが使用している Sekiban.Dcb.CosmosDb のバージョンを確認する。
+dotnet list package | grep Sekiban.Dcb.CosmosDb
+#   > Sekiban.Dcb.CosmosDb      10.2.2   10.2.2
+
+# 2. リリースタグは dcb-v<version> 形式。一覧から一致するものを選ぶ。
 git clone https://github.com/J-Tech-Japan/Sekiban.git
 cd Sekiban
-git checkout dcb-v10.3.0        # 使用中の Sekiban.Dcb.CosmosDb のバージョンに対応するリリースタグ
+git tag --list 'dcb-v*' | sort -V | tail -20
 
-# 1. 計画。読み取り専用。どの行が削除されるかを正確に記した artifact を出力する。
+# 3. チェックアウトし、ソースがデプロイ中のパッケージと一致することを検証する。
+git checkout dcb-v10.2.2        # ← 手順1で確認したバージョンに置き換える
+grep PackageVersion dcb/src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj
+#   > <PackageVersion>10.2.2</PackageVersion>   ← 手順1と一致していること
+```
+
+検証済みのチェックアウトができたら、2段階フローは次のとおりです。
+
+```bash
+# 計画。読み取り専用。どの行が削除されるかを正確に記した artifact を出力する。
 dotnet run --project tools/SekibanDcbTagMigration -- plan \
   --connection "<cs>" --database SekibanDcb --service-id <id> \
   --plan tag-migration-plan.json
 
-# 2. それを読む。この2段階フローの要点はここにある。
+# それを読む。この2段階フローの要点はここにある。
 
-# 3. 適用。--confirm と --backup がなければ拒否される。
+# 適用。--confirm と --backup がなければ拒否される。
 dotnet run --project tools/SekibanDcbTagMigration -- apply \
   --connection "<cs>" --database SekibanDcb --service-id <id> \
   --plan tag-migration-plan.json --backup removed-rows.json --confirm
 ```
-
-デプロイしているパッケージのバージョンと一致するタグをチェックアウトしてください。行を書き込んだコードとは別のリビジョンからツールを実行することは、手元に存在しない世界を記述した計画を作りにいくようなものです。
 
 ソースからの実行が現実的でない場合は、サービスAPIを直接呼び出してください。同じ2つの呼び出しであり、同じゲートに守られています。
 
