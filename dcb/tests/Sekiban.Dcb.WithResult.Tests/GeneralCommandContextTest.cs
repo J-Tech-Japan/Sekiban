@@ -1,7 +1,7 @@
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -9,7 +9,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
+using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 public class GeneralCommandContextTest
@@ -199,8 +199,10 @@ public class GeneralCommandContextTest
         // Create mock TagStateActor that returns the serializable state
         var mockActor = new MockTagStateActor(serializableState);
 
-        // Register the mock actor directly with InMemoryObjectAccessor's internal dictionary
-        var actorsField = _actorAccessor.GetType().GetField("_actors", BindingFlags.NonPublic | BindingFlags.Instance);
+        // Register the mock actor directly with InMemoryObjectAccessor's internal dictionary.
+        // Walk the hierarchy: the testing accessor derives from the one that declares _actors, and GetField does not
+        // look at private members of base types.
+        var actorsField = FindPrivateField(_actorAccessor.GetType(), "_actors");
         Assert.NotNull(actorsField);
 
         var actors = actorsField!.GetValue(_actorAccessor) as ConcurrentDictionary<string, object>;
@@ -406,5 +408,19 @@ public class GeneralCommandContextTest
         public Task<SerializableTagState> GetStateAsync() => Task.FromResult(_state);
         public Task<string> GetTagStateActorIdAsync() => Task.FromResult("test-actor-id");
         public Task UpdateStateAsync(string lastSortableUniqueId) => Task.CompletedTask;
+    }
+
+    private static FieldInfo? FindPrivateField(Type? type, string name)
+    {
+        for (; type is not null; type = type.BaseType)
+        {
+            var field = type.GetField(name, BindingFlags.NonPublic | BindingFlags.Instance);
+            if (field is not null)
+            {
+                return field;
+            }
+        }
+
+        return null;
     }
 }

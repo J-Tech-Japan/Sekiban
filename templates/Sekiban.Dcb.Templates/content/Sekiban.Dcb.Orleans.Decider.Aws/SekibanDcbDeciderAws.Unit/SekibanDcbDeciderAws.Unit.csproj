@@ -16,6 +16,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.3.0" />
+    <PackageReference Include="Sekiban.Dcb.Core.Testing" Version="10.3.0" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult.Testing" Version="10.3.0" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
   <ItemGroup>

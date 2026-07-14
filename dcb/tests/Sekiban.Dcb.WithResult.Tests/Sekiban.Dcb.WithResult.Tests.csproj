@@ -33,6 +33,8 @@
         <ProjectReference Include="..\..\src\Sekiban.Dcb.CosmosDb\Sekiban.Dcb.CosmosDb.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Sqlite\Sekiban.Dcb.Sqlite.csproj"/>
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Core.Testing\Sekiban.Dcb.Core.Testing.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.WithResult.Testing\Sekiban.Dcb.WithResult.Testing.csproj" />
     </ItemGroup>
 
 </Project>

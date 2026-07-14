@@ -10,7 +10,9 @@ namespace Sekiban.Dcb.InMemory;
 /// <summary>
 ///     In-memory implementation for tests.
 /// </summary>
-public sealed class InMemoryMultiProjectionStateStore : IMultiProjectionStateStore, IStorageDurabilityDescriptorProvider
+[Obsolete(
+    "Moved to Sekiban.Dcb.Core.Testing (namespace Sekiban.Dcb.Testing). This type is volatile/in-process and is for tests only; it lives in a production package for historical reasons, which is how it reached production once. Behaviour is unchanged and it will not be removed before the next major version.")]
+public class InMemoryMultiProjectionStateStore : IMultiProjectionStateStore, IStorageDurabilityDescriptorProvider
 {
     private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), MultiProjectionStateRecord> _states = new();
     private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), byte[]> _stateData = new();

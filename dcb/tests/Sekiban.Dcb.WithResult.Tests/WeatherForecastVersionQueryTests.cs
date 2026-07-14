@@ -11,7 +11,7 @@ using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;

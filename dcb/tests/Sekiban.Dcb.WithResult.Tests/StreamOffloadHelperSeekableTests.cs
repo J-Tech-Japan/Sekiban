@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Snapshots;
+using Sekiban.Dcb.Testing;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -37,7 +38,7 @@ public class StreamOffloadHelperSeekableTests : IDisposable
         await File.WriteAllBytesAsync(filePath, data);
 
         using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         const int threshold = 1000;
 
         // When
@@ -66,7 +67,7 @@ public class StreamOffloadHelperSeekableTests : IDisposable
         await File.WriteAllBytesAsync(filePath, data);
 
         using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         const int threshold = 1000;
 
         // When
@@ -94,7 +95,7 @@ public class StreamOffloadHelperSeekableTests : IDisposable
         await File.WriteAllBytesAsync(filePath, data);
 
         using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         const int threshold = 1000;
 
         // When
@@ -126,7 +127,7 @@ public class StreamOffloadHelperSeekableTests : IDisposable
         await File.WriteAllBytesAsync(filePath, data);
 
         using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
 
         // When
         var result = await StreamOffloadHelper.ProcessAsync(
@@ -181,7 +182,7 @@ public class StreamOffloadHelperSeekableTests : IDisposable
         await File.WriteAllBytesAsync(filePath, data);
 
         using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
 
         // When
         var result = await StreamOffloadHelper.ProcessAsync(
@@ -205,7 +206,7 @@ public class StreamOffloadHelperSeekableTests : IDisposable
         await File.WriteAllBytesAsync(filePath, Array.Empty<byte>());
 
         using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         const int threshold = 1000;
 
         // When

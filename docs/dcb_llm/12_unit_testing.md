@@ -23,16 +23,37 @@ handlers, reservation logic, and projectors without spinning up Orleans or a rea
 
 ## In-Memory Harness
 
-- `InMemoryEventStore` – stores events and tags in memory (`src/Sekiban.Dcb/InMemory/InMemoryEventStore.cs`).
-- `InMemoryObjectAccessor` – actor accessor that spins up in-memory TagState/TagConsistent actors on demand.
-- `GeneralSekibanExecutor` – same executor used in production; inject the in-memory components.
+The in-memory harness lives in the **Testing packages** — reference them from your test projects, and from nothing
+else:
+
+| package | what you get |
+|---|---|
+| `Sekiban.Dcb.Core.Testing` | `InMemoryEventStore`, `InMemoryObjectAccessor`, `InMemoryMultiProjectionStateStore`, … |
+| `Sekiban.Dcb.WithResult.Testing` | `InMemoryDcbExecutorForTesting` (ResultBox facade) |
+| `Sekiban.Dcb.WithoutResult.Testing` | `InMemoryDcbExecutorForTesting` (exception-based facade) |
 
 ```csharp
-var eventStore = new InMemoryEventStore();
+using Sekiban.Dcb.Testing;
+
 var domainTypes = DomainType.GetDomainTypes();
+
+// Pass the event types your domain registered. The parameterless overload discovers a DIFFERENT set by reflection,
+// which is a quiet way to make a test pass against a store that is not serializing what your domain serializes.
+var eventStore = new InMemoryEventStore(domainTypes.EventTypes);
+
+var executor = new InMemoryDcbExecutorForTesting(domainTypes, eventStore);
+```
+
+Or compose it by hand, when a test wants the pieces:
+
+```csharp
 var accessor = new InMemoryObjectAccessor(eventStore, domainTypes);
 var executor = new GeneralSekibanExecutor(eventStore, accessor, domainTypes);
 ```
+
+The old types in `Sekiban.Dcb.InMemory` still work identically and are `[Obsolete]`, not removed. They are deprecated
+because a production system once composed itself out of them — see
+[Localhost Orleans](22_localhost_orleans.md) for the taxonomy (real / local / test) and the migration table.
 
 ## Testing Optimistic Concurrency
 

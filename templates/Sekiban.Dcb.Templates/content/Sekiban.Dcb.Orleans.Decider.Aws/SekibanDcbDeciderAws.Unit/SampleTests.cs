@@ -13,7 +13,7 @@ using Dcb.MeetingRoomModels.States.UserDirectory;
 using Dcb.MeetingRoomModels.Tags;
 using NUnit.Framework;
 using Sekiban.Dcb;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Tags;
 
 namespace SekibanDcbOrleans.Unit;
@@ -33,7 +33,7 @@ public class SampleTests
     [Test]
     public async Task CreateStudent_ThenGetState_ReturnsStudentState()
     {
-        ISekibanExecutor executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
+        ISekibanExecutor executor = new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
         var studentId = Guid.CreateVersion7();
 
         await executor.ExecuteAsync(new CreateStudent(studentId, "Alice", 3));
@@ -49,7 +49,7 @@ public class SampleTests
     [Test]
     public async Task CreateClassRoom_ThenGetState_ReturnsClassRoomState()
     {
-        ISekibanExecutor executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
+        ISekibanExecutor executor = new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
         var classRoomId = Guid.CreateVersion7();
 
         await executor.ExecuteAsync(
@@ -67,7 +67,7 @@ public class SampleTests
     [Test]
     public async Task CreateWeatherForecast_ThenGetState_ReturnsForecastState()
     {
-        ISekibanExecutor executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
+        ISekibanExecutor executor = new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
         var forecastId = Guid.CreateVersion7();
 
         await executor.ExecuteAsync(new CreateWeatherForecast
@@ -90,7 +90,7 @@ public class SampleTests
     [Test]
     public async Task CreateRoom_ThenGetState_ReturnsRoomState()
     {
-        ISekibanExecutor executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
+        ISekibanExecutor executor = new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
         var roomId = Guid.CreateVersion7();
 
         await executor.ExecuteAsync(new CreateRoom
@@ -114,7 +114,7 @@ public class SampleTests
     [Test]
     public async Task RegisterUser_ThenGetState_ReturnsUserState()
     {
-        ISekibanExecutor executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
+        ISekibanExecutor executor = new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
         var userId = Guid.CreateVersion7();
 
         await executor.ExecuteAsync(new RegisterUser

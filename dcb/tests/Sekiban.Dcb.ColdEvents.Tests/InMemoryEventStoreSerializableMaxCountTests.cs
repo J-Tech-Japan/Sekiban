@@ -3,7 +3,7 @@ using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Storage;
 namespace Sekiban.Dcb.ColdEvents.Tests;
 

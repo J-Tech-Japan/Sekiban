@@ -43,6 +43,12 @@ dotnet new sekiban-dcb-orleans -n YourProjectName
 
 詳細は [ストレージプロバイダーの整合性契約](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm_ja/11_storage_providers.md#整合性契約) と [トラブルシューティング](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm_ja/13_common_issues.md) を参照してください。
 
+## ローカル開発 / ユニットテスト
+
+生成されるプロジェクトはローカルでも **Orleans**(単一サイロ、localhost クラスタリング)で動きます。インメモリエグゼキューターはユニットテスト専用であり、`*.Unit` プロジェクトだけが `Sekiban.Dcb.*.Testing` パッケージを参照します。ランタイムプロジェクトからは参照しないでください。
+
+分類と、CLI / Worker / Web それぞれの localhost 構成は [localhost Orleans ガイド](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm_ja/22_localhost_orleans.md) を参照してください。
+
 ## 生成後の手順
 
 ```bash

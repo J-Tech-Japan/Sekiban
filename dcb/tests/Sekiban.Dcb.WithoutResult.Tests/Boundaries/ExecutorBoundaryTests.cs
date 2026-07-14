@@ -1,7 +1,7 @@
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.Student;
 using Sekiban.Dcb.Boundaries;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Validation;
 using Xunit;
 namespace Sekiban.Dcb.WithoutResult.Tests.Boundaries;
@@ -14,7 +14,7 @@ namespace Sekiban.Dcb.WithoutResult.Tests.Boundaries;
 /// </summary>
 public class ExecutorBoundaryTests
 {
-    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
+    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
 
     [Fact]
     public async Task ExecuteAsync_ValidationFailure_StaysAValidationException_AndNamesTheCommand()

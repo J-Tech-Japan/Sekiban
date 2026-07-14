@@ -23,16 +23,34 @@ DCB にはインメモリ実装が用意されており、Orleans や実デー�
 
 ## インメモリハーネス
 
-- `InMemoryEventStore`
-- `InMemoryObjectAccessor`
-- `GeneralSekibanExecutor`
+インメモリハーネスは **Testing パッケージ**にあります。テストプロジェクトからのみ参照してください(他からは参照しないでください)。
+
+| パッケージ | 得られるもの |
+|---|---|
+| `Sekiban.Dcb.Core.Testing` | `InMemoryEventStore`、`InMemoryObjectAccessor`、`InMemoryMultiProjectionStateStore` など |
+| `Sekiban.Dcb.WithResult.Testing` | `InMemoryDcbExecutorForTesting` (ResultBox ファサード) |
+| `Sekiban.Dcb.WithoutResult.Testing` | `InMemoryDcbExecutorForTesting` (例外ベースファサード) |
 
 ```csharp
-var eventStore = new InMemoryEventStore();
+using Sekiban.Dcb.Testing;
+
 var domainTypes = DomainType.GetDomainTypes();
+
+// ドメインが登録したイベント型を渡してください。引数なしのオーバーロードはリフレクションで **別の集合** を検出するため、
+// ドメインとは異なるシリアライズを行うストアに対してテストが通ってしまう、という静かな落とし穴になります。
+var eventStore = new InMemoryEventStore(domainTypes.EventTypes);
+
+var executor = new InMemoryDcbExecutorForTesting(domainTypes, eventStore);
+```
+
+部品を直接組み立てることもできます。
+
+```csharp
 var accessor = new InMemoryObjectAccessor(eventStore, domainTypes);
 var executor = new GeneralSekibanExecutor(eventStore, accessor, domainTypes);
 ```
+
+`Sekiban.Dcb.InMemory` の旧型はこれまでどおり同一に動作し、削除ではなく `[Obsolete]` です。非推奨にした理由は、**ある本番システムがこれらで自身を構成してしまったから**です。分類(実環境 / ローカル / テスト)と移行表は [localhost Orleans](22_localhost_orleans.md) を参照してください。
 
 ## 楽観的同時実行のテスト
 

@@ -7,7 +7,7 @@ using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Xunit;
 using Xunit.Sdk;
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -125,7 +125,7 @@ public class ListQueryOptionalValueOrleansTests : IAsyncLifetime
                 .ConfigureServices(services =>
                 {
                     services.AddSingleton<IEventStore>(_ => SharedEventStore);
-                    services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.InMemory.InMemoryMultiProjectionStateStore>();
+                    services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore>();
                     services.AddSingleton<DcbDomainTypes>(_ => CreateDomainTypes());
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));

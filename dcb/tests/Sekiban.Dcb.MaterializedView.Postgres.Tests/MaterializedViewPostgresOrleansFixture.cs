@@ -11,7 +11,7 @@ using Npgsql;
 using Orleans.Streams;
 using Orleans.TestingHost;
 using Sekiban.Dcb.Actors;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.Orleans;
 using Sekiban.Dcb.MaterializedView.Postgres;

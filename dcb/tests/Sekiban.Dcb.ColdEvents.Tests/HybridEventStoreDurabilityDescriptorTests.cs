@@ -5,7 +5,7 @@ using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;

@@ -3,7 +3,7 @@ using Dcb.Domain.WithoutResult.Student;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Sekiban.Dcb.Capabilities;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Storage;
 using Xunit;
 namespace Sekiban.Dcb.WithoutResult.Tests.Capabilities;
@@ -17,7 +17,7 @@ public class InMemoryExecutorCapabilityTests
     [Fact]
     public void TheRealInMemoryExecutor_DeclaresItselfTestingInProcess()
     {
-        var executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
+        var executor = new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
 
         var runtime = ((IExecutorRuntimeDescriptorProvider)executor).DescribeRuntime();
 
@@ -47,7 +47,7 @@ public class InMemoryExecutorCapabilityTests
                 services.AddSingleton<IEventStore>(eventStore);
                 services.AddSingleton<IMultiProjectionStateStore>(new InMemoryMultiProjectionStateStore());
                 services.AddSingleton<ISekibanExecutor>(
-                    new InMemoryDcbExecutor(DomainType.GetDomainTypes(), eventStore));
+                    new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), eventStore));
                 services.AddSekibanDcbProductionGuard();
             })
             .Build();
@@ -68,7 +68,7 @@ public class InMemoryExecutorCapabilityTests
         // is too weak a claim to leave a test on — a guard that let the host start but broke the executor on the way
         // past would satisfy it. So the host starts, AND the executor it guarded goes on to execute a command.
         var eventStore = new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes);
-        var executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), eventStore);
+        var executor = new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), eventStore);
 
         using var host = new HostBuilder()
             .UseEnvironment(Environments.Development)

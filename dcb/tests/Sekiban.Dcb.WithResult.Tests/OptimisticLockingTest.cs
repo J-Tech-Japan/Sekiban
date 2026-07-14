@@ -4,12 +4,12 @@ using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using System.Text.Json;
-using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
+using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 namespace Sekiban.Dcb.Tests;
 
 public class OptimisticLockingTest

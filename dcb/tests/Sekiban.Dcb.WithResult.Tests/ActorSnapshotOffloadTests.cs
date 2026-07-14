@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
@@ -83,7 +84,7 @@ public class ActorSnapshotOffloadTests
             _domainTypes,
             BigPayloadProjector.MultiProjectorName,
             new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 });
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
 
         foreach (var i in Enumerable.Range(0, 6))
         {
@@ -125,7 +126,7 @@ public class ActorSnapshotOffloadTests
             _domainTypes,
             BigPayloadProjector.MultiProjectorName,
             new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 });
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         var bufferProvider = new SpillableSnapshotPayloadBufferProvider(
             new SpillableSnapshotPayloadOptions { InMemoryThresholdBytes = 256 });
 
@@ -173,7 +174,7 @@ public class ActorSnapshotOffloadTests
             _domainTypes,
             BigPayloadProjector.MultiProjectorName,
             new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 });
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
         var bufferProvider = new SpillableSnapshotPayloadBufferProvider(
             new SpillableSnapshotPayloadOptions { InMemoryThresholdBytes = 1024 * 1024 });
 
@@ -214,7 +215,7 @@ public class ActorSnapshotOffloadTests
             _domainTypes,
             BigPayloadProjector.MultiProjectorName,
             new GeneralMultiProjectionActorOptions { SafeWindowMs = 1000 });
-        var blobAccessor = new InMemoryBlobStorageSnapshotAccessor();
+        var blobAccessor = new Sekiban.Dcb.Testing.InMemoryBlobStorageSnapshotAccessor();
 
         // InMemoryThresholdBytes deliberately tiny so the stream has to spill to disk
         // for any non-trivial projection — this is the behavior under test.

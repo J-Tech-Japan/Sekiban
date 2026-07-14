@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 using MySqlConnector;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.MySql;
 using Sekiban.Dcb.MaterializedView.Sqlite;

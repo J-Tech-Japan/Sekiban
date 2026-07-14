@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <LangVersion>preview</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AssemblyName>Sekiban.Dcb.WithoutResult.Testing</AssemblyName>
+        <RootNamespace>Sekiban.Dcb.Testing</RootNamespace>
+        <PackageId>Sekiban.Dcb.WithoutResult.Testing</PackageId>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <Copyright>Copyright (c) J-Tech-Japan 2025</Copyright>
+        <PackageDescription>Sekiban DCB WithoutResult Testing - the in-process testing executor for the exception-based facade. Never reference this from a runtime project.</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
+        <PackageVersion>10.0.2-preview03</PackageVersion>
+        <Description>Sekiban DCB WithoutResult Testing - the in-process testing executor for the exception-based facade. Never reference this from a runtime project.</Description>
+        <PackageTags>event-sourcing;cqrs;ddd;dcb;sekiban;testing</PackageTags>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <GenerateSBOM>true</GenerateSBOM>
+        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Sekiban.Dcb.Core.Testing\Sekiban.Dcb.Core.Testing.csproj" />
+        <ProjectReference Include="..\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="ResultBoxes" Version="0.4.0" PrivateAssets="All" />
+        <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+</Project>

@@ -7,10 +7,10 @@ using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Tags;
 using Xunit;
-using CoreInMemoryEventStore = Sekiban.Dcb.InMemory.InMemoryEventStore;
+using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 
 namespace Sekiban.Dcb.Tests;
 
@@ -20,7 +20,7 @@ public class SerializedCommitTests
 
     private ISerializedSekibanDcbExecutor CreateExecutor()
     {
-        return (ISerializedSekibanDcbExecutor)new InMemoryDcbExecutor(_domainTypes, new Sekiban.Dcb.InMemory.InMemoryEventStore(_domainTypes.EventTypes));
+        return (ISerializedSekibanDcbExecutor)new InMemoryDcbExecutorForTesting(_domainTypes, new Sekiban.Dcb.Testing.InMemoryEventStore(_domainTypes.EventTypes));
     }
 
     private static byte[] SerializePayload<T>(T payload)
@@ -284,7 +284,7 @@ public class SerializedCommitTests
     public async Task InMemoryDcbExecutor_Implements_ISerializedSekibanDcbExecutor()
     {
         // Given
-        var executor = new InMemoryDcbExecutor(_domainTypes, new Sekiban.Dcb.InMemory.InMemoryEventStore(_domainTypes.EventTypes));
+        var executor = new InMemoryDcbExecutorForTesting(_domainTypes, new Sekiban.Dcb.Testing.InMemoryEventStore(_domainTypes.EventTypes));
 
         // Then
         Assert.IsAssignableFrom<ISerializedSekibanDcbExecutor>(executor);

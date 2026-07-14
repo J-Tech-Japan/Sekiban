@@ -1,4 +1,5 @@
 using Dcb.Domain.ClassRoom;
+using Sekiban.Dcb.Testing;
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Student;
 using Sekiban.Dcb.Common;

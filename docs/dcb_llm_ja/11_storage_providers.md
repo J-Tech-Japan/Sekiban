@@ -469,6 +469,14 @@ Sekiban DCB startup. Environment=Production IsProduction=True
 
 **接続文字列は決して出力しません。** すべてのログシンクに秘密情報を漏らすバナーは、防ごうとしている不具合よりも重大な不具合です。
 
+### インメモリスタックの現在の居場所
+
+揮発ストアとインプロセスエグゼキューターは、専用の住処を得ました: `Sekiban.Dcb.Core.Testing` / `Sekiban.Dcb.WithResult.Testing` / `Sekiban.Dcb.WithoutResult.Testing`(名前空間 `Sekiban.Dcb.Testing`)。これらを参照していないプロジェクトは、**新しい `Sekiban.Dcb.Testing` の入口には到達できません** — ランタイムプロジェクトがテスト用エグゼキューターをうっかり手に取ることはできなくなりました。
+
+一方、旧 `Sekiban.Dcb.InMemory` の型は **削除されていません**。ランタイムパッケージ内に public のまま残り、コンパイルでき、挙動も同一で、新しい住処を指す `[Obsolete]` が付いているだけです。したがって、**旧い名前**とランタイムプロジェクトの間にコンパイラは立ちません。そこに立つのは上のディスクリプタと、それに基づいて動くガードです。ガードは**どの名前で入手したかに関わらず、実際に解決されたもの**に対して作用します(インプロセスエグゼキューターは常に拒否、揮発ストレージは既定で拒否・ストレージ専用オーバーライドで許可可能、`Unknown` は常に fail-closed)。旧い名前が消えるのは次のメジャーです。
+
+本番同様に振る舞うローカル開発環境には、単一サイロの localhost Orleans ホストを使ってください: [localhost Orleans](22_localhost_orleans.md)。
+
 ### 非推奨になったコンストラクター
 
 `new InMemoryDcbExecutor(domainTypes)` は `[Obsolete]` になりました。**挙動は変わりません。非推奨にしたのはその「沈黙」です。** 使うストアを明示的に渡してください。

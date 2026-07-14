@@ -1,7 +1,7 @@
 using Dcb.Domain;
 using Dcb.Domain.Student;
 using ResultBoxes;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.MultiProjections;
 
 namespace Sekiban.Dcb.Tests;
@@ -12,7 +12,7 @@ public class ProjectionHeadStatusTests
     public async Task InMemoryExecutor_ShouldReturnProjectionHeadStatus_ForRegisteredProjector()
     {
         var domain = DomainType.GetDomainTypes();
-        ISekibanExecutor executor = new InMemoryDcbExecutor(domain, new Sekiban.Dcb.InMemory.InMemoryEventStore(domain.EventTypes));
+        ISekibanExecutor executor = new InMemoryDcbExecutorForTesting(domain, new Sekiban.Dcb.Testing.InMemoryEventStore(domain.EventTypes));
         var studentId = Guid.NewGuid();
 
         var executionResult = await executor.ExecuteAsync(new CreateStudent(studentId, "Projection Status", 4));
@@ -48,7 +48,7 @@ public class ProjectionHeadStatusTests
     public async Task InMemoryExecutor_ShouldReturnEventStoreHeadStatus_WithOptInCount()
     {
         var domain = DomainType.GetDomainTypes();
-        ISekibanExecutor executor = new InMemoryDcbExecutor(domain, new Sekiban.Dcb.InMemory.InMemoryEventStore(domain.EventTypes));
+        ISekibanExecutor executor = new InMemoryDcbExecutorForTesting(domain, new Sekiban.Dcb.Testing.InMemoryEventStore(domain.EventTypes));
 
         await executor.ExecuteAsync(new CreateStudent(Guid.NewGuid(), "One", 3));
         await executor.ExecuteAsync(new CreateStudent(Guid.NewGuid(), "Two", 5));

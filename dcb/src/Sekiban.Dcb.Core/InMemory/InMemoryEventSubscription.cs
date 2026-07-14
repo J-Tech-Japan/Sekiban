@@ -6,6 +6,8 @@ namespace Sekiban.Dcb.InMemory;
 /// <summary>
 ///     In-memory implementation of event subscription for testing and development
 /// </summary>
+[Obsolete(
+    "Moved to Sekiban.Dcb.Core.Testing (namespace Sekiban.Dcb.Testing). This type is volatile/in-process and is for tests only; it lives in a production package for historical reasons, which is how it reached production once. Behaviour is unchanged and it will not be removed before the next major version.")]
 public class InMemoryEventSubscription : IEventSubscription
 {
     private readonly List<Event> _eventStore = new();

@@ -30,6 +30,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.ColdStorage\Sekiban.Dcb.ColdStorage.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Core.Testing\Sekiban.Dcb.Core.Testing.csproj" />
     </ItemGroup>
 
 </Project>

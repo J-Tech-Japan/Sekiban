@@ -2,7 +2,7 @@ using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.Student;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Events;
-using Sekiban.Dcb.InMemory;
+using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Tags;
 using Xunit;
 
@@ -10,7 +10,7 @@ namespace Sekiban.Dcb.WithoutResult.Tests;
 
 public class ExecuteCommandAsyncTests
 {
-    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
+    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutorForTesting(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
 
     [Fact]
     public async Task ExecuteCommandAsync_NoEvent_ReturnsEmptyExecutionResult()

@@ -11,7 +11,9 @@ namespace Sekiban.Dcb.InMemory;
 ///     Minimal in-memory bridge that forwards newly persisted events to cached multi-projection actors.
 ///     Only actors that were previously requested are updated; new actors still rely on catch-up replay.
 /// </summary>
-public sealed class InMemoryMultiProjectionEventPublisher : IEventPublisher
+[Obsolete(
+    "Moved to Sekiban.Dcb.Core.Testing (namespace Sekiban.Dcb.Testing). This type is volatile/in-process and is for tests only; it lives in a production package for historical reasons, which is how it reached production once. Behaviour is unchanged and it will not be removed before the next major version.")]
+public class InMemoryMultiProjectionEventPublisher : IEventPublisher
 {
     private readonly InMemoryObjectAccessor _objectAccessor;
 
