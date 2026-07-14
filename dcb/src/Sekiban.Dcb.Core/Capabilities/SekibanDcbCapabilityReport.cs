@@ -21,9 +21,27 @@ public sealed record SekibanDcbCapabilityReport(
     StorageDurabilityDescriptor ProjectionStore,
     IReadOnlyList<string> UsedOverrideNames)
 {
-    /// <summary>True when any resolved store does not durably keep what it is given.</summary>
-    public bool HasVolatileOrUnknownStorage =>
-        EventStore.Durability != StorageDurability.Durable || ProjectionStore.Durability != StorageDurability.Durable;
+    /// <summary>
+    ///     True when a store told us, in as many words, that it does not keep what it is given.
+    ///     This is the only thing <c>AllowVolatileStorageInProduction</c> can authorise: an operator can look at a
+    ///     store that says "Volatile" and decide they meant it.
+    /// </summary>
+    public bool HasVolatileStorage =>
+        EventStore.Durability == StorageDurability.Volatile
+        || ProjectionStore.Durability == StorageDurability.Volatile;
+
+    /// <summary>
+    ///     True when a store would not say what it is.
+    ///     Deliberately NOT the same condition as <see cref="HasVolatileStorage" />, and deliberately not overridable.
+    ///     An operator who ticks "I accept volatile storage" has accepted a store that declared itself volatile — they
+    ///     have not accepted an unidentified store that might be anything, because there is nothing there to accept.
+    /// </summary>
+    public bool HasUnknownStorage =>
+        EventStore.Durability == StorageDurability.Unknown
+        || ProjectionStore.Durability == StorageDurability.Unknown;
+
+    /// <summary>True when any resolved store does not durably keep what it is given, for the banner's warning.</summary>
+    public bool HasVolatileOrUnknownStorage => HasVolatileStorage || HasUnknownStorage;
 
     /// <summary>True when the resolved executor is not a real distributed runtime.</summary>
     public bool HasTestingOrUnknownExecutor => Executor.Runtime != ExecutorRuntimeKind.DistributedRuntime;

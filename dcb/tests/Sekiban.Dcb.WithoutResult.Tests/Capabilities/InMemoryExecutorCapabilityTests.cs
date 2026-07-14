@@ -1,4 +1,5 @@
 using Dcb.Domain.WithoutResult;
+using Dcb.Domain.WithoutResult.Student;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Sekiban.Dcb.Capabilities;
@@ -61,23 +62,36 @@ public class InMemoryExecutorCapabilityTests
     }
 
     [Fact]
-    public async Task TheSameCompositionInDevelopment_StillStarts()
+    public async Task TheSameCompositionInDevelopment_StillStarts_AndStillWorks()
     {
-        // Zero default behaviour change is the point: this is what every test and every local run does.
-        var eventStore = new InMemoryEventStore();
+        // Zero default behaviour change is the point: this is what every test and every local run does. "It started"
+        // is too weak a claim to leave a test on — a guard that let the host start but broke the executor on the way
+        // past would satisfy it. So the host starts, AND the executor it guarded goes on to execute a command.
+        var eventStore = new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes);
+        var executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), eventStore);
 
         using var host = new HostBuilder()
             .UseEnvironment(Environments.Development)
             .ConfigureServices(services =>
             {
                 services.AddSingleton<IEventStore>(eventStore);
-                services.AddSingleton<ISekibanExecutor>(
-                    new InMemoryDcbExecutor(DomainType.GetDomainTypes(), eventStore));
+                services.AddSingleton<ISekibanExecutor>(executor);
                 services.AddSekibanDcbProductionGuard();
             })
             .Build();
 
         await host.StartAsync();
+
+        var resolved = host.Services.GetRequiredService<ISekibanExecutor>();
+        var studentId = Guid.NewGuid();
+        var result = await resolved.ExecuteAsync(new CreateStudent(studentId, "Test Student", 2));
+
         await host.StopAsync();
+
+        Assert.Same(executor, resolved);
+        Assert.Single(result.Events);
+        Assert.Equal(
+            ExecutorRuntimeKind.TestingInProcess,
+            ((IExecutorRuntimeDescriptorProvider)resolved).DescribeRuntime().Runtime);
     }
 }

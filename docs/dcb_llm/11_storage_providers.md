@@ -422,7 +422,10 @@ builder.Services.AddSekibanDcbProductionGuard(options =>
 });
 ```
 
-`AllowVolatileStorageInProduction` authorises **storage** and nothing else. It cannot authorise a testing executor — set it and register `InMemoryDcbExecutor` in Production, and the host still refuses to start.
+`AllowVolatileStorageInProduction` is narrow in two directions, and both are deliberate:
+
+- **Storage only.** It cannot authorise a testing executor — set it, register `InMemoryDcbExecutor` in Production, and the host still refuses to start.
+- **`Volatile` only, never `Unknown`.** Setting it means *"I looked at a store that said it was volatile, and I meant it."* A store that says nothing has not given you anything to mean, so `Unknown` stays fail-closed with the override on. The way past `Unknown` is to make the store durable, or to have it implement `IStorageDurabilityDescriptorProvider` so it can say what it is.
 
 There is **no** override that permits a testing executor in Production. Not off by default, not hidden behind a flag: it does not exist. A volatile store in Production can be a decision (a cache-shaped service, a throwaway environment). A test executor in Production is not a decision, it is an accident.
 

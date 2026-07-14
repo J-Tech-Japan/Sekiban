@@ -10,9 +10,23 @@ namespace Sekiban.Dcb.Capabilities;
 public sealed class SekibanDcbProductionGuardOptions
 {
     /// <summary>
-    ///     Permits a <see cref="StorageDurability.Volatile" /> or <see cref="StorageDurability.Unknown" /> store in
-    ///     Production. <b>Storage only.</b> It says nothing about the executor, and the guard will not let it: an
-    ///     environment with this set and a testing executor still fails closed.
+    ///     Permits a store that declared itself <see cref="StorageDurability.Volatile" /> in Production.
+    ///     It is narrow in two directions, and both are deliberate:
+    ///     <list type="bullet">
+    ///         <item>
+    ///             <description>
+    ///                 <b>Storage only.</b> It says nothing about the executor. An environment with this set and a
+    ///                 testing executor still fails closed.
+    ///             </description>
+    ///         </item>
+    ///         <item>
+    ///             <description>
+    ///                 <b>Volatile only — never <see cref="StorageDurability.Unknown" />.</b> Setting this means "I
+    ///                 looked at a store that said it was volatile, and I meant it". A store that says nothing has not
+    ///                 given you anything to mean. Unknown stays fail-closed with this override on.
+    ///             </description>
+    ///         </item>
+    ///     </list>
     ///     Default false. If you set it, the banner says so, by name, at Warning.
     /// </summary>
     public bool AllowVolatileStorageInProduction { get; set; }

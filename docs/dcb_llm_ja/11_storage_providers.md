@@ -446,7 +446,10 @@ builder.Services.AddSekibanDcbProductionGuard(options =>
 });
 ```
 
-`AllowVolatileStorageInProduction` が許可するのは**ストレージだけ**です。テスト用エグゼキューターを許可することはできません。これを設定したうえで Production に `InMemoryDcbExecutor` を登録しても、**ホストは起動を拒否します**。
+`AllowVolatileStorageInProduction` は 2 つの意味で意図的に狭く作られています。
+
+- **ストレージのみ。** テスト用エグゼキューターを許可することはできません。これを設定したうえで Production に `InMemoryDcbExecutor` を登録しても、**ホストは起動を拒否します**。
+- **`Volatile` のみ。`Unknown` は決して許可しません。** このオプションを設定するとは「volatile だと**申告した**ストアを見たうえで、それでよいと判断した」という意味です。何も申告しないストアは、判断の対象すら与えていません。したがってこのオーバーライドを有効にしても `Unknown` は fail-closed のままです。`Unknown` を解消する方法は、ストアを durable にするか、`IStorageDurabilityDescriptorProvider` を実装して自分が何であるかを申告させるかのどちらかです。
 
 **テスト用エグゼキューターを Production で許可するオーバーライドは存在しません。** 既定で無効なのではなく、フラグの奥に隠れているのでもなく、**存在しません**。volatile なストレージは判断であり得ます(キャッシュ的なサービス、使い捨て環境)。しかし本番でのテスト用エグゼキューターは判断ではなく事故です。
 

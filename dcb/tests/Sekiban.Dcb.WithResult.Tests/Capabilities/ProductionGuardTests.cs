@@ -93,7 +93,7 @@ public class ProductionGuardTests
 
         var thrown = await AssertRefusesToStart(host);
 
-        Assert.Contains("storage is not durable", thrown.Message);
+        Assert.Contains("storage is volatile", thrown.Message);
         Assert.Equal(StorageDurability.Volatile, thrown.Report.EventStore.Durability);
     }
 
@@ -140,7 +140,7 @@ public class ProductionGuardTests
         var thrown = await AssertRefusesToStart(host);
 
         Assert.Contains("Production requires a distributed runtime", thrown.Message);
-        Assert.Contains("storage is not durable", thrown.Message);
+        Assert.Contains("storage is volatile", thrown.Message);
     }
 
     /// <summary>
@@ -164,7 +164,99 @@ public class ProductionGuardTests
         Assert.Contains("There is no override for this", thrown.Message);
 
         // The storage complaint is gone — the override did exactly, and only, what it says.
-        Assert.DoesNotContain("storage is not durable", thrown.Message);
+        Assert.DoesNotContain("storage is volatile", thrown.Message);
+    }
+
+    /// <summary>
+    ///     The gap the review found, and it was a real one: Volatile and Unknown were one condition, so the
+    ///     volatile-only override silently authorised an unidentified store too. They are different claims. "Volatile"
+    ///     is a store telling you it loses data, and an operator can look at that and say they meant it. "Unknown" is a
+    ///     store telling you nothing — there is nothing there for an operator to have meant.
+    /// </summary>
+    [Fact]
+    public async Task Production_UnknownStorage_WithVolatileOverride_StillRefusesToStart()
+    {
+        using var host = BuildHost(
+            Environments.Production,
+            new FakeExecutor(ExecutorRuntimeKind.DistributedRuntime, "Orleans"),
+            new FakeEventStore(null, "third-party"),
+            new FakeProjectionStore(StorageDurability.Durable, "Postgres"),
+            options => options.AllowVolatileStorageInProduction = true);
+
+        var thrown = await AssertRefusesToStart(host);
+
+        Assert.Contains("would not identify itself", thrown.Message);
+        Assert.Contains("does not authorise this", thrown.Message);
+        Assert.Equal(StorageDurability.Unknown, thrown.Report.EventStore.Durability);
+    }
+
+    [Fact]
+    public async Task Production_VolatileStorage_WithVolatileOverride_Starts_ButOnlyBecauseTheStoreSaidVolatile()
+    {
+        // The pair to the test above: same override, same environment, and the only difference is that this store
+        // answered the question. That difference is the whole point of the override.
+        using var host = BuildHost(
+            Environments.Production,
+            new FakeExecutor(ExecutorRuntimeKind.DistributedRuntime, "Orleans"),
+            new FakeEventStore(StorageDurability.Volatile, "InMemory"),
+            new FakeProjectionStore(StorageDurability.Volatile, "InMemory"),
+            options => options.AllowVolatileStorageInProduction = true);
+
+        await AssertStarts(host);
+    }
+
+    /// <summary>
+    ///     Sekiban's own Cosmos registrations are scoped. A hosted service holds the ROOT provider, and asking the root
+    ///     provider for a scoped service throws under ValidateScopes — so before this fix, opting into the guard broke
+    ///     a supported composition outright, in Development too, which is the opposite of "zero behaviour change".
+    ///     ValidateScopes is on here precisely so this test fails if the guard ever resolves from the root again.
+    /// </summary>
+    [Fact]
+    public async Task AScopedComposition_IsResolvedInsideAScope_NotFromTheRootProvider()
+    {
+        using var host = new HostBuilder()
+            .UseEnvironment(Environments.Production)
+            .UseDefaultServiceProvider(options =>
+            {
+                options.ValidateScopes = true;
+                options.ValidateOnBuild = true;
+            })
+            .ConfigureServices(services =>
+            {
+                services.AddScoped<ISekibanExecutor>(
+                    _ => new FakeExecutor(ExecutorRuntimeKind.DistributedRuntime, "Orleans"));
+                services.AddScoped<IEventStore>(_ => new FakeEventStore(StorageDurability.Durable, "CosmosDb"));
+                services.AddScoped<IMultiProjectionStateStore>(
+                    _ => new FakeProjectionStore(StorageDurability.Durable, "CosmosDb"));
+                services.AddSekibanDcbProductionGuard();
+            })
+            .Build();
+
+        // The failure this guards against is not a refusal — it is an InvalidOperationException from the container
+        // before the guard can report anything at all.
+        await AssertStarts(host);
+    }
+
+    [Fact]
+    public async Task AScopedVolatileComposition_IsStillCaught()
+    {
+        // ...and resolving in a scope must not become a way to smuggle a volatile store past the guard.
+        using var host = new HostBuilder()
+            .UseEnvironment(Environments.Production)
+            .UseDefaultServiceProvider(options => options.ValidateScopes = true)
+            .ConfigureServices(services =>
+            {
+                services.AddScoped<ISekibanExecutor>(
+                    _ => new FakeExecutor(ExecutorRuntimeKind.DistributedRuntime, "Orleans"));
+                services.AddScoped<IEventStore>(_ => new InMemoryEventStore());
+                services.AddScoped<IMultiProjectionStateStore>(_ => new InMemoryMultiProjectionStateStore());
+                services.AddSekibanDcbProductionGuard();
+            })
+            .Build();
+
+        var thrown = await AssertRefusesToStart(host);
+
+        Assert.Equal(StorageDurability.Volatile, thrown.Report.EventStore.Durability);
     }
 
     [Fact]

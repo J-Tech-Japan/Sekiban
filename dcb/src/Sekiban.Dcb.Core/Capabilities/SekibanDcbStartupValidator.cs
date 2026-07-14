@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Text;
@@ -38,7 +39,17 @@ public sealed class SekibanDcbStartupValidator : IHostedService
     /// <summary>Resolves, reports, and — if enforcing — stops a Production host that would lose data.</summary>
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        var report = SekibanDcbCapabilityResolver.Resolve(_services, _environment, _options, _resolveExecutor);
+        // Resolve inside a scope, not from the root provider. Sekiban's own Cosmos registrations are scoped, and
+        // asking the root provider for a scoped service throws under ValidateScopes — so a host with a perfectly
+        // supported composition could not even opt in, and the guard would fail the host it was there to protect.
+        // The scope lives exactly as long as this check: nothing resolved here is kept.
+        using var scope = _services.CreateScope();
+
+        var report = SekibanDcbCapabilityResolver.Resolve(
+            scope.ServiceProvider,
+            _environment,
+            _options,
+            _resolveExecutor);
 
         LogBanner(report);
 
@@ -71,13 +82,26 @@ public sealed class SekibanDcbStartupValidator : IHostedService
                 + "in-process testing executor in Production is not a configuration, it is an accident.");
         }
 
-        if (report.HasVolatileOrUnknownStorage && !_options.AllowVolatileStorageInProduction)
+        if (report.HasVolatileStorage && !_options.AllowVolatileStorageInProduction)
         {
             faults.Add(
-                $"storage is not durable — event store: {report.EventStore}, projection state store: "
+                $"storage is volatile — event store: {report.EventStore}, projection state store: "
                 + $"{report.ProjectionStore}. Everything written would be lost when this process ends. If that is "
                 + $"genuinely what you want, set {nameof(SekibanDcbProductionGuardOptions.AllowVolatileStorageInProduction)} "
                 + "= true; it authorises storage only, and will not authorise a testing executor.");
+        }
+
+        if (report.HasUnknownStorage)
+        {
+            // NOT covered by AllowVolatileStorageInProduction, on purpose. That override says "I looked at a store
+            // that declared itself volatile and I meant it". An unidentified store has declared nothing, so there is
+            // nothing for an operator to have meant. Making it durable, or making it say so, is the way past this.
+            faults.Add(
+                $"storage would not identify itself — event store: {report.EventStore}, projection state store: "
+                + $"{report.ProjectionStore}. Silence is not a promise of durability. "
+                + $"{nameof(SekibanDcbProductionGuardOptions.AllowVolatileStorageInProduction)} does not authorise "
+                + "this: it authorises a store that declared itself Volatile, not one that declared nothing. Have the "
+                + $"store implement {nameof(IStorageDurabilityDescriptorProvider)} so it can say what it is.");
         }
 
         if (faults.Count == 0)
