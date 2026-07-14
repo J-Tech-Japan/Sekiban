@@ -6,6 +6,7 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Capabilities;
 
 namespace Sekiban.Dcb.DynamoDB;
 
@@ -14,8 +15,12 @@ namespace Sekiban.Dcb.DynamoDB;
 /// <summary>
 ///     DynamoDB implementation of IMultiProjectionStateStore.
 /// </summary>
-public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore
+public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore, IStorageDurabilityDescriptorProvider
 {
+    /// <summary>Projection state lands in DynamoDB.</summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        new(StorageDurability.Durable, "DynamoDB");
+
     private readonly DynamoDbContext _context;
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
     private readonly DynamoDbEventStoreOptions _options;

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Storage;
 
 namespace Sekiban.Dcb.CosmosDb;
@@ -8,8 +9,12 @@ namespace Sekiban.Dcb.CosmosDb;
 /// <summary>
 ///     Factory for creating ServiceId-scoped CosmosDbEventStore instances.
 /// </summary>
-public sealed class CosmosDbEventStoreFactory : IEventStoreFactory
+public sealed class CosmosDbEventStoreFactory : IEventStoreFactory, IStorageDurabilityDescriptorProvider
 {
+    /// <summary>Every store this factory builds writes to the same durable backend.</summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        new(StorageDurability.Durable, "CosmosDb (per-service factory)");
+
     private readonly CosmosDbContext _context;
     private readonly IEventTypes _eventTypes;
     private readonly ICosmosContainerResolver _containerResolver;

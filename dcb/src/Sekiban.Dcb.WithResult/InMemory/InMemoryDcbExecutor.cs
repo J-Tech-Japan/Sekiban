@@ -8,6 +8,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Common;
 using System.Text;
+using Sekiban.Dcb.Capabilities;
 namespace Sekiban.Dcb.InMemory;
 
 /// <summary>
@@ -16,8 +17,15 @@ namespace Sekiban.Dcb.InMemory;
 ///     to execute commands, queries and tag state retrieval without external infrastructure.
 ///     Intended for lightweight tests / prototyping; not thread-safe for high concurrency scenarios.
 /// </summary>
-public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor
+public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider
 {
+    /// <summary>
+    ///     In-process actors, this process only. A production host that resolves this executor is a production host
+    ///     running a unit-test runtime, and the production guard will not start it.
+    /// </summary>
+    public ExecutorRuntimeDescriptor DescribeRuntime() =>
+        new(ExecutorRuntimeKind.TestingInProcess, "InMemory (in-process actors)");
+
     private readonly GeneralSekibanExecutor _inner;
     private readonly InMemoryObjectAccessor _accessor;
     private readonly IEventStore _eventStore;
@@ -36,8 +44,17 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
     }
 
     /// <summary>
-    ///     Creates executor with built-in lightweight in-memory event store (no external dependencies)
+    ///     Creates the executor with a built-in lightweight in-memory event store (no external dependencies).
+    ///     Obsolete because it is silent about the most important thing it does. A downstream production system
+    ///     registered this executor as its <c>ISekibanExecutor</c>; this constructor created a private volatile event
+    ///     store for it, and every command succeeded, and no event ever reached the database it had configured. Pass
+    ///     the store you mean to use — <c>new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore())</c> in tests
+    ///     — so that the store is a decision somebody made, and can be seen in the code that made it.
     /// </summary>
+    [Obsolete(
+        "Pass the event store explicitly: new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore()). This "
+        + "constructor silently creates a private VOLATILE event store, which is invisible at the call site and has "
+        + "reached production before. Behaviour is unchanged; only the silence is deprecated.")]
     public InMemoryDcbExecutor(DcbDomainTypes domainTypes) : this(domainTypes, new InternalInMemoryEventStore(domainTypes)) { }
 
     Task<ResultBox<ExecutionResult>> ICommandExecutor.ExecuteAsync<TCommand>(

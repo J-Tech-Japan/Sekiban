@@ -397,6 +397,88 @@ dotnet run --project tools/SekibanDcbTagMigration -- apply \
 - [SekibanWasmRuntime](https://github.com/J-Tech-Japan/SekibanWasmRuntime) はイベントストアのデフォルトが Postgres で、Cosmos は opt-in です。
 - SekibanAsAService は管理系(management)とランタイム系(runtime)で別系統のコンテナーを使用しており、それぞれ独立してプロバイダーを選択できます。コンテナーごとに上記と同じ「アトミック性が必要なら Postgres」というガイドラインを適用してください。
 
+## 耐久性ディスクリプタと本番ガード
+
+**名前は根拠になりません。** `InMemoryDcbExecutor` はテスト用の型に見えますが、ある本番システムはこれを `ISekibanExecutor` として登録していました。一引数コンストラクターが黙ってプライベートなインメモリイベントストアを作り、コマンドはすべて成功し、設定済みの Cosmos アカウントには**イベントが1件も届きませんでした**。起動時に検知できなかったのは、**問い合わせる手段がなかった**からです。
+
+これからは問い合わせられます。
+
+### 実行時に問える 2 つの軸
+
+すべての組み込みストア/エグゼキューターが、**型名でも属性でも呼び出した `Add...` メソッドでもなく、生きたインスタンスから**次を申告します。
+
+| 軸 | 値 | 申告する側 |
+|---|---|---|
+| ストレージ耐久性 | `Durable` / `Volatile` / `Unknown` + プロバイダー名 | イベントストア **および** プロジェクション状態ストア(とそのサービス別ファクトリー) |
+| エグゼキューターランタイム | `DistributedRuntime` / `TestingInProcess` / `Unknown` + ランタイム名 | エグゼキューター(実際に載っているアクターアクセサーに問い合わせて回答) |
+
+組み込みの自己申告: Postgres / Cosmos DB / DynamoDB → `Durable`、InMemory → `Volatile`、Orleans → `DistributedRuntime`、`InMemoryDcbExecutor` → `TestingInProcess`。
+
+**実行時解決である理由**を示す 2 点:
+
+- **Sqlite はファイルなら `Durable`、`:memory:` なら `Volatile`** — 同じクラス、同じ名前、正反対の保証です。どちらを掴んだかを知っているのは生きたインスタンスだけです。
+- **デコレーターはデータが実際に着地する先を申告します。** volatile なストアを包んだ `HybridEventStore` は *volatile* です。包んだだけで耐久性を得ることはできません。
+
+`Unknown` は中立の値ではありません。「申告を拒んだ」という意味であり、ガードはこれを危険側として扱います。**沈黙は耐久性の約束ではないからです。**
+
+### ガード
+
+```csharp
+// opt-in。ライブラリが勝手に登録することはありません。
+// 「ホストを起動させない」判断を勝手に下すライブラリは、いつか必ずその判断を間違えます。
+builder.Services.AddSekibanDcbProductionGuard();
+```
+
+チェック対象の登録より**後**に呼び出してください。起動時(すべての登録が済み、ホストが何かを処理する前)に、コンテナーが**実際に構築したもの**を解決し、各インスタンスに問い合わせ、バナーを出力します。そして Production 環境では、次のいずれかであればホストの起動を拒否します。
+
+- エグゼキューターが `DistributedRuntime` でない(= `TestingInProcess` または `Unknown`)
+- いずれかのストアが `Durable` でない(= `Volatile` または `Unknown`)
+
+Production 以外では検証を行わず、ログ出力のみです。**Development の挙動は変わりません。**
+
+### 唯一のオーバーライドと、存在しないオーバーライド
+
+```csharp
+builder.Services.AddSekibanDcbProductionGuard(options =>
+{
+    options.AllowVolatileStorageInProduction = true;   // ストレージのみ
+    options.ProductionEnvironmentNames.Add("prod-eu"); // 本番環境名が "Production" でない場合
+});
+```
+
+`AllowVolatileStorageInProduction` は 2 つの意味で意図的に狭く作られています。
+
+- **ストレージのみ。** テスト用エグゼキューターを許可することはできません。これを設定したうえで Production に `InMemoryDcbExecutor` を登録しても、**ホストは起動を拒否します**。
+- **`Volatile` のみ。`Unknown` は決して許可しません。** このオプションを設定するとは「volatile だと**申告した**ストアを見たうえで、それでよいと判断した」という意味です。何も申告しないストアは、判断の対象すら与えていません。したがってこのオーバーライドを有効にしても `Unknown` は fail-closed のままです。`Unknown` を解消する方法は、ストアを durable にするか、`IStorageDurabilityDescriptorProvider` を実装して自分が何であるかを申告させるかのどちらかです。
+
+**テスト用エグゼキューターを Production で許可するオーバーライドは存在しません。** 既定で無効なのではなく、フラグの奥に隠れているのでもなく、**存在しません**。volatile なストレージは判断であり得ます(キャッシュ的なサービス、使い捨て環境)。しかし本番でのテスト用エグゼキューターは判断ではなく事故です。
+
+有効にしたオーバーライドは、起動バナーに `Warning` レベルで**名前付きで**出力されます。デプロイ設定を読まなくても分かるようにするためです。
+
+### バナー
+
+起動のたびに出力されます(強制なしで報告だけ欲しい場合は `AddSekibanDcbStartupBanner()`。volatile ストアが目的であるローカル開発に向いています)。
+
+```
+Sekiban DCB startup. Environment=Production IsProduction=True
+  ExecutorType=Sekiban.Dcb.Orleans.OrleansDcbExecutor ExecutorRuntime=DistributedRuntime ExecutorRuntimeName=Orleans
+  EventStoreProvider=CosmosDb EventStoreDurability=Durable
+  ProjectionStoreProvider=CosmosDb ProjectionStoreDurability=Durable
+  Overrides=(none) Enforcing=True
+```
+
+**接続文字列は決して出力しません。** すべてのログシンクに秘密情報を漏らすバナーは、防ごうとしている不具合よりも重大な不具合です。
+
+### 非推奨になったコンストラクター
+
+`new InMemoryDcbExecutor(domainTypes)` は `[Obsolete]` になりました。**挙動は変わりません。非推奨にしたのはその「沈黙」です。** 使うストアを明示的に渡してください。
+
+```csharp
+var executor = new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore());
+```
+
+こうすれば、ストアの選択は「誰かが下した判断」となり、その判断を下したコードの中に見えるようになります。
+
 ## マテリアライズドビュー用ストレージ
 
 マテリアライズドビューは現在 PostgreSQL 向けに実装されています。

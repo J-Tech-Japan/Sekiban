@@ -9,6 +9,7 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Tags;
 using System.Net;
 using System.Text;
@@ -18,8 +19,12 @@ namespace Sekiban.Dcb.CosmosDb;
 /// <summary>
 ///     CosmosDB-backed event store implementation.
 /// </summary>
-public partial class CosmosDbEventStore : IHotEventStore
+public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider
 {
+    /// <summary>Events land in Cosmos DB.</summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        new(StorageDurability.Durable, "CosmosDb");
+
     private const string ParamSince = "@since";
     private const string ParamServiceId = "@serviceId";
     private readonly CosmosDbContext _context;

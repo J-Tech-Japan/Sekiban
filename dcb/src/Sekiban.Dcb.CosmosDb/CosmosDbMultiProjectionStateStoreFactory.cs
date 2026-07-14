@@ -2,14 +2,19 @@ using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Capabilities;
 
 namespace Sekiban.Dcb.CosmosDb;
 
 /// <summary>
 ///     Factory for creating ServiceId-scoped CosmosMultiProjectionStateStore instances.
 /// </summary>
-public sealed class CosmosDbMultiProjectionStateStoreFactory : IMultiProjectionStateStoreFactory
+public sealed class CosmosDbMultiProjectionStateStoreFactory : IMultiProjectionStateStoreFactory, IStorageDurabilityDescriptorProvider
 {
+    /// <summary>Every store this factory builds is a Cosmos one.</summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        new(StorageDurability.Durable, "CosmosDb (per-service factory)");
+
     private readonly CosmosDbContext _context;
     private readonly ICosmosContainerResolver _containerResolver;
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;

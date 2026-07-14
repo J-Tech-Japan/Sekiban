@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Storage;
 
 namespace Sekiban.Dcb.Postgres;
@@ -9,8 +10,12 @@ namespace Sekiban.Dcb.Postgres;
 /// <summary>
 ///     Factory for creating ServiceId-scoped PostgresEventStore instances.
 /// </summary>
-public sealed class PostgresEventStoreFactory : IEventStoreFactory
+public sealed class PostgresEventStoreFactory : IEventStoreFactory, IStorageDurabilityDescriptorProvider
 {
+    /// <summary>Every store this factory builds writes to the same durable backend.</summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        new(StorageDurability.Durable, "Postgres (per-service factory)");
+
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IEventTypes _eventTypes;
     private readonly ILoggerFactory? _loggerFactory;

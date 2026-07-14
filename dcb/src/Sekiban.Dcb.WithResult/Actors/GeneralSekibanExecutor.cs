@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
@@ -12,9 +13,10 @@ namespace Sekiban.Dcb.Actors;
 ///     Wraps CoreGeneralSekibanExecutor to provide the public API
 ///     This implementation uses ResultBox for all error handling
 /// </summary>
-public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor
+public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider
 {
     private readonly CoreGeneralSekibanExecutor _core;
+    private readonly IActorObjectAccessor _actorAccessor;
     private static readonly AnonymousCommand NoCommandInstance = new();
 
     public GeneralSekibanExecutor(
@@ -23,8 +25,17 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         DcbDomainTypes domainTypes,
         IEventPublisher? eventPublisher = null)
     {
+        _actorAccessor = actorAccessor;
         _core = new CoreGeneralSekibanExecutor(eventStore, actorAccessor, domainTypes, eventPublisher);
     }
+
+    /// <summary>
+    ///     This executor is whatever its accessor is. It has no runtime of its own — commands go wherever the accessor
+    ///     sends them — so it asks, rather than claiming. An accessor that will not say leaves this Unknown, and the
+    ///     production guard treats Unknown as unsafe, which is the only safe way to treat it.
+    /// </summary>
+    public ExecutorRuntimeDescriptor DescribeRuntime() =>
+        SekibanDcbCapabilityResolver.DescribeExecutor(_actorAccessor);
 
     /// <summary>
     ///     Execute a command with its built-in handler

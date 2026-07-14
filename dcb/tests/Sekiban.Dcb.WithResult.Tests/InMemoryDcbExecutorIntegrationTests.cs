@@ -24,7 +24,7 @@ public class InMemoryDcbExecutorIntegrationTests
     public async Task CreateStudent_Then_QueryStudentList_Should_Return_Student()
     {
         var domain = DomainType.GetDomainTypes();
-        ISekibanExecutor executor = new InMemoryDcbExecutor(domain);
+        ISekibanExecutor executor = new InMemoryDcbExecutor(domain, new Sekiban.Dcb.InMemory.InMemoryEventStore(domain.EventTypes));
 
         var studentId = Guid.NewGuid();
         var name = "Integration Test Student";
@@ -49,7 +49,7 @@ public class InMemoryDcbExecutorIntegrationTests
     public async Task CreateStudent_Command_Should_Populate_TagState()
     {
         var domain = DomainType.GetDomainTypes();
-        ISekibanExecutor executor = new InMemoryDcbExecutor(domain);
+        ISekibanExecutor executor = new InMemoryDcbExecutor(domain, new Sekiban.Dcb.InMemory.InMemoryEventStore(domain.EventTypes));
 
         var studentId = Guid.NewGuid();
         var name = "Integration TagState Student";
@@ -90,7 +90,7 @@ public class InMemoryDcbExecutorIntegrationTests
             types.TagTypes.RegisterTagGroupType<StudentTag>();
         });
 
-        ISekibanExecutor executor = new InMemoryDcbExecutor(domainTypes);
+        ISekibanExecutor executor = new InMemoryDcbExecutor(domainTypes, new Sekiban.Dcb.InMemory.InMemoryEventStore(domainTypes.EventTypes));
 
         var studentId = Guid.NewGuid();
         var command = new CreateStudent(studentId, "Test Student", 5);
@@ -110,7 +110,7 @@ public class InMemoryDcbExecutorIntegrationTests
     public async Task MultiProjection_Should_Include_AllStudents_AfterMultipleCommands()
     {
         var domain = DomainType.GetDomainTypes();
-        ISekibanExecutor executor = new InMemoryDcbExecutor(domain);
+        ISekibanExecutor executor = new InMemoryDcbExecutor(domain, new Sekiban.Dcb.InMemory.InMemoryEventStore(domain.EventTypes));
 
         var studentId1 = Guid.NewGuid();
         var studentId2 = Guid.NewGuid();

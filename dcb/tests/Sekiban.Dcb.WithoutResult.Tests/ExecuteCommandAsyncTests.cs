@@ -10,7 +10,7 @@ namespace Sekiban.Dcb.WithoutResult.Tests;
 
 public class ExecuteCommandAsyncTests
 {
-    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes());
+    private readonly ISekibanExecutor _executor = new InMemoryDcbExecutor(DomainType.GetDomainTypes(), new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes));
 
     [Fact]
     public async Task ExecuteCommandAsync_NoEvent_ReturnsEmptyExecutionResult()

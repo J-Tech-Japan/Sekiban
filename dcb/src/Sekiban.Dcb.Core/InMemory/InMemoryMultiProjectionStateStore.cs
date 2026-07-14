@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 
@@ -9,7 +10,7 @@ namespace Sekiban.Dcb.InMemory;
 /// <summary>
 ///     In-memory implementation for tests.
 /// </summary>
-public sealed class InMemoryMultiProjectionStateStore : IMultiProjectionStateStore
+public sealed class InMemoryMultiProjectionStateStore : IMultiProjectionStateStore, IStorageDurabilityDescriptorProvider
 {
     private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), MultiProjectionStateRecord> _states = new();
     private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), byte[]> _stateData = new();
@@ -19,6 +20,10 @@ public sealed class InMemoryMultiProjectionStateStore : IMultiProjectionStateSto
     {
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
     }
+
+    /// <summary>Projection state held in this process only: rebuildable from events, but not itself durable.</summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        new(StorageDurability.Volatile, "InMemory");
 
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
 

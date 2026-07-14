@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
@@ -13,9 +14,13 @@ namespace Sekiban.Dcb.InMemory;
 ///     In-memory implementation of IEventStore for testing and development
 ///     Stores events and tag streams only - no tag state management
 /// </summary>
-public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader
+public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, IStorageDurabilityDescriptorProvider
 {
     private const string EventTypesRequiredMessage = "IEventTypes is required for SerializableEvent operations";
+
+    /// <summary>Everything here is a dictionary in this process. It is gone when the process is.</summary>
+    public StorageDurabilityDescriptor DescribeStorage() =>
+        new(StorageDurability.Volatile, "InMemory");
 
     private sealed class ServiceState
     {

@@ -373,6 +373,88 @@ Recommend **Postgres** for any workload that requires atomic event/tag visibilit
 - [SekibanWasmRuntime](https://github.com/J-Tech-Japan/SekibanWasmRuntime) defaults to Postgres for its event store, with Cosmos as an opt-in.
 - SekibanAsAService uses separate management and runtime container lineages; each can select its provider independently, so apply the same Postgres-for-atomicity guidance per container.
 
+## Durability Descriptors and the Production Guard
+
+Names are not evidence. `InMemoryDcbExecutor` reads like a test type, and a production system still registered it as its `ISekibanExecutor`; the one-argument constructor quietly created a private in-memory event store; every command succeeded; and no event ever reached the Cosmos account that was configured, sitting there, correct and empty. Nothing at startup could detect it, because nothing could *ask*.
+
+Now something can.
+
+### The two questions anything can be asked
+
+Every built-in store and executor answers these at runtime, from the live instance — not from its type name, not from an attribute, not from which `Add...` method was called:
+
+| Axis | Values | Who answers |
+|---|---|---|
+| Storage durability | `Durable` / `Volatile` / `Unknown` + provider name | event stores **and** projection state stores (and their per-service factories) |
+| Executor runtime | `DistributedRuntime` / `TestingInProcess` / `Unknown` + runtime name | executors, by asking the actor accessor they actually run on |
+
+Built-ins self-declare: Postgres, Cosmos DB, DynamoDB → `Durable`. InMemory → `Volatile`. Orleans → `DistributedRuntime`. `InMemoryDcbExecutor` → `TestingInProcess`.
+
+Two consequences worth stating, because they are the reason this is resolved at runtime rather than inferred:
+
+- **Sqlite answers `Durable` for a file and `Volatile` for `:memory:`** — same class, same name, opposite guarantee. Only the live instance knows which one it got.
+- **A decorator reports where the data actually lands.** `HybridEventStore` wrapping a volatile store is *volatile*. A wrapper cannot launder durability by being wrapped around it.
+
+`Unknown` is not a neutral value. It means the component declined to say, and the guard treats it as unsafe, because silence is not a promise of durability.
+
+### The guard
+
+```csharp
+// Opt-in. Nothing registers this for you: a library that decides on its own when your host may not start
+// is a library that will one day be wrong about it.
+builder.Services.AddSekibanDcbProductionGuard();
+```
+
+Call it after the registrations it is meant to check. At startup — after every registration has had its say, before the host serves anything — it resolves what the container *actually built*, asks each thing what it is, logs the banner, and in a Production environment refuses to start the host when:
+
+- the executor is not a `DistributedRuntime` (i.e. it is `TestingInProcess` or `Unknown`), **or**
+- either store is not `Durable` (i.e. `Volatile` or `Unknown`).
+
+Outside Production it validates nothing and only logs. Development is unchanged.
+
+### The one override, and the one that does not exist
+
+```csharp
+builder.Services.AddSekibanDcbProductionGuard(options =>
+{
+    options.AllowVolatileStorageInProduction = true;   // storage ONLY
+    options.ProductionEnvironmentNames.Add("prod-eu"); // if your real environment is not called "Production"
+});
+```
+
+`AllowVolatileStorageInProduction` is narrow in two directions, and both are deliberate:
+
+- **Storage only.** It cannot authorise a testing executor — set it, register `InMemoryDcbExecutor` in Production, and the host still refuses to start.
+- **`Volatile` only, never `Unknown`.** Setting it means *"I looked at a store that said it was volatile, and I meant it."* A store that says nothing has not given you anything to mean, so `Unknown` stays fail-closed with the override on. The way past `Unknown` is to make the store durable, or to have it implement `IStorageDurabilityDescriptorProvider` so it can say what it is.
+
+There is **no** override that permits a testing executor in Production. Not off by default, not hidden behind a flag: it does not exist. A volatile store in Production can be a decision (a cache-shaped service, a throwaway environment). A test executor in Production is not a decision, it is an accident.
+
+Any override you do turn on is named, by name, in the startup banner at `Warning`, so nobody has to read the deployment to find out.
+
+### The banner
+
+Logged on every start (with `AddSekibanDcbStartupBanner()` if you want the report without the enforcement — sensible for local development, where a volatile store is the point):
+
+```
+Sekiban DCB startup. Environment=Production IsProduction=True
+  ExecutorType=Sekiban.Dcb.Orleans.OrleansDcbExecutor ExecutorRuntime=DistributedRuntime ExecutorRuntimeName=Orleans
+  EventStoreProvider=CosmosDb EventStoreDurability=Durable
+  ProjectionStoreProvider=CosmosDb ProjectionStoreDurability=Durable
+  Overrides=(none) Enforcing=True
+```
+
+It never logs a connection string. A banner that leaks a secret into every log sink would be a worse bug than the one it exists to prevent.
+
+### The obsolete constructor
+
+`new InMemoryDcbExecutor(domainTypes)` is `[Obsolete]`. Its behaviour is unchanged — only its silence is deprecated. Pass the store you mean to use:
+
+```csharp
+var executor = new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore());
+```
+
+so that the store is a decision somebody made, visible in the code that made it.
+
 ## Materialized View Storage
 
 Materialized views are currently implemented for PostgreSQL:

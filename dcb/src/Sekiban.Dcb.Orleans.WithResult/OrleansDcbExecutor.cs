@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
@@ -18,8 +19,12 @@ namespace Sekiban.Dcb.Orleans;
 ///     Orleans-specific implementation of ISekibanExecutor
 ///     Uses Orleans grains for distributed command execution and queries
 /// </summary>
-public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor
+public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider
 {
+    /// <summary>Commands are executed by Orleans grains across the cluster.</summary>
+    public ExecutorRuntimeDescriptor DescribeRuntime() =>
+        SekibanDcbCapabilityResolver.DescribeExecutor(_actorAccessor);
+
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly IClusterClient _clusterClient;
     private readonly DcbDomainTypes _domainTypes;
