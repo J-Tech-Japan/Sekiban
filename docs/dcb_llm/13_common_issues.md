@@ -147,6 +147,13 @@ If your workload cannot tolerate that window at all — money-sensitive workflow
 
 **Symptoms**: calling a `Sekiban.Dcb.WithoutResult` API — `ISekibanExecutor`, `ICommandContext`, the Orleans executor — and getting a `NullReferenceException` with no message and nothing in it that names the call you made. Or, worse, getting no exception at all and a plainly wrong answer: `TagExistsAsync` reporting `false` for a tag that exists, a value-typed query returning `0`.
 
+**Where this came from**: [issue #1045](https://github.com/J-Tech-Japan/Sekiban/issues/1045) was reported as a `NullReferenceException` from `CosmosDbEventStore.WriteEventsAsync`, and it turned out to have **two separate causes, only one of which was ours**:
+
+- **The reporter's own cause — stale state, not a Sekiban defect.** Their staging environment was redeployed frequently without event/projector-versioning discipline, so stale projection state accumulated until reads began returning null. Recreating the affected stores cleared it, and their production environment (which does version properly) never hit it. If you see this, check your projector versioning before anything else.
+- **Sekiban's cause — a diagnostics defect.** That null surfaced through `UnwrapBox()` as a bare `NullReferenceException` with no message, so an environment problem looked exactly like a library bug and took far longer to find than it should have. That is the half we fixed.
+
+**And a third thing, found while fixing it, which nobody had reported**: the same `UnwrapBox()` was *silently swallowing* failures at value-typed boundaries. That is a correctness defect of our own, unrelated to the reporter's stale state, and it is described below.
+
 **Cause**: the WithoutResult packages are a facade over the `ResultBox`-native core: internally every operation returns a `ResultBox<T>`, and at the edge the box is opened. Opening it used to be `UnwrapBox()`, whose behaviour depends on the shape of `T`:
 
 | shape of the box | what the caller used to get |
@@ -155,7 +162,7 @@ If your workload cannot tolerate that window at all — money-sensitive workflow
 | failed, `T` is a **value type** (e.g. `bool`, `int`) | `default` — **the failure was silently swallowed** |
 | no box at all (an internal path returned `null`) | `NullReferenceException`, no message, no operation name |
 
-The middle row is the one that changed answers rather than just messages. `ICommandContext.TagExistsAsync` returns `bool`, so an event store that could not be reached came back as `false` — indistinguishable from "no, that tag does not exist" — and a command handler guarding on it would go on to create the entity it had just been told, wrongly, was absent.
+Row 3 is what issue #1045 hit. Row 2 is the one nobody hit yet, and it is worse, because it changed answers rather than just messages. `ICommandContext.TagExistsAsync` returns `bool`, so an event store that could not be reached came back as `false` — indistinguishable from "no, that tag does not exist" — and a command handler guarding on it would go on to create the entity it had just been told, wrongly, was absent.
 
 **Fixed in 10.3.0**. Every WithoutResult boundary now opens the box under one policy:
 

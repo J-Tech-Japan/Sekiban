@@ -158,7 +158,7 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         where TResult : notnull
     {
         var context = new BoundaryContext("ISekibanExecutor.QueryAsync", typeof(TResult).Name);
-        var general = GuardedUnwrap.Unwrap(await result.ToQueryResultAsync(_domainTypes), context);
+        var general = await GuardedUnwrap.UnwrapAsync(result.ToQueryResultAsync(_domainTypes), context);
         return GuardedUnwrap.Unwrap(general.ToTypedResult<TResult>(), context);
     }
 
@@ -167,7 +167,7 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         where TResult : notnull
     {
         var context = new BoundaryContext("ISekibanExecutor.QueryAsync (list)", typeof(TResult).Name);
-        var listGeneral = GuardedUnwrap.Unwrap(await result.ToListQueryResultAsync(_domainTypes), context);
+        var listGeneral = await GuardedUnwrap.UnwrapAsync(result.ToListQueryResultAsync(_domainTypes), context);
         return GuardedUnwrap.Unwrap(listGeneral.ToTypedResult<TResult>(), context);
     }
 

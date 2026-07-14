@@ -71,6 +71,9 @@ internal static class GuardedUnwrap
     /// <summary>The <see cref="Exception.Data" /> key carrying what that boundary was working on.</summary>
     internal const string TargetDataKey = "Sekiban.Boundary.Target";
 
+    /// <summary>Serialises annotation, so an operation/target pair can never come from two different boundaries.</summary>
+    private static readonly object AnnotationGate = new();
+
     /// <summary>
     ///     Returns the value the box holds, or throws something that explains why it does not.
     /// </summary>
@@ -123,7 +126,12 @@ internal static class GuardedUnwrap
         return value;
     }
 
-    /// <summary>Awaits the box, then <see cref="Unwrap{T}" />s it.</summary>
+    /// <summary>
+    ///     Awaits the box, then <see cref="Unwrap{T}" />s it.
+    ///     A failure can reach a boundary two ways: carried inside the box, or thrown by the Task that was supposed
+    ///     to produce the box. Both are the same failure to the caller, so both get the same treatment — the
+    ///     original exception, rethrown as itself, carrying the boundary it crossed.
+    /// </summary>
     internal static async Task<T> UnwrapAsync<T>(Task<ResultBox<T>> boxTask, BoundaryContext context)
         where T : notnull
     {
@@ -137,29 +145,67 @@ internal static class GuardedUnwrap
                 null);
         }
 
-        return Unwrap(await boxTask.ConfigureAwait(false), context);
+        ResultBox<T>? box;
+
+        try
+        {
+            box = await boxTask.ConfigureAwait(false);
+        }
+        catch (Exception failure)
+        {
+            // A faulted or cancelled Task never got as far as producing a box. Without this, the exception would
+            // reach the caller with no idea which boundary it crossed — the same blindness the box path fixes.
+            Annotate(failure, context);
+            ExceptionDispatchInfo.Capture(failure).Throw();
+            throw; // unreachable: Throw() above does not return. Here to satisfy definite assignment.
+        }
+
+        return Unwrap(box, context);
     }
 
     /// <summary>
-    ///     Records the boundary on the exception without changing what it is. Best effort: some exceptions expose a
-    ///     read-only <see cref="Exception.Data" />, and losing a diagnostic annotation must never replace the real
-    ///     failure with an annotation failure.
+    ///     Records the boundary on the exception without changing what it is.
+    ///     Two properties matter, and neither is free:
+    ///     <list type="bullet">
+    ///         <item>
+    ///             <description>
+    ///                 <b>Atomic.</b> The operation and the target are one context, and must never be interleaved
+    ///                 into a pair that describes two different boundaries. <see cref="Exception.Data" /> is a plain
+    ///                 <see cref="System.Collections.IDictionary" /> with no thread-safety promise, and the same
+    ///                 exception instance can legitimately cross concurrent boundaries — one shared failure observed
+    ///                 by several in-flight tasks. So the read and both writes happen under one lock.
+    ///             </description>
+    ///         </item>
+    ///         <item>
+    ///             <description>
+    ///                 <b>Best effort.</b> Some exceptions expose a read-only <c>Data</c>. Losing a diagnostic
+    ///                 annotation must never replace the real failure with an annotation failure.
+    ///             </description>
+    ///         </item>
+    ///     </list>
+    ///     The lock is a single static gate rather than one per exception: annotating happens only on a failure
+    ///     path, so the contention it can cause is bounded by how fast the system is failing.
     /// </summary>
     private static void Annotate(Exception failure, BoundaryContext context)
     {
         try
         {
-            if (failure.Data.IsReadOnly || failure.Data.Contains(OperationDataKey))
+            lock (AnnotationGate)
             {
-                // Do not overwrite: the innermost boundary the failure crossed is the informative one.
-                return;
-            }
+                if (failure.Data.IsReadOnly || failure.Data.Contains(OperationDataKey))
+                {
+                    // First writer wins, and it is the innermost boundary: a failure is annotated as it is rethrown,
+                    // so the boundary nearest the failure gets there first, and outer boundaries must not overwrite
+                    // it as the same exception unwinds through them.
+                    return;
+                }
 
-            failure.Data[OperationDataKey] = context.Operation;
+                failure.Data[OperationDataKey] = context.Operation;
 
-            if (!string.IsNullOrWhiteSpace(context.Target))
-            {
-                failure.Data[TargetDataKey] = context.Target;
+                if (!string.IsNullOrWhiteSpace(context.Target))
+                {
+                    failure.Data[TargetDataKey] = context.Target;
+                }
             }
         }
         catch (Exception)
