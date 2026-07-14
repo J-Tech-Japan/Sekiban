@@ -2,14 +2,22 @@
   <Project Path="SekibanDcbDecider.ApiService\SekibanDcbDecider.ApiService.csproj" />
   <Project Path="SekibanDcbDecider.AppHost\SekibanDcbDecider.AppHost.csproj" />
   <Project Path="SekibanDcbDecider.Cli\SekibanDcbDecider.Cli.csproj" />
+  <!--#if (IncludeTests) -->
   <Project Path="SekibanDcbDecider.Interactions.Unit\SekibanDcbDecider.Interactions.Unit.csproj" />
+  <!--#endif -->
   <Project Path="SekibanDcbDecider.Interactions\SekibanDcbDecider.Interactions.csproj" />
   <Project Path="SekibanDcbDecider.EventSource\SekibanDcbDecider.EventSource.csproj" />
+  <!--#if (IncludeTests) -->
   <Project Path="SekibanDcbDecider.ImmutableModels.Unit\SekibanDcbDecider.ImmutableModels.Unit.csproj" />
+  <!--#endif -->
   <Project Path="SekibanDcbDecider.ImmutableModels\SekibanDcbDecider.ImmutableModels.csproj" />
+  <!--#if (IncludeTests) -->
   <Project Path="SekibanDcbDecider.MeetingRoomModels.Unit\SekibanDcbDecider.MeetingRoomModels.Unit.csproj" />
+  <!--#endif -->
   <Project Path="SekibanDcbDecider.MeetingRoomModels\SekibanDcbDecider.MeetingRoomModels.csproj" />
   <Project Path="SekibanDcbDecider.ServiceDefaults\SekibanDcbDecider.ServiceDefaults.csproj" />
+  <!--#if (IncludeTests) -->
   <Project Path="SekibanDcbDecider.Unit\SekibanDcbDecider.Unit.csproj" />
+  <!--#endif -->
   <Project Path="SekibanDcbDecider.Web\SekibanDcbDecider.Web.csproj" />
 </Solution>

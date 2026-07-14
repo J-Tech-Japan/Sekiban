@@ -4,6 +4,8 @@
   <Project Path="SekibanDcbOrleans.Cli/SekibanDcbOrleans.Cli.csproj" />
   <Project Path="SekibanDcbOrleans.Domain/SekibanDcbOrleans.Domain.csproj" />
   <Project Path="SekibanDcbOrleans.ServiceDefaults/SekibanDcbOrleans.ServiceDefaults.csproj" />
+  <!--#if (IncludeTests) -->
   <Project Path="SekibanDcbOrleans.Unit/SekibanDcbOrleans.Unit.csproj" />
+  <!--#endif -->
   <Project Path="SekibanDcbOrleans.Web/SekibanDcbOrleans.Web.csproj" />
 </Solution>

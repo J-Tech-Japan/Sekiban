@@ -4,6 +4,8 @@
   <Project Path="SekibanDcbOrleansAws.Cli/SekibanDcbOrleansAws.Cli.csproj" />
   <Project Path="SekibanDcbOrleansAws.Domain/SekibanDcbOrleansAws.Domain.csproj" />
   <Project Path="SekibanDcbOrleansAws.ServiceDefaults/SekibanDcbOrleansAws.ServiceDefaults.csproj" />
+  <!--#if (IncludeTests) -->
   <Project Path="SekibanDcbOrleansAws.Unit/SekibanDcbOrleansAws.Unit.csproj" />
+  <!--#endif -->
   <Project Path="SekibanDcbOrleansAws.Web/SekibanDcbOrleansAws.Web.csproj" />
 </Solution>

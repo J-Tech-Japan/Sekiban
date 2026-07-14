@@ -371,8 +371,30 @@ DefaultTypeMap.MatchNamesWithUnderscores = true;
 string? configuredDatabasePath = null;
 if (databaseType == "cosmos")
 {
-    // CosmosDB settings - Aspire will automatically provide CosmosClient if configured
-    builder.Services.AddSekibanDcbCosmosDbWithAspire();
+    // CosmosDB settings - Aspire will automatically provide CosmosClient if configured.
+    //
+    // RollForward is the right policy for a NEW deployment. Cosmos writes events and tag rows in two
+    // phases, and when the tag phase fails in-process, RollForward retries it instead of deleting the
+    // events it already wrote (the Compatible default deletes them, and multi-projections may already
+    // have read them). The library keeps Compatible as its default only so that upgrading a package
+    // cannot change an existing deployment's behavior; a template generates a new one.
+    //
+    // It does NOT close the crash window: a crash is not an in-process failure, so it can still leave an
+    // event durable with no tag rows — visible to all-events reads, invisible to tag-scoped ones. Only a
+    // repair pass closes that. See docs/dcb_llm/11_storage_providers.md (Consistency Contract).
+    builder.Services.AddSekibanDcbCosmosDbWithAspire(options =>
+        options.WriteFailurePolicy = CosmosWriteFailurePolicy.RollForward);
+
+    // Recovery surfaces, both opt-in. Left commented on purpose: neither should start scanning your
+    // containers because a template generated them.
+    //
+    //   Repair — rebuilds tag rows the crash window left missing. Operator-triggered; dry-run by default.
+    //   builder.Services.AddSekibanDcbCosmosDbTagRepair();
+    //
+    //   Sweep — runs that repair automatically over a recent window. Disabled unless Enabled = true, and
+    //   it is EVENTUAL repair: it does not gate tag readers, so the missing-tag window stays open until a
+    //   run reaches it. Measure the RU cost with a manual dry run first.
+    //   builder.Services.AddSekibanDcbCosmosDbTagSweep(sweep => sweep.Enabled = true);
     builder.Services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.CosmosDb.CosmosMultiProjectionStateStore>();
 }
 else if (databaseType == "sqlite")
