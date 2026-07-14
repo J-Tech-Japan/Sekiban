@@ -3,13 +3,16 @@
     <PackageId>Sekiban.Dcb.Templates</PackageId>
     <PackageVersion>0.0.0-local</PackageVersion>
     <Version>0.0.0-local</Version>
-    <Title>Sekiban Dcb Templates</Title>
+    <Title>Sekiban DCB Templates</Title>
     <Authors>J-Tech Japan</Authors>
-    <Description>Templates for starting Sekiban Dcb (Distributed Consistent Bus) projects with Orleans and .NET Aspire</Description>
+    <Description>Templates for starting Sekiban DCB (Dynamic Consistency Boundary) projects with Orleans and .NET Aspire</Description>
     <PackageTags>Event Sourcing,CQRS,Orleans,Aspire,Sekiban,Dcb</PackageTags>
     <PackageProjectUrl>https://github.com/J-Tech-Japan/Sekiban</PackageProjectUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageType>Template</PackageType>
+    <!-- net9.0 on purpose: this project only carries the template content (IncludeBuildOutput=false), and
+         the lower TFM keeps it installable on template-engine hosts that are not yet on net10.0. The
+         templates it ships generate net10.0 projects regardless. -->
     <TargetFramework>net9.0</TargetFramework>
     <IncludeContentInPack>true</IncludeContentInPack>
     <IncludeBuildOutput>false</IncludeBuildOutput>
