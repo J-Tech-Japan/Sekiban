@@ -12,6 +12,7 @@ using Orleans.Runtime.Hosting;
 using Orleans.Storage;
 using Npgsql;
 using Scalar.AspNetCore;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Orleans;
@@ -253,6 +254,12 @@ builder.Services.AddCors(options =>
         policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
     });
 });
+
+// Fail-closed startup guard: in Production, refuses to start on a testing executor (always — no override) or a
+// Volatile/Unknown store (Volatile authorisable by name via AllowVolatileStorageInProduction, storage only).
+// Development only logs the banner. Must come AFTER the Sekiban registrations. Contract:
+// https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md
+builder.Services.AddSekibanDcbProductionGuard();
 
 var app = builder.Build();
 

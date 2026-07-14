@@ -2,7 +2,7 @@
 
 Sekiban DCB (Dynamic Consistency Boundary) 向けの .NET Aspire + Orleans スターターテンプレートです。
 
-生成されるプロジェクトはすべて **.NET 10.0** / **Aspire 13.x** / **Sekiban.Dcb 10.3.0** です。
+生成されるプロジェクトはすべて **.NET 10.0** / **Aspire 13.x** / **Sekiban.Dcb 10.4.0** です。
 
 ## インストール
 
@@ -43,11 +43,24 @@ dotnet new sekiban-dcb-orleans -n YourProjectName
 
 詳細は [ストレージプロバイダーの整合性契約](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm_ja/11_storage_providers.md#整合性契約) と [トラブルシューティング](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm_ja/13_common_issues.md) を参照してください。
 
+## 本番ガード (10.4.0 以降、既定で有効)
+
+生成される ApiService は、Sekiban の登録の後に **`AddSekibanDcbProductionGuard()`** を呼びます。起動時にコンテナーが**実際に構築したもの**(エグゼキューターと両ストア)を解決して自己申告を問い合わせ、Production 環境では次の場合にホストの起動を拒否します。
+
+- エグゼキューターがインプロセス(テスト用)、またはランタイムを申告しない → **常に拒否。オーバーライドはありません。**
+- ストアが `Volatile`、または耐久性を申告しない(`Unknown`)→ 既定で拒否。**`Volatile` のみ**、ストレージ専用の `AllowVolatileStorageInProduction` で運用者が明示的に許可できます(`Unknown` は許可できません)。
+
+**Development の挙動は変わりません。** Production 以外では検証を行わず、起動バナー(環境、エグゼキューターのランタイム、ストアのプロバイダーと耐久性、有効なオーバーライド)を出力するだけです。ローカル実行はこれまでどおり動きます。
+
+詳細: [ストレージプロバイダーと本番ガード](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm_ja/11_storage_providers.md)
+
 ## ローカル開発 / ユニットテスト
 
-生成されるプロジェクトはローカルでも **Orleans**(単一サイロ、localhost クラスタリング)で動きます。インメモリエグゼキューターはユニットテスト専用であり、`*.Unit` プロジェクトだけが `Sekiban.Dcb.*.Testing` パッケージを参照します。ランタイムプロジェクトからは参照しないでください。
+生成されるプロジェクトはローカルでも **Orleans**(単一サイロ、localhost クラスタリング)で動きます。インメモリエグゼキューターはユニットテスト専用です。
 
-分類と、CLI / Worker / Web それぞれの localhost 構成は [localhost Orleans ガイド](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm_ja/22_localhost_orleans.md) を参照してください。
+`*.Unit` プロジェクトだけが `Sekiban.Dcb.Core.Testing` と、ファサードに対応する `Sekiban.Dcb.WithResult.Testing` / `Sekiban.Dcb.WithoutResult.Testing` を参照し、`InMemoryDcbExecutorForTesting` と `InMemoryEventStore`(名前空間 `Sekiban.Dcb.Testing`)を使います。**ランタイムプロジェクトからは参照しないでください** — この 2 つは自分が `TestingInProcess` / `Volatile` であることを申告するため、本番ホストで解決されれば上のガードが起動を拒否します。
+
+分類(実環境 / ローカル開発 / ユニットテスト)と、CLI / Worker / Web それぞれの localhost 構成は [localhost Orleans ガイド](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm_ja/22_localhost_orleans.md) を参照してください。
 
 ## 生成後の手順
 
