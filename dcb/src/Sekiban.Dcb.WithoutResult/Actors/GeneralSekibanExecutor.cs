@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Boundaries;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Events;
@@ -48,8 +49,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
             }
         };
 
-        var result = await _core.ExecuteAsync(command, coreHandler, cancellationToken);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.ExecuteAsync(command, coreHandler, cancellationToken),
+            new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
     }
 
     /// <summary>
@@ -75,8 +77,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
             }
         };
 
-        var result = await _core.ExecuteAsync(command, coreHandler, cancellationToken);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.ExecuteAsync(command, coreHandler, cancellationToken),
+            new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
     }
 
     /// <summary>
@@ -100,8 +103,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
             }
         };
 
-        var result = await _core.ExecuteAsync(NoCommandInstance, coreHandler, cancellationToken);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.ExecuteAsync(NoCommandInstance, coreHandler, cancellationToken),
+            new BoundaryContext("ISekibanExecutor.ExecuteCommandAsync"));
     }
 
     /// <summary>
@@ -109,8 +113,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     /// </summary>
     public async Task<TagState> GetTagStateAsync(TagStateId tagStateId)
     {
-        var result = await _core.GetTagStateAsync(tagStateId);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.GetTagStateAsync(tagStateId),
+            new BoundaryContext("ISekibanExecutor.GetTagStateAsync", tagStateId.GetTagStateId()));
     }
 
     /// <summary>
@@ -118,8 +123,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     /// </summary>
     public async Task<TResult> QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) where TResult : notnull
     {
-        var result = await _core.QueryAsync(queryCommon);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.QueryAsync(queryCommon),
+            new BoundaryContext("ISekibanExecutor.QueryAsync", queryCommon?.GetType().Name));
     }
 
     /// <summary>
@@ -128,28 +134,28 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     public async Task<ListQueryResult<TResult>> QueryAsync<TResult>(IListQueryCommon<TResult> queryCommon)
         where TResult : notnull
     {
-        var result = await _core.QueryAsync(queryCommon);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.QueryAsync(queryCommon),
+            new BoundaryContext("ISekibanExecutor.QueryAsync (list)", queryCommon?.GetType().Name));
     }
 
     public async Task<string> GetLatestSortableUniqueIdAsync()
     {
-        var result = await _core.GetLatestSortableUniqueIdAsync();
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(_core.GetLatestSortableUniqueIdAsync(), new BoundaryContext("ISekibanExecutor.GetLatestSortableUniqueIdAsync"));
     }
 
     public async Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync(
         string projectorName,
         string? expectedProjectorVersion = null)
     {
-        var result = await _core.GetProjectionHeadStatusAsync(projectorName, expectedProjectorVersion);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.GetProjectionHeadStatusAsync(projectorName, expectedProjectorVersion),
+            new BoundaryContext("ISekibanExecutor.GetProjectionHeadStatusAsync", projectorName));
     }
 
     public async Task<EventStoreHeadStatus> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false)
     {
-        var result = await _core.GetEventStoreHeadStatusAsync(includeTotalEventCount);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(_core.GetEventStoreHeadStatusAsync(includeTotalEventCount), new BoundaryContext("ISekibanExecutor.GetEventStoreHeadStatusAsync"));
     }
 
     public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>

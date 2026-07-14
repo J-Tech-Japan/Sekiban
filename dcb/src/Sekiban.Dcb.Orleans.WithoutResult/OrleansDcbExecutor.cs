@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Boundaries;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
@@ -156,26 +157,18 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         SerializableQueryResult result)
         where TResult : notnull
     {
-        var generalBox = await result.ToQueryResultAsync(_domainTypes);
-        if (!generalBox.IsSuccess)
-        {
-            throw generalBox.GetException();
-        }
-
-        return generalBox.GetValue().ToTypedResult<TResult>().UnwrapBox();
+        var context = new BoundaryContext("ISekibanExecutor.QueryAsync", typeof(TResult).Name);
+        var general = await GuardedUnwrap.UnwrapAsync(result.ToQueryResultAsync(_domainTypes), context);
+        return GuardedUnwrap.Unwrap(general.ToTypedResult<TResult>(), context);
     }
 
     private async Task<ListQueryResult<TResult>> DeserializeListQueryResultAsync<TResult>(
         SerializableListQueryResult result)
         where TResult : notnull
     {
-        var listGeneralBox = await result.ToListQueryResultAsync(_domainTypes);
-        if (!listGeneralBox.IsSuccess)
-        {
-            throw listGeneralBox.GetException();
-        }
-
-        return listGeneralBox.GetValue().ToTypedResult<TResult>().UnwrapBox();
+        var context = new BoundaryContext("ISekibanExecutor.QueryAsync (list)", typeof(TResult).Name);
+        var listGeneral = await GuardedUnwrap.UnwrapAsync(result.ToListQueryResultAsync(_domainTypes), context);
+        return GuardedUnwrap.Unwrap(listGeneral.ToTypedResult<TResult>(), context);
     }
 
     public Task<string> GetLatestSortableUniqueIdAsync() =>

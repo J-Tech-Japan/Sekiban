@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Boundaries;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Commands;
 
@@ -20,37 +21,46 @@ internal class CommandContextAdapter : ICommandContext
         where TState : ITagStatePayload
         where TProjector : ITagProjector<TProjector>
     {
-        var result = await _core.GetStateAsync<TState, TProjector>(tag);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.GetStateAsync<TState, TProjector>(tag),
+            new BoundaryContext("ICommandContext.GetStateAsync", $"{typeof(TProjector).Name} on {tag.GetTag()}"));
     }
 
     public async Task<TagState> GetStateAsync<TProjector>(ITag tag)
         where TProjector : ITagProjector<TProjector>
     {
-        var result = await _core.GetStateAsync<TProjector>(tag);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.GetStateAsync<TProjector>(tag),
+            new BoundaryContext("ICommandContext.GetStateAsync", $"{typeof(TProjector).Name} on {tag.GetTag()}"));
     }
 
     public async Task<bool> TagExistsAsync(ITag tag)
     {
-        var result = await _core.TagExistsAsync(tag);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.TagExistsAsync(tag),
+            new BoundaryContext("ICommandContext.TagExistsAsync", tag.GetTag()));
     }
 
     public async Task<string> GetTagLatestSortableUniqueIdAsync(ITag tag)
     {
-        var result = await _core.GetTagLatestSortableUniqueIdAsync(tag);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.GetTagLatestSortableUniqueIdAsync(tag),
+            new BoundaryContext("ICommandContext.GetTagLatestSortableUniqueIdAsync", tag.GetTag()));
     }
 
     public async Task<EventOrNone> AppendEvent(IEventPayload ev, params ITag[] tags)
     {
-        var result = await _core.AppendEvent(ev, tags);
-        return result.UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.AppendEvent(ev, tags),
+            new BoundaryContext("ICommandContext.AppendEvent", ev.GetType().Name));
     }
 
     public async Task<EventOrNone> AppendEvent(EventPayloadWithTags eventPayloadWithTags)
     {
-        return await _core.AppendEvent(eventPayloadWithTags).UnwrapBox();
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.AppendEvent(eventPayloadWithTags),
+            new BoundaryContext(
+                "ICommandContext.AppendEvent",
+                eventPayloadWithTags.Event.GetType().Name));
     }
 }
