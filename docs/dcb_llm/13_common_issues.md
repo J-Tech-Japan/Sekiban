@@ -143,6 +143,28 @@ If your workload cannot tolerate that window at all — money-sensitive workflow
 
 **See**: [Consistency Contract](11_storage_providers.md#consistency-contract) for the full per-provider guarantees, the repair service, the sweep, and what none of them promise.
 
+## WithoutResult: a failure that arrived as a bare `NullReferenceException`, or as no failure at all
+
+**Symptoms**: calling a `Sekiban.Dcb.WithoutResult` API — `ISekibanExecutor`, `ICommandContext`, the Orleans executor — and getting a `NullReferenceException` with no message and nothing in it that names the call you made. Or, worse, getting no exception at all and a plainly wrong answer: `TagExistsAsync` reporting `false` for a tag that exists, a value-typed query returning `0`.
+
+**Cause**: the WithoutResult packages are a facade over the `ResultBox`-native core: internally every operation returns a `ResultBox<T>`, and at the edge the box is opened. Opening it used to be `UnwrapBox()`, whose behaviour depends on the shape of `T`:
+
+| shape of the box | what the caller used to get |
+|---|---|
+| failed, `T` is a reference type (e.g. `TagState`) | the carried exception, rethrown — correct |
+| failed, `T` is a **value type** (e.g. `bool`, `int`) | `default` — **the failure was silently swallowed** |
+| no box at all (an internal path returned `null`) | `NullReferenceException`, no message, no operation name |
+
+The middle row is the one that changed answers rather than just messages. `ICommandContext.TagExistsAsync` returns `bool`, so an event store that could not be reached came back as `false` — indistinguishable from "no, that tag does not exist" — and a command handler guarding on it would go on to create the entity it had just been told, wrongly, was absent.
+
+**Fixed in 10.3.0**. Every WithoutResult boundary now opens the box under one policy:
+
+- **A failure the box carries is rethrown as itself** — same exception, same type, same stack — whether `T` is a reference type or a value type. Your `catch (SekibanValidationException)` and `catch (OperationCanceledException)` keep working exactly as before; cancellation still carries its original `CancellationToken`. What is new is that value-typed boundaries throw it instead of swallowing it.
+- **The boundary is recorded on the exception**, not wrapped around it: `ex.Data["Sekiban.Boundary.Operation"]` (e.g. `ICommandContext.TagExistsAsync`) and `ex.Data["Sekiban.Boundary.Target"]` (e.g. the tag, the command type). The exception type is untouched.
+- **When there is no failure to rethrow**, you get a `SekibanBoundaryException` (namespace `Sekiban.Dcb.Boundaries`) naming the operation, instead of a bare `NullReferenceException`. This means an internal path returned something it should not have — please report it, with the message, which now tells us where to look.
+
+**What to do if you see `SekibanBoundaryException`**: it is not a domain error and there is nothing to retry. It says a Sekiban internal returned no result. Open an issue with the message — `Operation` and `Target` are on the exception.
+
 ## Serialization Exceptions
 
 **Symptoms**: `JsonException` during event replay or API responses.

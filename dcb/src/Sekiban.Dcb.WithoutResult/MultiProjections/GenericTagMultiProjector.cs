@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Boundaries;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -186,7 +187,9 @@ public record
         SortableUniqueId safeWindowThreshold)
     {
         var result = ProjectInternal(payload, ev, tags, domainTypes, safeWindowThreshold);
-        return result.UnwrapBox();
+        return GuardedUnwrap.Unwrap(
+            result,
+            new BoundaryContext("GenericTagMultiProjector.Project", ev?.EventType));
     }
 
     /// <summary>

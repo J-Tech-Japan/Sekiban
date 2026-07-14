@@ -132,6 +132,28 @@ services.AddSekibanDcbCosmosDb(
 
 **参照**: [整合性契約](11_storage_providers.md#整合性契約) — プロバイダーごとの完全な保証、修復サービス、スイープ、そしてそれらが **保証しないこと**。
 
+## WithoutResult: 失敗が素の `NullReferenceException` として届く / そもそも届かない
+
+**症状**: `Sekiban.Dcb.WithoutResult` の API(`ISekibanExecutor`、`ICommandContext`、Orleans エグゼキューター)を呼ぶと、メッセージも呼び出し元の情報もない `NullReferenceException` が飛ぶ。あるいはさらに悪いケースとして、**例外がまったく飛ばず、明らかに誤った答えが返る**(存在するタグに対して `TagExistsAsync` が `false`、値型のクエリが `0`)。
+
+**原因**: WithoutResult パッケージは `ResultBox` ネイティブなコアに対するファサードです。内部ではすべての操作が `ResultBox<T>` を返し、境界で箱を開けます。この「開ける」処理は従来 `UnwrapBox()` であり、その挙動は `T` の種類に依存していました。
+
+| 箱の状態 | 呼び出し側が受け取っていたもの |
+|---|---|
+| 失敗、`T` が参照型 (例: `TagState`) | 保持していた例外を再スロー — 正しい |
+| 失敗、`T` が**値型** (例: `bool`、`int`) | `default` — **失敗が黙って握りつぶされる** |
+| 箱そのものが `null`(内部パスが `null` を返した) | メッセージも操作名もない `NullReferenceException` |
+
+問題が深刻なのは 2 行目です。メッセージが不親切なのではなく、**答えが変わってしまいます**。`ICommandContext.TagExistsAsync` は `bool` を返すため、イベントストアに到達できなかった場合でも `false` が返り、「そのタグは存在しない」と区別がつきません。これをガード条件にしているコマンドハンドラーは、実際には存在するエンティティを新規作成してしまいます。
+
+**10.3.0 で修正されました**。WithoutResult のすべての境界は、単一のポリシーで箱を開けます。
+
+- **箱が保持している失敗は、そのまま再スローされます** — 同一の例外インスタンス、同一の型、同一のスタック。`T` が参照型でも値型でも同じです。既存の `catch (SekibanValidationException)` や `catch (OperationCanceledException)` はこれまでどおり動作し、キャンセルは元の `CancellationToken` を保持したままです。**変わったのは、値型の境界が握りつぶさずにスローするようになった点だけです。**
+- **境界の情報は例外をラップせずに例外へ記録します**: `ex.Data["Sekiban.Boundary.Operation"]`(例: `ICommandContext.TagExistsAsync`)と `ex.Data["Sekiban.Boundary.Target"]`(例: タグ、コマンド型)。例外の型は変わりません。
+- **再スローすべき失敗が存在しない場合**は、素の `NullReferenceException` ではなく、操作名を含む `SekibanBoundaryException`(名前空間 `Sekiban.Dcb.Boundaries`)が飛びます。これは内部パスが返してはならないものを返したことを意味します。メッセージを添えて Issue を立ててください。
+
+**`SekibanBoundaryException` を受け取ったら**: これはドメインエラーではなく、リトライする対象もありません。Sekiban 内部が結果を返さなかったことを示します。メッセージ(`Operation` / `Target` プロパティを含む)を添えて報告してください。
+
 ## JSON シリアライズ例外
 
 **対処**: イベントペイロードの変更は後方互換にする。`EventMetadata.EventType` をログに出し問題のイベントを特定。
