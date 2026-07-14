@@ -294,23 +294,31 @@ Rows written before the deterministic-id scheme sit at a random document id. **T
 
 It is not registered by `AddSekibanDcbCosmosDb`, it is **not reachable from the automatic sweep**, and it never runs by itself.
 
-**The CLI** (`tools/SekibanDcbTagMigration`) is a thin front-end over the same service — no destructive logic of its own, and it could not have any: the seam that expresses a tag-row delete is `internal` to `Sekiban.Dcb.CosmosDb`, so no other assembly can issue one.
+**The service API** ships in the `Sekiban.Dcb.CosmosDb` package: register the factory with `AddSekibanDcbCosmosDbLegacyTagMigration()`, then call `PlanAsync` and `ApplyAsync(plan, options)`.
+
+**The CLI is not distributed.** `tools/SekibanDcbTagMigration` is not packaged, not published, and not a `dotnet tool` — no release produces an executable you can install. It is a thin front-end over the same service (no destructive logic of its own, and it could not have any: the seam that expresses a tag-row delete is `internal` to `Sekiban.Dcb.CosmosDb`, so no other assembly can issue one). To use it, **run it from source**, from a checkout of the release tag whose packages you are running:
 
 ```bash
+git clone https://github.com/J-Tech-Japan/Sekiban.git
+cd Sekiban
+git checkout dcb-v10.3.0        # the release tag matching your Sekiban.Dcb.CosmosDb version
+
 # 1. Plan. Read-only. Writes an artifact naming exactly which rows would die.
-sekiban-dcb-tag-migration plan \
+dotnet run --project tools/SekibanDcbTagMigration -- plan \
   --connection "<cs>" --database SekibanDcb --service-id <id> \
   --plan tag-migration-plan.json
 
 # 2. READ IT. This is the point of the two-step flow.
 
 # 3. Apply. Refuses without --confirm and --backup.
-sekiban-dcb-tag-migration apply \
+dotnet run --project tools/SekibanDcbTagMigration -- apply \
   --connection "<cs>" --database SekibanDcb --service-id <id> \
   --plan tag-migration-plan.json --backup removed-rows.json --confirm
 ```
 
-The service API is the same two calls: `PlanAsync` then `ApplyAsync(plan, options)` (`AddSekibanDcbCosmosDbLegacyTagMigration()` to register the factory).
+Check out the tag that matches the package version you deploy. Running the tool from a different revision than the code that wrote your rows is asking for a plan that describes a world you do not have.
+
+If running from source is not practical, drive the service API directly — it is the same two calls, behind the same gates.
 
 **What stops a mistake.** Every one of these refuses *before* touching a document:
 

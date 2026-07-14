@@ -35,6 +35,8 @@ dotnet new sekiban-orleans-aspire -n YourProjectName
 | DynamoDB | `Sekiban.Dcb.DynamoDB` | AWS |
 | SQLite | `Sekiban.Dcb.Sqlite` | Local/Dev |
 
+**Cosmos DB — read the consistency contract first** ([English](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md#consistency-contract) | [日本語](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm_ja/11_storage_providers.md#整合性契約)). Postgres writes events and tag rows in one transaction; Cosmos writes them in two phases, so a crash can leave an event visible to all-events reads but missing from tag-scoped ones. The defaults are unchanged on upgrade (`WriteFailurePolicy = Compatible`); `RollForward` is an opt-in that retries the tag write instead of deleting events, and the tag-index repair service and automatic sweep are both opt-in registrations. If you need atomic event/tag visibility — money-sensitive workflows above all — use Postgres.
+
 ## Snapshot Storage
 
 | Storage | Package | Cloud |

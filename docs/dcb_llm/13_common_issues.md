@@ -68,6 +68,81 @@ Remember to register query types when introducing new projections.
 - Increase RU/s on the `events` and `tags` containers.
 - Use `WaitForSortableUniqueId` sparingly in read-heavy scenarios to reduce polling frequency.
 
+## Cosmos: an event is visible globally but missing from tag-scoped reads
+
+**Symptoms**: `ReadAllEventsAsync` returns the event, but `ReadEventsByTagAsync` does not. `TagExistsAsync` says false, tag projectors never see it, and `GetLatestTagAsync` — which feeds `GeneralTagConsistentActor`'s optimistic-concurrency baseline — reports a value older than the event you just wrote.
+
+This is the symptom [issue #1046](https://github.com/J-Tech-Japan/Sekiban/issues/1046) reported. Only Cosmos does this; Postgres writes events and tag rows in one transaction and cannot.
+
+### First: is it lag, or is it residue?
+
+They look identical for a few seconds and need completely different responses.
+
+- **Transient lag** — the write is still in flight, or the account's consistency level is letting a reader see a stale replica. **Wait and re-read.** If the tag read catches up on its own, nothing is wrong.
+- **Durable residue** — the tag rows never landed. The Cosmos write is two-phase (events first, then tag rows), so a crash between the phases leaves the event durable with no tag rows, and **no amount of waiting fixes it.**
+
+If the event is minutes old and still invisible to tag reads, it is residue.
+
+### Then: check the telemetry
+
+The `Sekiban.Dcb.CosmosDb` meter says whether a write actually failed:
+
+- `sekiban.dcb.cosmos.tag_write.failures` / `.retry_outcomes{outcome=exhausted}` — a tag write gave up. The structured logs and `CosmosTagWriteExhaustedException` name the affected event ids.
+- `sekiban.dcb.cosmos.event_write.partial_failures` — a multi-event write landed some events and not others.
+
+A crash leaves no in-process trace at all, so **an empty metric does not mean an empty tags container.** Confirm with a dry run.
+
+### Fix: repair the tag index
+
+The tags container is a **derivable index** — every event document carries its complete `tags` array — so missing rows can be rebuilt from the events. Register the repair service and **always dry-run first**:
+
+```csharp
+services.AddSekibanDcbCosmosDb(configuration);
+services.AddSekibanDcbCosmosDbTagRepair();   // opt-in; not registered by AddSekibanDcbCosmosDb alone
+
+var repair = await factory.CreateAsync(serviceId);
+
+// Look before you write. DryRun is the default.
+var report = await repair.RepairAsync(new CosmosTagRepairOptions
+{
+    DryRun = true,
+    ToSortableUniqueIdInclusive = lastSettledSortableUniqueId,  // pin the upper bound
+});
+```
+
+**Pin `ToSortableUniqueIdInclusive`** to an event you know is settled. Without it the scan runs to the end and races your live traffic, which the write path is already handling — the repair is for crash residue, not for events that are still being written.
+
+Read the report, then repair with `DryRun = false`. The counts tell you what you are looking at:
+
+| Category | Meaning | Does repair write? |
+|---|---|---|
+| `Missing` | Nothing indexes this `(event, tag)`. | **Yes — the only category it writes.** |
+| `Present` | The derived row exists and matches the event. | No |
+| `LegacyPresent` | A row from before the deterministic-id scheme indexes it. It works; migration is optional. | No |
+| `Duplicate` | Several legacy rows index it. | No — reported only |
+| `Corrupt` | A row indexes it but disagrees with the event. | **No — never overwritten.** Investigate before doing anything. |
+| `Overflow` | More rows than the per-key cap. | No — raise `MaxRowsPerKey` to look deeper |
+
+A `Corrupt` or `Duplicate` count is not something the repair will resolve for you, by design.
+
+### Prevent the recurrence you *can* prevent
+
+Set `WriteFailurePolicy = CosmosWriteFailurePolicy.RollForward`:
+
+```csharp
+services.AddSekibanDcbCosmosDb(
+    configuration,
+    options => options.WriteFailurePolicy = CosmosWriteFailurePolicy.RollForward);
+```
+
+The default is `Compatible`, which does not retry the tag write and — via the now-obsolete `TryRollbackOnFailure` — **deletes the events it already wrote**, which multi-projections may already have read. `RollForward` retries the tag write instead and never deletes an event.
+
+**The caveat that matters**: `RollForward` only helps when the process survives to retry. **A crash is not an in-process failure**, so it leaves residue no policy can prevent — only a repair pass closes that window. An [opt-in sweep](11_storage_providers.md) can run the repair automatically over a recent window, but it is *eventual* repair: it does not gate tag readers, and the window stays open until a run reaches it.
+
+If your workload cannot tolerate that window at all — money-sensitive workflows above all — **use the Postgres provider**, which has none of these gaps.
+
+**See**: [Consistency Contract](11_storage_providers.md#consistency-contract) for the full per-provider guarantees, the repair service, the sweep, and what none of them promise.
+
 ## Serialization Exceptions
 
 **Symptoms**: `JsonException` during event replay or API responses.
