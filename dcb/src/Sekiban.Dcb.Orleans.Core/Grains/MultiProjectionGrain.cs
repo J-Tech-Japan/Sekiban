@@ -2162,9 +2162,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             var version = currentVersion;
             // Operator rebuild/reset: clears the fault and re-establishes a clean baseline — allowed while faulted.
-            // The mutation clears only the CANDIDATE fault fields (pure). The LIVE actor fault is cleared only in the
-            // after-success continuation, so a failed reset write leaves the persisted descriptor AND the live actor
-            // fault intact — queries stay faulted and fault persistence stays coherent.
+            // The mutation clears only the CANDIDATE fault fields (pure, safe to roll back). The durable write must
+            // succeed before any live actor state is touched:
             await _stateStore.ExecuteWriteAsync(
                 GrainStateWriteKind.OperatorReset,
                 s =>
@@ -2181,13 +2180,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         s.ProjectorVersion = version;
                     }
                     ClearFaultFieldsOnCandidate(s);
-                },
-                onCommitted: () =>
-                {
-                    _projectionFault = null;
-                    _host?.ClearFaultForRebuild();
-                    _liveLastPosition = null;
                 });
+
+            // Reached only when the durable write above committed (an exception would have propagated and skipped this).
+            // Now clear the LIVE actor fault with a non-throwing idempotent primitive, so a failed reset leaves the
+            // persisted descriptor AND the live fault intact, and a post-commit live-clear hiccup does not reinterpret
+            // the already-durable write as failed.
+            ClearLiveProjectionFault();
         }
         catch (Exception ex)
         {
@@ -2539,7 +2538,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     // Clears ONLY the persisted fault fields on the candidate payload — a pure mutation with no live actor side effect,
     // so it is safe to run inside the store's gate on a candidate that may be rolled back. The live actor fault is
-    // cleared separately, only after the write commits (see the OperatorReset onCommitted continuation).
+    // cleared separately, only after the durable reset write commits (see ClearLiveProjectionFault).
     private static void ClearFaultFieldsOnCandidate(MultiProjectionGrainState state)
     {
         state.FaultEventId = null;
@@ -2547,6 +2546,24 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         state.FaultPosition = null;
         state.FaultMessage = null;
         state.FaultedAtUtcTicks = 0;
+    }
+
+    // Non-throwing, idempotent live-fault clear. Called ONLY after the durable reset write has committed. It never
+    // throws, so a hiccup here cannot make the caller reinterpret the already-durable write as failed; clearing an
+    // already-clear fault is a no-op.
+    private void ClearLiveProjectionFault()
+    {
+        _projectionFault = null;
+        try
+        {
+            _host?.ClearFaultForRebuild();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[{ProjectorName}] Live fault clear after a durable reset raised; the persisted reset already committed.", GetProjectorName());
+        }
+
+        _liveLastPosition = null;
     }
 
     /// <summary>Re-establishes a persisted fault into the freshly-activated host so the first query fails closed.</summary>

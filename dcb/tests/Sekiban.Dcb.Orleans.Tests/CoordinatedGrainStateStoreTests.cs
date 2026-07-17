@@ -160,32 +160,41 @@ public class CoordinatedGrainStateStoreTests
     }
 
     [Fact]
-    public async Task OnCommitted_runs_after_publish_on_success_and_never_on_failure()
+    public async Task Failed_operator_reset_write_does_not_advance_committed_state_so_a_caller_skips_its_live_clear()
     {
         var fake = new RecordingPersistentState();
         var store = NewStore(fake);
 
-        // Success: the continuation runs, and by the time it runs the committed view already reflects the new candidate.
-        string? seenAtCommit = null;
-        var outcome = await store.ExecuteWriteAsync(
-            GrainStateWriteKind.OperatorReset,
-            s => s.ProjectorName = "rebuilt",
-            onCommitted: () => seenAtCommit = store.Committed.ProjectorName);
-        Assert.Equal(GrainStateWriteOutcome.Committed, outcome);
-        Assert.Equal("rebuilt", seenAtCommit);
-        Assert.Equal("rebuilt", store.Committed.ProjectorName);
+        // Seed a committed fault (as a faulted grain would have).
+        await store.ExecuteWriteAsync(GrainStateWriteKind.FaultDescriptor, s =>
+        {
+            s.FaultEventId = "e1";
+            s.FaultMessage = "fault";
+        });
 
-        // Failure: the continuation must NOT run (so a live side effect is never applied without a durable commit), and
-        // the committed state is unchanged.
-        var ran = false;
+        // A reset whose durable write fails: it THROWS, so a caller awaiting it never reaches its post-await live clear.
         fake.FailNextWrite = true;
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            store.ExecuteWriteAsync(
-                GrainStateWriteKind.OperatorReset,
-                s => s.ProjectorName = "should-not-commit",
-                onCommitted: () => ran = true));
-        Assert.False(ran);
-        Assert.Equal("rebuilt", store.Committed.ProjectorName);
+            store.ExecuteWriteAsync(GrainStateWriteKind.OperatorReset, s =>
+            {
+                s.FaultEventId = null;
+                s.FaultMessage = null;
+            }));
+
+        // The committed descriptor is unchanged — the failed reset did not clear it.
+        Assert.Equal("e1", store.Committed.FaultEventId);
+        Assert.Equal("fault", store.Committed.FaultMessage);
+
+        // A later successful reset does clear the committed descriptor (and only then would a caller clear live state).
+        Assert.Equal(
+            GrainStateWriteOutcome.Committed,
+            await store.ExecuteWriteAsync(GrainStateWriteKind.OperatorReset, s =>
+            {
+                s.FaultEventId = null;
+                s.FaultMessage = null;
+            }));
+        Assert.Null(store.Committed.FaultEventId);
+        Assert.Null(store.Committed.FaultMessage);
     }
 
     [Fact]

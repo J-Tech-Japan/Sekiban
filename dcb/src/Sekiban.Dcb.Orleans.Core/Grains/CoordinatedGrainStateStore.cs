@@ -82,11 +82,11 @@ internal sealed record MultiProjectionGrainStateSnapshot(
 ///     escapes and cannot be reached by a downcast.
 ///     Writes are copy-on-write under a single-writer gate: a write clones the last committed state, applies its
 ///     mutation to the CANDIDATE, writes the candidate, and publishes it as the committed state only after a successful
-///     <c>WriteStateAsync</c>. An optional <c>onCommitted</c> continuation runs only after that publish, so a caller's
-///     live side effects (e.g. clearing the live actor fault) never happen before the persisted state commits. If the
-///     write fails, the candidate is discarded, the committed state (and provider payload) is restored, and
-///     <c>onCommitted</c> is NOT invoked. A <see cref="GrainStateWriteKind.Checkpoint" /> is rejected when a fault
-///     exists on the committed state OR live on the actor (fault persistence may be retrying).
+///     <c>WriteStateAsync</c>. If the write fails, the candidate is discarded and the committed state (and provider
+///     payload) is restored. The store's responsibility ends at a durable commit-or-rollback; a caller that needs to
+///     apply a live side effect (e.g. clearing the live actor fault) does so AFTER awaiting a successful write, so
+///     control never reaches the side effect when the durable write throws. A <see cref="GrainStateWriteKind.Checkpoint" />
+///     is rejected when a fault exists on the committed state OR live on the actor (fault persistence may be retrying).
 /// </summary>
 internal sealed class CoordinatedGrainStateStore
 {
@@ -123,13 +123,13 @@ internal sealed class CoordinatedGrainStateStore
 
     /// <summary>
     ///     Applies <paramref name="mutate" /> to a CLONE of the committed state and writes it under the single-writer
-    ///     gate, publishing the clone as committed only on success and then running <paramref name="onCommitted" />. A
-    ///     <see cref="GrainStateWriteKind.Checkpoint" /> is rejected (no write) when the projection is faulted.
+    ///     gate, publishing the clone as committed only on success. A <see cref="GrainStateWriteKind.Checkpoint" /> is
+    ///     rejected (no write) when the projection is faulted. On a write failure the candidate is discarded and the
+    ///     committed state is restored, and the exception propagates — the caller's post-await code does not run.
     /// </summary>
     public async Task<GrainStateWriteOutcome> ExecuteWriteAsync(
         GrainStateWriteKind kind,
-        Action<MultiProjectionGrainState> mutate,
-        Action? onCommitted = null)
+        Action<MultiProjectionGrainState> mutate)
     {
         ArgumentNullException.ThrowIfNull(mutate);
         await _gate.WaitAsync();
@@ -151,15 +151,14 @@ internal sealed class CoordinatedGrainStateStore
             }
             catch
             {
-                // Roll back: the failed candidate must never be visible, and onCommitted must not run. Restore the
-                // provider buffer to the committed state; _committed/_committedSnapshot are left untouched.
+                // Roll back: the failed candidate must never be visible. Restore the provider buffer to the committed
+                // state; _committed/_committedSnapshot are left untouched.
                 _state.State = _committed;
                 throw;
             }
 
             _committed = candidate; // publish only after a successful commit
             _committedSnapshot = MultiProjectionGrainStateSnapshot.From(candidate);
-            onCommitted?.Invoke(); // after-success continuation: safe to apply live side effects now
             return GrainStateWriteOutcome.Committed;
         }
         finally
