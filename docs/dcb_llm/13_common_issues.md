@@ -221,6 +221,49 @@ That is data loss, everywhere except a test. See [Storage providers](11_storage_
 
 For identifiers and other members that must be present, declare them `required` (C#) or `[JsonRequired]` — a missing required member then fails through the same descriptive exception, which is the only safe way to enforce presence (blanket null-checking would reject legitimately-default values).
 
+## A query returns empty, but the events are there and durable (#1075)
+
+**Symptoms**: a list query returns zero rows, or a projection reads as unpopulated, yet the events plainly exist in the store. No exception, no error — just "no data". Often paired with #1074: a payload that cannot be folded produces exactly this silence.
+
+**Cause**: a projection could not apply one of its events — a fold that threw, or a payload that would not deserialize — and the failure was swallowed. The projection stopped advancing at the poison event and presented whatever it had built so far (often nothing) as a *successful* empty result. "Durable events exist but cannot be projected" was masked as "there is no data", which is the most expensive kind of failure to notice.
+
+**Fixed in 10.4.0** (SEK-G14). A projection that cannot fold an event now **faults**, and a fault fails queries with context instead of answering empty:
+
+- The in-memory replay no longer swallows: a failed read or a failed fold surfaces as an error from the executor's normal `ResultBox`/exception boundary.
+- An Orleans multi-projection records a **confirmed fault** — event id, type, projector, position — and every query surface (state, scalar, list) fails with that context while the fault is unresolved. The fault is persisted, so a freshly-activated grain re-establishes it before answering the first query rather than briefly reporting empty.
+- **Ordinary catch-up lag is not a fault.** A projection that is simply behind still answers queries; only a projection that has *crashed* on an event fails them.
+
+### The fault-vs-lag contract
+
+| situation | query behavior |
+|---|---|
+| healthy, caught up | succeeds |
+| healthy, still catching up (lag) | succeeds (partial/current state) |
+| **faulted** (an event could not be folded) | **fails with fault context** — event id, type, projector, position; never a payload value |
+
+**What to do when a query fails with a projection fault**:
+
+1. The message names the event, the projector and the position. Find that event.
+2. If it is a casing/deserialization problem, it is #1074 — fix the producer, or read the row with the `CaseInsensitiveLegacy` deserialization policy while you migrate.
+3. If the projector's fold logic is at fault, fix the projector.
+4. Once the cause is resolved, **rebuild the projection** with the operator reset below. A fault clears only by a deterministic rebuild that successfully replays the same position — an unrelated later event never clears it. If the poison is still there, the rebuild simply faults again at the same event.
+
+Poison-event skip/quarantine is deliberately **not** a default: a projection silently skipping events it cannot apply is a return to the same class of silence. It may arrive later as an explicit, opt-in policy.
+
+### Operator reset: `ResetProjectionFaultAsync` (admin-plane, operator-only)
+
+Clearing a persisted projection fault is an **operator-only** action on the grain admin interface (`IMultiProjectionGrain`, alongside `GetStatusAsync`). It is **never invoked automatically** and is **not** exposed through `ISekibanExecutor` — application/query code cannot trigger it.
+
+- **Acquire the token first.** The reset requires the *exact* current fault identity — projector name, fault event id, and fault stream position — as a concurrency token. Read it from the fault context surfaced on a failed query (the projection-fault error carries event id, type, projector and position). Do not synthesise it.
+- **The persisted descriptor is the authority.** The token is compared against the current *persisted* fault inside the single-writer gate. A stale token, a descriptor changed by a concurrent write, a wrong projector, or no fault present is rejected with a normal error and **no write and no fault clear**. A same-token race commits at most once.
+- **Derived state is rebuilt.** A correct token durably clears the descriptor **and** the derived projection checkpoint, so the projection **rebuilds from the beginning** by catch-up. This does not delete any authoritative events — only the grain's derived snapshot/checkpoint. The first-query barrier prevents any early "healthy" answer before the rebuild reaches the head.
+- **The clear is earned, not assumed.** Only after the durable clear commits is the live actor fault cleared and a fresh activation requested. If the poison still cannot be folded, the per-event boundary **re-establishes and re-persists** the fault on rebuild — the reset never skips or quarantines. A permanent clear happens only when the same position replays successfully.
+- **Partial-failure semantics (two stores).** The reset touches two derived stores — the grain state (the descriptor) and the external snapshot store — in this order, under the single-writer gate: validate the token, then invalidate the external snapshot, then durably clear the descriptor. It is **not** a single atomic transaction, so:
+  - If the **external invalidation fails**, the descriptor clear is skipped: descriptor, live fault and the external snapshot are all retained — nothing changed. Retry the same token once the store recovers.
+  - If the external invalidation **succeeds but the descriptor clear fails**, the external snapshot is already gone but the descriptor and live fault are retained, so every query stays rejected (fail-closed). This is coherent: a later rebuild regenerates the snapshot, and the retained descriptor keeps the projection rejecting queries until you retry the same token, which then completes the clear. A deleted-but-not-yet-regenerated snapshot is harmless — it is derived-only, and no authoritative events are ever deleted.
+  - No **in-flight upsert can race the delete**: **every** external snapshot mutation goes through one activation-local coordinator — all three upsert paths (normal persist, streaming persist, version rewrite) **and every delete**, including the public `DeleteExternalStateAsync` admin call and the reset's own invalidation. No direct-to-store bypass remains. So the delete waits for any parked/in-flight upsert to finish before it deletes, and no upsert runs concurrently with it. On top of that, the coordinator **rejects any upsert while a live or committed fault exists**, so a faulted projection persists no derived state and no stale upsert can recreate what the reset removes. Catch-up runs on an interleaving grain timer, so this coordinator — not just non-reentrancy — is what makes the ordering hold. (A durable epoch/tombstone would only be needed for a hypothetical multi-writer or cross-silo persister, which the current model does not have.)
+  - The fault rejection is an **explicit failure, not a silent success**: a blocked upsert returns a `ResultBox.Error` carrying a stable `ExternalPersistenceBlockedByFaultException`, never a success carrying `false`. This matters because callers that inspect only `IsSuccess` would otherwise mistake a rejection for a completed save — so normal and streaming persistence never report "saved" or advance any persisted metadata after a rejection, and a version rewrite keeps `updated = false` and performs no projector-version write.
+
 ## Serialization Exceptions
 
 **Symptoms**: `JsonException` during event replay or API responses.

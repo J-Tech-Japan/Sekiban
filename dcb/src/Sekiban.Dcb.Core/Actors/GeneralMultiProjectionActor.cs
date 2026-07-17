@@ -4,6 +4,7 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
 using Sekiban.Dcb.Snapshots;
@@ -35,6 +36,14 @@ public class GeneralMultiProjectionActor
     private string _unsafeLastSortableUniqueId = string.Empty;
     private int _unsafeVersion;
 
+    // Set the instant a per-event fold throws, and never cleared by a later apply. A faulted projection has stopped
+    // at a poison event; presenting its pre-crash state as a successful query is the silence issue #1075 was about.
+    // While it is set, applies are rejected (so a catch-up retry cannot re-apply the events before the poison and
+    // double-count them) and every read surface fails with the fault context. It clears only when the projection is
+    // rebuilt from scratch — a fresh actor, or an explicit ClearFaultForRebuild — never on an unrelated success,
+    // because while faulted there are no successes to be had.
+    private ProjectionFaultDescriptor? _fault;
+
     // Dynamic SafeWindow tracking (observed stream lag)
     private double _observedLagMs; // EMA of observed lag in ms
     private DateTime _lastLagUpdateUtc = DateTime.MinValue;
@@ -57,6 +66,8 @@ public class GeneralMultiProjectionActor
 
     public async Task AddEventsAsync(IReadOnlyList<Event> events, bool finishedCatchUp = true, EventSource source = EventSource.Unknown)
     {
+        ThrowIfFaulted();
+
         // Initialize projectors if needed
         InitializeProjectorsIfNeeded();
 
@@ -85,24 +96,37 @@ public class GeneralMultiProjectionActor
 
     public async Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
     {
+        ThrowIfFaulted();
         InitializeProjectorsIfNeeded();
         _isCatchedUp = finishedCatchUp;
 
         var safeWindowThreshold = GetSafeWindowThreshold();
         foreach (var se in EnumerateOrderedDistinctSerializableEvents(events))
         {
-            var payload
-                = _domain.EventTypes.DeserializeEventPayload(
+            Event ev;
+            try
+            {
+                var payload
+                    = _domain.EventTypes.DeserializeEventPayload(
+                        se.EventPayloadName,
+                        Encoding.UTF8.GetString(se.Payload)) ??
+                    throw new InvalidOperationException($"Unknown event type: {se.EventPayloadName}");
+                ev = new Event(
+                    payload,
+                    se.SortableUniqueIdValue,
                     se.EventPayloadName,
-                    Encoding.UTF8.GetString(se.Payload)) ??
-                throw new InvalidOperationException($"Unknown event type: {se.EventPayloadName}");
-            var ev = new Event(
-                payload,
-                se.SortableUniqueIdValue,
-                se.EventPayloadName,
-                se.Id,
-                se.EventMetadata,
-                se.Tags);
+                    se.Id,
+                    se.EventMetadata,
+                    se.Tags);
+            }
+            catch (Exception ex)
+            {
+                // The deserialize boundary is authoritative too: a payload that cannot be turned into an event
+                // (the issue #1074 casing failure among them) faults the projection at the event it choked on, with
+                // the same "point at the poison, rethrow the original" rule the fold uses.
+                CaptureSerializableFaultAndRethrow(se, ex);
+                throw; // unreachable: CaptureSerializableFaultAndRethrow always throws.
+            }
 
             ApplyEventToSingleState(ev, safeWindowThreshold);
         }
@@ -110,11 +134,55 @@ public class GeneralMultiProjectionActor
         await Task.CompletedTask;
     }
 
+    /// <summary>The fold fault this projection is stuck on, or null when it is healthy or merely catching up.</summary>
+    public ProjectionFaultDescriptor? CurrentFault => _fault;
+
+    /// <summary>True when a per-event fold has failed and the projection has not been rebuilt since.</summary>
+    public bool IsFaulted => _fault is not null;
+
+    /// <summary>
+    ///     Re-establishes a fault that was persisted across a restart, so a freshly-activated grain cannot answer a
+    ///     query successfully before its known fault has been re-established.
+    /// </summary>
+    public void RestoreFault(ProjectionFaultDescriptor fault) => _fault = fault;
+
+    /// <summary>
+    ///     Clears the fault for a deliberate rebuild. The caller is responsible for replaying from a clean state; if
+    ///     the same poison event is reached again the fault simply re-establishes. This is the ONLY way a fault clears
+    ///     short of constructing a new actor — an ordinary successful apply never clears it, because a faulted
+    ///     projection rejects applies.
+    /// </summary>
+    public void ClearFaultForRebuild() => _fault = null;
+
     public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
     {
+        // A faulted projection has no trustworthy state to return. Every read surface — state, and through it the
+        // scalar and list query surfaces that all fetch state here first — fails with the fault context instead of
+        // handing back the last pre-crash payload as a success.
+        if (_fault is not null)
+        {
+            return Task.FromResult(ResultBox.Error<MultiProjectionState>(CreateFaultException(_fault)));
+        }
+
         InitializeProjectorsIfNeeded();
 
         return GetStateFromSingleAccessorAsync(canGetUnsafeState);
+    }
+
+    private static SekibanProjectionFaultException CreateFaultException(ProjectionFaultDescriptor fault)
+    {
+        var exception = new SekibanProjectionFaultException(fault);
+        fault.Annotate(exception);
+        return exception;
+    }
+
+    /// <summary>Rejects an apply on a faulted projection, so a catch-up retry cannot re-run the pre-poison events.</summary>
+    private void ThrowIfFaulted()
+    {
+        if (_fault is not null)
+        {
+            throw CreateFaultException(_fault);
+        }
     }
 
     public async Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync()
@@ -658,10 +726,7 @@ public class GeneralMultiProjectionActor
             }
             catch (Exception ex)
             {
-                var innerEx = ex.InnerException ?? ex;
-                throw new InvalidOperationException(
-                    $"Failed to process event {ev.Id} ({ev.EventType}) in projector {_projectorName}: {innerEx.Message}",
-                    innerEx);
+                CaptureFaultAndRethrow(ev, ex);
             }
 
             // The accessor may return 'this' (same instance) or a new instance
@@ -708,12 +773,49 @@ public class GeneralMultiProjectionActor
             }
             catch (Exception ex)
             {
-                var innerEx = ex.InnerException ?? ex;
-                throw new InvalidOperationException(
-                    $"Failed to process event {ev.Id} ({ev.EventType}) in projector {_projectorName}: {innerEx.Message}",
-                    innerEx);
+                CaptureFaultAndRethrow(ev, ex);
             }
         }
+    }
+
+    /// <summary>
+    ///     The one place a projection fault is born: the per-event fold boundary, where the poison event can be named.
+    ///     The event's identity and position are captured from <paramref name="ev" /> — BEFORE any tracking field
+    ///     advanced, because the fold threw — so the descriptor points at the event that could not be folded, not at
+    ///     wherever execution went next. The ORIGINAL exception instance is rethrown, never re-wrapped, carrying the
+    ///     fault's identifiers on its Data (SEK-G9's boundaries then read them like any other annotated failure).
+    /// </summary>
+    private void CaptureFaultAndRethrow(Event ev, Exception ex)
+    {
+        var original = ex.InnerException ?? ex;
+
+        _fault ??= new ProjectionFaultDescriptor(
+            ev.Id,
+            ev.EventType,
+            _projectorName,
+            ev.SortableUniqueIdValue,
+            original.Message,
+            DateTime.UtcNow.Ticks);
+
+        _fault.Annotate(original);
+        ExceptionDispatchInfo.Capture(original).Throw();
+    }
+
+    /// <summary>The deserialize-boundary counterpart of <see cref="CaptureFaultAndRethrow" />, before an Event exists.</summary>
+    private void CaptureSerializableFaultAndRethrow(SerializableEvent se, Exception ex)
+    {
+        var original = ex.InnerException ?? ex;
+
+        _fault ??= new ProjectionFaultDescriptor(
+            se.Id,
+            se.EventPayloadName,
+            _projectorName,
+            se.SortableUniqueIdValue,
+            original.Message,
+            DateTime.UtcNow.Ticks);
+
+        _fault.Annotate(original);
+        ExceptionDispatchInfo.Capture(original).Throw();
     }
 
     private static IEnumerable<SerializableEvent> EnumerateOrderedDistinctSerializableEvents(

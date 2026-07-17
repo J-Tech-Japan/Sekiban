@@ -30,6 +30,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj"/>
+        <ProjectReference Include="..\Sekiban.Dcb.TestSupport\Sekiban.Dcb.TestSupport.csproj" />
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core.Testing\Sekiban.Dcb.Core.Testing.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult.Testing\Sekiban.Dcb.WithoutResult.Testing.csproj" />

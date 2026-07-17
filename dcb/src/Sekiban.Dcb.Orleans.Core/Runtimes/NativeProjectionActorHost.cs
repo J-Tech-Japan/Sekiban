@@ -51,6 +51,12 @@ public class NativeProjectionActorHost : IProjectionActorHost
             serviceProvider.GetService<ISnapshotPayloadBufferProvider>());
     }
 
+    public Sekiban.Dcb.Actors.ProjectionFaultDescriptor? CurrentFault => _actor.CurrentFault;
+
+    public void RestoreFault(Sekiban.Dcb.Actors.ProjectionFaultDescriptor fault) => _actor.RestoreFault(fault);
+
+    public void ClearFaultForRebuild() => _actor.ClearFaultForRebuild();
+
     public Task AddSerializableEventsAsync(
         IReadOnlyList<SerializableEvent> events,
         bool finishedCatchUp = true)

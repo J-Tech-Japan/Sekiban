@@ -30,6 +30,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Friend access for the Orleans test project to drive internal coordination components directly. -->
+        <InternalsVisibleTo Include="Sekiban.Dcb.Orleans.Tests"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.1" />
         <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
