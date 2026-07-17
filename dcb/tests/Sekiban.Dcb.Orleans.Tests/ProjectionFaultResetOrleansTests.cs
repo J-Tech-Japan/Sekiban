@@ -464,6 +464,184 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
     }
 
+    // Genuinely persist a well-formed descriptor (the grain is already faulted), then deactivate, wait for the
+    // deactivation write to LAND (deterministic via WriteCount — OnDeactivateAsync persists the live descriptor on the
+    // way out, so the corruption must land after it or it is silently overwritten), corrupt the PERSISTED descriptor in
+    // place, set the poison policy for the coming restore, and hand back a fresh grain reference whose activation will
+    // read the corrupted descriptor. Only test-owned grain storage is touched — no production seam.
+    private async Task<IMultiProjectionGrain> CorruptPersistedDescriptorAndReactivateAsync(
+        IMultiProjectionGrain grain,
+        Action<MultiProjectionGrainState> corrupt,
+        bool poisonActiveOnRestore)
+    {
+        var writesBeforeDeactivate = TogglableGrainStorage.WriteCount;
+        await grain.RequestDeactivationAsync();
+        await PollUntilAsync(() => Task.FromResult(TogglableGrainStorage.WriteCount > writesBeforeDeactivate));
+        Assert.True(TogglableGrainStorage.TryMutatePersistedState(corrupt));
+        PoisonActive = poisonActiveOnRestore;
+        return Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
+    }
+
+    // A) Persisted-side (not request-side) malformed descriptor for the two fields that CAN be corrupted while the
+    // projection stays faulted: the persisted field is genuinely restored on reactivation, then a well-formed reset
+    // token is rejected because the PERSISTED field fails the guard. field: 0 = persisted ProjectorName, 1 = persisted
+    // FaultPosition. FaultEventId is excluded on purpose — a null/empty persisted FaultEventId restores NO live fault,
+    // so it cannot produce a still-faulted projection (see PersistedFaultEventId_* evidence tests below).
+    [Theory]
+    [InlineData(0, false)] // persisted ProjectorName = ""
+    [InlineData(0, true)]  // persisted ProjectorName = null
+    [InlineData(1, false)] // persisted FaultPosition = ""
+    [InlineData(1, true)]  // persisted FaultPosition = null
+    public async Task MalformedPersistedDescriptorField_ResetRejected_NoEffect_QueriesStillFaulted(int field, bool useNull)
+    {
+        var (grain, token, _) = await FaultAndTokenAsync(9_500 + field * 10 + (useNull ? 1 : 0));
+        await InjectExternalSnapshotAsync("000000000000000950000000000000");
+
+        // Benign poison so the corruption survives: the live fault still re-establishes from the intact FaultEventId
+        // (queries keep failing), but a faulted projection makes no persist progress, so nothing overwrites the field.
+        var malformed = useNull ? null : string.Empty;
+        var reactivated = await CorruptPersistedDescriptorAndReactivateAsync(
+            grain,
+            s =>
+            {
+                if (field == 0)
+                {
+                    s.ProjectorName = malformed!;
+                }
+                else
+                {
+                    s.FaultPosition = malformed;
+                }
+            },
+            poisonActiveOnRestore: false);
+        await PollUntilAsync(async () => !(await reactivated.GetSnapshotJsonAsync()).IsSuccess); // faulted
+
+        var upsertsBefore = StateStore.UpsertCount;
+        var writesBefore = TogglableGrainStorage.WriteCount;
+        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue;
+
+        // The well-formed token cannot match a descriptor whose persisted field is null/empty.
+        var reset = await reactivated.ResetProjectionFaultAsync(token);
+
+        Assert.False(reset.IsSuccess);                                                            // rejected
+        Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);                             // zero grain/provider write, zero version change
+        Assert.Equal(upsertsBefore, StateStore.UpsertCount);                                      // zero external upsert
+        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue); // zero external delete (snapshot retained)
+        // No live clear / no deactivation: state, scalar and list all continue to fail closed.
+        Assert.False((await reactivated.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await _executor.QueryAsync(new ResetCountQuery())).IsSuccess);
+        Assert.False((await _executor.QueryAsync(new ResetRowListQuery())).IsSuccess);
+    }
+
+    // B-evidence (benign poison): a null/empty persisted FaultEventId does NOT restore a live fault, because
+    // RestoreProjectionFaultIfPersisted needs a PARSEABLE Guid. With the poison benign, the fresh activation therefore
+    // comes up HEALTHY — documenting that "malformed persisted FaultEventId + still faulted" is unreachable on this path.
+    [Theory]
+    [InlineData(false)] // persisted FaultEventId = ""
+    [InlineData(true)]  // persisted FaultEventId = null
+    public async Task PersistedFaultEventId_MalformedWithBenignPoison_RestoresNoLiveFault_ProjectionHealthy(bool useNull)
+    {
+        var (grain, _, _) = await FaultAndTokenAsync(9_700 + (useNull ? 1 : 0));
+        var malformed = useNull ? null : string.Empty;
+
+        var reactivated = await CorruptPersistedDescriptorAndReactivateAsync(
+            grain,
+            s => s.FaultEventId = malformed,
+            poisonActiveOnRestore: false);
+
+        // No parseable FaultEventId -> no live fault restored -> healthy (the first-query barrier folds the now-benign
+        // poison successfully). Queries succeed; there is no faulted state a reset could be issued against.
+        await PollUntilAsync(async () => (await reactivated.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.True((await _executor.QueryAsync(new ResetCountQuery())).IsSuccess);
+    }
+
+    // B-evidence (active poison): with the same malformed persisted FaultEventId but the poison STILL active, the fresh
+    // activation restores no fault, so the first-query barrier re-folds the poison and re-establishes a fresh WELL-FORMED
+    // live fault (self-heal). Queries fail closed, and once that valid fault is persisted the original well-formed token
+    // resets it — so the malformed FaultEventId never becomes a stuck, unresettable descriptor.
+    [Theory]
+    [InlineData(false)] // persisted FaultEventId = ""
+    [InlineData(true)]  // persisted FaultEventId = null
+    public async Task PersistedFaultEventId_MalformedWithActivePoison_FirstQuerySelfHealsToValidLiveFault(bool useNull)
+    {
+        var (grain, token, _) = await FaultAndTokenAsync(9_720 + (useNull ? 1 : 0));
+        var malformed = useNull ? null : string.Empty;
+
+        var reactivated = await CorruptPersistedDescriptorAndReactivateAsync(
+            grain,
+            s => s.FaultEventId = malformed,
+            poisonActiveOnRestore: true);
+
+        // Barrier re-folds the still-active poison -> re-faulted with a fresh valid live fault.
+        await PollUntilAsync(async () => !(await reactivated.GetSnapshotJsonAsync()).IsSuccess);
+
+        // Persist that valid live fault (OnDeactivateAsync writes it) so the descriptor is self-healed to a valid one,
+        // then the original well-formed token resets it — the malformed FaultEventId is gone.
+        var writesBeforeDeactivate = TogglableGrainStorage.WriteCount;
+        await reactivated.RequestDeactivationAsync();
+        await PollUntilAsync(() => Task.FromResult(TogglableGrainStorage.WriteCount > writesBeforeDeactivate));
+        var healed = Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
+        await PollUntilAsync(async () => !(await healed.GetSnapshotJsonAsync()).IsSuccess);
+
+        Assert.True((await healed.ResetProjectionFaultAsync(token)).IsSuccess);
+    }
+
+    // C) Both-empty FALSE-MATCH: this is the scenario the non-empty guards actually protect against. Corrupt persisted
+    // field X to "" AND send a token whose field X is also "" (other fields well-formed and matching). The reset must be
+    // rejected; removing the PAIRED request+committed non-empty checks for X would let string.Equals("","") spuriously
+    // match and reset. field: 0 = ProjectorName, 1 = FaultEventId, 2 = FaultPosition. Asserts zero delete/write/live.
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task BothEmptyTokenAndPersistedField_ResetRejected_NoFalseMatch(int field)
+    {
+        var (grain, token, _) = await FaultAndTokenAsync(9_800 + field);
+        await InjectExternalSnapshotAsync("000000000000000980000000000000");
+
+        // Corrupt only field X to "". For field 1 (FaultEventId) this also means no live fault is restored (healthy),
+        // but the persisted empty identity must still never be matched by an empty token.
+        var reactivated = await CorruptPersistedDescriptorAndReactivateAsync(
+            grain,
+            s =>
+            {
+                if (field == 0)
+                {
+                    s.ProjectorName = string.Empty;
+                }
+                else if (field == 1)
+                {
+                    s.FaultEventId = string.Empty;
+                }
+                else
+                {
+                    s.FaultPosition = string.Empty;
+                }
+            },
+            poisonActiveOnRestore: false);
+        // Trigger the activation (faulted for field 0/2, healthy for field 1) before probing.
+        await reactivated.GetSnapshotJsonAsync();
+
+        // Token that mirrors the empty persisted field X, with the other two fields well-formed and matching.
+        var emptyToken = field switch
+        {
+            0 => new ResetProjectionFaultRequest(string.Empty, token.FaultEventId, token.FaultPosition),
+            1 => new ResetProjectionFaultRequest(token.ProjectorName, string.Empty, token.FaultPosition),
+            _ => new ResetProjectionFaultRequest(token.ProjectorName, token.FaultEventId, string.Empty)
+        };
+
+        var upsertsBefore = StateStore.UpsertCount;
+        var writesBefore = TogglableGrainStorage.WriteCount;
+        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue;
+
+        var reset = await reactivated.ResetProjectionFaultAsync(emptyToken);
+
+        Assert.False(reset.IsSuccess);                                                            // no empty-identity false match
+        Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);                             // zero grain/provider write
+        Assert.Equal(upsertsBefore, StateStore.UpsertCount);                                      // zero external upsert
+        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue); // zero external delete
+    }
+
     private sealed class SiloConfigurator : ISiloConfigurator
     {
         public void Configure(ISiloBuilder siloBuilder)
@@ -593,6 +771,26 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             }
 
             return Task.CompletedTask;
+        }
+
+        // Test-only seam: corrupt the already-persisted grain state in place, so a subsequent reactivation genuinely
+        // RESTORES a malformed fault descriptor (this models a persisted-side corruption, not a request-side one).
+        // Returns false when no MultiProjectionGrainState has been persisted yet.
+        public static bool TryMutatePersistedState(Action<MultiProjectionGrainState> mutate)
+        {
+            lock (Sync)
+            {
+                foreach (var value in Store.Values)
+                {
+                    if (value is MultiProjectionGrainState state)
+                    {
+                        mutate(state);
+                        return true;
+                    }
+                }
+
+                return false;
+            }
         }
     }
 
