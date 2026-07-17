@@ -17,6 +17,7 @@ using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using Xunit;
@@ -91,6 +92,29 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
             [],
             nameof(ResetTriggerEvent));
+
+    private static async Task InjectExternalSnapshotAsync(string position)
+    {
+        var request = new MultiProjectionStateWriteRequest(
+            ResettableProjector.MultiProjectorName,
+            ResettableProjector.MultiProjectorVersion,
+            nameof(ResettableProjector),
+            position,
+            EventsProcessed: 1,
+            IsOffloaded: false,
+            OffloadKey: null,
+            OffloadProvider: null,
+            OriginalSizeBytes: 4,
+            CompressedSizeBytes: 4,
+            SafeWindowThreshold: position,
+            CreatedAt: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            UpdatedAt: new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            BuildSource: "test",
+            BuildHost: null);
+        using var payload = new MemoryStream(new byte[] { 1, 2, 3, 4 });
+        var result = await SharedStateStore.UpsertFromStreamAsync(request, payload, 1_000_000);
+        Assert.True(result.IsSuccess);
+    }
 
     private static async Task PollUntilAsync(Func<Task<bool>> condition)
     {
@@ -249,30 +273,20 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     [Fact]
     public async Task Reset_InvalidatesExternalSnapshot_FreshActivationCannotRestorePrePoison()
     {
-        // A healthy event is folded and a derived snapshot persisted to the external store (pre-poison), then a poison
-        // event faults the projection.
-        var healthy = Event(poison: false, tick: 6_000, Guid.CreateVersion7());
-        var poison = Event(poison: true, tick: 6_001, Guid.CreateVersion7());
-        var grain = Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
-        await grain.SeedEventsAsync(new List<SerializableEvent> { healthy });
-        await grain.RefreshAsync();
-        Assert.True((await grain.PersistStateAsync()).IsSuccess); // pre-poison external snapshot persisted
+        // Fault the projection (descriptor durably persisted). A derived EXTERNAL snapshot for this projector/version
+        // also exists — as a real deployment would have persisted a pre-poison snapshot before the poison arrived.
+        var (grain, token, _) = await FaultAndTokenAsync(6_000);
+        await InjectExternalSnapshotAsync("000000000000000500000000000000");
         Assert.True((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
 
-        // Seed the poison and reactivate: a fresh activation restores the pre-poison external snapshot, catches up to
-        // the poison, faults and durably PERSISTS the descriptor (the concurrency authority the reset validates).
-        await grain.SeedEventsAsync(new List<SerializableEvent> { poison });
-        var faulted = await ReactivateAsync(grain, async g => !(await g.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.True((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
 
-        var token = new ResetProjectionFaultRequest(ResettableProjector.MultiProjectorName, poison.Id.ToString(), poison.SortableUniqueIdValue);
-        Assert.True((await faulted.ResetProjectionFaultAsync(token)).IsSuccess);
-
-        // The pre-poison external snapshot is invalidated — a fresh activation cannot restore it.
+        // The external snapshot is invalidated by the reset — a fresh activation cannot restore a pre-poison snapshot.
         Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
 
         // The in-activation rebuild re-encounters the still-poison event and re-faults immediately — it did NOT come up
         // healthy from a restored pre-poison snapshot (which is gone).
-        Assert.False((await faulted.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
     }
 
     private sealed class SiloConfigurator : ISiloConfigurator

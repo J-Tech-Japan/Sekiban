@@ -209,7 +209,7 @@ public class CoordinatedGrainStateStoreTests
         // The store owns exactly one IPersistentState field, and exposes NO member returning the mutable state — reads
         // escape only as the read-only view.
         var storeType = typeof(CoordinatedGrainStateStore);
-        Assert.Single(InstanceFields(storeType).Where(f => IsPersistentState(f.FieldType)));
+        Assert.Single(InstanceFields(storeType), f => IsPersistentState(f.FieldType));
 
         var members = storeType
             .GetMembers(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
