@@ -36,6 +36,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private const int SnapshotEnvelopeBase64ExpansionDenominator = 4;
     private const int SnapshotEnvelopeReservedOverheadBytes = 16 * 1024;
     private readonly IProjectionActorHostFactory _actorHostFactory;
+
+    // The merged actor options used to create the host on activation, retained so an operator reset can recreate a
+    // fresh host in-activation for a full rebuild without waiting for a deactivation cycle.
+    private GeneralMultiProjectionActorOptions? _mergedActorOptions;
     private readonly IEventStore _eventStore;
 
     // The grain does NOT retain the raw IPersistentState it is injected with: it hands it to this store in the
@@ -1822,6 +1826,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _largeSnapshotGcThresholdBytes = Math.Max(1_000_000, mergedOptions.LargeSnapshotGcThresholdBytes);
             _useStreamingSnapshotIO = mergedOptions.UseStreamingSnapshotIO;
 
+            _mergedActorOptions = mergedOptions; // retained so an operator reset can recreate a fresh host in-activation
+
             _host = _actorHostFactory.Create(
                 projectorName,
                 mergedOptions,
@@ -2170,30 +2176,28 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return ResultBox.Error<bool>(new InvalidOperationException("Projection host not initialized"));
         }
 
-        // The projector name identifies the grain; the fault event id + position are validated against the persisted
-        // descriptor inside the store gate. A wrong projector never matches this grain.
-        if (!string.Equals(request.ProjectorName, GetProjectorName(), StringComparison.Ordinal))
-        {
-            return ResultBox.Error<bool>(new InvalidOperationException(
-                "Projection fault reset rejected: projector name does not match this projection."));
-        }
-
         GrainStateWriteOutcome outcome;
         try
         {
-            // The persisted descriptor is the concurrency authority: validate the token AND clear the descriptor +
-            // derived checkpoint atomically under the single-writer gate (copy-on-write). A stale token, a descriptor
-            // changed by a concurrent write, or an already-cleared fault fails the guard with no write.
+            // ONE atomic precondition inside the single-writer gate: projector name + fault event id + fault position
+            // must all match the CURRENT persisted descriptor (the concurrency authority). A mismatch or missing value
+            // in ANY field fails the guard with zero mutation, zero provider write, zero external delete, zero live
+            // clear. On a match, still inside the gate, the derived EXTERNAL snapshot is invalidated (beforeWrite) so a
+            // fresh activation cannot restore a pre-poison snapshot, then the descriptor + derived checkpoint are
+            // durably cleared copy-on-write. A same-token race serialises: the first commits and clears the descriptor,
+            // so the second's guard no longer matches and it does nothing.
             outcome = await _stateStore.ExecuteGuardedWriteAsync(
                 GrainStateWriteKind.OperatorReset,
                 committed => FaultTokenMatchesCommitted(committed, request),
-                ResetDerivedStateForFullRebuild);
+                ResetDerivedStateForFullRebuild,
+                beforeWrite: InvalidateExternalDerivedSnapshotAsync);
         }
         catch (Exception ex)
         {
-            // The persisted clear write failed: the committed descriptor is retained (rolled back) and the LIVE actor
-            // fault is untouched, so state/scalar/list queries stay rejected and fault-persist retry stays coherent.
-            _lastError = $"Projection fault reset failed to persist: {ex.Message}";
+            // The external-snapshot invalidation or the persisted clear write failed: the committed descriptor is
+            // retained (rolled back) and the LIVE actor fault is untouched, so state/scalar/list queries stay rejected
+            // and fault-persist retry stays coherent.
+            _lastError = $"Projection fault reset failed: {ex.Message}";
             return ResultBox.Error<bool>(ex);
         }
 
@@ -2201,22 +2205,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             return ResultBox.Error<bool>(new InvalidOperationException(
                 "Projection fault reset rejected: the request token does not match the current persisted fault "
-                + "(stale token, descriptor changed, or no fault present)."));
+                + "(wrong/missing projector, event id, or position; stale token; or no fault present)."));
         }
 
-        // Durable clear committed. Only now clear the LIVE actor fault and drop derived caches, then request a fresh
-        // activation so the rebuild runs on a clean actor: on reactivation no descriptor is restored, the first-query
-        // barrier catches up from the reset baseline, and if the poison remains the per-event boundary re-establishes
-        // and persists the fault again (reset never skips or quarantines). Permanent clear is earned only when the same
-        // position replays successfully.
+        // Durable clear committed (descriptor + derived checkpoint gone; external snapshot invalidated). Only now clear
+        // the LIVE actor fault and REBUILD in-activation: recreate a fresh host and re-arm the first-query barrier, so
+        // the very next query synchronously catches up from the beginning before it can answer — no early healthy
+        // window, no reliance on a deactivation cycle. If the poison remains, the per-event boundary re-establishes and
+        // persists the fault again on rebuild (reset never skips or quarantines); a permanent clear is earned only when
+        // the same position replays successfully.
         ClearLiveProjectionFault();
-        _eventsProcessed = 0;
-        ClearProcessedEventCache();
-        _unsafeEventIds.Clear();
-        _eventBuffer.Clear();
-        _pendingStreamEvents.Clear();
-        CompactRetainedCollections();
-        DeactivateOnIdle();
+        RecreateHostForFullRebuild();
         return ResultBox.FromValue(true);
     }
 
@@ -2224,8 +2223,49 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         IReadOnlyMultiProjectionGrainState committed,
         ResetProjectionFaultRequest request) =>
         committed.FaultEventId is not null &&
+        string.Equals(committed.ProjectorName, request.ProjectorName, StringComparison.Ordinal) &&
         string.Equals(committed.FaultEventId, request.FaultEventId, StringComparison.Ordinal) &&
         string.Equals(committed.FaultPosition ?? string.Empty, request.FaultPosition ?? string.Empty, StringComparison.Ordinal);
+
+    // Invalidates the derived EXTERNAL snapshot (Postgres/Cosmos IMultiProjectionStateStore) for the current projector +
+    // version, so a fresh activation cannot restore a pre-poison snapshot and the rebuild starts from the beginning.
+    // Derived-state only — this never deletes authoritative events. A no-op when no external store is configured.
+    private async Task InvalidateExternalDerivedSnapshotAsync()
+    {
+        if (_multiProjectionStateStore is null || _host is null)
+        {
+            return;
+        }
+
+        var deleteResult = await _multiProjectionStateStore.DeleteAsync(GetProjectorName(), _host.GetProjectorVersion());
+        if (!deleteResult.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                $"Failed to invalidate the external derived snapshot for a full rebuild: {deleteResult.GetException().Message}",
+                deleteResult.GetException());
+        }
+    }
+
+    // Recreates a fresh actor host in the current activation and re-arms the first-query barrier, so the next query
+    // rebuilds the projection from the beginning (external snapshot invalidated, checkpoint cleared). No deactivation
+    // cycle is required and no early healthy answer is possible before the barrier's synchronous catch-up.
+    private void RecreateHostForFullRebuild()
+    {
+        _eventsProcessed = 0;
+        ClearProcessedEventCache();
+        _unsafeEventIds.Clear();
+        _eventBuffer.Clear();
+        _pendingStreamEvents.Clear();
+        CompactRetainedCollections();
+        _liveLastPosition = null;
+        _projectionFault = null;
+        _catchUpTimer?.Dispose();
+        _catchUpTimer = null;
+        _catchUpProgress = new CatchUpProgress { IsActive = false };
+
+        _host = _actorHostFactory.Create(GetProjectorName(), _mergedActorOptions ?? DefaultActorOptions, _logger);
+        _firstQueryGate.Arm();
+    }
 
     // Clears the persisted fault descriptor AND the derived projection checkpoint on the candidate, so catch-up rebuilds
     // the projection from the beginning. Pure candidate mutation — no live actor side effect.
@@ -2572,6 +2612,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (state is null)
         {
             return;
+        }
+
+        // Persist the projector name alongside the fault fields, so the reset token's projector name can be validated
+        // against the persisted descriptor even when the fault is the first thing this grain ever persisted (no prior
+        // checkpoint set ProjectorName).
+        if (!string.IsNullOrEmpty(fault.ProjectorName))
+        {
+            state.ProjectorName = fault.ProjectorName;
         }
 
         state.FaultEventId = fault.EventId.ToString();

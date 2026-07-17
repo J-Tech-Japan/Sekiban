@@ -172,16 +172,20 @@ internal sealed class CoordinatedGrainStateStore
 
     /// <summary>
     ///     A copy-on-write write whose <paramref name="guard" /> is evaluated against the CURRENT committed state
-    ///     INSIDE the single-writer gate — the concurrency authority. If the guard does not hold, nothing is mutated or
-    ///     written and <see cref="GrainStateWriteOutcome.RejectedGuard" /> is returned. Otherwise it behaves like
-    ///     <see cref="ExecuteWriteAsync" />: mutate a clone, write, publish only on success, roll back on failure. Two
-    ///     racing guarded writes with the same precondition therefore serialize — the first commits and changes the
-    ///     committed state, so the second's guard no longer holds and it does nothing.
+    ///     INSIDE the single-writer gate — the concurrency authority. If the guard does not hold, nothing is mutated,
+    ///     written, or run and <see cref="GrainStateWriteOutcome.RejectedGuard" /> is returned. Otherwise, still inside
+    ///     the gate: the optional <paramref name="beforeWrite" /> runs first (e.g. invalidate a derived external
+    ///     snapshot so it cannot be restored), then a clone is mutated and written, published only on success and rolled
+    ///     back on failure. Because everything runs under the one gate, two racing guarded writes with the same
+    ///     precondition serialize — the first commits and changes the committed state, so the second's guard no longer
+    ///     holds and it does nothing (no <paramref name="beforeWrite" />, no write). If <paramref name="beforeWrite" />
+    ///     throws, the grain write is skipped and the committed state is unchanged.
     /// </summary>
     public async Task<GrainStateWriteOutcome> ExecuteGuardedWriteAsync(
         GrainStateWriteKind kind,
         Func<IReadOnlyMultiProjectionGrainState, bool> guard,
-        Action<MultiProjectionGrainState> mutate)
+        Action<MultiProjectionGrainState> mutate,
+        Func<Task>? beforeWrite = null)
     {
         ArgumentNullException.ThrowIfNull(guard);
         ArgumentNullException.ThrowIfNull(mutate);
@@ -190,12 +194,19 @@ internal sealed class CoordinatedGrainStateStore
         {
             if (!guard(_committedSnapshot))
             {
-                return GrainStateWriteOutcome.RejectedGuard; // zero mutation / write / publish
+                return GrainStateWriteOutcome.RejectedGuard; // zero mutation / write / beforeWrite / publish
             }
 
             if (kind == GrainStateWriteKind.Checkpoint && (CommittedFaultExists() || _liveFaultActive()))
             {
                 return GrainStateWriteOutcome.RejectedFaulted;
+            }
+
+            if (beforeWrite is not null)
+            {
+                // Runs under the gate AFTER the guard holds and BEFORE the grain-state write. If it throws, the grain
+                // write below is skipped and the committed state is left intact (the caller sees the exception).
+                await beforeWrite();
             }
 
             var candidate = _committed.Clone();

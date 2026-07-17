@@ -17,12 +17,17 @@ internal sealed class FirstQueryCatchUpGate
     private bool _satisfied;
     private Task? _inFlight;
 
-    /// <summary>Arm the gate for a fresh activation that restored no fault descriptor.</summary>
+    /// <summary>
+    ///     Arm the gate so the next query runs the barrier. Resets any prior satisfied/in-flight state, so it can be
+    ///     used both on a fresh activation (restored no fault descriptor) and to re-arm an operator rebuild in-activation.
+    /// </summary>
     public void Arm()
     {
         lock (_sync)
         {
             _armed = true;
+            _satisfied = false;
+            _inFlight = null;
         }
     }
 
