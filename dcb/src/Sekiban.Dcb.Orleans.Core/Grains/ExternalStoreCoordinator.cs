@@ -2,6 +2,21 @@ using ResultBoxes;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
+///     Stable, distinguishable failure returned by <see cref="ExternalStoreCoordinator.UpsertAsync" /> when a snapshot
+///     upsert is rejected because the projection is faulted. It is surfaced as a <c>ResultBox.Error</c> (NOT a
+///     success carrying <c>false</c>) so every caller that only inspects <c>IsSuccess</c> takes the not-persisted
+///     branch: no caller may report the snapshot as saved or advance persisted metadata after this rejection. Callers
+///     that want to log the rejection as a benign skip (rather than a store failure) can match on this type.
+/// </summary>
+public sealed class ExternalPersistenceBlockedByFaultException : Exception
+{
+    public ExternalPersistenceBlockedByFaultException() : base(
+        "External derived-snapshot persistence is blocked because the projection is faulted (a live or committed fault exists).")
+    {
+    }
+}
+
+/// <summary>
 ///     Activation-local coordinator that serialises EVERY external derived-snapshot mutation
 ///     (<c>IMultiProjectionStateStore</c> upsert and the reset's delete) through one gate, and rejects a snapshot
 ///     upsert while the projection is faulted.
@@ -21,9 +36,10 @@ internal sealed class ExternalStoreCoordinator
         _faultBlocksUpsert = faultBlocksUpsert ?? throw new ArgumentNullException(nameof(faultBlocksUpsert));
 
     /// <summary>
-    ///     Runs <paramref name="upsert" /> under the coordinator, but only when no fault blocks it. Returns a
-    ///     not-persisted result (<c>false</c>) without invoking <paramref name="upsert" /> while faulted — a skip, not
-    ///     an error.
+    ///     Runs <paramref name="upsert" /> under the coordinator, but only when no fault blocks it. When faulted it
+    ///     returns a <c>ResultBox.Error</c> carrying <see cref="ExternalPersistenceBlockedByFaultException" /> WITHOUT
+    ///     invoking <paramref name="upsert" /> — an explicit failure, never a success carrying <c>false</c>, so a caller
+    ///     inspecting only <c>IsSuccess</c> cannot mistake the rejection for a completed save.
     /// </summary>
     public async Task<ResultBox<bool>> UpsertAsync(Func<Task<ResultBox<bool>>> upsert)
     {
@@ -33,7 +49,7 @@ internal sealed class ExternalStoreCoordinator
         {
             if (_faultBlocksUpsert())
             {
-                return ResultBox.FromValue(false);
+                return ResultBox.Error<bool>(new ExternalPersistenceBlockedByFaultException());
             }
 
             return await upsert();

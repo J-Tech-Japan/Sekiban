@@ -32,6 +32,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         StreamingPersistSiloConfigurator.SharedBlobAccessor.Clear();
+        await StreamingPersistSiloConfigurator.SharedStateStore.DeleteAllAsync(FaultingStreamingProjector.MultiProjectorName);
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
         var uniqueId = Guid.NewGuid().ToString("N")[..8];
@@ -190,6 +191,34 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
         Assert.True(StreamingPersistSiloConfigurator.SharedBlobAccessor.StoredObjectCount > 0);
     }
 
+    [Fact]
+    public async Task StreamingPersist_WhileFaulted_WritesNoExternalSnapshot_AndStaysFaulted()
+    {
+        // The streaming persist path (UseStreamingSnapshotIO = true) must honour the same fault invariant as the normal
+        // path: a faulted projection makes no safe-checkpoint progress and the external upsert is fault-gated, so a
+        // streaming persist writes NO external snapshot and does not clear the fault. This proves the rejection semantics
+        // end-to-end on the streaming-configured grain — not merely that no v2 snapshot happens to exist.
+        var grain = _client.GetGrain<IMultiProjectionGrain>(FaultingStreamingProjector.MultiProjectorName);
+
+        // Fold a poison event that throws during projection → the grain faults.
+        await grain.SeedEventsAsync(ToSerializableEvents(new[]
+        {
+            CreateEvent(new StreamingFaultEvt(Poison: true), DateTime.UtcNow.AddSeconds(-30))
+        }));
+        await grain.RefreshAsync();
+        Assert.False((await grain.GetSnapshotJsonAsync(canGetUnsafeState: false)).IsSuccess); // faulted
+
+        // A streaming persist while faulted succeeds by skipping the external write, never by persisting.
+        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+
+        // No external snapshot was written for the projector, and the projection is still faulted.
+        var snapshot = await StreamingPersistSiloConfigurator.SharedStateStore.GetLatestForVersionAsync(
+            FaultingStreamingProjector.MultiProjectorName,
+            FaultingStreamingProjector.MultiProjectorVersion);
+        Assert.False(snapshot.GetValue().HasValue);
+        Assert.False((await grain.GetSnapshotJsonAsync(canGetUnsafeState: false)).IsSuccess); // still faulted
+    }
+
     private static Event CreateEvent(IEventPayload payload, DateTime when)
     {
         var sortableId = SortableUniqueId.Generate(when, Guid.NewGuid());
@@ -215,6 +244,28 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
 
     private record StreamingTestEvt(string Name) : IEventPayload;
     private record LargeStreamingTestEvt(string Text) : IEventPayload;
+    private record StreamingFaultEvt(bool Poison) : IEventPayload;
+
+    /// <summary>A streaming-cluster projector that faults (throws) when it folds a poison event.</summary>
+    private record FaultingStreamingProjector(int Count) : IMultiProjector<FaultingStreamingProjector>
+    {
+        public FaultingStreamingProjector() : this(0) { }
+        public static string MultiProjectorVersion => "1.0";
+        public static string MultiProjectorName => "faulting-streaming-projector";
+        public static FaultingStreamingProjector GenerateInitialPayload() => new(0);
+
+        public static ResultBox<FaultingStreamingProjector> Project(
+            FaultingStreamingProjector payload,
+            Event ev,
+            List<ITag> tags,
+            DcbDomainTypes domainTypes,
+            SortableUniqueId safeWindowThreshold) => ev.Payload switch
+            {
+                StreamingFaultEvt { Poison: true } =>
+                    throw new InvalidOperationException("poison event: refuses to fold"),
+                _ => ResultBox.FromValue(payload with { Count = payload.Count + 1 })
+            };
+    }
 
     private static string GenerateRandomString(int size)
     {
@@ -253,6 +304,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
     private class StreamingPersistSiloConfigurator : ISiloConfigurator
     {
         internal static MockBlobStorageSnapshotAccessor SharedBlobAccessor { get; } = new();
+        internal static InMemoryMultiProjectionStateStore SharedStateStore { get; } = new();
 
         public void Configure(ISiloBuilder siloBuilder)
         {
@@ -264,6 +316,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
                         var eventTypes = new SimpleEventTypes();
                         eventTypes.RegisterEventType<StreamingTestEvt>();
                         eventTypes.RegisterEventType<LargeStreamingTestEvt>();
+                        eventTypes.RegisterEventType<StreamingFaultEvt>();
                         var tagTypes = new SimpleTagTypes();
                         var tagProjectorTypes = new SimpleTagProjectorTypes();
                         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
@@ -272,6 +325,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
 
                         multiProjectorTypes.RegisterProjectorWithCustomSerialization<CounterProjector>();
                         multiProjectorTypes.RegisterProjector<LargePayloadProjector>();
+                        multiProjectorTypes.RegisterProjector<FaultingStreamingProjector>();
 
                         return new DcbDomainTypes(
                             eventTypes,
@@ -284,7 +338,7 @@ public class StreamingPersistIntegrationTests : IAsyncLifetime
                     });
 
                     services.AddSingleton<IEventStore, InMemoryEventStore>();
-                    services.AddSingleton<IMultiProjectionStateStore, InMemoryMultiProjectionStateStore>();
+                    services.AddSingleton<IMultiProjectionStateStore>(SharedStateStore);
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IBlobStorageSnapshotAccessor>(SharedBlobAccessor);

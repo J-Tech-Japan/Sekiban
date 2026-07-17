@@ -46,7 +46,41 @@ public class ExternalStoreCoordinatorTests
     }
 
     [Fact]
-    public async Task Upsert_is_skipped_while_faulted_without_touching_the_store()
+    public async Task Upsert_waits_for_a_parked_delete_and_runs_only_after_it_completes()
+    {
+        // The mirror of the test above. A reset's delete (InvalidateAsync) is in flight when an external-store
+        // consumer — e.g. DeleteExternalStateAsync or a timer-issued snapshot upsert — arrives; the upsert must BLOCK on
+        // the coordinator until the delete finishes, never run concurrently with it. This pins the serialization in both
+        // directions, which is what routing EVERY external mutation (including the public delete) through the gate buys.
+        var coordinator = new ExternalStoreCoordinator(() => false);
+        var order = new List<string>();
+        var deleteEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var deleteTask = coordinator.InvalidateAsync(async () =>
+        {
+            lock (order) order.Add("delete-start");
+            deleteEntered.TrySetResult();
+            await release.Task;
+            lock (order) order.Add("delete-commit");
+        });
+        await deleteEntered.Task;
+
+        var upsertTask = coordinator.UpsertAsync(() =>
+        {
+            lock (order) order.Add("upsert");
+            return Task.FromResult(ResultBox.FromValue(true));
+        });
+        Assert.False(upsertTask.IsCompleted);
+        lock (order) Assert.DoesNotContain("upsert", order);
+
+        release.SetResult();
+        await Task.WhenAll(deleteTask, upsertTask);
+        Assert.Equal(new[] { "delete-start", "delete-commit", "upsert" }, order.ToArray());
+    }
+
+    [Fact]
+    public async Task Upsert_while_faulted_returns_an_explicit_fault_blocked_error_without_touching_the_store()
     {
         var faulted = true;
         var coordinator = new ExternalStoreCoordinator(() => faulted);
@@ -58,9 +92,12 @@ public class ExternalStoreCoordinatorTests
             return Task.FromResult(ResultBox.FromValue(true));
         });
         Assert.False(invoked);              // the store delegate was never called
-        Assert.False(blocked.GetValue());   // reported as not-persisted (a skip, not an error)
+        // A rejection is an explicit error carrying the stable fault-blocked exception — NOT a success carrying
+        // false. This is what makes every caller inspecting only IsSuccess take the not-saved branch.
+        Assert.False(blocked.IsSuccess);
+        Assert.IsType<ExternalPersistenceBlockedByFaultException>(blocked.GetException());
 
-        // Once the fault clears, the same upsert proceeds.
+        // Once the fault clears, the same upsert proceeds and succeeds.
         faulted = false;
         var allowed = await coordinator.UpsertAsync(() =>
         {
@@ -68,6 +105,7 @@ public class ExternalStoreCoordinatorTests
             return Task.FromResult(ResultBox.FromValue(true));
         });
         Assert.True(invoked);
+        Assert.True(allowed.IsSuccess);
         Assert.True(allowed.GetValue());
     }
 }

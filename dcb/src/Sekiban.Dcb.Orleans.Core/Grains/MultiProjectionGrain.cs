@@ -798,8 +798,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
         if (!saveResult.IsSuccess)
         {
-            _lastError = $"External store save failed: {saveResult.GetException().Message}";
-            _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
+            // A fault-block is a deliberate skip, not a store failure: log it as such and never report saved.
+            if (saveResult.GetException() is ExternalPersistenceBlockedByFaultException)
+            {
+                _logger.LogDebug(
+                    "[{ProjectorName}] External store save skipped: projection is faulted",
+                    projectorName);
+            }
+            else
+            {
+                _lastError = $"External store save failed: {saveResult.GetException().Message}";
+                _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
+            }
+
             return new StreamingExternalStorePersistResult(
                 ExternalStoreSaved: false,
                 UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds);
@@ -1135,8 +1146,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
                 if (!saveResult.IsSuccess)
                 {
-                    _lastError = $"External store save failed: {saveResult.GetException().Message}";
-                    _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
+                    // externalStoreSaved stays false: no LastGood/persisted metadata may advance after this rejection.
+                    // A fault-block is a deliberate skip, not a store failure — log accordingly and never report saved.
+                    if (saveResult.GetException() is ExternalPersistenceBlockedByFaultException)
+                    {
+                        _logger.LogDebug(
+                            "[{ProjectorName}] External store save skipped: projection is faulted",
+                            projectorName);
+                    }
+                    else
+                    {
+                        _lastError = $"External store save failed: {saveResult.GetException().Message}";
+                        _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
+                    }
                     // Continue to save Orleans state as fallback info
                 }
                 else
@@ -2279,8 +2301,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _host?.CurrentFault is not null || _stateStore.Committed.FaultEventId is not null;
 
     // The one path every external snapshot upsert (normal persist, streaming persist, version rewrite) goes through:
-    // serialised on the external-store coordinator AND rejected while faulted. Returns a not-persisted result (false)
-    // when blocked, so callers treat it as a skip, not an error.
+    // serialised on the external-store coordinator AND rejected while faulted. When faulted it returns a
+    // ResultBox.Error carrying ExternalPersistenceBlockedByFaultException (NOT a success carrying false), so every
+    // caller inspecting only IsSuccess takes the not-saved branch and cannot report the snapshot as saved or advance
+    // persisted metadata after the rejection.
     private Task<ResultBox<bool>> UpsertExternalStateCoordinatedAsync(
         MultiProjectionStateWriteRequest request,
         Stream stream,
@@ -2841,6 +2865,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         writeRequest,
                         targetStream,
                         _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
+                    // A fault-block returns a ResultBox.Error, so updated stays false and the MetadataMaintenance
+                    // ProjectorVersion write below is skipped: no projector-version mutation may happen after rejection.
                     if (saveResult.IsSuccess)
                     {
                         updated = true;
@@ -2869,8 +2895,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (_multiProjectionStateStore == null || _host == null) return false;
         var projectorName = GetProjectorName();
         var projectorVersion = _host.GetProjectorVersion();
-        var result = await _multiProjectionStateStore.DeleteAsync(projectorName, projectorVersion);
-        return result.IsSuccess && result.GetValue();
+        // Route through the coordinator like every other external-store mutation, so this delete WAITS for any
+        // parked/in-flight snapshot upsert to commit and never runs concurrently with one. No direct DeleteAsync
+        // bypass may remain, or the interleaving catch-up timer could recreate the snapshot right after this delete.
+        var deleted = false;
+        await _externalStore.InvalidateAsync(async () =>
+        {
+            var result = await _multiProjectionStateStore.DeleteAsync(projectorName, projectorVersion);
+            deleted = result.IsSuccess && result.GetValue();
+        });
+        return deleted;
     }
 
     public async Task SeedEventsAsync(IReadOnlyList<SerializableEvent> events)

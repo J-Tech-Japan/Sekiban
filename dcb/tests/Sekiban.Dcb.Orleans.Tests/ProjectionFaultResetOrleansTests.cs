@@ -394,27 +394,74 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task NormalPersist_IssuesNoExternalUpsertWhileFaulted()
+    public async Task NormalPersist_WhileFaulted_WritesNoExternalSnapshot_AdvancesNoMetadata()
     {
         // A faulted projection makes no safe-checkpoint progress AND the external upsert is fault-gated, so a normal
-        // persist writes NO external snapshot — no upsert can be in-flight to race the reset's delete.
+        // persist reaches NO external upsert (the store delegate is never invoked) and advances no persisted snapshot —
+        // there is no upsert to race the reset's delete. Asserting the upsert count is unchanged (not merely "no
+        // snapshot exists") makes the rejection non-vacuous, and the projection stays faulted afterwards.
         var (grain, _, _) = await FaultAndTokenAsync(8_000);
 
-        Assert.True((await grain.PersistStateAsync()).IsSuccess); // succeeds by skip, not by writing
+        var upsertsBefore = StateStore.UpsertCount;
+        Assert.True((await grain.PersistStateAsync()).IsSuccess);         // succeeds by skip, not by writing
+        Assert.Equal(upsertsBefore, StateStore.UpsertCount);             // no external upsert reached the store
         Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);     // still faulted
     }
 
     [Fact]
-    public async Task VersionRewrite_IssuesNoExternalUpsertWhileFaulted()
+    public async Task VersionRewrite_WhileFaulted_IsRejectedAtFaultGate_NoUpsert_NoVersionWrite_SnapshotRetained()
     {
-        // A snapshot exists; then the projection faults. A version rewrite (OverwritePersistedStateVersionAsync) routes
-        // its upsert through the same fault-gated coordinator, so it writes NO snapshot for the new version while faulted.
-        var (grain, _, _) = await FaultAndTokenAsync(8_100);
-        await InjectExternalSnapshotAsync("000000000000000810000000000000"); // an existing v1.0 snapshot to rewrite
+        // Build + persist cleanly first, so the committed ProjectorVersion is a real "1.0" and a genuine v1.0 external
+        // snapshot exists. This is what makes the rewrite below NON-vacuous: OverwritePersistedStateVersionAsync finds
+        // a source snapshot and a non-empty current version, so it actually REACHES the coordinated upsert instead of
+        // short-circuiting on a missing source.
+        var grain = Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
+        await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: false, 8_100, Guid.CreateVersion7()) });
+        await grain.RefreshAsync();
+        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        await PollUntilAsync(async () =>
+            (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "1.0")).GetValue().HasValue);
 
-        await grain.OverwritePersistedStateVersionAsync("2.0");
+        // Now fault the projection with a poison event.
+        await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: true, 8_150, Guid.CreateVersion7()) });
+        await grain.RefreshAsync();
+        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess); // faulted
 
-        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "2.0")).GetValue().HasValue);
+        // The rewrite reaches the coordinated upsert, which returns a fault-blocked Error. So: updated stays false, the
+        // store's upsert delegate is never invoked, NO MetadataMaintenance projector-version write happens, no new-version
+        // snapshot is created, and the original v1.0 snapshot is retained.
+        var upsertsBefore = StateStore.UpsertCount;
+        var writesBefore = TogglableGrainStorage.WriteCount;
+
+        var updated = await grain.OverwritePersistedStateVersionAsync("2.0");
+
+        Assert.False(updated);
+        Assert.Equal(upsertsBefore, StateStore.UpsertCount);          // upsert never reached the store
+        Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount); // no projector-version write
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "2.0")).GetValue().HasValue); // no new-version snapshot
+        Assert.True((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "1.0")).GetValue().HasValue);  // original retained
+    }
+
+    [Fact]
+    public async Task DeleteExternalStateAsync_RoutedThroughCoordinator_RemovesTheSnapshot()
+    {
+        // Path coverage for the public DeleteExternalStateAsync, which now routes its delete through the same
+        // coordinator as every other external mutation (no direct-DeleteAsync bypass remains). Same-grain calls are
+        // serialised by Orleans non-reentrancy, so the delete-vs-upsert race the coordinator actually guards can only be
+        // driven by the interleaving catch-up timer; that serialisation is pinned deterministically by the
+        // ExternalStoreCoordinator friend tests (delete-waits-for-upsert and upsert-waits-for-delete). Here we assert the
+        // end-to-end effect: a routed delete removes the derived snapshot.
+        var grain = Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
+        await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: false, 8_200, Guid.CreateVersion7()) });
+        await grain.RefreshAsync(); // initialise host so DeleteExternalStateAsync has projector name + version
+        await InjectExternalSnapshotAsync("000000000000000820000000000000");
+        Assert.True((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+
+        var deleted = await grain.DeleteExternalStateAsync();
+
+        Assert.True(deleted);
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
     }
 
     private sealed class SiloConfigurator : ISiloConfigurator
@@ -448,6 +495,10 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     {
         private readonly IMultiProjectionStateStore _inner;
         public volatile bool FailNextDelete;
+        // Counts real upsert-delegate invocations. A fault-gated persist must NEVER reach the store, so an unchanged
+        // count across a persist proves rejection at the coordinator — stronger than merely "no v2 snapshot exists".
+        private int _upsertCount;
+        public int UpsertCount => Volatile.Read(ref _upsertCount);
 
         public FailableStateStore(IMultiProjectionStateStore inner) => _inner = inner;
 
@@ -474,8 +525,11 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             _inner.DeleteAllAsync(projectorName, cancellationToken);
         public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord record, CancellationToken cancellationToken = default) =>
             _inner.OpenStateDataReadStreamAsync(record, cancellationToken);
-        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest request, Stream stream, int offloadThresholdBytes, CancellationToken cancellationToken = default) =>
-            _inner.UpsertFromStreamAsync(request, stream, offloadThresholdBytes, cancellationToken);
+        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest request, Stream stream, int offloadThresholdBytes, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _upsertCount);
+            return _inner.UpsertFromStreamAsync(request, stream, offloadThresholdBytes, cancellationToken);
+        }
     }
 
     /// <summary>An in-memory grain storage that really persists (so reactivation restores) and can fail the next write.</summary>
