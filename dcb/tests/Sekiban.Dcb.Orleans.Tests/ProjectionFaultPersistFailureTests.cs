@@ -20,11 +20,11 @@ using DomainTypes = Sekiban.Dcb.Orleans.Tests.ProjectionFaultOrleansTests;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
-///     The fail-closed half of the durability contract, with descriptor persistence deterministically broken. When the
-///     grain-state write that carries the fault descriptor throws, the grain must NOT discard the faulted activation
-///     into a fresh empty one — that would lose the only record of the fault and reopen the first-query empty success.
-///     Instead the faulted activation is pinned and keeps failing every query surface. Ordinary checkpoint writes here
-///     succeed (so catch-up can reach and fold the poison); only the fault-carrying write fails.
+///     The restart-durability contract when the fault-descriptor write fails: the grain must recover on its own. The
+///     injected storage rejects the FIRST fault-carrying write and accepts the rest, so the product-owned retry (no
+///     manual persist) makes the descriptor durable; then a genuine fresh activation restores it and the first
+///     state/scalar/list queries all fail. While the descriptor is not yet durable the faulted activation stays
+///     pinned, so no window opens where a fresh activation answers success.
 /// </summary>
 public class ProjectionFaultPersistFailureTests : IAsyncLifetime
 {
@@ -36,7 +36,7 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         SharedEventStore.Clear();
-        WriteFailingGrainStorage.FaultWriteAttempts = 0;
+        FaultWriteInjectingStorage.Reset();
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
         var id = Guid.NewGuid().ToString("N")[..8];
@@ -57,28 +57,39 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task PersistenceFailure_PinsTheFaultedActivation_NoQuerySurfaceSucceeds()
+    public async Task FirstDescriptorWriteFails_ProductRetryMakesItDurable_FreshActivationFailsClosed()
     {
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
         await grain.SeedEventsAsync(
             new List<SerializableEvent> { DomainTypes.Event(poison: true, tick: 7_000) });
+
+        // RefreshAsync folds the poison and faults; the first fault-descriptor write is rejected by the storage.
         await grain.RefreshAsync();
+        Assert.True(FaultWriteInjectingStorage.RejectedWrites >= 1, "the first fault-descriptor write was not rejected");
 
-        // The fault-carrying write is rejected by the injected storage.
-        var persisted = await grain.PersistStateAsync();
-        Assert.False(persisted.IsSuccess);
-        Assert.True(WriteFailingGrainStorage.FaultWriteAttempts > 0, "the fault-descriptor write was never attempted");
-
-        // Every query surface still fails on the pinned, live-faulted activation — the persistence failure did not
-        // reopen a success.
+        // On the pinned activation, every query still fails.
         Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
 
-        // And a later query — after the grain had every chance to be reclaimed — still fails: the faulted activation
-        // was not silently discarded into an empty one.
-        await Task.Delay(1500);
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        // The product-owned retry timer persists the descriptor with no manual PersistStateAsync. Wait for a durable
+        // fault-descriptor write to land.
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (FaultWriteInjectingStorage.DurableWrites == 0 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(200);
+        }
+        Assert.True(FaultWriteInjectingStorage.DurableWrites >= 1, "the retry never durably persisted the descriptor");
+
+        // Force a genuine fresh activation. The descriptor is durable now, so it restores and the FIRST queries fail —
+        // no empty-success window.
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(1000);
+
+        var reactivated = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
+        Assert.False((await reactivated.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
+        Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
     }
 
     private sealed class SiloConfigurator : ISiloConfigurator
@@ -98,10 +109,8 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
                     services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
                     services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 1 });
                     services.AddSekibanDcbNativeRuntime();
-                    // The grain's [PersistentState("multiProjection", "OrleansStorage")] binds to this provider. Only
-                    // the fault-carrying write throws; ordinary checkpoint writes succeed, so catch-up still reaches
-                    // and folds the poison.
-                    services.AddGrainStorage("OrleansStorage", (sp, name) => new WriteFailingGrainStorage());
+                    // The grain's [PersistentState("multiProjection", "OrleansStorage")] binds to this provider.
+                    services.AddGrainStorage("OrleansStorage", (sp, name) => new FaultWriteInjectingStorage());
                 })
                 .AddMemoryGrainStorageAsDefault()
                 .AddMemoryGrainStorage("PubSubStore")
@@ -110,30 +119,75 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
         }
     }
 
-    /// <summary>Reads return empty state; the write that carries a fault descriptor throws; other writes are accepted.</summary>
-    private sealed class WriteFailingGrainStorage : IGrainStorage
+    /// <summary>
+    ///     Persists real state (in memory) so a reactivation can read it back, but REJECTS the first write that carries
+    ///     a fault descriptor and accepts the rest — modelling a transient store failure that recovers. Ordinary
+    ///     checkpoint writes always succeed so catch-up can reach and fold the poison.
+    /// </summary>
+    private sealed class FaultWriteInjectingStorage : IGrainStorage
     {
-        public static int FaultWriteAttempts;
+        private static readonly Dictionary<string, object?> Store = new();
+        private static readonly object Gate = new();
+        public static int RejectedWrites;
+        public static int DurableWrites;
+
+        public static void Reset()
+        {
+            lock (Gate)
+            {
+                Store.Clear();
+                RejectedWrites = 0;
+                DurableWrites = 0;
+            }
+        }
 
         public Task ReadStateAsync<T>(string grainType, GrainId grainId, IGrainState<T> grainState)
         {
-            grainState.RecordExists = false;
+            lock (Gate)
+            {
+                if (Store.TryGetValue(grainId.ToString(), out var saved) && saved is T typed)
+                {
+                    grainState.State = typed;
+                    grainState.RecordExists = true;
+                }
+                else
+                {
+                    grainState.RecordExists = false;
+                }
+            }
+
             return Task.CompletedTask;
         }
 
         public Task WriteStateAsync<T>(string grainType, GrainId grainId, IGrainState<T> grainState)
         {
             var faultEventId = grainState.State?.GetType().GetProperty("FaultEventId")?.GetValue(grainState.State);
-            if (faultEventId is not null)
+            lock (Gate)
             {
-                Interlocked.Increment(ref FaultWriteAttempts);
-                throw new InvalidOperationException("injected: fault-descriptor write failure");
+                if (faultEventId is not null && RejectedWrites == 0)
+                {
+                    RejectedWrites++;
+                    throw new InvalidOperationException("injected: first fault-descriptor write failure");
+                }
+
+                Store[grainId.ToString()] = grainState.State;
+                if (faultEventId is not null)
+                {
+                    DurableWrites++;
+                }
             }
 
             return Task.CompletedTask;
         }
 
-        public Task ClearStateAsync<T>(string grainType, GrainId grainId, IGrainState<T> grainState) =>
-            Task.CompletedTask;
+        public Task ClearStateAsync<T>(string grainType, GrainId grainId, IGrainState<T> grainState)
+        {
+            lock (Gate)
+            {
+                Store.Remove(grainId.ToString());
+            }
+
+            return Task.CompletedTask;
+        }
     }
 }

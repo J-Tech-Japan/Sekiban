@@ -70,6 +70,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // fails, persisted into grain state, and restored on activation so a fresh grain fails queries from the first one.
     private ProjectionFaultDescriptor? _projectionFault;
     private bool _faultPersistFailed;
+    private IGrainTimer? _faultPersistRetryTimer;
+    private readonly TimeSpan _faultPersistRetryInterval = TimeSpan.FromMilliseconds(500);
     private long _eventsProcessed;
     private readonly HashSet<Guid> _processedEventIds = new(); // Track processed event IDs to prevent double counting
     private readonly Queue<Guid> _processedEventIdOrder = new();
@@ -1692,6 +1694,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _catchUpProgress.ConsecutiveEmptyBatches = 0;
             }
         }
+
+        // RefreshAsync's in-call loop can fault the actor without going through the background failure handlers, so
+        // capture-and-persist the fault here too. Otherwise a RefreshAsync-triggered fault would only become durable
+        // at the next timer/deactivation persist.
+        await CaptureAndPersistProjectionFaultIfAnyAsync();
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -2090,6 +2097,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _fallbackTimer?.Dispose();
         _batchTimer?.Dispose();
         _catchUpTimer?.Dispose();
+        _faultPersistRetryTimer?.Dispose();
 
         await base.OnDeactivateAsync(reason, cancellationToken);
     }
@@ -2251,16 +2259,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _faultPersistFailed = true;
             _logger.LogCritical(
                 writeEx,
-                "[{ProjectorName}] Failed to persist projection fault descriptor; pinning this faulted activation so its fail-closed state is not discarded (queries continue to fail).",
+                "[{ProjectorName}] Failed to persist projection fault descriptor; pinning this faulted activation and retrying persistence in the background until the descriptor is durable.",
                 GetProjectorName());
             PinFaultedActivation();
+            StartFaultPersistRetryTimer();
         }
     }
 
     /// <summary>
     ///     Keeps a faulted activation whose descriptor could not be persisted from being reclaimed and reactivated
-    ///     empty. Idempotent and best-effort — the load-bearing guarantee is the live in-memory fault, which fails
-    ///     every query; the pin only stops that live state from being silently thrown away.
+    ///     empty. The load-bearing guarantee while pinned is the live in-memory fault, which fails every query; the pin
+    ///     only stops that live state from being silently thrown away before the descriptor is made durable.
     /// </summary>
     private void PinFaultedActivation()
     {
@@ -2272,6 +2281,72 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             _logger.LogWarning(ex, "[{ProjectorName}] Could not pin faulted activation.", GetProjectorName());
         }
+    }
+
+    /// <summary>
+    ///     Registers the product-owned retry: while the fault descriptor could not be persisted, the grain keeps trying
+    ///     to write it. Once it succeeds the descriptor is durable — a subsequent fresh activation restores it and
+    ///     fails closed — so the pin is released and this activation may be reclaimed normally.
+    /// </summary>
+    private void StartFaultPersistRetryTimer()
+    {
+        if (_faultPersistRetryTimer is not null)
+        {
+            return;
+        }
+
+        _faultPersistRetryTimer = this.RegisterGrainTimer(
+            RetryFaultPersistAsync,
+            new GrainTimerCreationOptions
+            {
+                DueTime = _faultPersistRetryInterval,
+                Period = _faultPersistRetryInterval,
+                Interleave = true
+            });
+    }
+
+    private async Task RetryFaultPersistAsync()
+    {
+        if (!_faultPersistFailed || _projectionFault is null)
+        {
+            _faultPersistRetryTimer?.Dispose();
+            _faultPersistRetryTimer = null;
+            return;
+        }
+
+        // The descriptor is already in _state.State from the original capture; just try the write again.
+        WriteFaultIntoState(_projectionFault);
+
+        try
+        {
+            await _state.WriteStateAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "[{ProjectorName}] Retry of fault-descriptor persistence still failing; will keep retrying.",
+                GetProjectorName());
+            return;
+        }
+
+        // Durable now: a fresh activation would restore the fault and fail closed, so the fail-closed guarantee no
+        // longer depends on THIS activation staying alive. Release the pin and stop retrying.
+        _faultPersistFailed = false;
+        _faultPersistRetryTimer?.Dispose();
+        _faultPersistRetryTimer = null;
+        try
+        {
+            DelayDeactivation(TimeSpan.Zero); // undo the pin
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[{ProjectorName}] Could not release activation pin after durable fault persist.", GetProjectorName());
+        }
+
+        _logger.LogInformation(
+            "[{ProjectorName}] Fault descriptor is now durable; pin released.",
+            GetProjectorName());
     }
 
     private void WriteFaultIntoState(ProjectionFaultDescriptor fault)
