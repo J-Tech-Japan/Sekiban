@@ -73,6 +73,7 @@ public class ConverterOwnedPayloadTests
     [Theory]
     [InlineData(EventPayloadDeserializationPolicy.FailOnCaseMismatch)]
     [InlineData(EventPayloadDeserializationPolicy.StrictUnmapped)]
+    [InlineData(EventPayloadDeserializationPolicy.CaseInsensitiveLegacy)]
     public void Aot_ConverterOwnedTypeInfo_FailsDeterministically_UnderMetadataRequiringPolicies(
         EventPayloadDeserializationPolicy policy)
     {
