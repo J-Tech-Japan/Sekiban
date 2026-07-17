@@ -23,9 +23,13 @@ public class SerializedCommitTests
         return (ISerializedSekibanDcbExecutor)new InMemoryDcbExecutorForTesting(_domainTypes, new Sekiban.Dcb.Testing.InMemoryEventStore(_domainTypes.EventTypes));
     }
 
-    private static byte[] SerializePayload<T>(T payload)
+    private byte[] SerializePayload<T>(T payload)
     {
-        return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload));
+        // Serialize the way a canonical library write does — through the domain's options (camelCase) — not with a
+        // bare JsonSerializer.Serialize, which emits PascalCase. A PascalCase payload read back by the camelCase,
+        // case-sensitive domain is exactly the issue #1074 mismatch, and as of SEK-G13 it fails loud instead of
+        // binding to nulls; a test that hand-built one was manufacturing the bug, not exercising the commit path.
+        return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload, _domainTypes.JsonSerializerOptions));
     }
 
     [Fact]

@@ -44,14 +44,16 @@ public class AotDomainTypesBuilder
     ///     Initializes a new instance of AotDomainTypesBuilder.
     /// </summary>
     /// <param name="options">Optional JSON serializer options. If not provided, defaults are used.</param>
-    public AotDomainTypesBuilder(JsonSerializerOptions? options = null)
+    public AotDomainTypesBuilder(
+        JsonSerializerOptions? options = null,
+        EventPayloadDeserializationPolicy deserializationPolicy = EventPayloadDeserializationPolicy.FailOnCaseMismatch)
     {
         _jsonOptions = options ?? new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = false
         };
-        EventTypes = new AotEventTypes(_jsonOptions);
+        EventTypes = new AotEventTypes(_jsonOptions, deserializationPolicy);
     }
 
     /// <summary>

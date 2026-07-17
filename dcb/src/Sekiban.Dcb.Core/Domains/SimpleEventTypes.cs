@@ -10,14 +10,20 @@ public class SimpleEventTypes : IEventTypes
 {
     private readonly Dictionary<string, Type> _eventTypes = new();
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly EventPayloadDeserializationPolicy _policy;
 
-    public SimpleEventTypes(JsonSerializerOptions? jsonOptions = null) =>
+    public SimpleEventTypes(
+        JsonSerializerOptions? jsonOptions = null,
+        EventPayloadDeserializationPolicy policy = EventPayloadDeserializationPolicy.FailOnCaseMismatch)
+    {
         _jsonOptions = jsonOptions ??
             new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
                 WriteIndented = false
             };
+        _policy = policy;
+    }
 
     /// <inheritdoc />
     public string SerializeEventPayload(IEventPayload payload)
@@ -29,6 +35,20 @@ public class SimpleEventTypes : IEventTypes
             : JsonSerializer.Serialize(payload, payloadType, _jsonOptions);
     }
 
+    // Serialization is unchanged from pre-G13: resolve through the caller's own options when it can, otherwise let
+    // JsonSerializer do it. This path writes, so it never needs the names-only resolver the read path uses.
+    private JsonTypeInfo? TryResolveTypeInfo(Type payloadType)
+    {
+        try
+        {
+            return _jsonOptions.GetTypeInfo(payloadType);
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
+    }
+
     /// <inheritdoc />
     public IEventPayload? DeserializeEventPayload(string eventTypeName, string json)
     {
@@ -37,9 +57,18 @@ public class SimpleEventTypes : IEventTypes
             return null;
         }
 
-        JsonTypeInfo? typeInfo = TryResolveTypeInfo(eventType);
-        return typeInfo is not null
-            ? JsonSerializer.Deserialize(json, typeInfo) as IEventPayload
+        JsonTypeInfo? namesTypeInfo = TryResolveNamesTypeInfo(eventType);
+        // When the metadata is available (the normal case), the shared binder applies the policy before binding. When
+        // it is not — a resolver that cannot describe the type — there is nothing to check against, so fall back to the
+        // pre-G13 behaviour rather than pretend to have validated it. The bind itself always goes through the caller's
+        // options; the names typeInfo is only read, never used to deserialize, so the caller's options stay untouched.
+        return namesTypeInfo is not null
+            ? EventPayloadBinder.Deserialize(
+                json,
+                namesTypeInfo,
+                eventTypeName,
+                _policy,
+                effectiveJson => JsonSerializer.Deserialize(effectiveJson, eventType, _jsonOptions) as IEventPayload)
             : JsonSerializer.Deserialize(json, eventType, _jsonOptions) as IEventPayload;
     }
 
@@ -105,13 +134,32 @@ public class SimpleEventTypes : IEventTypes
         RegisterEventType(eventPayloadType.Name, eventPayloadType);
     }
 
-    private JsonTypeInfo? TryResolveTypeInfo(Type eventType)
+    private static readonly DefaultJsonTypeInfoResolver ReflectionResolver = new();
+
+    /// <summary>
+    ///     Resolves a JsonTypeInfo ONLY so the binder can read the type's declared JSON member names. It is never used
+    ///     to deserialize. It is built against a private, side-effect-free options that mirrors the caller's naming
+    ///     policy — never the caller's own options — so the declared names come out correct (camelCase, etc.) while the
+    ///     caller's options are neither read for a resolver nor written to. Returns null when even reflection cannot
+    ///     describe the type, in which case the caller skips the preflight rather than fake a check it did not do.
+    /// </summary>
+    private JsonTypeInfo? TryResolveNamesTypeInfo(Type eventType)
     {
         try
         {
-            return _jsonOptions.GetTypeInfo(eventType);
+            var namesOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = _jsonOptions.PropertyNamingPolicy,
+                PropertyNameCaseInsensitive = _jsonOptions.PropertyNameCaseInsensitive,
+                TypeInfoResolver = ReflectionResolver
+            };
+            return namesOptions.GetTypeInfo(eventType);
         }
         catch (NotSupportedException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
         {
             return null;
         }
