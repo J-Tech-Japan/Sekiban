@@ -2162,22 +2162,32 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             var version = currentVersion;
             // Operator rebuild/reset: clears the fault and re-establishes a clean baseline — allowed while faulted.
-            await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.OperatorReset, s =>
-            {
-                s.ProjectorName = GetProjectorName();
-                s.SerializedState = null;
-                s.LastPosition = null;
-                s.SafeLastPosition = null;
-                s.EventsProcessed = 0;
-                s.StateSize = 0;
-                s.LastPersistTime = DateTime.UtcNow;
-                if (!string.IsNullOrEmpty(version))
+            // The mutation clears only the CANDIDATE fault fields (pure). The LIVE actor fault is cleared only in the
+            // after-success continuation, so a failed reset write leaves the persisted descriptor AND the live actor
+            // fault intact — queries stay faulted and fault persistence stays coherent.
+            await _stateStore.ExecuteWriteAsync(
+                GrainStateWriteKind.OperatorReset,
+                s =>
                 {
-                    s.ProjectorVersion = version;
-                }
-                ClearFaultFromState(s);
-            });
-            _liveLastPosition = null;
+                    s.ProjectorName = GetProjectorName();
+                    s.SerializedState = null;
+                    s.LastPosition = null;
+                    s.SafeLastPosition = null;
+                    s.EventsProcessed = 0;
+                    s.StateSize = 0;
+                    s.LastPersistTime = DateTime.UtcNow;
+                    if (!string.IsNullOrEmpty(version))
+                    {
+                        s.ProjectorVersion = version;
+                    }
+                    ClearFaultFieldsOnCandidate(s);
+                },
+                onCommitted: () =>
+                {
+                    _projectionFault = null;
+                    _host?.ClearFaultForRebuild();
+                    _liveLastPosition = null;
+                });
         }
         catch (Exception ex)
         {
@@ -2527,17 +2537,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         state.FaultedAtUtcTicks = fault.FaultedAtUtc;
     }
 
-    // Clears the in-memory fault bookkeeping (instant) and the persisted fault fields on the passed payload; the caller
-    // runs the state mutation inside the store's gate.
-    private void ClearFaultFromState(MultiProjectionGrainState? state)
+    // Clears ONLY the persisted fault fields on the candidate payload — a pure mutation with no live actor side effect,
+    // so it is safe to run inside the store's gate on a candidate that may be rolled back. The live actor fault is
+    // cleared separately, only after the write commits (see the OperatorReset onCommitted continuation).
+    private static void ClearFaultFieldsOnCandidate(MultiProjectionGrainState state)
     {
-        _projectionFault = null;
-        _host?.ClearFaultForRebuild();
-        if (state is null)
-        {
-            return;
-        }
-
         state.FaultEventId = null;
         state.FaultEventType = null;
         state.FaultPosition = null;

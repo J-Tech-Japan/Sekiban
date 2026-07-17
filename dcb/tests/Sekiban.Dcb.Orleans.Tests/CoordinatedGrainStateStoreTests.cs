@@ -143,6 +143,52 @@ public class CoordinatedGrainStateStoreTests
     }
 
     [Fact]
+    public async Task Committed_is_a_true_immutable_snapshot_not_the_mutable_payload()
+    {
+        var fake = new RecordingPersistentState();
+        var store = NewStore(fake);
+        await store.ExecuteWriteAsync(GrainStateWriteKind.Checkpoint, s => s.LastSortableUniqueId = "cp");
+
+        var view = store.Committed;
+
+        // Runtime type, not just the declared return type: the view is a distinct snapshot, not the persisted payload,
+        // and cannot be downcast to a mutable reference.
+        Assert.IsNotType<MultiProjectionGrainState>(view);
+        Assert.Null(view as MultiProjectionGrainState);
+        Assert.False(typeof(MultiProjectionGrainState).IsAssignableFrom(view.GetType()));
+        Assert.Equal("cp", view.LastSortableUniqueId); // still a faithful read
+    }
+
+    [Fact]
+    public async Task OnCommitted_runs_after_publish_on_success_and_never_on_failure()
+    {
+        var fake = new RecordingPersistentState();
+        var store = NewStore(fake);
+
+        // Success: the continuation runs, and by the time it runs the committed view already reflects the new candidate.
+        string? seenAtCommit = null;
+        var outcome = await store.ExecuteWriteAsync(
+            GrainStateWriteKind.OperatorReset,
+            s => s.ProjectorName = "rebuilt",
+            onCommitted: () => seenAtCommit = store.Committed.ProjectorName);
+        Assert.Equal(GrainStateWriteOutcome.Committed, outcome);
+        Assert.Equal("rebuilt", seenAtCommit);
+        Assert.Equal("rebuilt", store.Committed.ProjectorName);
+
+        // Failure: the continuation must NOT run (so a live side effect is never applied without a durable commit), and
+        // the committed state is unchanged.
+        var ran = false;
+        fake.FailNextWrite = true;
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.ExecuteWriteAsync(
+                GrainStateWriteKind.OperatorReset,
+                s => s.ProjectorName = "should-not-commit",
+                onCommitted: () => ran = true));
+        Assert.False(ran);
+        Assert.Equal("rebuilt", store.Committed.ProjectorName);
+    }
+
+    [Fact]
     public void Grain_holds_no_persisted_state_reference_and_the_store_exposes_no_mutable_state()
     {
         // The grain must reach persisted state only through the store, so it holds neither the raw IPersistentState nor
