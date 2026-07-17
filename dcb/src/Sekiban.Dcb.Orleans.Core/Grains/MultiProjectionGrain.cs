@@ -41,6 +41,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // The grain does NOT retain the raw IPersistentState it is injected with: it hands it to this store in the
     // constructor and reaches persisted state only through here, so nothing but the store can call WriteStateAsync.
     private readonly CoordinatedGrainStateStore _stateStore;
+
+    // The live-runtime LastPosition. It advances as events are processed, ahead of any persist (a checkpoint clears the
+    // persisted LastPosition), so it is kept as an ephemeral grain field rather than mutating the persisted payload
+    // outside the coordinator. Seeded from the committed state on activation; surfaced by status queries.
+    private string? _liveLastPosition;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
@@ -223,8 +228,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         IServiceIdProvider? serviceIdProvider = null)
     {
         // Transfer ownership of the injected persistent state to the coordinated store immediately; keep no raw
-        // IPersistentState reference on the grain so writes cannot bypass the single-writer gate.
-        _stateStore = new CoordinatedGrainStateStore(state ?? throw new ArgumentNullException(nameof(state)));
+        // IPersistentState reference on the grain so writes cannot bypass the single-writer gate. The live-fault
+        // predicate lets the store suppress a checkpoint while the actor is faulted even before the descriptor persists.
+        _stateStore = new CoordinatedGrainStateStore(
+            state ?? throw new ArgumentNullException(nameof(state)),
+            () => _host?.CurrentFault is not null);
         _actorHostFactory = actorHostFactory ?? throw new ArgumentNullException(nameof(actorHostFactory));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
@@ -633,24 +641,24 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         string? safePosition,
         int? safeVersion)
     {
-        if (!_skipPersistWhenSafeCheckpointUnchanged || _stateStore.State == null)
+        if (!_skipPersistWhenSafeCheckpointUnchanged)
         {
             return false;
         }
 
-        if (!string.Equals(_stateStore.State.ProjectorVersion, projectorVersion, StringComparison.Ordinal))
+        if (!string.Equals(_stateStore.Committed.ProjectorVersion, projectorVersion, StringComparison.Ordinal))
         {
             return false;
         }
 
-        if (!string.Equals(_stateStore.State.LastSortableUniqueId ?? string.Empty, safePosition ?? string.Empty, StringComparison.Ordinal))
+        if (!string.Equals(_stateStore.Committed.LastSortableUniqueId ?? string.Empty, safePosition ?? string.Empty, StringComparison.Ordinal))
         {
             return false;
         }
 
         if (safeVersion.HasValue)
         {
-            return _stateStore.State.LastGoodSafeVersion > 0 && safeVersion.Value == _stateStore.State.LastGoodSafeVersion;
+            return _stateStore.Committed.LastGoodSafeVersion > 0 && safeVersion.Value == _stateStore.Committed.LastGoodSafeVersion;
         }
 
         return true;
@@ -658,7 +666,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private ResultBox<bool>? TryShortCircuitPersist(string projectorName, PersistCheckpoint checkpoint)
     {
-        var lastGoodSafeVersion = _stateStore.State?.LastGoodSafeVersion ?? 0;
+        var lastGoodSafeVersion = _stateStore.Committed.LastGoodSafeVersion;
         if (checkpoint.SafeVersion.HasValue && lastGoodSafeVersion > 0 && checkpoint.SafeVersion.Value < lastGoodSafeVersion)
         {
             _lastError = $"Integrity guard blocked persist: safeVersion {checkpoint.SafeVersion.Value} < LastGoodSafeVersion {lastGoodSafeVersion}";
@@ -758,9 +766,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             OriginalSizeBytes: tempFileSize,
             CompressedSizeBytes: tempFileSize,
             SafeWindowThreshold: checkpoint.SafeThresholdValue ?? _host!.PeekCurrentSafeWindowThreshold(),
-            CreatedAt: _stateStore.State!.LastPersistTime == default
+            CreatedAt: _stateStore.Committed.LastPersistTime == default
                 ? DateTime.UtcNow
-                : _stateStore.State.LastPersistTime,
+                : _stateStore.Committed.LastPersistTime,
             UpdatedAt: DateTime.UtcNow,
             BuildSource: "GRAIN_STREAM",
             BuildHost: Environment.MachineName);
@@ -811,7 +819,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         await EnsureInitializedAsync();
 
         var (_, projectorName, _) = GetIdentity();
-        var projectorVersion = _stateStore.State?.ProjectorVersion;
+        var projectorVersion = _stateStore.Committed.ProjectorVersion;
         ProjectionHeadStatus? hostStatus = null;
 
         if (_host != null)
@@ -837,16 +845,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var catchUpStatus = hostStatus?.CatchUp;
         var currentLastSortableUniqueId = NormalizeSortableUniqueId(currentPosition?.LastSortableUniqueId)
             ?? NormalizeSortableUniqueId(_catchUpProgress.CurrentPosition?.Value)
-            ?? NormalizeSortableUniqueId(_stateStore.State?.LastSortableUniqueId);
+            ?? NormalizeSortableUniqueId(_stateStore.Committed.LastSortableUniqueId);
         var consistentLastSortableUniqueId = NormalizeSortableUniqueId(consistentPosition?.LastSortableUniqueId)
-            ?? NormalizeSortableUniqueId(_stateStore.State?.LastSortableUniqueId);
+            ?? NormalizeSortableUniqueId(_stateStore.Committed.LastSortableUniqueId);
 
         return new MultiProjectionHeadStatusSnapshot(
             ProjectorName: projectorName,
             ProjectorVersion: projectorVersion,
-            CurrentEventVersion: currentPosition?.EventVersion ?? consistentPosition?.EventVersion ?? _stateStore.State?.LastGoodSafeVersion ?? 0,
+            CurrentEventVersion: currentPosition?.EventVersion ?? consistentPosition?.EventVersion ?? _stateStore.Committed.LastGoodSafeVersion,
             CurrentLastSortableUniqueId: currentLastSortableUniqueId,
-            ConsistentEventVersion: consistentPosition?.EventVersion ?? _stateStore.State?.LastGoodSafeVersion ?? 0,
+            ConsistentEventVersion: consistentPosition?.EventVersion ?? _stateStore.Committed.LastGoodSafeVersion,
             ConsistentLastSortableUniqueId: consistentLastSortableUniqueId,
             IsCatchUpInProgress: _catchUpProgress.IsActive || catchUpStatus?.IsInProgress == true,
             CatchUpCurrentSortableUniqueId: NormalizeSortableUniqueId(_catchUpProgress.CurrentPosition?.Value)
@@ -866,8 +874,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public Task<MultiProjectionHealthStatus> GetHealthStatusAsync()
     {
         // Safe access - return defaults if not initialized
-        var lastPersistTime = _stateStore.State?.LastPersistTime;
-        var lastSortableUniqueId = _stateStore.State?.LastSortableUniqueId;
+        var lastPersistTime = _stateStore.Committed.LastPersistTime;
+        var lastSortableUniqueId = _stateStore.Committed.LastSortableUniqueId;
         var pendingCount = _pendingStreamEvents?.Count ?? 0;
         var isCatchUpActive = _catchUpProgress?.IsActive ?? false;
 
@@ -951,7 +959,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public async Task<MultiProjectionGrainStatus> GetStatusAsync()
     {
-        var currentPosition = _stateStore.State?.LastPosition;
+        var currentPosition = _liveLastPosition;
         var isCaughtUp = _orleansStreamHandle != null;
 
         long stateSize = 0;
@@ -1015,7 +1023,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (_host.CurrentFault is { } liveFault)
             {
                 _projectionFault = liveFault;
-                await _stateStore.ExecuteWriteAsync(s => WriteFaultIntoState(s, liveFault));
+                await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.FaultDescriptor, s => WriteFaultIntoState(s, liveFault));
             }
 
             _logger.LogDebug(
@@ -1104,9 +1112,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     OriginalSizeBytes: originalSizeBytes,
                     CompressedSizeBytes: compressedSizeBytes,
                     SafeWindowThreshold: checkpoint.SafeThresholdValue ?? _host.PeekCurrentSafeWindowThreshold(),
-                    CreatedAt: _stateStore.State!.LastPersistTime == default
+                    CreatedAt: _stateStore.Committed.LastPersistTime == default
                         ? DateTime.UtcNow
-                        : _stateStore.State.LastPersistTime,
+                        : _stateStore.Committed.LastPersistTime,
                     UpdatedAt: DateTime.UtcNow,
                     BuildSource: "GRAIN",
                     BuildHost: Environment.MachineName);
@@ -1334,7 +1342,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 // applyFields runs INSIDE the store gate, immediately before the write commits — the mutation and the
                 // write are one atomic gated operation. On an ETag conflict we re-read and the loop re-applies the same
                 // fields onto the refreshed state, so the retry re-derives its mutation under the gate too.
-                await _stateStore.ExecuteWriteAsync(applyFields);
+                await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.Checkpoint, applyFields);
                 break;
             }
             catch (global::Orleans.Storage.InconsistentStateException) when (retry < maxRetries - 1)
@@ -1747,13 +1755,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             "Grain activation started: {ProjectorName}",
             projectorName);
 
-        // Validate Orleans state - if corrupted or incompatible, reset it
+        // Adopt the state Orleans populated as the committed baseline for reads. If accessing it throws (corrupt or
+        // incompatible), clear and proceed with fresh state.
         try
         {
-            if (_stateStore.State == null)
-            {
-                _logger.LogDebug("Orleans state is null, will initialize fresh: {ProjectorName}", projectorName);
-            }
+            _stateStore.AdoptProviderStateAsCommitted();
         }
         catch (Exception ex)
         {
@@ -1956,14 +1962,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         // Reset integrity guard fields when external snapshot is missing.
                         // Without this, LastGoodSafeVersion from a previous successful run
                         // permanently blocks persist because catch-up starts at safeVersion=0.
-                        if (_stateStore.State != null && _stateStore.State.LastGoodSafeVersion > 0)
+                        if (_stateStore.Committed.LastGoodSafeVersion > 0)
                         {
                             _logger.LogWarning(
                                 "Resetting integrity guard: LastGoodSafeVersion was {LastGood} but external snapshot is missing. "
                                 + "This allows catch-up to rebuild and persist a new snapshot. {ProjectorName}",
-                                _stateStore.State.LastGoodSafeVersion,
+                                _stateStore.Committed.LastGoodSafeVersion,
                                 projectorName);
-                            await _stateStore.ExecuteWriteAsync(s =>
+                            await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.MetadataMaintenance, s =>
                             {
                                 s.LastGoodSafeVersion = 0;
                                 s.LastGoodPayloadBytes = 0;
@@ -2154,25 +2160,24 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         try
         {
-            if (_stateStore.State != null)
+            var version = currentVersion;
+            // Operator rebuild/reset: clears the fault and re-establishes a clean baseline — allowed while faulted.
+            await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.OperatorReset, s =>
             {
-                var version = currentVersion;
-                await _stateStore.ExecuteWriteAsync(s =>
+                s.ProjectorName = GetProjectorName();
+                s.SerializedState = null;
+                s.LastPosition = null;
+                s.SafeLastPosition = null;
+                s.EventsProcessed = 0;
+                s.StateSize = 0;
+                s.LastPersistTime = DateTime.UtcNow;
+                if (!string.IsNullOrEmpty(version))
                 {
-                    s.ProjectorName = GetProjectorName();
-                    s.SerializedState = null;
-                    s.LastPosition = null;
-                    s.SafeLastPosition = null;
-                    s.EventsProcessed = 0;
-                    s.StateSize = 0;
-                    s.LastPersistTime = DateTime.UtcNow;
-                    if (!string.IsNullOrEmpty(version))
-                    {
-                        s.ProjectorVersion = version;
-                    }
-                    ClearFaultFromState(s);
-                });
-            }
+                    s.ProjectorVersion = version;
+                }
+                ClearFaultFromState(s);
+            });
+            _liveLastPosition = null;
         }
         catch (Exception ex)
         {
@@ -2393,7 +2398,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
-            await _stateStore.ExecuteWriteAsync(s => WriteFaultIntoState(s, fault));
+            await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.FaultDescriptor, s => WriteFaultIntoState(s, fault));
         }
         catch (Exception writeEx)
         {
@@ -2470,7 +2475,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
-            await _stateStore.ExecuteWriteAsync(s => WriteFaultIntoState(s, fault));
+            await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.FaultDescriptor, s => WriteFaultIntoState(s, fault));
         }
         catch (Exception ex)
         {
@@ -2543,7 +2548,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     /// <summary>Re-establishes a persisted fault into the freshly-activated host so the first query fails closed.</summary>
     private void RestoreProjectionFaultIfPersisted()
     {
-        var state = _stateStore.State;
+        var state = _stateStore.Committed;
         if (state?.FaultEventId is null || _host is null)
         {
             return;
@@ -2611,7 +2616,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         try
         {
             var projectorName = GetProjectorName();
-            var currentVersion = _stateStore.State?.ProjectorVersion;
+            var currentVersion = _stateStore.Committed.ProjectorVersion;
             bool updated = false;
 
             // Update external store (Postgres/Cosmos) via host
@@ -2682,10 +2687,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             // Update Orleans ProjectorVersion field
-            if (updated && _stateStore.State != null)
+            if (updated)
             {
                 var version = newVersion;
-                await _stateStore.ExecuteWriteAsync(s => s.ProjectorVersion = version);
+                await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.MetadataMaintenance, s => s.ProjectorVersion = version);
             }
 
             return updated;
@@ -3663,10 +3668,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 TrackProcessedEventId(ev.Id);
             }
             _lastEventTime = DateTime.UtcNow;
-            if (_stateStore.State != null)
-            {
-                _stateStore.State.LastPosition = allEvents.Last().SortableUniqueIdValue;
-            }
+            _liveLastPosition = allEvents.Last().SortableUniqueIdValue;
         }
     }
 
@@ -3902,7 +3904,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
                 .Last()
                 .SortableUniqueIdValue;
-            _stateStore.State.LastPosition = maxSortableId;
+            _liveLastPosition = maxSortableId;
 
             _logger.LogDebug(
                 "[{ProjectorName}] Processed {EventCount} events - Total: {EventsProcessed:N0} events",
@@ -4002,7 +4004,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
                 .Last()
                 .SortableUniqueIdValue;
-            _stateStore.State.LastPosition = maxSortableId;
+            _liveLastPosition = maxSortableId;
 
             _logger.LogDebug(
                 "[{ProjectorName}] Processed {EventCount} buffered events - Total: {EventsProcessed:N0} events",

@@ -1,43 +1,109 @@
 using Orleans.Runtime;
 namespace Sekiban.Dcb.Orleans.Grains;
 
+/// <summary>The category of a coordinated state write, which decides whether it is authorized while the projection is faulted.</summary>
+internal enum GrainStateWriteKind
+{
+    /// <summary>A normal/streaming snapshot checkpoint. Rejected while a fault exists — a faulted projection makes no checkpoint progress.</summary>
+    Checkpoint,
+
+    /// <summary>Persisting (or retrying) the projection fault descriptor. Always allowed.</summary>
+    FaultDescriptor,
+
+    /// <summary>An operator rebuild/reset that clears the fault and re-establishes a clean baseline. Always allowed.</summary>
+    OperatorReset,
+
+    /// <summary>Maintenance of auxiliary/monitoring metadata (version, integrity-guard). Always allowed.</summary>
+    MetadataMaintenance
+}
+
+/// <summary>The result of a coordinated write.</summary>
+internal enum GrainStateWriteOutcome
+{
+    /// <summary>The write mutated a candidate and committed it.</summary>
+    Committed,
+
+    /// <summary>A checkpoint was suppressed because the projection is faulted; nothing was written.</summary>
+    RejectedFaulted
+}
+
 /// <summary>
-///     Sole owner of the grain's raw <see cref="IPersistentState{TState}" /> write capability. The grain hands its
-///     Orleans-injected persistent state to this store in the constructor and keeps no direct reference of its own, so
-///     no call site can reach <c>WriteStateAsync</c> except through here — the single-writer serialization is enforced
-///     by TYPE OWNERSHIP, not by convention. A reflection/architecture test asserts the grain holds no
-///     <see cref="IPersistentState{TState}" /> field and that this type is the only owner.
-///     Every write goes through <see cref="ExecuteWriteAsync" />, which applies the caller's mutation to the persisted
-///     payload AND writes it inside the SAME acquired gate — so no caller mutates persisted fields for an operation
-///     before entering the gate, and a fault-descriptor retry can never interleave with a normal checkpoint persist.
-///     Read access to the payload is exposed read-only for in-memory reads/field updates that are not persisted writes.
+///     Sole owner of the grain's raw <see cref="IPersistentState{TState}" />. The grain hands its Orleans-injected
+///     persistent state here in the constructor and keeps no direct reference, so nothing but this store can call
+///     <c>WriteStateAsync</c> — enforced by TYPE OWNERSHIP. Reads are exposed only as an immutable
+///     <see cref="IReadOnlyMultiProjectionGrainState" /> view of the last committed state; the mutable payload never
+///     escapes.
+///     Writes are copy-on-write under a single-writer gate: a write clones the last committed state, applies its
+///     mutation to the CANDIDATE, writes the candidate, and publishes it as the committed state only after a successful
+///     <c>WriteStateAsync</c>. If the write fails, the candidate is discarded and the committed state (and the provider
+///     payload) is restored — no uncommitted field is ever visible to a later read or to another write. A
+///     <see cref="GrainStateWriteKind.Checkpoint" /> is rejected when a fault exists on the committed state OR live on
+///     the actor (fault persistence may be retrying), so a faulted projection makes no checkpoint progress.
 /// </summary>
 internal sealed class CoordinatedGrainStateStore
 {
     private readonly IPersistentState<MultiProjectionGrainState> _state;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Func<bool> _liveFaultActive;
+    private MultiProjectionGrainState _committed;
 
-    public CoordinatedGrainStateStore(IPersistentState<MultiProjectionGrainState> state) =>
+    public CoordinatedGrainStateStore(
+        IPersistentState<MultiProjectionGrainState> state,
+        Func<bool> liveFaultActive)
+    {
         _state = state ?? throw new ArgumentNullException(nameof(state));
+        _liveFaultActive = liveFaultActive ?? throw new ArgumentNullException(nameof(liveFaultActive));
+        _committed = _state.State ?? new MultiProjectionGrainState();
+    }
 
-    /// <summary>The persisted payload. In-memory reads and field updates are allowed; only writes are coordinated.</summary>
-    public MultiProjectionGrainState State => _state.State;
+    /// <summary>The last committed persisted state, as a read-only view. Never the in-flight candidate.</summary>
+    public IReadOnlyMultiProjectionGrainState Committed => _committed;
 
     public bool RecordExists => _state.RecordExists;
 
     /// <summary>
-    ///     Applies <paramref name="mutate" /> to the persisted payload and writes it, atomically under the single-writer
-    ///     gate. At most one write is in flight at a time; a second caller waits for the first to commit (or fail)
-    ///     before its mutation and write run.
+    ///     Adopts the provider's current payload as the committed baseline. Called after Orleans has populated the
+    ///     persistent state on activation (and after a re-read), so committed reads reflect what storage holds.
     /// </summary>
-    public async Task ExecuteWriteAsync(Action<MultiProjectionGrainState> mutate)
+    public void AdoptProviderStateAsCommitted() => _committed = _state.State ?? new MultiProjectionGrainState();
+
+    /// <summary>
+    ///     Applies <paramref name="mutate" /> to a CLONE of the committed state and writes it under the single-writer
+    ///     gate, publishing the clone as committed only on success. A <see cref="GrainStateWriteKind.Checkpoint" /> is
+    ///     rejected (no write) when the projection is faulted.
+    /// </summary>
+    public async Task<GrainStateWriteOutcome> ExecuteWriteAsync(
+        GrainStateWriteKind kind,
+        Action<MultiProjectionGrainState> mutate)
     {
         ArgumentNullException.ThrowIfNull(mutate);
         await _gate.WaitAsync();
         try
         {
-            mutate(_state.State);
-            await _state.WriteStateAsync();
+            if (kind == GrainStateWriteKind.Checkpoint && (CommittedFaultExists() || _liveFaultActive()))
+            {
+                // A faulted projection makes no checkpoint progress: no candidate, no write, no version increment.
+                return GrainStateWriteOutcome.RejectedFaulted;
+            }
+
+            var candidate = _committed.Clone();
+            mutate(candidate);
+
+            _state.State = candidate; // stage into the provider buffer for the write
+            try
+            {
+                await _state.WriteStateAsync();
+            }
+            catch
+            {
+                // Roll back: the failed candidate must never be visible. Restore the provider buffer to the committed
+                // state; _committed is left untouched, so later reads and writes see only the last good state.
+                _state.State = _committed;
+                throw;
+            }
+
+            _committed = candidate; // publish only after a successful commit
+            return GrainStateWriteOutcome.Committed;
         }
         finally
         {
@@ -45,10 +111,19 @@ internal sealed class CoordinatedGrainStateStore
         }
     }
 
-    /// <summary>Writes the current payload with no additional mutation, still under the gate.</summary>
-    public Task WriteAsync() => ExecuteWriteAsync(static _ => { });
+    /// <summary>Re-reads the provider payload (e.g. to refresh the ETag after a conflict) and adopts it as committed.</summary>
+    public async Task ReadStateAsync()
+    {
+        await _state.ReadStateAsync();
+        AdoptProviderStateAsCommitted();
+    }
 
-    public Task ReadStateAsync() => _state.ReadStateAsync();
+    /// <summary>Clears the provider payload and adopts the cleared state as committed.</summary>
+    public async Task ClearStateAsync()
+    {
+        await _state.ClearStateAsync();
+        AdoptProviderStateAsCommitted();
+    }
 
-    public Task ClearStateAsync() => _state.ClearStateAsync();
+    private bool CommittedFaultExists() => _committed.FaultEventId is not null;
 }

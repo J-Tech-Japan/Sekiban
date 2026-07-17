@@ -7,36 +7,42 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// <summary>
 ///     Friend tests for the production <see cref="CoordinatedGrainStateStore" /> — the sole owner of the grain's raw
 ///     <see cref="IPersistentState{TState}" /> write capability. They drive the store directly with a recording
-///     persistent-state fake that clones state on COMMIT and assigns a monotonic version, competing two DIFFERENT
-///     representative operations (a checkpoint write and a fault-descriptor retry write). The first is parked inside the
-///     write so the second becomes ready while it is in flight, proving the store — not the harness — serializes them
-///     AND that each operation's mutation happens under the same gate as its write (so a bypassed or before-gate
-///     mutation is caught). A reflection/architecture test enforces the ownership structurally: the grain holds no
-///     IPersistentState field; only the store does.
+///     persistent-state fake that clones state on COMMIT and assigns a monotonic version. They prove: writes are
+///     serialized and copy-on-write (a failed write leaves no uncommitted field visible); a checkpoint is suppressed
+///     while a fault exists (committed OR live); and the read view is immutable. A reflection/architecture test
+///     enforces the ownership structurally.
 /// </summary>
 public class CoordinatedGrainStateStoreTests
 {
+    private static CoordinatedGrainStateStore NewStore(RecordingPersistentState fake, Func<bool>? liveFault = null) =>
+        new(fake, liveFault ?? (() => false));
+
     [Fact]
-    public async Task Checkpoint_then_fault_writes_serialize_mutate_under_gate_with_no_overwrite()
+    public async Task Checkpoint_then_fault_writes_serialize_copy_on_write_with_no_overwrite()
     {
         var fake = new RecordingPersistentState();
-        var store = new CoordinatedGrainStateStore(fake);
+        fake.ParkFirstWrite();
+        var store = NewStore(fake);
 
-        // Op A — a checkpoint write. Its mutation runs INSIDE the gate (the ExecuteWriteAsync delegate) and the write
-        // then parks inside the fake, holding the gate.
-        var a = store.ExecuteWriteAsync(s => s.LastSortableUniqueId = "cp");
+        // Op A — a checkpoint write. Its mutation runs on a CLONE inside the gate; the write then parks inside the fake.
+        var a = store.ExecuteWriteAsync(GrainStateWriteKind.Checkpoint, s => s.LastSortableUniqueId = "cp");
         await fake.FirstWriteEntered;
 
-        // Op B — a fault-descriptor retry write, ready while A is parked.
-        var b = store.ExecuteWriteAsync(s => s.FaultMessage = "fault");
+        // Op B — a fault-descriptor write, ready while A is parked.
+        var b = store.ExecuteWriteAsync(GrainStateWriteKind.FaultDescriptor, s =>
+        {
+            s.FaultEventId = "e1";
+            s.FaultMessage = "fault";
+        });
 
-        Assert.False(b.IsCompleted);                 // B waits on the gate; its mutation has not run
+        Assert.False(b.IsCompleted);                 // B waits on the gate
         Assert.Equal(1, fake.MaxConcurrentWrites);
         Assert.Empty(fake.Commits);                  // A parked before committing
-        Assert.Null(fake.State.FaultMessage);        // B's mutation is gated, not applied early
+        Assert.Null(store.Committed.LastSortableUniqueId); // A's candidate is not published until it commits
 
         fake.ReleaseFirstWrite();
-        await Task.WhenAll(a, b);
+        Assert.Equal(GrainStateWriteOutcome.Committed, await a);
+        Assert.Equal(GrainStateWriteOutcome.Committed, await b);
 
         Assert.Equal(1, fake.MaxConcurrentWrites);                          // never overlapped
         Assert.Equal(new[] { 1L, 2L }, fake.Commits.Select(c => c.Version).ToArray()); // monotonic version
@@ -46,22 +52,127 @@ public class CoordinatedGrainStateStoreTests
         // Second commit: fault added while RETAINING the checkpoint (no overwrite).
         Assert.Equal("cp", fake.Commits[1].LastSortableUniqueId);
         Assert.Equal("fault", fake.Commits[1].FaultMessage);
+        // Committed view reflects the last successful commit.
+        Assert.Equal("cp", store.Committed.LastSortableUniqueId);
+        Assert.Equal("fault", store.Committed.FaultMessage);
     }
 
     [Fact]
-    public void Grain_holds_no_IPersistentState_field_only_the_coordinated_store_owns_it()
+    public async Task Failed_checkpoint_write_rolls_back_no_uncommitted_state_leaks_into_reads_or_later_writes()
     {
-        // Structural enforcement: after construction the grain must reach persisted state ONLY through the coordinated
-        // store, so it must not retain any IPersistentState field. The store must own exactly that field.
-        var grainPersistentStateFields = InstanceFields(typeof(MultiProjectionGrain))
-            .Where(f => IsPersistentState(f.FieldType))
-            .ToList();
-        Assert.Empty(grainPersistentStateFields);
+        var fake = new RecordingPersistentState();
+        var store = NewStore(fake);
 
-        var storePersistentStateFields = InstanceFields(typeof(CoordinatedGrainStateStore))
-            .Where(f => IsPersistentState(f.FieldType))
-            .ToList();
-        Assert.Single(storePersistentStateFields);
+        // A checkpoint write fails after mutating its candidate.
+        fake.FailNextWrite = true;
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.ExecuteWriteAsync(GrainStateWriteKind.Checkpoint, s =>
+            {
+                s.LastSortableUniqueId = "uncommitted";
+                s.ProjectorVersion = "v-bad";
+            }));
+
+        // The failed candidate is not visible to reads.
+        Assert.Null(store.Committed.LastSortableUniqueId);
+        Assert.Null(store.Committed.ProjectorVersion);
+        Assert.Empty(fake.Commits);
+
+        // A later successful, unrelated write does not carry the failed candidate's fields.
+        Assert.Equal(
+            GrainStateWriteOutcome.Committed,
+            await store.ExecuteWriteAsync(GrainStateWriteKind.Checkpoint, s => s.LastSortableUniqueId = "committed"));
+
+        Assert.Equal("committed", store.Committed.LastSortableUniqueId);
+        Assert.Null(store.Committed.ProjectorVersion);          // v-bad never leaked
+        Assert.Single(fake.Commits);
+        Assert.Equal("committed", fake.Commits[0].LastSortableUniqueId);
+    }
+
+    [Fact]
+    public async Task Fault_first_then_checkpoint_is_rejected_no_second_write_checkpoint_unchanged()
+    {
+        var fake = new RecordingPersistentState();
+        var store = NewStore(fake);
+
+        // Commit a fault first.
+        Assert.Equal(
+            GrainStateWriteOutcome.Committed,
+            await store.ExecuteWriteAsync(GrainStateWriteKind.FaultDescriptor, s =>
+            {
+                s.FaultEventId = "e1";
+                s.FaultMessage = "fault";
+            }));
+
+        // A normal checkpoint is now rejected: a faulted projection makes no checkpoint progress.
+        var outcome = await store.ExecuteWriteAsync(GrainStateWriteKind.Checkpoint, s => s.LastSortableUniqueId = "cp");
+
+        Assert.Equal(GrainStateWriteOutcome.RejectedFaulted, outcome);
+        Assert.Single(fake.Commits);                      // no second provider write / version increment
+        Assert.Null(store.Committed.LastSortableUniqueId); // checkpoint unchanged
+        Assert.Equal("fault", store.Committed.FaultMessage); // fault retained
+
+        // A contracted fault/reset write is still allowed while faulted.
+        Assert.Equal(
+            GrainStateWriteOutcome.Committed,
+            await store.ExecuteWriteAsync(GrainStateWriteKind.OperatorReset, s =>
+            {
+                s.FaultEventId = null;
+                s.FaultMessage = null;
+                s.ProjectorName = "rebuilt";
+            }));
+    }
+
+    [Fact]
+    public async Task Live_actor_fault_suppresses_checkpoint_even_without_a_committed_descriptor()
+    {
+        var fake = new RecordingPersistentState();
+        var live = true;
+        var store = NewStore(fake, () => live);
+
+        // No committed fault descriptor, but the live actor fault is active (fault persistence may still be retrying).
+        var outcome = await store.ExecuteWriteAsync(GrainStateWriteKind.Checkpoint, s => s.LastSortableUniqueId = "cp");
+        Assert.Equal(GrainStateWriteOutcome.RejectedFaulted, outcome);
+        Assert.Empty(fake.Commits);
+
+        // Once the live fault clears, the checkpoint proceeds.
+        live = false;
+        Assert.Equal(
+            GrainStateWriteOutcome.Committed,
+            await store.ExecuteWriteAsync(GrainStateWriteKind.Checkpoint, s => s.LastSortableUniqueId = "cp"));
+        Assert.Equal("cp", store.Committed.LastSortableUniqueId);
+    }
+
+    [Fact]
+    public void Grain_holds_no_persisted_state_reference_and_the_store_exposes_no_mutable_state()
+    {
+        // The grain must reach persisted state only through the store, so it holds neither the raw IPersistentState nor
+        // the mutable MultiProjectionGrainState.
+        var grainFields = InstanceFields(typeof(MultiProjectionGrain)).ToList();
+        Assert.DoesNotContain(grainFields, f => IsPersistentState(f.FieldType));
+        Assert.DoesNotContain(grainFields, f => f.FieldType == typeof(MultiProjectionGrainState));
+
+        // The store owns exactly one IPersistentState field, and exposes NO member returning the mutable state — reads
+        // escape only as the read-only view.
+        var storeType = typeof(CoordinatedGrainStateStore);
+        Assert.Single(InstanceFields(storeType).Where(f => IsPersistentState(f.FieldType)));
+
+        var members = storeType
+            .GetMembers(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(m => m is PropertyInfo or MethodInfo)
+            .Where(m => !(m is MethodInfo mi && (mi.IsSpecialName || mi.Name.StartsWith("<"))));
+        foreach (var m in members)
+        {
+            var returnType = m switch
+            {
+                PropertyInfo p => p.PropertyType,
+                MethodInfo mi => mi.ReturnType,
+                _ => typeof(void)
+            };
+            Assert.NotEqual(typeof(MultiProjectionGrainState), returnType);
+        }
+
+        // The committed view is the read-only interface, not the mutable type.
+        Assert.Equal(typeof(IReadOnlyMultiProjectionGrainState), storeType.GetProperty("Committed")!.PropertyType);
     }
 
     private static IEnumerable<FieldInfo> InstanceFields(Type t) =>
@@ -71,9 +182,8 @@ public class CoordinatedGrainStateStoreTests
         t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IPersistentState<>);
 
     /// <summary>
-    ///     A persistent-state fake that records the maximum concurrent writes, parks the FIRST write so a second write
-    ///     (if it could overlap) would be observed, and CLONES the state on each commit while assigning a monotonic
-    ///     version — so assertions read committed snapshots, not the live shared object.
+    ///     A persistent-state fake that records max concurrent writes, parks the FIRST write so an overlapping second
+    ///     write would be observed, CLONES the state on commit with a monotonic version, and can fail the next write.
     /// </summary>
     private sealed class RecordingPersistentState : IPersistentState<MultiProjectionGrainState>
     {
@@ -82,10 +192,15 @@ public class CoordinatedGrainStateStoreTests
         private long _version;
         private readonly TaskCompletionSource _firstEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _parkArmed;
 
         public MultiProjectionGrainState State { get; set; } = new();
         public string Etag => _version.ToString();
         public bool RecordExists { get; private set; }
+        public bool FailNextWrite { get; set; }
+
+        /// <summary>Opt-in: park the first write so a concurrency test can observe an overlapping second write.</summary>
+        public void ParkFirstWrite() => _parkArmed = true;
         public int MaxConcurrentWrites { get; private set; }
         public List<CommittedSnapshot> Commits { get; } = new();
 
@@ -94,17 +209,29 @@ public class CoordinatedGrainStateStoreTests
 
         public async Task WriteStateAsync()
         {
-            int n;
+            if (FailNextWrite)
+            {
+                FailNextWrite = false;
+                throw new InvalidOperationException("injected write failure");
+            }
+
+            bool park;
             lock (_sync)
             {
-                n = ++_current;
+                var n = ++_current;
                 if (n > MaxConcurrentWrites)
                 {
                     MaxConcurrentWrites = n;
                 }
+
+                park = n == 1 && _parkArmed;
+                if (park)
+                {
+                    _parkArmed = false;
+                }
             }
 
-            if (n == 1)
+            if (park)
             {
                 _firstEntered.TrySetResult();
                 await _release.Task; // park so a bypassed/overlapping second write would be observed here
@@ -114,8 +241,7 @@ public class CoordinatedGrainStateStoreTests
             {
                 _version++;
                 RecordExists = true;
-                // Clone on COMMIT: capture the state as it is now, not the live object inspected later.
-                Commits.Add(new CommittedSnapshot(_version, State.LastSortableUniqueId, State.FaultMessage));
+                Commits.Add(new CommittedSnapshot(_version, State.LastSortableUniqueId, State.FaultMessage, State.ProjectorVersion));
                 _current--;
             }
         }
@@ -139,5 +265,5 @@ public class CoordinatedGrainStateStoreTests
         public Task ClearStateAsync(CancellationToken cancellationToken) => ClearStateAsync();
     }
 
-    private sealed record CommittedSnapshot(long Version, string? LastSortableUniqueId, string? FaultMessage);
+    private sealed record CommittedSnapshot(long Version, string? LastSortableUniqueId, string? FaultMessage, string? ProjectorVersion);
 }
