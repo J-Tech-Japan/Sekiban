@@ -246,9 +246,19 @@ For identifiers and other members that must be present, declare them `required` 
 1. The message names the event, the projector and the position. Find that event.
 2. If it is a casing/deserialization problem, it is #1074 — fix the producer, or read the row with the `CaseInsensitiveLegacy` deserialization policy while you migrate.
 3. If the projector's fold logic is at fault, fix the projector.
-4. Once the cause is resolved, **rebuild the projection** (an operator rebuild/reset). A fault clears only by a deterministic rebuild that successfully replays the same position — an unrelated later event never clears it. If the poison is still there, the rebuild simply faults again at the same event.
+4. Once the cause is resolved, **rebuild the projection** with the operator reset below. A fault clears only by a deterministic rebuild that successfully replays the same position — an unrelated later event never clears it. If the poison is still there, the rebuild simply faults again at the same event.
 
 Poison-event skip/quarantine is deliberately **not** a default: a projection silently skipping events it cannot apply is a return to the same class of silence. It may arrive later as an explicit, opt-in policy.
+
+### Operator reset: `ResetProjectionFaultAsync` (admin-plane, operator-only)
+
+Clearing a persisted projection fault is an **operator-only** action on the grain admin interface (`IMultiProjectionGrain`, alongside `GetStatusAsync`). It is **never invoked automatically** and is **not** exposed through `ISekibanExecutor` — application/query code cannot trigger it.
+
+- **Acquire the token first.** The reset requires the *exact* current fault identity — projector name, fault event id, and fault stream position — as a concurrency token. Read it from the fault context surfaced on a failed query (the projection-fault error carries event id, type, projector and position). Do not synthesise it.
+- **The persisted descriptor is the authority.** The token is compared against the current *persisted* fault inside the single-writer gate. A stale token, a descriptor changed by a concurrent write, a wrong projector, or no fault present is rejected with a normal error and **no write and no fault clear**. A same-token race commits at most once.
+- **Derived state is rebuilt.** A correct token durably clears the descriptor **and** the derived projection checkpoint, so the projection **rebuilds from the beginning** by catch-up. This does not delete any authoritative events — only the grain's derived snapshot/checkpoint. The first-query barrier prevents any early "healthy" answer before the rebuild reaches the head.
+- **The clear is earned, not assumed.** Only after the durable clear commits is the live actor fault cleared and a fresh activation requested. If the poison still cannot be folded, the per-event boundary **re-establishes and re-persists** the fault on rebuild — the reset never skips or quarantines. A permanent clear happens only when the same position replays successfully.
+- **A failed reset changes nothing.** If the persisted clear write fails, the descriptor and the live fault are retained and every query surface stays rejected; retry the same token once storage recovers.
 
 ## Serialization Exceptions
 

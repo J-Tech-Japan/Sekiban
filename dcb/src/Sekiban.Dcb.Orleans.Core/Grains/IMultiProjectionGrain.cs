@@ -145,4 +145,16 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     ///     Testing aid: delete external state to simulate snapshot loss.
     /// </summary>
     Task<bool> DeleteExternalStateAsync();
+
+    /// <summary>
+    ///     Operator-only admin surface: clear a persisted projection fault and rebuild. The request carries the exact
+    ///     current fault identity (projector name, fault event id, fault stream position) as a concurrency token,
+    ///     validated inside the single-writer gate against the CURRENT persisted descriptor. A mismatch, stale token,
+    ///     missing fault, or projector mismatch returns <c>ResultBox.Error</c> with no write and no fault clear. On a
+    ///     correct token the persisted descriptor and derived checkpoint are durably cleared for a full rebuild; only
+    ///     after that durable commit is the live actor fault cleared and a rebuild triggered. If the persisted clear
+    ///     write fails, the descriptor and the live fault are retained and queries stay rejected. This surface is never
+    ///     invoked automatically and is not exposed through <c>ISekibanExecutor</c>.
+    /// </summary>
+    Task<ResultBox<bool>> ResetProjectionFaultAsync(ResetProjectionFaultRequest request);
 }

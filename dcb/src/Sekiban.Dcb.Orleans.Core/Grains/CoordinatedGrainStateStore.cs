@@ -24,7 +24,10 @@ internal enum GrainStateWriteOutcome
     Committed,
 
     /// <summary>A checkpoint was suppressed because the projection is faulted; nothing was written.</summary>
-    RejectedFaulted
+    RejectedFaulted,
+
+    /// <summary>A guarded write's precondition (e.g. a reset token vs the persisted fault) did not hold; nothing was written.</summary>
+    RejectedGuard
 }
 
 /// <summary>
@@ -158,6 +161,58 @@ internal sealed class CoordinatedGrainStateStore
             }
 
             _committed = candidate; // publish only after a successful commit
+            _committedSnapshot = MultiProjectionGrainStateSnapshot.From(candidate);
+            return GrainStateWriteOutcome.Committed;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    ///     A copy-on-write write whose <paramref name="guard" /> is evaluated against the CURRENT committed state
+    ///     INSIDE the single-writer gate — the concurrency authority. If the guard does not hold, nothing is mutated or
+    ///     written and <see cref="GrainStateWriteOutcome.RejectedGuard" /> is returned. Otherwise it behaves like
+    ///     <see cref="ExecuteWriteAsync" />: mutate a clone, write, publish only on success, roll back on failure. Two
+    ///     racing guarded writes with the same precondition therefore serialize — the first commits and changes the
+    ///     committed state, so the second's guard no longer holds and it does nothing.
+    /// </summary>
+    public async Task<GrainStateWriteOutcome> ExecuteGuardedWriteAsync(
+        GrainStateWriteKind kind,
+        Func<IReadOnlyMultiProjectionGrainState, bool> guard,
+        Action<MultiProjectionGrainState> mutate)
+    {
+        ArgumentNullException.ThrowIfNull(guard);
+        ArgumentNullException.ThrowIfNull(mutate);
+        await _gate.WaitAsync();
+        try
+        {
+            if (!guard(_committedSnapshot))
+            {
+                return GrainStateWriteOutcome.RejectedGuard; // zero mutation / write / publish
+            }
+
+            if (kind == GrainStateWriteKind.Checkpoint && (CommittedFaultExists() || _liveFaultActive()))
+            {
+                return GrainStateWriteOutcome.RejectedFaulted;
+            }
+
+            var candidate = _committed.Clone();
+            mutate(candidate);
+
+            _state.State = candidate;
+            try
+            {
+                await _state.WriteStateAsync();
+            }
+            catch
+            {
+                _state.State = _committed;
+                throw;
+            }
+
+            _committed = candidate;
             _committedSnapshot = MultiProjectionGrainStateSnapshot.From(candidate);
             return GrainStateWriteOutcome.Committed;
         }

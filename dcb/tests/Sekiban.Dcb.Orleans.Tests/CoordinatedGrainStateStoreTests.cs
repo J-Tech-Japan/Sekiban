@@ -230,6 +230,23 @@ public class CoordinatedGrainStateStoreTests
         Assert.Equal(typeof(IReadOnlyMultiProjectionGrainState), storeType.GetProperty("Committed")!.PropertyType);
     }
 
+    [Fact]
+    public void ResetProjectionFault_is_admin_plane_only_and_not_on_ISekibanExecutor()
+    {
+        // The operator-only reset is on the grain admin interface...
+        Assert.NotNull(typeof(IMultiProjectionGrain).GetMethod(nameof(IMultiProjectionGrain.ResetProjectionFaultAsync)));
+
+        // ...and is NOT exposed through the product query/command executor surface.
+        var executorType = typeof(Sekiban.Dcb.ISekibanExecutor);
+        Assert.DoesNotContain(
+            executorType.GetMethods(),
+            m => m.Name.Contains("ResetProjectionFault", StringComparison.Ordinal));
+        Assert.Null(executorType.GetMethod("ResetProjectionFaultAsync"));
+
+        // No production type auto-invokes it: the only references are the grain interface/implementation and tests.
+        Assert.Null(typeof(CoordinatedGrainStateStore).GetMethod("ResetProjectionFaultAsync"));
+    }
+
     private static IEnumerable<FieldInfo> InstanceFields(Type t) =>
         t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 

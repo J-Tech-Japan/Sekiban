@@ -2156,49 +2156,94 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         await base.OnDeactivateAsync(reason, cancellationToken);
     }
 
-    private async Task ResetPersistedStateForFullRebuildAsync(string? currentVersion)
+    /// <inheritdoc />
+    public async Task<ResultBox<bool>> ResetProjectionFaultAsync(ResetProjectionFaultRequest request)
     {
+        if (request is null)
+        {
+            return ResultBox.Error<bool>(new ArgumentNullException(nameof(request)));
+        }
+
+        await EnsureInitializedAsync();
+        if (_host is null)
+        {
+            return ResultBox.Error<bool>(new InvalidOperationException("Projection host not initialized"));
+        }
+
+        // The projector name identifies the grain; the fault event id + position are validated against the persisted
+        // descriptor inside the store gate. A wrong projector never matches this grain.
+        if (!string.Equals(request.ProjectorName, GetProjectorName(), StringComparison.Ordinal))
+        {
+            return ResultBox.Error<bool>(new InvalidOperationException(
+                "Projection fault reset rejected: projector name does not match this projection."));
+        }
+
+        GrainStateWriteOutcome outcome;
         try
         {
-            var version = currentVersion;
-            // Operator rebuild/reset: clears the fault and re-establishes a clean baseline — allowed while faulted.
-            // The mutation clears only the CANDIDATE fault fields (pure, safe to roll back). The durable write must
-            // succeed before any live actor state is touched:
-            await _stateStore.ExecuteWriteAsync(
+            // The persisted descriptor is the concurrency authority: validate the token AND clear the descriptor +
+            // derived checkpoint atomically under the single-writer gate (copy-on-write). A stale token, a descriptor
+            // changed by a concurrent write, or an already-cleared fault fails the guard with no write.
+            outcome = await _stateStore.ExecuteGuardedWriteAsync(
                 GrainStateWriteKind.OperatorReset,
-                s =>
-                {
-                    s.ProjectorName = GetProjectorName();
-                    s.SerializedState = null;
-                    s.LastPosition = null;
-                    s.SafeLastPosition = null;
-                    s.EventsProcessed = 0;
-                    s.StateSize = 0;
-                    s.LastPersistTime = DateTime.UtcNow;
-                    if (!string.IsNullOrEmpty(version))
-                    {
-                        s.ProjectorVersion = version;
-                    }
-                    ClearFaultFieldsOnCandidate(s);
-                });
-
-            // Reached only when the durable write above committed (an exception would have propagated and skipped this).
-            // Now clear the LIVE actor fault with a non-throwing idempotent primitive, so a failed reset leaves the
-            // persisted descriptor AND the live fault intact, and a post-commit live-clear hiccup does not reinterpret
-            // the already-durable write as failed.
-            ClearLiveProjectionFault();
+                committed => FaultTokenMatchesCommitted(committed, request),
+                ResetDerivedStateForFullRebuild);
         }
         catch (Exception ex)
         {
-            _lastError = $"Failed to clear persisted state: {ex.Message}";
+            // The persisted clear write failed: the committed descriptor is retained (rolled back) and the LIVE actor
+            // fault is untouched, so state/scalar/list queries stay rejected and fault-persist retry stays coherent.
+            _lastError = $"Projection fault reset failed to persist: {ex.Message}";
+            return ResultBox.Error<bool>(ex);
         }
 
+        if (outcome != GrainStateWriteOutcome.Committed)
+        {
+            return ResultBox.Error<bool>(new InvalidOperationException(
+                "Projection fault reset rejected: the request token does not match the current persisted fault "
+                + "(stale token, descriptor changed, or no fault present)."));
+        }
+
+        // Durable clear committed. Only now clear the LIVE actor fault and drop derived caches, then request a fresh
+        // activation so the rebuild runs on a clean actor: on reactivation no descriptor is restored, the first-query
+        // barrier catches up from the reset baseline, and if the poison remains the per-event boundary re-establishes
+        // and persists the fault again (reset never skips or quarantines). Permanent clear is earned only when the same
+        // position replays successfully.
+        ClearLiveProjectionFault();
         _eventsProcessed = 0;
         ClearProcessedEventCache();
         _unsafeEventIds.Clear();
         _eventBuffer.Clear();
         _pendingStreamEvents.Clear();
         CompactRetainedCollections();
+        DeactivateOnIdle();
+        return ResultBox.FromValue(true);
+    }
+
+    private static bool FaultTokenMatchesCommitted(
+        IReadOnlyMultiProjectionGrainState committed,
+        ResetProjectionFaultRequest request) =>
+        committed.FaultEventId is not null &&
+        string.Equals(committed.FaultEventId, request.FaultEventId, StringComparison.Ordinal) &&
+        string.Equals(committed.FaultPosition ?? string.Empty, request.FaultPosition ?? string.Empty, StringComparison.Ordinal);
+
+    // Clears the persisted fault descriptor AND the derived projection checkpoint on the candidate, so catch-up rebuilds
+    // the projection from the beginning. Pure candidate mutation — no live actor side effect.
+    private void ResetDerivedStateForFullRebuild(MultiProjectionGrainState s)
+    {
+        s.ProjectorName = GetProjectorName();
+        s.SerializedState = null;
+        s.LastPosition = null;
+        s.SafeLastPosition = null;
+        s.LastSortableUniqueId = null;
+        s.EventsProcessed = 0;
+        s.StateSize = 0;
+        s.LastGoodSafeVersion = 0;
+        s.LastGoodPayloadBytes = 0;
+        s.LastGoodOriginalSizeBytes = 0;
+        s.LastGoodEventsProcessed = 0;
+        s.LastPersistTime = DateTime.UtcNow;
+        ClearFaultFieldsOnCandidate(s);
     }
 
     private async Task EnsureInitializedAsync()
