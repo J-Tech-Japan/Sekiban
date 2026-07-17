@@ -16,14 +16,18 @@ public sealed class AotEventTypes : IEventTypes
     private readonly Dictionary<Type, Func<IEventPayload, string>> _serializers = new();
     private readonly Dictionary<string, JsonTypeInfo> _typeInfosByEventName = new();
     private readonly Dictionary<Type, JsonTypeInfo> _typeInfosByPayloadType = new();
+    private readonly EventPayloadDeserializationPolicy _policy;
 
-    public AotEventTypes(JsonSerializerOptions? jsonOptions = null)
+    public AotEventTypes(
+        JsonSerializerOptions? jsonOptions = null,
+        EventPayloadDeserializationPolicy policy = EventPayloadDeserializationPolicy.FailOnCaseMismatch)
     {
         _jsonOptions = jsonOptions ?? new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = false
         };
+        _policy = policy;
     }
 
     /// <summary>
@@ -37,7 +41,12 @@ public sealed class AotEventTypes : IEventTypes
     {
         EnsureEventRegistration(eventTypeName, typeof(T), typeInfo);
         _deserializers[eventTypeName] = json =>
-            JsonSerializer.Deserialize(json, typeInfo);
+            EventPayloadBinder.Deserialize(
+                json,
+                typeInfo,
+                eventTypeName,
+                _policy,
+                effectiveJson => JsonSerializer.Deserialize(effectiveJson, typeInfo));
 
         _serializers[typeof(T)] = payload =>
             JsonSerializer.Serialize((T)payload, typeInfo);
@@ -68,7 +77,12 @@ public sealed class AotEventTypes : IEventTypes
 
         EnsureEventRegistration(eventTypeName, eventPayloadType, typeInfo);
         _deserializers[eventTypeName] = json =>
-            JsonSerializer.Deserialize(json, typeInfo) as IEventPayload;
+            EventPayloadBinder.Deserialize(
+                json,
+                typeInfo,
+                eventTypeName,
+                _policy,
+                effectiveJson => JsonSerializer.Deserialize(effectiveJson, typeInfo) as IEventPayload);
 
         _serializers[eventPayloadType] = payload =>
             JsonSerializer.Serialize(payload, typeInfo);
@@ -91,7 +105,12 @@ public sealed class AotEventTypes : IEventTypes
             ? registeredTypeInfo
             : _jsonOptions.GetTypeInfo(eventType);
 
-        return JsonSerializer.Deserialize(json, typeInfo) as IEventPayload;
+        return EventPayloadBinder.Deserialize(
+            json,
+            typeInfo,
+            eventTypeName,
+            _policy,
+            effectiveJson => JsonSerializer.Deserialize(effectiveJson, typeInfo) as IEventPayload);
     }
 
     /// <inheritdoc />

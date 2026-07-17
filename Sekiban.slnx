@@ -98,6 +98,7 @@
     <Project Path="dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj" />
+    <Project Path="dcb/tests/Sekiban.Dcb.TestSupport/Sekiban.Dcb.TestSupport.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">

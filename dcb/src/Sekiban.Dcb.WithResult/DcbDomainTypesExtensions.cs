@@ -16,9 +16,12 @@ public static class DcbDomainTypesExtensions
     /// <summary>
     ///     Creates a simple DcbDomainTypes configuration with manual type registration
     /// </summary>
-    public static DcbDomainTypes Simple(Action<Builder> configure, JsonSerializerOptions? jsonOptions = null)
+    public static DcbDomainTypes Simple(
+        Action<Builder> configure,
+        JsonSerializerOptions? jsonOptions = null,
+        EventPayloadDeserializationPolicy deserializationPolicy = EventPayloadDeserializationPolicy.FailOnCaseMismatch)
     {
-        var builder = new Builder(jsonOptions);
+        var builder = new Builder(jsonOptions, deserializationPolicy);
         configure(builder);
         return builder.Build();
     }
@@ -36,7 +39,9 @@ public static class DcbDomainTypesExtensions
         public SimpleQueryTypes QueryTypes { get; }
         public JsonSerializerOptions JsonOptions { get; }
 
-        internal Builder(JsonSerializerOptions? jsonOptions = null)
+        internal Builder(
+            JsonSerializerOptions? jsonOptions = null,
+            EventPayloadDeserializationPolicy deserializationPolicy = EventPayloadDeserializationPolicy.FailOnCaseMismatch)
         {
             JsonOptions = jsonOptions ??
                 new JsonSerializerOptions
@@ -45,7 +50,7 @@ public static class DcbDomainTypesExtensions
                     WriteIndented = false
                 };
 
-            EventTypes = new SimpleEventTypes(JsonOptions);
+            EventTypes = new SimpleEventTypes(JsonOptions, deserializationPolicy);
             TagTypes = new SimpleTagTypes();
             TagProjectorTypes = new SimpleTagProjectorTypes();
             TagStatePayloadTypes = new SimpleTagStatePayloadTypes();

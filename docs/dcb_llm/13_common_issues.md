@@ -189,6 +189,38 @@ it, or use a single-silo localhost Orleans host — which is a real distributed 
 
 That is data loss, everywhere except a test. See [Storage providers](11_storage_providers.md#durability-descriptors-and-the-production-guard).
 
+## An event's values come back null even though the row clearly has them (#1074)
+
+**Symptoms**: a query returns empty or a projection looks unpopulated; you inspect the stored event and its JSON plainly holds values, but the deserialized payload's properties are all null / 0 / default. No exception was thrown when the payload was read.
+
+**Cause**: the stored payload's property names do not match the casing the reader binds with. Sekiban writes and reads camelCase, case-sensitively. A payload written in PascalCase — e.g. by a producer that serialized with a bare `JsonSerializer.Serialize(x)` instead of the domain's options — has member names (`StudentId`) that do not bind to the declared members (`studentId`). System.Text.Json, binding case-sensitively, simply leaves each unmatched member at its default and reports success. A producer-side data bug becomes an all-null instance on the reader side, with nothing pointing at the cause.
+
+**Fixed in 10.4.0** (SEK-G13): by default the reader now **fails loud** on this exact shape. A top-level member that does not bind AND matches a declared name except for casing throws `SekibanEventPayloadBindingException`, naming the event type, the CLR type, the offending JSON name, the expected name, and the payload location — never a payload value. Genuinely unknown members (an additive field from a newer writer) are still ignored, so forward compatibility is unaffected, and correct camelCase rows are never touched. The check is top-level only, by contract — it does not recurse into nested objects.
+
+**What to do**:
+
+1. **Fix the producer.** Serialize through the domain's options (camelCase), not a bare `JsonSerializer.Serialize`. That is the real fix; the exception is pointing at a real data bug.
+2. **To read existing mis-cased rows while you migrate**, choose a deserialization policy when you build the domain types:
+
+   ```csharp
+   var domainTypes = DcbDomainTypesExtensions.Simple(
+       configure,
+       deserializationPolicy: EventPayloadDeserializationPolicy.CaseInsensitiveLegacy);
+   ```
+
+   `CaseInsensitiveLegacy` binds a top-level member to its declared counterpart regardless of casing. It is a migration aid, not a fix: it does not rewrite your stored data and does nothing for nested casing.
+
+### The four policies
+
+| policy | top-level case mismatch | unknown field | when |
+|---|---|---|---|
+| `FailOnCaseMismatch` (default) | throws | ignored | new systems; catches #1074 |
+| `CompatibleCaseSensitive` | binds to null (pre-G13) | ignored | temporary escape hatch while migrating off the old silence |
+| `StrictUnmapped` | throws | throws | when any non-exact payload must be rejected |
+| `CaseInsensitiveLegacy` | binds (top-level) | ignored | reading legacy mis-cased rows during migration |
+
+For identifiers and other members that must be present, declare them `required` (C#) or `[JsonRequired]` — a missing required member then fails through the same descriptive exception, which is the only safe way to enforce presence (blanket null-checking would reject legitimately-default values).
+
 ## Serialization Exceptions
 
 **Symptoms**: `JsonException` during event replay or API responses.
