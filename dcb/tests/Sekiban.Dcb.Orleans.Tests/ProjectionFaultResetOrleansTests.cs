@@ -35,6 +35,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
 {
     private static readonly InMemoryEventStore SharedEventStore = new();
     private static readonly InMemoryMultiProjectionStateStore SharedStateStore = new();
+    private static readonly FailableStateStore StateStore = new(SharedStateStore);
     internal static volatile bool PoisonActive = true;
     private TestCluster _cluster = null!;
     private ISekibanExecutor _executor = null!;
@@ -65,6 +66,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         PoisonActive = true;
         await SharedStateStore.DeleteAllAsync(ResettableProjector.MultiProjectorName);
         TogglableGrainStorage.Reset();
+        StateStore.FailNextDelete = false;
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
         var id = Guid.NewGuid().ToString("N")[..8];
@@ -112,8 +114,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             BuildSource: "test",
             BuildHost: null);
         using var payload = new MemoryStream(new byte[] { 1, 2, 3, 4 });
-        var result = await SharedStateStore.UpsertFromStreamAsync(request, payload, 1_000_000);
-        Assert.True(result.IsSuccess);
+        Assert.True((await SharedStateStore.UpsertFromStreamAsync(request, payload, 1_000_000)).IsSuccess);
     }
 
     private static async Task PollUntilAsync(Func<Task<bool>> condition)
@@ -270,23 +271,134 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
 
     // ---- external snapshot invalidation: a full rebuild cannot restore a pre-poison derived snapshot ----
 
-    [Fact]
-    public async Task Reset_InvalidatesExternalSnapshot_FreshActivationCannotRestorePrePoison()
+    [Theory]
+    [InlineData("", "id-ok", "pos-ok")]
+    [InlineData("resettable-fault-projector", "", "pos-ok")]
+    [InlineData("resettable-fault-projector", "id-ok", "")]
+    public async Task MissingOrEmptyTokenField_IsRejected_NoEffect(string projector, string eventId, string position)
     {
-        // Fault the projection (descriptor durably persisted). A derived EXTERNAL snapshot for this projector/version
-        // also exists — as a real deployment would have persisted a pre-poison snapshot before the poison arrived.
-        var (grain, token, _) = await FaultAndTokenAsync(6_000);
-        await InjectExternalSnapshotAsync("000000000000000500000000000000");
-        Assert.True((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+        var (grain, token, _) = await FaultAndTokenAsync(1_400);
+        var writesBefore = TogglableGrainStorage.WriteCount;
+        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue;
 
-        Assert.True((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        // Fill non-empty placeholders from the real token so only the field under test is empty.
+        var request = new ResetProjectionFaultRequest(
+            projector.Length == 0 ? "" : token.ProjectorName,
+            eventId.Length == 0 ? "" : token.FaultEventId,
+            position.Length == 0 ? "" : token.FaultPosition);
 
-        // The external snapshot is invalidated by the reset — a fresh activation cannot restore a pre-poison snapshot.
+        var result = await grain.ResetProjectionFaultAsync(request);
+
+        Assert.False(result.IsSuccess);                                   // rejected
+        Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);     // zero provider write
+        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue); // zero external delete
+        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);     // fault retained
+    }
+
+    // ---- Blocker 3/4: descriptor persists on the production RefreshAsync path (no timing assistance); a GENUINE
+    // product-persisted pre-poison snapshot restores before the poison, then is invalidated by the reset ----
+
+    [Fact]
+    public async Task GenuineExternalSnapshot_RestoresHealthy_ThenPoisonFaultsOnProductionPath_ResetInvalidatesAndRebuildsExactly()
+    {
+        var healthy = Event(poison: false, tick: 6_000, Guid.CreateVersion7());
+        var poison = Event(poison: true, tick: 6_001, Guid.CreateVersion7());
+        var grain = Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
+        await grain.SeedEventsAsync(new List<SerializableEvent> { healthy });
+        await grain.RefreshAsync();
+
+        // A GENUINE derived snapshot is persisted by the product (not synthetic bytes).
+        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        var snap = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue();
+        Assert.True(snap.HasValue);
+        Assert.Equal(healthy.SortableUniqueIdValue, snap.GetValue().LastSortableUniqueId); // pre-poison position
+
+        // It genuinely restores healthy before the poison: a fresh activation comes up healthy at Count 1.
+        var restored = await ReactivateAsync(grain, async g => (await g.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.Equal(1, (await _executor.QueryAsync(new ResetCountQuery())).GetValue().Count);
+
+        // Now the poison arrives. A fresh activation restores the pre-poison snapshot, and its FIRST query
+        // synchronously catches up through the poison via the barrier, folds it, faults, and persists the descriptor
+        // in RefreshAsync's finally — the first query fails without any timing assistance.
+        await restored.SeedEventsAsync(new List<SerializableEvent> { poison });
+        var faulted = await ReactivateAsync(restored, async g => !(await g.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await faulted.GetSnapshotJsonAsync()).IsSuccess); // faulted, descriptor persisted on the production path
+
+        // The fix now lets the projector fold the previously-poison event; reset with the correct token.
+        PoisonActive = false;
+        var token = new ResetProjectionFaultRequest(ResettableProjector.MultiProjectorName, poison.Id.ToString(), poison.SortableUniqueIdValue);
+        Assert.True((await faulted.ResetProjectionFaultAsync(token)).IsSuccess); // token validated against the PERSISTED descriptor
+
+        // The genuine pre-poison snapshot is invalidated — a stale restore is now impossible.
         Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
 
-        // The in-activation rebuild re-encounters the still-poison event and re-faults immediately — it did NOT come up
-        // healthy from a restored pre-poison snapshot (which is gone).
-        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        // Exact rebuild from the beginning: both events fold now (Count 2), position advanced to the poison.
+        var count = await _executor.QueryAsync(new ResetCountQuery());
+        Assert.True(count.IsSuccess);
+        Assert.Equal(2, count.GetValue().Count);
+        var list = await _executor.QueryAsync(new ResetRowListQuery());
+        Assert.True(list.IsSuccess);
+        Assert.Equal(2, list.GetValue().Items.Count());
+        var rebuilt = await faulted.GetSnapshotJsonAsync();
+        Assert.True(rebuilt.IsSuccess);
+        Assert.Contains(poison.SortableUniqueIdValue, rebuilt.GetValue());
+    }
+
+    // ---- cross-store partial failures: external-first ordering keeps every outcome retry-coherent ----
+
+    [Fact]
+    public async Task ExternalInvalidationFails_ResetRejected_NothingChanged_ThenRetrySucceeds()
+    {
+        var (grain, token, _) = await FaultAndTokenAsync(7_000);
+        await InjectExternalSnapshotAsync("000000000000000700000000000000"); // a snapshot exists to observe retention
+        var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue;
+        var writesBefore = TogglableGrainStorage.WriteCount;
+
+        // The external invalidation runs first, under the gate, before the grain write. If it fails, the grain write is
+        // skipped: descriptor, live fault and the external snapshot are all retained.
+        StateStore.FailNextDelete = true;
+        Assert.False((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.Equal(writesBefore, TogglableGrainStorage.WriteCount);                 // zero grain write
+        Assert.Equal(snapshotBefore, (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue); // snapshot retained
+        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);                 // still faulted
+
+        // Storage recovers: the same token retries and completes (poison fixed so the rebuild recovers).
+        PoisonActive = false;
+        Assert.True((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+    }
+
+    [Fact]
+    public async Task GrainWriteFailsAfterExternalDelete_DescriptorAndFaultRetained_SnapshotDeleted_ThenRetrySucceeds()
+    {
+        var (grain, token, _) = await FaultAndTokenAsync(7_100);
+        await InjectExternalSnapshotAsync("000000000000000710000000000000");
+        Assert.True((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+
+        // The external delete succeeds, then the grain-state clear write fails: the grain state rolls back (descriptor
+        // and live fault retained, queries stay faulted), but the external snapshot is already gone. Coherent — a
+        // rebuild would regenerate the snapshot; the retained descriptor keeps the projection fail-closed until retry.
+        TogglableGrainStorage.FailNextWrite = true;
+        Assert.False((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue); // snapshot deleted
+        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);                 // descriptor retained -> still faulted
+
+        // Retry the same token: the reset completes and rebuilds.
+        PoisonActive = false;
+        Assert.True((await grain.ResetProjectionFaultAsync(token)).IsSuccess);
+        Assert.Equal(1, (await _executor.QueryAsync(new ResetCountQuery())).GetValue().Count);
+    }
+
+    [Fact]
+    public async Task NoExternalUpsertHappensWhileFaulted_SoNoInFlightUpsertCanRaceTheResetDelete()
+    {
+        // A faulted projection makes no safe-checkpoint progress, so a persist attempt is short-circuited and issues NO
+        // external upsert. Combined with a single non-reentrant activation and awaited upserts, no upsert can be
+        // in-flight when the reset's external delete runs — the delete is coherent without a cross-store epoch.
+        var (grain, _, _) = await FaultAndTokenAsync(8_000);
+
+        Assert.True((await grain.PersistStateAsync()).IsSuccess); // succeeds by short-circuit, not by writing
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
     }
 
     private sealed class SiloConfigurator : ISiloConfigurator
@@ -298,7 +410,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
                 {
                     services.AddSingleton(_ => CreateDomain());
                     services.AddSingleton<IEventStore>(SharedEventStore);
-                    services.AddSingleton<IMultiProjectionStateStore>(SharedStateStore);
+                    services.AddSingleton<IMultiProjectionStateStore>(StateStore);
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
@@ -313,6 +425,41 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
                 .AddMemoryStreams("EventStreamProvider")
                 .AddMemoryGrainStorage("EventStreamProvider");
         }
+    }
+
+    /// <summary>Delegates to a real in-memory state store, but can fail the next DeleteAsync to model an external-store failure.</summary>
+    private sealed class FailableStateStore : IMultiProjectionStateStore
+    {
+        private readonly IMultiProjectionStateStore _inner;
+        public volatile bool FailNextDelete;
+
+        public FailableStateStore(IMultiProjectionStateStore inner) => _inner = inner;
+
+        public Task<ResultBox<bool>> DeleteAsync(string projectorName, string projectorVersion, CancellationToken cancellationToken = default)
+        {
+            if (FailNextDelete)
+            {
+                FailNextDelete = false;
+                return Task.FromResult(ResultBox.Error<bool>(new InvalidOperationException("injected: external snapshot delete failure")));
+            }
+
+            return _inner.DeleteAsync(projectorName, projectorVersion, cancellationToken);
+        }
+
+        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string projectorName, string projectorVersion, CancellationToken cancellationToken = default) =>
+            _inner.GetLatestForVersionAsync(projectorName, projectorVersion, cancellationToken);
+        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(string projectorName, CancellationToken cancellationToken = default) =>
+            _inner.GetLatestAnyVersionAsync(projectorName, cancellationToken);
+        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord record, int offloadThresholdBytes = 1_000_000, CancellationToken cancellationToken = default) =>
+            _inner.UpsertAsync(record, offloadThresholdBytes, cancellationToken);
+        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken cancellationToken = default) =>
+            _inner.ListAllAsync(cancellationToken);
+        public Task<ResultBox<int>> DeleteAllAsync(string projectorName, CancellationToken cancellationToken = default) =>
+            _inner.DeleteAllAsync(projectorName, cancellationToken);
+        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord record, CancellationToken cancellationToken = default) =>
+            _inner.OpenStateDataReadStreamAsync(record, cancellationToken);
+        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest request, Stream stream, int offloadThresholdBytes, CancellationToken cancellationToken = default) =>
+            _inner.UpsertFromStreamAsync(request, stream, offloadThresholdBytes, cancellationToken);
     }
 
     /// <summary>An in-memory grain storage that really persists (so reactivation restores) and can fail the next write.</summary>

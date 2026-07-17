@@ -1727,28 +1727,36 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         MoveBufferedStreamEventsToPending(currentPosition);
 
-        const int maxRefreshBatches = 20000;
-        for (var i = 0; i < maxRefreshBatches && _catchUpProgress.IsActive; i++)
+        try
         {
-            var processed = await ProcessSingleCatchUpBatch();
-            if (processed == 0)
+            const int maxRefreshBatches = 20000;
+            for (var i = 0; i < maxRefreshBatches && _catchUpProgress.IsActive; i++)
             {
-                _catchUpProgress.ConsecutiveEmptyBatches++;
-                if (_catchUpProgress.ConsecutiveEmptyBatches >= MaxConsecutiveEmptyBatches)
+                var processed = await ProcessSingleCatchUpBatch();
+                if (processed == 0)
                 {
-                    await CompleteCatchUp();
+                    _catchUpProgress.ConsecutiveEmptyBatches++;
+                    if (_catchUpProgress.ConsecutiveEmptyBatches >= MaxConsecutiveEmptyBatches)
+                    {
+                        await CompleteCatchUp();
+                    }
+                }
+                else
+                {
+                    _catchUpProgress.ConsecutiveEmptyBatches = 0;
                 }
             }
-            else
-            {
-                _catchUpProgress.ConsecutiveEmptyBatches = 0;
-            }
         }
-
-        // RefreshAsync's in-call loop can fault the actor without going through the background failure handlers, so
-        // capture-and-persist the fault here too. Otherwise a RefreshAsync-triggered fault would only become durable
-        // at the next timer/deactivation persist.
-        await CaptureAndPersistProjectionFaultIfAnyAsync();
+        finally
+        {
+            // RefreshAsync's in-call loop can fault the actor without going through the background failure handlers, and
+            // a deserialize/fold that throws propagates straight out of the loop. Capture-and-persist the fault in a
+            // finally so the descriptor is durable on THIS production path even when the loop threw — otherwise a
+            // RefreshAsync-triggered fault would only become durable at the next timer/deactivation persist.
+            // CaptureAndPersist handles its own write failures (pins + schedules a retry) and does not throw, so the
+            // original exception's identity is preserved as it propagates.
+            await CaptureAndPersistProjectionFaultIfAnyAsync();
+        }
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -2222,10 +2230,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private static bool FaultTokenMatchesCommitted(
         IReadOnlyMultiProjectionGrainState committed,
         ResetProjectionFaultRequest request) =>
-        committed.FaultEventId is not null &&
+        // Every request AND persisted field must be present (non-null, non-empty) before any equality check — a null or
+        // empty value in any of them is a non-match, never normalized to "". Only then does exact equality decide.
+        !string.IsNullOrEmpty(request.ProjectorName) &&
+        !string.IsNullOrEmpty(request.FaultEventId) &&
+        !string.IsNullOrEmpty(request.FaultPosition) &&
+        !string.IsNullOrEmpty(committed.ProjectorName) &&
+        !string.IsNullOrEmpty(committed.FaultEventId) &&
+        !string.IsNullOrEmpty(committed.FaultPosition) &&
         string.Equals(committed.ProjectorName, request.ProjectorName, StringComparison.Ordinal) &&
         string.Equals(committed.FaultEventId, request.FaultEventId, StringComparison.Ordinal) &&
-        string.Equals(committed.FaultPosition ?? string.Empty, request.FaultPosition ?? string.Empty, StringComparison.Ordinal);
+        string.Equals(committed.FaultPosition, request.FaultPosition, StringComparison.Ordinal);
 
     // Invalidates the derived EXTERNAL snapshot (Postgres/Cosmos IMultiProjectionStateStore) for the current projector +
     // version, so a fresh activation cannot restore a pre-poison snapshot and the rebuild starts from the beginning.
