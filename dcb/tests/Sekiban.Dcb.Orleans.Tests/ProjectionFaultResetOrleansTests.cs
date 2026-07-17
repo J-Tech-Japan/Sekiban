@@ -272,20 +272,24 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     // ---- external snapshot invalidation: a full rebuild cannot restore a pre-poison derived snapshot ----
 
     [Theory]
-    [InlineData("", "id-ok", "pos-ok")]
-    [InlineData("resettable-fault-projector", "", "pos-ok")]
-    [InlineData("resettable-fault-projector", "id-ok", "")]
-    public async Task MissingOrEmptyTokenField_IsRejected_NoEffect(string projector, string eventId, string position)
+    [InlineData(0, false)] // empty projector
+    [InlineData(1, false)] // empty event id
+    [InlineData(2, false)] // empty position
+    [InlineData(0, true)]  // null projector
+    [InlineData(1, true)]  // null event id
+    [InlineData(2, true)]  // null position
+    public async Task MissingOrEmptyTokenField_IsRejected_NoEffect(int field, bool useNull)
     {
-        var (grain, token, _) = await FaultAndTokenAsync(1_400);
+        var (grain, token, _) = await FaultAndTokenAsync(1_400 + field + (useNull ? 100 : 0));
         var writesBefore = TogglableGrainStorage.WriteCount;
         var snapshotBefore = (await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue;
 
-        // Fill non-empty placeholders from the real token so only the field under test is empty.
+        // Only the field under test is missing (null or empty); the other two carry the real token value.
+        var missing = useNull ? null! : "";
         var request = new ResetProjectionFaultRequest(
-            projector.Length == 0 ? "" : token.ProjectorName,
-            eventId.Length == 0 ? "" : token.FaultEventId,
-            position.Length == 0 ? "" : token.FaultPosition);
+            field == 0 ? missing : token.ProjectorName,
+            field == 1 ? missing : token.FaultEventId,
+            field == 2 ? missing : token.FaultPosition);
 
         var result = await grain.ResetProjectionFaultAsync(request);
 
@@ -390,15 +394,27 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task NoExternalUpsertHappensWhileFaulted_SoNoInFlightUpsertCanRaceTheResetDelete()
+    public async Task NormalPersist_IssuesNoExternalUpsertWhileFaulted()
     {
-        // A faulted projection makes no safe-checkpoint progress, so a persist attempt is short-circuited and issues NO
-        // external upsert. Combined with a single non-reentrant activation and awaited upserts, no upsert can be
-        // in-flight when the reset's external delete runs — the delete is coherent without a cross-store epoch.
+        // A faulted projection makes no safe-checkpoint progress AND the external upsert is fault-gated, so a normal
+        // persist writes NO external snapshot — no upsert can be in-flight to race the reset's delete.
         var (grain, _, _) = await FaultAndTokenAsync(8_000);
 
-        Assert.True((await grain.PersistStateAsync()).IsSuccess); // succeeds by short-circuit, not by writing
+        Assert.True((await grain.PersistStateAsync()).IsSuccess); // succeeds by skip, not by writing
         Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, ResettableProjector.MultiProjectorVersion)).GetValue().HasValue);
+    }
+
+    [Fact]
+    public async Task VersionRewrite_IssuesNoExternalUpsertWhileFaulted()
+    {
+        // A snapshot exists; then the projection faults. A version rewrite (OverwritePersistedStateVersionAsync) routes
+        // its upsert through the same fault-gated coordinator, so it writes NO snapshot for the new version while faulted.
+        var (grain, _, _) = await FaultAndTokenAsync(8_100);
+        await InjectExternalSnapshotAsync("000000000000000810000000000000"); // an existing v1.0 snapshot to rewrite
+
+        await grain.OverwritePersistedStateVersionAsync("2.0");
+
+        Assert.False((await SharedStateStore.GetLatestForVersionAsync(ResettableProjector.MultiProjectorName, "2.0")).GetValue().HasValue);
     }
 
     private sealed class SiloConfigurator : ISiloConfigurator

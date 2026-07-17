@@ -40,6 +40,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // The merged actor options used to create the host on activation, retained so an operator reset can recreate a
     // fresh host in-activation for a full rebuild without waiting for a deactivation cycle.
     private GeneralMultiProjectionActorOptions? _mergedActorOptions;
+
+    // Activation-local coordinator serialising EVERY external IMultiProjectionStateStore mutation (snapshot upsert and
+    // the reset's delete) and rejecting an upsert while faulted. Acquired AFTER the grain-state write gate wherever both
+    // are held (reset), never before, so there is no lock cycle: upserts take only this coordinator; grain-state writes
+    // take only the store gate; the reset takes the store gate then this coordinator. Initialised in the constructor.
+    private readonly ExternalStoreCoordinator _externalStore;
     private readonly IEventStore _eventStore;
 
     // The grain does NOT retain the raw IPersistentState it is injected with: it hands it to this store in the
@@ -237,6 +243,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _stateStore = new CoordinatedGrainStateStore(
             state ?? throw new ArgumentNullException(nameof(state)),
             () => _host?.CurrentFault is not null);
+        _externalStore = new ExternalStoreCoordinator(ExternalPersistenceBlockedByFault);
         _actorHostFactory = actorHostFactory ?? throw new ArgumentNullException(nameof(actorHostFactory));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
@@ -785,11 +792,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             bufferSize: 81920,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-        var saveResult = await _multiProjectionStateStore.UpsertFromStreamAsync(
+        var saveResult = await UpsertExternalStateCoordinatedAsync(
             writeRequest,
             uploadStream,
-            _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024,
-            CancellationToken.None);
+            _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
         if (!saveResult.IsSuccess)
         {
             _lastError = $"External store save failed: {saveResult.GetException().Message}";
@@ -1123,11 +1129,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     BuildSource: "GRAIN",
                     BuildHost: Environment.MachineName);
 
-                var saveResult = await _multiProjectionStateStore.UpsertFromStreamAsync(
+                var saveResult = await UpsertExternalStateCoordinatedAsync(
                     writeRequest,
                     snapshotStream,
-                    _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024,
-                    CancellationToken.None);
+                    _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
                 if (!saveResult.IsSuccess)
                 {
                     _lastError = $"External store save failed: {saveResult.GetException().Message}";
@@ -2252,13 +2257,42 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return;
         }
 
-        var deleteResult = await _multiProjectionStateStore.DeleteAsync(GetProjectorName(), _host.GetProjectorVersion());
-        if (!deleteResult.IsSuccess)
+        // Route the delete through the external-store coordinator so any parked/in-flight snapshot upsert completes
+        // BEFORE this delete, and no upsert runs concurrently with it. Combined with UpsertExternalStateCoordinatedAsync
+        // rejecting upserts while a fault exists, no stale upsert can recreate the snapshot this delete removes.
+        await _externalStore.InvalidateAsync(async () =>
         {
-            throw new InvalidOperationException(
-                $"Failed to invalidate the external derived snapshot for a full rebuild: {deleteResult.GetException().Message}",
-                deleteResult.GetException());
+            var deleteResult = await _multiProjectionStateStore.DeleteAsync(GetProjectorName(), _host.GetProjectorVersion());
+            if (!deleteResult.IsSuccess)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to invalidate the external derived snapshot for a full rebuild: {deleteResult.GetException().Message}",
+                    deleteResult.GetException());
+            }
+        });
+    }
+
+    // True while a fault exists on the live actor OR the committed persisted descriptor. No external snapshot may be
+    // upserted in this state — a faulted projection has no valid derived state, and this stops a stale/late upsert from
+    // recreating data a reset is invalidating.
+    private bool ExternalPersistenceBlockedByFault() =>
+        _host?.CurrentFault is not null || _stateStore.Committed.FaultEventId is not null;
+
+    // The one path every external snapshot upsert (normal persist, streaming persist, version rewrite) goes through:
+    // serialised on the external-store coordinator AND rejected while faulted. Returns a not-persisted result (false)
+    // when blocked, so callers treat it as a skip, not an error.
+    private Task<ResultBox<bool>> UpsertExternalStateCoordinatedAsync(
+        MultiProjectionStateWriteRequest request,
+        Stream stream,
+        int offloadThreshold)
+    {
+        if (_multiProjectionStateStore is null)
+        {
+            return Task.FromResult(ResultBox.FromValue(false));
         }
+
+        return _externalStore.UpsertAsync(() =>
+            _multiProjectionStateStore.UpsertFromStreamAsync(request, stream, offloadThreshold, CancellationToken.None));
     }
 
     // Recreates a fresh actor host in the current activation and re-arms the first-query barrier, so the next query
@@ -2803,11 +2837,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         BuildSource: record.BuildSource,
                         BuildHost: record.BuildHost);
 
-                    var saveResult = await _multiProjectionStateStore.UpsertFromStreamAsync(
+                    var saveResult = await UpsertExternalStateCoordinatedAsync(
                         writeRequest,
                         targetStream,
-                        _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024,
-                        CancellationToken.None);
+                        _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
                     if (saveResult.IsSuccess)
                     {
                         updated = true;

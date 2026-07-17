@@ -245,7 +245,7 @@ poison イベントのスキップ/隔離は**意図的に既定ではありま�
 - **部分失敗の意味論(2つのストア)**: リセットは2つの派生ストア — グレイン状態(descriptor)と外部スナップショットストア — を、単一ライター gate 内で「トークン検証 → 外部スナップショット無効化 → descriptor の耐久的クリア」の順に操作します。単一の原子的トランザクションでは**ありません**:
   - **外部無効化が失敗**した場合、descriptor クリアはスキップされ、descriptor・ライブ fault・外部スナップショットはすべて保持されます(何も変わらない)。ストア回復後に同じトークンで再試行してください。
   - 外部無効化が**成功したが descriptor クリアが失敗**した場合、外部スナップショットは既に消えていますが descriptor とライブ fault は保持され、全クエリは拒否のまま(fail-closed)です。これは整合的です: 後続の rebuild がスナップショットを再生成し、保持された descriptor が再試行まで projection を拒否状態に保ちます。削除されて未再生成のスナップショットは無害です(派生専用であり、権威イベントは決して削除されません)。
-  - **進行中の upsert が delete と競合することはありません**: faulted な projection は safe-checkpoint 進行をしないため外部 upsert を発行せず、単一 Orleans アクティベーションは非リエントラントで全 upsert は await されるため、リセット実行時に未完了の upsert は存在しません。(耐久的な epoch/tombstone は、現行モデルにはない multi-writer や cross-silo の永続化でのみ必要になります。)
+  - **進行中の upsert が delete と競合することはありません**: すべての外部スナップショット upsert とリセットの delete は1つのアクティベーションローカル coordinator を通るため、リセットの delete は park 中/進行中の upsert 完了を待ってから削除し、delete と並行して upsert が走ることはありません。さらに coordinator は **live または committed の fault 存在時に upsert を拒否**するため、faulted な projection は派生状態を永続化せず、stale upsert がリセットの削除対象を再生成することもありません。catch-up は interleaving のグレインタイマー上で走るため、この順序を保証するのは非リエントランシではなくこの coordinator です。(耐久的な epoch/tombstone は、現行モデルにはない multi-writer や cross-silo の永続化でのみ必要になります。)
 
 ## JSON シリアライズ例外
 
