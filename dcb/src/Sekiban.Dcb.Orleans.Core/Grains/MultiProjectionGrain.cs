@@ -70,8 +70,21 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // fails, persisted into grain state, and restored on activation so a fresh grain fails queries from the first one.
     private ProjectionFaultDescriptor? _projectionFault;
     private bool _faultPersistFailed;
+
+    // Set on activation when NO durable fault was restored. The first query on such an activation must synchronously
+    // catch up to the event-store head before answering, so a fault whose descriptor was lost (a process loss while
+    // persistence was failing) is re-established BEFORE any success — closing the restart window the packet forbids.
+    // It is per-activation and consumed by the first query only; an already-active projection's ordinary lag is
+    // untouched.
+    private bool _firstQueryNeedsSyncCatchUp;
     private IGrainTimer? _faultPersistRetryTimer;
-    private readonly TimeSpan _faultPersistRetryInterval = TimeSpan.FromMilliseconds(500);
+    private int _faultPersistRetryAttempt;
+    private static readonly TimeSpan FaultPersistRetryBase = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan FaultPersistRetryCap = TimeSpan.FromSeconds(30);
+
+    // Serialises every grain-state write in this activation, so the fault-persist retry can never overlap a normal
+    // snapshot/checkpoint persist (they call the same WriteStateAsync and would otherwise race on the ETag).
+    private readonly SemaphoreSlim _stateWriteGate = new(1, 1);
     private long _eventsProcessed;
     private readonly HashSet<Guid> _processedEventIds = new(); // Track processed event IDs to prevent double counting
     private readonly Queue<Guid> _processedEventIdOrder = new();
@@ -450,6 +463,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return ResultBox.Error<MultiProjectionState>(
                 new InvalidOperationException("Projection host not initialized"));
         }
+
+        await EnsureFirstQuerySyncCatchUpAsync();
 
         await StartSubscriptionAsync();
 
@@ -865,6 +880,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 new InvalidOperationException("Projection host not initialized"));
         }
 
+        await EnsureFirstQuerySyncCatchUpAsync();
+
         await using var snapshotStream = new MemoryStream();
         var writeResult = await _host.WriteSnapshotToStreamAsync(
             snapshotStream,
@@ -976,7 +993,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 _projectionFault = liveFault;
                 WriteFaultIntoState(liveFault);
-                await _state.WriteStateAsync();
+                await WriteGrainStateGatedAsync();
             }
 
             _logger.LogDebug(
@@ -1287,7 +1304,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             try
             {
-                await _state.WriteStateAsync();
+                await WriteGrainStateGatedAsync();
                 break;
             }
             catch (global::Orleans.Storage.InconsistentStateException) when (retry < maxRetries - 1)
@@ -1484,6 +1501,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return new SerializableQueryResult();
         }
 
+        await EnsureFirstQuerySyncCatchUpAsync();
+
         try
         {
             var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
@@ -1535,6 +1554,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             return new SerializableListQueryResult();
         }
+
+        await EnsureFirstQuerySyncCatchUpAsync();
 
         try
         {
@@ -1929,7 +1950,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             _state.State.LastGoodPayloadBytes = 0;
                             _state.State.LastGoodOriginalSizeBytes = 0;
                             _state.State.LastGoodEventsProcessed = 0;
-                            await _state.WriteStateAsync();
+                            await WriteGrainStateGatedAsync();
                         }
                     }
                 }
@@ -1974,6 +1995,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Re-establish any persisted fault BEFORE the (fire-and-forget) catch-up starts, so the first query fails
         // closed instead of answering empty/partial success in the window before catch-up re-reaches the poison.
         RestoreProjectionFaultIfPersisted();
+
+        // If nothing was restored, we cannot be sure a fault is not waiting in the un-caught-up tail (its descriptor
+        // may have been lost to a process crash while persistence was failing). The first query must therefore
+        // synchronously catch up before it can answer — no fresh-activation empty-success window.
+        _firstQueryNeedsSyncCatchUp = _projectionFault is null;
 
         _ = CatchUpFromEventStoreAsync(forceFullCatchUp);
 
@@ -2120,7 +2146,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     _state.State.ProjectorVersion = currentVersion;
                 }
                 ClearFaultFromState();
-                await _state.WriteStateAsync();
+                await WriteGrainStateGatedAsync();
             }
         }
         catch (Exception ex)
@@ -2217,10 +2243,63 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     }
 
     /// <summary>
-    ///     If the hosted projection has recorded a fold fault, capture it into the grain and persist it, so the fault
-    ///     survives a restart. Reading it from the host means the descriptor came from the authoritative per-event
-    ///     boundary (event id/type/projector/position), not from a batch-level guess. First fault wins.
+    ///     On the first query of a fresh activation that restored no fault, synchronously catches up to the event-store
+    ///     head BEFORE the query can answer, and persists any fault that catch-up re-establishes. A fault whose
+    ///     descriptor was lost (a crash while persistence was failing) is therefore re-established before any success,
+    ///     closing the restart window. It is per-activation and runs once; an already-active projection's ordinary lag
+    ///     is untouched, and it is a fast no-op when the projection is already at head.
     /// </summary>
+    private async Task EnsureFirstQuerySyncCatchUpAsync()
+    {
+        if (!_firstQueryNeedsSyncCatchUp)
+        {
+            return;
+        }
+
+        _firstQueryNeedsSyncCatchUp = false;
+
+        // Already faulted (a persisted descriptor was restored, or an earlier in-call refresh established it): the
+        // query fails on the live fault regardless, so there is nothing to catch up.
+        if (_host is null || _host.CurrentFault is not null)
+        {
+            return;
+        }
+
+        // Run catch-up IN-CALL, not via the background timer. This grain turn is held by the query, and a
+        // non-reentrant grain cannot service a catch-up timer until we return — waiting on one here would deadlock.
+        // Cancel any pending timer-driven catch-up and let RefreshAsync's in-call loop drive it to the head; its loop
+        // re-folds the tail and faults on any poison. A fault makes the loop throw (the actor rejects further applies)
+        // — that is fine, the fault is now recorded on the actor and the query below surfaces it as a failed result;
+        // we only need catch-up to have RUN, not to have returned cleanly.
+        _catchUpTimer?.Dispose();
+        _catchUpTimer = null;
+        _catchUpProgress.IsActive = false;
+        try
+        {
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[{ProjectorName}] Synchronous first-query catch-up established a fault.", GetProjectorName());
+        }
+
+        await CaptureAndPersistProjectionFaultIfAnyAsync();
+    }
+
+    /// <summary>The single serialized grain-state writer — all WriteStateAsync goes through here so writers cannot overlap.</summary>
+    private async Task WriteGrainStateGatedAsync()
+    {
+        await _stateWriteGate.WaitAsync();
+        try
+        {
+            await _state.WriteStateAsync();
+        }
+        finally
+        {
+            _stateWriteGate.Release();
+        }
+    }
+
     /// <summary>
     ///     Captures the actor's fault and DURABLY persists it before the caller treats the failure as handled. A
     ///     background apply that faulted but only kept the descriptor in memory could lose it to a silo crash before
@@ -2252,7 +2331,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
-            await _state.WriteStateAsync();
+            await WriteGrainStateGatedAsync();
         }
         catch (Exception writeEx)
         {
@@ -2262,7 +2341,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 "[{ProjectorName}] Failed to persist projection fault descriptor; pinning this faulted activation and retrying persistence in the background until the descriptor is durable.",
                 GetProjectorName());
             PinFaultedActivation();
-            StartFaultPersistRetryTimer();
+            ScheduleFaultPersistRetry();
         }
     }
 
@@ -2288,20 +2367,30 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     ///     to write it. Once it succeeds the descriptor is durable — a subsequent fresh activation restores it and
     ///     fails closed — so the pin is released and this activation may be reclaimed normally.
     /// </summary>
-    private void StartFaultPersistRetryTimer()
+    /// <summary>
+    ///     Schedules the product-owned retry as a self-rescheduling one-shot with capped exponential backoff and
+    ///     bounded jitter — never a fixed hot loop — so a store outage does not become unbounded write pressure or a
+    ///     warning-per-tick log flood. The actual write goes through the single grain-state gate, so it cannot race a
+    ///     normal persist.
+    /// </summary>
+    private void ScheduleFaultPersistRetry()
     {
-        if (_faultPersistRetryTimer is not null)
-        {
-            return;
-        }
+        _faultPersistRetryTimer?.Dispose();
+
+        var exponent = Math.Min(_faultPersistRetryAttempt, 16); // cap the exponent so the shift cannot overflow
+        var backoffMs = Math.Min(
+            FaultPersistRetryBase.TotalMilliseconds * Math.Pow(2, exponent),
+            FaultPersistRetryCap.TotalMilliseconds);
+        var jitter = 1.0 + ((_faultPersistRetryAttempt * 7 % 41) - 20) / 100.0; // +/-20%, deterministic per attempt
+        var due = TimeSpan.FromMilliseconds(Math.Max(FaultPersistRetryBase.TotalMilliseconds, backoffMs * jitter));
 
         _faultPersistRetryTimer = this.RegisterGrainTimer(
             RetryFaultPersistAsync,
             new GrainTimerCreationOptions
             {
-                DueTime = _faultPersistRetryInterval,
-                Period = _faultPersistRetryInterval,
-                Interleave = true
+                DueTime = due,
+                Period = Timeout.InfiniteTimeSpan, // one-shot; each attempt reschedules the next
+                Interleave = false
             });
     }
 
@@ -2314,25 +2403,31 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return;
         }
 
-        // The descriptor is already in _state.State from the original capture; just try the write again.
+        // The descriptor is already in _state.State from the original capture; just try the write again, gated.
         WriteFaultIntoState(_projectionFault);
 
         try
         {
-            await _state.WriteStateAsync();
+            await WriteGrainStateGatedAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
+            _faultPersistRetryAttempt++;
+            // The first failure was already logged at Critical by the caller; keep the retries at Debug so a long
+            // outage does not flood the log, and back off before trying again.
+            _logger.LogDebug(
                 ex,
-                "[{ProjectorName}] Retry of fault-descriptor persistence still failing; will keep retrying.",
-                GetProjectorName());
+                "[{ProjectorName}] Fault-descriptor persistence retry {Attempt} still failing; backing off.",
+                GetProjectorName(),
+                _faultPersistRetryAttempt);
+            ScheduleFaultPersistRetry();
             return;
         }
 
         // Durable now: a fresh activation would restore the fault and fail closed, so the fail-closed guarantee no
         // longer depends on THIS activation staying alive. Release the pin and stop retrying.
         _faultPersistFailed = false;
+        _faultPersistRetryAttempt = 0;
         _faultPersistRetryTimer?.Dispose();
         _faultPersistRetryTimer = null;
         try
@@ -2524,7 +2619,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (updated && _state.State != null)
             {
                 _state.State.ProjectorVersion = newVersion;
-                await _state.WriteStateAsync();
+                await WriteGrainStateGatedAsync();
             }
 
             return updated;

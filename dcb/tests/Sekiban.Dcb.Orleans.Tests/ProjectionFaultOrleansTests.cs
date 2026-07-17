@@ -124,6 +124,24 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task FreshActivation_WithPoisonInStore_ButNoRestoredDescriptor_FailsTheFirstQuery_Synchronously()
+    {
+        // The descriptor-loss case: durable poison sits in the store, but this grain activates fresh with nothing to
+        // restore (as would happen if the descriptor were lost to a crash while persistence was failing). The FIRST
+        // query must synchronously catch up, re-encounter the poison and fault — no empty-success window before a
+        // background timer eventually re-faults.
+        await SharedEventStore.WriteSerializableEventsAsync(
+            new List<SerializableEvent> { Event(poison: true, tick: 8_000) });
+
+        var grain = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
+
+        // No RefreshAsync, no seeding through the grain — the very first thing asked of the fresh activation.
+        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await _executor.QueryAsync(new FaultCountQuery())).IsSuccess);
+        Assert.False((await _executor.QueryAsync(new FaultRowListQuery())).IsSuccess);
+    }
+
+    [Fact]
     public async Task Fault_IsDurable_WithoutAnyManualPersist_AndSurvivesReactivation()
     {
         var grain = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
