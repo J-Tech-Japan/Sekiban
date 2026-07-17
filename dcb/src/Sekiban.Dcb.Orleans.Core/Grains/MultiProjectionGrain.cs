@@ -2212,7 +2212,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     ///     survives a restart. Reading it from the host means the descriptor came from the authoritative per-event
     ///     boundary (event id/type/projector/position), not from a batch-level guess. First fault wins.
     /// </summary>
-    private void CaptureProjectionFaultIfAny()
+    /// <summary>
+    ///     Captures the actor's fault and DURABLY persists it before the caller treats the failure as handled. A
+    ///     background apply that faulted but only kept the descriptor in memory could lose it to a silo crash before
+    ///     the next timer/manual persist, and a fresh activation would then answer success until it re-reached the
+    ///     poison. So this awaits the grain-state write, and if that write fails it does not pretend the fault is
+    ///     safe: it deactivates, so the next activation re-reads the events and re-establishes the fault (fail-closed).
+    /// </summary>
+    private async Task CaptureAndPersistProjectionFaultIfAnyAsync()
     {
         if (_projectionFault is not null)
         {
@@ -2227,6 +2234,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         _projectionFault = fault;
         WriteFaultIntoState(fault);
+
+        try
+        {
+            await _state.WriteStateAsync();
+        }
+        catch (Exception writeEx)
+        {
+            _logger.LogCritical(
+                writeEx,
+                "[{ProjectorName}] Failed to persist projection fault descriptor; deactivating to fail closed so a fresh activation re-establishes the fault.",
+                GetProjectorName());
+            DeactivateOnIdle();
+        }
     }
 
     private void WriteFaultIntoState(ProjectionFaultDescriptor fault)
@@ -2285,9 +2305,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _host.RestoreFault(fault);
     }
 
-    private void HandleCatchUpBatchFailure(Exception ex, string projectorName)
+    private async Task HandleCatchUpBatchFailureAsync(Exception ex, string projectorName)
     {
-        CaptureProjectionFaultIfAny();
+        await CaptureAndPersistProjectionFaultIfAnyAsync();
         _catchUpConsecutiveFailureCount++;
         _catchUpFailureWindowStartUtc ??= DateTime.UtcNow;
 
@@ -2621,7 +2641,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
-            HandleCatchUpBatchFailure(ex, projectorName);
+            await HandleCatchUpBatchFailureAsync(ex, projectorName);
         }
         finally
         {
@@ -3633,7 +3653,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
-            CaptureProjectionFaultIfAny();
+            await CaptureAndPersistProjectionFaultIfAnyAsync();
             _lastError = $"Failed to process event batch: {ex.Message}";
             _logger.LogError(ex, "[{ProjectorName}] Error processing event batch", GetProjectorName());
 
@@ -3734,7 +3754,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
-            CaptureProjectionFaultIfAny();
+            await CaptureAndPersistProjectionFaultIfAnyAsync();
             _lastError = $"Failed to process buffered events: {ex.Message}";
             _logger.LogError(ex, "[{ProjectorName}] Error processing buffered events", GetProjectorName());
         }

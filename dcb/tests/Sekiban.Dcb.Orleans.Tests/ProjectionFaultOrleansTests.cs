@@ -20,20 +20,41 @@ using Xunit;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 /// <summary>
-///     Issue #1075 on the Orleans production path: a fold that crashes during background catch-up recorded an internal
+///     Issue #1075 on the Orleans production path: a fold that crashed during background catch-up recorded an internal
 ///     error and eventually stopped, while queries kept answering current/empty state as a success. These tests hold
-///     the Orleans multi-projection grain to the fault contract: a confirmed fault fails queries with context; the
-///     fault survives a deactivation/reactivation (a fresh activation cannot answer success before it is
-///     re-established); an operator rebuild clears it; and ordinary catch-up with no fault fails nothing.
+///     the Orleans multi-projection grain to the fault contract across ALL query surfaces (state via snapshot, scalar,
+///     list): a confirmed fault fails them with context; the fault is durable without a manual persist and survives a
+///     reactivation; and ordinary catch-up lag fails nothing.
 /// </summary>
 public class ProjectionFaultOrleansTests : IAsyncLifetime
 {
-    private static readonly IEventStore SharedEventStore = new InMemoryEventStore();
+    private static readonly InMemoryEventStore SharedEventStore = new();
     private TestCluster _cluster = null!;
+    private ISekibanExecutor _executor = null!;
     private IClusterClient Client => _cluster.Client;
+
+    internal static DcbDomainTypes CreateDomain()
+    {
+        var eventTypes = new SimpleEventTypes();
+        eventTypes.RegisterEventType<FaultTriggerEvent>();
+        var multiProjectorTypes = new SimpleMultiProjectorTypes();
+        multiProjectorTypes.RegisterProjector<FaultTestProjector>();
+        var queryTypes = new SimpleQueryTypes();
+        queryTypes.RegisterQuery<FaultCountQuery>();
+        queryTypes.RegisterListQuery<FaultRowListQuery>();
+        return new DcbDomainTypes(
+            eventTypes,
+            new SimpleTagTypes(),
+            new SimpleTagProjectorTypes(),
+            new SimpleTagStatePayloadTypes(),
+            multiProjectorTypes,
+            queryTypes,
+            new JsonSerializerOptions());
+    }
 
     public async Task InitializeAsync()
     {
+        SharedEventStore.Clear(); // isolate each test — SeedEventsAsync writes to this shared static store
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
         var id = Guid.NewGuid().ToString("N")[..8];
@@ -42,6 +63,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         builder.AddSiloBuilderConfigurator<SiloConfigurator>();
         _cluster = builder.Build();
         await _cluster.DeployAsync();
+        _executor = new OrleansDcbExecutor(Client, SharedEventStore, CreateDomain());
     }
 
     public async Task DisposeAsync()
@@ -52,7 +74,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         }
     }
 
-    private static SerializableEvent Event(bool poison, long tick) =>
+    internal static SerializableEvent Event(bool poison, long tick) =>
         new(
             Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new FaultTriggerEvent(poison))),
             new SortableUniqueId(SortableUniqueId.GetTickString(tick) + SortableUniqueId.GetIdString(Guid.Empty)).Value,
@@ -62,53 +84,61 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
             nameof(FaultTriggerEvent));
 
     [Fact]
-    public async Task ConfirmedFault_FailsTheQuery_WithContext()
+    public async Task ConfirmedFault_FailsTheStateSurface_WithContext()
     {
         var grain = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
-
         await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: true, tick: 1_000) });
         await grain.RefreshAsync();
 
-        // The read surface, taken through a serializable projection (GetStateAsync would try to Orleans-copy the
-        // projector payload itself, which this test's private projector is not set up for; the snapshot funnels
-        // through the same GetStateAsync fault gate and returns a string).
         var state = await grain.GetSnapshotJsonAsync();
-        Assert.False(state.IsSuccess); // NOT an empty success — the fault fails the query
+        Assert.False(state.IsSuccess); // NOT an empty success
         Assert.Contains(FaultTestProjector.MultiProjectorName, state.GetException().Message);
     }
 
     [Fact]
-    public async Task OrdinaryCatchUp_WithNoFault_FailsNothing()
+    public async Task ConfirmedFault_FailsScalarAndListQuerySurfaces_ThroughTheProductionQueryPath()
     {
         var grain = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
-
-        await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: false, tick: 2_000), Event(poison: false, tick: 2_001) });
+        await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: true, tick: 5_000) });
         await grain.RefreshAsync();
 
-        var state = await grain.GetSnapshotJsonAsync();
-        Assert.True(state.IsSuccess); // healthy lag is not a fault
+        // Both surfaces go through NativeProjectionQueryExecutor -> the actor's faulted GetStateAsync, and must fail
+        // rather than launder into an empty successful result (scalar count 0 / empty list).
+        Assert.False((await _executor.QueryAsync(new FaultCountQuery())).IsSuccess);
+        Assert.False((await _executor.QueryAsync(new FaultRowListQuery())).IsSuccess);
     }
 
     [Fact]
-    public async Task Fault_SurvivesReactivation_FreshActivationDoesNotAnswerSuccessFirst()
+    public async Task OrdinaryCatchUp_AllQuerySurfacesSucceed_LagIsNotAFault()
     {
         var grain = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
+        await grain.SeedEventsAsync(new List<SerializableEvent>
+        {
+            Event(poison: false, tick: 2_000), Event(poison: false, tick: 2_001)
+        });
+        await grain.RefreshAsync();
 
+        Assert.True((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.True((await _executor.QueryAsync(new FaultCountQuery())).IsSuccess);
+        Assert.True((await _executor.QueryAsync(new FaultRowListQuery())).IsSuccess);
+    }
+
+    [Fact]
+    public async Task Fault_IsDurable_WithoutAnyManualPersist_AndSurvivesReactivation()
+    {
+        var grain = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
         await grain.SeedEventsAsync(new List<SerializableEvent> { Event(poison: true, tick: 3_000) });
         await grain.RefreshAsync();
         Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
-        await grain.PersistStateAsync();
 
-        // Force a fresh activation.
+        // NO grain.PersistStateAsync() — fault handling persisted the descriptor on its own. Deactivate, reactivate,
+        // and the first query must still fail: no window where a fresh activation answers success before it re-reaches
+        // the poison.
         await grain.RequestDeactivationAsync();
         await Task.Delay(1000);
 
         var reactivated = Client.GetGrain<IMultiProjectionGrain>(FaultTestProjector.MultiProjectorName);
-
-        // The very first query after reactivation must fail — the persisted fault was restored before any query could
-        // be answered, so there is no window where the fresh grain reports empty success.
-        var state = await reactivated.GetSnapshotJsonAsync();
-        Assert.False(state.IsSuccess);
+        Assert.False((await reactivated.GetSnapshotJsonAsync()).IsSuccess);
     }
 
     private sealed class SiloConfigurator : ISiloConfigurator
@@ -118,22 +148,8 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
             siloBuilder
                 .ConfigureServices(services =>
                 {
-                    services.AddSingleton(_ =>
-                    {
-                        var eventTypes = new SimpleEventTypes();
-                        eventTypes.RegisterEventType<FaultTriggerEvent>();
-                        var multiProjectorTypes = new SimpleMultiProjectorTypes();
-                        multiProjectorTypes.RegisterProjector<FaultTestProjector>();
-                        return new DcbDomainTypes(
-                            eventTypes,
-                            new SimpleTagTypes(),
-                            new SimpleTagProjectorTypes(),
-                            new SimpleTagStatePayloadTypes(),
-                            multiProjectorTypes,
-                            new SimpleQueryTypes(),
-                            new JsonSerializerOptions());
-                    });
-                    services.AddSingleton(SharedEventStore);
+                    services.AddSingleton(_ => CreateDomain());
+                    services.AddSingleton<IEventStore>(SharedEventStore);
                     services.AddSingleton<IMultiProjectionStateStore, InMemoryMultiProjectionStateStore>();
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
@@ -151,10 +167,41 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         }
     }
 
-    private record FaultTriggerEvent(bool Poison) : IEventPayload;
+    internal record FaultTriggerEvent(bool Poison) : IEventPayload;
+
+    internal record FaultCountResult(int Count);
+
+    internal record FaultCountQuery :
+        IMultiProjectionQuery<FaultTestProjector, FaultCountQuery, FaultCountResult>
+    {
+        public static ResultBox<FaultCountResult> HandleQuery(
+            FaultTestProjector projector,
+            FaultCountQuery query,
+            IQueryContext context) => ResultBox.FromValue(new FaultCountResult(0));
+    }
+
+    internal record FaultRow(int Value);
+
+    internal record FaultRowListQuery :
+        IMultiProjectionListQuery<FaultTestProjector, FaultRowListQuery, FaultRow>,
+        IQueryPagingParameter
+    {
+        public int? PageNumber { get; init; }
+        public int? PageSize { get; init; }
+
+        public static ResultBox<IEnumerable<FaultRow>> HandleFilter(
+            FaultTestProjector projector,
+            FaultRowListQuery query,
+            IQueryContext context) => ResultBox.FromValue(Enumerable.Empty<FaultRow>());
+
+        public static ResultBox<IEnumerable<FaultRow>> HandleSort(
+            IEnumerable<FaultRow> filtered,
+            FaultRowListQuery query,
+            IQueryContext context) => ResultBox.FromValue(filtered);
+    }
 
     /// <summary>A projector that folds cleanly until it meets a poison event, then throws — a fold crash, deterministically.</summary>
-    private record FaultTestProjector : IMultiProjector<FaultTestProjector>
+    internal record FaultTestProjector : IMultiProjector<FaultTestProjector>
     {
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "fault-test-projector";
