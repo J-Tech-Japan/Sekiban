@@ -76,13 +76,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // catch up to the event-store head before answering, so a fault whose descriptor was lost (a process loss while
     // persistence was failing) is re-established BEFORE any success — closing the restart window the packet forbids.
     // It is per-activation and consumed by the first query only; an already-active projection's ordinary lag is
-    // untouched.
-    private bool _firstQueryNeedsSyncCatchUp;
-
-    // The single shared in-flight first-query barrier. Concurrent first callers await this SAME task and all observe
-    // its outcome — none bypasses into empty/current state while it runs. It is cleared on a transient failure so the
-    // next query retries; on success _firstQueryNeedsSyncCatchUp is cleared so later queries skip the barrier entirely.
-    private Task? _firstQuerySyncCatchUpInFlight;
+    // untouched. The single-flight sharing (concurrent first callers await one task; failure is retryable; success is
+    // sticky) lives in the gate component, which a friend test drives directly.
+    private readonly FirstQueryCatchUpGate _firstQueryGate = new();
 
     // The last event-store read exception the in-call catch-up swallowed (ProcessSerializableBatch launders a failed
     // read into an empty batch for the resilient background path). The first-query barrier consults it to fail closed
@@ -93,9 +89,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private static readonly TimeSpan FaultPersistRetryBase = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan FaultPersistRetryCap = TimeSpan.FromSeconds(30);
 
-    // Serialises every grain-state write in this activation, so the fault-persist retry can never overlap a normal
-    // snapshot/checkpoint persist (they call the same WriteStateAsync and would otherwise race on the ETag).
-    private readonly SemaphoreSlim _stateWriteGate = new(1, 1);
+    // Serialises every grain-state write in this activation through one coordinator, so the fault-persist retry can
+    // never overlap a normal snapshot/checkpoint persist (they call the same WriteStateAsync and would otherwise race
+    // on the ETag). Initialised in the constructor once _state is available.
+    private readonly GrainStateWriteCoordinator _writeCoordinator;
     private long _eventsProcessed;
     private readonly HashSet<Guid> _processedEventIds = new(); // Track processed event IDs to prevent double counting
     private readonly Queue<Guid> _processedEventIdOrder = new();
@@ -227,6 +224,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         IServiceIdProvider? serviceIdProvider = null)
     {
         _state = state ?? throw new ArgumentNullException(nameof(state));
+        _writeCoordinator = new GrainStateWriteCoordinator(() => _state.WriteStateAsync());
         _actorHostFactory = actorHostFactory ?? throw new ArgumentNullException(nameof(actorHostFactory));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
@@ -2030,7 +2028,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // If nothing was restored, we cannot be sure a fault is not waiting in the un-caught-up tail (its descriptor
         // may have been lost to a process crash while persistence was failing). The first query must therefore
         // synchronously catch up before it can answer — no fresh-activation empty-success window.
-        _firstQueryNeedsSyncCatchUp = _projectionFault is null;
+        if (_projectionFault is null)
+        {
+            _firstQueryGate.Arm();
+        }
 
         _ = CatchUpFromEventStoreAsync(forceFullCatchUp);
 
@@ -2284,35 +2285,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     ///     exception is preserved) and is NOT marked complete, so the query fails closed and the next query retries —
     ///     no caller reaches empty/current state because a flag was cleared early.
     /// </summary>
-    private Task EnsureFirstQuerySyncCatchUpAsync()
-    {
-        if (!_firstQueryNeedsSyncCatchUp)
-        {
-            return Task.CompletedTask;
-        }
-
-        return _firstQuerySyncCatchUpInFlight ??= RunAndSettleFirstQueryBarrierAsync();
-    }
-
-    private async Task RunAndSettleFirstQueryBarrierAsync()
-    {
-        try
-        {
-            await RunFirstQuerySyncCatchUpAsync();
-        }
-        catch
-        {
-            // Transient head/read/catch-up failure. Do NOT mark the barrier complete: drop the in-flight handle so the
-            // NEXT query re-runs it, keep _firstQueryNeedsSyncCatchUp set, and rethrow so THIS query fails closed. No
-            // query can succeed on empty state because a flag was cleared.
-            _firstQuerySyncCatchUpInFlight = null;
-            throw;
-        }
-
-        // Completed with either a healthy at-head result or a confirmed fault the query will surface as an error.
-        _firstQueryNeedsSyncCatchUp = false;
-        _firstQuerySyncCatchUpInFlight = null;
-    }
+    private Task EnsureFirstQuerySyncCatchUpAsync() => _firstQueryGate.EnsureAsync(RunFirstQuerySyncCatchUpAsync);
 
     private async Task RunFirstQuerySyncCatchUpAsync()
     {
@@ -2396,32 +2369,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _catchUpReadException = null;
     }
 
-    /// <summary>The single serialized grain-state writer — all WriteStateAsync goes through here so writers cannot overlap.</summary>
-    private async Task WriteGrainStateGatedAsync()
-    {
-        await _stateWriteGate.WaitAsync();
-        try
-        {
-            await _state.WriteStateAsync();
-        }
-        finally
-        {
-            _stateWriteGate.Release();
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task ProbeStateWriteConcurrencyAsync()
-    {
-        await EnsureInitializedAsync();
-
-        // Start two gated writes without awaiting the first — on the grain's single-threaded cooperative scheduler they
-        // interleave at await points, so if the gate did not serialize them a parked first write would overlap the
-        // second. Both go through the same gate all production writes use.
-        var first = WriteGrainStateGatedAsync();
-        var second = WriteGrainStateGatedAsync();
-        await Task.WhenAll(first, second);
-    }
+    /// <summary>The single serialized grain-state writer — all WriteStateAsync goes through the coordinator so writers cannot overlap.</summary>
+    private Task WriteGrainStateGatedAsync() => _writeCoordinator.WriteAsync();
 
     /// <summary>
     ///     Captures the actor's fault and DURABLY persists it before the caller treats the failure as handled. A

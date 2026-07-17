@@ -63,7 +63,9 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
 
         var state = await grain.GetSnapshotJsonAsync();
         Assert.False(state.IsSuccess); // not an empty success
-        Assert.Contains("head-read failure", state.GetException().Message);
+        var ex = state.GetException();
+        Assert.Contains("InvalidOperationException", ex.ToString());   // original exception TYPE preserved
+        Assert.Contains("head-read failure", ex.Message);              // original message/context preserved
     }
 
     [Fact]
@@ -81,13 +83,44 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
 
         var firstState = await grain.GetSnapshotJsonAsync();
         Assert.False(firstState.IsSuccess);
-        Assert.Contains("read failure", firstState.GetException().Message); // original exception preserved
-        Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
-        Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
+        var stateEx = firstState.GetException();
+        Assert.Contains("InvalidOperationException", stateEx.ToString()); // original exception TYPE preserved
+        Assert.Contains("read failure", stateEx.Message);                 // original message/context preserved
+
+        var countResult = await _executor.QueryAsync(new DomainTypes.FaultCountQuery());
+        Assert.False(countResult.IsSuccess);
+        Assert.Contains("read failure", countResult.GetException().ToString());
+        var listResult = await _executor.QueryAsync(new DomainTypes.FaultRowListQuery());
+        Assert.False(listResult.IsSuccess);
+        Assert.Contains("read failure", listResult.GetException().ToString());
 
         // A later query must NOT bypass the barrier into empty success while the read is still failing: the barrier was
         // not marked complete on the transient failure, so the query re-runs it and fails closed again.
         Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
+        Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
+    }
+
+    [Fact]
+    public async Task FailFirstHeadRead_ThenRecover_ReEstablishesThePoisonFaultOnALaterQuery_NeverEmpty()
+    {
+        // Durable POISON sits in the store. The first queries fail closed on a transient read failure; when the store
+        // recovers, a later query re-runs the barrier, catches up, re-folds the poison and fails with the FAULT — the
+        // projection is never bricked and never answers empty.
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { DomainTypes.Event(poison: true, tick: 12_000) });
+        Store.FailReads = true;
+
+        var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
+
+        var whileFailing = await grain.GetSnapshotJsonAsync();
+        Assert.False(whileFailing.IsSuccess);
+        Assert.Contains("read failure", whileFailing.GetException().ToString());
+
+        // Store recovers: the barrier retries on the next query, folds the poison and fails with the fault (not empty).
+        Store.FailReads = false;
+        var afterRecovery = await grain.GetSnapshotJsonAsync();
+        Assert.False(afterRecovery.IsSuccess);
+        Assert.Contains(DomainTypes.FaultTestProjector.MultiProjectorName, afterRecovery.GetException().ToString());
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
     }
