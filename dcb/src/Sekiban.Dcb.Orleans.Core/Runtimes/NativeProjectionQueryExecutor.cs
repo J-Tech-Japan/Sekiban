@@ -55,10 +55,10 @@ internal class NativeProjectionQueryExecutor
             var stateResult = await _actor.GetStateAsync();
             if (!stateResult.IsSuccess)
             {
-                var emptyResult = await SerializableQueryResult.CreateFromAsync(
-                    new QueryResultGeneral(null!, string.Empty, typedQuery),
-                    _jsonOptions);
-                return ResultBox.FromValue(emptyResult);
+                // A failed state fetch is a real failure — a faulted projection, or a version-resolution error — and
+                // must surface, not be laundered into an empty successful result. Ordinary catch-up lag does NOT reach
+                // here: it returns a successful (partial) state, so only genuine faults fail the query.
+                return ResultBox.Error<SerializableQueryResult>(stateResult.GetException());
             }
 
             var state = stateResult.GetValue();
@@ -73,14 +73,15 @@ internal class NativeProjectionQueryExecutor
                 safeThresholdTime,
                 unsafeVersion);
 
-            object? value = null;
-            string resultType = string.Empty;
-
-            if (result.IsSuccess)
+            if (!result.IsSuccess)
             {
-                value = result.GetValue();
-                resultType = value?.GetType().FullName ?? string.Empty;
+                // The handler failed. Previously this fell through and wrapped a null value as a success, which later
+                // surfaced as a confusing cast error far from the cause. Return the real failure instead.
+                return ResultBox.Error<SerializableQueryResult>(result.GetException());
             }
+
+            var value = result.GetValue();
+            var resultType = value?.GetType().FullName ?? string.Empty;
 
             var serialized = await SerializableQueryResult.CreateFromAsync(
                 new QueryResultGeneral(value ?? null!, resultType, typedQuery),
@@ -118,11 +119,9 @@ internal class NativeProjectionQueryExecutor
             var stateResult = await _actor.GetStateAsync();
             if (!stateResult.IsSuccess)
             {
-                var emptyGeneral = new ListQueryResultGeneral(
-                    0, 0, 0, 0, Array.Empty<object>(), string.Empty, listQuery);
-                var emptyResult = await SerializableListQueryResult.CreateFromAsync(
-                    emptyGeneral, _jsonOptions);
-                return ResultBox.FromValue(emptyResult);
+                // Same as the single-query path: a faulted projection fails the list query with its fault, instead of
+                // an empty TotalCount=0 success that reads exactly like "there is no data" — the #1075 masking.
+                return ResultBox.Error<SerializableListQueryResult>(stateResult.GetException());
             }
 
             var state = stateResult.GetValue();
@@ -137,13 +136,13 @@ internal class NativeProjectionQueryExecutor
                 safeThresholdTime,
                 unsafeVersion);
 
-            var general = result.IsSuccess
-                ? result.GetValue()
-                : new ListQueryResultGeneral(
-                    0, 0, 0, 0, Array.Empty<object>(), string.Empty, listQuery);
+            if (!result.IsSuccess)
+            {
+                return ResultBox.Error<SerializableListQueryResult>(result.GetException());
+            }
 
             var serialized = await SerializableListQueryResult.CreateFromAsync(
-                general, _jsonOptions);
+                result.GetValue(), _jsonOptions);
             return ResultBox.FromValue(serialized);
         }
         catch (Exception ex)

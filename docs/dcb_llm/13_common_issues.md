@@ -221,6 +221,35 @@ That is data loss, everywhere except a test. See [Storage providers](11_storage_
 
 For identifiers and other members that must be present, declare them `required` (C#) or `[JsonRequired]` — a missing required member then fails through the same descriptive exception, which is the only safe way to enforce presence (blanket null-checking would reject legitimately-default values).
 
+## A query returns empty, but the events are there and durable (#1075)
+
+**Symptoms**: a list query returns zero rows, or a projection reads as unpopulated, yet the events plainly exist in the store. No exception, no error — just "no data". Often paired with #1074: a payload that cannot be folded produces exactly this silence.
+
+**Cause**: a projection could not apply one of its events — a fold that threw, or a payload that would not deserialize — and the failure was swallowed. The projection stopped advancing at the poison event and presented whatever it had built so far (often nothing) as a *successful* empty result. "Durable events exist but cannot be projected" was masked as "there is no data", which is the most expensive kind of failure to notice.
+
+**Fixed in 10.4.0** (SEK-G14). A projection that cannot fold an event now **faults**, and a fault fails queries with context instead of answering empty:
+
+- The in-memory replay no longer swallows: a failed read or a failed fold surfaces as an error from the executor's normal `ResultBox`/exception boundary.
+- An Orleans multi-projection records a **confirmed fault** — event id, type, projector, position — and every query surface (state, scalar, list) fails with that context while the fault is unresolved. The fault is persisted, so a freshly-activated grain re-establishes it before answering the first query rather than briefly reporting empty.
+- **Ordinary catch-up lag is not a fault.** A projection that is simply behind still answers queries; only a projection that has *crashed* on an event fails them.
+
+### The fault-vs-lag contract
+
+| situation | query behavior |
+|---|---|
+| healthy, caught up | succeeds |
+| healthy, still catching up (lag) | succeeds (partial/current state) |
+| **faulted** (an event could not be folded) | **fails with fault context** — event id, type, projector, position; never a payload value |
+
+**What to do when a query fails with a projection fault**:
+
+1. The message names the event, the projector and the position. Find that event.
+2. If it is a casing/deserialization problem, it is #1074 — fix the producer, or read the row with the `CaseInsensitiveLegacy` deserialization policy while you migrate.
+3. If the projector's fold logic is at fault, fix the projector.
+4. Once the cause is resolved, **rebuild the projection** (an operator rebuild/reset). A fault clears only by a deterministic rebuild that successfully replays the same position — an unrelated later event never clears it. If the poison is still there, the rebuild simply faults again at the same event.
+
+Poison-event skip/quarantine is deliberately **not** a default: a projection silently skipping events it cannot apply is a return to the same class of silence. It may arrive later as an explicit, opt-in policy.
+
 ## Serialization Exceptions
 
 **Symptoms**: `JsonException` during event replay or API responses.

@@ -65,6 +65,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // Simple tracking
     private bool _isInitialized;
     private string? _lastError;
+
+    // SEK-G14: the projection fault this grain is stuck on. Captured from the actor when a catch-up/stream apply
+    // fails, persisted into grain state, and restored on activation so a fresh grain fails queries from the first one.
+    private ProjectionFaultDescriptor? _projectionFault;
     private long _eventsProcessed;
     private readonly HashSet<Guid> _processedEventIds = new(); // Track processed event IDs to prevent double counting
     private readonly Queue<Guid> _processedEventIdOrder = new();
@@ -960,6 +964,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 return ResultBox.Error<bool>(new InvalidOperationException("Projection host not initialized"));
             }
+
+            // Whatever faulted the actor — the background timer, the stream, or RefreshAsync's own loop — capture it
+            // into the state now, so the persisted snapshot re-establishes the fault on the next activation. A faulted
+            // projection makes no safe-checkpoint progress, so the snapshot persist below would short-circuit and never
+            // write the grain state; write it here directly so the fault survives a restart regardless.
+            if (_host.CurrentFault is { } liveFault)
+            {
+                _projectionFault = liveFault;
+                WriteFaultIntoState(liveFault);
+                await _state.WriteStateAsync();
+            }
+
             _logger.LogDebug(
                 "[{ProjectorName}] Starting persistence at {StartUtc:yyyy-MM-dd HH:mm:ss.fff} UTC",
                 projectorName,
@@ -1947,6 +1963,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // After activation, start catch-up in background (fire-and-forget).
         // This prevents Orleans activation timeout when catch-up takes longer than 30 seconds.
         // Queries will return partial/stale data with IsCatchUpInProgress=true until catch-up completes.
+        // Re-establish any persisted fault BEFORE the (fire-and-forget) catch-up starts, so the first query fails
+        // closed instead of answering empty/partial success in the window before catch-up re-reaches the poison.
+        RestoreProjectionFaultIfPersisted();
+
         _ = CatchUpFromEventStoreAsync(forceFullCatchUp);
 
         // Auto-start subscription so stream-only projections resume after crashes/restarts.
@@ -2090,6 +2110,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     _state.State.ProjectorVersion = currentVersion;
                 }
+                ClearFaultFromState();
                 await _state.WriteStateAsync();
             }
         }
@@ -2186,8 +2207,87 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _catchUpFailureWindowStartUtc = null;
     }
 
+    /// <summary>
+    ///     If the hosted projection has recorded a fold fault, capture it into the grain and persist it, so the fault
+    ///     survives a restart. Reading it from the host means the descriptor came from the authoritative per-event
+    ///     boundary (event id/type/projector/position), not from a batch-level guess. First fault wins.
+    /// </summary>
+    private void CaptureProjectionFaultIfAny()
+    {
+        if (_projectionFault is not null)
+        {
+            return;
+        }
+
+        var fault = _host?.CurrentFault;
+        if (fault is null)
+        {
+            return;
+        }
+
+        _projectionFault = fault;
+        WriteFaultIntoState(fault);
+    }
+
+    private void WriteFaultIntoState(ProjectionFaultDescriptor fault)
+    {
+        if (_state.State is null)
+        {
+            return;
+        }
+
+        _state.State.FaultEventId = fault.EventId.ToString();
+        _state.State.FaultEventType = fault.EventType;
+        _state.State.FaultPosition = fault.Position;
+        _state.State.FaultMessage = fault.Message;
+        _state.State.FaultedAtUtcTicks = fault.FaultedAtUtc;
+    }
+
+    private void ClearFaultFromState()
+    {
+        _projectionFault = null;
+        _host?.ClearFaultForRebuild();
+        if (_state.State is null)
+        {
+            return;
+        }
+
+        _state.State.FaultEventId = null;
+        _state.State.FaultEventType = null;
+        _state.State.FaultPosition = null;
+        _state.State.FaultMessage = null;
+        _state.State.FaultedAtUtcTicks = 0;
+    }
+
+    /// <summary>Re-establishes a persisted fault into the freshly-activated host so the first query fails closed.</summary>
+    private void RestoreProjectionFaultIfPersisted()
+    {
+        var state = _state.State;
+        if (state?.FaultEventId is null || _host is null)
+        {
+            return;
+        }
+
+        if (!Guid.TryParse(state.FaultEventId, out var eventId))
+        {
+            return;
+        }
+
+        var fault = new ProjectionFaultDescriptor(
+            eventId,
+            state.FaultEventType ?? string.Empty,
+            GetProjectorName(),
+            state.FaultPosition ?? string.Empty,
+            state.FaultMessage ?? string.Empty,
+            state.FaultedAtUtcTicks);
+
+        _projectionFault = fault;
+        _host.RestoreFault(fault);
+    }
+
     private void HandleCatchUpBatchFailure(Exception ex, string projectorName)
     {
+        CaptureProjectionFaultIfAny();
         _catchUpConsecutiveFailureCount++;
         _catchUpFailureWindowStartUtc ??= DateTime.UtcNow;
 
@@ -3533,6 +3633,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
+            CaptureProjectionFaultIfAny();
             _lastError = $"Failed to process event batch: {ex.Message}";
             _logger.LogError(ex, "[{ProjectorName}] Error processing event batch", GetProjectorName());
 
@@ -3633,6 +3734,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
+            CaptureProjectionFaultIfAny();
             _lastError = $"Failed to process buffered events: {ex.Message}";
             _logger.LogError(ex, "[{ProjectorName}] Error processing buffered events", GetProjectorName());
         }

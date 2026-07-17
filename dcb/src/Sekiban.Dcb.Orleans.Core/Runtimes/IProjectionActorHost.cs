@@ -1,6 +1,7 @@
 using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Orleans.Serialization;
 
 namespace Sekiban.Dcb.Runtime;
@@ -128,4 +129,13 @@ public interface IProjectionActorHost
         Stream target,
         string newVersion,
         CancellationToken cancellationToken);
+
+    /// <summary>The fold fault the hosted projection is stuck on, or null when it is healthy. Default: null (a host that predates SEK-G14 is treated as never faulted).</summary>
+    Sekiban.Dcb.Actors.ProjectionFaultDescriptor? CurrentFault => null;
+
+    /// <summary>Re-establishes a persisted fault across an activation so the first query cannot answer success before the known fault is back. Default: no-op.</summary>
+    void RestoreFault(Sekiban.Dcb.Actors.ProjectionFaultDescriptor fault) { }
+
+    /// <summary>Clears the fault for a deliberate rebuild. Default: no-op.</summary>
+    void ClearFaultForRebuild() { }
 }

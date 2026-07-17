@@ -48,4 +48,21 @@ public class MultiProjectionGrainState
 
     [Id(12)]
     public long LastGoodEventsProcessed { get; set; }
+
+    // SEK-G14 persisted projection fault: a fold/deserialize failure the projection is stuck on. Restored on
+    // activation so a freshly-activated grain cannot answer a query successfully before its known fault is re-established.
+    [Id(13)]
+    public string? FaultEventId { get; set; }
+
+    [Id(14)]
+    public string? FaultEventType { get; set; }
+
+    [Id(15)]
+    public string? FaultPosition { get; set; }
+
+    [Id(16)]
+    public string? FaultMessage { get; set; }
+
+    [Id(17)]
+    public long FaultedAtUtcTicks { get; set; }
 }

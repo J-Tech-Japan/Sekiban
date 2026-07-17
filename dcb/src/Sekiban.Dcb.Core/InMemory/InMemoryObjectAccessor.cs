@@ -182,26 +182,25 @@ public class InMemoryObjectAccessor : IActorObjectAccessor, IServiceProvider, IE
         {
             var projectorName = actorId; // actorId is the projector name
             var actor = new GeneralMultiProjectionActor(_domainTypes, projectorName);
-            try
+
+            // Initial catch-up: feed all existing events. Failures used to be swallowed here, which made a projection
+            // that could NOT be built present as an empty, successful one — the exact silence issue #1075 was about.
+            // Now a failed read and a failed fold both propagate: GetActorAsync's outer catch turns whatever is thrown
+            // into ResultBox.Error<T>, so the original exception reaches that boundary and the query fails instead of
+            // returning empty. GetAwaiter().GetResult() is used over Wait() so the fold's own exception surfaces, not
+            // the AggregateException Wait() would wrap it in.
+            var read = _eventStore.ReadAllSerializableEventsAsync().GetAwaiter().GetResult();
+            if (!read.IsSuccess)
             {
-                // Initial catch-up: feed all existing events
-                var eventsRb = _eventStore.ReadAllSerializableEventsAsync();
-                eventsRb.Wait();
-                if (eventsRb.Result.IsSuccess)
-                {
-                    var events = eventsRb.Result.GetValue().ToList();
-                    if (events.Count > 0)
-                    {
-                        // Synchronously apply (API is async but we can Wait in this limited in-memory context)
-                        // Initial replay is a catch-up phase
-                        actor.AddSerializableEventsAsync(events, finishedCatchUp: true).Wait();
-                    }
-                }
+                throw read.GetException();
             }
-            catch
+
+            var events = read.GetValue().ToList();
+            if (events.Count > 0)
             {
-                // Swallow - projection will appear empty if replay fails
+                actor.AddSerializableEventsAsync(events, finishedCatchUp: true).GetAwaiter().GetResult();
             }
+
             return actor as T;
         }
 
