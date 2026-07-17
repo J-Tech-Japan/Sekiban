@@ -69,6 +69,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // SEK-G14: the projection fault this grain is stuck on. Captured from the actor when a catch-up/stream apply
     // fails, persisted into grain state, and restored on activation so a fresh grain fails queries from the first one.
     private ProjectionFaultDescriptor? _projectionFault;
+    private bool _faultPersistFailed;
     private long _eventsProcessed;
     private readonly HashSet<Guid> _processedEventIds = new(); // Track processed event IDs to prevent double counting
     private readonly Queue<Guid> _processedEventIdOrder = new();
@@ -2216,8 +2217,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     ///     Captures the actor's fault and DURABLY persists it before the caller treats the failure as handled. A
     ///     background apply that faulted but only kept the descriptor in memory could lose it to a silo crash before
     ///     the next timer/manual persist, and a fresh activation would then answer success until it re-reached the
-    ///     poison. So this awaits the grain-state write, and if that write fails it does not pretend the fault is
-    ///     safe: it deactivates, so the next activation re-reads the events and re-establishes the fault (fail-closed).
+    ///     poison. So this awaits the grain-state write.
+    ///     If that write fails, it does NOT deactivate. Deactivating would be the worst move: the descriptor never
+    ///     persisted, so discarding this activation throws away the only record of the fault, and the fresh activation
+    ///     that replaces it — with nothing to restore — answers empty success until a background timer re-reaches the
+    ///     poison. Instead this PINS the current activation (it already holds the live fault, so its queries already
+    ///     fail) and keeps it alive, so the fault-closed state is retained rather than lost. The activation stays until
+    ///     a later persist succeeds (store recovered) or the process is lost; a lost process re-reads the events on
+    ///     restart and re-faults, which is the only fail-closed outcome available when the state store itself is down.
     /// </summary>
     private async Task CaptureAndPersistProjectionFaultIfAnyAsync()
     {
@@ -2241,11 +2248,29 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception writeEx)
         {
+            _faultPersistFailed = true;
             _logger.LogCritical(
                 writeEx,
-                "[{ProjectorName}] Failed to persist projection fault descriptor; deactivating to fail closed so a fresh activation re-establishes the fault.",
+                "[{ProjectorName}] Failed to persist projection fault descriptor; pinning this faulted activation so its fail-closed state is not discarded (queries continue to fail).",
                 GetProjectorName());
-            DeactivateOnIdle();
+            PinFaultedActivation();
+        }
+    }
+
+    /// <summary>
+    ///     Keeps a faulted activation whose descriptor could not be persisted from being reclaimed and reactivated
+    ///     empty. Idempotent and best-effort — the load-bearing guarantee is the live in-memory fault, which fails
+    ///     every query; the pin only stops that live state from being silently thrown away.
+    /// </summary>
+    private void PinFaultedActivation()
+    {
+        try
+        {
+            DelayDeactivation(TimeSpan.FromDays(3650));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[{ProjectorName}] Could not pin faulted activation.", GetProjectorName());
         }
     }
 
