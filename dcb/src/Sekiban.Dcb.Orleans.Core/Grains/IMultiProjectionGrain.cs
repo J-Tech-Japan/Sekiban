@@ -145,4 +145,12 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     ///     Testing aid: delete external state to simulate snapshot loss.
     /// </summary>
     Task<bool> DeleteExternalStateAsync();
+
+    /// <summary>
+    ///     Testing aid: launch two grain-state writes concurrently within a single grain turn, both routed through the
+    ///     single-writer gate. With the gate in place they are serialized (a storage harness that parks the first write
+    ///     observes at most one concurrent write); if the gate is bypassed they overlap. Returns nothing — the harness
+    ///     records the observed concurrency. Exists solely to prove the writer gate serializes overlapping writes.
+    /// </summary>
+    Task ProbeStateWriteConcurrencyAsync();
 }

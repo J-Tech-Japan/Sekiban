@@ -18,6 +18,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.ColdEvents;
 using System.Text;
 using System.Runtime;
+using System.Runtime.ExceptionServices;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
@@ -77,6 +78,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // It is per-activation and consumed by the first query only; an already-active projection's ordinary lag is
     // untouched.
     private bool _firstQueryNeedsSyncCatchUp;
+
+    // The single shared in-flight first-query barrier. Concurrent first callers await this SAME task and all observe
+    // its outcome — none bypasses into empty/current state while it runs. It is cleared on a transient failure so the
+    // next query retries; on success _firstQueryNeedsSyncCatchUp is cleared so later queries skip the barrier entirely.
+    private Task? _firstQuerySyncCatchUpInFlight;
+
+    // The last event-store read exception the in-call catch-up swallowed (ProcessSerializableBatch launders a failed
+    // read into an empty batch for the resilient background path). The first-query barrier consults it to fail closed
+    // with the original exception when catch-up did not reach the head, instead of answering empty success.
+    private Exception? _catchUpReadException;
     private IGrainTimer? _faultPersistRetryTimer;
     private int _faultPersistRetryAttempt;
     private static readonly TimeSpan FaultPersistRetryBase = TimeSpan.FromMilliseconds(500);
@@ -464,7 +475,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 new InvalidOperationException("Projection host not initialized"));
         }
 
-        await EnsureFirstQuerySyncCatchUpAsync();
+        try
+        {
+            await EnsureFirstQuerySyncCatchUpAsync();
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<MultiProjectionState>(ex); // fail closed with the original head/read failure
+        }
 
         await StartSubscriptionAsync();
 
@@ -880,7 +898,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 new InvalidOperationException("Projection host not initialized"));
         }
 
-        await EnsureFirstQuerySyncCatchUpAsync();
+        try
+        {
+            await EnsureFirstQuerySyncCatchUpAsync();
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<string>(ex); // fail closed with the original head/read failure
+        }
 
         await using var snapshotStream = new MemoryStream();
         var writeResult = await _host.WriteSnapshotToStreamAsync(
@@ -1501,10 +1526,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return new SerializableQueryResult();
         }
 
-        await EnsureFirstQuerySyncCatchUpAsync();
-
         try
         {
+            await EnsureFirstQuerySyncCatchUpAsync();
+
             var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
 
             var result = await _host.ExecuteQueryAsync(
@@ -1555,10 +1580,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return new SerializableListQueryResult();
         }
 
-        await EnsureFirstQuerySyncCatchUpAsync();
-
         try
         {
+            await EnsureFirstQuerySyncCatchUpAsync();
+
             var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
 
             var result = await _host.ExecuteListQueryAsync(
@@ -1654,7 +1679,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return await _host.IsSortableUniqueIdReceivedAsync(sortableUniqueId);
     }
 
-    public async Task RefreshAsync()
+    public Task RefreshAsync() => RefreshAsync(forceEvenIfCatchUpActive: false);
+
+    // forceEvenIfCatchUpActive: the first-query barrier needs the in-call catch-up to RUN even when a background
+    // catch-up (re)started by EnsureInitializedAsync has flipped IsActive on — otherwise the barrier would return
+    // without reading and could not re-establish a fault or reach the head. Normal RefreshAsync keeps the guard so a
+    // manual refresh does not fight an already-running catch-up.
+    private async Task RefreshAsync(bool forceEvenIfCatchUpActive)
     {
         var projectorName = GetProjectorName();
         _logger.LogDebug("[{ProjectorName}] Refreshing: Re-reading events from event store", projectorName);
@@ -1666,7 +1697,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         RecoverStaleCatchUpIfNeeded(projectorName);
-        if (_catchUpProgress.IsActive)
+        if (_catchUpProgress.IsActive && !forceEvenIfCatchUpActive)
         {
             _logger.LogDebug(
                 "[{ProjectorName}] Refresh skipped because catch-up is already active",
@@ -2248,42 +2279,121 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     ///     descriptor was lost (a crash while persistence was failing) is therefore re-established before any success,
     ///     closing the restart window. It is per-activation and runs once; an already-active projection's ordinary lag
     ///     is untouched, and it is a fast no-op when the projection is already at head.
+    ///     Callers share ONE in-flight barrier task, so concurrent first callers all await the same work and all
+    ///     observe the same outcome. A head/read/catch-up failure is never swallowed: the barrier throws (the original
+    ///     exception is preserved) and is NOT marked complete, so the query fails closed and the next query retries —
+    ///     no caller reaches empty/current state because a flag was cleared early.
     /// </summary>
-    private async Task EnsureFirstQuerySyncCatchUpAsync()
+    private Task EnsureFirstQuerySyncCatchUpAsync()
     {
         if (!_firstQueryNeedsSyncCatchUp)
         {
-            return;
+            return Task.CompletedTask;
         }
 
+        return _firstQuerySyncCatchUpInFlight ??= RunAndSettleFirstQueryBarrierAsync();
+    }
+
+    private async Task RunAndSettleFirstQueryBarrierAsync()
+    {
+        try
+        {
+            await RunFirstQuerySyncCatchUpAsync();
+        }
+        catch
+        {
+            // Transient head/read/catch-up failure. Do NOT mark the barrier complete: drop the in-flight handle so the
+            // NEXT query re-runs it, keep _firstQueryNeedsSyncCatchUp set, and rethrow so THIS query fails closed. No
+            // query can succeed on empty state because a flag was cleared.
+            _firstQuerySyncCatchUpInFlight = null;
+            throw;
+        }
+
+        // Completed with either a healthy at-head result or a confirmed fault the query will surface as an error.
         _firstQueryNeedsSyncCatchUp = false;
+        _firstQuerySyncCatchUpInFlight = null;
+    }
+
+    private async Task RunFirstQuerySyncCatchUpAsync()
+    {
+        if (_host is null)
+        {
+            return;
+        }
 
         // Already faulted (a persisted descriptor was restored, or an earlier in-call refresh established it): the
         // query fails on the live fault regardless, so there is nothing to catch up.
-        if (_host is null || _host.CurrentFault is not null)
+        if (_host.CurrentFault is not null)
         {
             return;
         }
 
-        // Run catch-up IN-CALL, not via the background timer. This grain turn is held by the query, and a
-        // non-reentrant grain cannot service a catch-up timer until we return — waiting on one here would deadlock.
-        // Cancel any pending timer-driven catch-up and let RefreshAsync's in-call loop drive it to the head; its loop
-        // re-folds the tail and faults on any poison. A fault makes the loop throw (the actor rejects further applies)
-        // — that is fine, the fault is now recorded on the actor and the query below surfaces it as a failed result;
-        // we only need catch-up to have RUN, not to have returned cleanly.
+        // Read the AUTHORITATIVE event-store head. If we cannot read it, we cannot prove there is no poison in the
+        // un-caught-up tail, so we must fail the query closed with the original exception rather than answer empty.
+        var catchUpStore = GetCatchUpEventStore();
+        var headResult = await catchUpStore.GetLatestSortableUniqueIdAsync();
+        if (!headResult.IsSuccess)
+        {
+            ExceptionDispatchInfo.Capture(headResult.GetException()).Throw();
+        }
+
+        var head = headResult.GetValue();
+        if (string.IsNullOrEmpty(head))
+        {
+            return; // empty store: nothing durable to be behind on.
+        }
+
+        var current = await GetCurrentPositionAsync();
+        if (current is not null && string.CompareOrdinal(current.Value, head) >= 0)
+        {
+            return; // already at or past head: ordinary lag semantics resume.
+        }
+
+        // Behind the head: catch up IN-CALL (not on the background timer, which a non-reentrant grain turn held by the
+        // query would deadlock waiting on). RefreshAsync re-reads and re-folds the tail; a poison re-faults the actor.
         _catchUpTimer?.Dispose();
         _catchUpTimer = null;
         _catchUpProgress.IsActive = false;
+        _catchUpReadException = null;
+
         try
         {
-            await RefreshAsync();
+            await RefreshAsync(forceEvenIfCatchUpActive: true);
         }
-        catch (Exception ex)
+        catch when (_host.CurrentFault is not null)
         {
-            _logger.LogDebug(ex, "[{ProjectorName}] Synchronous first-query catch-up established a fault.", GetProjectorName());
+            // A confirmed projection fault was established. The actor is faulted; the query surfaces it as an error.
+            // The barrier's job is done — swallow the rethrown reject and complete.
         }
 
-        await CaptureAndPersistProjectionFaultIfAnyAsync();
+        if (_host.CurrentFault is not null)
+        {
+            return; // fault established and (via RefreshAsync) persisted; the query will fail closed on it.
+        }
+
+        // No fault, but did catch-up actually REACH the head? Comparing the reached position with the head is the
+        // authoritative check: a read that failed was laundered into an empty batch by the resilient background path,
+        // so "catch-up completed" does not by itself prove we reached the head.
+        var reached = await GetCurrentPositionAsync();
+        if (reached is null || string.CompareOrdinal(reached.Value, head) < 0)
+        {
+            // Still behind: fail closed. Prefer the original read exception (a swallowed failed read) for context; the
+            // field is a best-effort signal shared with the resilient background reader, so only trust it here, where
+            // we have independently confirmed we did not reach the head.
+            if (_catchUpReadException is not null)
+            {
+                var captured = _catchUpReadException;
+                _catchUpReadException = null;
+                ExceptionDispatchInfo.Capture(captured).Throw();
+            }
+
+            throw new InvalidOperationException(
+                $"[{GetProjectorName()}] First-query catch-up did not reach the event-store head " +
+                $"(reached '{reached?.Value ?? "beginning"}', head '{head}'); failing the query closed.");
+        }
+
+        // Reached the head with no fault: clear any stale read exception a resilient background read may have left.
+        _catchUpReadException = null;
     }
 
     /// <summary>The single serialized grain-state writer — all WriteStateAsync goes through here so writers cannot overlap.</summary>
@@ -2298,6 +2408,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             _stateWriteGate.Release();
         }
+    }
+
+    /// <inheritdoc />
+    public async Task ProbeStateWriteConcurrencyAsync()
+    {
+        await EnsureInitializedAsync();
+
+        // Start two gated writes without awaiting the first — on the grain's single-threaded cooperative scheduler they
+        // interleave at await points, so if the gate did not serialize them a parked first write would overlap the
+        // second. Both go through the same gate all production writes use.
+        var first = WriteGrainStateGatedAsync();
+        var second = WriteGrainStateGatedAsync();
+        await Task.WhenAll(first, second);
     }
 
     /// <summary>
@@ -2967,6 +3090,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 exception,
                 "[{ProjectorName}] Failed to read serializable events for catch-up",
                 projectorName);
+            // The background catch-up path is deliberately resilient (return an empty batch and retry later), but the
+            // failure must not be lost: the first-query barrier reads this to fail closed with the original exception
+            // rather than treat a failed read as "caught up to an empty tail".
+            _catchUpReadException = exception;
             return 0;
         }
 
