@@ -77,6 +77,26 @@ public static class EventPayloadBinder
             return json;
         }
 
+        // A custom converter owns the type's binding, and a JsonTypeInfo for it is Kind=None with an empty Properties
+        // collection — it declares NO member names. Treating that as "zero declared names" would be a lie: the
+        // converter can read whatever top-level keys it likes, so FailOnCaseMismatch would wave a mis-cased member
+        // through while claiming to have checked it, StrictUnmapped would reject every key the converter owns, and
+        // CaseInsensitiveLegacy would have nothing to rename toward. There is no authoritative declared-name contract
+        // to validate against, so a policy that promises validation must fail deterministically instead of pretending.
+        if (typeInfo.Kind != JsonTypeInfoKind.Object)
+        {
+            throw new SekibanEventPayloadBindingException(
+                $"Event '{eventTypeName}' payload (CLR type '{typeInfo.Type.FullName}') is bound by a custom converter "
+                + $"or a non-object contract (JsonTypeInfoKind.{typeInfo.Kind}), which declares no member names. The "
+                + $"{policy} policy validates member names and has nothing authoritative to validate against here. Use "
+                + $"the CompatibleCaseSensitive policy to bind through the converter without the name check.",
+                eventTypeName,
+                typeInfo.Type.FullName ?? typeInfo.Type.Name,
+                offendingJsonName: null,
+                expectedJsonName: null,
+                payloadLocation: null);
+        }
+
         using var document = JsonDocument.Parse(json);
 
         // Only an object has member names to check. A payload that is an array, a string or a number is STJ's problem,
