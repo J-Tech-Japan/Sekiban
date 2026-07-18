@@ -1,88 +1,54 @@
 using Dcb.Domain;
-using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
-using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.TestSupport;
 using Xunit;
 namespace Sekiban.Dcb.Tests.ConditionalAppend;
 
 /// <summary>
 ///     SEK-G16 SQLite conditional (unique-key) append — the NEW path, exercised in-process against a real temp-file
-///     SQLite database (runs in CI with no container). Proves the uniform outcome machine, an N-writer race converging on
-///     one durable winner, capability reporting, and that the legacy INSERT OR REPLACE path is unchanged.
+///     SQLite database (runs in CI with no container). The shared outcome-machine assertions
+///     (<see cref="ConditionalAppendScenarios" />) prove the uniform contract; the SQLite-specific cases here are the
+///     N-writer race under the write lock and the guarantee that the legacy INSERT OR REPLACE path is unchanged.
 /// </summary>
 public sealed class SqliteConditionalAppendTests : IDisposable
 {
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"sek-g16-{Guid.NewGuid():N}.db");
-    private readonly DcbDomainTypes _domain = BuildDomain();
-
-    private static DcbDomainTypes BuildDomain()
-    {
-        var d = DomainType.GetDomainTypes();
-        ((SimpleEventTypes)d.EventTypes).RegisterEventType<MigrationMarker>();
-        ((SimpleTagTypes)d.TagTypes).RegisterTagGroupType<MigrationTag>();
-        return d;
-    }
+    private readonly DcbDomainTypes _domain = ConditionalAppendScenarios.RegisterMarker(DomainType.GetDomainTypes());
 
     private SqliteEventStore NewStore() => new(_dbPath, _domain.EventTypes);
 
-    private SerializableEvent Marker(string value) =>
-        new Event(new MigrationMarker(value), SortableUniqueId.GenerateNew(), nameof(MigrationMarker),
-                Guid.CreateVersion7(), new EventMetadata("c", "c", "u"), new List<string> { "Migration:once" })
-            .ToSerializableEvent(_domain.EventTypes);
+    private async Task<int> DurableCount(SqliteEventStore store) =>
+        (await store.ReadAllSerializableEventsAsync()).GetValue().Count();
 
     [Fact]
-    public void Capability_ReportsSingleEventUniqueKey()
-    {
-        Assert.True(NewStore().DescribeWriteConditions().Supports(WriteConditionKind.SingleEventUniqueKey));
-    }
+    public void Capability_ReportsSingleEventUniqueKey() =>
+        ConditionalAppendScenarios.AssertCapability(NewStore());
 
     [Fact]
     public async Task FirstAppend_Wins_SameOperationRetry_ReturnsIdenticalReceipt_NoSecondEvent()
     {
         var store = NewStore();
-        var first = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-1", Marker("v")))).GetValue();
-        var second = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-1", Marker("v")))).GetValue();
-
-        Assert.Equal(ConditionalAppendStatus.Appended, first.Status);
-        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, second.Status);
-        Assert.Equal(first.WinnerEventId, second.WinnerEventId);
-        Assert.Equal(first.WinnerSortableUniqueId, second.WinnerSortableUniqueId);
-        Assert.Equal(first.OperationFingerprint, second.OperationFingerprint);
-        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+        await ConditionalAppendScenarios.AssertFirstAppendWins_SameOpRetryIsIdempotent(
+            store, _domain, "mig-1", () => DurableCount(store));
     }
 
     [Fact]
     public async Task SameKey_DifferentOperation_IsKeyReuseConflict_WithProviderCause_NoSecondEvent()
     {
         var store = NewStore();
-        Assert.True((await store.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-1", Marker("first")))).IsSuccess);
-        var conflict = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-1", Marker("DIFFERENT")));
-
-        Assert.False(conflict.IsSuccess);
-        var ex = Assert.IsType<KeyReuseConflictException>(conflict.GetException());
-        Assert.NotNull(ex.InnerException); // constraint-discovered conflict preserves the real SQLite exception
-        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+        await ConditionalAppendScenarios.AssertDifferentOperationIsKeyReuseConflict_WithProviderCause(
+            store, _domain, "mig-1", () => DurableCount(store));
     }
 
     [Fact]
     public async Task NWriters_SameOperation_OneAppended_RestAlreadyCommitted_IdenticalReceipt_OneDurableEvent()
     {
         var store = NewStore();
-        var attempts = await Task.WhenAll(
-            Enumerable.Range(0, 12).Select(_ =>
-                store.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-race", Marker("payload")))));
-
-        var receipts = attempts.Select(r => r.GetValue()).ToList();
-        Assert.Equal(1, receipts.Count(r => r.Status == ConditionalAppendStatus.Appended));
-        Assert.Equal(11, receipts.Count(r => r.Status == ConditionalAppendStatus.AlreadyCommittedSameOperation));
-        Assert.Single(receipts.Select(r => r.WinnerEventId).Distinct());          // all converge on ONE winner id
-        Assert.Single(receipts.Select(r => r.WinnerSortableUniqueId).Distinct());
-        Assert.Single(receipts.Select(r => r.OperationFingerprint).Distinct());
-        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue()); // exactly one durable event
+        await ConditionalAppendScenarios.AssertNWritersConverge(store, _domain, "mig-race", 12, () => DurableCount(store));
     }
 
     [Fact]
@@ -94,7 +60,7 @@ public sealed class SqliteConditionalAppendTests : IDisposable
         var id = Guid.CreateVersion7();
         var sortable = SortableUniqueId.GenerateNew();
         SerializableEvent Fixed(string v) =>
-            new Event(new MigrationMarker(v), sortable, nameof(MigrationMarker), id,
+            new Event(new ConditionalMarkerEvent(v), sortable, nameof(ConditionalMarkerEvent), id,
                     new EventMetadata("c", "c", "u"), new List<string>())
                 .ToSerializableEvent(_domain.EventTypes);
 
@@ -117,15 +83,5 @@ public sealed class SqliteConditionalAppendTests : IDisposable
         {
             // best-effort temp cleanup
         }
-    }
-
-    private record MigrationMarker(string Value) : IEventPayload;
-
-    private record MigrationTag(string Id) : IStringTagGroup<MigrationTag>
-    {
-        public static string TagGroupName => "Migration";
-        public static MigrationTag FromContent(string content) => new(content);
-        public bool IsConsistencyTag() => false;
-        public string GetId() => Id;
     }
 }
