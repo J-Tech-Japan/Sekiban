@@ -121,10 +121,11 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     {
         lock (_gate)
         {
-            var match = _items
-                .Where(entry => entry.Key.Id == id)
-                .Select(entry => entry.Value)
-                .FirstOrDefault();
+            // Partition-scoped point read, exactly as Cosmos behaves: an id is unique WITHIN a partition, but the same id
+            // can exist in different partitions (e.g. tag rows share the event id across per-tag partitions). Matching by
+            // id alone would return another partition's row.
+            var pk = UnwrapPartitionKey(partitionKey);
+            var match = _items.TryGetValue((pk, id), out var found) ? found : null;
 
             if (match == null)
             {

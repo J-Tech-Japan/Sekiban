@@ -151,23 +151,39 @@ public class CosmosConditionalAppendTests
         var client = new InMemoryCosmosClient();
         var options = NewOptions();
         var first = NewLineage(client, options);
-        first.Store.AfterConditionalCommitHook = () => throw new InvalidOperationException("connection reset after commit");
+        var transport = new InvalidOperationException("connection reset after commit");
+        first.Store.AfterConditionalCommitHook = () => throw transport;
+
+        // Multi-tag event: the event AND all three tag rows are durable before the lost response.
+        SerializableEvent ThreeTagMarker() =>
+            new Event(new ConditionalMarkerEvent("v"), SortableUniqueId.GenerateNew(), nameof(ConditionalMarkerEvent),
+                    Guid.CreateVersion7(), new EventMetadata("c", "c", "u"), new List<string> { "T:a", "T:b", "T:c" })
+                .ToSerializableEvent(_domain.EventTypes);
 
         var ambiguous = await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-postcommit", ConditionalAppendScenarios.Marker(_domain, "v")));
+            new ConditionalAppendRequest("cosmos-postcommit", ThreeTagMarker()));
 
-        Assert.False(ambiguous.IsSuccess);            // ambiguous to the caller
-        Assert.Single(first.Events.Items);             // event durable
-        Assert.Single(first.Tags.Items);               // tag row durable too (committed before the lost response)
+        Assert.False(ambiguous.IsSuccess);
+        Assert.Same(transport, ambiguous.GetException());   // first call surfaces the ORIGINAL transport failure
+        Assert.Single(first.Events.Items);                   // event durable
+        Assert.Equal(3, first.Tags.Items.Count);             // all three tag rows durable before the lost response
 
+        // Retry on a fresh store converges to AlreadyCommitted with the EXACT stored-winner receipt; no duplicate rows.
+        var deterministicId = ConditionalAppendIdentity.DeriveEventId(ServiceId, OperationFingerprint.NormalizeKey("cosmos-postcommit"));
+        var winner = (await first.Store.ReadSerializableEventAsync(deterministicId)).GetValue();
         var second = NewLineage(client, options);
         var retry = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest("cosmos-postcommit", ConditionalAppendScenarios.Marker(_domain, "v")));
+            new ConditionalAppendRequest("cosmos-postcommit", ThreeTagMarker()));
 
-        Assert.True(retry.IsSuccess);
+        Assert.True(retry.IsSuccess, retry.IsSuccess ? "" : retry.GetException().ToString());
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.GetValue().Status);
-        Assert.Single(second.Events.Items);            // no second event
-        Assert.Single((await second.Store.ReadSerializableEventsByTagAsync(new TestTag("Migration:once"))).GetValue());
+        ConditionalAppendScenarios.AssertReceiptMatchesStoredWinner(retry.GetValue(), ServiceId, "cosmos-postcommit", _domain, winner);
+        Assert.Single(second.Events.Items);                  // no second event
+        Assert.Equal(3, second.Tags.Items.Count);            // exactly the three tag rows, no duplicates
+        foreach (var tag in new[] { "T:a", "T:b", "T:c" })
+        {
+            Assert.Single((await second.Store.ReadSerializableEventsByTagAsync(new TestTag(tag))).GetValue());
+        }
     }
 
     // ── The crash-window/repair gate (Fix #1) ───────────────────────────────────────────────────────

@@ -1,6 +1,8 @@
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.TestSupport;
 using Xunit;
@@ -95,24 +97,51 @@ public class PostgresConditionalAppendTests : PostgresTestBase
         // TRUE post-commit ambiguity on the real container (distinct from the cancelled-before-commit rollback test): the
         // transaction commits durably, then the response is lost via a transport exception. First call ambiguous; a retry
         // reads the committed winner and converges to AlreadyCommitted — no second event.
+        var transport = new InvalidOperationException("connection reset after commit");
         var store = (PostgresEventStore)Fixture.EventStore;
-        store.AfterConditionalCommitHook = () => throw new InvalidOperationException("connection reset after commit");
+        store.AfterConditionalCommitHook = () => throw transport;
         try
         {
             var first = await Conditional.AppendIfUniqueAsync(
                 new ConditionalAppendRequest("pg-postcommit", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")));
-            Assert.False(first.IsSuccess);            // ambiguous to the caller
-            Assert.Equal(1, await DurableCount());     // but the write IS durable
+            Assert.False(first.IsSuccess);
+            Assert.Same(transport, first.GetException());   // first call surfaces the ORIGINAL transport failure
+            Assert.Equal(1, await DurableCount());           // but the write IS durable
         }
         finally
         {
             store.AfterConditionalCommitHook = null;
         }
 
-        var retry = (await Conditional.AppendIfUniqueAsync(
+        // Retry through a GENUINELY FRESH PostgresEventStore/DbContext over the same database (default ServiceId).
+        var freshStore = new PostgresEventStore(
+            Fixture.DbContextFactory, Fixture.DomainTypes.EventTypes, new DefaultServiceIdProvider());
+        var deterministicId = ConditionalAppendIdentity.DeriveEventId("default", OperationFingerprint.NormalizeKey("pg-postcommit"));
+        var winner = (await freshStore.ReadSerializableEventAsync(deterministicId)).GetValue();
+        var retry = (await ((IConditionalEventStore)freshStore).AppendIfUniqueAsync(
             new ConditionalAppendRequest("pg-postcommit", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")))).GetValue();
+
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.Status);
+        ConditionalAppendScenarios.AssertReceiptMatchesStoredWinner(retry, "default", "pg-postcommit", Fixture.DomainTypes, winner);
         Assert.Equal(1, await DurableCount());         // no second event
+    }
+
+    [Fact]
+    public void ResponseLossSeam_IsNonPublicInstance_NotStatic_AbsentFromInterfaces_AndUnsetInProduction()
+    {
+        // Structural guard: the post-commit response-loss seam cannot become a public/production-reachable mutation surface.
+        const string hook = "AfterConditionalCommitHook";
+        Assert.NotNull(typeof(PostgresEventStore).GetProperty(hook, BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.Null(typeof(PostgresEventStore).GetProperty(hook, BindingFlags.Instance | BindingFlags.Public));
+        Assert.Null(typeof(PostgresEventStore).GetProperty(hook, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic));
+        foreach (var contract in new[] { typeof(IEventStore), typeof(IConditionalEventStore), typeof(IHotEventStore) })
+        {
+            Assert.Null(contract.GetProperty(hook));
+        }
+
+        // A store built the way production builds it (from the DbContext factory) carries no hook — construction touches no DB.
+        var store = new PostgresEventStore(Fixture.DbContextFactory, Fixture.DomainTypes.EventTypes, new DefaultServiceIdProvider());
+        Assert.Null(store.AfterConditionalCommitHook);
     }
 
     [Fact]

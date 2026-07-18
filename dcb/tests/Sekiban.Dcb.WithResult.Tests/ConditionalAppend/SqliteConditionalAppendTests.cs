@@ -116,18 +116,25 @@ public sealed class SqliteConditionalAppendTests : IDisposable
         // TRUE post-commit ambiguity (distinct from rollback-before-commit): the transaction commits durably, then the
         // response is lost via a transport exception. The first call is ambiguous (error); a retry through a FRESH store
         // reads the committed winner and converges to AlreadyCommitted — no second event.
+        var transport = new InvalidOperationException("connection reset after commit");
         var writer = NewStore();
-        writer.AfterConditionalCommitHook = () => throw new InvalidOperationException("connection reset after commit");
+        writer.AfterConditionalCommitHook = () => throw transport;
 
         var first = await writer.AppendIfUniqueAsync(
             new ConditionalAppendRequest("mig-postcommit", ConditionalAppendScenarios.Marker(_domain, "v")));
 
-        Assert.False(first.IsSuccess);                                             // ambiguous to the caller
+        Assert.False(first.IsSuccess);
+        Assert.Same(transport, first.GetException());                              // first call surfaces the ORIGINAL transport failure
         Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // but the write IS durable
 
+        // Retry through a genuinely fresh store: converges to AlreadyCommitted with a receipt IDENTICAL to the stored winner.
+        var deterministicId = ConditionalAppendIdentity.DeriveEventId("default", OperationFingerprint.NormalizeKey("mig-postcommit"));
+        var winner = (await NewStore().ReadSerializableEventAsync(deterministicId)).GetValue();
         var retry = (await NewStore().AppendIfUniqueAsync(
             new ConditionalAppendRequest("mig-postcommit", ConditionalAppendScenarios.Marker(_domain, "v")))).GetValue();
+
         Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.Status);
+        ConditionalAppendScenarios.AssertReceiptMatchesStoredWinner(retry, "default", "mig-postcommit", _domain, winner);
         Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // no second event
     }
 

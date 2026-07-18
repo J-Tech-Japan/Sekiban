@@ -121,7 +121,7 @@ public class ConditionalAppendFacadeInDoubtTests
     }
 
     [Fact]
-    public async Task SerializedBoundary_UnknownVersion_IsRejectedFirst_WithZeroStoreAndCapabilitySideEffects()
+    public async Task SerializedBoundary_UnknownVersion_IsRejectedFirst_WithZeroSideEffectsAtEveryPreflightStage()
     {
         var (executor, store) = NewExecutor(_ => throw new InvalidOperationException("store must not be reached"));
 
@@ -130,8 +130,15 @@ public class ConditionalAppendFacadeInDoubtTests
 
         Assert.False(result.IsSuccess);
         Assert.IsType<UnsupportedSerializedCommitVersionException>(result.GetException());
-        Assert.Equal(0, store.AppendAttempts);   // no store append attempted
-        Assert.Equal(0, store.DescribeCalls);     // no capability resolution — version is checked first
+        // The version gate runs BEFORE capability resolution, which runs before EventId/SortableUniqueId allocation,
+        // candidate serialization/canonicalization, and any provider read/append. Proving the FIRST observable stage
+        // (capability resolution) never ran, plus zero provider reads/appends, proves nothing downstream ran either — the
+        // executor short-circuits on version before touching the store at all. Non-vacuous: moving the version check after
+        // capability resolution would make DescribeCalls == 1 and fail this test.
+        Assert.Equal(0, store.DescribeCalls);   // capability resolution
+        Assert.Equal(0, store.ReadCalls);        // provider reads
+        Assert.Equal(0, store.WriteCalls);       // unconditional writes
+        Assert.Equal(0, store.AppendAttempts);   // conditional append (EventId alloc + serialization happen just before this)
     }
 
     private record UniqueMarkerEvent(string Value) : IEventPayload;

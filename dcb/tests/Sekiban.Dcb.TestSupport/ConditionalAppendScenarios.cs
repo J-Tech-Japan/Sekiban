@@ -54,6 +54,23 @@ public static class ConditionalAppendScenarios
     public static void AssertCapability(IWriteConditionCapabilityProvider store) =>
         Assert.True(store.DescribeWriteConditions().Supports(WriteConditionKind.SingleEventUniqueKey));
 
+    /// <summary>
+    ///     Asserts a receipt (e.g. an AlreadyCommitted from a post-response-loss retry) matches the INDEPENDENTLY read
+    ///     stored winner EXACTLY: the deterministic winner EventId, its SortableUniqueId, and the recomputed canonical
+    ///     fingerprint. Proves the retry returns the original winner's receipt, not a fresh or divergent one.
+    /// </summary>
+    public static void AssertReceiptMatchesStoredWinner(
+        ConditionalAppendReceipt receipt, string serviceId, string key, DcbDomainTypes domain, SerializableEvent winner)
+    {
+        var deterministicId = ConditionalAppendIdentity.DeriveEventId(serviceId, OperationFingerprint.NormalizeKey(key));
+        Assert.Equal(deterministicId, winner.Id);                       // the winner IS stored under the deterministic id
+        Assert.Equal(deterministicId, receipt.WinnerEventId);
+        Assert.Equal(winner.SortableUniqueIdValue, receipt.WinnerSortableUniqueId);
+        var fingerprint = OperationFingerprint.ComputeCanonical(
+            serviceId, key, domain.EventTypes, winner.EventPayloadName, winner.Payload, winner.Tags).GetValue();
+        Assert.Equal(fingerprint, receipt.OperationFingerprint);
+    }
+
     /// <summary>First append wins; a same-operation retry returns the ORIGINAL winner's receipt and writes nothing new.</summary>
     public static async Task AssertFirstAppendWins_SameOpRetryIsIdempotent(
         IConditionalEventStore store,
