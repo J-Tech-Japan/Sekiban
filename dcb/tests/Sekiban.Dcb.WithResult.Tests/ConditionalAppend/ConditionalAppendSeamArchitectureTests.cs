@@ -124,93 +124,162 @@ public class ConditionalAppendSeamArchitectureTests
     private const string StoreKind = "stfld";
     private const string ReflectionKind = "reflection";
 
-    private static readonly string[] AllSeams =
+    // The provider assemblies (Postgres/SQLite/Cosmos) declare the AfterConditionalCommitHook seam; Core declares the
+    // executor allocator probes and the coordinator's verification-budget override.
+    private const string ProviderHookSeam = "AfterConditionalCommitHook";
+    private static readonly string[] CoreSeams =
     {
-        "AfterConditionalCommitHook", "ConditionalEventIdFactory", "ConditionalSortableIdFactory", "VerificationBudgetOverride"
+        "ConditionalEventIdFactory", "ConditionalSortableIdFactory", "VerificationBudgetOverride"
     };
 
     [Fact]
     public void ProductionAssemblies_ContainNoSeamWrite_ByAnyPath()
     {
-        // Structural IL guard covering EVERY write surface: setter calls (call/callvirt set_X), direct backing-field
-        // stores (stfld/stsfld) outside the narrowly-allowed default init / own setter, and reflection assignment
-        // (PropertyInfo/FieldInfo.SetValue) ANYWHERE in the assembly (production uses zero reflection SetValue, so this is
-        // a clean conservative rejection — no allowlist needed).
-        Assert.Empty(FindSeamWrites(typeof(SqliteEventStore).Assembly, "AfterConditionalCommitHook"));
-        Assert.Empty(FindSeamWrites(typeof(CosmosDbEventStore).Assembly, "AfterConditionalCommitHook"));
-        Assert.Empty(FindSeamWrites(typeof(DynamoDbEventStore).Assembly, "AfterConditionalCommitHook"));
-        Assert.Empty(FindSeamWrites(typeof(IConditionalEventStore).Assembly, AllSeams));
+        // Structural IL guard covering EVERY write surface: setter calls, direct backing-field stores (stfld/stsfld) —
+        // matched by the EXACT resolved backing FieldInfo identity, never a name — outside the narrowly-allowed default
+        // init / own setter, and reflection assignment (PropertyInfo/FieldInfo.SetValue) ANYWHERE in the assembly
+        // (production uses zero reflection SetValue). Target resolution fails closed if a seam backing field is unresolved.
+        // SQLite/Cosmos declare the AfterConditionalCommitHook seam; Core declares the executor allocator probes + the
+        // coordinator's verification-budget override. DynamoDB has NO settable test seam (its post-commit ambiguity is
+        // wrapped in the store's catch, not a hook property), so it is not scanned for one.
+        Assert.Empty(FindSeamWrites(typeof(SqliteEventStore).Assembly, ProviderHookSeam));
+        Assert.Empty(FindSeamWrites(typeof(CosmosDbEventStore).Assembly, ProviderHookSeam));
+        Assert.Empty(FindSeamWrites(typeof(IConditionalEventStore).Assembly, CoreSeams));
     }
 
-    // ── Three INDEPENDENT, mode-specific non-vacuous controls: each proves one scanner branch, and each fails if that
-    //    branch is removed (a per-kind assertion, not an aggregate). The control fixtures below produce exactly one
-    //    write pattern each, from a NON-declaring external type. ───────────────────────────────────────────────────────
+    [Fact]
+    public void SeamTargetResolution_FailsClosed_WhenABackingFieldCannotBeResolved()
+    {
+        // A configured seam that does not exist in the scanned assembly must THROW (fail closed), never silently pass by
+        // falling back to name matching.
+        Assert.Throws<InvalidOperationException>(
+            () => FindSeamWrites(typeof(DynamoDbEventStore).Assembly, "AfterConditionalCommitHook"));
+    }
+
+    // ── Independent, mode-specific non-vacuous controls. Each proves one scanner branch (per-kind assertion, not an
+    //    aggregate) and fails if that branch is removed. The control "seam" is a manual property whose INTERNAL backing
+    //    field is directly writable by external fixtures, so the stfld branch can be exercised against the EXACT resolved
+    //    target field identity. ─────────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
     public void Control_SetterCall_IsDetected()
     {
-        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, AllSeams);
+        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, SeamWriteControls.SeamName);
         Assert.Contains(hits, h => h.StartsWith(SetterKind + ":", StringComparison.Ordinal)
             && h.Contains(nameof(SeamWriteControls.ExternalSetterCaller), StringComparison.Ordinal));
     }
 
     [Fact]
-    public void Control_DirectBackingFieldStore_IsDetected()
+    public void Control_DirectBackingFieldStore_ToExactTargetField_IsDetected()
     {
-        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, AllSeams);
+        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, SeamWriteControls.SeamName);
         Assert.Contains(hits, h => h.StartsWith(StoreKind + ":", StringComparison.Ordinal)
             && h.Contains(nameof(SeamWriteControls.ExternalFieldStorer), StringComparison.Ordinal));
     }
 
     [Fact]
+    public void Control_UnrelatedSameNamedField_IsNotReported()
+    {
+        // Negative control: a DIFFERENT type has a field with the IDENTICAL name to the control seam's backing field. Because
+        // matching is by exact FieldInfo identity (not name), its external store must NOT be reported.
+        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, SeamWriteControls.SeamName);
+        Assert.DoesNotContain(hits, h => h.Contains(nameof(SeamWriteControls.UnrelatedSameNamedField), StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Control_ReflectionSetValueFromNonDeclaringType_IsDetected()
     {
-        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, AllSeams);
+        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, SeamWriteControls.SeamName);
         Assert.Contains(hits, h => h.StartsWith(ReflectionKind + ":", StringComparison.Ordinal)
             && h.Contains(nameof(SeamWriteControls.ExternalReflectionSetter), StringComparison.Ordinal));
     }
 
     /// <summary>
-    ///     Control fixtures for the seam-write scanner. Each is a NON-seam-declaring external type that performs exactly
-    ///     one forbidden write pattern, so the scanner must attribute a hit of the corresponding kind to it.
+    ///     Control fixtures for the seam-write scanner. The control seam is a MANUAL property with an internal backing
+    ///     field so an external fixture can store it directly (the scanner matches by that field's exact identity).
     /// </summary>
     private static class SeamWriteControls
     {
-        // (1) An external type calls a seam setter.
-        internal sealed class ExternalSetterCaller
+        public const string SeamName = "ControlSeam";
+
+        internal sealed class ControlSeamHolder
         {
-            public Func<Task>? AfterConditionalCommitHook { get; set; }
-            public void Mutate(ExternalSetterCaller target) => target.AfterConditionalCommitHook = () => Task.CompletedTask;
+            internal Func<Task>? ControlSeamBackingField;
+            internal Func<Task>? ControlSeam
+            {
+                get => ControlSeamBackingField;
+                set => ControlSeamBackingField = value;
+            }
         }
 
-        // (2) An external/direct store to a seam-named field (models a converted-to-manual backing field assigned outside
-        //     any setter/ctor — a stfld the scanner must catch by the normalized field name).
+        // (1) An external type calls the seam setter.
+        internal sealed class ExternalSetterCaller
+        {
+            public void Mutate(ControlSeamHolder target) => target.ControlSeam = () => Task.CompletedTask;
+        }
+
+        // (2) An external type stores directly to the EXACT target backing field.
         internal sealed class ExternalFieldStorer
         {
-            public Func<Task>? AfterConditionalCommitHook;
-            public void Store(ExternalFieldStorer target) => target.AfterConditionalCommitHook = () => Task.CompletedTask;
+            public void Store(ControlSeamHolder target) => target.ControlSeamBackingField = () => Task.CompletedTask;
         }
 
         // (3) A different external type obtains a PropertyInfo and calls SetValue.
         internal sealed class ExternalReflectionSetter
         {
-            public void Assign(object target) =>
-                typeof(ExternalSetterCaller)
-                    .GetProperty(nameof(ExternalSetterCaller.AfterConditionalCommitHook))!
+            public void Assign(ControlSeamHolder target) =>
+                typeof(ControlSeamHolder).GetProperty(SeamName, BindingFlags.Instance | BindingFlags.NonPublic)!
                     .SetValue(target, (Func<Task>)(() => Task.CompletedTask));
+        }
+
+        // Negative: an unrelated type whose field has the IDENTICAL NAME but a different identity — must NOT be reported.
+        internal sealed class UnrelatedSameNamedField
+        {
+            internal Func<Task>? ControlSeamBackingField;
+            public void Store(UnrelatedSameNamedField target) => target.ControlSeamBackingField = () => Task.CompletedTask;
         }
     }
 
     private static List<string> FindSeamWrites(Assembly assembly, params string[] propNames)
     {
-        var setterNames = new HashSet<string>(propNames.Select(n => "set_" + n), StringComparer.Ordinal);
-        var seamNameSet = new HashSet<string>(propNames, StringComparer.Ordinal);
+        const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
 
         Type[] types;
         try { types = assembly.GetTypes(); }
         catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t is not null).ToArray()!; }
 
-        const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        // Resolve each configured seam to the EXACT identity of its backing field (via its getter's ldfld/ldsfld) and its
+        // setter method. Fail closed if a seam property or its backing field cannot be resolved — never fall back to names.
+        var targetFields = new HashSet<(Module Module, int Token)>();
+        var setterIds = new HashSet<(Module Module, int Token)>();
+        var setterOwnerOfField = new Dictionary<(Module, int), (Module, int)>(); // backing field -> its own setter
+        foreach (var propName in propNames)
+        {
+            var props = types
+                .Select(t => t.GetProperty(propName, all))
+                .Where(p => p is not null)
+                .Cast<PropertyInfo>()
+                .ToList();
+            if (props.Count == 0)
+            {
+                throw new InvalidOperationException($"Seam property '{propName}' not found in {assembly.GetName().Name}.");
+            }
+
+            foreach (var prop in props)
+            {
+                var backing = ResolveBackingField(prop)
+                    ?? throw new InvalidOperationException(
+                        $"Backing field for seam '{propName}' in {prop.DeclaringType?.FullName} could not be resolved.");
+                var fieldId = (backing.Module, backing.MetadataToken);
+                targetFields.Add(fieldId);
+                if (prop.SetMethod is { } setter)
+                {
+                    var setterId = (setter.Module, setter.MetadataToken);
+                    setterIds.Add(setterId);
+                    setterOwnerOfField[fieldId] = setterId;
+                }
+            }
+        }
 
         var hits = new List<string>();
         foreach (var type in types)
@@ -229,6 +298,7 @@ public class ConditionalAppendSeamArchitectureTests
 
                 var typeArgs = type.IsGenericType ? type.GetGenericArguments() : Type.EmptyTypes;
                 var methodArgs = method.IsGenericMethodDefinition ? method.GetGenericArguments() : Type.EmptyTypes;
+                var methodId = (method.Module, method.MetadataToken);
 
                 for (var i = 0; i + 5 <= il.Length; i++)
                 {
@@ -243,7 +313,7 @@ public class ConditionalAppendSeamArchitectureTests
                         {
                             continue;
                         }
-                        if (setterNames.Contains(callee.Name))
+                        if (setterIds.Contains((callee.Module, callee.MetadataToken)))
                         {
                             hits.Add($"{SetterKind}: {type.FullName}.{method.Name} -> {callee.Name}");
                         }
@@ -263,19 +333,18 @@ public class ConditionalAppendSeamArchitectureTests
                             continue;
                         }
 
-                        // Normalize an auto-property backing field (`<Prop>k__BackingField`) to its property name; a plain
-                        // field keeps its own name. Match either against the seam names.
-                        var normalized = NormalizeFieldName(field.Name);
-                        if (!seamNameSet.Contains(normalized))
+                        var fieldId = (field.Module, field.MetadataToken);
+                        if (!targetFields.Contains(fieldId))
                         {
-                            continue;
+                            continue; // exact identity — a same-named unrelated field is NOT a target
                         }
 
-                        // Legitimate ONLY in the property's own auto-generated setter or the declaring type's ctor.
+                        // Legitimate ONLY in the target field's OWN property setter or the field's declaring-type ctor.
                         var isDeclaringCtor = method is ConstructorInfo && field.DeclaringType == type;
-                        if (!isDeclaringCtor && !string.Equals(method.Name, "set_" + normalized, StringComparison.Ordinal))
+                        var isOwnSetter = setterOwnerOfField.TryGetValue(fieldId, out var owner) && owner == methodId;
+                        if (!isDeclaringCtor && !isOwnSetter)
                         {
-                            hits.Add($"{StoreKind}: {type.FullName}.{method.Name} -> {field.Name}");
+                            hits.Add($"{StoreKind}: {type.FullName}.{method.Name} -> {field.DeclaringType?.Name}.{field.Name}");
                         }
                     }
                 }
@@ -285,10 +354,30 @@ public class ConditionalAppendSeamArchitectureTests
         return hits;
     }
 
-    private static string NormalizeFieldName(string fieldName) =>
-        fieldName.StartsWith('<') && fieldName.EndsWith(">k__BackingField", StringComparison.Ordinal)
-            ? fieldName[1..fieldName.IndexOf('>')]
-            : fieldName;
+    // Resolves the backing field a property actually reads, by scanning its getter's IL for the first ldfld/ldsfld.
+    private static FieldInfo? ResolveBackingField(PropertyInfo prop)
+    {
+        var getter = prop.GetMethod;
+        byte[]? il;
+        try { il = getter?.GetMethodBody()?.GetILAsByteArray(); }
+        catch { il = null; }
+        if (getter is null || il is null)
+        {
+            return null;
+        }
+
+        var typeArgs = prop.DeclaringType is { IsGenericType: true } dt ? dt.GetGenericArguments() : Type.EmptyTypes;
+        for (var i = 0; i + 5 <= il.Length; i++)
+        {
+            if (il[i] is 0x7B or 0x7E) // ldfld / ldsfld
+            {
+                try { return getter.Module.ResolveField(BitConverter.ToInt32(il, i + 1), typeArgs, Type.EmptyTypes); }
+                catch { return null; }
+            }
+        }
+
+        return null;
+    }
 
     private static void AssertIvtAllowlist(Assembly assembly, params string[] expected)
     {
