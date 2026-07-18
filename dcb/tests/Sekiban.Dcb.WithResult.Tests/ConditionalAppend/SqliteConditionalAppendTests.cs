@@ -1,4 +1,5 @@
 using Dcb.Domain;
+using Microsoft.Data.Sqlite;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -80,6 +81,62 @@ public sealed class SqliteConditionalAppendTests : IDisposable
         Assert.Equal(1, results.Count(r => r.IsSuccess && r.GetValue().Status == ConditionalAppendStatus.Appended));
         Assert.Equal(1, results.Count(r => !r.IsSuccess && r.GetException() is KeyReuseConflictException));
         Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    [Fact]
+    public async Task CancelledMidWrite_IsTypedInDoubt_NoDurableEvent_ThenRetryConverges()
+    {
+        var store = NewStore();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // The write is cancelled before it commits: nothing is durable, and the outcome is resolved by an authoritative
+        // read-back (no winner) to a typed retryable in-doubt — never a partial durable event.
+        var cancelled = await store.AppendIfUniqueAsync(
+            new ConditionalAppendRequest("mig-cancel", ConditionalAppendScenarios.Marker(_domain, "v")), cts.Token);
+
+        Assert.False(cancelled.IsSuccess);
+        var ex = Assert.IsType<ConditionalAppendInDoubtException>(cancelled.GetException());
+        Assert.True(ex.IsRetryable);
+        Assert.Empty((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // transaction rolled back
+
+        // Recovery: a normal retry converges to a durable Appended.
+        var retry = (await store.AppendIfUniqueAsync(
+            new ConditionalAppendRequest("mig-cancel", ConditionalAppendScenarios.Marker(_domain, "v")))).GetValue();
+        Assert.Equal(ConditionalAppendStatus.Appended, retry.Status);
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    [Fact]
+    public async Task UnrelatedUniqueConstraint_IsProviderFailure_NotAClaimConflict()
+    {
+        // Materialize the schema, then add an UNRELATED unique index. A second conditional append reusing that sortable id
+        // under a DIFFERENT key derives a different (ServiceId, Id) PK (so the PK is fine) but violates the unrelated
+        // UNIQUE constraint (extended code 2067, not 1555). It must surface as a provider failure, not a claim conflict.
+        _ = NewStore(); // ensures tables exist
+        await using (var conn = new SqliteConnection($"Data Source={_dbPath}"))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "CREATE UNIQUE INDEX ux_g16_unrelated ON dcb_events (ServiceId, SortableUniqueId);";
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var store = NewStore();
+        SerializableEvent Fixed(string value, string sortable) =>
+            new Event(new ConditionalMarkerEvent(value), sortable, nameof(ConditionalMarkerEvent),
+                    Guid.CreateVersion7(), new EventMetadata("c", "c", "u"), new List<string> { "Migration:once" })
+                .ToSerializableEvent(_domain.EventTypes);
+        var sortableId = SortableUniqueId.GenerateNew();
+
+        var first = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-unrel-A", Fixed("A", sortableId)));
+        Assert.Equal(ConditionalAppendStatus.Appended, first.GetValue().Status);
+
+        var clash = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-unrel-B", Fixed("B", sortableId)));
+
+        Assert.False(clash.IsSuccess);
+        Assert.IsType<SqliteException>(clash.GetException());
+        Assert.IsNotType<KeyReuseConflictException>(clash.GetException());
     }
 
     [Fact]

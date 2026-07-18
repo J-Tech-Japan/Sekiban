@@ -119,12 +119,21 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         var options = _context.Options;
         var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
         var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
-        await WriteSerializableTagsWithBatchAsync(
-            new List<SerializableEvent> { winner },
-            tagsContainer,
-            options,
-            serviceId,
-            tagsSettings).ConfigureAwait(false);
+        try
+        {
+            await WriteSerializableTagsWithBatchAsync(
+                new List<SerializableEvent> { winner },
+                tagsContainer,
+                options,
+                serviceId,
+                tagsSettings).ConfigureAwait(false);
+        }
+        catch (CosmosTagIndexCorruptionException ex)
+        {
+            // An existing deterministic tag row DISAGREES with the event (strict ContentEquals failed). The stage never
+            // overwrites it; surface a NON-retryable committed-state corruption rather than a retryable in-doubt.
+            throw new ConditionalAppendCommittedStateCorruptionException(ConditionalProviderName, serviceId, winner.Id, ex);
+        }
     }
 
     private async Task<SerializableEvent?> ReadConditionalWinnerAsync(

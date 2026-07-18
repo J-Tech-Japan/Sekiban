@@ -67,6 +67,29 @@ public class PostgresConditionalAppendTests : PostgresTestBase
     }
 
     [Fact]
+    public async Task CancelledMidWrite_IsTypedInDoubt_NoDurableEvent_ThenRetryConverges()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // SaveChanges is cancelled before commit: nothing durable, and the outcome resolves by authoritative read-back
+        // (no winner) to a typed retryable in-doubt.
+        var cancelled = await Conditional.AppendIfUniqueAsync(
+            new ConditionalAppendRequest("pg-cancel", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")), cts.Token);
+
+        Assert.False(cancelled.IsSuccess);
+        var ex = Assert.IsType<ConditionalAppendInDoubtException>(cancelled.GetException());
+        Assert.True(ex.IsRetryable);
+        Assert.Equal(0, await DurableCount()); // transaction rolled back — nothing committed
+
+        // Recovery: a normal retry converges to a durable Appended.
+        var retry = (await Conditional.AppendIfUniqueAsync(
+            new ConditionalAppendRequest("pg-cancel", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")))).GetValue();
+        Assert.Equal(ConditionalAppendStatus.Appended, retry.Status);
+        Assert.Equal(1, await DurableCount());
+    }
+
+    [Fact]
     public async Task UnrelatedUniqueViolation_IsProviderFailure_NotAClaimConflict()
     {
         // Add a temporary UNRELATED unique index on (ServiceId, SortableUniqueId). A second conditional append that reuses

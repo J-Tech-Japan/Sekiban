@@ -184,6 +184,51 @@ public class DynamoConditionalAppendTests
     }
 
     [Fact]
+    public async Task AbsentCancellationReasons_IsProviderFailure_NotAClaimConflict()
+    {
+        var (s, client) = NewStore();
+        var store = (IConditionalEventStore)s;
+        // A TransactionCanceledException with an EMPTY reason collection is not the event claim condition.
+        client.NextTransactException = new TransactionCanceledException("cancelled") { CancellationReasons = new List<CancellationReason>() };
+
+        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-absent", ConditionalAppendScenarios.Marker(_domain, "v")));
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<TransactionCanceledException>(result.GetException());
+    }
+
+    [Fact]
+    public async Task MalformedCancellationReason_AtIndex0_ThatIsNotConditionalCheck_IsProviderFailure()
+    {
+        var (s, client) = NewStore();
+        var store = (IConditionalEventStore)s;
+        // Index 0 is present but is a throttling reason, not ConditionalCheckFailed — a provider failure, not a conflict.
+        client.NextTransactException = new TransactionCanceledException("cancelled")
+        {
+            CancellationReasons = new List<CancellationReason> { new() { Code = "ThrottlingError" } }
+        };
+
+        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-malformed", ConditionalAppendScenarios.Marker(_domain, "v")));
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<TransactionCanceledException>(result.GetException());
+    }
+
+    [Fact]
+    public async Task ProviderRejection_RequestTooLarge_IsProviderFailure_NotInDoubtOrConflict()
+    {
+        var (s, client) = NewStore();
+        var store = (IConditionalEventStore)s;
+        client.NextTransactException = new AmazonDynamoDBException("Transaction request cannot include more than allowed size");
+
+        var result = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("dyn-toolarge", ConditionalAppendScenarios.Marker(_domain, "v")));
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<AmazonDynamoDBException>(result.GetException());
+        Assert.IsNotType<ConditionalAppendInDoubtException>(result.GetException());
+    }
+
+    [Fact]
     public async Task BareConflict_WithNoReadableWinner_IsTypedRetryableInDoubt()
     {
         var (s, client) = NewStore();

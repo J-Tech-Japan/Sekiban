@@ -93,7 +93,7 @@ public static class ConditionalAppendExecution
             return await ResolveByReadbackAsync(
                 serviceId, request.IdempotencyKey, eventTypes, providerName, deterministicId, attemptFingerprint,
                 readCommittedWinner, ensureCommittedAsync, ex,
-                ConditionalAppendInDoubtException.ReasonAmbiguousAfterWrite, CancellationToken.None);
+                ConditionalAppendInDoubtReason.AmbiguousAfterWrite, CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -116,7 +116,7 @@ public static class ConditionalAppendExecution
         return await ResolveByReadbackAsync(
             serviceId, request.IdempotencyKey, eventTypes, providerName, deterministicId, attemptFingerprint,
             readCommittedWinner, ensureCommittedAsync, outcome.ConflictException,
-            ConditionalAppendInDoubtException.ReasonWinnerUnreadable, cancellationToken);
+            ConditionalAppendInDoubtReason.WinnerUnreadableAfterConflict, cancellationToken);
     }
 
     /// <summary>
@@ -133,7 +133,7 @@ public static class ConditionalAppendExecution
         Func<Guid, CancellationToken, Task<SerializableEvent?>> readCommittedWinner,
         Func<SerializableEvent, CancellationToken, Task>? ensureCommittedAsync,
         Exception? cause,
-        string unreadableReason,
+        ConditionalAppendInDoubtReason unreadableReason,
         CancellationToken cancellationToken)
     {
         SerializableEvent? existing;
@@ -145,7 +145,7 @@ public static class ConditionalAppendExecution
         {
             // The winner could not even be read — in-doubt. Prefer the original conflict/cancellation cause when present.
             return ResultBox.Error<ConditionalAppendReceipt>(
-                new ConditionalAppendInDoubtException(providerName, serviceId, deterministicId, unreadableReason, cause ?? ex));
+                ConditionalAppendInDoubtException.Create(providerName, serviceId, deterministicId, unreadableReason, cause ?? ex));
         }
 
         if (existing is null)
@@ -153,7 +153,7 @@ public static class ConditionalAppendExecution
             // The conflict/ambiguity said the id may exist, but no committed winner could be read back. Do NOT report
             // AlreadyCommitted; the caller may retry, which converges once it commits.
             return ResultBox.Error<ConditionalAppendReceipt>(
-                new ConditionalAppendInDoubtException(providerName, serviceId, deterministicId, unreadableReason, cause));
+                ConditionalAppendInDoubtException.Create(providerName, serviceId, deterministicId, unreadableReason, cause));
         }
 
         var existingFingerprintResult = OperationFingerprint.ComputeCanonical(
@@ -187,12 +187,19 @@ public static class ConditionalAppendExecution
             {
                 await ensureCommittedAsync(existing, cancellationToken);
             }
+            catch (ConditionalAppendCommittedStateCorruptionException corruption)
+            {
+                // A disagreeing (corrupt) committed row is NON-retryable and must never be overwritten — surface it as-is,
+                // never reclassified to a retryable in-doubt.
+                return ResultBox.Error<ConditionalAppendReceipt>(corruption);
+            }
             catch (Exception ex)
             {
+                // A transient/unresolved repair failure (e.g. exhausted retries) is retryable in-doubt.
                 return ResultBox.Error<ConditionalAppendReceipt>(
-                    new ConditionalAppendInDoubtException(
+                    ConditionalAppendInDoubtException.Create(
                         providerName, serviceId, deterministicId,
-                        ConditionalAppendInDoubtException.ReasonCommittedStateUnverified, ex));
+                        ConditionalAppendInDoubtReason.CommittedStateUnverified, ex));
             }
         }
 

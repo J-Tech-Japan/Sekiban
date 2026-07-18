@@ -129,7 +129,7 @@ public class CosmosConditionalAppendTests
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendInDoubtException>(result.GetException());
         Assert.True(ex.IsRetryable);
-        Assert.Equal(ConditionalAppendInDoubtException.ReasonWinnerUnreadable, ex.ReasonCode);
+        Assert.Equal(ConditionalAppendInDoubtReason.WinnerUnreadableAfterConflict, ex.Reason);
         Assert.Empty(lineage.Events.Items);
     }
 
@@ -191,8 +191,50 @@ public class CosmosConditionalAppendTests
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendInDoubtException>(result.GetException());
         Assert.True(ex.IsRetryable);
-        Assert.Equal(ConditionalAppendInDoubtException.ReasonCommittedStateUnverified, ex.ReasonCode);
+        Assert.Equal(ConditionalAppendInDoubtReason.CommittedStateUnverified, ex.Reason);
         Assert.Empty(second.Tags.Items);
+    }
+
+    [Fact]
+    public async Task Retry_WithMismatchedExistingTagRow_IsNonRetryableCorruption_NoOverwrite()
+    {
+        var client = new InMemoryCosmosClient();
+        var options = NewOptions();
+        var first = NewLineage(client, options);
+        const string key = "cosmos-corrupt";
+
+        // Crash after event create: the event is durable, no tag row landed.
+        first.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
+        await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(
+            new ConditionalAppendRequest(key, ConditionalAppendScenarios.Marker(_domain, "v")));
+        Assert.Single(first.Events.Items);
+        Assert.Empty(first.Tags.Items);
+
+        // Seed a DISAGREEING tag row under the deterministic identity (wrong event type) — an integrity violation the
+        // repair must NOT paper over with an overwrite.
+        var deterministicId = ConditionalAppendIdentity.DeriveEventId(ServiceId, OperationFingerprint.NormalizeKey(key));
+        var winner = (await first.Store.ReadSerializableEventAsync(deterministicId)).GetValue();
+        first.Tags.Seed(CosmosTagIdentity.DeriveRow(
+            ServiceId, "Migration:once", deterministicId, winner.SortableUniqueIdValue, "SomethingElse"));
+
+        // Retry on a fresh store: the mismatched committed row must classify as NON-retryable corruption — no overwrite,
+        // no AlreadyCommitted.
+        var second = NewLineage(client, options);
+        var result = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(
+            new ConditionalAppendRequest(key, ConditionalAppendScenarios.Marker(_domain, "v")));
+
+        Assert.False(result.IsSuccess);
+        var ex = Assert.IsType<ConditionalAppendCommittedStateCorruptionException>(result.GetException());
+        Assert.False(ex.IsRetryable);
+        Assert.Single(second.Tags.Items);                                             // no second tag row written
+        Assert.Equal("SomethingElse", second.Tags.Items.Single()["eventType"]!.ToString()); // bytes unchanged
+
+        // A repeated retry remains corruption — never "eventually" retryable, and still no overwrite.
+        var again = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(
+            new ConditionalAppendRequest(key, ConditionalAppendScenarios.Marker(_domain, "v")));
+        Assert.IsType<ConditionalAppendCommittedStateCorruptionException>(again.GetException());
+        Assert.Single(second.Tags.Items);
+        Assert.Equal("SomethingElse", second.Tags.Items.Single()["eventType"]!.ToString());
     }
 
     [Fact]
