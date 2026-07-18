@@ -21,10 +21,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
     IConditionalEventStore, IWriteConditionCapabilityProvider
 {
     private const string ConditionalProviderName = "Sqlite";
-
-    /// <inheritdoc />
-    public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
-        WriteConditionCapabilityDescriptor.Supporting(ConditionalProviderName, WriteConditionKind.SingleEventUniqueKey);
+    private ConditionalAppendCoordinator? _conditionalAppend;
 
     /// <summary>
     ///     SEK-G16 conditional (unique-key) append. This is a NEW path — the unconditional <c>INSERT OR REPLACE</c> write
@@ -33,17 +30,19 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
     ///     wins; a second writer hits the primary-key constraint and is classified by fingerprint against the stored
     ///     winner. All shared semantics live in <see cref="ConditionalAppendExecution" />.
     /// </summary>
+    private ConditionalAppendCoordinator ConditionalAppend =>
+        _conditionalAppend ??= new ConditionalAppendCoordinator(
+            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
+            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => ConditionalAppend.Descriptor;
+
+    /// <inheritdoc />
     public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default) =>
-        ConditionalAppendExecution.RunAsync(
-            request,
-            CurrentServiceId,
-            _eventTypes,
-            ConditionalProviderName,
-            TryWriteConditionalClaimAsync,
-            ReadConditionalWinnerAsync,
-            cancellationToken);
+        ConditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
 
     private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
         Guid deterministicId,

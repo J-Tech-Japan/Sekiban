@@ -38,8 +38,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
-        services.AddSingleton<Sekiban.Dcb.Storage.IConditionalEventStore>(sp => (Sekiban.Dcb.Storage.IConditionalEventStore)sp.GetRequiredService<IHotEventStore>());
-        services.AddSingleton<Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider>(sp => (Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider)sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 
@@ -64,8 +63,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
-        services.AddSingleton<Sekiban.Dcb.Storage.IConditionalEventStore>(sp => (Sekiban.Dcb.Storage.IConditionalEventStore)sp.GetRequiredService<IHotEventStore>());
-        services.AddSingleton<Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider>(sp => (Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider)sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 
@@ -94,8 +92,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
-        services.AddSingleton<Sekiban.Dcb.Storage.IConditionalEventStore>(sp => (Sekiban.Dcb.Storage.IConditionalEventStore)sp.GetRequiredService<IHotEventStore>());
-        services.AddSingleton<Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider>(sp => (Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider)sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 

@@ -25,9 +25,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "Postgres");
 
-    /// <inheritdoc />
-    public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
-        WriteConditionCapabilityDescriptor.Supporting(ConditionalProviderName, WriteConditionKind.SingleEventUniqueKey);
+    private ConditionalAppendCoordinator? _conditionalAppend;
 
     /// <summary>
     ///     SEK-G16 conditional (unique-key) append. The claim event is inserted under the deterministic id, so the
@@ -37,17 +35,19 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     ///     and the retrying execution strategy it uses are untouched; the conditional path uses a plain transaction
     ///     because a 23505 is a genuine conflict, not a transient to retry.
     /// </summary>
+    private ConditionalAppendCoordinator ConditionalAppend =>
+        _conditionalAppend ??= new ConditionalAppendCoordinator(
+            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
+            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => ConditionalAppend.Descriptor;
+
+    /// <inheritdoc />
     public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default) =>
-        ConditionalAppendExecution.RunAsync(
-            request,
-            CurrentServiceId,
-            _eventTypes,
-            ConditionalProviderName,
-            TryWriteConditionalClaimAsync,
-            ReadConditionalWinnerAsync,
-            cancellationToken);
+        ConditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
 
     private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
         Guid deterministicId,

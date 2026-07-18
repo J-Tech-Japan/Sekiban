@@ -40,8 +40,7 @@ public static class SekibanDcbSqliteExtensions
             return new SqliteEventStore(databasePath, eventTypes, options, logger, serviceIdProvider);
         });
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
-        services.AddSingleton<Sekiban.Dcb.Storage.IConditionalEventStore>(sp => (Sekiban.Dcb.Storage.IConditionalEventStore)sp.GetRequiredService<IHotEventStore>());
-        services.AddSingleton<Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider>(sp => (Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider)sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
 
         services.AddSingleton<IMultiProjectionStateStore>(sp =>
         {

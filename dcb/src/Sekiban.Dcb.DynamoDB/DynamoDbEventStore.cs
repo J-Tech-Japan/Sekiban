@@ -29,9 +29,7 @@ public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorPr
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "DynamoDB");
 
-    /// <inheritdoc />
-    public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
-        WriteConditionCapabilityDescriptor.Supporting(ConditionalProviderName, WriteConditionKind.SingleEventUniqueKey);
+    private ConditionalAppendCoordinator? _conditionalAppend;
 
     /// <summary>
     ///     SEK-G16 conditional (unique-key) append. The claim event is written under the deterministic id, so the existing
@@ -43,17 +41,19 @@ public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorPr
     ///     read-back rather than being silently idempotency-collapsed by DynamoDB. The unconditional write path is
     ///     untouched.
     /// </summary>
+    private ConditionalAppendCoordinator ConditionalAppend =>
+        _conditionalAppend ??= new ConditionalAppendCoordinator(
+            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
+            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => ConditionalAppend.Descriptor;
+
+    /// <inheritdoc />
     public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default) =>
-        ConditionalAppendExecution.RunAsync(
-            request,
-            CurrentServiceId,
-            _eventTypes,
-            ConditionalProviderName,
-            TryWriteConditionalClaimAsync,
-            ReadConditionalWinnerAsync,
-            cancellationToken);
+        ConditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
 
     private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
         Guid deterministicId,
