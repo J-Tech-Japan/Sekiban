@@ -120,31 +120,50 @@ public class ConditionalAppendSeamArchitectureTests
     }
 
     [Fact]
-    public void ProductionAssemblies_ContainNoAssignmentCallSiteForTheSeams()
+    public void ProductionAssemblies_ContainNoSeamWrite_ByAnyPath()
     {
-        // IL-level guard: no production method body calls the response-loss hook setter or the allocator/budget probe
-        // setters. The `= default` initializers compile to a backing-field store (stfld) in the declaring ctor, NOT a
-        // `call set_X`, so any `x.Seam = ...` assignment — the reachable mutation surface we forbid — would be caught here.
-        AssertNoSetterCallSites(typeof(SqliteEventStore).Assembly, "set_AfterConditionalCommitHook");
-        AssertNoSetterCallSites(typeof(CosmosDbEventStore).Assembly, "set_AfterConditionalCommitHook");
-        AssertNoSetterCallSites(
+        // Structural IL guard covering EVERY write surface: setter calls (call/callvirt set_X), direct backing-field
+        // stores (stfld/stsfld) outside the narrowly-allowed default initialization in the declaring ctor, and
+        // reflection assignment (PropertyInfo/FieldInfo.SetValue) inside the seam-declaring types.
+        Assert.Empty(FindSeamWrites(typeof(SqliteEventStore).Assembly, "AfterConditionalCommitHook"));
+        Assert.Empty(FindSeamWrites(typeof(CosmosDbEventStore).Assembly, "AfterConditionalCommitHook"));
+        Assert.Empty(FindSeamWrites(
             typeof(IConditionalEventStore).Assembly,
-            "set_ConditionalEventIdFactory", "set_ConditionalSortableIdFactory", "set_VerificationBudgetOverride");
+            "ConditionalEventIdFactory", "ConditionalSortableIdFactory", "VerificationBudgetOverride"));
     }
 
-    private static void AssertNoSetterCallSites(Assembly assembly, params string[] setterNames)
+    [Fact]
+    public void SeamWriteScanner_IsNonVacuous_DetectsRealWrites_InTheTestAssembly()
     {
+        // Control: the test assembly DOES assign these seams (setter calls, backing-field/reflection paths). The scanner
+        // must find them — proving the empty production result above is a real guarantee, not a broken scan.
+        var hits = FindSeamWrites(
+            typeof(ConditionalAppendSeamArchitectureTests).Assembly,
+            "AfterConditionalCommitHook", "ConditionalEventIdFactory", "ConditionalSortableIdFactory", "VerificationBudgetOverride");
+        Assert.NotEmpty(hits);
+    }
+
+    private static List<string> FindSeamWrites(Assembly assembly, params string[] propNames)
+    {
+        var setterNames = new HashSet<string>(propNames.Select(n => "set_" + n), StringComparer.Ordinal);
+        var backingFields = new HashSet<string>(propNames.Select(n => $"<{n}>k__BackingField"), StringComparer.Ordinal);
+
         Type[] types;
         try { types = assembly.GetTypes(); }
         catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t is not null).ToArray()!; }
 
-        var targets = new HashSet<string>(setterNames, StringComparer.Ordinal);
+        // The types that DECLARE a seam member — the scope for the "no reflection SetValue" rule.
         const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        var seamTypes = types
+            .Where(t => propNames.Any(n => t.GetProperty(n, all) is not null))
+            .ToHashSet();
+
+        var hits = new List<string>();
         foreach (var type in types)
         {
-            var methods = type.GetMethods(all | BindingFlags.DeclaredOnly).Cast<MethodBase>()
+            var members = type.GetMethods(all | BindingFlags.DeclaredOnly).Cast<MethodBase>()
                 .Concat(type.GetConstructors(all | BindingFlags.DeclaredOnly));
-            foreach (var method in methods)
+            foreach (var method in members)
             {
                 byte[]? il;
                 try { il = method.GetMethodBody()?.GetILAsByteArray(); }
@@ -154,34 +173,56 @@ public class ConditionalAppendSeamArchitectureTests
                     continue;
                 }
 
-                // Per-byte scan: at every offset where a call (0x28) or callvirt (0x6F) opcode could sit, resolve the next
-                // 4 bytes as a metadata token. Checking every offset never MISSES a real call; a coincidental
-                // (non-call) byte resolving to a method whose Name is exactly one of the very specific seam setters is
-                // effectively impossible, so this only fires on a genuine assignment.
+                var isDeclaringCtor = method is ConstructorInfo && seamTypes.Contains(type);
+                var typeArgs = type.IsGenericType ? type.GetGenericArguments() : Type.EmptyTypes;
+                var methodArgs = method.IsGenericMethodDefinition ? method.GetGenericArguments() : Type.EmptyTypes;
+
                 for (var i = 0; i + 5 <= il.Length; i++)
                 {
-                    if (il[i] != 0x28 && il[i] != 0x6F)
+                    var op = il[i];
+                    var token = BitConverter.ToInt32(il, i + 1);
+                    if (op is 0x28 or 0x6F) // call / callvirt
                     {
-                        continue;
+                        MethodBase? callee;
+                        try { callee = method.Module.ResolveMethod(token, typeArgs, methodArgs); }
+                        catch { continue; }
+                        if (callee is null)
+                        {
+                            continue;
+                        }
+                        if (setterNames.Contains(callee.Name))
+                        {
+                            hits.Add($"{type.FullName}.{method.Name}: setter call {callee.Name}");
+                        }
+                        else if (callee.Name == "SetValue" && callee.DeclaringType?.Namespace == "System.Reflection"
+                                 && seamTypes.Contains(type))
+                        {
+                            hits.Add($"{type.FullName}.{method.Name}: reflection SetValue inside a seam-declaring type");
+                        }
                     }
-
-                    MethodBase? callee;
-                    try
+                    else if (op is 0x7D or 0x80) // stfld / stsfld
                     {
-                        callee = method.Module.ResolveMethod(
-                            BitConverter.ToInt32(il, i + 1), type.GetGenericArguments(), method.GetGenericArguments());
-                    }
-                    catch { continue; }
+                        FieldInfo? field;
+                        try { field = method.Module.ResolveField(token, typeArgs, methodArgs); }
+                        catch { continue; }
+                        if (field is null || !backingFields.Contains(field.Name))
+                        {
+                            continue;
+                        }
 
-                    if (callee is not null && targets.Contains(callee.Name))
-                    {
-                        Assert.Fail(
-                            $"Production assembly '{assembly.GetName().Name}' assigns seam '{callee.Name}' in "
-                            + $"{type.FullName}.{method.Name}.");
+                        // A backing-field store is legitimate ONLY in the property's OWN auto-generated setter or in the
+                        // declaring type's constructor (the `= default` initializer). Any other store is a forbidden write.
+                        var ownSetter = "set_" + field.Name.TrimStart('<')[..field.Name.TrimStart('<').IndexOf('>')];
+                        if (!isDeclaringCtor && !string.Equals(method.Name, ownSetter, StringComparison.Ordinal))
+                        {
+                            hits.Add($"{type.FullName}.{method.Name}: backing-field store {field.Name} outside ctor/own setter");
+                        }
                     }
                 }
             }
         }
+
+        return hits;
     }
 
     private static void AssertIvtAllowlist(Assembly assembly, params string[] expected)

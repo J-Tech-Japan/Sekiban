@@ -168,6 +168,27 @@ public class DynamoConditionalAppendTests
     // ── Ambiguous commit after a durable write ──────────────────────────────────────────────────────
 
     [Fact]
+    public async Task PreDispatchCancellation_IsRawOriginalCancellation_ZeroDispatch_NoDurableState_NotInDoubt()
+    {
+        var (s, client) = NewStore();
+        var store = (IConditionalEventStore)s;
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // An already-cancelled token is a KNOWN no-commit: the pre-dispatch boundary throws before any SDK call, so it
+        // surfaces the exact original OperationCanceledException/token — never the post-commit ambiguity marker/in-doubt.
+        var result = await store.AppendIfUniqueAsync(
+            new ConditionalAppendRequest("dyn-precancel", ConditionalAppendScenarios.Marker(_domain, "v")), cts.Token);
+
+        Assert.False(result.IsSuccess);
+        Assert.IsNotType<ConditionalAppendInDoubtException>(result.GetException());
+        var oce = Assert.IsAssignableFrom<OperationCanceledException>(result.GetException());
+        Assert.Equal(cts.Token, oce.CancellationToken);
+        Assert.Equal(0, client.TransactCalls);         // zero SDK dispatch
+        Assert.Equal(0, client.CountIn(EventsTable));  // no durable state
+    }
+
+    [Fact]
     public async Task AmbiguousCancellation_AfterDurableCommit_ResolvesByReadback_ToAlreadyCommitted()
     {
         var (s, client) = NewStore();

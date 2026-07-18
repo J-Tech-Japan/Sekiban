@@ -115,6 +115,11 @@ public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorPr
         // request error, never a claim conflict or a retryable in-doubt.
         EnforceTransactWriteLimits(transactItems);
 
+        // Pre-dispatch cancellation boundary (OUTSIDE the try below): an already-cancelled token is a KNOWN no-commit — no
+        // SDK request is dispatched — so it surfaces the exact original OperationCanceledException/token, never the
+        // post-commit ambiguity marker. Only a cancellation/timeout raised BY the dispatch (below) is unknown-commit.
+        cancellationToken.ThrowIfCancellationRequested();
+
         try
         {
             await _client.TransactWriteItemsAsync(
