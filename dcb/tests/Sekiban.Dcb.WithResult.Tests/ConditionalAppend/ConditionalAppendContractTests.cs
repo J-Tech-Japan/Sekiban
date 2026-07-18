@@ -213,22 +213,38 @@ public class ConditionalAppendContractTests
     }
 
     [Fact]
-    public async Task WriteCalls_BaseWriteFailure_IsNotCountedAsDurableSuccess_AndKeyStaysClaimable()
+    public async Task FailFirstDurableWrite_LeavesNoClaim_ThenRetryWinsExactlyOnce_AndSameOpRetryDoesNotRecount()
     {
         var domain = BuildDomainTypes();
         var store = new InMemoryConditionalEventStore(domain.EventTypes);
         var serializable = SampleSerializable(domain);
 
+        // Injected base-write failure: nothing durable happened.
         store.FailNextDurableWrite = true;
         var failed = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable));
         Assert.False(failed.IsSuccess);
-        Assert.Equal(0, store.WriteCalls);     // a FAILED base write is not a durable success...
-        Assert.Equal(1, store.AppendAttempts); // ...though it did reach the durable-write step
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue()); // no event
+        Assert.Equal(1, store.AppendAttempts);                                  // reached the write step
+        Assert.Equal(0, store.WriteCalls);                                      // but not a durable success — no claim/receipt
 
-        // The key was never claimed, so a retry still wins with a real durable write.
+        // Retry wins with a real durable write, exactly once.
         var retry = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable))).GetValue();
         Assert.Equal(ConditionalAppendStatus.Appended, retry.Status);
+        Assert.Equal(2, store.AppendAttempts);
         Assert.Equal(1, store.WriteCalls);
+        var stored = (await store.ReadAllSerializableEventsAsync()).GetValue().ToList();
+        Assert.Single(stored);
+        Assert.Equal(serializable.Id, retry.WinnerEventId);                     // receipt names the stored winner
+        Assert.Equal(stored[0].Id, retry.WinnerEventId);
+
+        // A further same-operation retry returns the SAME receipt and increments neither counter.
+        var sameOp = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable))).GetValue();
+        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, sameOp.Status);
+        Assert.Equal(retry.WinnerEventId, sameOp.WinnerEventId);
+        Assert.Equal(retry.OperationFingerprint, sameOp.OperationFingerprint);
+        Assert.Equal(2, store.AppendAttempts); // unchanged
+        Assert.Equal(1, store.WriteCalls);     // unchanged
+        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
     }
 
     private static SerializableEvent SampleSerializable(DcbDomainTypes domain)

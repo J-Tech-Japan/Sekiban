@@ -95,6 +95,7 @@ public class ConditionalAppendAotContractTests
         // Genuine source-gen metadata: AotHostileEnumEvent's enum leaf is bound by a custom converter. Registered
         // through AotEventTypes and driven through the real conditional store path (AppendIfUniqueAsync -> ComputeCanonical
         // over the AOT metadata graph), the boundary rejects it with the sanitized typed failure and no durable write.
+        const string keySentinel = "AOT_KEY_SENTINEL_5b21_DO_NOT_LEAK";
         var aot = new AotEventTypes();
         aot.Register(nameof(AotHostileEnumEvent), AotHostileJsonContext.Default.AotHostileEnumEvent);
         var store = new InMemoryConditionalEventStore(aot);
@@ -102,13 +103,15 @@ public class ConditionalAppendAotContractTests
         var serializable = new SerializableEvent(payload, Common.SortableUniqueId.GenerateNew(), Guid.CreateVersion7(),
             new EventMetadata("c", "c", "u"), new List<string>(), nameof(AotHostileEnumEvent));
 
-        var r = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable));
+        var r = await store.AppendIfUniqueAsync(new ConditionalAppendRequest(keySentinel, serializable));
 
         Assert.False(r.IsSuccess);
         var ex = Assert.IsType<OperationCanonicalizationException>(r.GetException());
         Assert.Null(ex.InnerException);
+        ExceptionGraphSecretAssert.ContainsNoneOf(ex, keySentinel); // key never leaks into the observable graph
+        Assert.Equal(0, store.AppendAttempts); // rejected before the durable-write step
         Assert.Equal(0, store.WriteCalls);
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue()); // no event / no claim / no receipt
     }
 
     [Fact]

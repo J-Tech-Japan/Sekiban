@@ -84,17 +84,19 @@ public class ConditionalAppendShapeBoundaryTests
     [Fact]
     public async Task OptionsLevelAlternatingConverter_RealExecutor_FailsClosed_NoWrite_NoTwoFingerprints()
     {
+        const string payloadSentinel = "PAYLOAD_SENTINEL_7a1c_DO_NOT_LEAK";
+        const string keySentinel = "KEY_SENTINEL_3f9e_DO_NOT_LEAK";
         AlternatingStringConverter.Reset();
         var domain = DomainWithOptionsConverter();
         var store = new InMemoryConditionalEventStore(domain.EventTypes);
         var executor = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, domain), domain);
-        var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("op-alt") };
+        var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification(keySentinel) };
 
         var handlerInvocations = 0;
         Func<ShapeCommand, ICommandContext, Task<ResultBox<EventOrNone>>> handler = (_, ctx) =>
         {
             handlerInvocations++;
-            return ctx.AppendEvent(new PlainStringEvent("value"), new BoundaryTag("t"));
+            return ctx.AppendEvent(new PlainStringEvent(payloadSentinel), new BoundaryTag("t"));
         };
 
         var first = await executor.ExecuteAsync(new ShapeCommand(), handler, options);
@@ -118,7 +120,12 @@ public class ConditionalAppendShapeBoundaryTests
             Assert.False(result.IsSuccess);
             var ex = Assert.IsType<OperationCanonicalizationException>(result.GetException());
             Assert.Null(ex.InnerException);
+            // Neither the payload value nor the idempotency key leaks anywhere in the observable exception graph.
+            ExceptionGraphSecretAssert.ContainsNoneOf(ex, payloadSentinel, keySentinel);
         }
+
+        // Non-vacuous secret check: the sentinels really were in play (the emitted candidates embed the payload value).
+        Assert.All(AlternatingStringConverter.Emitted, e => Assert.Contains(payloadSentinel, e, StringComparison.Ordinal));
 
         Assert.Equal(0, store.AppendAttempts);
         Assert.Equal(0, store.WriteCalls);
