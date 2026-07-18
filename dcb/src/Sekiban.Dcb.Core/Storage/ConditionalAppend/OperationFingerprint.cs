@@ -112,11 +112,16 @@ public static class OperationFingerprint
             var normalizedJson = eventTypes.SerializeEventPayload(payloadObject);
             canonicalPayload = CanonicalizeJson(normalizedJson);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
+            // SECRET-SAFE: a deserializer/converter exception can carry the raw payload (and, via constructors, the raw
+            // key) in its Message/Data/InnerException/stack. It must NOT enter the ResultBox.Error graph. We deliberately
+            // discard the caught exception and surface only a sanitized failure whose sole caller-supplied datum is the
+            // registered event-type NAME (safe metadata, not payload/key). No inner exception is attached.
             return ResultBox.Error<string>(
                 new OperationCanonicalizationException(
-                    $"Payload for event type '{eventPayloadName}' could not be canonicalized.", ex));
+                    $"Payload for event type '{eventPayloadName}' could not be canonicalized. "
+                    + "Details are withheld to avoid exposing payload or key contents."));
         }
 
         return ResultBox.FromValue(
