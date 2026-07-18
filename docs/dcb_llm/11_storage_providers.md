@@ -518,7 +518,35 @@ The store guarantees **at most one durable claim per key**. That is a storage gu
 
 ### Reference implementation and provider status
 
-A deterministic in-memory reference lives in the testing package (`Sekiban.Dcb.Testing.InMemoryConditionalEventStore`, never referenced from a runtime project) and implements the full outcome machine. **Production provider implementations arrive in SEK-G16** (PostgreSQL/SQLite PK, Cosmos 409, DynamoDB `attribute_not_exists`); expected-position / CAS semantics are a later slice.
+A deterministic in-memory reference lives in the testing package (`Sekiban.Dcb.Testing.InMemoryConditionalEventStore`, never referenced from a runtime project) and implements the full outcome machine. **All four production providers implement it (SEK-G16)** — PostgreSQL, SQLite, Cosmos DB, and DynamoDB — with identical observable semantics. Expected-position / CAS semantics remain a later slice.
+
+### Provider mechanics (SEK-G16)
+
+Every provider produces the identical outcome machine through one shared orchestrator (`ConditionalAppendExecution`). The provider supplies only two primitives — durably write the claim event under a deterministic id using its native uniqueness primitive, and read the committed winner back — and the orchestrator does normalization, the pre-write fingerprint (fail-closed on an unsupported shape *before* any store call), classification, and receipt construction.
+
+**Deterministic storage identity.** The claim event is stored under an EventId derived purely from the key: `EventId = SHA-256(domain-separator ‖ version ‖ ServiceId ‖ normalized-key)` with UUID version/variant bits applied (`ConditionalAppendIdentity`, derivation v1). The caller's random EventId is discarded for the stored claim, so the storage identity is a pure function of `(ServiceId, key)` and the existing per-row/per-item primary key *is* the uniqueness primitive — **no schema migration and no new column/index on any provider**. Because identity is derived, not stored, and the fingerprint is recomputed from persisted event content, a same-operation retry recomputes an identical fingerprint from the stored winner, and a different operation under the same key recomputes a different one.
+
+**Classification is by recomputed fingerprint, never by the raw conflict signal.** A provider conflict (SQLSTATE 23505, Cosmos 409, DynamoDB `ConditionalCheckFailed`) is, on its own, *never* treated as a same-operation success. On any conflict the orchestrator reads the committed winner back and compares fingerprints; if the winner cannot be read back (an in-doubt/uncommitted claim), it returns a retryable error rather than reporting `AlreadyCommittedSameOperation`. The real provider exception is preserved as the diagnostic inner cause on a `KeyReuseConflict` only when one actually occurred.
+
+| Provider | Uniqueness primitive | Conflict signal | Winner read-back |
+|----------|----------------------|-----------------|------------------|
+| PostgreSQL | `(ServiceId, Id)` primary key; plain transaction (not the retrying execution strategy) | `DbUpdateException` → `PostgresException` SQLSTATE 23505 | `AsNoTracking` point read by `(ServiceId, Id)` |
+| SQLite | `(ServiceId, Id)` primary key; new path is a plain `INSERT` under the write lock (legacy `INSERT OR REPLACE` path byte-for-byte unchanged) | `SqliteException` result code 19 (constraint) | point read by `(ServiceId, Id)` |
+| Cosmos DB | item id within partition `{serviceId}|{id}`; `CreateItemAsync` | `CosmosException` 409 Conflict | consistent point read of the event item |
+| DynamoDB | item primary key `pk = SERVICE#{serviceId}#EVENT#{id}`; single-item `TransactWriteItems` guarded by `attribute_not_exists(pk)`, **no `ClientRequestToken`** (so a same-operation retry surfaces the real conflict instead of being idempotency-collapsed) | `ConditionalCheckFailedException` / `TransactionCanceledException` reason `ConditionalCheckFailed` | `GetItem` with `ConsistentRead = true` |
+
+The unconditional write path, `IEventStore`, and every default are unchanged on all four providers; the conditional path is purely additive and is registered alongside the store (`IConditionalEventStore` + `IWriteConditionCapabilityProvider` resolve to the same singleton the container already builds). The per-service factories (`PostgresEventStoreFactory`, `CosmosDbEventStoreFactory`) and the `HybridEventStore` decorator propagate the capability; a composite reports a kind only when every participant does (fail-closed intersection).
+
+### Recipe: a one-time migration fanned out across N hosts
+
+The canonical use: N replicas boot and each tries to perform the same one-time migration, and exactly one must win.
+
+1. Each host builds the *same* `ConditionalAppendRequest`: a stable `IdempotencyKey` that names the migration (e.g. `"migration:2026-07-add-region-tag"`) and the single migration-marker event (identical payload + tags on every host).
+2. Each host calls `AppendIfUniqueAsync`. Exactly one gets `Appended`; all the others get `AlreadyCommittedSameOperation` carrying the winner's receipt. Both are success — a host that sees `AlreadyCommittedSameOperation` knows the migration is already durably claimed and proceeds as a no-op.
+3. A host whose call returns a retryable error (in-doubt claim, transient store error) simply retries; the retry converges — once the winner commits, the retry classifies as `AlreadyCommittedSameOperation`.
+4. If a host builds a *different* operation under the same key (different payload/tags), it gets `KeyReuseConflict` — a programming error surfaced loudly, not silently merged.
+
+**One durable claim is the boundary.** The contract guarantees at most one durable claim per key; it does **not** make the migration's side effects exactly-once. If the migration itself performs external effects (writes to another system, sends notifications), gate those behind the winning claim through an outbox / idempotency layer — the claim tells you *who won*, not that the effect ran exactly once.
 
 ## Related
 

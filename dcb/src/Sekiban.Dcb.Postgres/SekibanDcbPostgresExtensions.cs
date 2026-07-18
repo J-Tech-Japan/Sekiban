@@ -42,6 +42,8 @@ public static class SekibanDcbPostgresExtensions
         services.AddSingleton<PostgresEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<PostgresEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddSingleton<Sekiban.Dcb.Storage.IConditionalEventStore>(sp => (Sekiban.Dcb.Storage.IConditionalEventStore)sp.GetRequiredService<IHotEventStore>());
+        services.AddSingleton<Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider>(sp => (Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider)sp.GetRequiredService<IHotEventStore>());
         services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
 
         return services;
@@ -92,6 +94,8 @@ public static class SekibanDcbPostgresExtensions
         services.AddSingleton<PostgresEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<PostgresEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddSingleton<Sekiban.Dcb.Storage.IConditionalEventStore>(sp => (Sekiban.Dcb.Storage.IConditionalEventStore)sp.GetRequiredService<IHotEventStore>());
+        services.AddSingleton<Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider>(sp => (Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider)sp.GetRequiredService<IHotEventStore>());
         services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
 
         return services;
@@ -125,6 +129,8 @@ public static class SekibanDcbPostgresExtensions
         services.AddSingleton<PostgresEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<PostgresEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddSingleton<Sekiban.Dcb.Storage.IConditionalEventStore>(sp => (Sekiban.Dcb.Storage.IConditionalEventStore)sp.GetRequiredService<IHotEventStore>());
+        services.AddSingleton<Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider>(sp => (Sekiban.Dcb.Capabilities.IWriteConditionCapabilityProvider)sp.GetRequiredService<IHotEventStore>());
         services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
 
         return services;

@@ -10,11 +10,17 @@ namespace Sekiban.Dcb.Postgres;
 /// <summary>
 ///     Factory for creating ServiceId-scoped PostgresEventStore instances.
 /// </summary>
-public sealed class PostgresEventStoreFactory : IEventStoreFactory, IStorageDurabilityDescriptorProvider
+public sealed class PostgresEventStoreFactory : IEventStoreFactory, IStorageDurabilityDescriptorProvider,
+    IWriteConditionCapabilityProvider
 {
     /// <summary>Every store this factory builds writes to the same durable backend.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "Postgres (per-service factory)");
+
+    /// <summary>Every store this factory builds is a conditional (single-event unique-key) store.</summary>
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
+        WriteConditionCapabilityDescriptor.Supporting(
+            "Postgres (per-service factory)", WriteConditionKind.SingleEventUniqueKey);
 
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IEventTypes _eventTypes;

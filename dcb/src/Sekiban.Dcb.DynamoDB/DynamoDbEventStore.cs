@@ -20,11 +20,152 @@ namespace Sekiban.Dcb.DynamoDB;
 /// <summary>
 ///     DynamoDB-backed event store implementation.
 /// </summary>
-public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider
+public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider,
+    IConditionalEventStore, IWriteConditionCapabilityProvider
 {
+    private const string ConditionalProviderName = "DynamoDB";
+
     /// <summary>Events land in DynamoDB.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "DynamoDB");
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
+        WriteConditionCapabilityDescriptor.Supporting(ConditionalProviderName, WriteConditionKind.SingleEventUniqueKey);
+
+    /// <summary>
+    ///     SEK-G16 conditional (unique-key) append. The claim event is written under the deterministic id, so the existing
+    ///     item primary key (<c>pk = SERVICE#{serviceId}#EVENT#{id}</c>) is the uniqueness primitive — no schema change.
+    ///     The claim is a single-item transaction guarded by <c>attribute_not_exists(pk)</c>; a pre-existing claim surfaces
+    ///     as <see cref="ConditionalCheckFailedException" /> (or a <see cref="TransactionCanceledException" /> whose reason
+    ///     is a conditional-check failure), which is classified by fingerprint against the CONSISTENT-read winner. No
+    ///     <c>ClientRequestToken</c> is used, so a same-operation retry surfaces the real conflict and is verified by
+    ///     read-back rather than being silently idempotency-collapsed by DynamoDB. The unconditional write path is
+    ///     untouched.
+    /// </summary>
+    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        ConditionalAppendRequest request,
+        CancellationToken cancellationToken = default) =>
+        ConditionalAppendExecution.RunAsync(
+            request,
+            CurrentServiceId,
+            _eventTypes,
+            ConditionalProviderName,
+            TryWriteConditionalClaimAsync,
+            ReadConditionalWinnerAsync,
+            cancellationToken);
+
+    private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
+        Guid deterministicId,
+        SerializableEvent claimEvent,
+        CancellationToken cancellationToken)
+    {
+        await _context.EnsureTablesAsync().ConfigureAwait(false);
+        var serviceId = CurrentServiceId;
+        var serializedPayload = Encoding.UTF8.GetString(claimEvent.Payload);
+        var helperEvent = new Event(
+            SerializableEventPlaceholder.Instance,
+            claimEvent.SortableUniqueIdValue,
+            claimEvent.EventPayloadName,
+            deterministicId,
+            claimEvent.EventMetadata,
+            claimEvent.Tags);
+        var dynEvent = DynamoEvent.FromEvent(
+            helperEvent,
+            serializedPayload,
+            GetGsiPartitionKey(claimEvent.SortableUniqueIdValue, serviceId),
+            serviceId);
+        var dynamoTags = claimEvent.Tags.Select(tagString =>
+        {
+            var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
+                ? tagString.Split(':')[0]
+                : tagString;
+            var storedTagGroup = BuildStoredTagGroup(serviceId, tagGroup);
+            return DynamoTag.FromEventTag(
+                serviceId,
+                tagString,
+                storedTagGroup,
+                claimEvent.SortableUniqueIdValue,
+                deterministicId,
+                claimEvent.EventPayloadName);
+        }).ToList();
+
+        var transactItems = new List<TransactWriteItem>
+        {
+            new TransactWriteItem
+            {
+                Put = new Put
+                {
+                    TableName = _context.EventsTableName,
+                    Item = dynEvent.ToAttributeValues(),
+                    ConditionExpression = "attribute_not_exists(pk)"
+                }
+            }
+        };
+        foreach (var tag in dynamoTags)
+        {
+            transactItems.Add(new TransactWriteItem
+            {
+                Put = new Put
+                {
+                    TableName = _context.TagsTableName,
+                    Item = tag.ToAttributeValues()
+                }
+            });
+        }
+
+        try
+        {
+            await _client.TransactWriteItemsAsync(
+                new TransactWriteItemsRequest { TransactItems = transactItems },
+                cancellationToken).ConfigureAwait(false);
+            return ConditionalWriteOutcome.Wrote();
+        }
+        catch (ConditionalCheckFailedException ex)
+        {
+            return ConditionalWriteOutcome.Conflict(ex);
+        }
+        catch (TransactionCanceledException ex) when (ex.CancellationReasons.Any(
+            r => string.Equals(r.Code, "ConditionalCheckFailed", StringComparison.Ordinal)))
+        {
+            return ConditionalWriteOutcome.Conflict(ex);
+        }
+    }
+
+    private async Task<SerializableEvent?> ReadConditionalWinnerAsync(
+        Guid deterministicId,
+        CancellationToken cancellationToken)
+    {
+        await _context.EnsureTablesAsync().ConfigureAwait(false);
+        var serviceId = CurrentServiceId;
+        // Consistent read: the winner may have committed a moment ago; an eventually-consistent read could miss it and
+        // wrongly report the claim as in-doubt.
+        var response = await _client.GetItemAsync(
+            new GetItemRequest
+            {
+                TableName = _context.EventsTableName,
+                Key = BuildEventKey(serviceId, deterministicId.ToString()),
+                ConsistentRead = true
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (response.Item == null || response.Item.Count == 0)
+        {
+            return null;
+        }
+
+        var dynEvent = DynamoEvent.FromAttributeValues(response.Item);
+        return new SerializableEvent(
+            Encoding.UTF8.GetBytes(dynEvent.Payload),
+            dynEvent.SortableUniqueId,
+            Guid.Parse(dynEvent.EventId),
+            new EventMetadata(
+                dynEvent.CausationId ?? string.Empty,
+                dynEvent.CorrelationId ?? string.Empty,
+                dynEvent.ExecutedUser ?? string.Empty),
+            dynEvent.Tags.ToList(),
+            dynEvent.EventType);
+    }
 
     private const string PartitionKeyConditionExpression = "gsi1pk = :pk";
     private const string PartitionKeySinceConditionExpression = "gsi1pk = :pk AND sortableUniqueId > :since";

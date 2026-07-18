@@ -19,11 +19,132 @@ namespace Sekiban.Dcb.CosmosDb;
 /// <summary>
 ///     CosmosDB-backed event store implementation.
 /// </summary>
-public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider
+public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider,
+    IConditionalEventStore, IWriteConditionCapabilityProvider
 {
+    private const string ConditionalProviderName = "CosmosDb";
+
     /// <summary>Events land in Cosmos DB.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "CosmosDb");
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
+        WriteConditionCapabilityDescriptor.Supporting(ConditionalProviderName, WriteConditionKind.SingleEventUniqueKey);
+
+    /// <summary>
+    ///     SEK-G16 conditional (unique-key) append. The claim event is created under the deterministic id, so the existing
+    ///     per-item uniqueness (id within partition <c>{serviceId}|{id}</c>) is the primitive — no schema change. A
+    ///     duplicate surfaces as a Cosmos 409 (Conflict), which is NEVER on its own treated as a same-operation success:
+    ///     the orchestrator reads the committed winner back (point read) and classifies by fingerprint, so
+    ///     <see cref="ConditionalAppendStatus.AlreadyCommittedSameOperation" /> is reported only after verification reaches
+    ///     the committed state. The real <see cref="CosmosException" /> is preserved as the diagnostic cause on a key-reuse
+    ///     conflict. The unconditional write path is untouched.
+    /// </summary>
+    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        ConditionalAppendRequest request,
+        CancellationToken cancellationToken = default) =>
+        ConditionalAppendExecution.RunAsync(
+            request,
+            CurrentServiceId,
+            _eventTypes,
+            ConditionalProviderName,
+            TryWriteConditionalClaimAsync,
+            ReadConditionalWinnerAsync,
+            cancellationToken);
+
+    private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
+        Guid deterministicId,
+        SerializableEvent claimEvent,
+        CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        var options = _context.Options;
+        var eventsSettings = _containerResolver.ResolveEventsContainer(serviceId);
+        var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
+        var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
+        var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
+
+        var id = deterministicId.ToString();
+        var cosmosEvent = new CosmosEvent
+        {
+            Pk = $"{serviceId}|{id}",
+            ServiceId = serviceId,
+            Id = id,
+            SortableUniqueId = claimEvent.SortableUniqueIdValue,
+            EventType = claimEvent.EventPayloadName,
+            Payload = Encoding.UTF8.GetString(claimEvent.Payload),
+            Tags = claimEvent.Tags,
+            Timestamp = DateTime.UtcNow,
+            CausationId = claimEvent.EventMetadata.CausationId,
+            CorrelationId = claimEvent.EventMetadata.CorrelationId,
+            ExecutedUser = claimEvent.EventMetadata.ExecutedUser
+        };
+        var eventPk = GetEventPartitionKey(id, serviceId);
+
+        try
+        {
+            await eventsContainer.CreateItemAsync(
+                cosmosEvent,
+                new PartitionKey(eventPk),
+                new ItemRequestOptions { EnableContentResponseOnWrite = options.EnableContentResponseOnWrite })
+                .ConfigureAwait(false);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        {
+            return ConditionalWriteOutcome.Conflict(ex);
+        }
+
+        // The claim event is durable — the caller has won the key. The tag rows are an idempotent, repairable secondary
+        // index; a transient failure here surfaces as an error and the caller's retry converges (the event now exists, so
+        // the retry classifies as AlreadyCommittedSameOperation).
+        var claimSerializable = claimEvent with { Id = deterministicId };
+        await WriteSerializableTagsWithBatchAsync(
+            new List<SerializableEvent> { claimSerializable },
+            tagsContainer,
+            options,
+            serviceId,
+            tagsSettings).ConfigureAwait(false);
+        return ConditionalWriteOutcome.Wrote();
+    }
+
+    private async Task<SerializableEvent?> ReadConditionalWinnerAsync(
+        Guid deterministicId,
+        CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        var eventsSettings = _containerResolver.ResolveEventsContainer(serviceId);
+        var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
+        var id = deterministicId.ToString();
+        var eventPk = GetEventPartitionKey(id, serviceId);
+
+        try
+        {
+            var response = await eventsContainer.ReadItemAsync<CosmosEvent>(
+                id,
+                new PartitionKey(eventPk)).ConfigureAwait(false);
+            var cosmosEvent = response.Resource;
+            if (!ServiceIdMatches(cosmosEvent.ServiceId, serviceId))
+            {
+                return null;
+            }
+
+            return new SerializableEvent(
+                Encoding.UTF8.GetBytes(cosmosEvent.Payload),
+                cosmosEvent.SortableUniqueId,
+                Guid.Parse(cosmosEvent.Id),
+                new EventMetadata(
+                    cosmosEvent.CausationId ?? "",
+                    cosmosEvent.CorrelationId ?? "",
+                    cosmosEvent.ExecutedUser ?? ""),
+                cosmosEvent.Tags?.ToList() ?? new List<string>(),
+                cosmosEvent.EventType);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
 
     private const string ParamSince = "@since";
     private const string ParamServiceId = "@serviceId";

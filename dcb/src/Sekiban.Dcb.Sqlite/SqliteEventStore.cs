@@ -17,8 +17,132 @@ namespace Sekiban.Dcb.Sqlite;
 ///     SQLite implementation of IEventStore.
 ///     Can be used as a standalone event store or as a local cache for remote stores.
 /// </summary>
-public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider
+public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider,
+    IConditionalEventStore, IWriteConditionCapabilityProvider
 {
+    private const string ConditionalProviderName = "Sqlite";
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
+        WriteConditionCapabilityDescriptor.Supporting(ConditionalProviderName, WriteConditionKind.SingleEventUniqueKey);
+
+    /// <summary>
+    ///     SEK-G16 conditional (unique-key) append. This is a NEW path — the unconditional <c>INSERT OR REPLACE</c> write
+    ///     paths are untouched. The claim event is written under the deterministic id with a PLAIN <c>INSERT</c>, so the
+    ///     existing <c>(ServiceId, Id)</c> primary key is the uniqueness primitive (no schema change): the first writer
+    ///     wins; a second writer hits the primary-key constraint and is classified by fingerprint against the stored
+    ///     winner. All shared semantics live in <see cref="ConditionalAppendExecution" />.
+    /// </summary>
+    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        ConditionalAppendRequest request,
+        CancellationToken cancellationToken = default) =>
+        ConditionalAppendExecution.RunAsync(
+            request,
+            CurrentServiceId,
+            _eventTypes,
+            ConditionalProviderName,
+            TryWriteConditionalClaimAsync,
+            ReadConditionalWinnerAsync,
+            cancellationToken);
+
+    private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
+        Guid deterministicId,
+        SerializableEvent claimEvent,
+        CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                await using var eventCmd = connection.CreateCommand();
+                eventCmd.Transaction = (SqliteTransaction)transaction;
+                // PLAIN INSERT (not INSERT OR REPLACE): a duplicate (ServiceId, Id) raises the PK constraint.
+                eventCmd.CommandText = $"""
+                    INSERT INTO dcb_events (ServiceId, Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser)
+                    VALUES ({ParamServiceId}, @id, @sortableUniqueId, @eventType, @payloadJson, @tagsJson, @timestamp, @causationId, @correlationId, @executedUser)
+                    """;
+                eventCmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+                eventCmd.Parameters.AddWithValue("@id", deterministicId.ToString());
+                eventCmd.Parameters.AddWithValue("@sortableUniqueId", claimEvent.SortableUniqueIdValue);
+                eventCmd.Parameters.AddWithValue("@eventType", claimEvent.EventPayloadName);
+                eventCmd.Parameters.AddWithValue("@payloadJson", Encoding.UTF8.GetString(claimEvent.Payload));
+                eventCmd.Parameters.AddWithValue("@tagsJson", JsonSerializer.Serialize(claimEvent.Tags));
+                eventCmd.Parameters.AddWithValue("@timestamp", new SortableUniqueId(claimEvent.SortableUniqueIdValue).GetDateTime().ToString("O"));
+                eventCmd.Parameters.AddWithValue("@causationId", (object?)claimEvent.EventMetadata.CausationId ?? DBNull.Value);
+                eventCmd.Parameters.AddWithValue("@correlationId", (object?)claimEvent.EventMetadata.CorrelationId ?? DBNull.Value);
+                eventCmd.Parameters.AddWithValue("@executedUser", (object?)claimEvent.EventMetadata.ExecutedUser ?? DBNull.Value);
+
+                try
+                {
+                    await eventCmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+                catch (SqliteException ex) when (ex.SqliteErrorCode == 19) // SQLITE_CONSTRAINT (PK/unique)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return ConditionalWriteOutcome.Conflict(ex);
+                }
+
+                foreach (var tagString in claimEvent.Tags)
+                {
+                    var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
+                    await using var tagCmd = connection.CreateCommand();
+                    tagCmd.Transaction = (SqliteTransaction)transaction;
+                    tagCmd.CommandText = $"""
+                        INSERT INTO dcb_tags (ServiceId, Tag, TagGroup, SortableUniqueId, EventId, EventType, CreatedAt)
+                        VALUES ({ParamServiceId}, @tag, @tagGroup, @sortableUniqueId, @eventId, @eventType, @createdAt)
+                        """;
+                    tagCmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+                    tagCmd.Parameters.AddWithValue("@tag", tagString);
+                    tagCmd.Parameters.AddWithValue("@tagGroup", tagGroup);
+                    tagCmd.Parameters.AddWithValue("@sortableUniqueId", claimEvent.SortableUniqueIdValue);
+                    tagCmd.Parameters.AddWithValue("@eventId", deterministicId.ToString());
+                    tagCmd.Parameters.AddWithValue("@eventType", claimEvent.EventPayloadName);
+                    tagCmd.Parameters.AddWithValue("@createdAt", DateTime.UtcNow.ToString("O"));
+                    await tagCmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+
+                await transaction.CommitAsync(cancellationToken);
+                return ConditionalWriteOutcome.Wrote();
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    private async Task<SerializableEvent?> ReadConditionalWinnerAsync(Guid deterministicId, CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT Id, SortableUniqueId, EventType, PayloadJson, TagsJson, Timestamp, CausationId, CorrelationId, ExecutedUser
+            FROM dcb_events
+            WHERE ServiceId = {ParamServiceId} AND Id = @id
+            """;
+        cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+        cmd.Parameters.AddWithValue("@id", deterministicId.ToString());
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return ReadSerializableEvent(reader);
+    }
+
     /// <summary>
     ///     Sqlite is durable when it is a file, and volatile when it is <c>:memory:</c> — same type, same class name,
     ///     opposite guarantee. This is the case that proves the descriptor has to be resolved from the live instance

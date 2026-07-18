@@ -535,7 +535,35 @@ var executor = new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore());
 
 ### リファレンス実装とプロバイダの状況
 
-決定論的なインメモリのリファレンスがテスト用パッケージにあり（`Sekiban.Dcb.Testing.InMemoryConditionalEventStore`、ランタイムプロジェクトからは参照しない）、アウトカムマシン全体を実装します。**本番プロバイダ実装は SEK-G16 で登場します**（PostgreSQL/SQLite の PK、Cosmos の 409、DynamoDB の `attribute_not_exists`）。expected-position / CAS セマンティクスはさらに後のスライスです。
+決定論的なインメモリのリファレンスがテスト用パッケージにあり（`Sekiban.Dcb.Testing.InMemoryConditionalEventStore`、ランタイムプロジェクトからは参照しない）、アウトカムマシン全体を実装します。**4つの本番プロバイダすべてが SEK-G16 で実装済み**です — PostgreSQL・SQLite・Cosmos DB・DynamoDB — で、観測可能なセマンティクスは同一です。expected-position / CAS セマンティクスはさらに後のスライスのままです。
+
+### プロバイダの仕組み（SEK-G16）
+
+すべてのプロバイダは、共有オーケストレーター（`ConditionalAppendExecution`）を通じて同一のアウトカムマシンを生成します。プロバイダが提供するのは2つのプリミティブのみ — ネイティブの一意性プリミティブを使ってクレームイベントを決定論的 id の下に耐久書き込みすること、およびコミット済みの勝者を読み戻すこと — であり、正規化・書き込み前フィンガープリント（未対応形状は**あらゆるストア呼び出しの前に**フェイルクローズ）・分類・レシート構築はオーケストレーターが行います。
+
+**決定論的なストレージ識別子。** クレームイベントは、キーのみから導出した EventId の下に格納されます: `EventId = SHA-256(ドメインセパレータ ‖ バージョン ‖ ServiceId ‖ 正規化キー)` に UUID の version/variant ビットを適用したもの（`ConditionalAppendIdentity`、導出 v1）。呼び出し側のランダムな EventId は格納クレームでは破棄されるため、ストレージ識別子は `(ServiceId, key)` の純粋関数となり、既存の行単位／アイテム単位の主キーがそのまま一意性プリミティブになります — **どのプロバイダでもスキーマ移行なし、新しいカラム／インデックスなし**。識別子は保存ではなく導出され、フィンガープリントは永続化されたイベント内容から再計算されるため、同一操作のリトライは格納済み勝者から同一のフィンガープリントを再計算し、同一キー下の異なる操作は異なるフィンガープリントを再計算します。
+
+**分類は再計算したフィンガープリントによって行い、生の衝突シグナルでは行いません。** プロバイダの衝突（SQLSTATE 23505、Cosmos 409、DynamoDB `ConditionalCheckFailed`）は、それ単体では*決して*同一操作の成功として扱いません。衝突時、オーケストレーターはコミット済み勝者を読み戻してフィンガープリントを比較します。勝者を読み戻せない場合（in-doubt／未コミットのクレーム）は、`AlreadyCommittedSameOperation` を報告せずリトライ可能なエラーを返します。実プロバイダ例外は、実際に発生したときのみ `KeyReuseConflict` の診断用内部原因として保持します。
+
+| プロバイダ | 一意性プリミティブ | 衝突シグナル | 勝者の読み戻し |
+|----------|----------------------|-----------------|------------------|
+| PostgreSQL | `(ServiceId, Id)` 主キー。プレーンなトランザクション（リトライ用の実行戦略ではない） | `DbUpdateException` → `PostgresException` SQLSTATE 23505 | `(ServiceId, Id)` による `AsNoTracking` ポイントリード |
+| SQLite | `(ServiceId, Id)` 主キー。新パスは書き込みロック下のプレーンな `INSERT`（レガシーの `INSERT OR REPLACE` パスはバイト単位で不変） | `SqliteException` result code 19（制約） | `(ServiceId, Id)` によるポイントリード |
+| Cosmos DB | パーティション `{serviceId}|{id}` 内のアイテム id。`CreateItemAsync` | `CosmosException` 409 Conflict | イベントアイテムの整合ポイントリード |
+| DynamoDB | アイテム主キー `pk = SERVICE#{serviceId}#EVENT#{id}`。`attribute_not_exists(pk)` でガードした単一アイテムの `TransactWriteItems`。**`ClientRequestToken` なし**（同一操作のリトライが冪等性で潰されず実際の衝突を表出させるため） | `ConditionalCheckFailedException` / 理由 `ConditionalCheckFailed` の `TransactionCanceledException` | `ConsistentRead = true` の `GetItem` |
+
+無条件書き込みパス、`IEventStore`、およびすべてのデフォルトは4プロバイダすべてで不変です。条件付きパスは純粋に追加のみで、ストアと同時に登録されます（`IConditionalEventStore` と `IWriteConditionCapabilityProvider` は、コンテナが既に構築する同一シングルトンに解決されます）。サービス別ファクトリー（`PostgresEventStoreFactory`・`CosmosDbEventStoreFactory`）と `HybridEventStore` デコレーターはこのケイパビリティを伝播します。コンポジットは、すべての参加ストアが対応する場合にのみそのカインドを報告します（フェイルクローズな積集合）。
+
+### レシピ: N ホストにファンアウトした一度きりのマイグレーション
+
+代表的なユースケース: N 個のレプリカが起動し、それぞれが同じ一度きりのマイグレーションを実行しようとするが、勝者はちょうど1つでなければならない。
+
+1. 各ホストは*同一*の `ConditionalAppendRequest` を組み立てます。マイグレーションを表す安定した `IdempotencyKey`（例: `"migration:2026-07-add-region-tag"`）と、単一のマイグレーションマーカーイベント（全ホストで同一のペイロード＋タグ）。
+2. 各ホストが `AppendIfUniqueAsync` を呼びます。ちょうど1つが `Appended` を得て、他はすべて勝者のレシートを伴う `AlreadyCommittedSameOperation` を得ます。どちらも成功であり、`AlreadyCommittedSameOperation` を見たホストはマイグレーションが既に耐久的にクレームされたと分かり、ノーオペとして続行します。
+3. リトライ可能なエラー（in-doubt クレーム、ストアの一時エラー）を返されたホストは単純にリトライします。リトライは収束します — 勝者がコミットすれば、リトライは `AlreadyCommittedSameOperation` に分類されます。
+4. あるホストが同一キー下で*異なる*操作（異なるペイロード／タグ）を組み立てた場合は `KeyReuseConflict` を得ます — 静かにマージされるのではなく、プログラミングエラーとして大きく表出されます。
+
+**境界は耐久クレーム1つ。** 本コントラクトはキーごとに高々1つの耐久クレームを保証しますが、マイグレーションの副作用をちょうど1回にはしません。マイグレーション自体が外部副作用（他システムへの書き込み、通知送信）を行う場合は、それらを勝者クレームの背後にアウトボックス／冪等層で置いてください — クレームが伝えるのは*誰が勝ったか*であって、副作用がちょうど1回実行されたことではありません。
 
 ## 関連資料
 
