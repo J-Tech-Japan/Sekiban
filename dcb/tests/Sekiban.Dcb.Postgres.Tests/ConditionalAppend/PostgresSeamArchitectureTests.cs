@@ -7,15 +7,40 @@ namespace Sekiban.Dcb.Postgres.Tests.ConditionalAppend;
 
 /// <summary>
 ///     Structural guard for the Postgres <c>AfterConditionalCommitHook</c> test seam. The Postgres provider store cannot be
-///     referenced from <c>Sekiban.Dcb.WithResult.Tests</c>, so the identical setter / backing-field / API / constructor /
-///     reflection / IVT guarantees that the shared seam guard applies to SQLite, Cosmos and Core are applied HERE to the
-///     Postgres assembly — driven from the same single <see cref="SeamInventory" />. Without this file one real production
-///     seam would sit outside the structural guarantee.
+///     referenced from <c>Sekiban.Dcb.WithResult.Tests</c>, so the identical reverse-discovery / exact-field / API /
+///     constructor / reflection / IVT guarantees are applied HERE, driven from the same single <see cref="SeamInventory" />
+///     and <see cref="ProductionSeamRule" />. This closes the five-assembly set: WithResult owns Core/SQLite/Cosmos/Dynamo,
+///     this project owns Postgres.
 /// </summary>
 public class PostgresSeamArchitectureTests
 {
     private static readonly Type StoreType = typeof(PostgresEventStore);
+    private static readonly Assembly PostgresAssembly = StoreType.Assembly;
     private const string HookName = "AfterConditionalCommitHook";
+
+    // Authoritative assemblies resolved to the ones this project owns for scanning; only Postgres is owned here.
+    private static Assembly? ResolveOwnedAssembly(string name) =>
+        name == SeamInventory.PostgresAssembly ? PostgresAssembly : null;
+
+    [Fact]
+    public void PostgresSeams_ReverseDiscovered_EqualInventory()
+    {
+        // TRUE reverse discovery over the Postgres assembly: the discovered seam-shaped non-public settable members must
+        // equal the inventory's Postgres subset EXACTLY (missing OR extra fails) — not a hand-maintained assertion.
+        var discovered = ProductionSeamRule.DiscoverSeamProperties(PostgresAssembly)
+            .Select(Key).OrderBy(s => s, StringComparer.Ordinal).ToArray();
+        var expected = SeamInventory.Entries.Where(e => e.AssemblyName == SeamInventory.PostgresAssembly)
+            .Select(Key).OrderBy(s => s, StringComparer.Ordinal).ToArray();
+        Assert.Equal(expected, discovered);
+        Assert.NotEmpty(expected); // non-vacuous: Postgres genuinely contributes a seam
+    }
+
+    [Fact]
+    public void NoHiddenFieldSeam_InPostgresAssembly()
+    {
+        // Anti-evasion: no writable non-public seam-shaped field (other than compiler-generated backing fields) exists.
+        Assert.Empty(ProductionSeamRule.DiscoverNonBackingSeamFields(PostgresAssembly));
+    }
 
     [Fact]
     public void SeamInventory_ListsThePostgresHook_ResolvingToARealSettableProperty()
@@ -24,7 +49,7 @@ public class PostgresSeamArchitectureTests
         Assert.Equal("Sekiban.Dcb.Postgres.PostgresEventStore", entry.DeclaringTypeFullName);
         Assert.Equal(HookName, entry.PropertyName);
 
-        var type = StoreType.Assembly.GetType(entry.DeclaringTypeFullName);
+        var type = PostgresAssembly.GetType(entry.DeclaringTypeFullName);
         Assert.NotNull(type);
         var prop = type!.GetProperty(entry.PropertyName,
             BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
@@ -64,44 +89,50 @@ public class PostgresSeamArchitectureTests
     }
 
     [Fact]
-    public void PostgresStore_ExposesNoUnlistedFuncTaskSeam()
-    {
-        // Reverse guard: every internal instance Func<Task> property must be the inventoried hook — a silently-added
-        // second hook cannot escape.
-        var hookShaped = StoreType
-            .GetProperties(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
-            .Where(p => p.PropertyType == typeof(Func<Task>))
-            .Select(p => p.Name);
-        var listed = SeamInventory.Entries
-            .Where(e => e.DeclaringTypeFullName == StoreType.FullName)
-            .Select(e => e.PropertyName)
-            .ToHashSet();
-        Assert.All(hookShaped, n => Assert.Contains(n, listed));
-    }
-
-    [Fact]
     public void PostgresAssembly_ContainsNoSeamTargetWrite_ByAnyPath()
     {
         // Exact-identity seam-target scan over the Postgres assembly, driven from the inventory's Postgres property list.
         var props = SeamInventory.PropertyNamesIn(SeamInventory.PostgresAssembly);
         Assert.NotEmpty(props); // non-vacuous: the Postgres seam contributes at least one name
-        Assert.Empty(SeamWriteScanner.FindSeamTargetWrites(StoreType.Assembly, props));
+        Assert.Empty(SeamWriteScanner.FindSeamTargetWrites(PostgresAssembly, props));
     }
 
     [Fact]
-    public void PostgresAssembly_ContainsNoReflectionAssignment()
+    public void ReflectionScan_Coverage_PostgresOwnedAndUnionComplete()
     {
-        // Decoupled reflection-assignment ban applied to the Postgres assembly (production uses zero reflection SetValue).
-        Assert.Empty(SeamWriteScanner.FindReflectionAssignments(StoreType.Assembly));
+        // Driven by the authoritative list: Postgres is scanned (and proven reflection-clean) here; the remaining four are
+        // delegated to Sekiban.Dcb.WithResult.Tests. scanned ∪ delegated must equal the authoritative list exactly.
+        var authoritative = SeamInventory.ReflectionScannedAssemblies.OrderBy(s => s, StringComparer.Ordinal).ToArray();
+        var scanned = new List<string>();
+        var delegated = new List<string>();
+        foreach (var name in SeamInventory.ReflectionScannedAssemblies)
+        {
+            var asm = ResolveOwnedAssembly(name);
+            if (asm is null)
+            {
+                delegated.Add(name);
+                continue;
+            }
+            Assert.Empty(SeamWriteScanner.FindReflectionAssignments(asm));
+            scanned.Add(name);
+        }
+
+        Assert.Equal(authoritative, scanned.Concat(delegated).OrderBy(s => s, StringComparer.Ordinal).ToArray());
+        Assert.Equal(new[] { SeamInventory.PostgresAssembly }, scanned.ToArray());
+        Assert.Equal(
+            new[] { "Sekiban.Dcb.Core", "Sekiban.Dcb.CosmosDb", "Sekiban.Dcb.DynamoDB", "Sekiban.Dcb.Sqlite" },
+            delegated.OrderBy(s => s, StringComparer.Ordinal).ToArray());
     }
 
     [Fact]
     public void InternalsVisibleTo_Allowlist_IsExactlyThisTestAssembly()
     {
-        var actual = StoreType.Assembly.GetCustomAttributes<InternalsVisibleToAttribute>()
+        var actual = PostgresAssembly.GetCustomAttributes<InternalsVisibleToAttribute>()
             .Select(a => a.AssemblyName.Split(',')[0].Trim())
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToArray();
         Assert.Equal(new[] { "Sekiban.Dcb.Postgres.Tests" }, actual);
     }
+
+    private static string Key(SeamEntry e) => $"{e.AssemblyName}|{e.DeclaringTypeFullName}|{e.PropertyName}";
 }
