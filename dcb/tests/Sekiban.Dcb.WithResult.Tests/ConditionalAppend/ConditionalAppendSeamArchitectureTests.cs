@@ -7,25 +7,111 @@ using Sekiban.Dcb.DynamoDB;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.TestSupport;
 using Sekiban.Dcb.Tests.Cosmos;
 using Xunit;
 namespace Sekiban.Dcb.Tests.ConditionalAppend;
 
 /// <summary>
-///     Structural guard for the SEK-G16 post-commit response-loss TEST seam (<c>AfterConditionalCommitHook</c>). It proves
-///     the seam cannot silently become a public/production-reachable runtime mutation surface: it is a NON-public INSTANCE
-///     member (never static/global, so parallel instances cannot leak state), absent from the public event-store
-///     interfaces, and left null by normal construction (production composition never assigns it).
+///     Structural guard for the SEK-G16 test-only seams (the post-commit response-loss <c>AfterConditionalCommitHook</c> on
+///     each provider store, plus the executor allocator probes and the coordinator verification-budget override in Core). It
+///     proves a seam cannot silently become a public/production-reachable runtime mutation surface, and — crucially — that
+///     the guarantee is applied to EVERY production seam, driven from the SINGLE exhaustive <see cref="SeamInventory" />.
+///     The Postgres provider store cannot be referenced from this assembly, so its identical guards live in
+///     <c>Sekiban.Dcb.Postgres.Tests.ConditionalAppend.PostgresSeamArchitectureTests</c>; the shared inventory ties the two
+///     together and the snapshot assertion below pins the whole surface (Postgres included) so nothing escapes.
 /// </summary>
 public class ConditionalAppendSeamArchitectureTests
 {
     private const string HookName = "AfterConditionalCommitHook";
 
+    // Provider store types this assembly CAN reference (Postgres is guarded in its own provider test project).
     public static IEnumerable<object[]> SeamStoreTypes => new[]
     {
         new object[] { typeof(SqliteEventStore) },
         new object[] { typeof(CosmosDbEventStore) }
     };
+
+    // Assemblies referenceable here that DECLARE at least one seam (used to drive the exact seam-target scan).
+    private static readonly (string Name, Assembly Assembly)[] SeamDeclaringAssembliesHere =
+    {
+        (SeamInventory.CoreAssembly, typeof(IConditionalEventStore).Assembly),
+        (SeamInventory.SqliteAssembly, typeof(SqliteEventStore).Assembly),
+        (SeamInventory.CosmosAssembly, typeof(CosmosDbEventStore).Assembly)
+    };
+
+    // Assemblies referenceable here that must be reflection-scanned (includes DynamoDB, which declares NO settable seam).
+    private static readonly (string Name, Assembly Assembly)[] ReflectionScannedAssembliesHere =
+    {
+        (SeamInventory.CoreAssembly, typeof(IConditionalEventStore).Assembly),
+        (SeamInventory.SqliteAssembly, typeof(SqliteEventStore).Assembly),
+        (SeamInventory.CosmosAssembly, typeof(CosmosDbEventStore).Assembly),
+        ("Sekiban.Dcb.DynamoDB", typeof(DynamoDbEventStore).Assembly)
+    };
+
+    // ── The single exhaustive inventory is pinned here: count + every (assembly, type, property) tuple. Adding or removing
+    //    a production seam MUST update SeamInventory, which changes this snapshot — omission becomes a failing assertion. ──
+
+    [Fact]
+    public void SeamInventory_Snapshot_IsExactlyTheExpectedProductionSurface()
+    {
+        var actual = SeamInventory.Entries
+            .Select(e => $"{e.AssemblyName}|{e.DeclaringTypeFullName}|{e.PropertyName}")
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToArray();
+
+        var expected = new[]
+        {
+            "Sekiban.Dcb.Core|Sekiban.Dcb.Actors.CoreGeneralSekibanExecutor|ConditionalEventIdFactory",
+            "Sekiban.Dcb.Core|Sekiban.Dcb.Actors.CoreGeneralSekibanExecutor|ConditionalSortableIdFactory",
+            "Sekiban.Dcb.Core|Sekiban.Dcb.Storage.ConditionalAppendCoordinator|VerificationBudgetOverride",
+            "Sekiban.Dcb.CosmosDb|Sekiban.Dcb.CosmosDb.CosmosDbEventStore|AfterConditionalCommitHook",
+            "Sekiban.Dcb.Postgres|Sekiban.Dcb.Postgres.PostgresEventStore|AfterConditionalCommitHook",
+            "Sekiban.Dcb.Sqlite|Sekiban.Dcb.Sqlite.SqliteEventStore|AfterConditionalCommitHook"
+        }.OrderBy(s => s, StringComparer.Ordinal).ToArray();
+
+        Assert.Equal(6, SeamInventory.Entries.Count);
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void SeamInventory_ProviderHookEntries_ResolveToRealSettableProperties_Here()
+    {
+        // Every inventory entry for an assembly referenceable here must resolve to a real, settable, non-public instance
+        // property whose backing field the scanner can locate. Postgres is verified in its own provider test project.
+        foreach (var (name, asm) in SeamDeclaringAssembliesHere)
+        {
+            foreach (var entry in SeamInventory.Entries.Where(e => e.AssemblyName == name))
+            {
+                var type = asm.GetType(entry.DeclaringTypeFullName);
+                Assert.NotNull(type);
+                var prop = type!.GetProperty(entry.PropertyName,
+                    BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                Assert.NotNull(prop);
+                Assert.True(prop!.CanWrite, $"{entry.DeclaringTypeFullName}.{entry.PropertyName} must be settable (a seam).");
+                Assert.NotNull(SeamWriteScanner.ResolveBackingField(prop));
+            }
+        }
+    }
+
+    [Fact]
+    public void ProviderStores_ExposeNoUnlistedFuncTaskSeam()
+    {
+        // Reverse guard: any internal instance Func<Task> property on a provider store MUST be in the inventory, so a
+        // silently-added second hook cannot escape the structural scan.
+        foreach (var storeType in new[] { typeof(SqliteEventStore), typeof(CosmosDbEventStore) })
+        {
+            var hookShaped = storeType
+                .GetProperties(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+                .Where(p => p.PropertyType == typeof(Func<Task>))
+                .Select(p => p.Name);
+            var listed = SeamInventory.Entries
+                .Where(e => e.DeclaringTypeFullName == storeType.FullName)
+                .Select(e => e.PropertyName)
+                .ToHashSet();
+            Assert.All(hookShaped, n => Assert.Contains(n, listed));
+        }
+    }
 
     [Theory]
     [MemberData(nameof(SeamStoreTypes))]
@@ -86,7 +172,8 @@ public class ConditionalAppendSeamArchitectureTests
     public void InternalsVisibleTo_Allowlist_IsExactlyTheIntendedAssemblies()
     {
         // The provider assemblies grant internals only to the intended test assembly; Core grants ONLY the four provider
-        // assemblies (for the internal post-commit-response-loss signal) — never a test assembly.
+        // assemblies (for the internal post-commit-response-loss signal) — never a test assembly. Postgres's own IVT is
+        // asserted in Sekiban.Dcb.Postgres.Tests (that test assembly is where the Postgres seam is reachable).
         AssertIvtAllowlist(typeof(SqliteEventStore).Assembly, "Sekiban.Dcb.WithResult.Tests");
         AssertIvtAllowlist(typeof(CosmosDbEventStore).Assembly, "Sekiban.Dcb.WithResult.Tests");
         AssertIvtAllowlist(
@@ -120,40 +207,40 @@ public class ConditionalAppendSeamArchitectureTests
             typeof(SqliteEventStoreOptions).GetProperties(), p => p.PropertyType == typeof(Func<Task>));
     }
 
-    private const string SetterKind = "setter";
-    private const string StoreKind = "stfld";
-    private const string ReflectionKind = "reflection";
-
-    // The provider assemblies (Postgres/SQLite/Cosmos) declare the AfterConditionalCommitHook seam; Core declares the
-    // executor allocator probes and the coordinator's verification-budget override.
-    private const string ProviderHookSeam = "AfterConditionalCommitHook";
-    private static readonly string[] CoreSeams =
+    [Fact]
+    public void ProductionAssemblies_ContainNoSeamTargetWrite_ByAnyPath()
     {
-        "ConditionalEventIdFactory", "ConditionalSortableIdFactory", "VerificationBudgetOverride"
-    };
+        // Exact-identity seam-target scan: for each seam-declaring assembly, drive the scan from the inventory's own list of
+        // property names for that assembly. Setter calls and direct backing-field stores (matched by EXACT resolved
+        // FieldInfo identity, never a name) outside the field's own setter / declaring ctor are reported. Fails closed if a
+        // configured seam or backing field cannot be resolved. (Postgres's identical scan runs in its provider test project.)
+        foreach (var (name, asm) in SeamDeclaringAssembliesHere)
+        {
+            var props = SeamInventory.PropertyNamesIn(name);
+            Assert.NotEmpty(props); // a seam-declaring assembly must contribute at least one name — no vacuous scan
+            Assert.Empty(SeamWriteScanner.FindSeamTargetWrites(asm, props));
+        }
+    }
 
     [Fact]
-    public void ProductionAssemblies_ContainNoSeamWrite_ByAnyPath()
+    public void ProductionAssemblies_ContainNoReflectionAssignment_IncludingDynamo()
     {
-        // Structural IL guard covering EVERY write surface: setter calls, direct backing-field stores (stfld/stsfld) —
-        // matched by the EXACT resolved backing FieldInfo identity, never a name — outside the narrowly-allowed default
-        // init / own setter, and reflection assignment (PropertyInfo/FieldInfo.SetValue) ANYWHERE in the assembly
-        // (production uses zero reflection SetValue). Target resolution fails closed if a seam backing field is unresolved.
-        // SQLite/Cosmos declare the AfterConditionalCommitHook seam; Core declares the executor allocator probes + the
-        // coordinator's verification-budget override. DynamoDB has NO settable test seam (its post-commit ambiguity is
-        // wrapped in the store's catch, not a hook property), so it is not scanned for one.
-        Assert.Empty(FindSeamWrites(typeof(SqliteEventStore).Assembly, ProviderHookSeam));
-        Assert.Empty(FindSeamWrites(typeof(CosmosDbEventStore).Assembly, ProviderHookSeam));
-        Assert.Empty(FindSeamWrites(typeof(IConditionalEventStore).Assembly, CoreSeams));
+        // Reflection assignment ban is DECOUPLED from seam resolution and runs unconditionally over every referenceable
+        // production assembly, including DynamoDB (which declares no settable seam but must still be reflection-clean).
+        // Postgres's reflection scan runs in its provider test project.
+        foreach (var (_, asm) in ReflectionScannedAssembliesHere)
+        {
+            Assert.Empty(SeamWriteScanner.FindReflectionAssignments(asm));
+        }
     }
 
     [Fact]
     public void SeamTargetResolution_FailsClosed_WhenABackingFieldCannotBeResolved()
     {
         // A configured seam that does not exist in the scanned assembly must THROW (fail closed), never silently pass by
-        // falling back to name matching.
+        // falling back to name matching. DynamoDB declares no AfterConditionalCommitHook.
         Assert.Throws<InvalidOperationException>(
-            () => FindSeamWrites(typeof(DynamoDbEventStore).Assembly, "AfterConditionalCommitHook"));
+            () => SeamWriteScanner.FindSeamTargetWrites(typeof(DynamoDbEventStore).Assembly, HookName));
     }
 
     // ── Independent, mode-specific non-vacuous controls. Each proves one scanner branch (per-kind assertion, not an
@@ -164,16 +251,16 @@ public class ConditionalAppendSeamArchitectureTests
     [Fact]
     public void Control_SetterCall_IsDetected()
     {
-        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, SeamWriteControls.SeamName);
-        Assert.Contains(hits, h => h.StartsWith(SetterKind + ":", StringComparison.Ordinal)
+        var hits = SeamWriteScanner.FindSeamTargetWrites(typeof(SeamWriteControls).Assembly, SeamWriteControls.SeamName);
+        Assert.Contains(hits, h => h.StartsWith(SeamWriteScanner.SetterKind + ":", StringComparison.Ordinal)
             && h.Contains(nameof(SeamWriteControls.ExternalSetterCaller), StringComparison.Ordinal));
     }
 
     [Fact]
     public void Control_DirectBackingFieldStore_ToExactTargetField_IsDetected()
     {
-        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, SeamWriteControls.SeamName);
-        Assert.Contains(hits, h => h.StartsWith(StoreKind + ":", StringComparison.Ordinal)
+        var hits = SeamWriteScanner.FindSeamTargetWrites(typeof(SeamWriteControls).Assembly, SeamWriteControls.SeamName);
+        Assert.Contains(hits, h => h.StartsWith(SeamWriteScanner.StoreKind + ":", StringComparison.Ordinal)
             && h.Contains(nameof(SeamWriteControls.ExternalFieldStorer), StringComparison.Ordinal));
     }
 
@@ -182,15 +269,16 @@ public class ConditionalAppendSeamArchitectureTests
     {
         // Negative control: a DIFFERENT type has a field with the IDENTICAL name to the control seam's backing field. Because
         // matching is by exact FieldInfo identity (not name), its external store must NOT be reported.
-        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, SeamWriteControls.SeamName);
+        var hits = SeamWriteScanner.FindSeamTargetWrites(typeof(SeamWriteControls).Assembly, SeamWriteControls.SeamName);
         Assert.DoesNotContain(hits, h => h.Contains(nameof(SeamWriteControls.UnrelatedSameNamedField), StringComparison.Ordinal));
     }
 
     [Fact]
     public void Control_ReflectionSetValueFromNonDeclaringType_IsDetected()
     {
-        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, SeamWriteControls.SeamName);
-        Assert.Contains(hits, h => h.StartsWith(ReflectionKind + ":", StringComparison.Ordinal)
+        // The decoupled reflection scan is non-vacuous: an external SetValue is reported without any seam configuration.
+        var hits = SeamWriteScanner.FindReflectionAssignments(typeof(SeamWriteControls).Assembly);
+        Assert.Contains(hits, h => h.StartsWith(SeamWriteScanner.ReflectionKind + ":", StringComparison.Ordinal)
             && h.Contains(nameof(SeamWriteControls.ExternalReflectionSetter), StringComparison.Ordinal));
     }
 
@@ -238,145 +326,6 @@ public class ConditionalAppendSeamArchitectureTests
             internal Func<Task>? ControlSeamBackingField;
             public void Store(UnrelatedSameNamedField target) => target.ControlSeamBackingField = () => Task.CompletedTask;
         }
-    }
-
-    private static List<string> FindSeamWrites(Assembly assembly, params string[] propNames)
-    {
-        const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
-
-        Type[] types;
-        try { types = assembly.GetTypes(); }
-        catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t is not null).ToArray()!; }
-
-        // Resolve each configured seam to the EXACT identity of its backing field (via its getter's ldfld/ldsfld) and its
-        // setter method. Fail closed if a seam property or its backing field cannot be resolved — never fall back to names.
-        var targetFields = new HashSet<(Module Module, int Token)>();
-        var setterIds = new HashSet<(Module Module, int Token)>();
-        var setterOwnerOfField = new Dictionary<(Module, int), (Module, int)>(); // backing field -> its own setter
-        foreach (var propName in propNames)
-        {
-            var props = types
-                .Select(t => t.GetProperty(propName, all))
-                .Where(p => p is not null)
-                .Cast<PropertyInfo>()
-                .ToList();
-            if (props.Count == 0)
-            {
-                throw new InvalidOperationException($"Seam property '{propName}' not found in {assembly.GetName().Name}.");
-            }
-
-            foreach (var prop in props)
-            {
-                var backing = ResolveBackingField(prop)
-                    ?? throw new InvalidOperationException(
-                        $"Backing field for seam '{propName}' in {prop.DeclaringType?.FullName} could not be resolved.");
-                var fieldId = (backing.Module, backing.MetadataToken);
-                targetFields.Add(fieldId);
-                if (prop.SetMethod is { } setter)
-                {
-                    var setterId = (setter.Module, setter.MetadataToken);
-                    setterIds.Add(setterId);
-                    setterOwnerOfField[fieldId] = setterId;
-                }
-            }
-        }
-
-        var hits = new List<string>();
-        foreach (var type in types)
-        {
-            var members = type.GetMethods(all | BindingFlags.DeclaredOnly).Cast<MethodBase>()
-                .Concat(type.GetConstructors(all | BindingFlags.DeclaredOnly));
-            foreach (var method in members)
-            {
-                byte[]? il;
-                try { il = method.GetMethodBody()?.GetILAsByteArray(); }
-                catch { il = null; }
-                if (il is null)
-                {
-                    continue;
-                }
-
-                var typeArgs = type.IsGenericType ? type.GetGenericArguments() : Type.EmptyTypes;
-                var methodArgs = method.IsGenericMethodDefinition ? method.GetGenericArguments() : Type.EmptyTypes;
-                var methodId = (method.Module, method.MetadataToken);
-
-                for (var i = 0; i + 5 <= il.Length; i++)
-                {
-                    var op = il[i];
-                    var token = BitConverter.ToInt32(il, i + 1);
-                    if (op is 0x28 or 0x6F) // call / callvirt
-                    {
-                        MethodBase? callee;
-                        try { callee = method.Module.ResolveMethod(token, typeArgs, methodArgs); }
-                        catch { continue; }
-                        if (callee is null)
-                        {
-                            continue;
-                        }
-                        if (setterIds.Contains((callee.Module, callee.MetadataToken)))
-                        {
-                            hits.Add($"{SetterKind}: {type.FullName}.{method.Name} -> {callee.Name}");
-                        }
-                        else if (callee.Name == "SetValue" && callee.DeclaringType?.Namespace == "System.Reflection")
-                        {
-                            // Conservative: ANY reflection assignment anywhere in the assembly (production has none).
-                            hits.Add($"{ReflectionKind}: {type.FullName}.{method.Name} -> {callee.DeclaringType!.Name}.SetValue");
-                        }
-                    }
-                    else if (op is 0x7D or 0x80) // stfld / stsfld
-                    {
-                        FieldInfo? field;
-                        try { field = method.Module.ResolveField(token, typeArgs, methodArgs); }
-                        catch { continue; }
-                        if (field is null)
-                        {
-                            continue;
-                        }
-
-                        var fieldId = (field.Module, field.MetadataToken);
-                        if (!targetFields.Contains(fieldId))
-                        {
-                            continue; // exact identity — a same-named unrelated field is NOT a target
-                        }
-
-                        // Legitimate ONLY in the target field's OWN property setter or the field's declaring-type ctor.
-                        var isDeclaringCtor = method is ConstructorInfo && field.DeclaringType == type;
-                        var isOwnSetter = setterOwnerOfField.TryGetValue(fieldId, out var owner) && owner == methodId;
-                        if (!isDeclaringCtor && !isOwnSetter)
-                        {
-                            hits.Add($"{StoreKind}: {type.FullName}.{method.Name} -> {field.DeclaringType?.Name}.{field.Name}");
-                        }
-                    }
-                }
-            }
-        }
-
-        return hits;
-    }
-
-    // Resolves the backing field a property actually reads, by scanning its getter's IL for the first ldfld/ldsfld.
-    private static FieldInfo? ResolveBackingField(PropertyInfo prop)
-    {
-        var getter = prop.GetMethod;
-        byte[]? il;
-        try { il = getter?.GetMethodBody()?.GetILAsByteArray(); }
-        catch { il = null; }
-        if (getter is null || il is null)
-        {
-            return null;
-        }
-
-        var typeArgs = prop.DeclaringType is { IsGenericType: true } dt ? dt.GetGenericArguments() : Type.EmptyTypes;
-        for (var i = 0; i + 5 <= il.Length; i++)
-        {
-            if (il[i] is 0x7B or 0x7E) // ldfld / ldsfld
-            {
-                try { return getter.Module.ResolveField(BitConverter.ToInt32(il, i + 1), typeArgs, Type.EmptyTypes); }
-                catch { return null; }
-            }
-        }
-
-        return null;
     }
 
     private static void AssertIvtAllowlist(Assembly assembly, params string[] expected)
