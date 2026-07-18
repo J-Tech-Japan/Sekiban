@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Dcb.Domain;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.DynamoDB;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
@@ -119,44 +120,97 @@ public class ConditionalAppendSeamArchitectureTests
             typeof(SqliteEventStoreOptions).GetProperties(), p => p.PropertyType == typeof(Func<Task>));
     }
 
+    private const string SetterKind = "setter";
+    private const string StoreKind = "stfld";
+    private const string ReflectionKind = "reflection";
+
+    private static readonly string[] AllSeams =
+    {
+        "AfterConditionalCommitHook", "ConditionalEventIdFactory", "ConditionalSortableIdFactory", "VerificationBudgetOverride"
+    };
+
     [Fact]
     public void ProductionAssemblies_ContainNoSeamWrite_ByAnyPath()
     {
         // Structural IL guard covering EVERY write surface: setter calls (call/callvirt set_X), direct backing-field
-        // stores (stfld/stsfld) outside the narrowly-allowed default initialization in the declaring ctor, and
-        // reflection assignment (PropertyInfo/FieldInfo.SetValue) inside the seam-declaring types.
+        // stores (stfld/stsfld) outside the narrowly-allowed default init / own setter, and reflection assignment
+        // (PropertyInfo/FieldInfo.SetValue) ANYWHERE in the assembly (production uses zero reflection SetValue, so this is
+        // a clean conservative rejection — no allowlist needed).
         Assert.Empty(FindSeamWrites(typeof(SqliteEventStore).Assembly, "AfterConditionalCommitHook"));
         Assert.Empty(FindSeamWrites(typeof(CosmosDbEventStore).Assembly, "AfterConditionalCommitHook"));
-        Assert.Empty(FindSeamWrites(
-            typeof(IConditionalEventStore).Assembly,
-            "ConditionalEventIdFactory", "ConditionalSortableIdFactory", "VerificationBudgetOverride"));
+        Assert.Empty(FindSeamWrites(typeof(DynamoDbEventStore).Assembly, "AfterConditionalCommitHook"));
+        Assert.Empty(FindSeamWrites(typeof(IConditionalEventStore).Assembly, AllSeams));
+    }
+
+    // ── Three INDEPENDENT, mode-specific non-vacuous controls: each proves one scanner branch, and each fails if that
+    //    branch is removed (a per-kind assertion, not an aggregate). The control fixtures below produce exactly one
+    //    write pattern each, from a NON-declaring external type. ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Control_SetterCall_IsDetected()
+    {
+        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, AllSeams);
+        Assert.Contains(hits, h => h.StartsWith(SetterKind + ":", StringComparison.Ordinal)
+            && h.Contains(nameof(SeamWriteControls.ExternalSetterCaller), StringComparison.Ordinal));
     }
 
     [Fact]
-    public void SeamWriteScanner_IsNonVacuous_DetectsRealWrites_InTheTestAssembly()
+    public void Control_DirectBackingFieldStore_IsDetected()
     {
-        // Control: the test assembly DOES assign these seams (setter calls, backing-field/reflection paths). The scanner
-        // must find them — proving the empty production result above is a real guarantee, not a broken scan.
-        var hits = FindSeamWrites(
-            typeof(ConditionalAppendSeamArchitectureTests).Assembly,
-            "AfterConditionalCommitHook", "ConditionalEventIdFactory", "ConditionalSortableIdFactory", "VerificationBudgetOverride");
-        Assert.NotEmpty(hits);
+        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, AllSeams);
+        Assert.Contains(hits, h => h.StartsWith(StoreKind + ":", StringComparison.Ordinal)
+            && h.Contains(nameof(SeamWriteControls.ExternalFieldStorer), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Control_ReflectionSetValueFromNonDeclaringType_IsDetected()
+    {
+        var hits = FindSeamWrites(typeof(SeamWriteControls).Assembly, AllSeams);
+        Assert.Contains(hits, h => h.StartsWith(ReflectionKind + ":", StringComparison.Ordinal)
+            && h.Contains(nameof(SeamWriteControls.ExternalReflectionSetter), StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    ///     Control fixtures for the seam-write scanner. Each is a NON-seam-declaring external type that performs exactly
+    ///     one forbidden write pattern, so the scanner must attribute a hit of the corresponding kind to it.
+    /// </summary>
+    private static class SeamWriteControls
+    {
+        // (1) An external type calls a seam setter.
+        internal sealed class ExternalSetterCaller
+        {
+            public Func<Task>? AfterConditionalCommitHook { get; set; }
+            public void Mutate(ExternalSetterCaller target) => target.AfterConditionalCommitHook = () => Task.CompletedTask;
+        }
+
+        // (2) An external/direct store to a seam-named field (models a converted-to-manual backing field assigned outside
+        //     any setter/ctor — a stfld the scanner must catch by the normalized field name).
+        internal sealed class ExternalFieldStorer
+        {
+            public Func<Task>? AfterConditionalCommitHook;
+            public void Store(ExternalFieldStorer target) => target.AfterConditionalCommitHook = () => Task.CompletedTask;
+        }
+
+        // (3) A different external type obtains a PropertyInfo and calls SetValue.
+        internal sealed class ExternalReflectionSetter
+        {
+            public void Assign(object target) =>
+                typeof(ExternalSetterCaller)
+                    .GetProperty(nameof(ExternalSetterCaller.AfterConditionalCommitHook))!
+                    .SetValue(target, (Func<Task>)(() => Task.CompletedTask));
+        }
     }
 
     private static List<string> FindSeamWrites(Assembly assembly, params string[] propNames)
     {
         var setterNames = new HashSet<string>(propNames.Select(n => "set_" + n), StringComparer.Ordinal);
-        var backingFields = new HashSet<string>(propNames.Select(n => $"<{n}>k__BackingField"), StringComparer.Ordinal);
+        var seamNameSet = new HashSet<string>(propNames, StringComparer.Ordinal);
 
         Type[] types;
         try { types = assembly.GetTypes(); }
         catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t is not null).ToArray()!; }
 
-        // The types that DECLARE a seam member — the scope for the "no reflection SetValue" rule.
         const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
-        var seamTypes = types
-            .Where(t => propNames.Any(n => t.GetProperty(n, all) is not null))
-            .ToHashSet();
 
         var hits = new List<string>();
         foreach (var type in types)
@@ -173,7 +227,6 @@ public class ConditionalAppendSeamArchitectureTests
                     continue;
                 }
 
-                var isDeclaringCtor = method is ConstructorInfo && seamTypes.Contains(type);
                 var typeArgs = type.IsGenericType ? type.GetGenericArguments() : Type.EmptyTypes;
                 var methodArgs = method.IsGenericMethodDefinition ? method.GetGenericArguments() : Type.EmptyTypes;
 
@@ -192,12 +245,12 @@ public class ConditionalAppendSeamArchitectureTests
                         }
                         if (setterNames.Contains(callee.Name))
                         {
-                            hits.Add($"{type.FullName}.{method.Name}: setter call {callee.Name}");
+                            hits.Add($"{SetterKind}: {type.FullName}.{method.Name} -> {callee.Name}");
                         }
-                        else if (callee.Name == "SetValue" && callee.DeclaringType?.Namespace == "System.Reflection"
-                                 && seamTypes.Contains(type))
+                        else if (callee.Name == "SetValue" && callee.DeclaringType?.Namespace == "System.Reflection")
                         {
-                            hits.Add($"{type.FullName}.{method.Name}: reflection SetValue inside a seam-declaring type");
+                            // Conservative: ANY reflection assignment anywhere in the assembly (production has none).
+                            hits.Add($"{ReflectionKind}: {type.FullName}.{method.Name} -> {callee.DeclaringType!.Name}.SetValue");
                         }
                     }
                     else if (op is 0x7D or 0x80) // stfld / stsfld
@@ -205,17 +258,24 @@ public class ConditionalAppendSeamArchitectureTests
                         FieldInfo? field;
                         try { field = method.Module.ResolveField(token, typeArgs, methodArgs); }
                         catch { continue; }
-                        if (field is null || !backingFields.Contains(field.Name))
+                        if (field is null)
                         {
                             continue;
                         }
 
-                        // A backing-field store is legitimate ONLY in the property's OWN auto-generated setter or in the
-                        // declaring type's constructor (the `= default` initializer). Any other store is a forbidden write.
-                        var ownSetter = "set_" + field.Name.TrimStart('<')[..field.Name.TrimStart('<').IndexOf('>')];
-                        if (!isDeclaringCtor && !string.Equals(method.Name, ownSetter, StringComparison.Ordinal))
+                        // Normalize an auto-property backing field (`<Prop>k__BackingField`) to its property name; a plain
+                        // field keeps its own name. Match either against the seam names.
+                        var normalized = NormalizeFieldName(field.Name);
+                        if (!seamNameSet.Contains(normalized))
                         {
-                            hits.Add($"{type.FullName}.{method.Name}: backing-field store {field.Name} outside ctor/own setter");
+                            continue;
+                        }
+
+                        // Legitimate ONLY in the property's own auto-generated setter or the declaring type's ctor.
+                        var isDeclaringCtor = method is ConstructorInfo && field.DeclaringType == type;
+                        if (!isDeclaringCtor && !string.Equals(method.Name, "set_" + normalized, StringComparison.Ordinal))
+                        {
+                            hits.Add($"{StoreKind}: {type.FullName}.{method.Name} -> {field.Name}");
                         }
                     }
                 }
@@ -224,6 +284,11 @@ public class ConditionalAppendSeamArchitectureTests
 
         return hits;
     }
+
+    private static string NormalizeFieldName(string fieldName) =>
+        fieldName.StartsWith('<') && fieldName.EndsWith(">k__BackingField", StringComparison.Ordinal)
+            ? fieldName[1..fieldName.IndexOf('>')]
+            : fieldName;
 
     private static void AssertIvtAllowlist(Assembly assembly, params string[] expected)
     {
