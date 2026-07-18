@@ -6,7 +6,7 @@ namespace Sekiban.Dcb.Domains;
 /// <summary>
 ///     Simple implementation of IEventTypes that manages event type registration
 /// </summary>
-public class SimpleEventTypes : IEventTypes
+public class SimpleEventTypes : IEventTypes, IEventTypeJsonMetadataProvider
 {
     private readonly Dictionary<string, Type> _eventTypes = new();
     private readonly JsonSerializerOptions _jsonOptions;
@@ -97,6 +97,10 @@ public class SimpleEventTypes : IEventTypes
     /// <inheritdoc />
     public Type? GetEventType(string eventTypeName) =>
         _eventTypes.TryGetValue(eventTypeName, out var type) ? type : null;
+
+    /// <inheritdoc />
+    public JsonTypeInfo? GetEffectiveTypeInfo(string eventTypeName) =>
+        _eventTypes.TryGetValue(eventTypeName, out var type) ? ResolveEffectiveTypeInfo(type) : null;
 
     /// <summary>
     ///     Register an event type with its name

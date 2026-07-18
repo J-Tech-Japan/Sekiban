@@ -97,6 +97,29 @@ public static class OperationFingerprint
 
         var typeIdentity = authoritativeType.FullName ?? authoritativeType.Name;
 
+        // Conservative supported-shape boundary. Only a shape whose EFFECTIVE JsonTypeInfo graph is provably built from
+        // deterministic, structure-preserving metadata may be fingerprinted. This runs BEFORE deserialization, so a
+        // converter-owned / non-object / non-deterministic-collection shape (whose canonical output we cannot trust to
+        // be stable) is rejected before it can produce any output — it can never yield two fingerprints for one key.
+        if (eventTypes is not IEventTypeJsonMetadataProvider metadataProvider)
+        {
+            return ResultBox.Error<string>(
+                new OperationCanonicalizationException(
+                    $"Event type '{eventPayloadName}' cannot be conditionally appended: its event-types registry does "
+                    + "not expose JSON metadata, so a stable canonical shape cannot be proven."));
+        }
+
+        var effectiveTypeInfo = metadataProvider.GetEffectiveTypeInfo(eventPayloadName);
+        if (effectiveTypeInfo is null || !CanonicalShapeValidator.IsSupported(effectiveTypeInfo))
+        {
+            return ResultBox.Error<string>(
+                new OperationCanonicalizationException(
+                    $"Event type '{eventPayloadName}' has a payload shape that is not supported for conditional append "
+                    + "(converter-owned, non-object, or non-deterministically-ordered), so a stable canonical "
+                    + "fingerprint cannot be proven. Use a plain object payload of deterministic, structure-preserving "
+                    + "members."));
+        }
+
         byte[] canonicalPayload;
         try
         {
