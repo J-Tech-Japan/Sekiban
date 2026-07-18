@@ -190,6 +190,44 @@ public class CosmosConditionalAppendTests
         }
     }
 
+    [Fact]
+    public async Task PostCommitResponseLoss_BoundedVerificationTimeout_OnStuckRead_IsTypedInDoubt_Promptly_NoLaterMutation()
+    {
+        // Production-path (not cooperative-delegate) proof that the bounded verification budget is enforced end to end:
+        // the event+tags commit, the response is lost, and the authoritative winner read is STUCK. The read observes the
+        // bounded budget token, so verification times out promptly to a typed AmbiguousAfterWrite — and nothing mutates
+        // after the result returns.
+        var lineage = NewLineage();
+        // Override the verification budget on the store's coordinator (test seam, reached by reflection).
+        var coordinator = typeof(CosmosDbEventStore)
+            .GetField("_conditionalAppend", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(lineage.Store)!;
+        coordinator.GetType().GetProperty("VerificationBudgetOverride",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(coordinator, TimeSpan.FromMilliseconds(200));
+
+        lineage.Store.AfterConditionalCommitHook = () => throw new InvalidOperationException("response lost after commit");
+        lineage.Events.ReadItemGate = ct => Task.Delay(Timeout.Infinite, ct); // winner read hangs until the budget cancels it
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = await ((IConditionalEventStore)lineage.Store).AppendIfUniqueAsync(
+            new ConditionalAppendRequest("cosmos-budget", ConditionalAppendScenarios.Marker(_domain, "v")));
+        sw.Stop();
+
+        Assert.False(result.IsSuccess);
+        var ex = Assert.IsType<ConditionalAppendInDoubtException>(result.GetException());
+        Assert.Equal(ConditionalAppendInDoubtReason.AmbiguousAfterWrite, ex.Reason);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"bounded verification should time out promptly, took {sw.Elapsed}");
+
+        // No background mutation after the typed in-doubt returned: the counts are stable.
+        lineage.Events.ReadItemGate = null;
+        var creates = lineage.Events.Creates + lineage.Tags.Creates;
+        var deletes = lineage.Events.Deletes + lineage.Tags.Deletes;
+        await Task.Delay(150);
+        Assert.Equal(creates, lineage.Events.Creates + lineage.Tags.Creates);
+        Assert.Equal(deletes, lineage.Events.Deletes + lineage.Tags.Deletes);
+    }
+
     // ── The crash-window/repair gate (Fix #1) ───────────────────────────────────────────────────────
 
     [Fact]

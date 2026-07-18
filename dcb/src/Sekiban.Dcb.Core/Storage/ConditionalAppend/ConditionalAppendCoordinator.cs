@@ -41,6 +41,12 @@ public sealed class ConditionalAppendCoordinator
         _ensureCommittedAsync = ensureCommittedAsync;
     }
 
+    /// <summary>
+    ///     Test seam ONLY (never set in production): overrides the bounded post-ambiguity verification budget so a provider
+    ///     path's timeout can be exercised deterministically without waiting the production default. Null → the default.
+    /// </summary>
+    internal TimeSpan? VerificationBudgetOverride { get; set; }
+
     /// <summary>The single-event unique-key capability descriptor for this provider.</summary>
     public WriteConditionCapabilityDescriptor Descriptor =>
         WriteConditionCapabilityDescriptor.Supporting(_providerName, WriteConditionKind.SingleEventUniqueKey);
@@ -57,5 +63,6 @@ public sealed class ConditionalAppendCoordinator
             _tryWriteClaim,
             _readCommittedWinner,
             _ensureCommittedAsync,
-            cancellationToken);
+            cancellationToken,
+            VerificationBudgetOverride);
 }

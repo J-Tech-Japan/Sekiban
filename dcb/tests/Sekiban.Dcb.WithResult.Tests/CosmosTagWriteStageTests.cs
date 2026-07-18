@@ -27,7 +27,7 @@ public class CosmosTagWriteStageTests
 
         public void Seed(CosmosTag row) => _rows[(row.Pk, row.Id)] = row;
 
-        public Task<CosmosTagBatchOutcome> CreateBatchAsync(string partitionKey, IReadOnlyList<CosmosTag> rows)
+        public Task<CosmosTagBatchOutcome> CreateBatchAsync(string partitionKey, IReadOnlyList<CosmosTag> rows, CancellationToken cancellationToken = default)
         {
             BatchAttempts++;
 
@@ -44,7 +44,7 @@ public class CosmosTagWriteStageTests
             return Task.FromResult(CosmosTagBatchOutcome.Created);
         }
 
-        public Task<bool> TryCreateRowAsync(string partitionKey, CosmosTag row)
+        public Task<bool> TryCreateRowAsync(string partitionKey, CosmosTag row, CancellationToken cancellationToken = default)
         {
             RowCreateAttempts++;
 
@@ -57,7 +57,7 @@ public class CosmosTagWriteStageTests
             return Task.FromResult(true);
         }
 
-        public Task<CosmosTag?> TryReadRowAsync(string partitionKey, string id) =>
+        public Task<CosmosTag?> TryReadRowAsync(string partitionKey, string id, CancellationToken cancellationToken = default) =>
             Task.FromResult(_rows.GetValueOrDefault((partitionKey, id)));
     }
 

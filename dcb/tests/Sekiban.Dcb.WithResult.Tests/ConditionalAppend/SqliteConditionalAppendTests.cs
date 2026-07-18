@@ -84,22 +84,21 @@ public sealed class SqliteConditionalAppendTests : IDisposable
     }
 
     [Fact]
-    public async Task CancelledMidWrite_IsTypedInDoubt_NoDurableEvent_ThenRetryConverges()
+    public async Task CancelledBeforeCommit_PropagatesTheExactOriginalCancellation_NoDurableEvent_ThenRetryConverges()
     {
         var store = NewStore();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        // The write is cancelled before it commits: nothing is durable, and the outcome is resolved by an authoritative
-        // read-back (no winner) to a typed retryable in-doubt — never a partial durable event.
+        // Phase-aware: a KNOWN pre-commit rollback cancellation is a permanent failure — it surfaces as the EXACT original
+        // OperationCanceledException carrying the caller's token, NEVER a typed AmbiguousAfterWrite (which is reserved for
+        // provider-declared post-commit response loss). Nothing is durable.
         var cancelled = await store.AppendIfUniqueAsync(
             new ConditionalAppendRequest("mig-cancel", ConditionalAppendScenarios.Marker(_domain, "v")), cts.Token);
 
         Assert.False(cancelled.IsSuccess);
-        var ex = Assert.IsType<ConditionalAppendInDoubtException>(cancelled.GetException());
-        Assert.True(ex.IsRetryable);
-        // The preserved cause is the ORIGINAL cancellation carrying the caller's token (identity preserved, not wrapped).
-        var oce = Assert.IsAssignableFrom<OperationCanceledException>(ex.InnerException);
+        Assert.IsNotType<ConditionalAppendInDoubtException>(cancelled.GetException());
+        var oce = Assert.IsAssignableFrom<OperationCanceledException>(cancelled.GetException());
         Assert.Equal(cts.Token, oce.CancellationToken);
         Assert.Empty((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // rollback-before-commit: nothing durable
 

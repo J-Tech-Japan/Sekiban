@@ -458,8 +458,8 @@ public class CoreGeneralSekibanExecutor
                 var serializableEvents = new List<SerializableEvent>();
                 foreach (var candidate in request.EventCandidates)
                 {
-                    var eventId = Guid.CreateVersion7();
-                    var sortableId = SortableUniqueId.GenerateNew();
+                    var eventId = ConditionalEventIdFactory();
+                    var sortableId = ConditionalSortableIdFactory();
                     var metadata = new EventMetadata(eventId.ToString(), "SerializedCommit", "SerializedSekibanExecutor");
 
                     serializableEvents.Add(new SerializableEvent(
@@ -943,7 +943,7 @@ public class CoreGeneralSekibanExecutor
             var single = collectedEvents[0];
             TagValidator.ValidateTagsAndThrow(new HashSet<ITag>(single.Tags));
 
-            var eventId = Guid.CreateVersion7();
+            var eventId = ConditionalEventIdFactory();
             var sortable = SortableUniqueId.GenerateNew();
             var metadata = new EventMetadata(eventId.ToString(), command.GetType().Name, "GeneralSekibanExecutor");
             var domainEvent = new Event(

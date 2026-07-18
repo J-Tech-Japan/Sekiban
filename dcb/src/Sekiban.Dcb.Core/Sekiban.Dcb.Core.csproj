@@ -57,6 +57,9 @@
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>Sekiban.Dcb.CosmosDb</_Parameter1>
         </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>Sekiban.Dcb.DynamoDB</_Parameter1>
+        </AssemblyAttribute>
     </ItemGroup>
 
 </Project>

@@ -28,22 +28,26 @@ public class ConditionalAppendBoundedVerificationTests
             Id = ConditionalAppendIdentity.DeriveEventId("svc", OperationFingerprint.NormalizeKey(key))
         };
 
-    // A write that is ambiguous: it throws a caller cancellation after (hypothetically) committing.
-    private static Task<ConditionalWriteOutcome> AmbiguousWrite(CancellationToken callerToken) =>
-        throw new OperationCanceledException("caller cancelled after possible commit", callerToken);
+    // The INTERNAL provider→orchestrator post-commit marker, constructed by reflection (it is internal to Core, and only
+    // a provider raises it in production). Wraps the original transport/cancellation cause.
+    private static Exception PostCommitMarker(Exception originalCause)
+    {
+        var type = typeof(ConditionalAppendExecution).Assembly
+            .GetType("Sekiban.Dcb.Storage.PostCommitResponseLostException")!;
+        return (Exception)Activator.CreateInstance(type, originalCause)!;
+    }
 
     [Fact]
-    public async Task ReadbackWithinBudget_ResolvesSameCall_ToAlreadyCommitted()
+    public async Task PostCommitMarker_ReadbackWithinBudget_ResolvesSameCall_ToAlreadyCommitted()
     {
-        using var caller = new CancellationTokenSource();
         var winner = Winner("bv-ok");
 
         var result = await ConditionalAppendExecution.RunAsync(
             Request("bv-ok"), "svc", _domain.EventTypes, "TestProvider",
-            (_, _, _) => AmbiguousWrite(caller.Token),
+            (_, _, _) => throw PostCommitMarker(new InvalidOperationException("response lost after commit")),
             (_, _) => Task.FromResult<SerializableEvent?>(winner),
             ensureCommittedAsync: null,
-            cancellationToken: caller.Token,
+            cancellationToken: CancellationToken.None,
             verificationBudget: TimeSpan.FromSeconds(5));
 
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
@@ -62,7 +66,7 @@ public class ConditionalAppendBoundedVerificationTests
         var sw = Stopwatch.StartNew();
         var result = await ConditionalAppendExecution.RunAsync(
             Request("bv-hang"), "svc", _domain.EventTypes, "TestProvider",
-            (_, _, _) => throw callerCause,
+            (_, _, _) => throw PostCommitMarker(callerCause),
             // The readback hangs until ITS token (the independent budget token) fires — never the caller's.
             async (_, ct) => { await Task.Delay(Timeout.Infinite, ct); return null; },
             ensureCommittedAsync: null,

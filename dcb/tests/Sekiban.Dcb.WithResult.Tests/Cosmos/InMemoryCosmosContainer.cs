@@ -36,6 +36,13 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     /// </summary>
     public Action<int>? OnWrite { get; set; }
 
+    /// <summary>
+    ///     Optional gate awaited at the START of every point read, OBSERVING the read's CancellationToken. A test sets it
+    ///     to a token-respecting infinite delay to make a read block until a bounded budget cancels it — proving the
+    ///     production budget is enforced end to end (not merely on a cooperative delegate).
+    /// </summary>
+    public Func<CancellationToken, Task>? ReadItemGate { get; set; }
+
     /// <summary>Every document currently stored, newest last.</summary>
     public IReadOnlyList<JObject> Items => _items.Values.ToList();
 
@@ -113,12 +120,19 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         }
     }
 
-    public override Task<ItemResponse<T>> ReadItemAsync<T>(
+    public override async Task<ItemResponse<T>> ReadItemAsync<T>(
         string id,
         PartitionKey partitionKey,
         ItemRequestOptions? requestOptions = null,
         CancellationToken cancellationToken = default)
     {
+        // Optional blocking gate (observing the read's token) — lets a test prove the bounded verification budget cancels
+        // a stuck production read. Awaited OUTSIDE the lock.
+        if (ReadItemGate is not null)
+        {
+            await ReadItemGate(cancellationToken).ConfigureAwait(false);
+        }
+
         lock (_gate)
         {
             // Partition-scoped point read, exactly as Cosmos behaves: an id is unique WITHIN a partition, but the same id
@@ -132,8 +146,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
                 throw CosmosFailures.NotFound();
             }
 
-            return Task.FromResult<ItemResponse<T>>(
-                new FakeItemResponse<T>(match.ToObject<T>()!, HttpStatusCode.OK));
+            return new FakeItemResponse<T>(match.ToObject<T>()!, HttpStatusCode.OK);
         }
     }
 

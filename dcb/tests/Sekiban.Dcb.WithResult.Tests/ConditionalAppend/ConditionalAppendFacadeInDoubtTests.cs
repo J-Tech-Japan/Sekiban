@@ -154,6 +154,21 @@ public class ConditionalAppendFacadeInDoubtTests
         Assert.Equal(0, store.AppendAttempts);   // conditional append (payload canonicalization happens inside it)
     }
 
+    [Fact]
+    public void SerializedConditionalBoundary_HasNoHandlerOrDelegateStage()
+    {
+        // Structural proof for the packet's "handler invocation" stage: the versioned serialized conditional method takes
+        // ONLY a SerializedConditionalCommitRequest (pre-serialized candidate) and a CancellationToken — there is NO
+        // handler/delegate parameter, so no handler stage exists on this boundary to run before the version gate. The
+        // ordinary handler path (ExecuteAsync with a handler delegate) cannot consume a SerializedConditionalCommitRequest.
+        var method = typeof(ISerializedConditionalSekibanDcbExecutor)
+            .GetMethod(nameof(ISerializedConditionalSekibanDcbExecutor.CommitSerializableEventConditionallyAsync))!;
+        var paramTypes = method.GetParameters().Select(p => p.ParameterType).ToArray();
+        Assert.Equal(new[] { typeof(SerializedConditionalCommitRequest), typeof(CancellationToken) }, paramTypes);
+        Assert.DoesNotContain(method.GetParameters(), p =>
+            p.ParameterType.IsGenericType && p.ParameterType.GetGenericTypeDefinition() == typeof(Func<,,>));
+    }
+
     private record UniqueMarkerEvent(string Value) : IEventPayload;
 
     private record MarkerCommand : ICommand;

@@ -139,7 +139,8 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 tagsContainer,
                 options,
                 serviceId,
-                tagsSettings).ConfigureAwait(false);
+                tagsSettings,
+                cancellationToken).ConfigureAwait(false);
         }
         catch (CosmosTagIndexCorruptionException ex)
         {
@@ -167,7 +168,9 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         {
             var response = await eventsContainer.ReadItemAsync<CosmosEvent>(
                 id,
-                new PartitionKey(eventPk)).ConfigureAwait(false);
+                new PartitionKey(eventPk),
+                requestOptions: null,
+                cancellationToken).ConfigureAwait(false);
             var cosmosEvent = response.Resource;
             if (!ServiceIdMatches(cosmosEvent.ServiceId, serviceId))
             {
@@ -1578,7 +1581,8 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         Container tagsContainer,
         CosmosDbEventStoreOptions options,
         string serviceId,
-        CosmosContainerSettings settings)
+        CosmosContainerSettings settings,
+        CancellationToken cancellationToken = default)
     {
         var sources = writtenEvents
             .SelectMany(se => se.Tags.Select(tagString => new CosmosTagRowSource(
@@ -1593,7 +1597,8 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             new CosmosContainerTagRowStore(tagsContainer),
             options,
             serviceId,
-            TagWriteFaultInjector).ConfigureAwait(false);
+            TagWriteFaultInjector,
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

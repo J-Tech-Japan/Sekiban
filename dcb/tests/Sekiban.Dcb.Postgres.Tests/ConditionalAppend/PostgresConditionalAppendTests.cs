@@ -69,19 +69,19 @@ public class PostgresConditionalAppendTests : PostgresTestBase
     }
 
     [Fact]
-    public async Task CancelledMidWrite_IsTypedInDoubt_NoDurableEvent_ThenRetryConverges()
+    public async Task CancelledBeforeCommit_PropagatesTheOriginalCancellation_NoDurableEvent_ThenRetryConverges()
     {
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        // SaveChanges is cancelled before commit: nothing durable, and the outcome resolves by authoritative read-back
-        // (no winner) to a typed retryable in-doubt.
+        // Phase-aware: SaveChanges is cancelled before commit — a KNOWN pre-commit rollback. It surfaces as the original
+        // OperationCanceledException, NEVER a typed AmbiguousAfterWrite. Nothing is durable.
         var cancelled = await Conditional.AppendIfUniqueAsync(
             new ConditionalAppendRequest("pg-cancel", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")), cts.Token);
 
         Assert.False(cancelled.IsSuccess);
-        var ex = Assert.IsType<ConditionalAppendInDoubtException>(cancelled.GetException());
-        Assert.True(ex.IsRetryable);
+        Assert.IsNotType<ConditionalAppendInDoubtException>(cancelled.GetException());
+        Assert.IsAssignableFrom<OperationCanceledException>(cancelled.GetException());
         Assert.Equal(0, await DurableCount()); // transaction rolled back — nothing committed
 
         // Recovery: a normal retry converges to a durable Appended.

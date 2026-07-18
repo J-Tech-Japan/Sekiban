@@ -94,24 +94,18 @@ public static class ConditionalAppendExecution
         }
         catch (PostCommitResponseLostException ex)
         {
-            // The provider KNOWS the claim committed durably but the response was lost. Resolve authoritatively via a
-            // BOUNDED, caller-independent verification: AlreadyCommitted on proof, else typed AmbiguousAfterWrite with the
-            // original transport/cancellation cause — never the raw transport exception.
+            // ONLY a provider-declared post-commit response loss (commit is known/possible to have occurred) enters
+            // bounded authoritative verification: AlreadyCommitted on proof, else typed AmbiguousAfterWrite with the
+            // original cause — never the raw transport exception. A pre-commit failure (including a pre-commit
+            // cancellation/timeout/transport) does NOT reach here; it is surfaced below as its exact original instance.
             return await ResolveAmbiguousAfterWriteAsync(
                 serviceId, request.IdempotencyKey, eventTypes, providerName, deterministicId, attemptFingerprint,
                 readCommittedWinner, ensureCommittedAsync, ex.OriginalCause, budget);
         }
-        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
-        {
-            // Ambiguous: the write may have committed before the cancellation/timeout. Resolve it the same way — a bounded
-            // independent verification (the caller's token may be cancelled, so it must NOT gate the verification).
-            return await ResolveAmbiguousAfterWriteAsync(
-                serviceId, request.IdempotencyKey, eventTypes, providerName, deterministicId, attemptFingerprint,
-                readCommittedWinner, ensureCommittedAsync, ex, budget);
-        }
         catch (Exception ex)
         {
-            // Any other write failure is surfaced as-is (permanent/unexpected pre-commit); not classified as in-doubt.
+            // Any other write failure — including a KNOWN pre-commit rollback cancellation/timeout/transport — is a
+            // permanent pre-commit failure and is surfaced as-is (exact instance/token preserved); never AmbiguousAfterWrite.
             return ResultBox.Error<ConditionalAppendReceipt>(ex);
         }
 

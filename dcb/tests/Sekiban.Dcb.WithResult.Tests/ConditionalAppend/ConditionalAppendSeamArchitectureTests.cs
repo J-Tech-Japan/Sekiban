@@ -84,13 +84,13 @@ public class ConditionalAppendSeamArchitectureTests
     [Fact]
     public void InternalsVisibleTo_Allowlist_IsExactlyTheIntendedAssemblies()
     {
-        // The provider assemblies grant internals only to the intended test assembly; Core grants ONLY the three provider
+        // The provider assemblies grant internals only to the intended test assembly; Core grants ONLY the four provider
         // assemblies (for the internal post-commit-response-loss signal) — never a test assembly.
         AssertIvtAllowlist(typeof(SqliteEventStore).Assembly, "Sekiban.Dcb.WithResult.Tests");
         AssertIvtAllowlist(typeof(CosmosDbEventStore).Assembly, "Sekiban.Dcb.WithResult.Tests");
         AssertIvtAllowlist(
             typeof(IConditionalEventStore).Assembly,
-            "Sekiban.Dcb.Postgres", "Sekiban.Dcb.Sqlite", "Sekiban.Dcb.CosmosDb");
+            "Sekiban.Dcb.Postgres", "Sekiban.Dcb.Sqlite", "Sekiban.Dcb.CosmosDb", "Sekiban.Dcb.DynamoDB");
     }
 
     [Theory]
@@ -117,6 +117,71 @@ public class ConditionalAppendSeamArchitectureTests
             typeof(CosmosDbEventStoreOptions).GetProperties(), p => p.PropertyType == typeof(Func<Task>));
         Assert.DoesNotContain(
             typeof(SqliteEventStoreOptions).GetProperties(), p => p.PropertyType == typeof(Func<Task>));
+    }
+
+    [Fact]
+    public void ProductionAssemblies_ContainNoAssignmentCallSiteForTheSeams()
+    {
+        // IL-level guard: no production method body calls the response-loss hook setter or the allocator/budget probe
+        // setters. The `= default` initializers compile to a backing-field store (stfld) in the declaring ctor, NOT a
+        // `call set_X`, so any `x.Seam = ...` assignment — the reachable mutation surface we forbid — would be caught here.
+        AssertNoSetterCallSites(typeof(SqliteEventStore).Assembly, "set_AfterConditionalCommitHook");
+        AssertNoSetterCallSites(typeof(CosmosDbEventStore).Assembly, "set_AfterConditionalCommitHook");
+        AssertNoSetterCallSites(
+            typeof(IConditionalEventStore).Assembly,
+            "set_ConditionalEventIdFactory", "set_ConditionalSortableIdFactory", "set_VerificationBudgetOverride");
+    }
+
+    private static void AssertNoSetterCallSites(Assembly assembly, params string[] setterNames)
+    {
+        Type[] types;
+        try { types = assembly.GetTypes(); }
+        catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t is not null).ToArray()!; }
+
+        var targets = new HashSet<string>(setterNames, StringComparer.Ordinal);
+        const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        foreach (var type in types)
+        {
+            var methods = type.GetMethods(all | BindingFlags.DeclaredOnly).Cast<MethodBase>()
+                .Concat(type.GetConstructors(all | BindingFlags.DeclaredOnly));
+            foreach (var method in methods)
+            {
+                byte[]? il;
+                try { il = method.GetMethodBody()?.GetILAsByteArray(); }
+                catch { il = null; }
+                if (il is null)
+                {
+                    continue;
+                }
+
+                // Per-byte scan: at every offset where a call (0x28) or callvirt (0x6F) opcode could sit, resolve the next
+                // 4 bytes as a metadata token. Checking every offset never MISSES a real call; a coincidental
+                // (non-call) byte resolving to a method whose Name is exactly one of the very specific seam setters is
+                // effectively impossible, so this only fires on a genuine assignment.
+                for (var i = 0; i + 5 <= il.Length; i++)
+                {
+                    if (il[i] != 0x28 && il[i] != 0x6F)
+                    {
+                        continue;
+                    }
+
+                    MethodBase? callee;
+                    try
+                    {
+                        callee = method.Module.ResolveMethod(
+                            BitConverter.ToInt32(il, i + 1), type.GetGenericArguments(), method.GetGenericArguments());
+                    }
+                    catch { continue; }
+
+                    if (callee is not null && targets.Contains(callee.Name))
+                    {
+                        Assert.Fail(
+                            $"Production assembly '{assembly.GetName().Name}' assigns seam '{callee.Name}' in "
+                            + $"{type.FullName}.{method.Name}.");
+                    }
+                }
+            }
+        }
     }
 
     private static void AssertIvtAllowlist(Assembly assembly, params string[] expected)

@@ -136,6 +136,13 @@ public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorPr
             // preserves its original failure and is never misrouted to winner classification.
             return ConditionalWriteOutcome.Conflict(ex);
         }
+        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
+        {
+            // TransactWriteItems IS the commit, so a cancellation/timeout here is an UNKNOWN commit status (the request may
+            // have reached the server and committed). Signal the post-commit ambiguity marker so the shared orchestrator
+            // resolves it by authoritative read-back rather than surfacing a possibly-false pre-commit failure.
+            throw new PostCommitResponseLostException(ex);
+        }
     }
 
     private static void EnforceTransactWriteLimits(List<TransactWriteItem> transactItems)
