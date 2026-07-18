@@ -13,8 +13,10 @@ using Xunit;
 namespace Sekiban.Dcb.ColdEvents.Tests;
 
 /// <summary>
-///     Write-conditions propagate exactly like durability: a Hybrid reports what its HOT store can enforce (writes land
-///     there), never upgrading on its own authority, and stays silent when the hot store is silent.
+///     Write-conditions propagate like durability, but with a stricter rule: the Hybrid advertises (and forwards) a kind
+///     only when its HOT store BOTH declares the capability AND actually implements <see cref="IConditionalEventStore" />.
+///     A store that only DECLARES the capability (but cannot be forwarded to) must not be honoured — otherwise the
+///     executor would pass a descriptor-only preflight and then fail on the forward.
 /// </summary>
 public class HybridEventStoreWriteConditionDescriptorTests
 {
@@ -28,7 +30,7 @@ public class HybridEventStoreWriteConditionDescriptorTests
             NullLogger<HybridEventStore>.Instance);
 
     [Fact]
-    public void WrappingAConditionalHotStore_PropagatesTheKind()
+    public void WrappingAHotStoreThatDeclaresAndImplements_PropagatesTheKind()
     {
         var descriptor = Wrap(new ConditionalStore()).DescribeWriteConditions();
 
@@ -37,20 +39,68 @@ public class HybridEventStoreWriteConditionDescriptorTests
     }
 
     [Fact]
+    public void WrappingADeceptiveHotStore_ThatDeclaresButDoesNotImplement_AdvertisesNothing()
+    {
+        // The regression: declaring the capability without implementing IConditionalEventStore must NOT be advertised.
+        var descriptor = Wrap(new DeceptiveStore()).DescribeWriteConditions();
+
+        Assert.False(descriptor.Supports(WriteConditionKind.SingleEventUniqueKey));
+        Assert.Empty(descriptor.SupportedKinds);
+    }
+
+    [Fact]
     public void WrappingAStoreThatCannotCondition_StaysSilent()
     {
-        // A durable-but-unconditional hot store: the Hybrid must not invent a write-condition it cannot enforce.
         var descriptor = Wrap(new SilentStore()).DescribeWriteConditions();
 
         Assert.False(descriptor.Supports(WriteConditionKind.SingleEventUniqueKey));
         Assert.Empty(descriptor.SupportedKinds);
     }
 
-    /// <summary>A hot store that declares the single-event unique-key capability.</summary>
-    private sealed class ConditionalStore : SilentStore, IWriteConditionCapabilityProvider
+    [Fact]
+    public async Task Hybrid_ForwardsConditionalAppend_ToTheHotStore()
     {
+        var hot = new ConditionalStore();
+        var hybrid = Wrap(hot);
+        var request = new ConditionalAppendRequest(
+            "k",
+            new SerializableEvent(new byte[] { 1 }, SortableUniqueId.GenerateNew(), Guid.CreateVersion7(),
+                new EventMetadata("c", "c", "u"), new List<string>(), "Evt"));
+
+        var result = await hybrid.AppendIfUniqueAsync(request);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(hot.ForwardReceived); // the append was forwarded to the hot store, not handled by the wrapper
+    }
+
+    /// <summary>A hot store that declares AND implements the capability (the honest case).</summary>
+    private sealed class ConditionalStore : SilentStore, IWriteConditionCapabilityProvider, IConditionalEventStore
+    {
+        public bool ForwardReceived { get; private set; }
+
         public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
             WriteConditionCapabilityDescriptor.Supporting("ConditionalStore", WriteConditionKind.SingleEventUniqueKey);
+
+        public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+            ConditionalAppendRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            ForwardReceived = true;
+            return Task.FromResult(
+                ResultBox.FromValue(
+                    new ConditionalAppendReceipt(
+                        ConditionalAppendStatus.Appended,
+                        request.Event.Id,
+                        request.Event.SortableUniqueIdValue,
+                        "fingerprint")));
+        }
+    }
+
+    /// <summary>A hot store that DECLARES the capability but does NOT implement IConditionalEventStore — must not be honoured.</summary>
+    private sealed class DeceptiveStore : SilentStore, IWriteConditionCapabilityProvider
+    {
+        public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
+            WriteConditionCapabilityDescriptor.Supporting("DeceptiveStore", WriteConditionKind.SingleEventUniqueKey);
     }
 
     /// <summary>An event store that does not implement the capability descriptor at all.</summary>

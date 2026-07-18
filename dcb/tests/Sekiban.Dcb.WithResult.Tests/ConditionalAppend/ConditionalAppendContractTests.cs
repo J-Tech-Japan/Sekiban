@@ -26,6 +26,7 @@ public class ConditionalAppendContractTests
     {
         var domainTypes = DomainType.GetDomainTypes();
         ((SimpleEventTypes)domainTypes.EventTypes).RegisterEventType<UniqueMarkerEvent>();
+        ((SimpleEventTypes)domainTypes.EventTypes).RegisterEventType<GoldenEvent>();
         ((SimpleTagTypes)domainTypes.TagTypes).RegisterTagGroupType<MarkerTag>();
         return domainTypes;
     }
@@ -46,8 +47,8 @@ public class ConditionalAppendContractTests
     [Fact]
     public void Fingerprint_IsStable_ForTheSameInputs_AndTagOrderIndependent()
     {
-        var a = OperationFingerprint.Compute("svc", "key-1", "Evt", "payload"u8, new[] { "A:1", "B:2" });
-        var b = OperationFingerprint.Compute("svc", "key-1", "Evt", "payload"u8, new[] { "B:2", "A:1" });
+        var a = OperationFingerprint.ComputeFromCanonical("svc", "key-1", "Evt", "payload"u8, new[] { "A:1", "B:2" });
+        var b = OperationFingerprint.ComputeFromCanonical("svc", "key-1", "Evt", "payload"u8, new[] { "B:2", "A:1" });
         Assert.Equal(a, b); // tag ordering must not change the fingerprint
     }
 
@@ -59,8 +60,8 @@ public class ConditionalAppendContractTests
     [InlineData("svc", "key-1", "Evt", "payload", "A:2")] // different tag
     public void Fingerprint_ChangesWhenAnyComponentChanges(string svc, string key, string type, string payload, string tag)
     {
-        var baseline = OperationFingerprint.Compute("svc", "key-1", "Evt", "payload"u8, new[] { "A:1" });
-        var changed = OperationFingerprint.Compute(svc, key, type, Encoding.UTF8.GetBytes(payload), new[] { tag });
+        var baseline = OperationFingerprint.ComputeFromCanonical("svc", "key-1", "Evt", "payload"u8, new[] { "A:1" });
+        var changed = OperationFingerprint.ComputeFromCanonical(svc, key, type, Encoding.UTF8.GetBytes(payload), new[] { tag });
         Assert.NotEqual(baseline, changed);
     }
 
@@ -71,6 +72,53 @@ public class ConditionalAppendContractTests
         Assert.Throws<ArgumentException>(() => OperationFingerprint.NormalizeKey("   "));
         Assert.Throws<ArgumentException>(() =>
             OperationFingerprint.NormalizeKey(new string('x', OperationFingerprint.MaxIdempotencyKeyUtf8Bytes + 1)));
+    }
+
+    // ---------------- Canonical fingerprint golden vectors ----------------
+
+    [Fact]
+    public void CanonicalizeJson_IsPropertyOrderAndWhitespaceIndependent()
+    {
+        var a = OperationFingerprint.CanonicalizeJson("{\"a\":1,\"b\":{\"y\":2,\"x\":3}}");
+        var b = OperationFingerprint.CanonicalizeJson("{ \"b\" : { \"x\":3, \"y\":2 }, \"a\": 1 }");
+        Assert.Equal(Encoding.UTF8.GetString(a), Encoding.UTF8.GetString(b));
+    }
+
+    [Fact]
+    public void ComputeCanonical_SemanticallyEqualPayloads_DifferentFormatting_SameFingerprint()
+    {
+        var domain = BuildDomainTypes();
+        // Two byte encodings of the SAME event: canonical domain form, and a reordered+indented reformat of it.
+        var canonicalJson = domain.EventTypes.SerializeEventPayload(new GoldenEvent("x", 1));
+        var reformatted = ReformatJsonReorderedIndented(canonicalJson);
+        Assert.NotEqual(canonicalJson, reformatted); // genuinely different bytes going in
+
+        var f1 = OperationFingerprint.ComputeCanonical("svc", "k", domain.EventTypes, nameof(GoldenEvent),
+            Encoding.UTF8.GetBytes(canonicalJson), new[] { "Marker:m" }).GetValue();
+        var f2 = OperationFingerprint.ComputeCanonical("svc", "k", domain.EventTypes, nameof(GoldenEvent),
+            Encoding.UTF8.GetBytes(reformatted), new[] { "Marker:m" }).GetValue();
+        Assert.Equal(f1, f2); // ...but the same fingerprint out
+    }
+
+    [Fact]
+    public void ComputeCanonical_DifferentPayloadValue_DifferentFingerprint()
+    {
+        var domain = BuildDomainTypes();
+        var f1 = OperationFingerprint.ComputeCanonical("svc", "k", domain.EventTypes, nameof(GoldenEvent),
+            Encoding.UTF8.GetBytes(domain.EventTypes.SerializeEventPayload(new GoldenEvent("x", 1))), new[] { "Marker:m" }).GetValue();
+        var f2 = OperationFingerprint.ComputeCanonical("svc", "k", domain.EventTypes, nameof(GoldenEvent),
+            Encoding.UTF8.GetBytes(domain.EventTypes.SerializeEventPayload(new GoldenEvent("x", 2))), new[] { "Marker:m" }).GetValue();
+        Assert.NotEqual(f1, f2);
+    }
+
+    [Fact]
+    public void ComputeCanonical_UnregisteredType_FailsClosed()
+    {
+        var domain = BuildDomainTypes();
+        var result = OperationFingerprint.ComputeCanonical("svc", "k", domain.EventTypes, "NotRegisteredEvent",
+            Encoding.UTF8.GetBytes("{}"), Array.Empty<string>());
+        Assert.False(result.IsSuccess);
+        Assert.IsType<OperationCanonicalizationException>(result.GetException());
     }
 
     // ---------------- InMemory reference outcome machine ----------------
@@ -228,7 +276,60 @@ public class ConditionalAppendContractTests
         Assert.Empty((await plain.ReadAllSerializableEventsAsync()).GetValue()); // nothing allocated or written
     }
 
+    // ---------------- Single-event contract (zero and multi both fail closed, before any store call) ----------------
+
+    [Fact]
+    public async Task Conditional_ZeroEvents_FailsClosed_NoStoreCall_NoReceipt()
+    {
+        var (executor, store, _) = NewConditional();
+        var result = await executor.ExecuteAsync(
+            new MarkerCommand(),
+            (MarkerCommand _, ICommandContext _) => Task.FromResult(EventOrNone.None),
+            new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("op-0") });
+
+        // Must NOT fall through to the legacy empty-success result.
+        Assert.False(result.IsSuccess);
+        var ex = Assert.IsType<SingleEventConditionalAppendException>(result.GetException());
+        Assert.Equal(0, ex.AppendedEventCount);
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue()); // no store call / no receipt
+    }
+
+    [Fact]
+    public async Task Conditional_MultipleEvents_FailsClosed_NoStoreCall()
+    {
+        var (executor, store, _) = NewConditional();
+        var result = await executor.ExecuteAsync(
+            new MarkerCommand(),
+            async (MarkerCommand _, ICommandContext ctx) =>
+            {
+                await ctx.AppendEvent(new UniqueMarkerEvent("a"), new MarkerTag("m"));
+                await ctx.AppendEvent(new UniqueMarkerEvent("b"), new MarkerTag("m"));
+                return EventOrNone.None;
+            },
+            new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("op-multi") });
+
+        Assert.False(result.IsSuccess);
+        var ex = Assert.IsType<SingleEventConditionalAppendException>(result.GetException());
+        Assert.Equal(2, ex.AppendedEventCount);
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+    }
+
     // ---------------- Serialized (WASM) conditional path ----------------
+
+    [Fact]
+    public async Task Serialized_Conditional_UnsupportedVersion_FailsClosed_NoWrite()
+    {
+        var (executor, store, domain) = NewConditional();
+        var payload = Encoding.UTF8.GetBytes(domain.EventTypes.SerializeEventPayload(new UniqueMarkerEvent("s")));
+        var candidate = new SerializableEventCandidate(payload, nameof(UniqueMarkerEvent), new List<string> { "Marker:m" });
+        var badVersion = new SerializedConditionalCommitRequest(SerializedConditionalCommitRequest.CurrentVersion + 1, candidate, "wasm-op");
+
+        var result = await executor.CommitSerializableEventConditionallyAsync(badVersion);
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<UnsupportedSerializedCommitVersionException>(result.GetException());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue()); // rejected before any write
+    }
 
     [Fact]
     public async Task Serialized_Conditional_AppendedThenAlreadyCommitted()
@@ -264,7 +365,51 @@ public class ConditionalAppendContractTests
         Assert.Single((await plain.ReadAllSerializableEventsAsync()).GetValue());
     }
 
+    // Re-emits JSON with object properties in REVERSE order and indented, so the bytes differ while the meaning does not.
+    private static string ReformatJsonReorderedIndented(string json)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        var output = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new System.Text.Json.Utf8JsonWriter(output, new System.Text.Json.JsonWriterOptions { Indented = true }))
+        {
+            WriteReversed(document.RootElement, writer);
+        }
+
+        return Encoding.UTF8.GetString(output.WrittenSpan);
+
+        static void WriteReversed(System.Text.Json.JsonElement element, System.Text.Json.Utf8JsonWriter writer)
+        {
+            switch (element.ValueKind)
+            {
+                case System.Text.Json.JsonValueKind.Object:
+                    writer.WriteStartObject();
+                    foreach (var prop in element.EnumerateObject().Reverse())
+                    {
+                        writer.WritePropertyName(prop.Name);
+                        WriteReversed(prop.Value, writer);
+                    }
+
+                    writer.WriteEndObject();
+                    break;
+                case System.Text.Json.JsonValueKind.Array:
+                    writer.WriteStartArray();
+                    foreach (var item in element.EnumerateArray())
+                    {
+                        WriteReversed(item, writer);
+                    }
+
+                    writer.WriteEndArray();
+                    break;
+                default:
+                    element.WriteTo(writer);
+                    break;
+            }
+        }
+    }
+
     private record UniqueMarkerEvent(string Value) : IEventPayload;
+
+    private record GoldenEvent(string A, int B) : IEventPayload;
 
     private record MarkerCommand : ICommand;
 

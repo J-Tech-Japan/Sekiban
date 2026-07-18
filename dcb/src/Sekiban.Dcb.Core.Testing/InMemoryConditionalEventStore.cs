@@ -22,11 +22,15 @@ public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditi
 {
     private const string ProviderName = "InMemoryConditional";
     private readonly IServiceIdProvider _serviceIdProvider;
+    private readonly IEventTypes _eventTypes;
     private readonly ConcurrentDictionary<string, ServiceClaims> _claimsByService = new(StringComparer.Ordinal);
 
     public InMemoryConditionalEventStore(IEventTypes eventTypes, IServiceIdProvider? serviceIdProvider = null)
-        : base(eventTypes, serviceIdProvider) =>
+        : base(eventTypes, serviceIdProvider)
+    {
+        _eventTypes = eventTypes;
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+    }
 
     public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
         WriteConditionCapabilityDescriptor.Supporting(ProviderName, WriteConditionKind.SingleEventUniqueKey);
@@ -37,21 +41,30 @@ public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditi
     {
         var serviceId = _serviceIdProvider.GetCurrentServiceId();
         string normalizedKey;
-        string fingerprint;
         try
         {
             normalizedKey = OperationFingerprint.NormalizeKey(request.IdempotencyKey);
-            fingerprint = OperationFingerprint.Compute(
-                serviceId,
-                request.IdempotencyKey,
-                request.Event.EventPayloadName,
-                request.Event.Payload,
-                request.Event.Tags);
         }
         catch (ArgumentException ex)
         {
             return Task.FromResult(ResultBox.Error<ConditionalAppendReceipt>(ex));
         }
+
+        // Canonical, authoritative fingerprint. Fails closed (typed) BEFORE any write when the type is unregistered or
+        // the payload cannot be canonicalized.
+        var fingerprintResult = OperationFingerprint.ComputeCanonical(
+            serviceId,
+            request.IdempotencyKey,
+            _eventTypes,
+            request.Event.EventPayloadName,
+            request.Event.Payload,
+            request.Event.Tags);
+        if (!fingerprintResult.IsSuccess)
+        {
+            return Task.FromResult(ResultBox.Error<ConditionalAppendReceipt>(fingerprintResult.GetException()));
+        }
+
+        var fingerprint = fingerprintResult.GetValue();
 
         var claims = _claimsByService.GetOrAdd(serviceId, _ => new ServiceClaims());
         lock (claims.Lock)

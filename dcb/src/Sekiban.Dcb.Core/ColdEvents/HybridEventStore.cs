@@ -34,6 +34,16 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     public WriteConditionCapabilityDescriptor DescribeWriteConditions()
     {
         var hot = SekibanDcbCapabilityResolver.DescribeWriteConditions(_hotStore, "hot event store");
+
+        // Advertise a write condition only when the hot store BOTH declares it AND can actually be forwarded to (i.e.
+        // implements IConditionalEventStore). A "deceptive" hot store that declares the capability but is not an
+        // IConditionalEventStore is not honoured — otherwise the executor would pass its descriptor-only preflight and
+        // then fail on the forward. This keeps advertise, forward, and the executor preflight consistent.
+        if (_hotStore is not IConditionalEventStore)
+        {
+            return WriteConditionCapabilityDescriptor.None($"HybridEventStore({hot.ProviderName})");
+        }
+
         return new WriteConditionCapabilityDescriptor(hot.SupportedKinds, $"HybridEventStore({hot.ProviderName})");
     }
 
