@@ -1,10 +1,34 @@
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.TestSupport;
+using Sekiban.Dcb.Testing;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Xunit;
 namespace Sekiban.Dcb.Tests.ConditionalAppend;
+
+// A genuine source-generated context whose event carries a type-level custom converter on an otherwise-allowlisted
+// enum leaf. Source-gen honours the [JsonConverter], so the effective (AOT) metadata for the leaf is the custom
+// converter — which the boundary must reject.
+[JsonConverter(typeof(AotHostileEnumConverter))]
+public enum AotHostileColor { Red, Green }
+
+public sealed record AotHostileEnumEvent(AotHostileColor Color) : IEventPayload;
+
+public sealed class AotHostileEnumConverter : JsonConverter<AotHostileColor>
+{
+    public override AotHostileColor Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        Enum.Parse<AotHostileColor>(reader.GetString() ?? nameof(AotHostileColor.Red));
+
+    public override void Write(Utf8JsonWriter writer, AotHostileColor value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value.ToString());
+}
+
+[JsonSerializable(typeof(AotHostileEnumEvent))]
+internal partial class AotHostileJsonContext : JsonSerializerContext;
 
 /// <summary>
 ///     SEK-G15 AOT parity + frozen vector. The fingerprint is computed through the production <see cref="AotEventTypes" />
@@ -63,6 +87,28 @@ public class ConditionalAppendAotContractTests
             "svc", "key", reflection, nameof(FixtureStudentCreated), reflectionPayload, new[] { "Tag:1" }).GetValue();
 
         Assert.Equal(aotFp, reflectionFp);
+    }
+
+    [Fact]
+    public async Task Aot_HostileConverterLeaf_IsRejectedThroughTheProductionConditionalPath_NoDurableWrite()
+    {
+        // Genuine source-gen metadata: AotHostileEnumEvent's enum leaf is bound by a custom converter. Registered
+        // through AotEventTypes and driven through the real conditional store path (AppendIfUniqueAsync -> ComputeCanonical
+        // over the AOT metadata graph), the boundary rejects it with the sanitized typed failure and no durable write.
+        var aot = new AotEventTypes();
+        aot.Register(nameof(AotHostileEnumEvent), AotHostileJsonContext.Default.AotHostileEnumEvent);
+        var store = new InMemoryConditionalEventStore(aot);
+        var payload = Encoding.UTF8.GetBytes(aot.SerializeEventPayload(new AotHostileEnumEvent(AotHostileColor.Red)));
+        var serializable = new SerializableEvent(payload, Common.SortableUniqueId.GenerateNew(), Guid.CreateVersion7(),
+            new EventMetadata("c", "c", "u"), new List<string>(), nameof(AotHostileEnumEvent));
+
+        var r = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable));
+
+        Assert.False(r.IsSuccess);
+        var ex = Assert.IsType<OperationCanonicalizationException>(r.GetException());
+        Assert.Null(ex.InnerException);
+        Assert.Equal(0, store.WriteCalls);
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
     }
 
     [Fact]

@@ -26,6 +26,7 @@ public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditi
     private readonly ConcurrentDictionary<string, ServiceClaims> _claimsByService = new(StringComparer.Ordinal);
 
     private int _writeCalls;
+    private int _appendAttempts;
 
     public InMemoryConditionalEventStore(IEventTypes eventTypes, IServiceIdProvider? serviceIdProvider = null)
         : base(eventTypes, serviceIdProvider)
@@ -35,11 +36,22 @@ public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditi
     }
 
     /// <summary>
-    ///     Number of times a conditional append actually reached the durable write (the Appended path). A rejected
-    ///     append (fault-gate, canonicalization boundary, or key-reuse) never increments this — so a test can assert the
-    ///     forbidden side effect did NOT happen, not merely that the store looks empty.
+    ///     Count of SUCCESSFUL durable writes — incremented ONLY AFTER the base append commits. A rejected append
+    ///     (canonicalization boundary, fault-gate, or key-reuse) never reaches the write, and a base-write that FAILS is
+    ///     not counted, so a test can assert a durable claim truly happened (or did not) rather than inferring it from
+    ///     empty state.
     /// </summary>
     public int WriteCalls => Volatile.Read(ref _writeCalls);
+
+    /// <summary>
+    ///     Count of times a fresh key reached the durable-write STEP (whether or not that write then succeeded). Distinct
+    ///     from <see cref="WriteCalls" /> so a base-write failure — which increments this but not <see cref="WriteCalls" />
+    ///     — can be pinned as "attempted but not a durable success".
+    /// </summary>
+    public int AppendAttempts => Volatile.Read(ref _appendAttempts);
+
+    /// <summary>Test hook: make the next durable base-store write fail, to pin that a failure is not counted as success.</summary>
+    public bool FailNextDurableWrite { get; set; }
 
     public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
         WriteConditionCapabilityDescriptor.Supporting(ProviderName, WriteConditionKind.SingleEventUniqueKey);
@@ -98,14 +110,26 @@ public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditi
             }
 
             // First claim: write the event through the base store, then record the claim. The base write is synchronous,
-            // so blocking on it here holds no async gap; the whole (write + claim) is atomic under this lock.
-            Interlocked.Increment(ref _writeCalls);
+            // so blocking on it here holds no async gap; the whole (write + claim) is atomic under this lock. A durable
+            // write that FAILS must not count as a success and must not record the claim (so a retry can still win).
+            Interlocked.Increment(ref _appendAttempts);
+
+            if (FailNextDurableWrite)
+            {
+                FailNextDurableWrite = false;
+                return Task.FromResult(
+                    ResultBox.Error<ConditionalAppendReceipt>(
+                        new InvalidOperationException("injected: durable base-store write failure")));
+            }
+
             var writeResult = base.WriteSerializableEventsAsync(new[] { request.Event }).GetAwaiter().GetResult();
             if (!writeResult.IsSuccess)
             {
                 return Task.FromResult(ResultBox.Error<ConditionalAppendReceipt>(writeResult.GetException()));
             }
 
+            // Count the SUCCESSFUL durable write only after the base append committed, then record the claim.
+            Interlocked.Increment(ref _writeCalls);
             claims.ByKey[normalizedKey] = new ClaimRecord(
                 request.Event.Id,
                 request.Event.SortableUniqueIdValue,

@@ -193,6 +193,51 @@ public class ConditionalAppendContractTests
         Assert.Equal(appended.WinnerEventId, retry.WinnerEventId); // original winner, not the retry's id
     }
 
+    // ---------------- WriteCalls semantics: only successful durable writes are counted ----------------
+
+    [Fact]
+    public async Task WriteCalls_CountsOnlySuccessfulDurableWrites_AndRetryDoesNotRecount()
+    {
+        var domain = BuildDomainTypes();
+        var store = new InMemoryConditionalEventStore(domain.EventTypes);
+        var serializable = SampleSerializable(domain);
+
+        var appended = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable))).GetValue();
+        Assert.Equal(ConditionalAppendStatus.Appended, appended.Status);
+        Assert.Equal(1, store.WriteCalls);   // one successful durable write
+        Assert.Equal(1, store.AppendAttempts);
+
+        var retry = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable))).GetValue();
+        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.Status);
+        Assert.Equal(1, store.WriteCalls);   // retry writes nothing durable
+    }
+
+    [Fact]
+    public async Task WriteCalls_BaseWriteFailure_IsNotCountedAsDurableSuccess_AndKeyStaysClaimable()
+    {
+        var domain = BuildDomainTypes();
+        var store = new InMemoryConditionalEventStore(domain.EventTypes);
+        var serializable = SampleSerializable(domain);
+
+        store.FailNextDurableWrite = true;
+        var failed = await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable));
+        Assert.False(failed.IsSuccess);
+        Assert.Equal(0, store.WriteCalls);     // a FAILED base write is not a durable success...
+        Assert.Equal(1, store.AppendAttempts); // ...though it did reach the durable-write step
+
+        // The key was never claimed, so a retry still wins with a real durable write.
+        var retry = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable))).GetValue();
+        Assert.Equal(ConditionalAppendStatus.Appended, retry.Status);
+        Assert.Equal(1, store.WriteCalls);
+    }
+
+    private static SerializableEvent SampleSerializable(DcbDomainTypes domain)
+    {
+        var evt = new Event(new UniqueMarkerEvent("x"), SortableUniqueId.GenerateNew(), nameof(UniqueMarkerEvent),
+            Guid.CreateVersion7(), new EventMetadata("c", "c", "u"), new List<string> { "Marker:m" });
+        return evt.ToSerializableEvent(domain.EventTypes);
+    }
+
     // ---------------- Capability descriptor (runtime-resolved, fail-closed) ----------------
 
     [Fact]

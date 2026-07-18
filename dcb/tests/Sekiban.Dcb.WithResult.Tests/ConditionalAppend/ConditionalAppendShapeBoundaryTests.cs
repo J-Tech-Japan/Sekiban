@@ -100,18 +100,27 @@ public class ConditionalAppendShapeBoundaryTests
         var first = await executor.ExecuteAsync(new ShapeCommand(), handler, options);
         var second = await executor.ExecuteAsync(new ShapeCommand(), handler, options);
 
-        // PERMITTED, and asserted rather than denied: the handler ran on both attempts, and the alternating converter
-        // ran when the executor serialized the candidate (so its output genuinely differed across the two attempts).
+        // PERMITTED invocations, asserted with EXACT counts: the handler ran exactly twice, and the alternating converter
+        // emitted exactly twice — once per attempt when the executor serialized the candidate.
         Assert.Equal(2, handlerInvocations);
-        Assert.True(AlternatingStringConverter.WriteCalls >= 2);
+        Assert.Equal(2, AlternatingStringConverter.WriteCalls);
+        Assert.Equal(2, AlternatingStringConverter.Emitted.Count);
+        // Non-vacuous: the two emitted candidate values are genuinely DISTINCT (a deterministic converter emitting the
+        // same output on both calls would fail this — that is the mutation this test kills).
+        Assert.NotEqual(AlternatingStringConverter.Emitted[0], AlternatingStringConverter.Emitted[1]);
 
-        // FORBIDDEN side effects, all absent: both attempts fail with the sanitized canonicalization error, the store
-        // never reached a durable write, and no event/receipt exists — so no fingerprint was produced and two differing
-        // fingerprints for one key are impossible.
-        Assert.False(first.IsSuccess);
-        Assert.IsType<OperationCanonicalizationException>(first.GetException());
-        Assert.False(second.IsSuccess);
-        Assert.IsType<OperationCanonicalizationException>(second.GetException());
+        // FORBIDDEN side effects, all absent: both attempts fail with the sanitized canonicalization error (secret-safe:
+        // no inner exception), the store never reached the durable-write STEP (AppendAttempts == 0) let alone a
+        // successful write (WriteCalls == 0), and no event/receipt exists — so no fingerprint was produced and two
+        // differing fingerprints for one key are impossible.
+        foreach (var result in new[] { first, second })
+        {
+            Assert.False(result.IsSuccess);
+            var ex = Assert.IsType<OperationCanonicalizationException>(result.GetException());
+            Assert.Null(ex.InnerException);
+        }
+
+        Assert.Equal(0, store.AppendAttempts);
         Assert.Equal(0, store.WriteCalls);
         Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
     }
@@ -191,18 +200,32 @@ public class ConditionalAppendShapeBoundaryTests
 
     private record ListEvent(List<string> Items) : IEventPayload;
 
-    /// <summary>Emits a valid JSON string that DIFFERS on every write; the boundary must ensure it never fingerprints.</summary>
+    /// <summary>
+    ///     Emits a valid JSON string that DIFFERS on every write; the boundary must ensure it never fingerprints. Records
+    ///     each emitted value so a test can prove the two attempts genuinely produced DISTINCT candidates (non-vacuous).
+    /// </summary>
     private sealed class AlternatingStringConverter : JsonConverter<string>
     {
         private static int _writeCalls;
+        private static readonly object Sync = new();
+        public static List<string> Emitted { get; } = new();
         public static int WriteCalls => Volatile.Read(ref _writeCalls);
-        public static void Reset() => Interlocked.Exchange(ref _writeCalls, 0);
+
+        public static void Reset()
+        {
+            Interlocked.Exchange(ref _writeCalls, 0);
+            lock (Sync) Emitted.Clear();
+        }
 
         public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
             reader.GetString() ?? string.Empty;
 
-        public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options) =>
-            writer.WriteStringValue($"{value}#{Interlocked.Increment(ref _writeCalls)}");
+        public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+        {
+            var emitted = $"{value}#{Interlocked.Increment(ref _writeCalls)}";
+            lock (Sync) Emitted.Add(emitted);
+            writer.WriteStringValue(emitted);
+        }
     }
 
     private sealed class RootConverter : JsonConverter<RootConverterEvent>
