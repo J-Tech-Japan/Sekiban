@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 namespace Sekiban.Dcb.Storage;
 
@@ -38,18 +39,14 @@ internal static class CanonicalShapeValidator
             return false;
         }
 
-        return IsNodeSupported(root, root.Options, new HashSet<Type>());
+        return IsNodeSupported(root, root.Options, new HashSet<Type> { root.Type });
     }
 
     private static bool IsSupportedType(Type type, JsonSerializerOptions options, HashSet<Type> visiting)
     {
-        // Allowlisted primitives never need metadata resolution — this also avoids GetTypeInfo throwing on a source-gen
-        // context that did not register a built-in leaf type.
-        if (IsAllowedLeaf(type))
-        {
-            return true;
-        }
-
+        // NOTE: leaves are NOT accepted before resolving metadata. A leaf's EFFECTIVE converter — which can be overridden
+        // at the options level, the type level ([JsonConverter] on the type), or captured as a property-level converter
+        // — must be resolved and confirmed built-in. An allowlisted CLR type with a custom converter is NOT supported.
         if (!visiting.Add(type))
         {
             return true; // cycle: this type is already being validated up-stack
@@ -80,6 +77,9 @@ internal static class CanonicalShapeValidator
         switch (typeInfo.Kind)
         {
             case JsonTypeInfoKind.Object:
+                // A structural object is bound by the built-in object/metadata converter; source-gen emits its metadata
+                // converter in the app assembly, so we trust Kind=Object structurally and recurse rather than checking
+                // this node's converter assembly. Each property's own converter and type are validated below.
                 foreach (var property in typeInfo.Properties)
                 {
                     if (property.CustomConverter is not null)
@@ -107,12 +107,16 @@ internal static class CanonicalShapeValidator
             case JsonTypeInfoKind.Dictionary:
                 return false; // conservative: maps excluded
 
-            default: // JsonTypeInfoKind.None
-                // A non-leaf type reaching here is converter-owned (Kind=None with no structural metadata). Leaves were
-                // already accepted in IsSupportedType before any metadata lookup, so anything here is unsupported.
-                return false;
+            default: // JsonTypeInfoKind.None — a leaf, OR a converter-owned type.
+                // Support only an allowlisted primitive CLR type whose EFFECTIVE converter is authoritatively built-in
+                // (lives in the System.Text.Json assembly). A custom/options/type-level converter on an otherwise
+                // allowed leaf — which could emit non-deterministic output — is rejected here.
+                return IsAllowedLeaf(typeInfo.Type) && IsBuiltInConverter(typeInfo.Converter);
         }
     }
+
+    private static bool IsBuiltInConverter(JsonConverter? converter) =>
+        converter is not null && converter.GetType().Assembly == typeof(JsonConverter).Assembly;
 
     private static bool IsAllowedLeaf(Type type)
     {

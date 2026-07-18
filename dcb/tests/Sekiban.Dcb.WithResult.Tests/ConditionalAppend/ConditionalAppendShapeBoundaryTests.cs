@@ -4,6 +4,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
@@ -14,14 +15,107 @@ using Xunit;
 namespace Sekiban.Dcb.Tests.ConditionalAppend;
 
 /// <summary>
-///     SEK-G15 conservative supported-shape boundary: only payloads whose effective JsonTypeInfo graph is provably
-///     deterministic may be fingerprinted. Converter-owned / non-object / non-deterministically-ordered shapes are
-///     rejected BEFORE any (de)serialization — proven here with a hostile valid-JSON converter that would produce a
-///     different output on every call: a real conditional executor invocation fails closed before the store write, the
-///     converter is never even invoked, and two attempts can never yield two fingerprints.
+///     SEK-G15 conservative supported-shape boundary. Only a payload whose effective JsonTypeInfo graph is provably built
+///     from deterministic, structure-preserving, authoritatively-built-in metadata may be fingerprinted. A custom
+///     converter — at the options, type, or property level, even on an OTHERWISE-ALLOWED primitive leaf — is rejected.
+///     Ordering note (kept truthful): canonical shape validation happens INSIDE the store's AppendIfUniqueAsync, i.e.
+///     AFTER the handler produced the event and after the executor serialized the candidate. So the handler and the
+///     payload converter DO run; what the boundary guarantees is that NO fingerprint is computed, NO EventId/append/
+///     receipt/durable write happens, and the store's WriteCalls stays zero.
 /// </summary>
 public class ConditionalAppendShapeBoundaryTests
 {
+    // ---- ComputeCanonical-level rejection vectors ----
+
+    [Fact]
+    public void RootCustomConverter_IsRejected()
+    {
+        var domain = DomainWith(e => e.RegisterEventType<RootConverterEvent>());
+        AssertRejected(domain, nameof(RootConverterEvent), "{\"value\":\"x\"}");
+    }
+
+    [Fact]
+    public void PropertyLevelConverterOnAllowedLeaf_IsRejected()
+    {
+        var domain = DomainWith(e => e.RegisterEventType<PropertyConverterEvent>());
+        AssertRejected(domain, nameof(PropertyConverterEvent), "{\"name\":\"x\"}");
+    }
+
+    [Fact]
+    public void TypeLevelConverterOnEnumLeaf_IsRejected()
+    {
+        var domain = DomainWith(e => e.RegisterEventType<EnumConverterEvent>());
+        AssertRejected(domain, nameof(EnumConverterEvent), "{\"color\":\"Red\"}");
+    }
+
+    [Fact]
+    public void OptionsLevelConverterOnStringLeaf_IsRejected()
+    {
+        var domain = DomainWithOptionsConverter();
+        AssertRejected(domain, nameof(PlainStringEvent), "{\"field\":\"x\"}");
+    }
+
+    [Fact]
+    public void UnorderedSetCollection_IsRejected()
+    {
+        var domain = DomainWith(e => e.RegisterEventType<SetEvent>());
+        AssertRejected(domain, nameof(SetEvent), "{\"items\":[\"a\"]}");
+    }
+
+    [Fact]
+    public void DictionaryCollection_IsRejected()
+    {
+        var domain = DomainWith(e => e.RegisterEventType<MapEvent>());
+        AssertRejected(domain, nameof(MapEvent), "{\"map\":{\"a\":1}}");
+    }
+
+    [Fact]
+    public void OrderedListOfBuiltInLeaves_IsSupported()
+    {
+        var domain = DomainWith(e => e.RegisterEventType<ListEvent>());
+        var json = domain.EventTypes.SerializeEventPayload(new ListEvent(new List<string> { "a", "b" }));
+        var r = OperationFingerprint.ComputeCanonical(
+            "s", "k", domain.EventTypes, nameof(ListEvent), Encoding.UTF8.GetBytes(json), Array.Empty<string>());
+        Assert.True(r.IsSuccess);
+    }
+
+    // ---- Real conditional-executor invocation with an alternating options-level primitive converter ----
+
+    [Fact]
+    public async Task OptionsLevelAlternatingConverter_RealExecutor_FailsClosed_NoWrite_NoTwoFingerprints()
+    {
+        AlternatingStringConverter.Reset();
+        var domain = DomainWithOptionsConverter();
+        var store = new InMemoryConditionalEventStore(domain.EventTypes);
+        var executor = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, domain), domain);
+        var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("op-alt") };
+
+        var handlerInvocations = 0;
+        Func<ShapeCommand, ICommandContext, Task<ResultBox<EventOrNone>>> handler = (_, ctx) =>
+        {
+            handlerInvocations++;
+            return ctx.AppendEvent(new PlainStringEvent("value"), new BoundaryTag("t"));
+        };
+
+        var first = await executor.ExecuteAsync(new ShapeCommand(), handler, options);
+        var second = await executor.ExecuteAsync(new ShapeCommand(), handler, options);
+
+        // PERMITTED, and asserted rather than denied: the handler ran on both attempts, and the alternating converter
+        // ran when the executor serialized the candidate (so its output genuinely differed across the two attempts).
+        Assert.Equal(2, handlerInvocations);
+        Assert.True(AlternatingStringConverter.WriteCalls >= 2);
+
+        // FORBIDDEN side effects, all absent: both attempts fail with the sanitized canonicalization error, the store
+        // never reached a durable write, and no event/receipt exists — so no fingerprint was produced and two differing
+        // fingerprints for one key are impossible.
+        Assert.False(first.IsSuccess);
+        Assert.IsType<OperationCanonicalizationException>(first.GetException());
+        Assert.False(second.IsSuccess);
+        Assert.IsType<OperationCanonicalizationException>(second.GetException());
+        Assert.Equal(0, store.WriteCalls);
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+    }
+
     private static DcbDomainTypes DomainWith(params Action<SimpleEventTypes>[] registrations)
     {
         var d = DomainType.GetDomainTypes();
@@ -33,78 +127,37 @@ public class ConditionalAppendShapeBoundaryTests
         return d;
     }
 
-    [Fact]
-    public void CustomConverterPayload_IsRejectedByTheBoundary()
+    private static DcbDomainTypes DomainWithOptionsConverter()
     {
-        var domain = DomainWith(e => e.RegisterEventType<HostileConverterEvent>());
+        var eventTypes = new SimpleEventTypes(
+            new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                PropertyNameCaseInsensitive = true,
+                Converters = { new AlternatingStringConverter() }
+            });
+        eventTypes.RegisterEventType<PlainStringEvent>();
+        var tagTypes = new SimpleTagTypes();
+        tagTypes.RegisterTagGroupType<BoundaryTag>();
+        return new DcbDomainTypes(
+            eventTypes,
+            tagTypes,
+            new SimpleTagProjectorTypes(),
+            new SimpleTagStatePayloadTypes(),
+            new SimpleMultiProjectorTypes(),
+            new SimpleQueryTypes(),
+            new JsonSerializerOptions());
+    }
+
+    private static void AssertRejected(DcbDomainTypes domain, string eventName, string payloadJson)
+    {
         var r = OperationFingerprint.ComputeCanonical(
-            "s", "k", domain.EventTypes, nameof(HostileConverterEvent),
-            Encoding.UTF8.GetBytes("{\"value\":\"x\"}"), Array.Empty<string>());
+            "s", "k", domain.EventTypes, eventName, Encoding.UTF8.GetBytes(payloadJson), Array.Empty<string>());
         Assert.False(r.IsSuccess);
         Assert.IsType<OperationCanonicalizationException>(r.GetException());
     }
 
-    [Fact]
-    public void UnorderedSetCollection_IsRejectedByTheBoundary()
-    {
-        var domain = DomainWith(e => e.RegisterEventType<SetEvent>());
-        var r = OperationFingerprint.ComputeCanonical(
-            "s", "k", domain.EventTypes, nameof(SetEvent),
-            Encoding.UTF8.GetBytes("{\"items\":[\"a\"]}"), Array.Empty<string>());
-        Assert.False(r.IsSuccess);
-        Assert.IsType<OperationCanonicalizationException>(r.GetException());
-    }
-
-    [Fact]
-    public void DictionaryCollection_IsRejectedByTheBoundary()
-    {
-        var domain = DomainWith(e => e.RegisterEventType<MapEvent>());
-        var r = OperationFingerprint.ComputeCanonical(
-            "s", "k", domain.EventTypes, nameof(MapEvent),
-            Encoding.UTF8.GetBytes("{\"map\":{\"a\":1}}"), Array.Empty<string>());
-        Assert.False(r.IsSuccess);
-        Assert.IsType<OperationCanonicalizationException>(r.GetException());
-    }
-
-    [Fact]
-    public void OrderedListCollection_IsSupported()
-    {
-        var domain = DomainWith(e => e.RegisterEventType<ListEvent>());
-        var json = domain.EventTypes.SerializeEventPayload(new ListEvent(new List<string> { "a", "b" }));
-        var r = OperationFingerprint.ComputeCanonical(
-            "s", "k", domain.EventTypes, nameof(ListEvent),
-            Encoding.UTF8.GetBytes(json), Array.Empty<string>());
-        Assert.True(r.IsSuccess);
-    }
-
-    [Fact]
-    public async Task HostileConverter_ConditionalExecutor_FailsClosedBeforeStoreWrite_NeverTwoFingerprints()
-    {
-        HostileConverter.Reset();
-        var domain = DomainWith(e => e.RegisterEventType<HostileConverterEvent>());
-        var store = new InMemoryConditionalEventStore(domain.EventTypes);
-        var executor = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, domain), domain);
-        var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("op-hostile") };
-
-        Func<HostileCommand, ICommandContext, Task<ResultBox<EventOrNone>>> handler =
-            (_, ctx) => ctx.AppendEvent(new HostileConverterEvent("x"), new BoundaryTag("t"));
-
-        var first = await executor.ExecuteAsync(new HostileCommand(), handler, options);
-        var second = await executor.ExecuteAsync(new HostileCommand(), handler, options);
-
-        // Both fail closed with the sanitized canonicalization error, BEFORE the store made any durable write. The
-        // boundary rejects the shape inside AppendIfUniqueAsync before ComputeCanonical ever hashes anything, so NO
-        // fingerprint is produced on either attempt — there can be no two differing fingerprints for the key. (The
-        // executor does serialize the event to form the candidate, which is why the converter runs; but that output is
-        // never fingerprinted and never persisted.)
-        Assert.False(first.IsSuccess);
-        Assert.IsType<OperationCanonicalizationException>(first.GetException());
-        Assert.False(second.IsSuccess);
-        Assert.IsType<OperationCanonicalizationException>(second.GetException());
-        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue()); // no durable claim / no write
-    }
-
-    private record HostileCommand : ICommand;
+    private record ShapeCommand : ICommand;
 
     private record BoundaryTag(string Id) : IStringTagGroup<BoundaryTag>
     {
@@ -114,8 +167,23 @@ public class ConditionalAppendShapeBoundaryTests
         public string GetId() => Id;
     }
 
-    [JsonConverter(typeof(HostileConverter))]
-    private record HostileConverterEvent(string Value) : IEventPayload;
+    // An ordinary object whose string leaf is bound by an OPTIONS-LEVEL custom converter (see DomainWithOptionsConverter).
+    private record PlainStringEvent(string Field) : IEventPayload;
+
+    // A type-level custom converter on the whole event (root Kind=None).
+    [JsonConverter(typeof(RootConverter))]
+    private record RootConverterEvent(string Value) : IEventPayload;
+
+    // A property-level custom converter on an otherwise-allowed string leaf.
+    private record PropertyConverterEvent(
+        [property: JsonConverter(typeof(AlternatingStringConverter))]
+        string Name) : IEventPayload;
+
+    // A type-level custom converter on an enum leaf.
+    private record EnumConverterEvent(Color Color) : IEventPayload;
+
+    [JsonConverter(typeof(CustomColorConverter))]
+    private enum Color { Red, Green }
 
     private record SetEvent(HashSet<string> Items) : IEventPayload;
 
@@ -123,27 +191,42 @@ public class ConditionalAppendShapeBoundaryTests
 
     private record ListEvent(List<string> Items) : IEventPayload;
 
-    /// <summary>Emits valid but DIFFERENT JSON on every write; the boundary must ensure it is never reached.</summary>
-    private sealed class HostileConverter : JsonConverter<HostileConverterEvent>
+    /// <summary>Emits a valid JSON string that DIFFERS on every write; the boundary must ensure it never fingerprints.</summary>
+    private sealed class AlternatingStringConverter : JsonConverter<string>
     {
         private static int _writeCalls;
         public static int WriteCalls => Volatile.Read(ref _writeCalls);
         public static void Reset() => Interlocked.Exchange(ref _writeCalls, 0);
 
-        public override HostileConverterEvent Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+            reader.GetString() ?? string.Empty;
+
+        public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options) =>
+            writer.WriteStringValue($"{value}#{Interlocked.Increment(ref _writeCalls)}");
+    }
+
+    private sealed class RootConverter : JsonConverter<RootConverterEvent>
+    {
+        public override RootConverterEvent Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             using var doc = JsonDocument.ParseValue(ref reader);
-            var value = doc.RootElement.TryGetProperty("value", out var v) ? v.GetString() ?? string.Empty : string.Empty;
-            return new HostileConverterEvent(value);
+            return new RootConverterEvent(doc.RootElement.TryGetProperty("value", out var v) ? v.GetString() ?? "" : "");
         }
 
-        public override void Write(Utf8JsonWriter writer, HostileConverterEvent value, JsonSerializerOptions options)
+        public override void Write(Utf8JsonWriter writer, RootConverterEvent value, JsonSerializerOptions options)
         {
-            var call = Interlocked.Increment(ref _writeCalls);
             writer.WriteStartObject();
-            writer.WriteNumber("call", call); // non-deterministic: differs every time
             writer.WriteString("value", value.Value);
             writer.WriteEndObject();
         }
+    }
+
+    private sealed class CustomColorConverter : JsonConverter<Color>
+    {
+        public override Color Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+            Enum.Parse<Color>(reader.GetString() ?? nameof(Color.Red));
+
+        public override void Write(Utf8JsonWriter writer, Color value, JsonSerializerOptions options) =>
+            writer.WriteStringValue(value.ToString());
     }
 }

@@ -25,12 +25,21 @@ public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditi
     private readonly IEventTypes _eventTypes;
     private readonly ConcurrentDictionary<string, ServiceClaims> _claimsByService = new(StringComparer.Ordinal);
 
+    private int _writeCalls;
+
     public InMemoryConditionalEventStore(IEventTypes eventTypes, IServiceIdProvider? serviceIdProvider = null)
         : base(eventTypes, serviceIdProvider)
     {
         _eventTypes = eventTypes;
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
     }
+
+    /// <summary>
+    ///     Number of times a conditional append actually reached the durable write (the Appended path). A rejected
+    ///     append (fault-gate, canonicalization boundary, or key-reuse) never increments this — so a test can assert the
+    ///     forbidden side effect did NOT happen, not merely that the store looks empty.
+    /// </summary>
+    public int WriteCalls => Volatile.Read(ref _writeCalls);
 
     public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
         WriteConditionCapabilityDescriptor.Supporting(ProviderName, WriteConditionKind.SingleEventUniqueKey);
@@ -90,6 +99,7 @@ public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditi
 
             // First claim: write the event through the base store, then record the claim. The base write is synchronous,
             // so blocking on it here holds no async gap; the whole (write + claim) is atomic under this lock.
+            Interlocked.Increment(ref _writeCalls);
             var writeResult = base.WriteSerializableEventsAsync(new[] { request.Event }).GetAwaiter().GetResult();
             if (!writeResult.IsSuccess)
             {
