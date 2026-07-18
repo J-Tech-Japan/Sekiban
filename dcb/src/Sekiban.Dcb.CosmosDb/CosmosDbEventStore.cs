@@ -28,7 +28,7 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "CosmosDb");
 
-    private ConditionalAppendCoordinator? _conditionalAppend;
+    private readonly ConditionalAppendCoordinator _conditionalAppend;
 
     /// <summary>
     ///     SEK-G16 conditional (unique-key) append. The claim event is created under the deterministic id, so the existing
@@ -39,19 +39,13 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
     ///     the committed state. The real <see cref="CosmosException" /> is preserved as the diagnostic cause on a key-reuse
     ///     conflict. The unconditional write path is untouched.
     /// </summary>
-    private ConditionalAppendCoordinator ConditionalAppend =>
-        _conditionalAppend ??= new ConditionalAppendCoordinator(
-            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
-            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
-
-    /// <inheritdoc />
-    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => ConditionalAppend.Descriptor;
-
-    /// <inheritdoc />
     public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default) =>
-        ConditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
+        _conditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => _conditionalAppend.Descriptor;
 
     private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
         Guid deterministicId,
@@ -169,6 +163,9 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _containerResolver = containerResolver ?? throw new ArgumentNullException(nameof(containerResolver));
         _logger = logger;
+        _conditionalAppend = new ConditionalAppendCoordinator(
+            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
+            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
     }
 
     /// <summary>

@@ -21,7 +21,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
     IConditionalEventStore, IWriteConditionCapabilityProvider
 {
     private const string ConditionalProviderName = "Sqlite";
-    private ConditionalAppendCoordinator? _conditionalAppend;
+    private readonly ConditionalAppendCoordinator _conditionalAppend;
 
     /// <summary>
     ///     SEK-G16 conditional (unique-key) append. This is a NEW path — the unconditional <c>INSERT OR REPLACE</c> write
@@ -30,19 +30,13 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
     ///     wins; a second writer hits the primary-key constraint and is classified by fingerprint against the stored
     ///     winner. All shared semantics live in <see cref="ConditionalAppendExecution" />.
     /// </summary>
-    private ConditionalAppendCoordinator ConditionalAppend =>
-        _conditionalAppend ??= new ConditionalAppendCoordinator(
-            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
-            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
-
-    /// <inheritdoc />
-    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => ConditionalAppend.Descriptor;
-
-    /// <inheritdoc />
     public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default) =>
-        ConditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
+        _conditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => _conditionalAppend.Descriptor;
 
     private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
         Guid deterministicId,
@@ -190,6 +184,9 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
         _options = options ?? new SqliteEventStoreOptions();
         _logger = logger;
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+        _conditionalAppend = new ConditionalAppendCoordinator(
+            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
+            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
 
         if (_options.AutoCreateDatabase)
         {

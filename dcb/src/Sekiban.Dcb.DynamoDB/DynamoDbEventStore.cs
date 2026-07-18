@@ -29,7 +29,7 @@ public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorPr
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "DynamoDB");
 
-    private ConditionalAppendCoordinator? _conditionalAppend;
+    private readonly ConditionalAppendCoordinator _conditionalAppend;
 
     /// <summary>
     ///     SEK-G16 conditional (unique-key) append. The claim event is written under the deterministic id, so the existing
@@ -41,19 +41,13 @@ public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorPr
     ///     read-back rather than being silently idempotency-collapsed by DynamoDB. The unconditional write path is
     ///     untouched.
     /// </summary>
-    private ConditionalAppendCoordinator ConditionalAppend =>
-        _conditionalAppend ??= new ConditionalAppendCoordinator(
-            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
-            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
-
-    /// <inheritdoc />
-    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => ConditionalAppend.Descriptor;
-
-    /// <inheritdoc />
     public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default) =>
-        ConditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
+        _conditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => _conditionalAppend.Descriptor;
 
     private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
         Guid deterministicId,
@@ -200,6 +194,9 @@ public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorPr
         _logger = logger;
         _options = context.Options;
         _client = context.Client;
+        _conditionalAppend = new ConditionalAppendCoordinator(
+            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
+            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
     }
 
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();

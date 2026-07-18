@@ -25,7 +25,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "Postgres");
 
-    private ConditionalAppendCoordinator? _conditionalAppend;
+    private readonly ConditionalAppendCoordinator _conditionalAppend;
 
     /// <summary>
     ///     SEK-G16 conditional (unique-key) append. The claim event is inserted under the deterministic id, so the
@@ -35,19 +35,13 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     ///     and the retrying execution strategy it uses are untouched; the conditional path uses a plain transaction
     ///     because a 23505 is a genuine conflict, not a transient to retry.
     /// </summary>
-    private ConditionalAppendCoordinator ConditionalAppend =>
-        _conditionalAppend ??= new ConditionalAppendCoordinator(
-            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
-            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
-
-    /// <inheritdoc />
-    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => ConditionalAppend.Descriptor;
-
-    /// <inheritdoc />
     public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
         CancellationToken cancellationToken = default) =>
-        ConditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
+        _conditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => _conditionalAppend.Descriptor;
 
     private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
         Guid deterministicId,
@@ -129,6 +123,9 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         _eventTypes = eventTypes;
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _logger = logger ?? NullLogger<PostgresEventStore>.Instance;
+        _conditionalAppend = new ConditionalAppendCoordinator(
+            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
+            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
     }
 
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
