@@ -111,31 +111,24 @@ public sealed class SqliteConditionalAppendTests : IDisposable
     }
 
     [Fact]
-    public async Task PostCommitResponseLoss_Transport_FirstCallAmbiguous_RetryConvergesToAlreadyCommitted()
+    public async Task PostCommitResponseLoss_Transport_ResolvesSameCall_ToAlreadyCommitted_ExactReceipt()
     {
         // TRUE post-commit ambiguity (distinct from rollback-before-commit): the transaction commits durably, then the
-        // response is lost via a transport exception. The first call is ambiguous (error); a retry through a FRESH store
-        // reads the committed winner and converges to AlreadyCommitted — no second event.
-        var transport = new InvalidOperationException("connection reset after commit");
+        // response is lost via a transport exception. The store signals the post-commit ambiguity marker, and the shared
+        // orchestrator resolves it authoritatively ON THE SAME CALL via bounded read-back — returning AlreadyCommitted
+        // with a receipt IDENTICAL to the stored winner, never the raw transport exception.
         var writer = NewStore();
-        writer.AfterConditionalCommitHook = () => throw transport;
+        writer.AfterConditionalCommitHook = () => throw new InvalidOperationException("connection reset after commit");
 
         var first = await writer.AppendIfUniqueAsync(
             new ConditionalAppendRequest("mig-postcommit", ConditionalAppendScenarios.Marker(_domain, "v")));
 
-        Assert.False(first.IsSuccess);
-        Assert.Same(transport, first.GetException());                              // first call surfaces the ORIGINAL transport failure
-        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // but the write IS durable
-
-        // Retry through a genuinely fresh store: converges to AlreadyCommitted with a receipt IDENTICAL to the stored winner.
+        Assert.True(first.IsSuccess, first.IsSuccess ? "" : first.GetException().ToString());
+        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, first.GetValue().Status);
         var deterministicId = ConditionalAppendIdentity.DeriveEventId("default", OperationFingerprint.NormalizeKey("mig-postcommit"));
         var winner = (await NewStore().ReadSerializableEventAsync(deterministicId)).GetValue();
-        var retry = (await NewStore().AppendIfUniqueAsync(
-            new ConditionalAppendRequest("mig-postcommit", ConditionalAppendScenarios.Marker(_domain, "v")))).GetValue();
-
-        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.Status);
-        ConditionalAppendScenarios.AssertReceiptMatchesStoredWinner(retry, "default", "mig-postcommit", _domain, winner);
-        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // no second event
+        ConditionalAppendScenarios.AssertReceiptMatchesStoredWinner(first.GetValue(), "default", "mig-postcommit", _domain, winner);
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // exactly one durable event
     }
 
     [Fact]

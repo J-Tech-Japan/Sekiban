@@ -91,10 +91,19 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         {
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            // Test seam ONLY: simulate the response/return being lost AFTER a durable commit (see AfterConditionalCommitHook).
+            // The claim is now durably committed. A failure past this point is a LOST RESPONSE, not a failed write: signal
+            // it as the post-commit ambiguity marker so the shared orchestrator resolves it authoritatively rather than
+            // surfacing a raw transport error. (The seam is test-only; production has no hook.)
             if (AfterConditionalCommitHook is not null)
             {
-                await AfterConditionalCommitHook();
+                try
+                {
+                    await AfterConditionalCommitHook();
+                }
+                catch (Exception ex)
+                {
+                    throw new PostCommitResponseLostException(ex);
+                }
             }
             return ConditionalWriteOutcome.Wrote();
         }

@@ -99,10 +99,18 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             options,
             serviceId,
             tagsSettings).ConfigureAwait(false);
-        // Test seam ONLY: simulate the response/return being lost AFTER the event and all tag rows are durable.
+        // The event and all tag rows are now durable: a failure past this point is a LOST RESPONSE, signalled as the
+        // post-commit ambiguity marker for the shared orchestrator to resolve authoritatively. (The seam is test-only.)
         if (AfterConditionalCommitHook is not null)
         {
-            await AfterConditionalCommitHook().ConfigureAwait(false);
+            try
+            {
+                await AfterConditionalCommitHook().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                throw new PostCommitResponseLostException(ex);
+            }
         }
         return ConditionalWriteOutcome.Wrote();
     }

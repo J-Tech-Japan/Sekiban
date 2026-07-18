@@ -97,23 +97,25 @@ public class PostgresConditionalAppendTests : PostgresTestBase
         // TRUE post-commit ambiguity on the real container (distinct from the cancelled-before-commit rollback test): the
         // transaction commits durably, then the response is lost via a transport exception. First call ambiguous; a retry
         // reads the committed winner and converges to AlreadyCommitted — no second event.
-        var transport = new InvalidOperationException("connection reset after commit");
         var store = (PostgresEventStore)Fixture.EventStore;
-        store.AfterConditionalCommitHook = () => throw transport;
+        store.AfterConditionalCommitHook = () => throw new InvalidOperationException("connection reset after commit");
         try
         {
+            // The claim commits durably, then the response is lost. The store signals the post-commit ambiguity marker and
+            // the shared orchestrator resolves it authoritatively ON THE SAME CALL to AlreadyCommitted — never raw transport.
             var first = await Conditional.AppendIfUniqueAsync(
                 new ConditionalAppendRequest("pg-postcommit", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")));
-            Assert.False(first.IsSuccess);
-            Assert.Same(transport, first.GetException());   // first call surfaces the ORIGINAL transport failure
-            Assert.Equal(1, await DurableCount());           // but the write IS durable
+            Assert.True(first.IsSuccess, first.IsSuccess ? "" : first.GetException().ToString());
+            Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, first.GetValue().Status);
+            Assert.Equal(1, await DurableCount());
         }
         finally
         {
             store.AfterConditionalCommitHook = null;
         }
 
-        // Retry through a GENUINELY FRESH PostgresEventStore/DbContext over the same database (default ServiceId).
+        // And a subsequent retry through a GENUINELY FRESH PostgresEventStore/DbContext over the same database converges to
+        // the same AlreadyCommitted receipt, verified against the independently-read stored winner.
         var freshStore = new PostgresEventStore(
             Fixture.DbContextFactory, Fixture.DomainTypes.EventTypes, new DefaultServiceIdProvider());
         var deterministicId = ConditionalAppendIdentity.DeriveEventId("default", OperationFingerprint.NormalizeKey("pg-postcommit"));
@@ -142,6 +144,22 @@ public class PostgresConditionalAppendTests : PostgresTestBase
         // A store built the way production builds it (from the DbContext factory) carries no hook — construction touches no DB.
         var store = new PostgresEventStore(Fixture.DbContextFactory, Fixture.DomainTypes.EventTypes, new DefaultServiceIdProvider());
         Assert.Null(store.AfterConditionalCommitHook);
+
+        // The hook is not constructor-injected and not a public Func<Task> surface.
+        foreach (var ctor in typeof(PostgresEventStore).GetConstructors())
+        {
+            Assert.DoesNotContain(ctor.GetParameters(), p => p.ParameterType == typeof(Func<Task>));
+        }
+        Assert.DoesNotContain(
+            typeof(PostgresEventStore).GetProperties(BindingFlags.Instance | BindingFlags.Public),
+            p => p.PropertyType == typeof(Func<Task>));
+
+        // The Postgres assembly grants internals only to the intended test assembly (exact allowlist).
+        var ivt = typeof(PostgresEventStore).Assembly
+            .GetCustomAttributes<System.Runtime.CompilerServices.InternalsVisibleToAttribute>()
+            .Select(a => a.AssemblyName.Split(',')[0].Trim())
+            .ToArray();
+        Assert.Equal(new[] { "Sekiban.Dcb.Postgres.Tests" }, ivt);
     }
 
     [Fact]

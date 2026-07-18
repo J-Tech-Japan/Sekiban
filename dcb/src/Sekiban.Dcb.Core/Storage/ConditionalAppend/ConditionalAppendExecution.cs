@@ -35,6 +35,9 @@ public readonly record struct ConditionalWriteOutcome(bool Written, Exception? C
 /// </summary>
 public static class ConditionalAppendExecution
 {
+    /// <summary>The default independent budget for authoritative post-ambiguity verification (winner read + committed gate).</summary>
+    public static readonly TimeSpan DefaultVerificationBudget = TimeSpan.FromSeconds(30);
+
     public static async Task<ResultBox<ConditionalAppendReceipt>> RunAsync(
         ConditionalAppendRequest request,
         string serviceId,
@@ -43,7 +46,8 @@ public static class ConditionalAppendExecution
         Func<Guid, SerializableEvent, CancellationToken, Task<ConditionalWriteOutcome>> tryWriteClaim,
         Func<Guid, CancellationToken, Task<SerializableEvent?>> readCommittedWinner,
         Func<SerializableEvent, CancellationToken, Task>? ensureCommittedAsync = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        TimeSpan? verificationBudget = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(eventTypes);
@@ -81,23 +85,33 @@ public static class ConditionalAppendExecution
         // storage identity is a pure function of the key). Payload/tags/metadata/sortable-id are preserved.
         var claimEvent = request.Event with { Id = deterministicId };
 
+        var budget = verificationBudget ?? DefaultVerificationBudget;
+
         ConditionalWriteOutcome outcome;
         try
         {
             outcome = await tryWriteClaim(deterministicId, claimEvent, cancellationToken);
         }
+        catch (PostCommitResponseLostException ex)
+        {
+            // The provider KNOWS the claim committed durably but the response was lost. Resolve authoritatively via a
+            // BOUNDED, caller-independent verification: AlreadyCommitted on proof, else typed AmbiguousAfterWrite with the
+            // original transport/cancellation cause — never the raw transport exception.
+            return await ResolveAmbiguousAfterWriteAsync(
+                serviceId, request.IdempotencyKey, eventTypes, providerName, deterministicId, attemptFingerprint,
+                readCommittedWinner, ensureCommittedAsync, ex.OriginalCause, budget);
+        }
         catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
         {
-            // Ambiguous: the write may have durably committed before the cancellation/timeout. Resolve it authoritatively
-            // by reading the winner back (with a fresh token, since the caller's may be cancelled) and classifying.
-            return await ResolveByReadbackAsync(
+            // Ambiguous: the write may have committed before the cancellation/timeout. Resolve it the same way — a bounded
+            // independent verification (the caller's token may be cancelled, so it must NOT gate the verification).
+            return await ResolveAmbiguousAfterWriteAsync(
                 serviceId, request.IdempotencyKey, eventTypes, providerName, deterministicId, attemptFingerprint,
-                readCommittedWinner, ensureCommittedAsync, ex,
-                ConditionalAppendInDoubtReason.AmbiguousAfterWrite, CancellationToken.None);
+                readCommittedWinner, ensureCommittedAsync, ex, budget);
         }
         catch (Exception ex)
         {
-            // Any other write failure is surfaced as-is (permanent/unexpected); it is not classified as retryable in-doubt.
+            // Any other write failure is surfaced as-is (permanent/unexpected pre-commit); not classified as in-doubt.
             return ResultBox.Error<ConditionalAppendReceipt>(ex);
         }
 
@@ -117,6 +131,87 @@ public static class ConditionalAppendExecution
             serviceId, request.IdempotencyKey, eventTypes, providerName, deterministicId, attemptFingerprint,
             readCommittedWinner, ensureCommittedAsync, outcome.ConflictException,
             ConditionalAppendInDoubtReason.WinnerUnreadableAfterConflict, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Resolves a post-write ambiguity (durable commit whose response was lost, or a cancellation/timeout that may
+    ///     have committed) with a BOUNDED, caller-independent verification: an authoritative winner read + fingerprint +
+    ///     committed-state gate, all under a fresh budget token (never the caller's, which may already be cancelled, and
+    ///     never unbounded). On proof it returns the original winner's receipt (AlreadyCommitted) on THIS call; if the
+    ///     bounded verification cannot complete (budget exceeded, no readable winner) it returns typed
+    ///     <see cref="ConditionalAppendInDoubtReason.AmbiguousAfterWrite" /> preserving the original cause (and its exact
+    ///     CancellationToken when the cause was a cancellation). A disagreeing committed row is still non-retryable
+    ///     corruption; a different fingerprint is still a key-reuse conflict.
+    /// </summary>
+    private static async Task<ResultBox<ConditionalAppendReceipt>> ResolveAmbiguousAfterWriteAsync(
+        string serviceId,
+        string idempotencyKey,
+        IEventTypes eventTypes,
+        string providerName,
+        Guid deterministicId,
+        string attemptFingerprint,
+        Func<Guid, CancellationToken, Task<SerializableEvent?>> readCommittedWinner,
+        Func<SerializableEvent, CancellationToken, Task>? ensureCommittedAsync,
+        Exception cause,
+        TimeSpan budget)
+    {
+        ConditionalAppendInDoubtException InDoubt() => ConditionalAppendInDoubtException.Create(
+            providerName, serviceId, deterministicId, ConditionalAppendInDoubtReason.AmbiguousAfterWrite, cause);
+
+        using var cts = new CancellationTokenSource(budget);
+        SerializableEvent? existing;
+        try
+        {
+            existing = await readCommittedWinner(deterministicId, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Bounded budget exceeded (or the read itself cancelled): unresolved — typed in-doubt, original cause preserved.
+            return ResultBox.Error<ConditionalAppendReceipt>(InDoubt());
+        }
+
+        if (existing is null)
+        {
+            return ResultBox.Error<ConditionalAppendReceipt>(InDoubt());
+        }
+
+        var existingFingerprintResult = OperationFingerprint.ComputeCanonical(
+            serviceId, idempotencyKey, eventTypes, existing.EventPayloadName, existing.Payload, existing.Tags);
+        if (!existingFingerprintResult.IsSuccess)
+        {
+            return ResultBox.Error<ConditionalAppendReceipt>(existingFingerprintResult.GetException());
+        }
+
+        var existingFingerprint = existingFingerprintResult.GetValue();
+        if (!string.Equals(existingFingerprint, attemptFingerprint, StringComparison.Ordinal))
+        {
+            return ResultBox.Error<ConditionalAppendReceipt>(
+                new KeyReuseConflictException(existingFingerprint, attemptFingerprint, providerName, cause));
+        }
+
+        if (ensureCommittedAsync is not null)
+        {
+            try
+            {
+                await ensureCommittedAsync(existing, cts.Token);
+            }
+            catch (ConditionalAppendCommittedStateCorruptionException corruption)
+            {
+                return ResultBox.Error<ConditionalAppendReceipt>(corruption);
+            }
+            catch (Exception)
+            {
+                // The bounded committed-state gate could not complete (budget exceeded / transient): typed in-doubt.
+                return ResultBox.Error<ConditionalAppendReceipt>(InDoubt());
+            }
+        }
+
+        return ResultBox.FromValue(
+            new ConditionalAppendReceipt(
+                ConditionalAppendStatus.AlreadyCommittedSameOperation,
+                existing.Id,
+                existing.SortableUniqueIdValue,
+                existingFingerprint));
     }
 
     /// <summary>

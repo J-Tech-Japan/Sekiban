@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Dcb.Domain;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Domains;
@@ -78,5 +79,52 @@ public class ConditionalAppendSeamArchitectureTests
         var store = new CosmosDbEventStore(
             context, domain.EventTypes, new DefaultServiceIdProvider(), new DefaultCosmosContainerResolver(options));
         Assert.Null(store.AfterConditionalCommitHook);
+    }
+
+    [Fact]
+    public void InternalsVisibleTo_Allowlist_IsExactlyTheIntendedAssemblies()
+    {
+        // The provider assemblies grant internals only to the intended test assembly; Core grants ONLY the three provider
+        // assemblies (for the internal post-commit-response-loss signal) — never a test assembly.
+        AssertIvtAllowlist(typeof(SqliteEventStore).Assembly, "Sekiban.Dcb.WithResult.Tests");
+        AssertIvtAllowlist(typeof(CosmosDbEventStore).Assembly, "Sekiban.Dcb.WithResult.Tests");
+        AssertIvtAllowlist(
+            typeof(IConditionalEventStore).Assembly,
+            "Sekiban.Dcb.Postgres", "Sekiban.Dcb.Sqlite", "Sekiban.Dcb.CosmosDb");
+    }
+
+    [Theory]
+    [MemberData(nameof(SeamStoreTypes))]
+    public void Hook_IsNotConstructorInjected_NorAnOptionOrDiSurface(Type storeType)
+    {
+        // Not a constructor parameter (so DI/composition cannot supply it).
+        foreach (var ctor in storeType.GetConstructors())
+        {
+            Assert.DoesNotContain(ctor.GetParameters(), p =>
+                p.Name == "afterConditionalCommitHook" || p.ParameterType == typeof(Func<Task>));
+        }
+
+        // Not a public settable option/DI surface: no PUBLIC Func<Task> property anywhere on the store.
+        Assert.DoesNotContain(
+            storeType.GetProperties(BindingFlags.Instance | BindingFlags.Public),
+            p => p.PropertyType == typeof(Func<Task>));
+    }
+
+    [Fact]
+    public void OptionsTypes_DoNotExposeTheHook()
+    {
+        Assert.DoesNotContain(
+            typeof(CosmosDbEventStoreOptions).GetProperties(), p => p.PropertyType == typeof(Func<Task>));
+        Assert.DoesNotContain(
+            typeof(SqliteEventStoreOptions).GetProperties(), p => p.PropertyType == typeof(Func<Task>));
+    }
+
+    private static void AssertIvtAllowlist(Assembly assembly, params string[] expected)
+    {
+        var actual = assembly.GetCustomAttributes<InternalsVisibleToAttribute>()
+            .Select(a => a.AssemblyName.Split(',')[0].Trim())
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(expected.OrderBy(n => n, StringComparer.Ordinal).ToArray(), actual);
     }
 }

@@ -160,16 +160,20 @@ public class CosmosConditionalAppendTests
                     Guid.CreateVersion7(), new EventMetadata("c", "c", "u"), new List<string> { "T:a", "T:b", "T:c" })
                 .ToSerializableEvent(_domain.EventTypes);
 
-        var ambiguous = await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(
+        // The event AND all three tag rows commit durably, then the response is lost. The store signals the post-commit
+        // ambiguity marker; the shared orchestrator resolves it authoritatively ON THE SAME CALL — bounded read-back plus
+        // the committed-state gate verifying all tag rows — to AlreadyCommitted with the exact stored-winner receipt.
+        var deterministicId = ConditionalAppendIdentity.DeriveEventId(ServiceId, OperationFingerprint.NormalizeKey("cosmos-postcommit"));
+        var resolved = await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(
             new ConditionalAppendRequest("cosmos-postcommit", ThreeTagMarker()));
 
-        Assert.False(ambiguous.IsSuccess);
-        Assert.Same(transport, ambiguous.GetException());   // first call surfaces the ORIGINAL transport failure
-        Assert.Single(first.Events.Items);                   // event durable
-        Assert.Equal(3, first.Tags.Items.Count);             // all three tag rows durable before the lost response
+        Assert.True(resolved.IsSuccess, resolved.IsSuccess ? "" : resolved.GetException().ToString());
+        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, resolved.GetValue().Status);
+        Assert.Single(first.Events.Items);                   // exactly one event
+        Assert.Equal(3, first.Tags.Items.Count);             // all three tag rows, no duplicates
 
-        // Retry on a fresh store converges to AlreadyCommitted with the EXACT stored-winner receipt; no duplicate rows.
-        var deterministicId = ConditionalAppendIdentity.DeriveEventId(ServiceId, OperationFingerprint.NormalizeKey("cosmos-postcommit"));
+        // A subsequent retry on a genuinely fresh store converges to the same AlreadyCommitted receipt, with every ordered
+        // tag row present/visible and no duplicates.
         var winner = (await first.Store.ReadSerializableEventAsync(deterministicId)).GetValue();
         var second = NewLineage(client, options);
         var retry = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(

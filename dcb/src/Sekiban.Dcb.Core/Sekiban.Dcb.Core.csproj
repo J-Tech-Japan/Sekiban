@@ -45,4 +45,18 @@
         <ProjectReference Include="..\Sekiban.Dcb.Core.Model\Sekiban.Dcb.Core.Model.csproj"/>
     </ItemGroup>
 
+    <!-- The internal post-commit-response-loss signal is raised by these provider assemblies and caught by the shared
+         orchestrator; grant them access to the internal type only. -->
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>Sekiban.Dcb.Postgres</_Parameter1>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>Sekiban.Dcb.Sqlite</_Parameter1>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>Sekiban.Dcb.CosmosDb</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
 </Project>

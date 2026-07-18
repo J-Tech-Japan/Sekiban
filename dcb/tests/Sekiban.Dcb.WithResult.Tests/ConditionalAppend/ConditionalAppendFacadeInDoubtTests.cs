@@ -1,6 +1,7 @@
 using Dcb.Domain;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -125,20 +126,32 @@ public class ConditionalAppendFacadeInDoubtTests
     {
         var (executor, store) = NewExecutor(_ => throw new InvalidOperationException("store must not be reached"));
 
+        // DIRECT probes for the allocation stage: install counting EventId/SortableUniqueId factories on the underlying
+        // core executor (reached by reflection, so no cross-assembly type/IVT coupling). If validation moved after
+        // allocation, these would be > 0.
+        const System.Reflection.BindingFlags nonPublicInstance =
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var core = typeof(GeneralSekibanExecutor).GetField("_core", nonPublicInstance)!.GetValue(executor)!;
+        var eventIdAllocations = 0;
+        var sortableAllocations = 0;
+        core.GetType().GetProperty("ConditionalEventIdFactory", nonPublicInstance)!
+            .SetValue(core, (Func<Guid>)(() => { eventIdAllocations++; return Guid.CreateVersion7(); }));
+        core.GetType().GetProperty("ConditionalSortableIdFactory", nonPublicInstance)!
+            .SetValue(core, (Func<string>)(() => { sortableAllocations++; return SortableUniqueId.GenerateNew(); }));
+
         var result = await ((ISerializedConditionalSekibanDcbExecutor)executor)
             .CommitSerializableEventConditionallyAsync(SerializedRequest(version: 999));
 
         Assert.False(result.IsSuccess);
         Assert.IsType<UnsupportedSerializedCommitVersionException>(result.GetException());
-        // The version gate runs BEFORE capability resolution, which runs before EventId/SortableUniqueId allocation,
-        // candidate serialization/canonicalization, and any provider read/append. Proving the FIRST observable stage
-        // (capability resolution) never ran, plus zero provider reads/appends, proves nothing downstream ran either — the
-        // executor short-circuits on version before touching the store at all. Non-vacuous: moving the version check after
-        // capability resolution would make DescribeCalls == 1 and fail this test.
+        // Every preflight stage the packet names, proven zero directly and non-vacuously (moving the version check after
+        // any of these would trip the corresponding counter):
         Assert.Equal(0, store.DescribeCalls);   // capability resolution
-        Assert.Equal(0, store.ReadCalls);        // provider reads
+        Assert.Equal(0, eventIdAllocations);     // EventId allocation
+        Assert.Equal(0, sortableAllocations);    // SortableUniqueId allocation
+        Assert.Equal(0, store.ReadCalls);        // provider reads (serialization/canonicalization happen inside the append)
         Assert.Equal(0, store.WriteCalls);       // unconditional writes
-        Assert.Equal(0, store.AppendAttempts);   // conditional append (EventId alloc + serialization happen just before this)
+        Assert.Equal(0, store.AppendAttempts);   // conditional append (payload canonicalization happens inside it)
     }
 
     private record UniqueMarkerEvent(string Value) : IEventPayload;

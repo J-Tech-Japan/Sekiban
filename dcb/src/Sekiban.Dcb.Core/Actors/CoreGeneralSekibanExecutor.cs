@@ -26,6 +26,15 @@ public class CoreGeneralSekibanExecutor
     private readonly IEventPublisher? _eventPublisher;
     private readonly IEventStore _eventStore;
 
+    /// <summary>
+    ///     Test seam ONLY (never set in production): the EventId / SortableUniqueId generators used by the serialized
+    ///     conditional-commit path. Making the allocation stage injectable lets a test prove it is NOT reached when an
+    ///     unsupported wire version is rejected first — a direct, non-vacuous ordering probe. Defaults are the real
+    ///     generators, so production behaviour is unchanged.
+    /// </summary>
+    internal Func<Guid> ConditionalEventIdFactory { get; set; } = Guid.CreateVersion7;
+    internal Func<string> ConditionalSortableIdFactory { get; set; } = () => SortableUniqueId.GenerateNew();
+
     public CoreGeneralSekibanExecutor(
         IEventStore eventStore,
         IActorObjectAccessor actorAccessor,
@@ -1021,8 +1030,8 @@ public class CoreGeneralSekibanExecutor
             }
 
             var candidate = request.EventCandidate;
-            var eventId = Guid.CreateVersion7();
-            var sortableId = SortableUniqueId.GenerateNew();
+            var eventId = ConditionalEventIdFactory();
+            var sortableId = ConditionalSortableIdFactory();
             var metadata = new EventMetadata(eventId.ToString(), "SerializedConditionalCommit", "SerializedSekibanExecutor");
             var serializable = new SerializableEvent(
                 candidate.Payload,

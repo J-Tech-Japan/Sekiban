@@ -115,10 +115,18 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
 
                 await transaction.CommitAsync(cancellationToken);
                 committed = true;
-                // Test seam ONLY: simulate the response/return being lost AFTER a durable commit.
+                // Durably committed: a failure past this point is a LOST RESPONSE, signalled as the post-commit ambiguity
+                // marker for the shared orchestrator to resolve authoritatively. (The seam is test-only.)
                 if (AfterConditionalCommitHook is not null)
                 {
-                    await AfterConditionalCommitHook();
+                    try
+                    {
+                        await AfterConditionalCommitHook();
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new PostCommitResponseLostException(ex);
+                    }
                 }
                 return ConditionalWriteOutcome.Wrote();
             }
