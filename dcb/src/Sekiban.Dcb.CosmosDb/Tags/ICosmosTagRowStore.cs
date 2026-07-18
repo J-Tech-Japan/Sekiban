@@ -25,17 +25,18 @@ internal interface ICosmosTagRowStore
     ///     Creates every row of one partition in a single all-or-nothing batch.
     ///     Returns <see cref="CosmosTagBatchOutcome.Conflict" /> if any row already exists.
     /// </summary>
-    Task<CosmosTagBatchOutcome> CreateBatchAsync(string partitionKey, IReadOnlyList<CosmosTag> rows);
+    Task<CosmosTagBatchOutcome> CreateBatchAsync(
+        string partitionKey, IReadOnlyList<CosmosTag> rows, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Creates a single row. Returns false if a row already exists at that identity.
     /// </summary>
-    Task<bool> TryCreateRowAsync(string partitionKey, CosmosTag row);
+    Task<bool> TryCreateRowAsync(string partitionKey, CosmosTag row, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Reads a single row, or null when it does not exist.
     /// </summary>
-    Task<CosmosTag?> TryReadRowAsync(string partitionKey, string id);
+    Task<CosmosTag?> TryReadRowAsync(string partitionKey, string id, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

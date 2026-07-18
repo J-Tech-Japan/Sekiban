@@ -19,6 +19,12 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     private readonly Dictionary<(string PartitionKey, string Id), JObject> _items = new();
     private readonly string _name;
 
+    /// <summary>
+    ///     Guards the item store so concurrent writers (SEK-G16 conditional-append race tests) are serialized exactly as a
+    ///     real Cosmos partition serializes conflicting creates. Behaviour is unchanged for single-threaded tests.
+    /// </summary>
+    private readonly object _gate = new();
+
     public InMemoryCosmosContainer(string name) => _name = name;
 
     /// <summary>Fails the next N writes with this, to model a store that is throttling or a host that dies.</summary>
@@ -29,6 +35,13 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     ///     cancel, crash, race a concurrent writer — at an exact point, instead of polling for one.
     /// </summary>
     public Action<int>? OnWrite { get; set; }
+
+    /// <summary>
+    ///     Optional gate awaited at the START of every point read, OBSERVING the read's CancellationToken. A test sets it
+    ///     to a token-respecting infinite delay to make a read block until a bounded budget cancels it — proving the
+    ///     production budget is enforced end to end (not merely on a cooperative delegate).
+    /// </summary>
+    public Func<CancellationToken, Task>? ReadItemGate { get; set; }
 
     /// <summary>Every document currently stored, newest last.</summary>
     public IReadOnlyList<JObject> Items => _items.Values.ToList();
@@ -87,41 +100,54 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         ItemRequestOptions? requestOptions = null,
         CancellationToken cancellationToken = default)
     {
-        ThrowIfFaulted();
-        OnWrite?.Invoke(Creates);
-        Creates++;
-
-        var document = JObject.FromObject(item!);
-        var key = (Pk(document), Id_(document));
-
-        if (_items.ContainsKey(key))
+        lock (_gate)
         {
-            throw CosmosFailures.Conflict();
-        }
+            ThrowIfFaulted();
+            OnWrite?.Invoke(Creates);
+            Creates++;
 
-        Stamp(document);
-        _items[key] = document;
-        return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.Created));
+            var document = JObject.FromObject(item!);
+            var key = (Pk(document), Id_(document));
+
+            if (_items.ContainsKey(key))
+            {
+                throw CosmosFailures.Conflict();
+            }
+
+            Stamp(document);
+            _items[key] = document;
+            return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.Created));
+        }
     }
 
-    public override Task<ItemResponse<T>> ReadItemAsync<T>(
+    public override async Task<ItemResponse<T>> ReadItemAsync<T>(
         string id,
         PartitionKey partitionKey,
         ItemRequestOptions? requestOptions = null,
         CancellationToken cancellationToken = default)
     {
-        var match = _items
-            .Where(entry => entry.Key.Id == id)
-            .Select(entry => entry.Value)
-            .FirstOrDefault();
-
-        if (match == null)
+        // Optional blocking gate (observing the read's token) — lets a test prove the bounded verification budget cancels
+        // a stuck production read. Awaited OUTSIDE the lock.
+        if (ReadItemGate is not null)
         {
-            throw CosmosFailures.NotFound();
+            await ReadItemGate(cancellationToken).ConfigureAwait(false);
         }
 
-        return Task.FromResult<ItemResponse<T>>(
-            new FakeItemResponse<T>(match.ToObject<T>()!, HttpStatusCode.OK));
+        lock (_gate)
+        {
+            // Partition-scoped point read, exactly as Cosmos behaves: an id is unique WITHIN a partition, but the same id
+            // can exist in different partitions (e.g. tag rows share the event id across per-tag partitions). Matching by
+            // id alone would return another partition's row.
+            var pk = UnwrapPartitionKey(partitionKey);
+            var match = _items.TryGetValue((pk, id), out var found) ? found : null;
+
+            if (match == null)
+            {
+                throw CosmosFailures.NotFound();
+            }
+
+            return new FakeItemResponse<T>(match.ToObject<T>()!, HttpStatusCode.OK);
+        }
     }
 
     public override Task<ItemResponse<T>> DeleteItemAsync<T>(
@@ -172,52 +198,55 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         string partitionKey,
         IReadOnlyList<InMemoryTransactionalBatch.Operation> operations)
     {
-        ThrowIfFaulted();
-
-        var statuses = new List<HttpStatusCode>();
-        var rejected = false;
-
-        // Pass 1 — judge every operation against the store as it is now. Nothing is written yet.
-        foreach (var operation in operations)
+        lock (_gate)
         {
-            var status = Judge(partitionKey, operation);
+            ThrowIfFaulted();
 
-            if ((int)status is < 200 or > 299)
+            var statuses = new List<HttpStatusCode>();
+            var rejected = false;
+
+            // Pass 1 — judge every operation against the store as it is now. Nothing is written yet.
+            foreach (var operation in operations)
             {
-                rejected = true;
+                var status = Judge(partitionKey, operation);
+
+                if ((int)status is < 200 or > 299)
+                {
+                    rejected = true;
+                }
+
+                statuses.Add(status);
             }
 
-            statuses.Add(status);
-        }
-
-        if (rejected)
-        {
-            // Not one write. This is the guarantee the migration is built on.
-            return new FakeBatchResponse(HttpStatusCode.FailedDependency, statuses);
-        }
-
-        // Pass 2 — every condition held, so commit. Always against the batch's own partition.
-        foreach (var operation in operations)
-        {
-            var key = (partitionKey, operation.Id);
-
-            switch (operation.Kind)
+            if (rejected)
             {
-                case InMemoryTransactionalBatch.Kind.Delete:
-                    Deletes++;
-                    _items.Remove(key);
-                    break;
-
-                default:
-                    OnWrite?.Invoke(Creates);
-                    Creates++;
-                    Stamp(operation.Document!);
-                    _items[key] = operation.Document!;
-                    break;
+                // Not one write. This is the guarantee the migration is built on.
+                return new FakeBatchResponse(HttpStatusCode.FailedDependency, statuses);
             }
-        }
 
-        return new FakeBatchResponse(HttpStatusCode.OK, statuses);
+            // Pass 2 — every condition held, so commit. Always against the batch's own partition.
+            foreach (var operation in operations)
+            {
+                var key = (partitionKey, operation.Id);
+
+                switch (operation.Kind)
+                {
+                    case InMemoryTransactionalBatch.Kind.Delete:
+                        Deletes++;
+                        _items.Remove(key);
+                        break;
+
+                    default:
+                        OnWrite?.Invoke(Creates);
+                        Creates++;
+                        Stamp(operation.Document!);
+                        _items[key] = operation.Document!;
+                        break;
+                }
+            }
+
+            return new FakeBatchResponse(HttpStatusCode.OK, statuses);
+        }
     }
 
     private HttpStatusCode Judge(string partitionKey, InMemoryTransactionalBatch.Operation operation)

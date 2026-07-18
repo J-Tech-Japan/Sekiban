@@ -9,11 +9,17 @@ namespace Sekiban.Dcb.CosmosDb;
 /// <summary>
 ///     Factory for creating ServiceId-scoped CosmosDbEventStore instances.
 /// </summary>
-public sealed class CosmosDbEventStoreFactory : IEventStoreFactory, IStorageDurabilityDescriptorProvider
+public sealed class CosmosDbEventStoreFactory : IEventStoreFactory, IStorageDurabilityDescriptorProvider,
+    IWriteConditionCapabilityProvider
 {
     /// <summary>Every store this factory builds writes to the same durable backend.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "CosmosDb (per-service factory)");
+
+    /// <summary>Every store this factory builds is a conditional (single-event unique-key) store.</summary>
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
+        WriteConditionCapabilityDescriptor.Supporting(
+            "CosmosDb (per-service factory)", WriteConditionKind.SingleEventUniqueKey);
 
     private readonly CosmosDbContext _context;
     private readonly IEventTypes _eventTypes;

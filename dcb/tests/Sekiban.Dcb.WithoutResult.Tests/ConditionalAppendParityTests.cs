@@ -6,6 +6,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
+using Sekiban.Dcb.TestSupport;
 using Xunit;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 namespace Sekiban.Dcb.WithoutResult.Tests;
@@ -66,6 +67,48 @@ public class ConditionalAppendParityTests
         await executor.ExecuteAsync(new MarkerCommand(), AppendMarker("first"), options);
         await Assert.ThrowsAsync<KeyReuseConflictException>(
             () => executor.ExecuteAsync(new MarkerCommand(), AppendMarker("DIFFERENT"), options));
+    }
+
+    [Fact]
+    public async Task Conditional_InDoubt_ThrowsExactSameTypedRetryable_AndCause_SecretSafe_NotGenericallyWrapped()
+    {
+        const string secretKey = "op-secret-KEYX";
+        var domain = BuildDomain();
+        var cause = new InvalidOperationException("cause");
+        var indoubt = ConditionalAppendInDoubtException.Create(
+            "TestProvider", "svc-42", Guid.NewGuid(), ConditionalAppendInDoubtReason.AmbiguousAfterWrite, cause);
+        var store = new OutcomeForcingConditionalEventStore(
+            new InMemoryConditionalEventStore(domain.EventTypes),
+            _ => ResultBoxes.ResultBox.Error<ConditionalAppendReceipt>(indoubt));
+        var executor = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, domain), domain);
+        var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification(secretKey) };
+
+        var ex = await Assert.ThrowsAsync<ConditionalAppendInDoubtException>(
+            () => executor.ExecuteAsync(new MarkerCommand(), AppendMarker("v"), options));
+        Assert.Same(indoubt, ex);              // exact instance rethrown, no generic wrap
+        Assert.Same(cause, ex.InnerException); // original cause preserved by identity
+        Assert.True(ex.IsRetryable);
+        Assert.Equal(ConditionalAppendInDoubtReason.AmbiguousAfterWrite, ex.Reason);
+        ExceptionGraphSecretAssert.ContainsNoneOf(ex, secretKey);
+    }
+
+    [Fact]
+    public async Task Conditional_CommittedStateCorruption_ThrowsExactSameTypedNonRetryable()
+    {
+        var domain = BuildDomain();
+        var corruption = new ConditionalAppendCommittedStateCorruptionException(
+            "TestProvider", "svc-42", Guid.NewGuid(), "derived-row-hash-abc");
+        var store = new OutcomeForcingConditionalEventStore(
+            new InMemoryConditionalEventStore(domain.EventTypes),
+            _ => ResultBoxes.ResultBox.Error<ConditionalAppendReceipt>(corruption));
+        var executor = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, domain), domain);
+        var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("op-1") };
+
+        var ex = await Assert.ThrowsAsync<ConditionalAppendCommittedStateCorruptionException>(
+            () => executor.ExecuteAsync(new MarkerCommand(), AppendMarker("v"), options));
+        Assert.Same(corruption, ex);
+        Assert.False(ex.IsRetryable);
+        Assert.Null(ex.InnerException);
     }
 
     private record UniqueMarkerEvent(string Value) : IEventPayload;

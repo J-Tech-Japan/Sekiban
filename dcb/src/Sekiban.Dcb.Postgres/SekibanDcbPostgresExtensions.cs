@@ -42,6 +42,7 @@ public static class SekibanDcbPostgresExtensions
         services.AddSingleton<PostgresEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<PostgresEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
 
         return services;
@@ -92,6 +93,7 @@ public static class SekibanDcbPostgresExtensions
         services.AddSingleton<PostgresEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<PostgresEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
 
         return services;
@@ -125,6 +127,7 @@ public static class SekibanDcbPostgresExtensions
         services.AddSingleton<PostgresEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<PostgresEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
 
         return services;

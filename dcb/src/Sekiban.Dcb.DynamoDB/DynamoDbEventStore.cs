@@ -20,11 +20,192 @@ namespace Sekiban.Dcb.DynamoDB;
 /// <summary>
 ///     DynamoDB-backed event store implementation.
 /// </summary>
-public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider
+public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider,
+    IConditionalEventStore, IWriteConditionCapabilityProvider
 {
+    private const string ConditionalProviderName = "DynamoDB";
+
     /// <summary>Events land in DynamoDB.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "DynamoDB");
+
+    private readonly ConditionalAppendCoordinator _conditionalAppend;
+
+    /// <summary>
+    ///     SEK-G16 conditional (unique-key) append. The claim event is written under the deterministic id, so the existing
+    ///     item primary key (<c>pk = SERVICE#{serviceId}#EVENT#{id}</c>) is the uniqueness primitive — no schema change.
+    ///     The claim is a single-item transaction guarded by <c>attribute_not_exists(pk)</c>; a pre-existing claim surfaces
+    ///     as <see cref="ConditionalCheckFailedException" /> (or a <see cref="TransactionCanceledException" /> whose reason
+    ///     is a conditional-check failure), which is classified by fingerprint against the CONSISTENT-read winner. No
+    ///     <c>ClientRequestToken</c> is used, so a same-operation retry surfaces the real conflict and is verified by
+    ///     read-back rather than being silently idempotency-collapsed by DynamoDB. The unconditional write path is
+    ///     untouched.
+    /// </summary>
+    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        ConditionalAppendRequest request,
+        CancellationToken cancellationToken = default) =>
+        _conditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => _conditionalAppend.Descriptor;
+
+    private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
+        Guid deterministicId,
+        SerializableEvent claimEvent,
+        CancellationToken cancellationToken)
+    {
+        await _context.EnsureTablesAsync().ConfigureAwait(false);
+        var serviceId = CurrentServiceId;
+        var serializedPayload = Encoding.UTF8.GetString(claimEvent.Payload);
+        var helperEvent = new Event(
+            SerializableEventPlaceholder.Instance,
+            claimEvent.SortableUniqueIdValue,
+            claimEvent.EventPayloadName,
+            deterministicId,
+            claimEvent.EventMetadata,
+            claimEvent.Tags);
+        var dynEvent = DynamoEvent.FromEvent(
+            helperEvent,
+            serializedPayload,
+            GetGsiPartitionKey(claimEvent.SortableUniqueIdValue, serviceId),
+            serviceId);
+        var dynamoTags = claimEvent.Tags.Select(tagString =>
+        {
+            var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
+                ? tagString.Split(':')[0]
+                : tagString;
+            var storedTagGroup = BuildStoredTagGroup(serviceId, tagGroup);
+            return DynamoTag.FromEventTag(
+                serviceId,
+                tagString,
+                storedTagGroup,
+                claimEvent.SortableUniqueIdValue,
+                deterministicId,
+                claimEvent.EventPayloadName);
+        }).ToList();
+
+        // The event Put is ALWAYS index 0 — only its attribute_not_exists(pk) condition is the claim guard, so only a
+        // cancellation reason at index 0 classifies as a conflict (see the catch below).
+        var transactItems = new List<TransactWriteItem>
+        {
+            new TransactWriteItem
+            {
+                Put = new Put
+                {
+                    TableName = _context.EventsTableName,
+                    Item = dynEvent.ToAttributeValues(),
+                    ConditionExpression = "attribute_not_exists(pk)"
+                }
+            }
+        };
+        foreach (var tag in dynamoTags)
+        {
+            transactItems.Add(new TransactWriteItem
+            {
+                Put = new Put
+                {
+                    TableName = _context.TagsTableName,
+                    Item = tag.ToAttributeValues()
+                }
+            });
+        }
+
+        // Enforce DynamoDB's TransactWriteItems limits BEFORE the call, fail-closed: >100 items, or a duplicate item key
+        // (a transaction may not touch the same item twice — e.g. duplicate tag strings). A violation is a permanent
+        // request error, never a claim conflict or a retryable in-doubt.
+        EnforceTransactWriteLimits(transactItems);
+
+        // Pre-dispatch cancellation boundary (OUTSIDE the try below): an already-cancelled token is a KNOWN no-commit — no
+        // SDK request is dispatched — so it surfaces the exact original OperationCanceledException/token, never the
+        // post-commit ambiguity marker. Only a cancellation/timeout raised BY the dispatch (below) is unknown-commit.
+        cancellationToken.ThrowIfCancellationRequested();
+
+        try
+        {
+            await _client.TransactWriteItemsAsync(
+                new TransactWriteItemsRequest { TransactItems = transactItems },
+                cancellationToken).ConfigureAwait(false);
+            return ConditionalWriteOutcome.Wrote();
+        }
+        catch (ConditionalCheckFailedException ex)
+        {
+            // A bare ConditionalCheckFailed on a single-item PutItem-style rejection maps to the event claim guard.
+            return ConditionalWriteOutcome.Conflict(ex);
+        }
+        catch (TransactionCanceledException ex) when (
+            ex.CancellationReasons.Count > 0 &&
+            string.Equals(ex.CancellationReasons[0].Code, "ConditionalCheckFailed", StringComparison.Ordinal))
+        {
+            // Only the event Put (index 0) carries the attribute_not_exists condition, so only a conditional failure at
+            // index 0 is the claim collision. A cancellation for any other reason (throttle, size, a different index)
+            // preserves its original failure and is never misrouted to winner classification.
+            return ConditionalWriteOutcome.Conflict(ex);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
+        {
+            // TransactWriteItems IS the commit, so a cancellation/timeout here is an UNKNOWN commit status (the request may
+            // have reached the server and committed). Signal the post-commit ambiguity marker so the shared orchestrator
+            // resolves it by authoritative read-back rather than surfacing a possibly-false pre-commit failure.
+            throw new PostCommitResponseLostException(ex);
+        }
+    }
+
+    private static void EnforceTransactWriteLimits(List<TransactWriteItem> transactItems)
+    {
+        if (transactItems.Count > DynamoConditionalAppendLimitException.MaxTransactItems)
+        {
+            throw new DynamoConditionalAppendLimitException(
+                $"Conditional append would write {transactItems.Count} transaction items (1 event + tags), exceeding "
+                + $"DynamoDB's TransactWriteItems limit of {DynamoConditionalAppendLimitException.MaxTransactItems}.");
+        }
+
+        var seen = new HashSet<(string, string)>();
+        foreach (var item in transactItems)
+        {
+            var key = (item.Put.Item["pk"].S, item.Put.Item["sk"].S);
+            if (!seen.Add(key))
+            {
+                throw new DynamoConditionalAppendLimitException(
+                    "Conditional append would write the same DynamoDB item more than once in one transaction "
+                    + "(duplicate item key); DynamoDB rejects duplicate item operations. Deduplicate the event's tags.");
+            }
+        }
+    }
+
+    private async Task<SerializableEvent?> ReadConditionalWinnerAsync(
+        Guid deterministicId,
+        CancellationToken cancellationToken)
+    {
+        await _context.EnsureTablesAsync().ConfigureAwait(false);
+        var serviceId = CurrentServiceId;
+        // Consistent read: the winner may have committed a moment ago; an eventually-consistent read could miss it and
+        // wrongly report the claim as in-doubt.
+        var response = await _client.GetItemAsync(
+            new GetItemRequest
+            {
+                TableName = _context.EventsTableName,
+                Key = BuildEventKey(serviceId, deterministicId.ToString()),
+                ConsistentRead = true
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        if (response.Item == null || response.Item.Count == 0)
+        {
+            return null;
+        }
+
+        var dynEvent = DynamoEvent.FromAttributeValues(response.Item);
+        return new SerializableEvent(
+            Encoding.UTF8.GetBytes(dynEvent.Payload),
+            dynEvent.SortableUniqueId,
+            Guid.Parse(dynEvent.EventId),
+            new EventMetadata(
+                dynEvent.CausationId ?? string.Empty,
+                dynEvent.CorrelationId ?? string.Empty,
+                dynEvent.ExecutedUser ?? string.Empty),
+            dynEvent.Tags.ToList(),
+            dynEvent.EventType);
+    }
 
     private const string PartitionKeyConditionExpression = "gsi1pk = :pk";
     private const string PartitionKeySinceConditionExpression = "gsi1pk = :pk AND sortableUniqueId > :since";
@@ -59,6 +240,9 @@ public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorPr
         _logger = logger;
         _options = context.Options;
         _client = context.Client;
+        _conditionalAppend = new ConditionalAppendCoordinator(
+            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
+            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
     }
 
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();

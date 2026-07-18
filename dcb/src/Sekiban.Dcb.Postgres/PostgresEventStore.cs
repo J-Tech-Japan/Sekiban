@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
@@ -15,11 +16,128 @@ using System.Text;
 using System.Text.Json;
 namespace Sekiban.Dcb.Postgres;
 
-public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader, IStorageDurabilityDescriptorProvider
+public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader, IStorageDurabilityDescriptorProvider,
+    IConditionalEventStore, IWriteConditionCapabilityProvider
 {
+    private const string ConditionalProviderName = "Postgres";
+
+    /// <summary>
+    ///     The name of the events-table primary key <c>(ServiceId, Id)</c>. Only a 23505 on THIS constraint is the
+    ///     deterministic claim collision; an unrelated unique-violation (a tag or other constraint) preserves its original
+    ///     failure and is never misrouted to winner classification.
+    /// </summary>
+    private const string EventsPrimaryKeyConstraint = "PK_dcb_events";
+
     /// <summary>Events land in Postgres and survive this process.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "Postgres");
+
+    private readonly ConditionalAppendCoordinator _conditionalAppend;
+
+    /// <summary>
+    ///     Test seam ONLY (never set in production): invoked immediately AFTER the conditional claim durably commits, to
+    ///     simulate the response/return being lost (transport error / cancellation) while the write is already durable.
+    /// </summary>
+    internal Func<Task>? AfterConditionalCommitHook { get; set; }
+
+    /// <summary>
+    ///     SEK-G16 conditional (unique-key) append. The claim event is inserted under the deterministic id, so the
+    ///     existing <c>(ServiceId, Id)</c> primary key is the uniqueness primitive — no schema change. A duplicate raises
+    ///     SQLSTATE 23505 (unique_violation), which is classified by fingerprint against the stored winner (the real
+    ///     PostgresException is preserved as the diagnostic cause on a key-reuse conflict). The unconditional write path
+    ///     and the retrying execution strategy it uses are untouched; the conditional path uses a plain transaction
+    ///     because a 23505 is a genuine conflict, not a transient to retry.
+    /// </summary>
+    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        ConditionalAppendRequest request,
+        CancellationToken cancellationToken = default) =>
+        _conditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => _conditionalAppend.Descriptor;
+
+    private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
+        Guid deterministicId,
+        SerializableEvent claimEvent,
+        CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+        var dbEvent = new DbEvent
+        {
+            ServiceId = serviceId,
+            Id = deterministicId,
+            SortableUniqueId = claimEvent.SortableUniqueIdValue,
+            EventType = claimEvent.EventPayloadName,
+            Payload = Encoding.UTF8.GetString(claimEvent.Payload),
+            Tags = JsonSerializer.Serialize(claimEvent.Tags),
+            Timestamp = DateTime.UtcNow,
+            CausationId = claimEvent.EventMetadata.CausationId,
+            CorrelationId = claimEvent.EventMetadata.CorrelationId,
+            ExecutedUser = claimEvent.EventMetadata.ExecutedUser
+        };
+        context.Events.Add(dbEvent);
+        foreach (var tagString in claimEvent.Tags)
+        {
+            var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
+            context.Tags.Add(
+                DbTag.FromEventTag(tagString, tagGroup, claimEvent.SortableUniqueIdValue, deterministicId,
+                    claimEvent.EventPayloadName, serviceId));
+        }
+
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            // The claim is now durably committed. A failure past this point is a LOST RESPONSE, not a failed write: signal
+            // it as the post-commit ambiguity marker so the shared orchestrator resolves it authoritatively rather than
+            // surfacing a raw transport error. (The seam is test-only; production has no hook.)
+            if (AfterConditionalCommitHook is not null)
+            {
+                try
+                {
+                    await AfterConditionalCommitHook();
+                }
+                catch (Exception ex)
+                {
+                    throw new PostCommitResponseLostException(ex);
+                }
+            }
+            return ConditionalWriteOutcome.Wrote();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: EventsPrimaryKeyConstraint
+        })
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return ConditionalWriteOutcome.Conflict(ex);
+        }
+    }
+
+    private async Task<SerializableEvent?> ReadConditionalWinnerAsync(Guid deterministicId, CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dbEvent = await context.Events.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.ServiceId == serviceId && e.Id == deterministicId, cancellationToken);
+        if (dbEvent is null)
+        {
+            return null;
+        }
+
+        var tags = JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>();
+        return new SerializableEvent(
+            Encoding.UTF8.GetBytes(dbEvent.Payload),
+            dbEvent.SortableUniqueId,
+            dbEvent.Id,
+            new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
+            tags,
+            dbEvent.EventType);
+    }
 
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IEventTypes _eventTypes;
@@ -36,6 +154,9 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         _eventTypes = eventTypes;
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _logger = logger ?? NullLogger<PostgresEventStore>.Instance;
+        _conditionalAppend = new ConditionalAppendCoordinator(
+            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
+            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
     }
 
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();

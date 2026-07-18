@@ -19,11 +19,180 @@ namespace Sekiban.Dcb.CosmosDb;
 /// <summary>
 ///     CosmosDB-backed event store implementation.
 /// </summary>
-public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider
+public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider,
+    IConditionalEventStore, IWriteConditionCapabilityProvider
 {
+    private const string ConditionalProviderName = "CosmosDb";
+
     /// <summary>Events land in Cosmos DB.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "CosmosDb");
+
+    private readonly ConditionalAppendCoordinator _conditionalAppend;
+
+    /// <summary>
+    ///     SEK-G16 conditional (unique-key) append. The claim event is created under the deterministic id, so the existing
+    ///     per-item uniqueness (id within partition <c>{serviceId}|{id}</c>) is the primitive — no schema change. A
+    ///     duplicate surfaces as a Cosmos 409 (Conflict), which is NEVER on its own treated as a same-operation success:
+    ///     the orchestrator reads the committed winner back (point read) and classifies by fingerprint, so
+    ///     <see cref="ConditionalAppendStatus.AlreadyCommittedSameOperation" /> is reported only after verification reaches
+    ///     the committed state. The real <see cref="CosmosException" /> is preserved as the diagnostic cause on a key-reuse
+    ///     conflict. The unconditional write path is untouched.
+    /// </summary>
+    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        ConditionalAppendRequest request,
+        CancellationToken cancellationToken = default) =>
+        _conditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
+
+    /// <inheritdoc />
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => _conditionalAppend.Descriptor;
+
+    private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
+        Guid deterministicId,
+        SerializableEvent claimEvent,
+        CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        var options = _context.Options;
+        var eventsSettings = _containerResolver.ResolveEventsContainer(serviceId);
+        var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
+        var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
+        var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
+
+        var id = deterministicId.ToString();
+        var cosmosEvent = new CosmosEvent
+        {
+            Pk = $"{serviceId}|{id}",
+            ServiceId = serviceId,
+            Id = id,
+            SortableUniqueId = claimEvent.SortableUniqueIdValue,
+            EventType = claimEvent.EventPayloadName,
+            Payload = Encoding.UTF8.GetString(claimEvent.Payload),
+            Tags = claimEvent.Tags,
+            Timestamp = DateTime.UtcNow,
+            CausationId = claimEvent.EventMetadata.CausationId,
+            CorrelationId = claimEvent.EventMetadata.CorrelationId,
+            ExecutedUser = claimEvent.EventMetadata.ExecutedUser
+        };
+        var eventPk = GetEventPartitionKey(id, serviceId);
+
+        try
+        {
+            await eventsContainer.CreateItemAsync(
+                cosmosEvent,
+                new PartitionKey(eventPk),
+                new ItemRequestOptions { EnableContentResponseOnWrite = options.EnableContentResponseOnWrite })
+                .ConfigureAwait(false);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+        {
+            return ConditionalWriteOutcome.Conflict(ex);
+        }
+
+        // The claim event is durable — the caller has won the key. The tag rows are an idempotent, repairable secondary
+        // index; a transient failure here surfaces as an error and the caller's retry converges (the event now exists, so
+        // the retry classifies as AlreadyCommittedSameOperation).
+        var claimSerializable = claimEvent with { Id = deterministicId };
+        await WriteSerializableTagsWithBatchAsync(
+            new List<SerializableEvent> { claimSerializable },
+            tagsContainer,
+            options,
+            serviceId,
+            tagsSettings).ConfigureAwait(false);
+        // The event and all tag rows are now durable: a failure past this point is a LOST RESPONSE, signalled as the
+        // post-commit ambiguity marker for the shared orchestrator to resolve authoritatively. (The seam is test-only.)
+        if (AfterConditionalCommitHook is not null)
+        {
+            try
+            {
+                await AfterConditionalCommitHook().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                throw new PostCommitResponseLostException(ex);
+            }
+        }
+        return ConditionalWriteOutcome.Wrote();
+    }
+
+    /// <summary>
+    ///     Closes the SEK-G16 event/tag roll-forward window for Cosmos. Event and tag rows are NOT written atomically (the
+    ///     event document is created first, then tag rows in a separate phase), so a crash after the event create leaves a
+    ///     committed event with missing tag rows. A same-operation retry sees the event (409), reads it back, and matches
+    ///     the fingerprint — but the CONTRACTED committed state (tag-scoped visibility) is not yet reached. This gate
+    ///     idempotently (re)writes every required tag row for the winner via the same create-or-verify stage the
+    ///     unconditional write and the repair service use (create → on 409 read-back → ContentEquals): rows that already
+    ///     landed are accepted, missing rows are backfilled, and a row that disagrees with the event throws (corruption)
+    ///     rather than being overwritten. Only after this succeeds does the orchestrator return AlreadyCommitted; a failure
+    ///     here becomes a typed retryable in-doubt, never a false AlreadyCommitted.
+    /// </summary>
+    private async Task EnsureConditionalCommittedAsync(SerializableEvent winner, CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        var options = _context.Options;
+        var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
+        var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
+        try
+        {
+            await WriteSerializableTagsWithBatchAsync(
+                new List<SerializableEvent> { winner },
+                tagsContainer,
+                options,
+                serviceId,
+                tagsSettings,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (CosmosTagIndexCorruptionException ex)
+        {
+            // An existing deterministic tag row DISAGREES with the event (strict ContentEquals failed). The stage never
+            // overwrites it; surface a NON-retryable committed-state corruption rather than a retryable in-doubt. The
+            // provider exception is deliberately NOT chained — its message/properties carry the tag, partition key, and
+            // full row descriptions, which must not leak into the externally observable graph. Only the DERIVED (hashed)
+            // row id is preserved for diagnostics.
+            throw new ConditionalAppendCommittedStateCorruptionException(
+                ConditionalProviderName, serviceId, winner.Id, ex.DocumentId);
+        }
+    }
+
+    private async Task<SerializableEvent?> ReadConditionalWinnerAsync(
+        Guid deterministicId,
+        CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        var eventsSettings = _containerResolver.ResolveEventsContainer(serviceId);
+        var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
+        var id = deterministicId.ToString();
+        var eventPk = GetEventPartitionKey(id, serviceId);
+
+        try
+        {
+            var response = await eventsContainer.ReadItemAsync<CosmosEvent>(
+                id,
+                new PartitionKey(eventPk),
+                requestOptions: null,
+                cancellationToken).ConfigureAwait(false);
+            var cosmosEvent = response.Resource;
+            if (!ServiceIdMatches(cosmosEvent.ServiceId, serviceId))
+            {
+                return null;
+            }
+
+            return new SerializableEvent(
+                Encoding.UTF8.GetBytes(cosmosEvent.Payload),
+                cosmosEvent.SortableUniqueId,
+                Guid.Parse(cosmosEvent.Id),
+                new EventMetadata(
+                    cosmosEvent.CausationId ?? "",
+                    cosmosEvent.CorrelationId ?? "",
+                    cosmosEvent.ExecutedUser ?? ""),
+                cosmosEvent.Tags?.ToList() ?? new List<string>(),
+                cosmosEvent.EventType);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
 
     private const string ParamSince = "@since";
     private const string ParamServiceId = "@serviceId";
@@ -48,6 +217,9 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _containerResolver = containerResolver ?? throw new ArgumentNullException(nameof(containerResolver));
         _logger = logger;
+        _conditionalAppend = new ConditionalAppendCoordinator(
+            ConditionalProviderName, () => CurrentServiceId, _eventTypes,
+            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync, EnsureConditionalCommittedAsync);
     }
 
     /// <summary>
@@ -55,6 +227,12 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
     ///     Always null in production; the public construction paths cannot set it.
     /// </summary>
     internal ICosmosTagWriteFaultInjector? TagWriteFaultInjector { get; set; }
+
+    /// <summary>
+    ///     Test seam ONLY (never set in production): invoked immediately AFTER the conditional claim's event and all tag
+    ///     rows are durable, to simulate the response/return being lost (transport error / cancellation).
+    /// </summary>
+    internal Func<Task>? AfterConditionalCommitHook { get; set; }
 
     /// <summary>
     ///     Clock, delay and jitter used while retrying the tag write. Substituted in tests so retry behavior
@@ -1403,7 +1581,8 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         Container tagsContainer,
         CosmosDbEventStoreOptions options,
         string serviceId,
-        CosmosContainerSettings settings)
+        CosmosContainerSettings settings,
+        CancellationToken cancellationToken = default)
     {
         var sources = writtenEvents
             .SelectMany(se => se.Tags.Select(tagString => new CosmosTagRowSource(
@@ -1418,7 +1597,8 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             new CosmosContainerTagRowStore(tagsContainer),
             options,
             serviceId,
-            TagWriteFaultInjector).ConfigureAwait(false);
+            TagWriteFaultInjector,
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

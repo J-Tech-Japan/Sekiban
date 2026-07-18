@@ -38,6 +38,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 
@@ -62,6 +63,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 
@@ -90,6 +92,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddHostedService<DynamoDbInitializer>();
 

@@ -28,7 +28,8 @@ internal static class CosmosTagWriteStage
         ICosmosTagRowStore store,
         CosmosDbEventStoreOptions options,
         string serviceId,
-        ICosmosTagWriteFaultInjector? faultInjector = null)
+        ICosmosTagWriteFaultInjector? faultInjector = null,
+        CancellationToken cancellationToken = default)
     {
         var results = new List<TagWriteResult>();
         if (sources.Count == 0)
@@ -58,6 +59,7 @@ internal static class CosmosTagWriteStage
 
             for (var offset = 0; offset < rows.Count; offset += maxBatchOperations)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var chunk = rows.Skip(offset).Take(maxBatchOperations).ToList();
 
                 if (faultInjector != null)
@@ -70,7 +72,7 @@ internal static class CosmosTagWriteStage
                 var created = false;
                 if (options.UseTransactionalBatchForTags)
                 {
-                    var outcome = await store.CreateBatchAsync(partitionKey, chunk).ConfigureAwait(false);
+                    var outcome = await store.CreateBatchAsync(partitionKey, chunk, cancellationToken).ConfigureAwait(false);
                     created = outcome == CosmosTagBatchOutcome.Created;
                 }
 
@@ -79,7 +81,7 @@ internal static class CosmosTagWriteStage
                 {
                     foreach (var row in chunk)
                     {
-                        await EnsureRowAsync(store, partitionKey, row, serviceId).ConfigureAwait(false);
+                        await EnsureRowAsync(store, partitionKey, row, serviceId, cancellationToken).ConfigureAwait(false);
                     }
                 }
 
@@ -101,23 +103,24 @@ internal static class CosmosTagWriteStage
         ICosmosTagRowStore store,
         string partitionKey,
         CosmosTag row,
-        string serviceId)
+        string serviceId,
+        CancellationToken cancellationToken)
     {
-        if (await store.TryCreateRowAsync(partitionKey, row).ConfigureAwait(false))
+        if (await store.TryCreateRowAsync(partitionKey, row, cancellationToken).ConfigureAwait(false))
         {
             return;
         }
 
-        var existing = await store.TryReadRowAsync(partitionKey, row.Id).ConfigureAwait(false);
+        var existing = await store.TryReadRowAsync(partitionKey, row.Id, cancellationToken).ConfigureAwait(false);
         if (existing == null)
         {
             // Created and then removed between our create and our read: one more create settles it.
-            if (await store.TryCreateRowAsync(partitionKey, row).ConfigureAwait(false))
+            if (await store.TryCreateRowAsync(partitionKey, row, cancellationToken).ConfigureAwait(false))
             {
                 return;
             }
 
-            existing = await store.TryReadRowAsync(partitionKey, row.Id).ConfigureAwait(false);
+            existing = await store.TryReadRowAsync(partitionKey, row.Id, cancellationToken).ConfigureAwait(false);
             if (existing == null)
             {
                 throw new InvalidOperationException(

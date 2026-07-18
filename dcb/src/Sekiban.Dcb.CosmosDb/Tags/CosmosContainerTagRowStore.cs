@@ -13,7 +13,8 @@ internal sealed class CosmosContainerTagRowStore : ICosmosTagRowStore
 
     public CosmosContainerTagRowStore(Container container) => _container = container;
 
-    public async Task<CosmosTagBatchOutcome> CreateBatchAsync(string partitionKey, IReadOnlyList<CosmosTag> rows)
+    public async Task<CosmosTagBatchOutcome> CreateBatchAsync(
+        string partitionKey, IReadOnlyList<CosmosTag> rows, CancellationToken cancellationToken = default)
     {
         var batch = _container.CreateTransactionalBatch(new PartitionKey(partitionKey));
         foreach (var row in rows)
@@ -21,7 +22,7 @@ internal sealed class CosmosContainerTagRowStore : ICosmosTagRowStore
             batch.CreateItem(row);
         }
 
-        using var response = await batch.ExecuteAsync().ConfigureAwait(false);
+        using var response = await batch.ExecuteAsync(cancellationToken).ConfigureAwait(false);
         if (response.IsSuccessStatusCode)
         {
             return CosmosTagBatchOutcome.Created;
@@ -42,11 +43,12 @@ internal sealed class CosmosContainerTagRowStore : ICosmosTagRowStore
             response.RequestCharge);
     }
 
-    public async Task<bool> TryCreateRowAsync(string partitionKey, CosmosTag row)
+    public async Task<bool> TryCreateRowAsync(string partitionKey, CosmosTag row, CancellationToken cancellationToken = default)
     {
         try
         {
-            await _container.CreateItemAsync(row, new PartitionKey(partitionKey)).ConfigureAwait(false);
+            await _container.CreateItemAsync(row, new PartitionKey(partitionKey), requestOptions: null, cancellationToken)
+                .ConfigureAwait(false);
             return true;
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
@@ -55,12 +57,12 @@ internal sealed class CosmosContainerTagRowStore : ICosmosTagRowStore
         }
     }
 
-    public async Task<CosmosTag?> TryReadRowAsync(string partitionKey, string id)
+    public async Task<CosmosTag?> TryReadRowAsync(string partitionKey, string id, CancellationToken cancellationToken = default)
     {
         try
         {
             var response = await _container
-                .ReadItemAsync<CosmosTag>(id, new PartitionKey(partitionKey))
+                .ReadItemAsync<CosmosTag>(id, new PartitionKey(partitionKey), requestOptions: null, cancellationToken)
                 .ConfigureAwait(false);
             return response.Resource;
         }

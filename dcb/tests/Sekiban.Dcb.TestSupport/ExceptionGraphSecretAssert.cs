@@ -1,11 +1,11 @@
 using Xunit;
-namespace Sekiban.Dcb.Tests.ConditionalAppend;
+namespace Sekiban.Dcb.TestSupport;
 
 /// <summary>
 ///     Recursively asserts that no sentinel secret appears anywhere in the externally observable exception graph — every
 ///     node's Message, Data (keys and values), StackTrace, and ToString, walked through the whole InnerException chain.
 /// </summary>
-internal static class ExceptionGraphSecretAssert
+public static class ExceptionGraphSecretAssert
 {
     public static void ContainsNoneOf(Exception exception, params string[] sentinels)
     {

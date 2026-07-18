@@ -67,6 +67,7 @@ public static class SekibanDcbCosmosDbExtensions
         services.AddSingleton<CosmosDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 
         return services;
@@ -100,6 +101,7 @@ public static class SekibanDcbCosmosDbExtensions
         services.AddSingleton<CosmosDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 
         return services;
@@ -166,6 +168,7 @@ public static class SekibanDcbCosmosDbExtensions
         services.AddSingleton<CosmosDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 
         // Register hosted service to ensure containers are created
@@ -227,6 +230,7 @@ public static class SekibanDcbCosmosDbExtensions
         services.AddSingleton<CosmosDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
 
         return services;
