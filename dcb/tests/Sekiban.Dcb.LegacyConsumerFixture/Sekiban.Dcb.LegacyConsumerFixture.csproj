@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        SEK-G15 compatibility proof. This is a GENUINELY SEPARATE consumer assembly (not the in-source test project) that
+        compiles against the produced Sekiban assemblies using ONLY the legacy public surfaces, plus a legacy IEventStore
+        implementor. If SEK-G15 had made any breaking change to IEventStore / ICommandContext / the positional serialized
+        DTO / the executor's existing overloads, THIS PROJECT WOULD FAIL TO COMPILE. Building it in CI is the proof.
+    -->
+    <PropertyGroup>
+        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <LangVersion>preview</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <GenerateSBOM>false</GenerateSBOM>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.WithResult\Sekiban.Dcb.WithResult.csproj" />
+    </ItemGroup>
+
+</Project>

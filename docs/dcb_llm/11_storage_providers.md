@@ -482,6 +482,44 @@ Materialized views are currently implemented for PostgreSQL:
 This is separate from the main event store package. In the current PoC, a service can store events in one database and
 materialized view tables in another PostgreSQL database or schema. See [Materialized View Basics](20_materialized_view.md).
 
+## Conditional (Unique-Key) Append — SEK-G15
+
+The base `IEventStore.WriteSerializableEventsAsync` is unconditional: EventIds are server-generated and the write always lands. When you need "exactly one host performs this" — e.g. a one-time migration fanned out across N hosts — use the **optional** conditional-append contract. It is strictly additive: `IEventStore`, `ICommandContext`, and the existing serialized DTOs are untouched, and nothing changes for stores that do not opt in.
+
+### The contract
+
+- **Optional interface** `IConditionalEventStore.AppendIfUniqueAsync(ConditionalAppendRequest, ...)` — single-event append under a caller-supplied idempotency key. Feature-detected with `is`, exactly like `IStreamingSerializableEventStore`. A store that implements it MUST also implement `IWriteConditionCapabilityProvider` (an architecture test enforces this — there is no silent default pass-through).
+- **Outcome machine** (one observable contract): `Appended` / `AlreadyCommittedSameOperation` (both carry a durable **receipt**: winner `EventId`, `SortableUniqueId`, and operation fingerprint) / `KeyReuseConflict` / `ConditionNotSupported`.
+- **Executor seams** — opt-in only: new `ExecuteAsync(command, handler, CommandExecutionOptions, ...)` overloads on both facades (existing `ExecuteAsync` overloads unchanged; `ICommandContext` unchanged) and a new versioned `SerializedConditionalCommitRequest` / `CommitSerializableEventConditionallyAsync` on the WASM boundary (the existing positional `SerializedCommitRequest` is untouched).
+
+### Capability discovery (runtime-resolved, fail-closed)
+
+Support is a **runtime capability descriptor**, reused from the G10 pattern — never a type-name check. `WriteConditionKind` distinguishes kinds (`SingleEventUniqueKey` now; `BatchUniqueKey` / `ExpectedPosition` are reserved future kinds). The descriptor is resolved from the **live** store the container built, and decorators propagate it: a `HybridEventStore` reports exactly what its hot store can enforce (writes land there — it never upgrades on its own authority), and a composite supports a kind only if **every** underlying store does. A store that says nothing supports nothing.
+
+Requesting a conditional append against a store that does not support the kind **fails closed**: `ConditionNotSupportedException` is raised **before** the command handler runs, before any EventId is allocated, before serialization, and before any store call. There is no silent degradation to an unconditional write.
+
+### Operation fingerprint and receipt
+
+Operation identity alone is never proof of "same operation". Each claim persists a **canonical fingerprint** derived (with a length-prefixed, domain-separated SHA-256) from, in order: derivation version, canonicalization version, domain separator, ServiceId, the normalized idempotency key (NFC, trimmed, ≤ 512 UTF-8 bytes), the **authoritative event-type identity**, the **canonical payload**, and the event's tags. The server-generated EventId/SortableUniqueId are **excluded** — a genuine retry allocates fresh ids yet must still be recognised. ServiceId is part of the identity, so a key claimed under one service is never matched under another. Raw keys are never logged or returned; only the opaque fingerprint leaves the layer. The derivation is **versioned** (currently derivation v2 / canonicalization v1) and pinned by golden vectors with literal digests, so any change to the version, domain separator, field order, length-prefix framing, or canonicalization algorithm is a deliberate, test-breaking change.
+
+- **Authoritative event-type identity**: the type is resolved through the domain's registered event types (its CLR `FullName`), not the caller-supplied simple payload name. An unregistered type fails closed before any side effect.
+- **Canonical payload (supported shapes)**: the raw payload is deserialized into the resolved type and re-serialized by the domain, then re-emitted as canonical JSON — **object keys recursively ordinal-sorted, array element order preserved, numbers and strings as the domain serializer emits them** (Unicode escaping and property order therefore do not matter; `1` and `1.0` are distinct). This is stable for records/POCOs serialized with System.Text.Json (reflection or source-gen), independent of property declaration order. The supported shape is **enforced programmatically, not merely documented**: before hashing, the payload's *effective* `JsonTypeInfo` graph is validated (cycle-guarded, without mutation, using the actual reflection or source-gen metadata) — the root must be a JSON object, collections must be ordered types (arrays, `List`/`IList`/`IReadOnlyList`, `Collection`/`ReadOnlyCollection`, `ImmutableArray`/`ImmutableList`), leaves must be an allowlist of deterministic primitives, and **no custom converter, non-object/converter-owned type (`JsonTypeInfoKind.None`), set, or dictionary is admitted**. Anything else — including a converter that could emit non-deterministic output — is rejected before any (de)serialization, so it can never yield an unstable or two differing fingerprints. A payload that cannot be deserialized/canonicalized likewise fails closed.
+- **Ordered-tag semantics**: tags are ordinal-sorted (order-insensitive), duplicate-significant, and case-sensitive.
+
+Outcomes:
+
+- Same key + **same** fingerprint → `AlreadyCommittedSameOperation`, returning the ORIGINAL winner's receipt; nothing is written.
+- Same key + **different** fingerprint → `KeyReuseConflict`. When a real provider surfaces a unique-violation, that provider exception may be preserved as the inner cause; a conflict discovered by read has no provider exception and none is fabricated.
+- Cannot canonicalize (unregistered type, undeserializable payload) → fails closed with a typed `OperationCanonicalizationException`. This failure is **secret-safe**: the underlying converter/deserializer exception — which can embed the raw payload or key in its message, `Data`, or stack — is **discarded**, never chained into the result. The typed exception carries only sanitized metadata (the registered event-type name), no inner exception, and no payload/key.
+
+### The boundary: one durable claim, not exactly-once side effects
+
+The store guarantees **at most one durable claim per key**. That is a storage guarantee, not an exactly-once side-effect guarantee: making an external effect (send an email, call an API) happen exactly once still needs an outbox / idempotency layer on top of the winning claim.
+
+### Reference implementation and provider status
+
+A deterministic in-memory reference lives in the testing package (`Sekiban.Dcb.Testing.InMemoryConditionalEventStore`, never referenced from a runtime project) and implements the full outcome machine. **Production provider implementations arrive in SEK-G16** (PostgreSQL/SQLite PK, Cosmos 409, DynamoDB `attribute_not_exists`); expected-position / CAS semantics are a later slice.
+
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).

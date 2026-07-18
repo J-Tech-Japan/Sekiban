@@ -8,7 +8,7 @@ namespace Sekiban.Dcb.Domains;
 ///     AOT-compatible implementation of IEventTypes.
 ///     Uses JsonTypeInfo for serialization instead of reflection.
 /// </summary>
-public sealed class AotEventTypes : IEventTypes
+public sealed class AotEventTypes : IEventTypes, IEventTypeJsonMetadataProvider
 {
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly Dictionary<string, Type> _eventTypes = new();
@@ -134,6 +134,29 @@ public sealed class AotEventTypes : IEventTypes
     /// </summary>
     public Type? GetEventType(string eventTypeName) =>
         _eventTypes.TryGetValue(eventTypeName, out Type? eventType) ? eventType : null;
+
+    /// <inheritdoc />
+    public JsonTypeInfo? GetEffectiveTypeInfo(string eventTypeName)
+    {
+        if (_typeInfosByEventName.TryGetValue(eventTypeName, out JsonTypeInfo? registered))
+        {
+            return registered;
+        }
+
+        if (!_eventTypes.TryGetValue(eventTypeName, out Type? eventType))
+        {
+            return null;
+        }
+
+        try
+        {
+            return _jsonOptions.GetTypeInfo(eventType);
+        }
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
 
     private void EnsureEventRegistration(string eventTypeName, Type eventPayloadType, JsonTypeInfo typeInfo)
     {

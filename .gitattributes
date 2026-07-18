@@ -1,0 +1,4 @@
+# CoreGeneralSekibanExecutor.cs predates the repo's LF convention and is stored CRLF.
+# Do not flag its CR-at-eol as a whitespace error so SEK-G15's additive change shows as
+# additions-only (git diff --check clean) rather than whole-file churn. Kept textual for review.
+dcb/src/Sekiban.Dcb.Core/Actors/CoreGeneralSekibanExecutor.cs whitespace=cr-at-eol
