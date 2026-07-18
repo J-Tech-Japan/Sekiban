@@ -35,6 +35,12 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     private readonly ConditionalAppendCoordinator _conditionalAppend;
 
     /// <summary>
+    ///     Test seam ONLY (never set in production): invoked immediately AFTER the conditional claim durably commits, to
+    ///     simulate the response/return being lost (transport error / cancellation) while the write is already durable.
+    /// </summary>
+    internal Func<Task>? AfterConditionalCommitHook { get; set; }
+
+    /// <summary>
     ///     SEK-G16 conditional (unique-key) append. The claim event is inserted under the deterministic id, so the
     ///     existing <c>(ServiceId, Id)</c> primary key is the uniqueness primitive — no schema change. A duplicate raises
     ///     SQLSTATE 23505 (unique_violation), which is classified by fingerprint against the stored winner (the real
@@ -85,6 +91,11 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         {
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            // Test seam ONLY: simulate the response/return being lost AFTER a durable commit (see AfterConditionalCommitHook).
+            if (AfterConditionalCommitHook is not null)
+            {
+                await AfterConditionalCommitHook();
+            }
             return ConditionalWriteOutcome.Wrote();
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException

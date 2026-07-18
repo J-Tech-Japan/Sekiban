@@ -99,6 +99,11 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             options,
             serviceId,
             tagsSettings).ConfigureAwait(false);
+        // Test seam ONLY: simulate the response/return being lost AFTER the event and all tag rows are durable.
+        if (AfterConditionalCommitHook is not null)
+        {
+            await AfterConditionalCommitHook().ConfigureAwait(false);
+        }
         return ConditionalWriteOutcome.Wrote();
     }
 
@@ -131,8 +136,12 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         catch (CosmosTagIndexCorruptionException ex)
         {
             // An existing deterministic tag row DISAGREES with the event (strict ContentEquals failed). The stage never
-            // overwrites it; surface a NON-retryable committed-state corruption rather than a retryable in-doubt.
-            throw new ConditionalAppendCommittedStateCorruptionException(ConditionalProviderName, serviceId, winner.Id, ex);
+            // overwrites it; surface a NON-retryable committed-state corruption rather than a retryable in-doubt. The
+            // provider exception is deliberately NOT chained — its message/properties carry the tag, partition key, and
+            // full row descriptions, which must not leak into the externally observable graph. Only the DERIVED (hashed)
+            // row id is preserved for diagnostics.
+            throw new ConditionalAppendCommittedStateCorruptionException(
+                ConditionalProviderName, serviceId, winner.Id, ex.DocumentId);
         }
     }
 
@@ -207,6 +216,12 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
     ///     Always null in production; the public construction paths cannot set it.
     /// </summary>
     internal ICosmosTagWriteFaultInjector? TagWriteFaultInjector { get; set; }
+
+    /// <summary>
+    ///     Test seam ONLY (never set in production): invoked immediately AFTER the conditional claim's event and all tag
+    ///     rows are durable, to simulate the response/return being lost (transport error / cancellation).
+    /// </summary>
+    internal Func<Task>? AfterConditionalCommitHook { get; set; }
 
     /// <summary>
     ///     Clock, delay and jitter used while retrying the tag write. Substituted in tests so retry behavior

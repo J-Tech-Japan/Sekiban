@@ -15,8 +15,10 @@ namespace Sekiban.Dcb.Tests.ConditionalAppend;
 /// <summary>
 ///     SEK-G16 typed-failure propagation through the WithResult facade and the versioned serialized conditional boundary.
 ///     A store double forces a specific conditional outcome; the tests assert the TYPED exception (in-doubt or committed-
-///     state corruption) reaches the caller intact — right type, retryability, provider/service/derived-EventId, preserved
-///     cause — with no generic wrapping and no leak of the raw idempotency key or payload.
+///     state corruption) reaches the caller as the EXACT SAME instance (and its cause), with the closed reason, provider/
+///     service/derived-EventId, no generic wrapping, and — checked recursively over the whole exception graph — no leak of
+///     the raw idempotency key or payload. The unknown serialized version is rejected first, with zero store/capability
+///     side effects.
 /// </summary>
 public class ConditionalAppendFacadeInDoubtTests
 {
@@ -31,41 +33,27 @@ public class ConditionalAppendFacadeInDoubtTests
         return domain;
     }
 
-    private static (GeneralSekibanExecutor Executor, DcbDomainTypes Domain) NewExecutor(
+    private static (GeneralSekibanExecutor Executor, OutcomeForcingConditionalEventStore Store) NewExecutor(
         Func<ConditionalAppendRequest, ResultBox<ConditionalAppendReceipt>> outcome)
     {
         var domain = BuildDomain();
         var inner = new InMemoryConditionalEventStore(domain.EventTypes);
         var store = new OutcomeForcingConditionalEventStore(inner, outcome);
         var accessor = new InMemoryObjectAccessor(store, domain);
-        return (new GeneralSekibanExecutor(store, accessor, domain), domain);
+        return (new GeneralSekibanExecutor(store, accessor, domain), store);
     }
-
-    private static ConditionalAppendInDoubtException InDoubt() =>
-        ConditionalAppendInDoubtException.Create(
-            "TestProvider", "svc-42", Guid.NewGuid(),
-            ConditionalAppendInDoubtReason.WinnerUnreadableAfterConflict,
-            new InvalidOperationException("provider conflict cause"));
-
-    private static ConditionalAppendCommittedStateCorruptionException Corruption() =>
-        new("TestProvider", "svc-42", Guid.NewGuid(), new InvalidOperationException("index corruption cause"));
 
     private static Func<MarkerCommand, ICommandContext, Task<ResultBox<EventOrNone>>> AppendMarker() =>
         (_, ctx) => ctx.AppendEvent(new UniqueMarkerEvent(SecretPayloadValue), new MarkerTag("m"));
 
-    private static void AssertSecretSafe(Exception ex)
-    {
-        var text = ex.ToString();
-        Assert.DoesNotContain(SecretKey, text, StringComparison.Ordinal);
-        Assert.DoesNotContain(SecretPayloadValue, text, StringComparison.Ordinal);
-    }
-
     // ── WithResult facade ───────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task WithResult_InDoubt_IsErrorCarryingTheTypedException_NoGenericWrap()
+    public async Task WithResult_InDoubt_ReturnsExactSameTypedException_AndCause_SecretSafe_NoWrap()
     {
-        var indoubt = InDoubt();
+        var cause = new InvalidOperationException("provider conflict cause");
+        var indoubt = ConditionalAppendInDoubtException.Create(
+            "TestProvider", "svc-42", Guid.NewGuid(), ConditionalAppendInDoubtReason.WinnerUnreadableAfterConflict, cause);
         var (executor, _) = NewExecutor(_ => ResultBox.Error<ConditionalAppendReceipt>(indoubt));
         var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification(SecretKey) };
 
@@ -73,20 +61,22 @@ public class ConditionalAppendFacadeInDoubtTests
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendInDoubtException>(result.GetException());
+        Assert.Same(indoubt, ex);                    // exact instance, no generic wrap
+        Assert.Same(cause, ex.InnerException);        // original provider cause preserved by identity
         Assert.True(ex.IsRetryable);
         Assert.Equal(ConditionalAppendInDoubtReason.WinnerUnreadableAfterConflict, ex.Reason);
         Assert.Equal("winner-unreadable-after-conflict", ex.ReasonCode);
         Assert.Equal("TestProvider", ex.ProviderName);
         Assert.Equal("svc-42", ex.ServiceId);
         Assert.NotEqual(Guid.Empty, ex.DerivedEventId);
-        Assert.NotNull(ex.InnerException);
-        AssertSecretSafe(ex);
+        ExceptionGraphSecretAssert.ContainsNoneOf(ex, SecretKey, SecretPayloadValue);
     }
 
     [Fact]
-    public async Task WithResult_CommittedStateCorruption_IsErrorCarryingTheTypedNonRetryableException()
+    public async Task WithResult_CommittedStateCorruption_ReturnsExactSameTypedNonRetryableException_SecretSafe()
     {
-        var corruption = Corruption();
+        var corruption = new ConditionalAppendCommittedStateCorruptionException(
+            "TestProvider", "svc-42", Guid.NewGuid(), "derived-row-hash-abc");
         var (executor, _) = NewExecutor(_ => ResultBox.Error<ConditionalAppendReceipt>(corruption));
         var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification(SecretKey) };
 
@@ -94,9 +84,11 @@ public class ConditionalAppendFacadeInDoubtTests
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendCommittedStateCorruptionException>(result.GetException());
+        Assert.Same(corruption, ex);
         Assert.False(ex.IsRetryable);
-        Assert.NotNull(ex.InnerException);
-        AssertSecretSafe(ex);
+        Assert.Null(ex.InnerException);              // corruption never chains an unsafe provider exception
+        Assert.Equal("derived-row-hash-abc", ex.CorruptRowId);
+        ExceptionGraphSecretAssert.ContainsNoneOf(ex, SecretKey, SecretPayloadValue);
     }
 
     // ── Versioned serialized boundary ───────────────────────────────────────────────────────────────
@@ -110,9 +102,11 @@ public class ConditionalAppendFacadeInDoubtTests
             SecretKey);
 
     [Fact]
-    public async Task SerializedBoundary_InDoubt_IsErrorCarryingTheTypedException_SecretSafe()
+    public async Task SerializedBoundary_InDoubt_ReturnsExactSameTypedException_SecretSafe()
     {
-        var indoubt = InDoubt();
+        var cause = new InvalidOperationException("provider conflict cause");
+        var indoubt = ConditionalAppendInDoubtException.Create(
+            "TestProvider", "svc-42", Guid.NewGuid(), ConditionalAppendInDoubtReason.AmbiguousAfterWrite, cause);
         var (executor, _) = NewExecutor(_ => ResultBox.Error<ConditionalAppendReceipt>(indoubt));
 
         var result = await ((ISerializedConditionalSekibanDcbExecutor)executor)
@@ -120,21 +114,24 @@ public class ConditionalAppendFacadeInDoubtTests
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendInDoubtException>(result.GetException());
+        Assert.Same(indoubt, ex);
+        Assert.Same(cause, ex.InnerException);
         Assert.True(ex.IsRetryable);
-        Assert.Equal(ConditionalAppendInDoubtReason.WinnerUnreadableAfterConflict, ex.Reason);
-        AssertSecretSafe(ex);
+        ExceptionGraphSecretAssert.ContainsNoneOf(ex, SecretKey, SecretPayloadValue);
     }
 
     [Fact]
-    public async Task SerializedBoundary_UnknownVersion_IsRejectedFailClosed()
+    public async Task SerializedBoundary_UnknownVersion_IsRejectedFirst_WithZeroStoreAndCapabilitySideEffects()
     {
-        var (executor, _) = NewExecutor(_ => throw new InvalidOperationException("should not be reached"));
+        var (executor, store) = NewExecutor(_ => throw new InvalidOperationException("store must not be reached"));
 
         var result = await ((ISerializedConditionalSekibanDcbExecutor)executor)
             .CommitSerializableEventConditionallyAsync(SerializedRequest(version: 999));
 
         Assert.False(result.IsSuccess);
         Assert.IsType<UnsupportedSerializedCommitVersionException>(result.GetException());
+        Assert.Equal(0, store.AppendAttempts);   // no store append attempted
+        Assert.Equal(0, store.DescribeCalls);     // no capability resolution — version is checked first
     }
 
     private record UniqueMarkerEvent(string Value) : IEventPayload;

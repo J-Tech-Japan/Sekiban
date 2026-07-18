@@ -11,6 +11,7 @@ using Sekiban.Dcb.Testing;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Sekiban.Dcb.TestSupport;
 using Xunit;
 namespace Sekiban.Dcb.Tests.ConditionalAppend;
 

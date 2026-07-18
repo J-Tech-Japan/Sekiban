@@ -28,6 +28,12 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
     private readonly ConditionalAppendCoordinator _conditionalAppend;
 
     /// <summary>
+    ///     Test seam ONLY (never set in production): invoked immediately AFTER the conditional claim durably commits, to
+    ///     simulate the response/return being lost (transport error / cancellation) while the write is already durable.
+    /// </summary>
+    internal Func<Task>? AfterConditionalCommitHook { get; set; }
+
+    /// <summary>
     ///     SEK-G16 conditional (unique-key) append. This is a NEW path — the unconditional <c>INSERT OR REPLACE</c> write
     ///     paths are untouched. The claim event is written under the deterministic id with a PLAIN <c>INSERT</c>, so the
     ///     existing <c>(ServiceId, Id)</c> primary key is the uniqueness primitive (no schema change): the first writer
@@ -54,6 +60,7 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync(cancellationToken);
             await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            var committed = false;
             try
             {
                 await using var eventCmd = connection.CreateCommand();
@@ -107,11 +114,22 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
                 }
 
                 await transaction.CommitAsync(cancellationToken);
+                committed = true;
+                // Test seam ONLY: simulate the response/return being lost AFTER a durable commit.
+                if (AfterConditionalCommitHook is not null)
+                {
+                    await AfterConditionalCommitHook();
+                }
                 return ConditionalWriteOutcome.Wrote();
             }
             catch
             {
-                await transaction.RollbackAsync(cancellationToken);
+                // Only roll back a still-open transaction; a post-commit failure (e.g. the response-loss seam) must not
+                // attempt to roll back an already-durable commit.
+                if (!committed)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                }
                 throw;
             }
         }

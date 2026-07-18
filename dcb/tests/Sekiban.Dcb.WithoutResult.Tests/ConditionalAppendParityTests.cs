@@ -70,31 +70,34 @@ public class ConditionalAppendParityTests
     }
 
     [Fact]
-    public async Task Conditional_InDoubt_ThrowsTypedRetryable_NotGenericallyWrapped()
+    public async Task Conditional_InDoubt_ThrowsExactSameTypedRetryable_AndCause_SecretSafe_NotGenericallyWrapped()
     {
+        const string secretKey = "op-secret-KEYX";
         var domain = BuildDomain();
+        var cause = new InvalidOperationException("cause");
         var indoubt = ConditionalAppendInDoubtException.Create(
-            "TestProvider", "svc-42", Guid.NewGuid(),
-            ConditionalAppendInDoubtReason.AmbiguousAfterWrite, new InvalidOperationException("cause"));
+            "TestProvider", "svc-42", Guid.NewGuid(), ConditionalAppendInDoubtReason.AmbiguousAfterWrite, cause);
         var store = new OutcomeForcingConditionalEventStore(
             new InMemoryConditionalEventStore(domain.EventTypes),
             _ => ResultBoxes.ResultBox.Error<ConditionalAppendReceipt>(indoubt));
         var executor = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, domain), domain);
-        var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("op-1") };
+        var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification(secretKey) };
 
         var ex = await Assert.ThrowsAsync<ConditionalAppendInDoubtException>(
             () => executor.ExecuteAsync(new MarkerCommand(), AppendMarker("v"), options));
+        Assert.Same(indoubt, ex);              // exact instance rethrown, no generic wrap
+        Assert.Same(cause, ex.InnerException); // original cause preserved by identity
         Assert.True(ex.IsRetryable);
         Assert.Equal(ConditionalAppendInDoubtReason.AmbiguousAfterWrite, ex.Reason);
-        Assert.NotNull(ex.InnerException);
+        ExceptionGraphSecretAssert.ContainsNoneOf(ex, secretKey);
     }
 
     [Fact]
-    public async Task Conditional_CommittedStateCorruption_ThrowsTypedNonRetryable()
+    public async Task Conditional_CommittedStateCorruption_ThrowsExactSameTypedNonRetryable()
     {
         var domain = BuildDomain();
         var corruption = new ConditionalAppendCommittedStateCorruptionException(
-            "TestProvider", "svc-42", Guid.NewGuid(), new InvalidOperationException("corrupt"));
+            "TestProvider", "svc-42", Guid.NewGuid(), "derived-row-hash-abc");
         var store = new OutcomeForcingConditionalEventStore(
             new InMemoryConditionalEventStore(domain.EventTypes),
             _ => ResultBoxes.ResultBox.Error<ConditionalAppendReceipt>(corruption));
@@ -103,7 +106,9 @@ public class ConditionalAppendParityTests
 
         var ex = await Assert.ThrowsAsync<ConditionalAppendCommittedStateCorruptionException>(
             () => executor.ExecuteAsync(new MarkerCommand(), AppendMarker("v"), options));
+        Assert.Same(corruption, ex);
         Assert.False(ex.IsRetryable);
+        Assert.Null(ex.InnerException);
     }
 
     private record UniqueMarkerEvent(string Value) : IEventPayload;

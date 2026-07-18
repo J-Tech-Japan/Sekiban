@@ -98,12 +98,52 @@ public sealed class SqliteConditionalAppendTests : IDisposable
         Assert.False(cancelled.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendInDoubtException>(cancelled.GetException());
         Assert.True(ex.IsRetryable);
-        Assert.Empty((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // transaction rolled back
+        // The preserved cause is the ORIGINAL cancellation carrying the caller's token (identity preserved, not wrapped).
+        var oce = Assert.IsAssignableFrom<OperationCanceledException>(ex.InnerException);
+        Assert.Equal(cts.Token, oce.CancellationToken);
+        Assert.Empty((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // rollback-before-commit: nothing durable
 
         // Recovery: a normal retry converges to a durable Appended.
         var retry = (await store.AppendIfUniqueAsync(
             new ConditionalAppendRequest("mig-cancel", ConditionalAppendScenarios.Marker(_domain, "v")))).GetValue();
         Assert.Equal(ConditionalAppendStatus.Appended, retry.Status);
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    [Fact]
+    public async Task PostCommitResponseLoss_Transport_FirstCallAmbiguous_RetryConvergesToAlreadyCommitted()
+    {
+        // TRUE post-commit ambiguity (distinct from rollback-before-commit): the transaction commits durably, then the
+        // response is lost via a transport exception. The first call is ambiguous (error); a retry through a FRESH store
+        // reads the committed winner and converges to AlreadyCommitted — no second event.
+        var writer = NewStore();
+        writer.AfterConditionalCommitHook = () => throw new InvalidOperationException("connection reset after commit");
+
+        var first = await writer.AppendIfUniqueAsync(
+            new ConditionalAppendRequest("mig-postcommit", ConditionalAppendScenarios.Marker(_domain, "v")));
+
+        Assert.False(first.IsSuccess);                                             // ambiguous to the caller
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // but the write IS durable
+
+        var retry = (await NewStore().AppendIfUniqueAsync(
+            new ConditionalAppendRequest("mig-postcommit", ConditionalAppendScenarios.Marker(_domain, "v")))).GetValue();
+        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.Status);
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // no second event
+    }
+
+    [Fact]
+    public async Task PostCommitResponseLoss_Cancellation_ResolvesByReadback_ToAlreadyCommitted_NoSecondEvent()
+    {
+        // Cancellation lost the response AFTER a durable commit: the orchestrator resolves it authoritatively by read-back
+        // + fingerprint on the same call, to AlreadyCommitted — never a lost or duplicated write.
+        var writer = NewStore();
+        writer.AfterConditionalCommitHook = () => throw new OperationCanceledException("cancelled after commit");
+
+        var result = await writer.AppendIfUniqueAsync(
+            new ConditionalAppendRequest("mig-postcancel", ConditionalAppendScenarios.Marker(_domain, "v")));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, result.GetValue().Status);
         Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue());
     }
 

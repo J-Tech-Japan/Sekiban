@@ -18,6 +18,8 @@ public sealed class OutcomeForcingConditionalEventStore
 {
     private readonly IEventStore _inner;
     private readonly Func<ConditionalAppendRequest, ResultBox<ConditionalAppendReceipt>> _outcome;
+    private int _appendAttempts;
+    private int _describeCalls;
 
     public OutcomeForcingConditionalEventStore(
         IEventStore inner,
@@ -27,13 +29,25 @@ public sealed class OutcomeForcingConditionalEventStore
         _outcome = outcome;
     }
 
-    public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
-        WriteConditionCapabilityDescriptor.Supporting("OutcomeForcing", WriteConditionKind.SingleEventUniqueKey);
+    /// <summary>How many times <see cref="AppendIfUniqueAsync" /> was invoked — a store-side-effect counter for tests.</summary>
+    public int AppendAttempts => Volatile.Read(ref _appendAttempts);
+
+    /// <summary>How many times the capability descriptor was resolved — for version-gate zero-side-effect assertions.</summary>
+    public int DescribeCalls => Volatile.Read(ref _describeCalls);
+
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions()
+    {
+        Interlocked.Increment(ref _describeCalls);
+        return WriteConditionCapabilityDescriptor.Supporting("OutcomeForcing", WriteConditionKind.SingleEventUniqueKey);
+    }
 
     public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
         ConditionalAppendRequest request,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult(_outcome(request));
+        CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _appendAttempts);
+        return Task.FromResult(_outcome(request));
+    }
 
     // ── IEventStore: pure delegation ────────────────────────────────────────────────────────────────
     public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);

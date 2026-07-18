@@ -90,6 +90,32 @@ public class PostgresConditionalAppendTests : PostgresTestBase
     }
 
     [Fact]
+    public async Task PostCommitResponseLoss_Transport_FirstCallAmbiguous_RetryConvergesToAlreadyCommitted()
+    {
+        // TRUE post-commit ambiguity on the real container (distinct from the cancelled-before-commit rollback test): the
+        // transaction commits durably, then the response is lost via a transport exception. First call ambiguous; a retry
+        // reads the committed winner and converges to AlreadyCommitted — no second event.
+        var store = (PostgresEventStore)Fixture.EventStore;
+        store.AfterConditionalCommitHook = () => throw new InvalidOperationException("connection reset after commit");
+        try
+        {
+            var first = await Conditional.AppendIfUniqueAsync(
+                new ConditionalAppendRequest("pg-postcommit", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")));
+            Assert.False(first.IsSuccess);            // ambiguous to the caller
+            Assert.Equal(1, await DurableCount());     // but the write IS durable
+        }
+        finally
+        {
+            store.AfterConditionalCommitHook = null;
+        }
+
+        var retry = (await Conditional.AppendIfUniqueAsync(
+            new ConditionalAppendRequest("pg-postcommit", ConditionalAppendScenarios.Marker(Fixture.DomainTypes, "v")))).GetValue();
+        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.Status);
+        Assert.Equal(1, await DurableCount());         // no second event
+    }
+
+    [Fact]
     public async Task UnrelatedUniqueViolation_IsProviderFailure_NotAClaimConflict()
     {
         // Add a temporary UNRELATED unique index on (ServiceId, SortableUniqueId). A second conditional append that reuses

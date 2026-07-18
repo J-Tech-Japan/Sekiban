@@ -1,8 +1,10 @@
 using Dcb.Domain;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.CosmosDb.Models;
 using Sekiban.Dcb.CosmosDb.Tags;
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -131,6 +133,41 @@ public class CosmosConditionalAppendTests
         Assert.True(ex.IsRetryable);
         Assert.Equal(ConditionalAppendInDoubtReason.WinnerUnreadableAfterConflict, ex.Reason);
         Assert.Empty(lineage.Events.Items);
+
+        // Recovery: the injected fault is one-shot, so a retry converges to a durable Appended.
+        var recovered = await store.AppendIfUniqueAsync(
+            new ConditionalAppendRequest("cosmos-indoubt", ConditionalAppendScenarios.Marker(_domain, "v")));
+        Assert.True(recovered.IsSuccess);
+        Assert.Equal(ConditionalAppendStatus.Appended, recovered.GetValue().Status);
+        Assert.Single(lineage.Events.Items);
+    }
+
+    [Fact]
+    public async Task PostCommitResponseLoss_Transport_FirstCallAmbiguous_Retry_ConvergesToAlreadyCommitted_WithTagVisibility()
+    {
+        // TRUE post-commit ambiguity: the event AND all tag rows are durable, then the response is lost via a transport
+        // exception. First call ambiguous; a retry on a fresh store converges to AlreadyCommitted, with exact tag
+        // visibility and no second event.
+        var client = new InMemoryCosmosClient();
+        var options = NewOptions();
+        var first = NewLineage(client, options);
+        first.Store.AfterConditionalCommitHook = () => throw new InvalidOperationException("connection reset after commit");
+
+        var ambiguous = await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(
+            new ConditionalAppendRequest("cosmos-postcommit", ConditionalAppendScenarios.Marker(_domain, "v")));
+
+        Assert.False(ambiguous.IsSuccess);            // ambiguous to the caller
+        Assert.Single(first.Events.Items);             // event durable
+        Assert.Single(first.Tags.Items);               // tag row durable too (committed before the lost response)
+
+        var second = NewLineage(client, options);
+        var retry = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(
+            new ConditionalAppendRequest("cosmos-postcommit", ConditionalAppendScenarios.Marker(_domain, "v")));
+
+        Assert.True(retry.IsSuccess);
+        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.GetValue().Status);
+        Assert.Single(second.Events.Items);            // no second event
+        Assert.Single((await second.Store.ReadSerializableEventsByTagAsync(new TestTag("Migration:once"))).GetValue());
     }
 
     // ── The crash-window/repair gate (Fix #1) ───────────────────────────────────────────────────────
@@ -196,45 +233,51 @@ public class CosmosConditionalAppendTests
     }
 
     [Fact]
-    public async Task Retry_WithMismatchedExistingTagRow_IsNonRetryableCorruption_NoOverwrite()
+    public async Task Retry_WithMismatchedFirstRow_IsNonRetryableCorruption_NoOverwrite_NoLaterRepair_SecretSafe()
     {
+        const string sentinel = "SENTINEL-SECRET-9F3-EVTTYPE";
         var client = new InMemoryCosmosClient();
         var options = NewOptions();
         var first = NewLineage(client, options);
         const string key = "cosmos-corrupt";
 
-        // Crash after event create: the event is durable, no tag row landed.
+        // Event carries two tags; "Corrupt:a" is FIRST so its partition is repaired first (GroupBy preserves source
+        // order). Crash the tag write: the event is durable, neither tag row landed.
+        SerializableEvent TwoTagMarker() =>
+            new Event(new ConditionalMarkerEvent("v"), SortableUniqueId.GenerateNew(), nameof(ConditionalMarkerEvent),
+                    Guid.CreateVersion7(), new EventMetadata("c", "c", "u"), new List<string> { "Corrupt:a", "Missing:b" })
+                .ToSerializableEvent(_domain.EventTypes);
+
         first.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
-        await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest(key, ConditionalAppendScenarios.Marker(_domain, "v")));
+        await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(new ConditionalAppendRequest(key, TwoTagMarker()));
         Assert.Single(first.Events.Items);
         Assert.Empty(first.Tags.Items);
 
-        // Seed a DISAGREEING tag row under the deterministic identity (wrong event type) — an integrity violation the
-        // repair must NOT paper over with an overwrite.
+        // Seed ONE DISAGREEING row for the FIRST tag (wrong event type carrying a sentinel secret). The second tag's row
+        // stays missing. Repair must not overwrite the corrupt row nor proceed to create the missing one.
         var deterministicId = ConditionalAppendIdentity.DeriveEventId(ServiceId, OperationFingerprint.NormalizeKey(key));
         var winner = (await first.Store.ReadSerializableEventAsync(deterministicId)).GetValue();
-        first.Tags.Seed(CosmosTagIdentity.DeriveRow(
-            ServiceId, "Migration:once", deterministicId, winner.SortableUniqueIdValue, "SomethingElse"));
+        first.Tags.Seed(CosmosTagIdentity.DeriveRow(ServiceId, "Corrupt:a", deterministicId, winner.SortableUniqueIdValue, sentinel));
 
-        // Retry on a fresh store: the mismatched committed row must classify as NON-retryable corruption — no overwrite,
-        // no AlreadyCommitted.
+        static string Snapshot(InMemoryCosmosContainer c) =>
+            string.Join("\n", c.Items.Select(i => i.ToString(Newtonsoft.Json.Formatting.None)).OrderBy(s => s, StringComparer.Ordinal));
+        var before = Snapshot(first.Tags);
+
         var second = NewLineage(client, options);
-        var result = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest(key, ConditionalAppendScenarios.Marker(_domain, "v")));
+        var result = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(new ConditionalAppendRequest(key, TwoTagMarker()));
 
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<ConditionalAppendCommittedStateCorruptionException>(result.GetException());
         Assert.False(ex.IsRetryable);
-        Assert.Single(second.Tags.Items);                                             // no second tag row written
-        Assert.Equal("SomethingElse", second.Tags.Items.Single()["eventType"]!.ToString()); // bytes unchanged
+        Assert.Null(ex.InnerException);                                  // no unsafe provider exception chained
+        ExceptionGraphSecretAssert.ContainsNoneOf(ex, sentinel, "Corrupt:a", "Missing:b"); // recursive graph secret-safe
+        Assert.Single(second.Tags.Items);                               // the missing later row was NOT created
+        Assert.Equal(before, Snapshot(second.Tags));                    // every existing byte unchanged (no overwrite)
 
-        // A repeated retry remains corruption — never "eventually" retryable, and still no overwrite.
-        var again = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(
-            new ConditionalAppendRequest(key, ConditionalAppendScenarios.Marker(_domain, "v")));
+        // Repeated retry stays corruption and still changes nothing.
+        var again = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(new ConditionalAppendRequest(key, TwoTagMarker()));
         Assert.IsType<ConditionalAppendCommittedStateCorruptionException>(again.GetException());
-        Assert.Single(second.Tags.Items);
-        Assert.Equal("SomethingElse", second.Tags.Items.Single()["eventType"]!.ToString());
+        Assert.Equal(before, Snapshot(second.Tags));
     }
 
     [Fact]
