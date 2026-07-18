@@ -1,0 +1,278 @@
+using Dcb.Domain;
+using ResultBoxes;
+using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Capabilities;
+using Sekiban.Dcb.ColdEvents;
+using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.Testing;
+using System.Text;
+using Xunit;
+using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
+namespace Sekiban.Dcb.Tests.ConditionalAppend;
+
+/// <summary>
+///     SEK-G15 conditional-append contract: the optional interface, the outcome machine, the fingerprint/receipt, the
+///     runtime-resolved write-condition capability (fail-closed), and the InMemory reference. All additive — the existing
+///     unconditional path is exercised alongside and is unchanged.
+/// </summary>
+public class ConditionalAppendContractTests
+{
+    private static DcbDomainTypes BuildDomainTypes()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        ((SimpleEventTypes)domainTypes.EventTypes).RegisterEventType<UniqueMarkerEvent>();
+        ((SimpleTagTypes)domainTypes.TagTypes).RegisterTagGroupType<MarkerTag>();
+        return domainTypes;
+    }
+
+    private static (GeneralSekibanExecutor Executor, InMemoryConditionalEventStore Store, DcbDomainTypes Domain) NewConditional()
+    {
+        var domain = BuildDomainTypes();
+        var store = new InMemoryConditionalEventStore(domain.EventTypes);
+        var accessor = new InMemoryObjectAccessor(store, domain);
+        return (new GeneralSekibanExecutor(store, accessor, domain), store, domain);
+    }
+
+    private static Func<MarkerCommand, ICommandContext, Task<ResultBox<EventOrNone>>> AppendMarker(string value) =>
+        (_, ctx) => ctx.AppendEvent(new UniqueMarkerEvent(value), new MarkerTag("m"));
+
+    // ---------------- Operation fingerprint ----------------
+
+    [Fact]
+    public void Fingerprint_IsStable_ForTheSameInputs_AndTagOrderIndependent()
+    {
+        var a = OperationFingerprint.Compute("svc", "key-1", "Evt", "payload"u8, new[] { "A:1", "B:2" });
+        var b = OperationFingerprint.Compute("svc", "key-1", "Evt", "payload"u8, new[] { "B:2", "A:1" });
+        Assert.Equal(a, b); // tag ordering must not change the fingerprint
+    }
+
+    [Theory]
+    [InlineData("svc2", "key-1", "Evt", "payload", "A:1")] // different serviceId
+    [InlineData("svc", "key-2", "Evt", "payload", "A:1")] // different key
+    [InlineData("svc", "key-1", "Evt2", "payload", "A:1")] // different event type
+    [InlineData("svc", "key-1", "Evt", "payload2", "A:1")] // different payload
+    [InlineData("svc", "key-1", "Evt", "payload", "A:2")] // different tag
+    public void Fingerprint_ChangesWhenAnyComponentChanges(string svc, string key, string type, string payload, string tag)
+    {
+        var baseline = OperationFingerprint.Compute("svc", "key-1", "Evt", "payload"u8, new[] { "A:1" });
+        var changed = OperationFingerprint.Compute(svc, key, type, Encoding.UTF8.GetBytes(payload), new[] { tag });
+        Assert.NotEqual(baseline, changed);
+    }
+
+    [Fact]
+    public void NormalizeKey_TrimsAndAppliesNfc_AndRejectsBlankOrOversize()
+    {
+        Assert.Equal("key", OperationFingerprint.NormalizeKey("  key  "));
+        Assert.Throws<ArgumentException>(() => OperationFingerprint.NormalizeKey("   "));
+        Assert.Throws<ArgumentException>(() =>
+            OperationFingerprint.NormalizeKey(new string('x', OperationFingerprint.MaxIdempotencyKeyUtf8Bytes + 1)));
+    }
+
+    // ---------------- InMemory reference outcome machine ----------------
+
+    [Fact]
+    public async Task InMemory_FirstAppend_Wins_WithReceipt()
+    {
+        var (executor, store, _) = NewConditional();
+        var result = await executor.ExecuteAsync(
+            new MarkerCommand(),
+            AppendMarker("v1"),
+            new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("op-1") });
+
+        Assert.True(result.IsSuccess);
+        var exec = result.GetValue();
+        Assert.Equal("Appended", exec.Metadata!["ConditionalAppendStatus"]);
+        Assert.NotEqual(Guid.Empty, exec.EventId);
+        var stored = (await store.ReadAllSerializableEventsAsync()).GetValue().ToList();
+        Assert.Single(stored);
+    }
+
+    [Fact]
+    public async Task InMemory_SameOperationRetry_ReturnsAlreadyCommitted_SameReceipt_NoSecondWrite()
+    {
+        var (executor, store, _) = NewConditional();
+        var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("op-1") };
+
+        var first = (await executor.ExecuteAsync(new MarkerCommand(), AppendMarker("same"), options)).GetValue();
+        var second = (await executor.ExecuteAsync(new MarkerCommand(), AppendMarker("same"), options)).GetValue();
+
+        Assert.Equal("Appended", first.Metadata!["ConditionalAppendStatus"]);
+        Assert.Equal("AlreadyCommittedSameOperation", second.Metadata!["ConditionalAppendStatus"]);
+        Assert.Equal(first.EventId, second.EventId); // the ORIGINAL winner
+        Assert.Equal(first.SortableUniqueId, second.SortableUniqueId);
+        Assert.Equal(first.Metadata!["OperationFingerprint"], second.Metadata!["OperationFingerprint"]);
+        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue()); // still only one durable event
+    }
+
+    [Fact]
+    public async Task InMemory_SameKeyDifferentOperation_IsKeyReuseConflict_NoInnerException_NoSecondWrite()
+    {
+        var (executor, store, _) = NewConditional();
+        var options = new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("op-1") };
+
+        Assert.True((await executor.ExecuteAsync(new MarkerCommand(), AppendMarker("first"), options)).IsSuccess);
+        var conflict = await executor.ExecuteAsync(new MarkerCommand(), AppendMarker("DIFFERENT"), options);
+
+        Assert.False(conflict.IsSuccess);
+        var ex = Assert.IsType<KeyReuseConflictException>(conflict.GetException());
+        Assert.Equal(ConditionalAppendStatus.KeyReuseConflict, ex.Status);
+        Assert.Null(ex.InnerException); // conflict discovered by read — no provider exception fabricated
+        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    [Fact]
+    public async Task InMemory_DirectStore_ReceiptOutcomes()
+    {
+        var domain = BuildDomainTypes();
+        var store = new InMemoryConditionalEventStore(domain.EventTypes);
+        var evt = new Event(new UniqueMarkerEvent("x"), SortableUniqueId.GenerateNew(), nameof(UniqueMarkerEvent),
+            Guid.CreateVersion7(), new EventMetadata("c", "c", "u"), new List<string> { "Marker:m" });
+        var serializable = evt.ToSerializableEvent(domain.EventTypes);
+
+        var appended = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", serializable))).GetValue();
+        Assert.Equal(ConditionalAppendStatus.Appended, appended.Status);
+        Assert.Equal(evt.Id, appended.WinnerEventId);
+
+        // Same key, same content but freshly-allocated ids => still recognised as the same operation.
+        var retryEvt = serializable with { Id = Guid.CreateVersion7(), SortableUniqueIdValue = SortableUniqueId.GenerateNew() };
+        var retry = (await store.AppendIfUniqueAsync(new ConditionalAppendRequest("k", retryEvt))).GetValue();
+        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, retry.Status);
+        Assert.Equal(appended.WinnerEventId, retry.WinnerEventId); // original winner, not the retry's id
+    }
+
+    // ---------------- Capability descriptor (runtime-resolved, fail-closed) ----------------
+
+    [Fact]
+    public void Capability_InMemoryReference_Supports_SingleEventUniqueKey()
+    {
+        var domain = BuildDomainTypes();
+        var store = new InMemoryConditionalEventStore(domain.EventTypes);
+        var descriptor = SekibanDcbCapabilityResolver.DescribeWriteConditions(store, "event store");
+        Assert.True(descriptor.Supports(WriteConditionKind.SingleEventUniqueKey));
+    }
+
+    [Fact]
+    public void Capability_PlainStore_SupportsNothing_FailClosed()
+    {
+        var plain = new CoreInMemoryEventStore();
+        var descriptor = SekibanDcbCapabilityResolver.DescribeWriteConditions(plain, "event store");
+        Assert.False(descriptor.Supports(WriteConditionKind.SingleEventUniqueKey));
+        Assert.False(descriptor.Supports(WriteConditionKind.Unknown)); // Unknown is never "supported"
+    }
+
+    [Fact]
+    public void Capability_NullStore_SupportsNothing()
+    {
+        var descriptor = SekibanDcbCapabilityResolver.DescribeWriteConditions(null, "event store");
+        Assert.Empty(descriptor.SupportedKinds);
+    }
+
+    [Fact]
+    public void Capability_Composite_IsIntersectionOfUnderlying()
+    {
+        var supports = WriteConditionCapabilityDescriptor.Supporting("A", WriteConditionKind.SingleEventUniqueKey);
+        var none = WriteConditionCapabilityDescriptor.None("B");
+        var intersect = WriteConditionCapabilityDescriptor.Intersect("composite", new[] { supports, none });
+        Assert.False(intersect.Supports(WriteConditionKind.SingleEventUniqueKey)); // all-underlying-support-only
+    }
+
+    /// <summary>
+    ///     No default pass-through: any type that implements <see cref="IConditionalEventStore" /> MUST also declare the
+    ///     capability via <see cref="IWriteConditionCapabilityProvider" />, so the runtime probe and the cast can never
+    ///     disagree. Enforced by reflection over the production Core assembly and the testing reference assembly.
+    /// </summary>
+    [Fact]
+    public void Architecture_EveryConditionalStore_AlsoDeclaresTheCapability()
+    {
+        var assemblies = new[] { typeof(HybridEventStore).Assembly, typeof(InMemoryConditionalEventStore).Assembly };
+        foreach (var assembly in assemblies)
+        {
+            var offenders = assembly.GetTypes()
+                .Where(t => t is { IsClass: true, IsAbstract: false })
+                .Where(t => typeof(IConditionalEventStore).IsAssignableFrom(t))
+                .Where(t => !typeof(IWriteConditionCapabilityProvider).IsAssignableFrom(t))
+                .Select(t => t.FullName)
+                .ToList();
+            Assert.True(offenders.Count == 0, $"IConditionalEventStore without IWriteConditionCapabilityProvider: {string.Join(", ", offenders)}");
+        }
+    }
+
+    // ---------------- Executor fail-closed ordering ----------------
+
+    [Fact]
+    public async Task Executor_ConditionalOnUnsupportedStore_FailsClosed_BeforeHandlerOrWrite()
+    {
+        var domain = BuildDomainTypes();
+        var plain = new CoreInMemoryEventStore(domain.EventTypes); // NOT conditional
+        var accessor = new InMemoryObjectAccessor(plain, domain);
+        var executor = new GeneralSekibanExecutor(plain, accessor, domain);
+
+        var handlerInvoked = false;
+        var result = await executor.ExecuteAsync(
+            new MarkerCommand(),
+            (MarkerCommand _, ICommandContext ctx) =>
+            {
+                handlerInvoked = true;
+                return ctx.AppendEvent(new UniqueMarkerEvent("v"), new MarkerTag("m"));
+            },
+            new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("op-1") });
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<ConditionNotSupportedException>(result.GetException());
+        Assert.False(handlerInvoked); // fail-closed BEFORE the handler runs
+        Assert.Empty((await plain.ReadAllSerializableEventsAsync()).GetValue()); // nothing allocated or written
+    }
+
+    // ---------------- Serialized (WASM) conditional path ----------------
+
+    [Fact]
+    public async Task Serialized_Conditional_AppendedThenAlreadyCommitted()
+    {
+        var (executor, _, domain) = NewConditional();
+        var payload = Encoding.UTF8.GetBytes(domain.EventTypes.SerializeEventPayload(new UniqueMarkerEvent("s")));
+        var candidate = new SerializableEventCandidate(payload, nameof(UniqueMarkerEvent), new List<string> { "Marker:m" });
+        var request = new SerializedConditionalCommitRequest(SerializedConditionalCommitRequest.CurrentVersion, candidate, "wasm-op");
+
+        var first = (await executor.CommitSerializableEventConditionallyAsync(request)).GetValue();
+        var second = (await executor.CommitSerializableEventConditionallyAsync(request)).GetValue();
+
+        Assert.Equal(ConditionalAppendStatus.Appended, first.Status);
+        Assert.Single(first.WrittenEvents);
+        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, second.Status);
+        Assert.Empty(second.WrittenEvents); // nothing written on the retry
+        Assert.Equal(first.WinnerEventId, second.WinnerEventId);
+    }
+
+    // ---------------- Compatibility: the unconditional path is unchanged and never capability-casts ----------------
+
+    [Fact]
+    public async Task Unconditional_Path_StillWorks_OnAPlainStore()
+    {
+        var domain = BuildDomainTypes();
+        var plain = new CoreInMemoryEventStore(domain.EventTypes);
+        var accessor = new InMemoryObjectAccessor(plain, domain);
+        var executor = new GeneralSekibanExecutor(plain, accessor, domain);
+
+        // No options overload => the legacy behaviour; a plain store that cannot condition writes is perfectly fine here.
+        var result = await executor.ExecuteAsync(new MarkerCommand(), AppendMarker("legacy"));
+        Assert.True(result.IsSuccess);
+        Assert.Single((await plain.ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    private record UniqueMarkerEvent(string Value) : IEventPayload;
+
+    private record MarkerCommand : ICommand;
+
+    private record MarkerTag(string Id) : IStringTagGroup<MarkerTag>
+    {
+        public static string TagGroupName => "Marker";
+        public static MarkerTag FromContent(string content) => new(content);
+        public bool IsConsistencyTag() => false;
+        public string GetId() => Id;
+    }
+}

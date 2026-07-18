@@ -1,0 +1,107 @@
+using ResultBoxes;
+using Sekiban.Dcb.Capabilities;
+using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Storage;
+using System.Collections.Concurrent;
+namespace Sekiban.Dcb.Testing;
+
+/// <summary>
+///     The deterministic in-memory REFERENCE implementation of the full conditional-append outcome machine, placed in the
+///     testing package (never referenced from a runtime project) exactly like the other in-memory reference stores.
+///     It is a full <see cref="IEventStore" /> (so appended events are readable / projectable) plus
+///     <see cref="IConditionalEventStore" />, and it declares the capability via
+///     <see cref="IWriteConditionCapabilityProvider" /> so the runtime probe and the cast agree.
+///     Semantics, per ServiceId (isolated exactly as the base store isolates events):
+///     first claim of a key wins and is written durably (Appended, with a receipt); a later attempt with the SAME
+///     operation fingerprint returns the ORIGINAL receipt (AlreadyCommittedSameOperation) and writes nothing; a later
+///     attempt with a DIFFERENT fingerprint is a KeyReuseConflict. Conflicts are discovered by READ here, so there is no
+///     provider exception and none is fabricated as an inner cause.
+/// </summary>
+public sealed class InMemoryConditionalEventStore : InMemoryEventStore, IConditionalEventStore, IWriteConditionCapabilityProvider
+{
+    private const string ProviderName = "InMemoryConditional";
+    private readonly IServiceIdProvider _serviceIdProvider;
+    private readonly ConcurrentDictionary<string, ServiceClaims> _claimsByService = new(StringComparer.Ordinal);
+
+    public InMemoryConditionalEventStore(IEventTypes eventTypes, IServiceIdProvider? serviceIdProvider = null)
+        : base(eventTypes, serviceIdProvider) =>
+        _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
+        WriteConditionCapabilityDescriptor.Supporting(ProviderName, WriteConditionKind.SingleEventUniqueKey);
+
+    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        ConditionalAppendRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var serviceId = _serviceIdProvider.GetCurrentServiceId();
+        string normalizedKey;
+        string fingerprint;
+        try
+        {
+            normalizedKey = OperationFingerprint.NormalizeKey(request.IdempotencyKey);
+            fingerprint = OperationFingerprint.Compute(
+                serviceId,
+                request.IdempotencyKey,
+                request.Event.EventPayloadName,
+                request.Event.Payload,
+                request.Event.Tags);
+        }
+        catch (ArgumentException ex)
+        {
+            return Task.FromResult(ResultBox.Error<ConditionalAppendReceipt>(ex));
+        }
+
+        var claims = _claimsByService.GetOrAdd(serviceId, _ => new ServiceClaims());
+        lock (claims.Lock)
+        {
+            if (claims.ByKey.TryGetValue(normalizedKey, out var existing))
+            {
+                if (string.Equals(existing.Fingerprint, fingerprint, StringComparison.Ordinal))
+                {
+                    return Task.FromResult(
+                        ResultBox.FromValue(
+                            new ConditionalAppendReceipt(
+                                ConditionalAppendStatus.AlreadyCommittedSameOperation,
+                                existing.EventId,
+                                existing.SortableUniqueId,
+                                existing.Fingerprint)));
+                }
+
+                // Conflict discovered by read — no provider exception occurred, so none is fabricated.
+                return Task.FromResult(
+                    ResultBox.Error<ConditionalAppendReceipt>(
+                        new KeyReuseConflictException(existing.Fingerprint, fingerprint, ProviderName)));
+            }
+
+            // First claim: write the event through the base store, then record the claim. The base write is synchronous,
+            // so blocking on it here holds no async gap; the whole (write + claim) is atomic under this lock.
+            var writeResult = base.WriteSerializableEventsAsync(new[] { request.Event }).GetAwaiter().GetResult();
+            if (!writeResult.IsSuccess)
+            {
+                return Task.FromResult(ResultBox.Error<ConditionalAppendReceipt>(writeResult.GetException()));
+            }
+
+            claims.ByKey[normalizedKey] = new ClaimRecord(
+                request.Event.Id,
+                request.Event.SortableUniqueIdValue,
+                fingerprint);
+            return Task.FromResult(
+                ResultBox.FromValue(
+                    new ConditionalAppendReceipt(
+                        ConditionalAppendStatus.Appended,
+                        request.Event.Id,
+                        request.Event.SortableUniqueIdValue,
+                        fingerprint)));
+        }
+    }
+
+    private sealed class ServiceClaims
+    {
+        public object Lock { get; } = new();
+        public Dictionary<string, ClaimRecord> ByKey { get; } = new(StringComparer.Ordinal);
+    }
+
+    private sealed record ClaimRecord(Guid EventId, string SortableUniqueId, string Fingerprint);
+}

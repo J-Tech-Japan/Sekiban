@@ -482,6 +482,37 @@ Materialized views are currently implemented for PostgreSQL:
 This is separate from the main event store package. In the current PoC, a service can store events in one database and
 materialized view tables in another PostgreSQL database or schema. See [Materialized View Basics](20_materialized_view.md).
 
+## Conditional (Unique-Key) Append — SEK-G15
+
+The base `IEventStore.WriteSerializableEventsAsync` is unconditional: EventIds are server-generated and the write always lands. When you need "exactly one host performs this" — e.g. a one-time migration fanned out across N hosts — use the **optional** conditional-append contract. It is strictly additive: `IEventStore`, `ICommandContext`, and the existing serialized DTOs are untouched, and nothing changes for stores that do not opt in.
+
+### The contract
+
+- **Optional interface** `IConditionalEventStore.AppendIfUniqueAsync(ConditionalAppendRequest, ...)` — single-event append under a caller-supplied idempotency key. Feature-detected with `is`, exactly like `IStreamingSerializableEventStore`. A store that implements it MUST also implement `IWriteConditionCapabilityProvider` (an architecture test enforces this — there is no silent default pass-through).
+- **Outcome machine** (one observable contract): `Appended` / `AlreadyCommittedSameOperation` (both carry a durable **receipt**: winner `EventId`, `SortableUniqueId`, and operation fingerprint) / `KeyReuseConflict` / `ConditionNotSupported`.
+- **Executor seams** — opt-in only: new `ExecuteAsync(command, handler, CommandExecutionOptions, ...)` overloads on both facades (existing `ExecuteAsync` overloads unchanged; `ICommandContext` unchanged) and a new versioned `SerializedConditionalCommitRequest` / `CommitSerializableEventConditionallyAsync` on the WASM boundary (the existing positional `SerializedCommitRequest` is untouched).
+
+### Capability discovery (runtime-resolved, fail-closed)
+
+Support is a **runtime capability descriptor**, reused from the G10 pattern — never a type-name check. `WriteConditionKind` distinguishes kinds (`SingleEventUniqueKey` now; `BatchUniqueKey` / `ExpectedPosition` are reserved future kinds). The descriptor is resolved from the **live** store the container built, and decorators propagate it: a `HybridEventStore` reports exactly what its hot store can enforce (writes land there — it never upgrades on its own authority), and a composite supports a kind only if **every** underlying store does. A store that says nothing supports nothing.
+
+Requesting a conditional append against a store that does not support the kind **fails closed**: `ConditionNotSupportedException` is raised **before** the command handler runs, before any EventId is allocated, before serialization, and before any store call. There is no silent degradation to an unconditional write.
+
+### Operation fingerprint and receipt
+
+Operation identity alone is never proof of "same operation". Each claim persists a **canonical fingerprint** derived (with a versioned, length-prefixed, domain-separated SHA-256) from: derivation version, domain separator, ServiceId, the normalized idempotency key (NFC, trimmed, ≤ 512 UTF-8 bytes), event type, canonical payload bytes, and the event's tags in canonical order. The server-generated EventId/SortableUniqueId are **excluded** — a genuine retry allocates fresh ids yet must still be recognised. ServiceId is part of the identity, so a key claimed under one service is never matched under another. Raw keys are never logged or returned; only the opaque fingerprint leaves the layer.
+
+- Same key + **same** fingerprint → `AlreadyCommittedSameOperation`, returning the ORIGINAL winner's receipt; nothing is written.
+- Same key + **different** fingerprint → `KeyReuseConflict`. When a real provider surfaced a unique-violation, that provider exception is preserved as the inner cause; a conflict discovered by read has no provider exception and none is fabricated.
+
+### The boundary: one durable claim, not exactly-once side effects
+
+The store guarantees **at most one durable claim per key**. That is a storage guarantee, not an exactly-once side-effect guarantee: making an external effect (send an email, call an API) happen exactly once still needs an outbox / idempotency layer on top of the winning claim.
+
+### Reference implementation and provider status
+
+A deterministic in-memory reference lives in the testing package (`Sekiban.Dcb.Testing.InMemoryConditionalEventStore`, never referenced from a runtime project) and implements the full outcome machine. **Production provider implementations arrive in SEK-G16** (PostgreSQL/SQLite PK, Cosmos 409, DynamoDB `attribute_not_exists`); expected-position / CAS semantics are a later slice.
+
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).

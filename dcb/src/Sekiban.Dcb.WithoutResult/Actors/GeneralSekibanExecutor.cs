@@ -14,7 +14,8 @@ namespace Sekiban.Dcb.Actors;
 ///     Wraps CoreGeneralSekibanExecutor and unwraps ResultBox, throwing exceptions on errors
 ///     This implementation uses exceptions for all error handling
 /// </summary>
-public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider
+public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider,
+    IConditionalCommandExecutor, ISerializedConditionalSekibanDcbExecutor
 {
     private readonly CoreGeneralSekibanExecutor _core;
     private readonly IActorObjectAccessor _actorAccessor;
@@ -176,6 +177,61 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         SerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
         _core.CommitSerializableEventsAsync(request, cancellationToken);
+
+    /// <summary>Opt-in: execute a self-handling command with conditional (unique-key) append options.</summary>
+    public async Task<ExecutionResult> ExecuteAsync<TCommand>(
+        TCommand command,
+        CommandExecutionOptions options,
+        CancellationToken cancellationToken = default) where TCommand : ICommandWithHandler<TCommand>
+    {
+        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = async (cmd, coreCtx) =>
+        {
+            try
+            {
+                var contextAdapter = new CommandContextAdapter(coreCtx);
+                var result = await TCommand.HandleAsync(cmd, contextAdapter);
+                return ResultBox.FromValue(result);
+            }
+            catch (Exception ex)
+            {
+                return ResultBox<EventOrNone>.Error(ex);
+            }
+        };
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.ExecuteAsync(command, coreHandler, options, cancellationToken),
+            new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
+    }
+
+    /// <summary>Opt-in: execute a command with a handler function and conditional (unique-key) append options.</summary>
+    public async Task<ExecutionResult> ExecuteAsync<TCommand>(
+        TCommand command,
+        Func<TCommand, ICommandContext, Task<EventOrNone>> handlerFunc,
+        CommandExecutionOptions options,
+        CancellationToken cancellationToken = default) where TCommand : ICommand
+    {
+        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> coreHandler = async (cmd, coreCtx) =>
+        {
+            try
+            {
+                var contextAdapter = new CommandContextAdapter(coreCtx);
+                var result = await handlerFunc(cmd, contextAdapter);
+                return ResultBox.FromValue(result);
+            }
+            catch (Exception ex)
+            {
+                return ResultBox<EventOrNone>.Error(ex);
+            }
+        };
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.ExecuteAsync(command, coreHandler, options, cancellationToken),
+            new BoundaryContext("ISekibanExecutor.ExecuteAsync", typeof(TCommand).Name));
+    }
+
+    /// <summary>Opt-in WASM boundary: conditional (unique-key) single-event serialized commit.</summary>
+    public Task<ResultBox<SerializedConditionalCommitResult>> CommitSerializableEventConditionallyAsync(
+        SerializedConditionalCommitRequest request,
+        CancellationToken cancellationToken = default) =>
+        _core.CommitSerializableEventConditionallyAsync(request, cancellationToken);
 
     private sealed record AnonymousCommand : ICommand;
 }

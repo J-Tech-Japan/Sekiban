@@ -499,6 +499,37 @@ var executor = new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore());
 マテリアライズドビューの DB を分離した構成も取れます。詳細は [マテリアライズドビュー基礎](20_materialized_view.md)
 を参照してください。
 
+## 条件付き（ユニークキー）追記 — SEK-G15
+
+基本の `IEventStore.WriteSerializableEventsAsync` は無条件です。EventId はサーバー生成で、書き込みは常に成立します。「この処理はちょうど1台のホストだけが実行する」— 例えば N 台のホストにまたがる一度きりのマイグレーション — が必要な場合は、**オプションの**条件付き追記コントラクトを使います。完全に追加のみで、`IEventStore`・`ICommandContext`・既存のシリアライズ DTO は一切変更せず、オプトインしないストアの挙動は変わりません。
+
+### コントラクト
+
+- **オプションインターフェース** `IConditionalEventStore.AppendIfUniqueAsync(ConditionalAppendRequest, ...)` — 呼び出し側が指定する冪等キーの下での単一イベント追記。`IStreamingSerializableEventStore` と同様に `is` で機能検出します。これを実装するストアは `IWriteConditionCapabilityProvider` も必ず実装します（アーキテクチャテストで強制。暗黙のデフォルト素通りは存在しません）。
+- **アウトカムマシン**（唯一の観測コントラクト）: `Appended` / `AlreadyCommittedSameOperation`（両者とも耐久的な**レシート**を持つ: 勝者の `EventId`・`SortableUniqueId`・オペレーションフィンガープリント）/ `KeyReuseConflict` / `ConditionNotSupported`。
+- **エグゼキュータのシーム** — オプトインのみ: 両ファサードに `ExecuteAsync(command, handler, CommandExecutionOptions, ...)` の新オーバーロード（既存の `ExecuteAsync` は不変、`ICommandContext` も不変）、および WASM 境界に新しいバージョン付き `SerializedConditionalCommitRequest` / `CommitSerializableEventConditionallyAsync`（既存の位置指定 `SerializedCommitRequest` は不変）。
+
+### ケーパビリティの解決（実行時解決・フェイルクローズ）
+
+サポート可否は**実行時ケーパビリティディスクリプタ**で、G10 パターンを再利用します — 型名判定は決して行いません。`WriteConditionKind` は種別を区別します（現在は `SingleEventUniqueKey`。`BatchUniqueKey` / `ExpectedPosition` は将来の予約種別）。ディスクリプタはコンテナが実際に構築した**ライブ**インスタンスから解決され、デコレータは伝播します。`HybridEventStore` はホットストアが強制できる内容をそのまま報告し（書き込みはそこに着地する — 自らの権限で昇格しない）、コンポジットは**すべての**下位ストアが対応する種別のみをサポートします。何も言わないストアは何もサポートしません。
+
+対応しない種別への条件付き追記要求は**フェイルクローズ**します。`ConditionNotSupportedException` は、コマンドハンドラの実行前・EventId の採番前・シリアライズ前・いかなるストア呼び出しの前に送出されます。無条件書き込みへの暗黙のデグレードはありません。
+
+### オペレーションフィンガープリントとレシート
+
+オペレーションの同一性だけでは「同じオペレーション」の証明になりません。各クレームは**正規フィンガープリント**を永続化します。これはバージョン付き・長さプレフィックス付き・ドメインセパレータ付きの SHA-256 で、次から導出します: 導出バージョン、ドメインセパレータ、ServiceId、正規化された冪等キー（NFC・トリム・512 UTF-8 バイト以下）、イベント型、正規のペイロードバイト列、イベントのタグ（正規順）。サーバー生成の EventId/SortableUniqueId は**除外**します — 真のリトライは新しい id を採番しても同一と認識される必要があるためです。ServiceId は同一性の一部なので、あるサービスで取得したキーが別サービスでマッチすることはありません。生のキーはログにも戻り値にも出さず、不透明なフィンガープリントのみが層の外に出ます。
+
+- 同一キー + **同一**フィンガープリント → `AlreadyCommittedSameOperation`。元の勝者のレシートを返し、何も書き込みません。
+- 同一キー + **異なる**フィンガープリント → `KeyReuseConflict`。実プロバイダがユニーク制約違反を表出した場合はそのプロバイダ例外を内部原因として保持します。読み取りで発見された衝突にはプロバイダ例外がなく、捏造もしません。
+
+### 境界: 耐久クレームは1つ、副作用のちょうど1回ではない
+
+ストアが保証するのは**キーごとに高々1つの耐久クレーム**です。これはストレージの保証であって、副作用のちょうど1回保証ではありません。外部への副作用（メール送信・API 呼び出し）をちょうど1回にするには、勝者クレームの上にアウトボックス／冪等層が別途必要です。
+
+### リファレンス実装とプロバイダの状況
+
+決定論的なインメモリのリファレンスがテスト用パッケージにあり（`Sekiban.Dcb.Testing.InMemoryConditionalEventStore`、ランタイムプロジェクトからは参照しない）、アウトカムマシン全体を実装します。**本番プロバイダ実装は SEK-G16 で登場します**（PostgreSQL/SQLite の PK、Cosmos の 409、DynamoDB の `attribute_not_exists`）。expected-position / CAS セマンティクスはさらに後のスライスです。
+
 ## 関連資料
 
 現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。

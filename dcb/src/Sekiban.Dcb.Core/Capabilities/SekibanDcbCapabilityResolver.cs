@@ -72,4 +72,18 @@ public static class SekibanDcbCapabilityResolver
             IStorageDurabilityDescriptorProvider provider => provider.DescribeStorage(),
             _ => StorageDurabilityDescriptor.Unknown(store.GetType().Name)
         };
+
+    /// <summary>
+    ///     What write-conditions a store can enforce, or nothing (<see cref="WriteConditionCapabilityDescriptor.None" />)
+    ///     if it says nothing. Resolved from the live instance — a store that does not implement
+    ///     <see cref="IWriteConditionCapabilityProvider" /> supports nothing, never "maybe". This is what the conditional
+    ///     append path consults to fail closed before it does any work.
+    /// </summary>
+    public static WriteConditionCapabilityDescriptor DescribeWriteConditions(object? store, string role) =>
+        store switch
+        {
+            null => WriteConditionCapabilityDescriptor.None($"(no {role} registered)"),
+            IWriteConditionCapabilityProvider provider => provider.DescribeWriteConditions(),
+            _ => WriteConditionCapabilityDescriptor.None(store.GetType().Name)
+        };
 }

@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
@@ -38,9 +39,16 @@ public class CoreGeneralSekibanExecutor
         _eventPublisher = eventPublisher;
     }
 
+    public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
+        TCommand command,
+        Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
+        CancellationToken cancellationToken = default) where TCommand : ICommand =>
+        ExecuteAsync(command, handlerFunc, options: null, cancellationToken);
+
     public async Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
         TCommand command,
         Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
+        CommandExecutionOptions? options,
         CancellationToken cancellationToken = default) where TCommand : ICommand
     {
         var stopwatch = Stopwatch.StartNew();
@@ -52,6 +60,22 @@ public class CoreGeneralSekibanExecutor
             if (validationErrors.Count > 0)
             {
                 return ResultBox.Error<ExecutionResult>(new SekibanValidationException(validationErrors));
+            }
+
+            // Step 0.5: FAIL CLOSED. If conditional (unique-key) append was requested, the resolved store MUST declare
+            // and actually implement the capability. This runs BEFORE the handler, before any EventId allocation, before
+            // serialization, and before any store call — so an unsupported store never degrades to an unconditional
+            // write. The decision is the runtime capability descriptor (never a type name); the cast check is defensive
+            // (a store that declares support must implement the interface — enforced by an architecture test).
+            if (options?.ConditionalAppend is not null)
+            {
+                var capability = SekibanDcbCapabilityResolver.DescribeWriteConditions(_eventStore, "event store");
+                if (!capability.Supports(WriteConditionKind.SingleEventUniqueKey) ||
+                    _eventStore is not IConditionalEventStore)
+                {
+                    return ResultBox.Error<ExecutionResult>(
+                        new ConditionNotSupportedException(WriteConditionKind.SingleEventUniqueKey, capability.ProviderName));
+                }
             }
 
             // Step 1: Create command context
@@ -96,6 +120,15 @@ public class CoreGeneralSekibanExecutor
             {
                 return ResultBox.FromValue(
                     new ExecutionResult(Guid.Empty, 0, new List<TagWriteResult>(), stopwatch.Elapsed, []));
+            }
+
+            // Conditional (unique-key) append path. The capability was already proven at Step 0.5, so the cast is safe.
+            // This is the single-event contract: the handler must have appended exactly one event. It routes the write
+            // through the store's conditional path (idempotency-key uniqueness is the concurrency mechanism here, in
+            // place of tag reservation) and maps the outcome machine onto the ExecutionResult / typed errors.
+            if (options?.ConditionalAppend is { } conditional)
+            {
+                return await ExecuteConditionalAppendAsync(command, collectedEvents, conditional, stopwatch, cancellationToken);
             }
 
             // Step 3: Collect tags across all events
@@ -241,6 +274,84 @@ public class CoreGeneralSekibanExecutor
         {
             return ResultBox.Error<ExecutionResult>(ex);
         }
+    }
+
+    private async Task<ResultBox<ExecutionResult>> ExecuteConditionalAppendAsync<TCommand>(
+        TCommand command,
+        IReadOnlyList<EventPayloadWithTags> collectedEvents,
+        ConditionalAppendSpecification conditional,
+        Stopwatch stopwatch,
+        CancellationToken cancellationToken) where TCommand : ICommand
+    {
+        // Single-event contract: exactly one appended event. Zero was already handled by the early return; more-than-one
+        // is a misuse of the single-event conditional contract.
+        if (collectedEvents.Count != 1)
+        {
+            return ResultBox.Error<ExecutionResult>(
+                new InvalidOperationException(
+                    "Conditional (unique-key) append requires the handler to append exactly one event, but it appended "
+                    + $"{collectedEvents.Count}."));
+        }
+
+        var single = collectedEvents[0];
+
+        // Validate tags, same as the normal path's Step 3.1.
+        var tags = new HashSet<ITag>(single.Tags);
+        TagValidator.ValidateTagsAndThrow(tags);
+
+        // Allocate the server-generated identity and serialize — only now, AFTER the fail-closed gate has passed.
+        var eventId = Guid.CreateVersion7();
+        var sortable = SortableUniqueId.GenerateNew();
+        var metadata = new EventMetadata(eventId.ToString(), command.GetType().Name, "GeneralSekibanExecutor");
+        var domainEvent = new Event(
+            single.Event,
+            sortable,
+            single.Event.GetType().Name,
+            eventId,
+            metadata,
+            single.Tags.Select(t => t.GetTag()).ToList());
+        var serializable = domainEvent.ToSerializableEvent(_domainTypes.EventTypes);
+
+        var conditionalStore = (IConditionalEventStore)_eventStore; // capability proven at Step 0.5
+        var appendResult = await conditionalStore.AppendIfUniqueAsync(
+            new ConditionalAppendRequest(conditional.IdempotencyKey, serializable),
+            cancellationToken);
+        if (!appendResult.IsSuccess)
+        {
+            return ResultBox.Error<ExecutionResult>(appendResult.GetException());
+        }
+
+        var receipt = appendResult.GetValue();
+        var isNewlyAppended = receipt.Status == ConditionalAppendStatus.Appended;
+        var writtenEvents = isNewlyAppended ? new List<Event> { domainEvent } : new List<Event>();
+
+        // Publish only a genuinely-new event; a same-operation retry wrote nothing this attempt.
+        if (_eventPublisher != null && isNewlyAppended)
+        {
+            var publishEvents = new List<(Event Event, IReadOnlyCollection<ITag> Tags)>
+                {
+                    (domainEvent, single.Tags.AsReadOnly())
+                }
+                .AsReadOnly();
+            await _eventPublisher.PublishAsync(publishEvents, CancellationToken.None);
+        }
+
+        var metadataMap = new Dictionary<string, object>
+        {
+            ["ConditionalAppendStatus"] = receipt.Status.ToString(),
+            ["OperationFingerprint"] = receipt.OperationFingerprint,
+            ["WasAlreadyCommitted"] = receipt.WasAlreadyCommitted
+        };
+
+        return ResultBox.FromValue(
+            new ExecutionResult(
+                receipt.WinnerEventId,
+                isNewlyAppended ? 1 : 0,
+                new List<TagWriteResult>(),
+                stopwatch.Elapsed,
+                writtenEvents,
+                metadataMap,
+                receipt.WinnerSortableUniqueId));
     }
 
     public async Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId)
@@ -519,6 +630,84 @@ public class CoreGeneralSekibanExecutor
         catch (Exception ex)
         {
             return ResultBox.Error<SerializedCommitResult>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     WASM-boundary conditional (unique-key) single-event append. Fails closed on an unsupported store BEFORE any
+    ///     EventId allocation, serialization, or store call, then routes the single candidate through the store's
+    ///     conditional path and maps the outcome machine onto <see cref="SerializedConditionalCommitResult" /> / typed
+    ///     errors.
+    /// </summary>
+    public async Task<ResultBox<SerializedConditionalCommitResult>> CommitSerializableEventConditionallyAsync(
+        SerializedConditionalCommitRequest request,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            // FAIL CLOSED before allocating an EventId or serializing anything.
+            var capability = SekibanDcbCapabilityResolver.DescribeWriteConditions(_eventStore, "event store");
+            if (!capability.Supports(WriteConditionKind.SingleEventUniqueKey) ||
+                _eventStore is not IConditionalEventStore conditionalStore)
+            {
+                return ResultBox.Error<SerializedConditionalCommitResult>(
+                    new ConditionNotSupportedException(WriteConditionKind.SingleEventUniqueKey, capability.ProviderName));
+            }
+
+            var candidate = request.EventCandidate;
+            var eventId = Guid.CreateVersion7();
+            var sortableId = SortableUniqueId.GenerateNew();
+            var metadata = new EventMetadata(eventId.ToString(), "SerializedConditionalCommit", "SerializedSekibanExecutor");
+            var serializable = new SerializableEvent(
+                candidate.Payload,
+                sortableId,
+                eventId,
+                metadata,
+                candidate.Tags.ToList(),
+                candidate.EventPayloadName);
+
+            var appendResult = await conditionalStore.AppendIfUniqueAsync(
+                new ConditionalAppendRequest(request.IdempotencyKey, serializable),
+                cancellationToken);
+            if (!appendResult.IsSuccess)
+            {
+                return ResultBox.Error<SerializedConditionalCommitResult>(appendResult.GetException());
+            }
+
+            var receipt = appendResult.GetValue();
+            var isNewlyAppended = receipt.Status == ConditionalAppendStatus.Appended;
+            var written = isNewlyAppended
+                ? (IReadOnlyList<SerializableEvent>)new[] { serializable }
+                : Array.Empty<SerializableEvent>();
+
+            if (_eventPublisher != null && isNewlyAppended)
+            {
+                var eventResult = serializable.ToEvent(_domainTypes.EventTypes);
+                if (eventResult.IsSuccess)
+                {
+                    List<ITag> eventTags = serializable.Tags.Select(_domainTypes.TagTypes.GetTag).ToList();
+                    await _eventPublisher.PublishAsync(
+                        new List<(Event Event, IReadOnlyCollection<ITag> Tags)> { (eventResult.GetValue(), eventTags.AsReadOnly()) }
+                            .AsReadOnly(),
+                        CancellationToken.None);
+                }
+            }
+
+            return ResultBox.FromValue(
+                new SerializedConditionalCommitResult(
+                    SerializedConditionalCommitResult.CurrentVersion,
+                    receipt.Status,
+                    receipt.WinnerEventId,
+                    receipt.WinnerSortableUniqueId,
+                    receipt.OperationFingerprint,
+                    written,
+                    stopwatch.Elapsed));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<SerializedConditionalCommitResult>(ex);
         }
     }
 

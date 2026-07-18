@@ -10,7 +10,8 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.ColdEvents;
 
-public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventStore, IStorageDurabilityDescriptorProvider
+public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventStore, IStorageDurabilityDescriptorProvider,
+    IWriteConditionCapabilityProvider, IConditionalEventStore
 {
     private const string ReadAllSerializableEventsCall = nameof(ReadAllSerializableEventsAsync);
 
@@ -23,6 +24,39 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     {
         var hot = SekibanDcbCapabilityResolver.DescribeStorage(_hotStore, "hot event store");
         return new StorageDurabilityDescriptor(hot.Durability, $"HybridEventStore({hot.ProviderName})");
+    }
+
+    /// <summary>
+    ///     Writes land in the hot store, so write-conditions are exactly what the hot store enforces — the same
+    ///     never-upgrade rule as <see cref="DescribeStorage" />. If the hot store cannot condition a write, neither can
+    ///     the Hybrid.
+    /// </summary>
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions()
+    {
+        var hot = SekibanDcbCapabilityResolver.DescribeWriteConditions(_hotStore, "hot event store");
+        return new WriteConditionCapabilityDescriptor(hot.SupportedKinds, $"HybridEventStore({hot.ProviderName})");
+    }
+
+    /// <summary>
+    ///     Forwards a conditional append to the hot store. This is only reachable when the hot store is itself an
+    ///     <see cref="IConditionalEventStore" /> (otherwise <see cref="DescribeWriteConditions" /> reports nothing and the
+    ///     caller fails closed before getting here); the guard is defensive.
+    /// </summary>
+    public Task<ResultBox<ConditionalAppendReceipt>> AppendIfUniqueAsync(
+        ConditionalAppendRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (_hotStore is IConditionalEventStore conditionalHot)
+        {
+            return conditionalHot.AppendIfUniqueAsync(request, cancellationToken);
+        }
+
+        var descriptor = SekibanDcbCapabilityResolver.DescribeWriteConditions(_hotStore, "hot event store");
+        return Task.FromResult(
+            ResultBox.Error<ConditionalAppendReceipt>(
+                new ConditionNotSupportedException(
+                    WriteConditionKind.SingleEventUniqueKey,
+                    $"HybridEventStore({descriptor.ProviderName})")));
     }
     private readonly IEventStore _hotStore;
     private readonly IColdObjectStorage _coldStorage;
