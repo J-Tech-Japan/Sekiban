@@ -10,9 +10,10 @@ namespace Sekiban.Dcb.Tests.ConditionalAppend;
 
 /// <summary>
 ///     SEK-G16 SQLite conditional (unique-key) append — the NEW path, exercised in-process against a real temp-file
-///     SQLite database (runs in CI with no container). The shared outcome-machine assertions
-///     (<see cref="ConditionalAppendScenarios" />) prove the uniform contract; the SQLite-specific cases here are the
-///     N-writer race under the write lock and the guarantee that the legacy INSERT OR REPLACE path is unchanged.
+///     SQLite database (runs in CI with no container). The shared outcome-machine assertions prove the uniform contract;
+///     the SQLite-specific coverage is a genuine race between INDEPENDENT store instances / connections against the same
+///     real database file (not a single store serialized by one in-process lock), a different-operation race, and the
+///     guarantee that the legacy INSERT OR REPLACE path is unchanged.
 /// </summary>
 public sealed class SqliteConditionalAppendTests : IDisposable
 {
@@ -45,10 +46,40 @@ public sealed class SqliteConditionalAppendTests : IDisposable
     }
 
     [Fact]
-    public async Task NWriters_SameOperation_OneAppended_RestAlreadyCommitted_IdenticalReceipt_OneDurableEvent()
+    public async Task NWriters_IndependentStores_SameOperation_OneAppended_RestAlreadyCommitted_OneDurableEvent()
     {
-        var store = NewStore();
-        await ConditionalAppendScenarios.AssertNWritersConverge(store, _domain, "mig-race", 12, () => DurableCount(store));
+        // Each writer is a DISTINCT SqliteEventStore with its own connections against the same real DB file, so the win is
+        // arbitrated by SQLite's own write serialization (the loser hits the (ServiceId, Id) PK and rolls back), NOT by a
+        // single store's in-process semaphore.
+        const int writers = 8;
+        var stores = Enumerable.Range(0, writers).Select(_ => NewStore()).ToList();
+        var attempts = await Task.WhenAll(
+            stores.Select(s => s.AppendIfUniqueAsync(
+                new ConditionalAppendRequest("mig-race", ConditionalAppendScenarios.Marker(_domain, "payload")))));
+
+        var receipts = attempts.Where(r => r.IsSuccess).Select(r => r.GetValue()).ToList();
+        Assert.Equal(writers, receipts.Count); // no writer errored (losers converge, not fail)
+        Assert.Equal(1, receipts.Count(r => r.Status == ConditionalAppendStatus.Appended));
+        Assert.Equal(writers - 1, receipts.Count(r => r.Status == ConditionalAppendStatus.AlreadyCommittedSameOperation));
+        Assert.Single(receipts.Select(r => r.WinnerEventId).Distinct());
+        Assert.Single(receipts.Select(r => r.OperationFingerprint).Distinct());
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue()); // exactly one durable event
+    }
+
+    [Fact]
+    public async Task IndependentStores_DifferentOperations_SameKey_OneWins_OtherIsKeyReuseConflict()
+    {
+        // Two independent stores race DIFFERENT operations under the same key. Exactly one durable claim lands; the loser
+        // reads the winner back, sees a different fingerprint, and gets a key-reuse conflict — never a second event.
+        var a = NewStore();
+        var b = NewStore();
+        var results = await Task.WhenAll(
+            a.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-diff", ConditionalAppendScenarios.Marker(_domain, "A"))),
+            b.AppendIfUniqueAsync(new ConditionalAppendRequest("mig-diff", ConditionalAppendScenarios.Marker(_domain, "B"))));
+
+        Assert.Equal(1, results.Count(r => r.IsSuccess && r.GetValue().Status == ConditionalAppendStatus.Appended));
+        Assert.Equal(1, results.Count(r => !r.IsSuccess && r.GetException() is KeyReuseConflictException));
+        Assert.Single((await NewStore().ReadAllSerializableEventsAsync()).GetValue());
     }
 
     [Fact]

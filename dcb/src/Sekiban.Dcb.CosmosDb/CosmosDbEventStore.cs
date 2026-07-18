@@ -102,6 +102,31 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         return ConditionalWriteOutcome.Wrote();
     }
 
+    /// <summary>
+    ///     Closes the SEK-G16 event/tag roll-forward window for Cosmos. Event and tag rows are NOT written atomically (the
+    ///     event document is created first, then tag rows in a separate phase), so a crash after the event create leaves a
+    ///     committed event with missing tag rows. A same-operation retry sees the event (409), reads it back, and matches
+    ///     the fingerprint — but the CONTRACTED committed state (tag-scoped visibility) is not yet reached. This gate
+    ///     idempotently (re)writes every required tag row for the winner via the same create-or-verify stage the
+    ///     unconditional write and the repair service use (create → on 409 read-back → ContentEquals): rows that already
+    ///     landed are accepted, missing rows are backfilled, and a row that disagrees with the event throws (corruption)
+    ///     rather than being overwritten. Only after this succeeds does the orchestrator return AlreadyCommitted; a failure
+    ///     here becomes a typed retryable in-doubt, never a false AlreadyCommitted.
+    /// </summary>
+    private async Task EnsureConditionalCommittedAsync(SerializableEvent winner, CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        var options = _context.Options;
+        var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
+        var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
+        await WriteSerializableTagsWithBatchAsync(
+            new List<SerializableEvent> { winner },
+            tagsContainer,
+            options,
+            serviceId,
+            tagsSettings).ConfigureAwait(false);
+    }
+
     private async Task<SerializableEvent?> ReadConditionalWinnerAsync(
         Guid deterministicId,
         CancellationToken cancellationToken)
@@ -165,7 +190,7 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         _logger = logger;
         _conditionalAppend = new ConditionalAppendCoordinator(
             ConditionalProviderName, () => CurrentServiceId, _eventTypes,
-            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync);
+            TryWriteConditionalClaimAsync, ReadConditionalWinnerAsync, EnsureConditionalCommittedAsync);
     }
 
     /// <summary>

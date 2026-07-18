@@ -1,22 +1,22 @@
 using Dcb.Domain;
 using Sekiban.Dcb.CosmosDb;
+using Sekiban.Dcb.CosmosDb.Models;
+using Sekiban.Dcb.CosmosDb.Tags;
 using Sekiban.Dcb.Domains;
-using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.TestSupport;
 using Sekiban.Dcb.Tests.Cosmos;
 using Xunit;
 namespace Sekiban.Dcb.Tests.ConditionalAppend;
 
 /// <summary>
-///     SEK-G16 Cosmos DB conditional (unique-key) append, driven end to end through the real
-///     <see cref="CosmosDbEventStore" /> against in-memory Cosmos containers. The shared outcome-machine assertions
-///     (<see cref="ConditionalAppendScenarios" />) prove the uniform contract; the Cosmos-specific case is the point of
-///     the read-back design — a bare 409 is NEVER on its own a same-operation success: with no committed winner to verify
-///     against, the append is in-doubt, not AlreadyCommitted.
-///     Real N-writer concurrency is proven by the database-backed providers (Postgres, SQLite); the in-memory Cosmos
-///     double is a deterministic single-threaded fault harness, so convergence here is exercised by repeated append.
+///     SEK-G16 Cosmos DB conditional (unique-key) append, end to end through the real <see cref="CosmosDbEventStore" />
+///     against in-memory Cosmos containers. Cosmos writes the event document and its tag rows in SEPARATE phases, so the
+///     headline coverage here is the crash-window/repair gate: a same-operation retry after an event-only partial commit
+///     must idempotently repair every required tag row (proving exact tag-scoped visibility) BEFORE returning
+///     AlreadyCommitted, and must surface a typed retryable in-doubt when the committed state cannot be reached.
 /// </summary>
 public class CosmosConditionalAppendTests
 {
@@ -25,12 +25,11 @@ public class CosmosConditionalAppendTests
 
     private sealed class Lineage
     {
-        public Lineage(DcbDomainTypes domain)
+        public Lineage(DcbDomainTypes domain, InMemoryCosmosClient client, CosmosDbEventStoreOptions options)
         {
-            var options = new CosmosDbEventStoreOptions { EventsContainerName = "events", TagsContainerName = "tags" };
-            Client = new InMemoryCosmosClient();
+            Client = client;
             Options = options;
-            var context = new CosmosDbContext(Client, "test-db", null, options);
+            var context = new CosmosDbContext(client, "test-db", null, options);
             var resolver = new DefaultCosmosContainerResolver(options);
             Store = new CosmosDbEventStore(context, domain.EventTypes, new FixedServiceIdProvider(ServiceId), resolver);
         }
@@ -39,8 +38,21 @@ public class CosmosConditionalAppendTests
         public CosmosDbEventStoreOptions Options { get; }
         public CosmosDbEventStore Store { get; }
         public InMemoryCosmosContainer Events => Client.Container(Options.EventsContainerName);
+        public InMemoryCosmosContainer Tags => Client.Container(Options.TagsContainerName);
         public Task<int> DurableCount() => Task.FromResult(Events.Items.Count);
     }
+
+    private static CosmosDbEventStoreOptions NewOptions() =>
+        new()
+        {
+            EventsContainerName = "events",
+            TagsContainerName = "tags",
+            WriteFailurePolicy = CosmosWriteFailurePolicy.RollForward,
+            TagWriteRetry = new CosmosTagWriteRetryOptions { MaxAttempts = 1, JitterRatio = 0 }
+        };
+
+    private Lineage NewLineage(InMemoryCosmosClient? client = null, CosmosDbEventStoreOptions? options = null) =>
+        new(_domain, client ?? new InMemoryCosmosClient(), options ?? NewOptions());
 
     private sealed class FixedServiceIdProvider : IServiceIdProvider
     {
@@ -49,14 +61,38 @@ public class CosmosConditionalAppendTests
         public string GetCurrentServiceId() => _serviceId;
     }
 
+    private sealed class FailBeforeBatch : ICosmosTagWriteFaultInjector
+    {
+        private readonly int _batchIndex;
+        public FailBeforeBatch(int batchIndex) => _batchIndex = batchIndex;
+        public Task OnBeforeBatchAsync(int batchIndex, string partitionKey, IReadOnlyList<CosmosTag> rows)
+        {
+            if (batchIndex >= _batchIndex)
+            {
+                throw new InvalidOperationException($"Injected crash before tag batch {batchIndex}");
+            }
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed record TestTag(string Value) : ITag
+    {
+        public bool IsConsistencyTag() => false;
+        public string GetTagGroup() => Value.Split(':')[0];
+        public string GetTag() => Value;
+        public string GetTagContent() => Value.Split(':')[1];
+    }
+
+    // ── The shared uniform contract ─────────────────────────────────────────────────────────────────
+
     [Fact]
     public void Capability_ReportsSingleEventUniqueKey() =>
-        ConditionalAppendScenarios.AssertCapability(new Lineage(_domain).Store);
+        ConditionalAppendScenarios.AssertCapability(NewLineage().Store);
 
     [Fact]
     public Task FirstAppend_Wins_SameOperationRetry_ReturnsIdenticalReceipt_NoSecondEvent()
     {
-        var lineage = new Lineage(_domain);
+        var lineage = NewLineage();
         return ConditionalAppendScenarios.AssertFirstAppendWins_SameOpRetryIsIdempotent(
             lineage.Store, _domain, "cosmos-1", lineage.DurableCount);
     }
@@ -64,17 +100,26 @@ public class CosmosConditionalAppendTests
     [Fact]
     public Task SameKey_DifferentOperation_IsKeyReuseConflict_WithProviderCause_NoSecondEvent()
     {
-        var lineage = new Lineage(_domain);
+        var lineage = NewLineage();
         return ConditionalAppendScenarios.AssertDifferentOperationIsKeyReuseConflict_WithProviderCause(
             lineage.Store, _domain, "cosmos-2", lineage.DurableCount);
     }
 
     [Fact]
-    public async Task Bare409_WithoutACommittedWinner_IsInDoubt_NotAlreadyCommitted()
+    public Task NWriters_SameOperation_ConcurrentWriters_OneAppended_RestAlreadyCommitted_OneDurableEvent()
     {
-        // A conflict alone is never proof of a same-operation success. Inject a 409 on the event create while NO winner
-        // actually exists to read back: the append must fail in-doubt (retryable), never report AlreadyCommitted.
-        var lineage = new Lineage(_domain);
+        // The in-memory container serializes concurrent creates under a lock exactly as a Cosmos partition does, so this
+        // is a genuine concurrent-writer race, not sequential retries.
+        var lineage = NewLineage();
+        return ConditionalAppendScenarios.AssertNWritersConverge(lineage.Store, _domain, "cosmos-race", 8, lineage.DurableCount);
+    }
+
+    // ── In-doubt: a bare 409 with no committed winner is retryable in-doubt, never AlreadyCommitted ──
+
+    [Fact]
+    public async Task Bare409_WithoutACommittedWinner_IsTypedRetryableInDoubt()
+    {
+        var lineage = NewLineage();
         var store = (IConditionalEventStore)lineage.Store;
         lineage.Events.WriteFaults.Enqueue(CosmosFailures.Conflict());
 
@@ -82,28 +127,92 @@ public class CosmosConditionalAppendTests
             new ConditionalAppendRequest("cosmos-indoubt", ConditionalAppendScenarios.Marker(_domain, "v")));
 
         Assert.False(result.IsSuccess);
-        Assert.IsType<InvalidOperationException>(result.GetException());
-        Assert.Empty(lineage.Events.Items); // nothing committed
+        var ex = Assert.IsType<ConditionalAppendInDoubtException>(result.GetException());
+        Assert.True(ex.IsRetryable);
+        Assert.Equal(ConditionalAppendInDoubtException.ReasonWinnerUnreadable, ex.ReasonCode);
+        Assert.Empty(lineage.Events.Items);
+    }
+
+    // ── The crash-window/repair gate (Fix #1) ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CrashAfterEventCreate_BeforeTags_Retry_RepairsTags_ThenAlreadyCommitted_WithTagVisibility()
+    {
+        var client = new InMemoryCosmosClient();
+        var options = NewOptions();
+        var first = NewLineage(client, options);
+        var store = (IConditionalEventStore)first.Store;
+
+        // Crash the tag write: the event document lands, no tag row does.
+        first.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
+        var crashed = await store.AppendIfUniqueAsync(
+            new ConditionalAppendRequest("cosmos-crash", ConditionalAppendScenarios.Marker(_domain, "v")));
+
+        Assert.False(crashed.IsSuccess);          // the attempt did not reach committed state
+        Assert.Single(first.Events.Items);         // event is durable
+        Assert.Empty(first.Tags.Items);            // tag row never landed — the open window
+        Assert.Empty((await first.Store.ReadSerializableEventsByTagAsync(new TestTag("Migration:once"))).GetValue());
+
+        // Retry on a FRESH store instance (as a restarted host would). The event-only 409 must NOT short-circuit to
+        // AlreadyCommitted: the gate repairs the missing tag row first, then returns the original winner's receipt.
+        var second = NewLineage(client, options);
+        var retryStore = (IConditionalEventStore)second.Store;
+        var repaired = await retryStore.AppendIfUniqueAsync(
+            new ConditionalAppendRequest("cosmos-crash", ConditionalAppendScenarios.Marker(_domain, "v")));
+
+        Assert.True(repaired.IsSuccess);
+        Assert.Equal(ConditionalAppendStatus.AlreadyCommittedSameOperation, repaired.GetValue().Status);
+        Assert.Single(second.Events.Items);        // still exactly one durable event
+        Assert.Single(second.Tags.Items);          // the tag row is now present — window closed
+        var byTag = await second.Store.ReadSerializableEventsByTagAsync(new TestTag("Migration:once"));
+        Assert.Single(byTag.GetValue());           // exact tag-scoped visibility, not merely one event document
     }
 
     [Fact]
-    public async Task RepeatedAppend_SameOperation_ConvergesOnOneDurableEvent()
+    public async Task Retry_WhenRepairStillFails_IsTypedInDoubt_NotFalseAlreadyCommitted()
     {
-        // The in-memory double is single-threaded, so convergence is exercised by repeated (sequential) append.
-        var lineage = new Lineage(_domain);
-        var store = (IConditionalEventStore)lineage.Store;
+        var client = new InMemoryCosmosClient();
+        var options = NewOptions();
+        var first = NewLineage(client, options);
 
-        var receipts = new List<ConditionalAppendReceipt>();
-        for (var i = 0; i < 5; i++)
-        {
-            receipts.Add((await store.AppendIfUniqueAsync(
-                new ConditionalAppendRequest("cosmos-conv", ConditionalAppendScenarios.Marker(_domain, "payload")))).GetValue());
-        }
+        first.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
+        await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(
+            new ConditionalAppendRequest("cosmos-stuck", ConditionalAppendScenarios.Marker(_domain, "v")));
+        Assert.Single(first.Events.Items);
+        Assert.Empty(first.Tags.Items);
 
-        Assert.Equal(1, receipts.Count(r => r.Status == ConditionalAppendStatus.Appended));
-        Assert.Equal(4, receipts.Count(r => r.Status == ConditionalAppendStatus.AlreadyCommittedSameOperation));
-        Assert.Single(receipts.Select(r => r.WinnerEventId).Distinct());
-        Assert.Single(receipts.Select(r => r.OperationFingerprint).Distinct());
-        Assert.Single(lineage.Events.Items);
+        // The retry's repair also fails (the tag store is still crashing): the committed state cannot be verified, so the
+        // outcome is typed retryable in-doubt — never a false AlreadyCommitted while tag rows are still missing.
+        var second = NewLineage(client, options);
+        second.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
+        var result = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(
+            new ConditionalAppendRequest("cosmos-stuck", ConditionalAppendScenarios.Marker(_domain, "v")));
+
+        Assert.False(result.IsSuccess);
+        var ex = Assert.IsType<ConditionalAppendInDoubtException>(result.GetException());
+        Assert.True(ex.IsRetryable);
+        Assert.Equal(ConditionalAppendInDoubtException.ReasonCommittedStateUnverified, ex.ReasonCode);
+        Assert.Empty(second.Tags.Items);
+    }
+
+    [Fact]
+    public async Task DifferentOperation_UnderSameKey_IsKeyReuseConflict_EvenWhenPriorTagsMissing()
+    {
+        var client = new InMemoryCosmosClient();
+        var options = NewOptions();
+        var first = NewLineage(client, options);
+        first.Store.TagWriteFaultInjector = new FailBeforeBatch(0);
+        await ((IConditionalEventStore)first.Store).AppendIfUniqueAsync(
+            new ConditionalAppendRequest("cosmos-diff", ConditionalAppendScenarios.Marker(_domain, "original")));
+        Assert.Single(first.Events.Items);
+
+        // A DIFFERENT operation reusing the key must still be a key-reuse conflict (fingerprint differs), regardless of
+        // the prior partial commit — the repair gate is only reached on a fingerprint match.
+        var second = NewLineage(client, options);
+        var conflict = await ((IConditionalEventStore)second.Store).AppendIfUniqueAsync(
+            new ConditionalAppendRequest("cosmos-diff", ConditionalAppendScenarios.Marker(_domain, "DIFFERENT")));
+
+        Assert.False(conflict.IsSuccess);
+        Assert.IsType<KeyReuseConflictException>(conflict.GetException());
     }
 }

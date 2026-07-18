@@ -20,15 +20,18 @@ public readonly record struct ConditionalWriteOutcome(bool Written, Exception? C
 
 /// <summary>
 ///     The single implementation of the SEK-G15 unique-append semantics shared by every provider. A provider supplies
-///     only two primitives — how to durably write the claim event under a deterministic id (using its native uniqueness
-///     primitive) and how to read the committed winner back — and this method produces the identical observable outcome
+///     three primitives — how to durably write the claim event under a deterministic id (using its native uniqueness
+///     primitive), how to read the committed winner back, and (optionally) how to bring the winner's CONTRACTED committed
+///     state to convergence before its receipt is returned — and this method produces the identical observable outcome
 ///     machine everywhere: <see cref="ConditionalAppendStatus.Appended" /> /
 ///     <see cref="ConditionalAppendStatus.AlreadyCommittedSameOperation" /> (same fingerprint, original winner's receipt)
 ///     / <see cref="ConditionalAppendStatus.KeyReuseConflict" />, failing closed on an unsupported payload BEFORE any
-///     write.
-///     Fingerprints are recomputed from persisted event CONTENT (never stored separately), so no schema change is needed:
-///     a same-operation retry recomputes an identical fingerprint from the stored winner; a different operation under the
-///     same key recomputes a different one and is a key-reuse conflict.
+///     write, and raising a typed RETRYABLE <see cref="ConditionalAppendInDoubtException" /> when the outcome cannot be
+///     resolved (winner unreadable, ambiguous after cancellation/timeout, committed state unverified).
+///     Fingerprints are recomputed from persisted event CONTENT (never stored separately), so no schema change is needed.
+///     The <c>ensureCommittedAsync</c> gate closes the event/tag (or event/materialization) roll-forward window: a
+///     same-operation retry must NOT report AlreadyCommitted from a bare event-only conflict on a store whose event and
+///     tag rows are not written atomically — the required rows are idempotently repaired/verified first.
 /// </summary>
 public static class ConditionalAppendExecution
 {
@@ -39,6 +42,7 @@ public static class ConditionalAppendExecution
         string providerName,
         Func<Guid, SerializableEvent, CancellationToken, Task<ConditionalWriteOutcome>> tryWriteClaim,
         Func<Guid, CancellationToken, Task<SerializableEvent?>> readCommittedWinner,
+        Func<SerializableEvent, CancellationToken, Task>? ensureCommittedAsync = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -53,6 +57,7 @@ public static class ConditionalAppendExecution
         }
         catch (ArgumentException ex)
         {
+            // A malformed key is a permanent bad request, not an in-doubt/retryable state.
             return ResultBox.Error<ConditionalAppendReceipt>(ex);
         }
 
@@ -81,8 +86,18 @@ public static class ConditionalAppendExecution
         {
             outcome = await tryWriteClaim(deterministicId, claimEvent, cancellationToken);
         }
+        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
+        {
+            // Ambiguous: the write may have durably committed before the cancellation/timeout. Resolve it authoritatively
+            // by reading the winner back (with a fresh token, since the caller's may be cancelled) and classifying.
+            return await ResolveByReadbackAsync(
+                serviceId, request.IdempotencyKey, eventTypes, providerName, deterministicId, attemptFingerprint,
+                readCommittedWinner, ensureCommittedAsync, ex,
+                ConditionalAppendInDoubtException.ReasonAmbiguousAfterWrite, CancellationToken.None);
+        }
         catch (Exception ex)
         {
+            // Any other write failure is surfaced as-is (permanent/unexpected); it is not classified as retryable in-doubt.
             return ResultBox.Error<ConditionalAppendReceipt>(ex);
         }
 
@@ -98,6 +113,29 @@ public static class ConditionalAppendExecution
 
         // A conflict: the key is already claimed. Read the committed winner back and CLASSIFY by fingerprint — a bare
         // provider conflict (409 / 23505 / ConditionalCheckFailed) is never on its own proof of a same-operation success.
+        return await ResolveByReadbackAsync(
+            serviceId, request.IdempotencyKey, eventTypes, providerName, deterministicId, attemptFingerprint,
+            readCommittedWinner, ensureCommittedAsync, outcome.ConflictException,
+            ConditionalAppendInDoubtException.ReasonWinnerUnreadable, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Reads the committed winner back and classifies: same fingerprint (after the committed-state gate) →
+    ///     AlreadyCommitted; different → KeyReuseConflict; unreadable/unverifiable → typed retryable in-doubt.
+    /// </summary>
+    private static async Task<ResultBox<ConditionalAppendReceipt>> ResolveByReadbackAsync(
+        string serviceId,
+        string idempotencyKey,
+        IEventTypes eventTypes,
+        string providerName,
+        Guid deterministicId,
+        string attemptFingerprint,
+        Func<Guid, CancellationToken, Task<SerializableEvent?>> readCommittedWinner,
+        Func<SerializableEvent, CancellationToken, Task>? ensureCommittedAsync,
+        Exception? cause,
+        string unreadableReason,
+        CancellationToken cancellationToken)
+    {
         SerializableEvent? existing;
         try
         {
@@ -105,22 +143,22 @@ public static class ConditionalAppendExecution
         }
         catch (Exception ex)
         {
-            return ResultBox.Error<ConditionalAppendReceipt>(ex);
+            // The winner could not even be read — in-doubt. Prefer the original conflict/cancellation cause when present.
+            return ResultBox.Error<ConditionalAppendReceipt>(
+                new ConditionalAppendInDoubtException(providerName, serviceId, deterministicId, unreadableReason, cause ?? ex));
         }
 
         if (existing is null)
         {
-            // The conflict said the id exists, but no committed winner could be read back — an in-doubt/uncommitted
-            // state. Fail (do NOT report AlreadyCommitted); the caller may retry, which converges once it commits.
+            // The conflict/ambiguity said the id may exist, but no committed winner could be read back. Do NOT report
+            // AlreadyCommitted; the caller may retry, which converges once it commits.
             return ResultBox.Error<ConditionalAppendReceipt>(
-                new InvalidOperationException(
-                    $"Conditional append on '{providerName}' hit a claim conflict but could not read back a committed "
-                    + "winner to verify it; the claim is in-doubt. Retry."));
+                new ConditionalAppendInDoubtException(providerName, serviceId, deterministicId, unreadableReason, cause));
         }
 
         var existingFingerprintResult = OperationFingerprint.ComputeCanonical(
             serviceId,
-            request.IdempotencyKey,
+            idempotencyKey,
             eventTypes,
             existing.EventPayloadName,
             existing.Payload,
@@ -131,20 +169,38 @@ public static class ConditionalAppendExecution
         }
 
         var existingFingerprint = existingFingerprintResult.GetValue();
-        if (string.Equals(existingFingerprint, attemptFingerprint, StringComparison.Ordinal))
+        if (!string.Equals(existingFingerprint, attemptFingerprint, StringComparison.Ordinal))
         {
-            // Same operation: return the ORIGINAL winner's receipt; nothing was written this attempt.
-            return ResultBox.FromValue(
-                new ConditionalAppendReceipt(
-                    ConditionalAppendStatus.AlreadyCommittedSameOperation,
-                    existing.Id,
-                    existing.SortableUniqueIdValue,
-                    existingFingerprint));
+            // Same key, different operation: key-reuse conflict. Preserve the provider exception as the diagnostic cause
+            // ONLY when one actually occurred (a conflict discovered purely by read carries none).
+            return ResultBox.Error<ConditionalAppendReceipt>(
+                new KeyReuseConflictException(existingFingerprint, attemptFingerprint, providerName, cause));
         }
 
-        // Same key, different operation: key-reuse conflict. Preserve the provider exception as the diagnostic cause ONLY
-        // when one actually occurred (a conflict discovered purely by read carries none).
-        return ResultBox.Error<ConditionalAppendReceipt>(
-            new KeyReuseConflictException(existingFingerprint, attemptFingerprint, providerName, outcome.ConflictException));
+        // Same operation. Before returning the ORIGINAL winner's receipt, close the roll-forward window: bring the
+        // contracted committed state (e.g. every required tag/materialization row) to convergence. On a store that writes
+        // event and tags atomically this is a no-op; where it is not, a failure here is in-doubt (retryable), NOT a false
+        // AlreadyCommitted.
+        if (ensureCommittedAsync is not null)
+        {
+            try
+            {
+                await ensureCommittedAsync(existing, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return ResultBox.Error<ConditionalAppendReceipt>(
+                    new ConditionalAppendInDoubtException(
+                        providerName, serviceId, deterministicId,
+                        ConditionalAppendInDoubtException.ReasonCommittedStateUnverified, ex));
+            }
+        }
+
+        return ResultBox.FromValue(
+            new ConditionalAppendReceipt(
+                ConditionalAppendStatus.AlreadyCommittedSameOperation,
+                existing.Id,
+                existing.SortableUniqueIdValue,
+                existingFingerprint));
     }
 }

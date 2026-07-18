@@ -19,6 +19,12 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     private readonly Dictionary<(string PartitionKey, string Id), JObject> _items = new();
     private readonly string _name;
 
+    /// <summary>
+    ///     Guards the item store so concurrent writers (SEK-G16 conditional-append race tests) are serialized exactly as a
+    ///     real Cosmos partition serializes conflicting creates. Behaviour is unchanged for single-threaded tests.
+    /// </summary>
+    private readonly object _gate = new();
+
     public InMemoryCosmosContainer(string name) => _name = name;
 
     /// <summary>Fails the next N writes with this, to model a store that is throttling or a host that dies.</summary>
@@ -87,21 +93,24 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         ItemRequestOptions? requestOptions = null,
         CancellationToken cancellationToken = default)
     {
-        ThrowIfFaulted();
-        OnWrite?.Invoke(Creates);
-        Creates++;
-
-        var document = JObject.FromObject(item!);
-        var key = (Pk(document), Id_(document));
-
-        if (_items.ContainsKey(key))
+        lock (_gate)
         {
-            throw CosmosFailures.Conflict();
-        }
+            ThrowIfFaulted();
+            OnWrite?.Invoke(Creates);
+            Creates++;
 
-        Stamp(document);
-        _items[key] = document;
-        return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.Created));
+            var document = JObject.FromObject(item!);
+            var key = (Pk(document), Id_(document));
+
+            if (_items.ContainsKey(key))
+            {
+                throw CosmosFailures.Conflict();
+            }
+
+            Stamp(document);
+            _items[key] = document;
+            return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.Created));
+        }
     }
 
     public override Task<ItemResponse<T>> ReadItemAsync<T>(
@@ -110,18 +119,21 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         ItemRequestOptions? requestOptions = null,
         CancellationToken cancellationToken = default)
     {
-        var match = _items
-            .Where(entry => entry.Key.Id == id)
-            .Select(entry => entry.Value)
-            .FirstOrDefault();
-
-        if (match == null)
+        lock (_gate)
         {
-            throw CosmosFailures.NotFound();
-        }
+            var match = _items
+                .Where(entry => entry.Key.Id == id)
+                .Select(entry => entry.Value)
+                .FirstOrDefault();
 
-        return Task.FromResult<ItemResponse<T>>(
-            new FakeItemResponse<T>(match.ToObject<T>()!, HttpStatusCode.OK));
+            if (match == null)
+            {
+                throw CosmosFailures.NotFound();
+            }
+
+            return Task.FromResult<ItemResponse<T>>(
+                new FakeItemResponse<T>(match.ToObject<T>()!, HttpStatusCode.OK));
+        }
     }
 
     public override Task<ItemResponse<T>> DeleteItemAsync<T>(
@@ -172,52 +184,55 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         string partitionKey,
         IReadOnlyList<InMemoryTransactionalBatch.Operation> operations)
     {
-        ThrowIfFaulted();
-
-        var statuses = new List<HttpStatusCode>();
-        var rejected = false;
-
-        // Pass 1 — judge every operation against the store as it is now. Nothing is written yet.
-        foreach (var operation in operations)
+        lock (_gate)
         {
-            var status = Judge(partitionKey, operation);
+            ThrowIfFaulted();
 
-            if ((int)status is < 200 or > 299)
+            var statuses = new List<HttpStatusCode>();
+            var rejected = false;
+
+            // Pass 1 — judge every operation against the store as it is now. Nothing is written yet.
+            foreach (var operation in operations)
             {
-                rejected = true;
+                var status = Judge(partitionKey, operation);
+
+                if ((int)status is < 200 or > 299)
+                {
+                    rejected = true;
+                }
+
+                statuses.Add(status);
             }
 
-            statuses.Add(status);
-        }
-
-        if (rejected)
-        {
-            // Not one write. This is the guarantee the migration is built on.
-            return new FakeBatchResponse(HttpStatusCode.FailedDependency, statuses);
-        }
-
-        // Pass 2 — every condition held, so commit. Always against the batch's own partition.
-        foreach (var operation in operations)
-        {
-            var key = (partitionKey, operation.Id);
-
-            switch (operation.Kind)
+            if (rejected)
             {
-                case InMemoryTransactionalBatch.Kind.Delete:
-                    Deletes++;
-                    _items.Remove(key);
-                    break;
-
-                default:
-                    OnWrite?.Invoke(Creates);
-                    Creates++;
-                    Stamp(operation.Document!);
-                    _items[key] = operation.Document!;
-                    break;
+                // Not one write. This is the guarantee the migration is built on.
+                return new FakeBatchResponse(HttpStatusCode.FailedDependency, statuses);
             }
-        }
 
-        return new FakeBatchResponse(HttpStatusCode.OK, statuses);
+            // Pass 2 — every condition held, so commit. Always against the batch's own partition.
+            foreach (var operation in operations)
+            {
+                var key = (partitionKey, operation.Id);
+
+                switch (operation.Kind)
+                {
+                    case InMemoryTransactionalBatch.Kind.Delete:
+                        Deletes++;
+                        _items.Remove(key);
+                        break;
+
+                    default:
+                        OnWrite?.Invoke(Creates);
+                        Creates++;
+                        Stamp(operation.Document!);
+                        _items[key] = operation.Document!;
+                        break;
+                }
+            }
+
+            return new FakeBatchResponse(HttpStatusCode.OK, statuses);
+        }
     }
 
     private HttpStatusCode Judge(string partitionKey, InMemoryTransactionalBatch.Operation operation)

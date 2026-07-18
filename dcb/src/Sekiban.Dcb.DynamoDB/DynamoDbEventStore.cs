@@ -84,6 +84,8 @@ public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorPr
                 claimEvent.EventPayloadName);
         }).ToList();
 
+        // The event Put is ALWAYS index 0 — only its attribute_not_exists(pk) condition is the claim guard, so only a
+        // cancellation reason at index 0 classifies as a conflict (see the catch below).
         var transactItems = new List<TransactWriteItem>
         {
             new TransactWriteItem
@@ -108,6 +110,11 @@ public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorPr
             });
         }
 
+        // Enforce DynamoDB's TransactWriteItems limits BEFORE the call, fail-closed: >100 items, or a duplicate item key
+        // (a transaction may not touch the same item twice — e.g. duplicate tag strings). A violation is a permanent
+        // request error, never a claim conflict or a retryable in-doubt.
+        EnforceTransactWriteLimits(transactItems);
+
         try
         {
             await _client.TransactWriteItemsAsync(
@@ -117,12 +124,39 @@ public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorPr
         }
         catch (ConditionalCheckFailedException ex)
         {
+            // A bare ConditionalCheckFailed on a single-item PutItem-style rejection maps to the event claim guard.
             return ConditionalWriteOutcome.Conflict(ex);
         }
-        catch (TransactionCanceledException ex) when (ex.CancellationReasons.Any(
-            r => string.Equals(r.Code, "ConditionalCheckFailed", StringComparison.Ordinal)))
+        catch (TransactionCanceledException ex) when (
+            ex.CancellationReasons.Count > 0 &&
+            string.Equals(ex.CancellationReasons[0].Code, "ConditionalCheckFailed", StringComparison.Ordinal))
         {
+            // Only the event Put (index 0) carries the attribute_not_exists condition, so only a conditional failure at
+            // index 0 is the claim collision. A cancellation for any other reason (throttle, size, a different index)
+            // preserves its original failure and is never misrouted to winner classification.
             return ConditionalWriteOutcome.Conflict(ex);
+        }
+    }
+
+    private static void EnforceTransactWriteLimits(List<TransactWriteItem> transactItems)
+    {
+        if (transactItems.Count > DynamoConditionalAppendLimitException.MaxTransactItems)
+        {
+            throw new DynamoConditionalAppendLimitException(
+                $"Conditional append would write {transactItems.Count} transaction items (1 event + tags), exceeding "
+                + $"DynamoDB's TransactWriteItems limit of {DynamoConditionalAppendLimitException.MaxTransactItems}.");
+        }
+
+        var seen = new HashSet<(string, string)>();
+        foreach (var item in transactItems)
+        {
+            var key = (item.Put.Item["pk"].S, item.Put.Item["sk"].S);
+            if (!seen.Add(key))
+            {
+                throw new DynamoConditionalAppendLimitException(
+                    "Conditional append would write the same DynamoDB item more than once in one transaction "
+                    + "(duplicate item key); DynamoDB rejects duplicate item operations. Deduplicate the event's tags.");
+            }
         }
     }
 

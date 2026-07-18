@@ -248,6 +248,23 @@ poison イベントのスキップ/隔離は**意図的に既定ではありま�
   - **進行中の upsert が delete と競合することはありません**: **すべての**外部スナップショット変更が1つのアクティベーションローカル coordinator を通ります — 3つの upsert パス（通常 persist・streaming persist・version rewrite）**とすべての delete**、すなわち公開 admin API の `DeleteExternalStateAsync` とリセット自身の invalidation を含みます。ストアへの直接バイパスは残っていません。そのため delete は park 中/進行中の upsert 完了を待ってから削除し、delete と並行して upsert が走ることはありません。さらに coordinator は **live または committed の fault 存在時に upsert を拒否**するため、faulted な projection は派生状態を永続化せず、stale upsert がリセットの削除対象を再生成することもありません。catch-up は interleaving のグレインタイマー上で走るため、この順序を保証するのは非リエントランシではなくこの coordinator です。(耐久的な epoch/tombstone は、現行モデルにはない multi-writer や cross-silo の永続化でのみ必要になります。)
   - fault による拒否は **暗黙の成功ではなく明示的な失敗**です: ブロックされた upsert は、成功値 `false` ではなく、安定した `ExternalPersistenceBlockedByFaultException` を保持する `ResultBox.Error` を返します。これは重要で、`IsSuccess` だけを見る呼び出し側が拒否を「保存完了」と誤認しないためです — 通常 persist と streaming persist は拒否後に「保存済み」を報告せず永続化メタデータも進めず、version rewrite は `updated = false` を維持し projector-version の書き込みを一切行いません。
 
+## 条件付き（ユニークキー）追記: in-doubt・キー再利用・Cosmos タグ修復ゲート
+
+これは任意の SEK-G15/G16 `IConditionalEventStore.AppendIfUniqueAsync` コントラクト（[ストレージプロバイダー](11_storage_providers.md) 参照）に関するものです。無条件書き込みパスには影響しません。
+
+**症状と各アウトカムの意味**:
+- `ConditionalAppendInDoubtException` を伴う `ResultBox.Error`（WithoutResult では同じ例外が送出）。追記を確定した結果に解決**できなかった**状態。これは**リトライ可能**（`IsRetryable == true`）であり、第5の成功／衝突ステータスではありません。
+- `KeyReuseConflictException`。冪等キーが既に**異なる**操作でクレームされています（永続化されたフィンガープリントが異なる）。一時障害ではなくプログラミングエラーです。
+- `DynamoConditionalAppendLimitException`。DynamoDB `TransactWriteItems` の制限超過（100 アイテム = 1 イベント + 100 タグ超、またはタグ文字列重複によるアイテムキー重複）。**あらゆるネットワーク呼び出しの前**に送出。恒久的でリトライ不可。
+- `ConditionNotSupportedException`。解決されたストアが要求された書き込み条件を強制できない。無条件書き込みへ降格せず、ストア呼び出し前にフェイルクローズ。
+
+**原因と対処**:
+- **読み戻せる勝者のない衝突後、またはキャンセル／タイムアウト後の in-doubt**（`ReasonCode` は `winner-unreadable-after-conflict` / `ambiguous-after-write`）: ストアがクレーム衝突を示した（または耐久コミットの可能性がある後にキャンセルされた）が、検証のためのコミット済み勝者を読み戻せなかった。**リトライ**してください — 勝者がコミットすればリトライは `AlreadyCommittedSameOperation` に収束します。耐久コミット後のキャンセル／タイムアウトは、まず権威的な読み取り＋フィンガープリント（Cosmos ではコミット済み状態ゲートも）で可能なら `AlreadyCommittedSameOperation` に解決し、それ以外の場合のみ in-doubt として表出します。
+- **コミット済み状態を検証できなかった in-doubt**（`ReasonCode` は `committed-state-unverified`）: これは **Cosmos 固有**です。Cosmos はイベントドキュメントとタグ行を別フェーズで書くため、イベント作成後のクラッシュはタグスコープ可視性が未回復のコミット済みイベントを残します。同一操作のリトライは、`AlreadyCommittedSameOperation` を返す**前**に必要なタグ行を冪等に修復します。修復がなお失敗すれば（タグストアがまだ障害中）結果は in-doubt であり、タグ行欠損中に偽の `AlreadyCommitted` を返すことはありません。**対処**: リトライ。継続する場合は Cosmos のタグ修復／スイープ（[ストレージプロバイダー](11_storage_providers.md) 参照）を実行し、タグ行の破損を確認してください。
+- **想定外のキー再利用衝突**: 同じ冪等キーで異なるペイロード／タグが送信されました。キーは呼び出し側ではなく*操作*を表す必要があります。操作の同一性から導いた安定キー（例: マイグレーション名）を使い、全ホストで同一のイベントを構築してください。
+- **DynamoDB の制限エラー**: タグ数を ≤99（1 イベント + 99 タグ = 100 アイテム上限）に減らし、タグ文字列を重複排除してください。条件付き追記は契約上シングルイベントです。
+- **シークレットセーフ**: これらの例外はいずれも生の冪等キーやペイロードを持ちません — 不透明なフィンガープリント、プロバイダ名、ServiceId、*導出* EventId のみです。リクエストからキーを復元するようなログを追加しないでください。
+
 ## JSON シリアライズ例外
 
 **対処**: イベントペイロードの変更は後方互換にする。`EventMetadata.EventType` をログに出し問題のイベントを特定。

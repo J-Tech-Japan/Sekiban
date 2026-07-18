@@ -21,6 +21,13 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
 {
     private const string ConditionalProviderName = "Postgres";
 
+    /// <summary>
+    ///     The name of the events-table primary key <c>(ServiceId, Id)</c>. Only a 23505 on THIS constraint is the
+    ///     deterministic claim collision; an unrelated unique-violation (a tag or other constraint) preserves its original
+    ///     failure and is never misrouted to winner classification.
+    /// </summary>
+    private const string EventsPrimaryKeyConstraint = "PK_dcb_events";
+
     /// <summary>Events land in Postgres and survive this process.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "Postgres");
@@ -80,7 +87,11 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             await transaction.CommitAsync(cancellationToken);
             return ConditionalWriteOutcome.Wrote();
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: EventsPrimaryKeyConstraint
+        })
         {
             await transaction.RollbackAsync(cancellationToken);
             return ConditionalWriteOutcome.Conflict(ex);

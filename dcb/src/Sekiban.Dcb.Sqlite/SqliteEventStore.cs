@@ -21,6 +21,10 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
     IConditionalEventStore, IWriteConditionCapabilityProvider
 {
     private const string ConditionalProviderName = "Sqlite";
+
+    /// <summary>SQLite extended result code SQLITE_CONSTRAINT_PRIMARYKEY (1555) — the (ServiceId, Id) PK violation.</summary>
+    private const int SqliteConstraintPrimaryKey = 1555;
+
     private readonly ConditionalAppendCoordinator _conditionalAppend;
 
     /// <summary>
@@ -74,8 +78,11 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
                 {
                     await eventCmd.ExecuteNonQueryAsync(cancellationToken);
                 }
-                catch (SqliteException ex) when (ex.SqliteErrorCode == 19) // SQLITE_CONSTRAINT (PK/unique)
+                catch (SqliteException ex) when (ex.SqliteExtendedErrorCode == SqliteConstraintPrimaryKey)
                 {
+                    // Only the events-table (ServiceId, Id) PRIMARY KEY violation is the deterministic claim collision.
+                    // Any other constraint (a different extended code) rolls back and propagates as a provider failure,
+                    // never a winner classification.
                     await transaction.RollbackAsync(cancellationToken);
                     return ConditionalWriteOutcome.Conflict(ex);
                 }

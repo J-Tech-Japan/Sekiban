@@ -539,20 +539,24 @@ var executor = new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore());
 
 ### プロバイダの仕組み（SEK-G16）
 
-すべてのプロバイダは、共有オーケストレーター（`ConditionalAppendExecution`）を通じて同一のアウトカムマシンを生成します。プロバイダが提供するのは2つのプリミティブのみ — ネイティブの一意性プリミティブを使ってクレームイベントを決定論的 id の下に耐久書き込みすること、およびコミット済みの勝者を読み戻すこと — であり、正規化・書き込み前フィンガープリント（未対応形状は**あらゆるストア呼び出しの前に**フェイルクローズ）・分類・レシート構築はオーケストレーターが行います。
+すべてのプロバイダは、共有オーケストレーター（`ConditionalAppendExecution`）を通じて同一のアウトカムマシンを生成します。プロバイダが提供するのは3つのプリミティブのみ — ネイティブの一意性プリミティブを使ってクレームイベントを決定論的 id の下に耐久書き込みすること、コミット済みの勝者を読み戻すこと、そして（イベント行とインデックス行がアトミックに書かれない場合に）勝者の契約上のコミット済み状態を収束させること — であり、正規化・書き込み前フィンガープリント（未対応形状は**あらゆるストア呼び出しの前に**フェイルクローズ）・分類・コミット済み状態ゲート・レシート構築はオーケストレーターが行います。
 
 **決定論的なストレージ識別子。** クレームイベントは、キーのみから導出した EventId の下に格納されます: `EventId = SHA-256(ドメインセパレータ ‖ バージョン ‖ ServiceId ‖ 正規化キー)` に UUID の version/variant ビットを適用したもの（`ConditionalAppendIdentity`、導出 v1）。呼び出し側のランダムな EventId は格納クレームでは破棄されるため、ストレージ識別子は `(ServiceId, key)` の純粋関数となり、既存の行単位／アイテム単位の主キーがそのまま一意性プリミティブになります — **どのプロバイダでもスキーマ移行なし、新しいカラム／インデックスなし**。識別子は保存ではなく導出され、フィンガープリントは永続化されたイベント内容から再計算されるため、同一操作のリトライは格納済み勝者から同一のフィンガープリントを再計算し、同一キー下の異なる操作は異なるフィンガープリントを再計算します。
 
-**分類は再計算したフィンガープリントによって行い、生の衝突シグナルでは行いません。** プロバイダの衝突（SQLSTATE 23505、Cosmos 409、DynamoDB `ConditionalCheckFailed`）は、それ単体では*決して*同一操作の成功として扱いません。衝突時、オーケストレーターはコミット済み勝者を読み戻してフィンガープリントを比較します。勝者を読み戻せない場合（in-doubt／未コミットのクレーム）は、`AlreadyCommittedSameOperation` を報告せずリトライ可能なエラーを返します。実プロバイダ例外は、実際に発生したときのみ `KeyReuseConflict` の診断用内部原因として保持します。
+**分類は再計算したフィンガープリントによって行い、生の衝突シグナルでは行いません。しかも、衝突は*意図した*ものでなければなりません。** プロバイダの衝突は、それ単体では*決して*同一操作の成功として扱いません。各プロバイダは、決定論的クレーム衝突である特定の制約／理由のみをマッピングします。無関係な制約や想定外のキャンセル理由は元のプロバイダ失敗を保持し、勝者分類へ誤ルーティングされることはありません。マッピングされた衝突時、オーケストレーターはコミット済み勝者を読み戻してフィンガープリントを比較します。勝者を読み戻せない場合（in-doubt／未コミットのクレーム）は、`AlreadyCommittedSameOperation` を報告せず、型付きでリトライ可能な `ConditionalAppendInDoubtException` を送出します。実プロバイダ例外は、実際に発生したときのみ `KeyReuseConflict`（または in-doubt）の診断用内部原因として保持します。
 
-| プロバイダ | 一意性プリミティブ | 衝突シグナル | 勝者の読み戻し |
-|----------|----------------------|-----------------|------------------|
-| PostgreSQL | `(ServiceId, Id)` 主キー。プレーンなトランザクション（リトライ用の実行戦略ではない） | `DbUpdateException` → `PostgresException` SQLSTATE 23505 | `(ServiceId, Id)` による `AsNoTracking` ポイントリード |
-| SQLite | `(ServiceId, Id)` 主キー。新パスは書き込みロック下のプレーンな `INSERT`（レガシーの `INSERT OR REPLACE` パスはバイト単位で不変） | `SqliteException` result code 19（制約） | `(ServiceId, Id)` によるポイントリード |
-| Cosmos DB | パーティション `{serviceId}|{id}` 内のアイテム id。`CreateItemAsync` | `CosmosException` 409 Conflict | イベントアイテムの整合ポイントリード |
-| DynamoDB | アイテム主キー `pk = SERVICE#{serviceId}#EVENT#{id}`。`attribute_not_exists(pk)` でガードした単一アイテムの `TransactWriteItems`。**`ClientRequestToken` なし**（同一操作のリトライが冪等性で潰されず実際の衝突を表出させるため） | `ConditionalCheckFailedException` / 理由 `ConditionalCheckFailed` の `TransactionCanceledException` | `ConsistentRead = true` の `GetItem` |
+| プロバイダ | 一意性プリミティブ | マッピングする衝突シグナル（これのみがクレーム衝突） | 勝者の読み戻し | コミット済み状態ゲート |
+|----------|----------------------|--------------------------------------------------|------------------|----------------------|
+| PostgreSQL | `(ServiceId, Id)` 主キー。プレーンなトランザクション（リトライ用の実行戦略ではない）、イベント行＋タグ行を1トランザクション | `DbUpdateException` → `PostgresException` SQLSTATE 23505 **かつ `ConstraintName == "PK_dcb_events"`**（他の 23505 はプロバイダ失敗のまま） | `(ServiceId, Id)` による `AsNoTracking` ポイントリード | 不要（書き込みがアトミック） |
+| SQLite | `(ServiceId, Id)` 主キー。新パスは書き込みロック下のプレーンな `INSERT`（レガシーの `INSERT OR REPLACE` は不変）、イベント行＋タグ行を1トランザクション | 隔離したイベント INSERT での **`SqliteExtendedErrorCode == 1555`（SQLITE_CONSTRAINT_PRIMARYKEY）**（他の制約はロールバックして伝播） | `(ServiceId, Id)` によるポイントリード | 不要（書き込みがアトミック） |
+| Cosmos DB | パーティション `{serviceId}|{id}` 内のアイテム id。イベントドキュメントとタグ行は**別フェーズ**で書き込む（非アトミック） | イベント作成での `CosmosException` 409 Conflict | イベントアイテムの整合ポイントリード | **必須** — 同一操作のリトライは、AlreadyCommitted の前にすべてのタグ行を冪等に修復／検証する（create → 409 で読み戻し → `ContentEquals`）。コミット済み状態に到達できなければ型付き in-doubt |
+| DynamoDB | アイテム主キー `pk = SERVICE#{serviceId}#EVENT#{id}`。**イベント Put（index 0、`attribute_not_exists(pk)`）＋タグ行1件ごとの Put を1つの `TransactWriteItems`** に含める。**`ClientRequestToken` なし**（同一操作のリトライが冪等性で潰されず実際の衝突を表出させるため）。制限は呼び出し前にフェイルクローズで強制：≤100 アイテム・アイテムキー重複なし（`DynamoConditionalAppendLimitException`）。 | `ConditionalCheckFailedException`、または**キャンセル理由の index 0** が `ConditionalCheckFailed` の `TransactionCanceledException`（他の index の理由はプロバイダ失敗） | `ConsistentRead = true` の `GetItem` | 不要（トランザクションがアトミック） |
 
 無条件書き込みパス、`IEventStore`、およびすべてのデフォルトは4プロバイダすべてで不変です。条件付きパスは純粋に追加のみで、ストアと同時に登録されます（`IConditionalEventStore` と `IWriteConditionCapabilityProvider` は、コンテナが既に構築する同一シングルトンに解決されます）。サービス別ファクトリー（`PostgresEventStoreFactory`・`CosmosDbEventStoreFactory`）と `HybridEventStore` デコレーターはこのケイパビリティを伝播します。コンポジットは、すべての参加ストアが対応する場合にのみそのカインドを報告します（フェイルクローズな積集合）。
+
+**アトミック性はプロバイダごとに異なり、一律ではありません。** Postgres/SQLite/DynamoDB はイベントとタグ行を単一トランザクションで書くため、コミット済みイベントには必ずタグ行があります。Cosmos は異なり、イベントドキュメント→タグ行の順で書くため、その間のクラッシュはタグスコープの可視性が未回復のコミット済みイベントを残します。Cosmos のコミット済み状態ゲートは、次の同一操作の試行でまさにこのウィンドウを閉じます。共有アウトカムテストの合格だけでは Cosmos のアトミック性は証明されません。
+
+**型付きでリトライ可能な in-doubt。** 結果を確定できない場合 — 読み戻せる勝者のない衝突、耐久コミットの可能性がある後のキャンセル／タイムアウト、または検証／修復できなかったコミット済み状態 — 追記は型付き `ConditionalAppendInDoubtException`（`IsRetryable == true`、安定した `ReasonCode`、プロバイダ名、ServiceId、*導出* EventId。生キー／ペイロードは持たない）で失敗します。これは第5のアウトカムステータスではなく、呼び出し側がリトライすべき失敗です。リトライは収束します（勝者がコミットすれば `AlreadyCommittedSameOperation` に分類）。WithResult では `ResultBox.Error`、WithoutResult ではガード境界が再送出します。耐久コミット後のキャンセル／タイムアウトは、まず権威的な読み取り＋フィンガープリント（＋コミット済み状態検証）で可能なら `AlreadyCommittedSameOperation` に解決し、それ以外の場合のみ in-doubt として表出します。
 
 ### レシピ: N ホストにファンアウトした一度きりのマイグレーション
 
