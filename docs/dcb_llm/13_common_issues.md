@@ -316,3 +316,28 @@ Provider-test fidelity: Postgres uses a real container (Testcontainers) and SQLi
 
 Not yet available. If you see references to `Sekiban.Pure.Dapr`, they apply to the pure aggregate runtime, not DCB.
 Stick with Orleans until Dapr support ships.
+
+## Serialized-Commit Wire Contract Compatibility (SEK-G17)
+
+**Symptoms**: A mixed-version deployment reports the serialized-commit wire contract as "broken", or an endpoint returns a
+null-reference 500 on a request that looks structurally off.
+
+**Causes**:
+- The official contract (`eventCandidates` + base64 `payload` + `eventPayloadName` + **per-event `tags`** +
+  `consistencyTags`) has NOT changed across dcb-v10.2.2 → 10.6.0. Issues #1087/#1088 traced the reported break to a
+  DIFFERENT downstream shape (`events` / `payloadJson` / per-commit-`tags`) exposed under the same route and misdescribed as
+  mirroring the framework contract.
+- The framework contract historically had no version discriminator, no pinned property names, no normative spec, and no
+  golden-wire tests, so a wrong compatibility claim had nothing to fail against.
+
+**Fixes**:
+- Treat the normative spec in `07_json_orleans_serialization.md` ("Serialized Commit Wire Contract") as authoritative, and
+  make any compatibility claim pass the golden vectors (`SerializedCommitWireGoldenTests`).
+- Do NOT add serialization attributes to the positional DTOs to "fix" naming; pin via the contract-owned
+  `SerializedCommitWireContract` / `SerializedCommitWireJsonContext` instead. Attributes would change fresh-options
+  consumers' PascalCase output.
+- For an explicit version and typed errors, accept requests through `ISerializedCommitAcceptor` /
+  `SerializedCommitAcceptor`: an unknown `version` fails closed with `UnsupportedSerializedCommitEnvelopeVersionException`
+  and a malformed shape with `MalformedSerializedCommitException` — before any side effect, instead of a null-reference 500.
+- A downstream adapter that collapses per-event tags into per-commit tags may do so ONLY when every event in the commit
+  shares an identical tag set, and must reject the rest explicitly.
