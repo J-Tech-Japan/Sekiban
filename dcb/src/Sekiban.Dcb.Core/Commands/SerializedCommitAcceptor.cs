@@ -17,8 +17,9 @@ namespace Sekiban.Dcb.Commands;
 ///         via <see cref="LegacyUnversionedSerializedCommitAdapter" />); a known version binds
 ///         <see cref="VersionedSerializedCommitRequest" />. Either way the same event candidates + consistency tags are
 ///         handed to <see cref="ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync" /> with identical semantics
-///         (heterogeneous per-event tags preserved). A binding failure is reported as a typed shape error, never a
-///         null-reference.
+///         (heterogeneous per-event tags preserved). A binding failure becomes a SANITIZED typed shape error — the raw
+///         System.Text.Json exception is discarded, never attached — so hostile request content cannot leak through the
+///         error surface, and a null-reference is never surfaced.
 ///     </para>
 /// </summary>
 public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
@@ -36,9 +37,7 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
         switch (discrimination.Kind)
         {
             case SerializedCommitVersionKind.Malformed:
-                return Task.FromResult(
-                    ResultBox.Error<SerializedCommitResult>(
-                        new MalformedSerializedCommitException(discrimination.Detail ?? "invalid envelope")));
+                return Malformed(discrimination.ShapeError ?? SerializedCommitShapeError.UnreadableJson);
 
             case SerializedCommitVersionKind.UnsupportedVersion:
                 return Task.FromResult(
@@ -53,9 +52,7 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
                 return BindVersionedThenExecuteAsync(utf8Json, cancellationToken);
 
             default:
-                return Task.FromResult(
-                    ResultBox.Error<SerializedCommitResult>(
-                        new MalformedSerializedCommitException("unrecognized discrimination result")));
+                return Malformed(SerializedCommitShapeError.UnreadableJson);
         }
     }
 
@@ -69,14 +66,14 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
             legacy = JsonSerializer.Deserialize<SerializedCommitRequest>(
                 utf8Json.Span, SerializedCommitWireContract.Options);
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            return Malformed("legacy unversioned payload could not be bound", ex);
+            return Malformed(SerializedCommitShapeError.LegacyPayloadInvalid); // raw cause discarded (secret-safe)
         }
 
         if (legacy is null)
         {
-            return Malformed("legacy unversioned payload bound to null");
+            return Malformed(SerializedCommitShapeError.LegacyPayloadInvalid);
         }
 
         // Lift losslessly to V1 (per-event tags preserved) before execution — the legacy path is not a shortcut.
@@ -94,14 +91,14 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
             envelope = JsonSerializer.Deserialize<VersionedSerializedCommitRequest>(
                 utf8Json.Span, SerializedCommitWireContract.Options);
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            return Malformed("known-version (V1) payload could not be bound", ex);
+            return Malformed(SerializedCommitShapeError.VersionedPayloadInvalid); // raw cause discarded (secret-safe)
         }
 
         if (envelope is null)
         {
-            return Malformed("known-version (V1) payload bound to null");
+            return Malformed(SerializedCommitShapeError.VersionedPayloadInvalid);
         }
 
         return ExecuteAsync(envelope, cancellationToken);
@@ -119,9 +116,6 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
         return _executor.CommitSerializableEventsAsync(request, cancellationToken);
     }
 
-    private static Task<ResultBox<SerializedCommitResult>> Malformed(string detail) =>
-        Task.FromResult(ResultBox.Error<SerializedCommitResult>(new MalformedSerializedCommitException(detail)));
-
-    private static Task<ResultBox<SerializedCommitResult>> Malformed(string detail, Exception inner) =>
-        Task.FromResult(ResultBox.Error<SerializedCommitResult>(new MalformedSerializedCommitException(detail, inner)));
+    private static Task<ResultBox<SerializedCommitResult>> Malformed(SerializedCommitShapeError reason) =>
+        Task.FromResult(ResultBox.Error<SerializedCommitResult>(new MalformedSerializedCommitException(reason)));
 }

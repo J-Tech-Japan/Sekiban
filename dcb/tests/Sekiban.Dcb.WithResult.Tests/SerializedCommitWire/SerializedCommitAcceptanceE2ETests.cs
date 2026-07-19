@@ -1,73 +1,75 @@
-using System.Text;
-using System.Text.Json;
 using Dcb.Domain;
-using Dcb.Domain.Student;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
-using Sekiban.Dcb.Events;
+using Sekiban.Dcb.LegacyConsumerFixture;
 using Sekiban.Dcb.Testing;
 using Xunit;
 namespace Sekiban.Dcb.Tests.SerializedCommitWire;
 
 /// <summary>
-///     SEK-G17 no-migration evidence: a literal UNVERSIONED official-shape wire byte string (frozen below, the exact bytes a
-///     10.1.x producer emits for registered events) is accepted by the new acceptance surface and committed by the REAL
-///     executor + event store, with heterogeneous per-event tags and decoded payload bytes preserved end-to-end — no
-///     envelope, no migration, no per-commit-tag translation. The identical bytes with a leading <c>"version":1</c> produce
-///     the same committed shape, proving the legacy lift to V1 and the versioned path converge on one executor.
+///     SEK-G17 BEHAVIORAL no-migration evidence. The wire bytes are produced by the SEPARATE
+///     <c>Sekiban.Dcb.LegacyConsumerFixture</c> assembly (a dcb-v10.1.17-era producer built only on pre-G17 public
+///     surfaces) — NOT reconstructed in this test assembly — and then crossed into the new acceptance surface and committed
+///     by the REAL executor + event store. It asserts exact decoded payload bytes, distinct heterogeneous per-event tags,
+///     result semantics, and empty-request compatibility. That the old producer's artifact still commits unchanged is the
+///     no-migration proof.
 /// </summary>
 public class SerializedCommitAcceptanceE2ETests
 {
-    private const string Guid1 = "11111111-1111-1111-1111-111111111111";
-    private const string Guid2 = "22222222-2222-2222-2222-222222222222";
-
-    // Frozen literal unversioned official shape (camelCase, base64 payloads of StudentCreated). Event #1 carries two tags,
-    // event #2 one tag — heterogeneous, not flattened.
-    private const string LiteralUnversioned =
-        """{"eventCandidates":[{"payload":"eyJzdHVkZW50SWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJuYW1lIjoiQWxpY2UiLCJtYXhDbGFzc0NvdW50Ijo1fQ==","eventPayloadName":"StudentCreated","tags":["Student:11111111-1111-1111-1111-111111111111","Student:22222222-2222-2222-2222-222222222222"]},{"payload":"eyJzdHVkZW50SWQiOiIyMjIyMjIyMi0yMjIyLTIyMjItMjIyMi0yMjIyMjIyMjIyMjIiLCJuYW1lIjoiQm9iIiwibWF4Q2xhc3NDb3VudCI6M30=","eventPayloadName":"StudentCreated","tags":["Student:22222222-2222-2222-2222-222222222222"]}],"consistencyTags":[]}""";
-
-    private const string LiteralVersionedV1 =
-        """{"version":1,"eventCandidates":[{"payload":"eyJzdHVkZW50SWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJuYW1lIjoiQWxpY2UiLCJtYXhDbGFzc0NvdW50Ijo1fQ==","eventPayloadName":"StudentCreated","tags":["Student:11111111-1111-1111-1111-111111111111","Student:22222222-2222-2222-2222-222222222222"]},{"payload":"eyJzdHVkZW50SWQiOiIyMjIyMjIyMi0yMjIyLTIyMjItMjIyMi0yMjIyMjIyMjIyMjIiLCJuYW1lIjoiQm9iIiwibWF4Q2xhc3NDb3VudCI6M30=","eventPayloadName":"StudentCreated","tags":["Student:22222222-2222-2222-2222-222222222222"]}],"consistencyTags":[]}""";
-
     private static ISerializedSekibanDcbExecutor CreateRealExecutor(DcbDomainTypes domainTypes) =>
         (ISerializedSekibanDcbExecutor)new InMemoryDcbExecutorForTesting(
             domainTypes, new Sekiban.Dcb.Testing.InMemoryEventStore(domainTypes.EventTypes));
 
     [Fact]
-    public async Task LiteralUnversionedBytes_ThroughAcceptor_CommitViaRealExecutor_PreservesTagsAndPayloadBytes()
+    public async Task LegacyProducerBytes_CrossBoundary_CommitViaRealExecutor_PreservesTagsAndPayloadBytes()
     {
         var domainTypes = DomainType.GetDomainTypes();
         var acceptor = new SerializedCommitAcceptor(CreateRealExecutor(domainTypes));
 
-        var result = await acceptor.AcceptAsync(Encoding.UTF8.GetBytes(LiteralUnversioned));
+        // The old producer's artifact — bytes emitted by the separate legacy assembly.
+        var producedBytes = Legacy1017WireConsumer.SerializeUnversionedWire();
+        var result = await acceptor.AcceptAsync(producedBytes);
 
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         var commit = result.GetValue();
         Assert.Equal(2, commit.WrittenEvents.Count);
 
         // Heterogeneous per-event tags preserved onto each written event (not flattened across events).
-        Assert.Equal(new[] { $"Student:{Guid1}", $"Student:{Guid2}" }, commit.WrittenEvents[0].Tags);
-        Assert.Equal(new[] { $"Student:{Guid2}" }, commit.WrittenEvents[1].Tags);
+        Assert.Equal(Legacy1017WireConsumer.Event1Tags, commit.WrittenEvents[0].Tags);
+        Assert.Equal(Legacy1017WireConsumer.Event2Tags, commit.WrittenEvents[1].Tags);
 
-        // Decoded payload bytes preserved byte-for-byte against a freshly-serialized reference.
-        byte[] Ref(object o) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(o, domainTypes.JsonSerializerOptions));
-        Assert.Equal(Ref(new StudentCreated(Guid.Parse(Guid1), "Alice", 5)), commit.WrittenEvents[0].Payload);
-        Assert.Equal(Ref(new StudentCreated(Guid.Parse(Guid2), "Bob", 3)), commit.WrittenEvents[1].Payload);
+        // Exact decoded payload bytes preserved byte-for-byte from the producer's artifact.
+        Assert.Equal(Legacy1017WireConsumer.Payload1(), commit.WrittenEvents[0].Payload);
+        Assert.Equal(Legacy1017WireConsumer.Payload2(), commit.WrittenEvents[1].Payload);
 
         Assert.Equal("StudentCreated", commit.WrittenEvents[0].EventPayloadName);
+        Assert.Equal("StudentCreated", commit.WrittenEvents[1].EventPayloadName);
     }
 
     [Fact]
-    public async Task ExplicitV1EnvelopeBytes_ProduceTheSameCommitShapeAsLegacy()
+    public async Task LegacyProducerEmptyRequestBytes_CrossBoundary_AreAcceptedAsEmptyCommit()
     {
         var domainTypes = DomainType.GetDomainTypes();
-        var legacy = (await new SerializedCommitAcceptor(CreateRealExecutor(domainTypes))
-            .AcceptAsync(Encoding.UTF8.GetBytes(LiteralUnversioned))).GetValue();
-        var envelope = (await new SerializedCommitAcceptor(CreateRealExecutor(domainTypes))
-            .AcceptAsync(Encoding.UTF8.GetBytes(LiteralVersionedV1))).GetValue();
+        var acceptor = new SerializedCommitAcceptor(CreateRealExecutor(domainTypes));
 
-        // Same written-event shape (payload bytes, tags, type names) whether or not a version was present — EventIds /
-        // SortableIds are server-generated per call, so compare the stable projection.
+        var result = await acceptor.AcceptAsync(Legacy1017WireConsumer.SerializeEmptyUnversionedWire());
+
+        Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
+        Assert.Empty(result.GetValue().WrittenEvents);
+    }
+
+    [Fact]
+    public async Task ExplicitV1EnvelopeBytes_ProduceTheSameCommitShapeAsLegacyProducerBytes()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        var legacyBytes = Legacy1017WireConsumer.SerializeUnversionedWire();
+        // Prefix an explicit "version":1 to the same producer bytes (turn the leading '{' into '{"version":1,').
+        var versionedBytes = System.Text.Encoding.UTF8.GetBytes(
+            "{\"version\":1," + System.Text.Encoding.UTF8.GetString(legacyBytes).Substring(1));
+
+        var legacy = (await new SerializedCommitAcceptor(CreateRealExecutor(domainTypes)).AcceptAsync(legacyBytes)).GetValue();
+        var envelope = (await new SerializedCommitAcceptor(CreateRealExecutor(domainTypes)).AcceptAsync(versionedBytes)).GetValue();
+
         static object[] Shape(SerializedCommitResult r) =>
             r.WrittenEvents
                 .Select(e => (object)(e.EventPayloadName, string.Join(",", e.Tags), Convert.ToBase64String(e.Payload)))

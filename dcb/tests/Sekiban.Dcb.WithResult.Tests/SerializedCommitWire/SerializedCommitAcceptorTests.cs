@@ -113,7 +113,7 @@ public class SerializedCommitAcceptorTests
     }
 
     [Fact]
-    public async Task DuplicateVersion_IsShapeError()
+    public async Task DuplicateExactVersion_IsShapeError()
     {
         var exec = new RecordingExecutor();
         var acceptor = new SerializedCommitAcceptor(exec);
@@ -122,7 +122,35 @@ public class SerializedCommitAcceptorTests
         var result = await acceptor.AcceptAsync(Utf8(json));
 
         var ex = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
-        Assert.Contains("duplicate", ex.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(SerializedCommitShapeError.DuplicateVersion, ex.Reason);
+        Assert.Equal(0, exec.CommitCalls);
+    }
+
+    [Fact]
+    public async Task MixedCaseVersionOnly_IsShapeError_NeverSilentlyLegacyOrV1()
+    {
+        var exec = new RecordingExecutor();
+        var acceptor = new SerializedCommitAcceptor(exec);
+        var json = """{"Version":1,"eventCandidates":[],"consistencyTags":[]}"""; // capital V
+
+        var result = await acceptor.AcceptAsync(Utf8(json));
+
+        var ex = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
+        Assert.Equal(SerializedCommitShapeError.AmbiguousVersionCasing, ex.Reason);
+        Assert.Equal(0, exec.CommitCalls); // NOT routed as legacy or V1
+    }
+
+    [Fact]
+    public async Task ExactPlusMixedCaseVersion_IsShapeError()
+    {
+        var exec = new RecordingExecutor();
+        var acceptor = new SerializedCommitAcceptor(exec);
+        var json = """{"version":1,"Version":1,"eventCandidates":[],"consistencyTags":[]}""";
+
+        var result = await acceptor.AcceptAsync(Utf8(json));
+
+        var ex = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
+        Assert.Equal(SerializedCommitShapeError.AmbiguousVersionCasing, ex.Reason);
         Assert.Equal(0, exec.CommitCalls);
     }
 
@@ -154,14 +182,32 @@ public class SerializedCommitAcceptorTests
     }
 
     [Theory]
-    [InlineData(SerializedCommitVersionKind.LegacyUnversioned, """{"eventCandidates":[],"consistencyTags":[]}""")]
-    [InlineData(SerializedCommitVersionKind.KnownVersion, """{"version":1,"eventCandidates":[]}""")]
-    [InlineData(SerializedCommitVersionKind.UnsupportedVersion, """{"version":2,"eventCandidates":[]}""")]
-    [InlineData(SerializedCommitVersionKind.Malformed, """{"version":1.5}""")]
-    [InlineData(SerializedCommitVersionKind.Malformed, """{"version":true}""")]
-    [InlineData(SerializedCommitVersionKind.Malformed, "not json at all")]
-    public void Discriminator_ClassifiesRawVersion(SerializedCommitVersionKind expected, string json)
+    [InlineData(SerializedCommitVersionKind.KnownVersion, null, """{"version":1,"eventCandidates":[]}""")]           // exact known
+    [InlineData(SerializedCommitVersionKind.UnsupportedVersion, null, """{"version":2,"eventCandidates":[]}""")]     // exact unknown
+    [InlineData(SerializedCommitVersionKind.LegacyUnversioned, null, """{"eventCandidates":[],"consistencyTags":[]}""")] // missing → legacy
+    [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.VersionNotInteger, """{"version":"1"}""")]   // wrong type (string)
+    [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.VersionNotInteger, """{"version":1.5}""")]   // wrong type (float)
+    [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.VersionNotInteger, """{"version":true}""")]  // wrong type (bool)
+    [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.DuplicateVersion, """{"version":1,"version":1}""")] // exact duplicate
+    [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.AmbiguousVersionCasing, """{"Version":1}""")]       // mixed-case only
+    [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.AmbiguousVersionCasing, """{"VERSION":1}""")]       // upper-case only
+    [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.AmbiguousVersionCasing, """{"vErSiOn":1}""")]       // arbitrary mixed
+    [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.AmbiguousVersionCasing, """{"version":1,"Version":1}""")] // exact + mixed duplicate
+    [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.NonObjectRoot, "[]")]              // non-object root
+    [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.UnreadableJson, "not json at all")] // unreadable
+    public void Discriminator_ClassifiesRawVersion(
+        SerializedCommitVersionKind expectedKind, SerializedCommitShapeError? expectedError, string json)
     {
-        Assert.Equal(expected, SerializedCommitVersionDiscriminator.Read(Utf8(json)).Kind);
+        var result = SerializedCommitVersionDiscriminator.Read(Utf8(json));
+        Assert.Equal(expectedKind, result.Kind);
+        Assert.Equal(expectedError, result.ShapeError);
+    }
+
+    [Fact]
+    public void ContractOptions_AreCaseSensitive_NeverAmbientCaseInsensitive()
+    {
+        // A PascalCase 'Version' must NOT bind to the camelCase contract property (ambient web-defaults case-insensitivity
+        // is deliberately not inherited by the contract-owned options).
+        Assert.False(SerializedCommitWireContract.Options.PropertyNameCaseInsensitive);
     }
 }

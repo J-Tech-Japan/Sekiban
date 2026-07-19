@@ -4,36 +4,48 @@ namespace Sekiban.Dcb.Commands;
 /// <summary>The outcome of raw (phase-1) version discrimination — computed with no typed payload binding.</summary>
 public enum SerializedCommitVersionKind
 {
-    /// <summary>No <c>version</c> property is present: the legacy unversioned official shape.</summary>
+    /// <summary>No <c>version</c> property (exact or case-variant) is present: the legacy unversioned official shape.</summary>
     LegacyUnversioned,
-    /// <summary>A single integer <c>version</c> equal to a supported version.</summary>
+    /// <summary>A single exact integer <c>version</c> equal to a supported version.</summary>
     KnownVersion,
-    /// <summary>A single integer <c>version</c> that this runtime does not support.</summary>
+    /// <summary>A single exact integer <c>version</c> that this runtime does not support.</summary>
     UnsupportedVersion,
-    /// <summary>Structurally invalid: non-object root, non-integer <c>version</c>, or a duplicated <c>version</c>.</summary>
+    /// <summary>Structurally invalid (see <see cref="SerializedCommitVersionResult.ShapeError" />).</summary>
     Malformed
 }
 
 /// <summary>The discrimination result. <see cref="Version" /> is set only for known/unsupported versions.</summary>
-public readonly record struct SerializedCommitVersionResult(SerializedCommitVersionKind Kind, int? Version, string? Detail);
+public readonly record struct SerializedCommitVersionResult(
+    SerializedCommitVersionKind Kind,
+    int? Version,
+    SerializedCommitShapeError? ShapeError);
 
 /// <summary>
 ///     SEK-G17 phase-1 of two-phase acceptance: reads ONLY the envelope's <c>version</c> discriminator straight from the raw
 ///     UTF-8 bytes, before any typed payload binding, base64 decode, reservation, EventId allocation, or executor/store
-///     call. The contract is camelCase, so the discriminator keys off the exact <c>version</c> property name.
+///     call.
+///     <para>
+///         The discriminator is the EXACT ordinal property name <c>version</c> (the camelCase spelling of the contract).
+///         Matching is deliberately case-SENSITIVE and never falls back to ambient case-insensitivity: a case-variant such
+///         as <c>Version</c> / <c>VERSION</c> does NOT silently select V1 or legacy — it is a <b>ShapeError</b>. This
+///         prevents an off-contract casing from being interpreted optimistically.
+///     </para>
 ///     <list type="bullet">
-///         <item>no <c>version</c> → <see cref="SerializedCommitVersionKind.LegacyUnversioned" /> (legacy path);</item>
-///         <item>one integer <c>version</c> == supported → <see cref="SerializedCommitVersionKind.KnownVersion" />;</item>
-///         <item>one integer <c>version</c> != supported → <see cref="SerializedCommitVersionKind.UnsupportedVersion" />;</item>
-///         <item>non-object root, non-integer <c>version</c>, or duplicated <c>version</c> →
-///         <see cref="SerializedCommitVersionKind.Malformed" />.</item>
+///         <item>no <c>version</c> and no case-variant → <see cref="SerializedCommitVersionKind.LegacyUnversioned" />;</item>
+///         <item>one exact integer <c>version</c> == supported → <see cref="SerializedCommitVersionKind.KnownVersion" />;</item>
+///         <item>one exact integer <c>version</c> != supported → <see cref="SerializedCommitVersionKind.UnsupportedVersion" />;</item>
+///         <item>a case-variant of <c>version</c> present (alone or alongside the exact one) →
+///         <see cref="SerializedCommitShapeError.AmbiguousVersionCasing" />;</item>
+///         <item>exact <c>version</c> duplicated → <see cref="SerializedCommitShapeError.DuplicateVersion" />;</item>
+///         <item>non-integer <c>version</c> → <see cref="SerializedCommitShapeError.VersionNotInteger" />;</item>
+///         <item>non-object root / not well-formed JSON → <see cref="SerializedCommitShapeError.NonObjectRoot" /> /
+///         <see cref="SerializedCommitShapeError.UnreadableJson" />.</item>
 ///     </list>
 /// </summary>
 public static class SerializedCommitVersionDiscriminator
 {
-    private static readonly System.Text.Json.JsonReaderOptions ReaderOptions = new()
+    private static readonly JsonReaderOptions ReaderOptions = new()
     {
-        // Reject duplicate-detection ambiguity sources; comments are not part of the wire contract.
         CommentHandling = JsonCommentHandling.Disallow,
         AllowTrailingCommas = false
     };
@@ -45,11 +57,11 @@ public static class SerializedCommitVersionDiscriminator
             var reader = new Utf8JsonReader(utf8Json, ReaderOptions);
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
             {
-                return new SerializedCommitVersionResult(
-                    SerializedCommitVersionKind.Malformed, null, "root must be a JSON object");
+                return Malformed(SerializedCommitShapeError.NonObjectRoot);
             }
 
-            var versionCount = 0;
+            var exactVersionCount = 0;
+            var caseVariantCount = 0;
             var versionIsInteger = false;
             var versionValue = 0;
 
@@ -57,20 +69,20 @@ public static class SerializedCommitVersionDiscriminator
             {
                 if (reader.TokenType != JsonTokenType.PropertyName)
                 {
-                    return new SerializedCommitVersionResult(
-                        SerializedCommitVersionKind.Malformed, null, "unexpected token in object");
+                    return Malformed(SerializedCommitShapeError.UnreadableJson);
                 }
 
-                var isVersion = reader.ValueTextEquals("version"); // camelCase contract, exact
+                var isExact = reader.ValueTextEquals("version"); // exact ordinal, camelCase contract
+                var isCaseVariant = !isExact && IsVersionIgnoreCase(ref reader);
+
                 if (!reader.Read())
                 {
-                    return new SerializedCommitVersionResult(
-                        SerializedCommitVersionKind.Malformed, null, "truncated after property name");
+                    return Malformed(SerializedCommitShapeError.UnreadableJson);
                 }
 
-                if (isVersion)
+                if (isExact)
                 {
-                    versionCount++;
+                    exactVersionCount++;
                     if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var v))
                     {
                         versionIsInteger = true;
@@ -78,8 +90,12 @@ public static class SerializedCommitVersionDiscriminator
                     }
                     else
                     {
-                        versionIsInteger = false; // string / bool / float / object / array 'version' is wrong-typed
+                        versionIsInteger = false;
                     }
+                }
+                else if (isCaseVariant)
+                {
+                    caseVariantCount++;
                 }
 
                 if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
@@ -88,27 +104,41 @@ public static class SerializedCommitVersionDiscriminator
                 }
             }
 
-            if (versionCount == 0)
+            // Any case-variant of 'version' (alone or with the exact one) is never interpreted — it is a shape error.
+            if (caseVariantCount > 0)
+            {
+                return Malformed(SerializedCommitShapeError.AmbiguousVersionCasing);
+            }
+            if (exactVersionCount == 0)
             {
                 return new SerializedCommitVersionResult(SerializedCommitVersionKind.LegacyUnversioned, null, null);
             }
-            if (versionCount > 1)
+            if (exactVersionCount > 1)
             {
-                return new SerializedCommitVersionResult(
-                    SerializedCommitVersionKind.Malformed, null, "duplicate 'version' property");
+                return Malformed(SerializedCommitShapeError.DuplicateVersion);
             }
             if (!versionIsInteger)
             {
-                return new SerializedCommitVersionResult(
-                    SerializedCommitVersionKind.Malformed, null, "'version' must be an integer");
+                return Malformed(SerializedCommitShapeError.VersionNotInteger);
             }
             return versionValue == VersionedSerializedCommitRequest.CurrentVersion
                 ? new SerializedCommitVersionResult(SerializedCommitVersionKind.KnownVersion, versionValue, null)
                 : new SerializedCommitVersionResult(SerializedCommitVersionKind.UnsupportedVersion, versionValue, null);
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            return new SerializedCommitVersionResult(SerializedCommitVersionKind.Malformed, null, ex.Message);
+            // Deliberately sanitized: the raw parser message may echo request bytes, so it is never surfaced.
+            return Malformed(SerializedCommitShapeError.UnreadableJson);
         }
     }
+
+    // True when the current property name equals "version" ignoring case (the caller has already excluded the exact match).
+    private static bool IsVersionIgnoreCase(ref Utf8JsonReader reader)
+    {
+        var name = reader.GetString();
+        return name is not null && name.Equals("version", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static SerializedCommitVersionResult Malformed(SerializedCommitShapeError error) =>
+        new(SerializedCommitVersionKind.Malformed, null, error);
 }

@@ -37,6 +37,7 @@
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core.Testing\Sekiban.Dcb.Core.Testing.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithResult.Testing\Sekiban.Dcb.WithResult.Testing.csproj" />
+        <ProjectReference Include="..\Sekiban.Dcb.LegacyConsumerFixture\Sekiban.Dcb.LegacyConsumerFixture.csproj" />
     </ItemGroup>
 
 </Project>

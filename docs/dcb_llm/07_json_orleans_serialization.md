@@ -168,12 +168,16 @@ existing interface). It is two-phase:
 
 1. **Phase 1 — raw discrimination** (`SerializedCommitVersionDiscriminator`): the `version` property is read straight from
    the raw UTF-8 bytes, before any typed payload binding, base64 decode, tag reservation, EventId allocation, or
-   executor/store call.
-   - No `version` → legacy path.
-   - One integer `version` == 1 → known version.
-   - One integer `version` != 1 → **`UnsupportedSerializedCommitEnvelopeVersionException`** (fail closed, before side effects).
-   - Non-object root, non-integer `version`, or a duplicated `version` → **`MalformedSerializedCommitException`** (a
-     DISTINCT typed shape error).
+   executor/store call. The discriminator is the **exact** ordinal property name `version` (the camelCase spelling of the
+   contract). Matching is deliberately **case-sensitive** and never uses ambient case-insensitivity.
+   - No `version` and no case-variant of it → legacy path.
+   - One integer exact `version` == 1 → known version.
+   - One integer exact `version` != 1 → **`UnsupportedSerializedCommitEnvelopeVersionException`** (fail closed, before side effects).
+   - A **case-variant** of `version` (e.g. `Version` / `VERSION` / `vErSiOn`), whether alone or alongside the exact one,
+     does NOT silently select V1 or legacy — it is a **`MalformedSerializedCommitException`** (`AmbiguousVersionCasing`).
+   - Non-object root, non-integer `version`, or a duplicated exact `version` → **`MalformedSerializedCommitException`** (a
+     DISTINCT typed shape error). The typed error is **secret-safe**: it carries only a closed reason code and a fixed
+     message, never the offending JSON, keys, payload/base64, type names, or a raw parser exception.
 2. **Phase 2 — bind + route**: only the resolved shape is bound. A missing version is the legacy official shape, lifted
    losslessly to V1 by `LegacyUnversionedSerializedCommitAdapter` (per-event tags preserved; no per-commit-tag model
    involved). A known version binds `VersionedSerializedCommitRequest`. A binding failure (including a malformed V1 payload)
