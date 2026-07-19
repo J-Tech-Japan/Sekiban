@@ -40,4 +40,11 @@
         <ProjectReference Include="..\Sekiban.Dcb.LegacyConsumerFixture\Sekiban.Dcb.LegacyConsumerFixture.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- SEK-G17: frozen dcb-v10.1.17 wire artifacts. Embedded verbatim so tests read the exact committed bytes as the
+             authority (not regenerated from current DTOs). See SerializedCommitWire/goldens/PROVENANCE.md. -->
+        <EmbeddedResource Include="SerializedCommitWire/goldens/legacy_1017_unversioned.json" />
+        <EmbeddedResource Include="SerializedCommitWire/goldens/legacy_1017_empty.json" />
+    </ItemGroup>
+
 </Project>
