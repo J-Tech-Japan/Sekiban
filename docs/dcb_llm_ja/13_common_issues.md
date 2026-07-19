@@ -291,3 +291,27 @@ poison イベントのスキップ/隔離は**意図的に既定ではありま�
 ## Dapr 連携
 
 DCB の Dapr 版は未提供です。`Sekiban.Pure.Dapr` は古いランタイム向けであり、DCB では Orleans をご利用ください。
+
+## Serialized-Commit ワイヤ契約の互換性 (SEK-G17)
+
+**症状**: バージョン混在デプロイで serialized-commit ワイヤ契約が「壊れている」と報告される、あるいは構造的におかしい
+リクエストに対しエンドポイントが null 参照の 500 を返す。
+
+**原因**:
+- 公式契約 (`eventCandidates` + base64 `payload` + `eventPayloadName` + **イベント単位の `tags`** + `consistencyTags`) は
+  dcb-v10.2.2 → 10.6.0 で変わっていません。#1087/#1088 は、報告された破損を、同じルートで公開され本契約を写したものと
+  誤説明された別の下流形状 (`events` / `payloadJson` / per-commit-`tags`) に起因すると特定しました。
+- フレームワーク契約には従来、バージョン識別子・固定プロパティ名・正規仕様・ゴールデンワイヤテストがなかったため、
+  誤った互換性主張を機械的に失敗させる対象が存在しませんでした。
+
+**対処**:
+- `07_json_orleans_serialization.md` の正規仕様 (「Serialized Commit ワイヤ契約」) を正とし、互換性主張は必ずゴールデン
+  ベクタ (`SerializedCommitWireGoldenTests`) を通過させます。
+- 命名を「直す」ために positional DTO へシリアライズ属性を追加しないでください。代わりに契約所有の
+  `SerializedCommitWireContract` / `SerializedCommitWireJsonContext` で固定します。属性は fresh-options 利用者の
+  PascalCase 出力を変えてしまいます。
+- 明示的なバージョンと型付きエラーが必要なら `ISerializedCommitAcceptor` / `SerializedCommitAcceptor` 経由で受理します。
+  未知の `version` は `UnsupportedSerializedCommitEnvelopeVersionException`、不正形状は `MalformedSerializedCommitException`
+  で、いずれも副作用の前に fail closed となり、null 参照の 500 になりません。
+- イベント単位のタグをコミット単位へ縮約する下流アダプタは、コミット内の全イベントが同一タグ集合を共有する場合のみ
+  許され、それ以外は明示的に拒否しなければなりません。

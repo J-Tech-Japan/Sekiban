@@ -76,3 +76,104 @@ Orleans の Source Generator を利用するため、タグ状態やクエリ結
 - 型未登録: "Event type not registered" などの例外 → `DomainType` へ登録漏れがないか確認。
 - JSON 例外: ペイロード名 (`EventMetadata.EventType`) をログに出し、シリアライズ対象を特定。
 - Orleans で新しい `[GenerateSerializer]` 型を追加した場合は完全ビルドを実行。
+
+## Serialized Commit ワイヤ契約 (SEK-G17)
+
+WASM 境界で使用される公式 serialized-commit ワイヤ契約の正規仕様です。
+
+### 正規オーナー
+
+契約は `Sekiban.Dcb.Core` パッケージの以下の型が所有します。
+
+- `Sekiban.Dcb.Commands.SerializedCommitRequest` — リクエストエンベロープ (positional record)。
+- `Sekiban.Dcb.Events.SerializableEventCandidate` — 1 件のイベント候補。
+- `Sekiban.Dcb.Commands.ConsistencyTagEntry` — 1 件の整合性予約エントリ。
+- `Sekiban.Dcb.Actors.ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync` — 受理オペレーション。
+
+この契約に準拠すると主張するエンドポイントは、以下の形状・シリアライザ設定、および凍結されたゴールデンベクタ
+(`SerializedCommitWireGoldenTests`) に必ず適合しなければなりません。
+
+### JSON 形状
+
+```json
+{
+  "eventCandidates": [
+    {
+      "payload": "<イベントペイロード JSON の UTF-8 バイト列の base64>",
+      "eventPayloadName": "<登録済みイベント型名>",
+      "tags": ["Group:Content", "..."]
+    }
+  ],
+  "consistencyTags": [
+    { "tag": "Group:Content", "lastSortableUniqueId": "<sortable-unique-id もしくは \"\">" }
+  ]
+}
+```
+
+| フィールド | 型 | 必須 | 補足 |
+| --- | --- | --- | --- |
+| `eventCandidates` | array | はい (空可) | 順序付き。各要素が順番に 1 イベントとして書き込まれます。空配列は有効な「空コミット」です。 |
+| `eventCandidates[].payload` | string | はい | イベントペイロード JSON の UTF-8 バイト列の base64。コミット経路にとって不透明 (そのまま保存)。 |
+| `eventCandidates[].eventPayloadName` | string | はい | ペイロードの解決・検証に用いる登録済みイベント型名。 |
+| `eventCandidates[].tags` | string[] | はい (空可) | **イベント単位のタグが正 (authoritative)**。各イベントは自身のタグリストを保持し、イベント間で平坦化・共有されません。形式は `"Group:Content"`。 |
+| `consistencyTags` | array | はい (空可) | 楽観的同時実行の予約。ここの各 `tag` はいずれかのイベント候補の `tags` にも存在する必要があります。 |
+| `consistencyTags[].tag` | string | はい | `"Group:Content"`。 |
+| `consistencyTags[].lastSortableUniqueId` | string | はい | 予約に対する直近の `SortableUniqueId`。空文字列は「事前期待なし」を意味します。 |
+
+### シリアライザ正規化 (完全固定)
+
+本番ワイヤバイトは、契約所有のシリアライザ `Sekiban.Dcb.Commands.SerializedCommitWireContract.Options`
+(ソース生成 `SerializedCommitWireJsonContext` に基づく) で固定されます。設定は以下のとおりです。
+
+- **プロパティ命名**: camelCase。
+- **プロパティ順序**: 宣言 / コンストラクタ引数順。
+- **インデント**: なし。UTF-8、BOM なし、無意味な空白なし。
+- **エンコーダ**: `JavaScriptEncoder.Default` — 非 ASCII および HTML 敏感文字は `\uXXXX` エスケープ (ASP.NET
+  `JsonSerializerDefaults.Web` の書き込み経路とバイト単位で一致)。
+- **null/既定値の扱い**: 常に出力 (無視しない)。
+- **`byte[]` ペイロード**: base64 文字列。
+
+固定は **追加のみ** です。ソース生成コンテキストに存在し、既存 positional DTO への属性ではありません。DTO への
+シリアライズ属性の付与は禁止です。基準的に無害な `[JsonPropertyName]` ですら、新規 `JsonSerializerOptions`
+(なお PascalCase を出力) でシリアライズする利用者の出力を変えてしまいます。ゴールデンベクタは契約シリアライザの
+バイト列と fresh-options の PascalCase バイト列の両方を凍結するため、いかなるドリフトも CI で失敗します。
+
+### 追加のバージョン付きエンベロープ + 二段階受理
+
+公式形状にはバージョン識別子がありません。SEK-G17 はレガシー形状に一切触れずにバージョン付きエンベロープを追加します。
+
+- `Sekiban.Dcb.Commands.VersionedSerializedCommitRequest(int Version, IReadOnlyList<SerializableEventCandidate>
+  EventCandidates, IReadOnlyList<ConsistencyTagEntry> ConsistencyTags)`、`CurrentVersion = 1`。(G15 の単一イベント
+  `SerializedConditionalCommitRequest` は基底エンベロープとして意図的に再利用しません。)
+
+受理は `ISerializedCommitAcceptor` / `SerializedCommitAcceptor` による任意かつ追加的なものです (既存インターフェイスへの
+メンバ追加はありません)。二段階です。
+
+1. **フェーズ 1 — 生の識別** (`SerializedCommitVersionDiscriminator`): `version` プロパティを、型付きペイロードの
+   バインド・base64 デコード・タグ予約・EventId 採番・executor/store 呼び出しの前に、生の UTF-8 バイトから読み取ります。
+   識別子は **厳密な** 序数プロパティ名 `version` (契約の camelCase 表記) です。照合は意図的に **大文字小文字を区別** し、
+   周囲の大文字小文字非依存は一切使いません。
+   - `version` もその大小文字違いも無し → レガシー経路。
+   - 厳密な整数 `version` が 1 → 既知バージョン。
+   - 厳密な整数 `version` が 1 以外 → **`UnsupportedSerializedCommitEnvelopeVersionException`** (副作用の前に fail closed)。
+   - `version` の **大小文字違い** (例: `Version` / `VERSION` / `vErSiOn`) は、単独でも厳密版と併存でも、V1 やレガシーとして
+     暗黙選択されず、**`MalformedSerializedCommitException`** (`AmbiguousVersionCasing`) です。
+   - 非オブジェクトのルート、非整数 `version`、厳密な `version` の重複 → **`MalformedSerializedCommitException`** (別種の
+     型付き shape エラー)。この型付きエラーは **秘密安全** で、閉じた理由コードと固定メッセージのみを持ち、問題の JSON・
+     キー・ペイロード/base64・型名・生のパーサ例外を一切含みません。
+2. **フェーズ 2 — バインド + ルーティング**: 解決された形状のみをバインドします。version 欠如はレガシー公式形状であり、
+   `LegacyUnversionedSerializedCommitAdapter` が V1 へ無損失にリフトします (イベント単位のタグを保持、per-commit-tag
+   モデルは介在しません)。既知バージョンは `VersionedSerializedCommitRequest` をバインドします。バインド失敗 (不正な V1
+   ペイロードを含む) は型付き `MalformedSerializedCommitException` として報告され、null 参照にはなりません。いずれの
+   経路も同じイベント候補 + 整合性タグを `ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync` へ同一セマンティクス
+   でルーティングします。
+
+### 所有と互換性主張のガイダンス
+
+- 公式契約 (`eventCandidates` + base64 `payload` + `eventPayloadName` + **イベント単位の `tags`** + `consistencyTags`) は
+  dcb-v10.2.2 → 10.6.0 で安定しており、10.1.x のプログラムに移行は不要です。
+- 別の `events` / `payloadJson` / per-commit-`tags` 形状は、独立した下流ランタイム契約 (例: WASM ランタイムや
+  as-a-service ホスト) です。本契約ではなく、本契約を写したものと説明してはいけません。
+- 本契約との互換性を主張するエンドポイントは、上記仕様に適合しゴールデンベクタを通過しなければなりません。
+- イベント単位のタグをコミット単位のタグへ縮約する下流アダプタは、コミット内の全イベントが同一のタグ集合を持つ場合に
+  限り許され、それ以外のコミットは黙ってタグを落とさず明示的に拒否しなければなりません。
