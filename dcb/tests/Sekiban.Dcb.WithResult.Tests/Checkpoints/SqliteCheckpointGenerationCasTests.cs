@@ -88,6 +88,87 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
         Assert.True((await ReadAsync(store)).IsTombstoned);
     }
 
+    // SEK-G20 per-provider phase matrix against a REAL SQLite file. For EACH write op (normal upsert, invalidate/tombstone,
+    // rebuilt commit) a PostCommit fault (the row is durably written, but the response is lost) resolves to Committed via a
+    // bounded re-read on a fresh connection, and a PreCommit fault (nothing committed) resolves to typed retryable InDoubt
+    // whose same-token retry then converges — proving the real provider commit boundary, not a generic InMemory resolver.
+
+    [Fact]
+    public async Task NormalUpsert_PostCommitLoss_ConfirmsOwnCommit_PreCommitLoss_InDoubtThenConverges()
+    {
+        var store = NewStore();
+        await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = await ReadAsync(store);
+
+        // Post-commit: the UPDATE durably advances the row, but the response is lost -> the bounded re-read confirms our
+        // exact resulting token + payload identity -> Committed.
+        store.NextUpsertFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PostCommit;
+        var post = await store.ConditionalUpsertAsync(Req(2), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, post.Status);
+        var afterPost = await ReadAsync(store);
+        Assert.Equal(2, afterPost.Record!.EventsProcessed);   // the row really advanced
+
+        // Pre-commit: nothing is written -> the re-read cannot confirm -> InDoubt; the row is unchanged.
+        store.NextUpsertFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PreCommit;
+        var pre = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(afterPost), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.InDoubt, pre.Status);
+        Assert.NotNull(pre.Cause);
+        Assert.Equal(2, (await ReadAsync(store)).Record!.EventsProcessed);   // unchanged
+
+        // The same-token retry converges (the token never moved).
+        var retry = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(afterPost), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, retry.Status);
+        Assert.Equal(3, (await ReadAsync(store)).Record!.EventsProcessed);
+    }
+
+    [Fact]
+    public async Task Invalidate_PostCommitLoss_ConfirmsTombstone_PreCommitLoss_InDoubtThenConverges()
+    {
+        var store = NewStore();
+        await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = await ReadAsync(store);
+
+        // Pre-commit: nothing committed -> the row stays Active -> InDoubt.
+        store.NextInvalidateFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PreCommit;
+        var pre = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
+        Assert.Equal(CheckpointCasStatus.InDoubt, pre.Status);
+        Assert.True((await ReadAsync(store)).IsActive);   // unchanged
+
+        // Post-commit: the tombstone (g+1) is durably written but the response is lost -> the re-read confirms it -> Committed.
+        store.NextInvalidateFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PostCommit;
+        var post = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
+        Assert.Equal(CheckpointCasStatus.Committed, post.Status);
+        var tomb = await ReadAsync(store);
+        Assert.True(tomb.IsTombstoned);
+        Assert.Equal(active.Generation + 1, tomb.Generation);
+    }
+
+    [Fact]
+    public async Task RebuiltCommit_PostCommitLoss_ConfirmsOwnCommit_PreCommitLoss_InDoubtThenConverges()
+    {
+        var store = NewStore();
+        await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = await ReadAsync(store);
+        await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
+        var tomb = await ReadAsync(store);
+
+        // Pre-commit: nothing committed -> the row stays Tombstoned -> InDoubt.
+        store.NextRebuiltFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PreCommit;
+        var pre = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.InDoubt, pre.Status);
+        Assert.True((await ReadAsync(store)).IsTombstoned);   // unchanged
+
+        // Post-commit: the rebuilt Active(g+1) is durably written but the response is lost -> the re-read confirms our exact
+        // resulting token + payload identity -> Committed.
+        store.NextRebuiltFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PostCommit;
+        var post = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, post.Status);
+        var final = await ReadAsync(store);
+        Assert.True(final.IsActive);
+        Assert.Equal(tomb.Generation, final.Generation);
+        Assert.Equal(9, final.Record!.EventsProcessed);
+    }
+
     [Fact]
     public async Task LegacyInsertOrReplace_ErasesTombstone_DocumentedMixedVersionHazard()
     {

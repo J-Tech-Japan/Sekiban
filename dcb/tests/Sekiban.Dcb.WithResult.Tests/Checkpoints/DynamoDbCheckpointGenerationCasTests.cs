@@ -125,6 +125,48 @@ public class DynamoDbCheckpointGenerationCasTests
     }
 
     [Fact]
+    public async Task Invalidate_And_RebuiltCommit_PostAndPreAmbiguity_ResolveViaBoundedReread()
+    {
+        // SEK-G20 phase matrix for the OTHER two write ops (invalidate via UpdateItem, rebuilt via PutItem) through the real
+        // Dynamo store over the round-trip fake: a post-write loss (the write committed) resolves Committed via the bounded
+        // re-read; a pre-write loss (nothing committed) resolves typed InDoubt with the row unchanged.
+        var client = NewClient();
+        var fake = (FakeDynamoDb)client;
+        var store = NewStore(client);
+        await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = await ReadAsync(store);
+
+        // Invalidate, pre-write loss: nothing commits -> the row stays Active -> InDoubt.
+        fake.PreWriteFaults.Enqueue(new IOException("injected: lost response, tombstone did not commit"));
+        var invPre = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
+        Assert.Equal(CheckpointCasStatus.InDoubt, invPre.Status);
+        Assert.True((await ReadAsync(store)).IsActive);
+
+        // Invalidate, post-write loss: the tombstone (g+1) is durably written but the response is lost -> Committed.
+        fake.PostWriteFaults.Enqueue(new IOException("injected: lost response after a committed tombstone"));
+        var invPost = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
+        Assert.Equal(CheckpointCasStatus.Committed, invPost.Status);
+        var tomb = await ReadAsync(store);
+        Assert.True(tomb.IsTombstoned);
+        Assert.Equal(active.Generation + 1, tomb.Generation);
+
+        // Rebuilt commit, pre-write loss: nothing commits -> the row stays Tombstoned -> InDoubt.
+        fake.PreWriteFaults.Enqueue(new IOException("injected: lost response, rebuilt did not commit"));
+        var rebPre = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.InDoubt, rebPre.Status);
+        Assert.True((await ReadAsync(store)).IsTombstoned);
+
+        // Rebuilt commit, post-write loss: the rebuilt Active(g+1) is durably written but the response is lost -> Committed.
+        fake.PostWriteFaults.Enqueue(new IOException("injected: lost response after a committed rebuild"));
+        var rebPost = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, rebPost.Status);
+        var final = await ReadAsync(store);
+        Assert.True(final.IsActive);
+        Assert.Equal(tomb.Generation, final.Generation);
+        Assert.Equal(9, final.Record!.EventsProcessed);
+    }
+
+    [Fact]
     public async Task PreG20Item_MissingControlAttributes_ReadsAsGeneration0_Active()
     {
         var store = NewStore(NewClient());
@@ -210,6 +252,7 @@ public class DynamoDbCheckpointGenerationCasTests
                 {
                     throw new ConditionalCheckFailedException("The conditional request failed");
                 }
+                if (PreWriteFaults.Count > 0) throw PreWriteFaults.Dequeue();   // lost response, update did NOT commit
                 // Apply a "SET #a = :v, #b = :w" update expression.
                 var body = req.UpdateExpression.Trim();
                 if (body.StartsWith("SET ", StringComparison.OrdinalIgnoreCase))
@@ -223,6 +266,7 @@ public class DynamoDbCheckpointGenerationCasTests
                     var value = req.ExpressionAttributeValues[parts[1].Trim()];
                     existing[attr] = value;
                 }
+                if (PostWriteFaults.Count > 0) throw PostWriteFaults.Dequeue(); // lost response AFTER a committed update
                 return new UpdateItemResponse();
             }
         }

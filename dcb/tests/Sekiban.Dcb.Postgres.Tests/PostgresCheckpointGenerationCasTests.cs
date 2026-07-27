@@ -198,18 +198,114 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
     private sealed class InterceptingDbContextFactory : Microsoft.EntityFrameworkCore.IDbContextFactory<SekibanDcbDbContext>
     {
         private readonly string _conn;
-        private readonly Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor _interceptor;
-        public InterceptingDbContextFactory(string conn, Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor interceptor)
+        private readonly Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] _interceptors;
+        public InterceptingDbContextFactory(string conn, params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
         {
             _conn = conn;
-            _interceptor = interceptor;
+            _interceptors = interceptors;
         }
         public SekibanDcbDbContext CreateDbContext()
         {
             var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<SekibanDcbDbContext>()
-                .UseNpgsql(_conn).AddInterceptors(_interceptor).Options;
+                .UseNpgsql(_conn).AddInterceptors(_interceptors).Options;
             return new SekibanDcbDbContext(options);
         }
+    }
+
+    // SEK-G20: injects a lost response at the DbCommand NonQuery boundary — the mechanism the conditional CAS UPDATE (a
+    // single ExecuteUpdateAsync) uses for a normal persist, an invalidate/tombstone, and a rebuilt commit. PreCommitFault
+    // throws BEFORE the UPDATE dispatches (nothing committed); PostCommitFault throws AFTER it executes (with Npgsql
+    // autocommit the row is durably committed), so the store's bounded re-read on a fresh command either confirms our own
+    // commit (Committed) or, if unconfirmable, reports typed retryable InDoubt. Fires only on UPDATE — a SELECT re-read is
+    // a Reader, not a NonQuery, so verification is never blocked. One-shot each.
+    private sealed class NonQueryCommandFaultInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+    {
+        public bool PreCommitFault;
+        public bool PostCommitFault;
+
+        public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> NonQueryExecutingAsync(
+            System.Data.Common.DbCommand command,
+            Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (PreCommitFault) { PreCommitFault = false; throw new IOException("injected: lost response, write did not commit"); }
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override async ValueTask<int> NonQueryExecutedAsync(
+            System.Data.Common.DbCommand command,
+            Microsoft.EntityFrameworkCore.Diagnostics.CommandExecutedEventData eventData,
+            int result,
+            CancellationToken cancellationToken = default)
+        {
+            var value = await base.NonQueryExecutedAsync(command, eventData, result, cancellationToken);
+            if (PostCommitFault) { PostCommitFault = false; throw new IOException("injected: lost response after a committed write"); }
+            return value;
+        }
+    }
+
+    [Fact]
+    public async Task PhaseMatrix_NormalUpsert_Invalidate_RebuiltCommit_PostAndPreAmbiguity_RealDb()
+    {
+        // Extends the create-only seam to the ExecuteUpdate CAS ops (normal persist, invalidate/tombstone, rebuilt commit)
+        // against a REAL Postgres: each op's post-commit loss resolves Committed via the bounded re-read, and each pre-commit
+        // loss resolves typed InDoubt with the row unchanged and a same-token retry that converges.
+        string conn;
+        await using (var ctx = await _fixture.DbContextFactory.CreateDbContextAsync())
+        {
+            conn = ctx.Database.GetConnectionString()!;
+            await ctx.Database.ExecuteSqlRawAsync("DELETE FROM dcb_multi_projection_states");
+        }
+        var cmdFault = new NonQueryCommandFaultInterceptor();
+        var factory = new InterceptingDbContextFactory(conn, cmdFault);
+        var store = new PostgresMultiProjectionStateStore(factory, new FixedServiceId("svc"));
+
+        // Seed an Active row (plain create, no fault).
+        Assert.Equal(CheckpointCasStatus.Committed,
+            (await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000)).Status);
+        var active = await ReadAsync(store);
+
+        // Normal persist — post-commit loss confirms our own commit.
+        cmdFault.PostCommitFault = true;
+        var persistPost = await store.ConditionalUpsertAsync(Req(2), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, persistPost.Status);
+        var afterPersist = await ReadAsync(store);
+        Assert.Equal(2, afterPersist.Record!.EventsProcessed);
+
+        // Normal persist — pre-commit loss stays InDoubt; row unchanged; same-token retry converges.
+        cmdFault.PreCommitFault = true;
+        var persistPre = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(afterPersist), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.InDoubt, persistPre.Status);
+        Assert.Equal(2, (await ReadAsync(store)).Record!.EventsProcessed);
+        var persistRetry = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(afterPersist), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, persistRetry.Status);
+        var beforeInvalidate = await ReadAsync(store);
+
+        // Invalidate — pre-commit loss stays InDoubt (still Active); post-commit loss confirms the tombstone.
+        cmdFault.PreCommitFault = true;
+        var invPre = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(beforeInvalidate));
+        Assert.Equal(CheckpointCasStatus.InDoubt, invPre.Status);
+        Assert.True((await ReadAsync(store)).IsActive);
+        cmdFault.PostCommitFault = true;
+        var invPost = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(beforeInvalidate));
+        Assert.Equal(CheckpointCasStatus.Committed, invPost.Status);
+        var tomb = await ReadAsync(store);
+        Assert.True(tomb.IsTombstoned);
+        Assert.Equal(beforeInvalidate.Generation + 1, tomb.Generation);
+
+        // Rebuilt commit — pre-commit loss stays InDoubt (still Tombstoned); post-commit loss confirms our own commit.
+        cmdFault.PreCommitFault = true;
+        var rebPre = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.InDoubt, rebPre.Status);
+        Assert.True((await ReadAsync(store)).IsTombstoned);
+        cmdFault.PostCommitFault = true;
+        var rebPost = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, rebPost.Status);
+        var final = await ReadAsync(store);
+        Assert.True(final.IsActive);
+        Assert.Equal(tomb.Generation, final.Generation);
+        Assert.Equal(9, final.Record!.EventsProcessed);
     }
 
     private sealed class SaveChangesFaultInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor

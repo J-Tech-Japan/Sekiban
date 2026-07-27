@@ -107,15 +107,23 @@ public class SqliteMultiProjectionStateStore :
         EnsureControlColumns(connection);
     }
 
+    // Additive control-plane columns as CONSTANT DDL literals (no string-formatted SQL) — each column name is a fixed
+    // compile-time constant, never interpolated into the command text.
+    private static readonly (string Column, string Ddl)[] ControlColumnDdl =
+    {
+        ("Generation", "ALTER TABLE dcb_multi_projection_states ADD COLUMN Generation INTEGER NOT NULL DEFAULT 0;"),
+        ("Revision", "ALTER TABLE dcb_multi_projection_states ADD COLUMN Revision INTEGER NOT NULL DEFAULT 0;"),
+        ("Lifecycle", "ALTER TABLE dcb_multi_projection_states ADD COLUMN Lifecycle INTEGER NOT NULL DEFAULT 0;")
+    };
+
     private static void EnsureControlColumns(SqliteConnection connection)
     {
-        foreach (var column in new[] { "Generation", "Revision", "Lifecycle" })
+        foreach (var (column, ddl) in ControlColumnDdl)
         {
             if (!HasColumn(connection, "dcb_multi_projection_states", column))
             {
                 using var alter = connection.CreateCommand();
-                // Identifier validated against AllowedColumnNames by HasColumn above; literal type/default is constant.
-                alter.CommandText = $"ALTER TABLE dcb_multi_projection_states ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0;";
+                alter.CommandText = ddl; // constant literal — not dynamically formatted
                 alter.ExecuteNonQuery();
             }
         }
@@ -604,6 +612,29 @@ public class SqliteMultiProjectionStateStore :
 
     private static bool TryToken(CheckpointExpectation e, out long revision) => long.TryParse(e.ExpectedRevision, out revision);
 
+    /// <summary>
+    ///     A DETERMINISTIC pre-commit failure — a schema/syntax error (e.g. "no such column" when the additive ALTER is
+    ///     unapplied) or an already-cancelled token. Provably NOT post-commit, so ProviderFailure/fail-closed, never in-doubt.
+    /// </summary>
+    private static bool IsDeterministicPreCommitFailure(Exception ex, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested && ex is OperationCanceledException)
+        {
+            return true;
+        }
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is Microsoft.Data.Sqlite.SqliteException se
+                && (se.Message.Contains("no such column", StringComparison.OrdinalIgnoreCase)
+                    || se.Message.Contains("no such table", StringComparison.OrdinalIgnoreCase)
+                    || se.Message.Contains("syntax error", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public async Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(
         string projectorName,
         string projectorVersion,
@@ -662,6 +693,24 @@ public class SqliteMultiProjectionStateStore :
         cmd.Parameters.AddWithValue("@buildHost", (object?)r.BuildHost ?? DBNull.Value);
     }
 
+    // SEK-G20 test seams (never set in production) that prove a REAL SQLite production-path commit boundary for each write
+    // op: PreCommit throws BEFORE the ExecuteNonQuery dispatches (nothing committed); PostCommit throws AFTER it returns
+    // (the row is durably committed to the SQLite file), so the store's bounded re-read against a fresh connection either
+    // confirms our own commit (Committed) or, if unconfirmable, reports typed retryable InDoubt. One-shot per op.
+    internal enum CheckpointFaultPhase { None, PreCommit, PostCommit }
+    internal CheckpointFaultPhase NextUpsertFault { get; set; } = CheckpointFaultPhase.None;
+    internal CheckpointFaultPhase NextInvalidateFault { get; set; } = CheckpointFaultPhase.None;
+    internal CheckpointFaultPhase NextRebuiltFault { get; set; } = CheckpointFaultPhase.None;
+
+    private static void FaultPreCommit(CheckpointFaultPhase fault)
+    {
+        if (fault == CheckpointFaultPhase.PreCommit) throw new IOException("injected: lost response, write did not commit");
+    }
+    private static void FaultPostCommit(CheckpointFaultPhase fault)
+    {
+        if (fault == CheckpointFaultPhase.PostCommit) throw new IOException("injected: lost response after a committed write");
+    }
+
     public async Task<CheckpointCasOutcome> ConditionalUpsertAsync(
         MultiProjectionStateWriteRequest payload,
         Stream stream,
@@ -669,6 +718,8 @@ public class SqliteMultiProjectionStateStore :
         int offloadThresholdBytes,
         CancellationToken cancellationToken = default)
     {
+        var fault = NextUpsertFault;
+        NextUpsertFault = CheckpointFaultPhase.None;
         try
         {
             using var ms = new MemoryStream();
@@ -699,7 +750,9 @@ public class SqliteMultiProjectionStateStore :
                 insert.Parameters.AddWithValue("@projectorVersion", payload.ProjectorVersion);
                 insert.Parameters.AddWithValue("@createdAt", payload.CreatedAt.ToString("O"));
                 BindPayloadParams(insert, payload, stateData);
+                FaultPreCommit(fault);
                 var inserted = await insert.ExecuteNonQueryAsync(cancellationToken);
+                FaultPostCommit(fault);
                 var slot0 = await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken);
                 return inserted == 1 ? CheckpointCasOutcome.Committed(slot0) : CheckpointCasOutcome.Rejected(slot0);
             }
@@ -726,13 +779,16 @@ public class SqliteMultiProjectionStateStore :
             update.Parameters.AddWithValue("@g", expectation.ExpectedGeneration);
             update.Parameters.AddWithValue("@rev", expectedRevision);
             BindPayloadParams(update, payload, stateData);
+            FaultPreCommit(fault);
             var affected = await update.ExecuteNonQueryAsync(cancellationToken);
+            FaultPostCommit(fault);
             var slot = await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken);
             return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
         }
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
             return await ResolveWriteInDoubtAsync(payload, expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, ex);
         }
     }
@@ -743,12 +799,14 @@ public class SqliteMultiProjectionStateStore :
         CheckpointExpectation expectation,
         CancellationToken cancellationToken = default)
     {
+        if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+        {
+            return CheckpointCasOutcome.Corrupt();
+        }
+        var fault = NextInvalidateFault;
+        NextInvalidateFault = CheckpointFaultPhase.None;
         try
         {
-            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
-            {
-                return CheckpointCasOutcome.Corrupt();
-            }
             var serviceId = CurrentServiceId;
             await using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync(cancellationToken);
@@ -765,13 +823,19 @@ public class SqliteMultiProjectionStateStore :
             cmd.Parameters.AddWithValue("@g", expectation.ExpectedGeneration);
             cmd.Parameters.AddWithValue("@rev", expectedRevision);
             cmd.Parameters.AddWithValue("@updatedAt", DateTime.UtcNow.ToString("O"));
+            FaultPreCommit(fault);
             var affected = await cmd.ExecuteNonQueryAsync(cancellationToken);
+            FaultPostCommit(fault);
             var slot = await RefetchAsync(projectorName, projectorVersion, cancellationToken);
             return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
         }
         catch (Exception ex)
         {
-            return CheckpointCasOutcome.ProviderFailed(ex);
+            // SEK-G20: a lost response on the tombstone UPDATE is UNKNOWN-commit — deterministic pre-commit/schema is
+            // ProviderFailure, otherwise resolve by a bounded independent re-read (Tombstoned at g+1 => our own commit).
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
+            return await ResolveInvalidateInDoubtAsync(
+                projectorName, projectorVersion, expectation.ExpectedGeneration + 1, expectedRevision + 1, ex);
         }
     }
 
@@ -782,12 +846,14 @@ public class SqliteMultiProjectionStateStore :
         int offloadThresholdBytes,
         CancellationToken cancellationToken = default)
     {
+        if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+        {
+            return CheckpointCasOutcome.Corrupt();
+        }
+        var fault = NextRebuiltFault;
+        NextRebuiltFault = CheckpointFaultPhase.None;
         try
         {
-            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
-            {
-                return CheckpointCasOutcome.Corrupt();
-            }
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
             var stateData = ms.ToArray();
@@ -813,13 +879,16 @@ public class SqliteMultiProjectionStateStore :
             cmd.Parameters.AddWithValue("@g", expectation.ExpectedGeneration);
             cmd.Parameters.AddWithValue("@rev", expectedRevision);
             BindPayloadParams(cmd, payload, stateData);
+            FaultPreCommit(fault);
             var affected = await cmd.ExecuteNonQueryAsync(cancellationToken);
+            FaultPostCommit(fault);
             var slot = await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken);
             return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
         }
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
             return await ResolveWriteInDoubtAsync(payload, expectation.ExpectedGeneration, ex);
         }
     }
@@ -834,6 +903,18 @@ public class SqliteMultiProjectionStateStore :
             slot => slot.IsActive && slot.Generation == resultingGeneration && slot.Record is { } r
                 && string.Equals(r.LastSortableUniqueId, payload.LastSortableUniqueId, StringComparison.Ordinal)
                 && r.EventsProcessed == payload.EventsProcessed,
+            maxAttempts: 3,
+            cause: cause);
+
+    // Resolves a tombstone (invalidate) write whose response was lost: only an invalidate from the exact Active token we
+    // observed can produce Tombstoned at the resulting (generation, revision), so a re-read that shows it confirms our
+    // own commit; an unconfirmable re-read is typed retryable InDoubt.
+    private Task<CheckpointCasOutcome> ResolveInvalidateInDoubtAsync(
+        string projectorName, string projectorVersion, long resultingGeneration, long resultingRevision, Exception cause) =>
+        CheckpointInDoubtResolver.ResolveAsync(
+            ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
+            slot => slot.IsTombstoned && slot.Generation == resultingGeneration
+                && string.Equals(slot.Revision, resultingRevision.ToString(), StringComparison.Ordinal),
             maxAttempts: 3,
             cause: cause);
 }

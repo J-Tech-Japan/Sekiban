@@ -554,8 +554,27 @@ public class CosmosMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
             return await ResolveWriteInDoubtAsync(payload, expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, ex);
         }
+    }
+
+    // A DETERMINISTIC pre-commit failure — a Bad Request (malformed op) or an already-cancelled token. Provably NOT
+    // post-commit, so ProviderFailure/fail-closed, never in-doubt.
+    private static bool IsDeterministicPreCommitFailure(Exception ex, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested && ex is OperationCanceledException)
+        {
+            return true;
+        }
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is CosmosException { StatusCode: HttpStatusCode.BadRequest })
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Resolves a write whose response was lost: a bounded re-read that verifies our exact resulting generation + Active
@@ -568,6 +587,18 @@ public class CosmosMultiProjectionStateStore :
             slot => slot.IsActive && slot.Generation == resultingGeneration && slot.Record is { } r
                 && string.Equals(r.LastSortableUniqueId, payload.LastSortableUniqueId, StringComparison.Ordinal)
                 && r.EventsProcessed == payload.EventsProcessed,
+            maxAttempts: 3,
+            cause: cause);
+
+    // Resolves a tombstone (invalidate) write whose response was lost. The resulting generation (g+1) is deterministic and
+    // only an invalidate from the exact Active token we observed can produce Tombstoned at it, so a re-read that shows it
+    // confirms our intended transition is durable (the _etag is opaque, so identity is by generation + Tombstoned only);
+    // an unconfirmable re-read is typed retryable InDoubt.
+    private Task<CheckpointCasOutcome> ResolveInvalidateInDoubtAsync(
+        string projectorName, string projectorVersion, long resultingGeneration, Exception cause) =>
+        CheckpointInDoubtResolver.ResolveAsync(
+            ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
+            slot => slot.IsTombstoned && slot.Generation == resultingGeneration,
             maxAttempts: 3,
             cause: cause);
 
@@ -609,7 +640,10 @@ public class CosmosMultiProjectionStateStore :
         }
         catch (Exception ex)
         {
-            return CheckpointCasOutcome.ProviderFailed(ex);
+            // SEK-G20: a lost response on the tombstone Replace is UNKNOWN-commit — deterministic pre-commit is
+            // ProviderFailure, otherwise resolve by a bounded independent re-read (Tombstoned at g+1 => our own commit).
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
+            return await ResolveInvalidateInDoubtAsync(projectorName, projectorVersion, expectation.ExpectedGeneration + 1, ex);
         }
     }
 
@@ -641,6 +675,7 @@ public class CosmosMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
             return await ResolveWriteInDoubtAsync(payload, expectation.ExpectedGeneration, ex);
         }
     }

@@ -615,6 +615,7 @@ public class DynamoMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
             return await ResolveWriteInDoubtAsync(payload, expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, ex);
         }
     }
@@ -625,12 +626,12 @@ public class DynamoMultiProjectionStateStore :
         CheckpointExpectation expectation,
         CancellationToken cancellationToken = default)
     {
+        if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+        {
+            return CheckpointCasOutcome.Corrupt();
+        }
         try
         {
-            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
-            {
-                return CheckpointCasOutcome.Corrupt();
-            }
             await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
             var serviceId = CurrentServiceId;
 
@@ -661,7 +662,11 @@ public class DynamoMultiProjectionStateStore :
         }
         catch (Exception ex)
         {
-            return CheckpointCasOutcome.ProviderFailed(ex);
+            // SEK-G20: a lost response on the tombstone UpdateItem is UNKNOWN-commit — deterministic pre-commit/validation
+            // is ProviderFailure, otherwise resolve by a bounded independent re-read (Tombstoned at g+1 => our own commit).
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
+            return await ResolveInvalidateInDoubtAsync(
+                projectorName, projectorVersion, expectation.ExpectedGeneration + 1, expectedRevision + 1, ex);
         }
     }
 
@@ -711,8 +716,29 @@ public class DynamoMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
             return await ResolveWriteInDoubtAsync(payload, expectation.ExpectedGeneration, ex);
         }
+    }
+
+    // A DETERMINISTIC pre-commit failure — a validation error (malformed request / missing table) or an already-cancelled
+    // token. Provably NOT post-commit, so ProviderFailure/fail-closed, never in-doubt.
+    private static bool IsDeterministicPreCommitFailure(Exception ex, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested && ex is OperationCanceledException)
+        {
+            return true;
+        }
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is Amazon.DynamoDBv2.Model.ResourceNotFoundException
+                || (e is Amazon.Runtime.AmazonServiceException ase
+                    && string.Equals(ase.ErrorCode, "ValidationException", StringComparison.Ordinal)))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Resolves a write whose response was lost: a bounded re-read that verifies our exact resulting generation + Active
@@ -725,6 +751,18 @@ public class DynamoMultiProjectionStateStore :
             slot => slot.IsActive && slot.Generation == resultingGeneration && slot.Record is { } r
                 && string.Equals(r.LastSortableUniqueId, payload.LastSortableUniqueId, StringComparison.Ordinal)
                 && r.EventsProcessed == payload.EventsProcessed,
+            maxAttempts: 3,
+            cause: cause);
+
+    // Resolves a tombstone (invalidate) write whose response was lost: only an invalidate from the exact Active token we
+    // observed can produce Tombstoned at the resulting (generation, revision), so a re-read that shows it confirms our
+    // own commit; an unconfirmable re-read is typed retryable InDoubt.
+    private Task<CheckpointCasOutcome> ResolveInvalidateInDoubtAsync(
+        string projectorName, string projectorVersion, long resultingGeneration, long resultingRevision, Exception cause) =>
+        CheckpointInDoubtResolver.ResolveAsync(
+            ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
+            slot => slot.IsTombstoned && slot.Generation == resultingGeneration
+                && string.Equals(slot.Revision, resultingRevision.ToString(), StringComparison.Ordinal),
             maxAttempts: 3,
             cause: cause);
 }

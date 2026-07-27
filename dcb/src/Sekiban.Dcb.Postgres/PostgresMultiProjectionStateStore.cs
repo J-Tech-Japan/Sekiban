@@ -359,6 +359,27 @@ public class PostgresMultiProjectionStateStore :
     private static bool IsUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation };
 
+    /// <summary>
+    ///     A DETERMINISTIC pre-commit failure — a syntax/schema error (SQL-state class 42, e.g. undefined_column when the
+    ///     additive migration is unapplied) or an already-cancelled token (no request dispatched). These are provably NOT
+    ///     post-commit, so they are ProviderFailure/fail-closed, never in-doubt.
+    /// </summary>
+    private static bool IsDeterministicPreCommitFailure(Exception ex, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested && ex is OperationCanceledException)
+        {
+            return true;
+        }
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is Npgsql.PostgresException pg && pg.SqlState is { Length: >= 2 } s && s[0] == '4' && s[1] == '2')
+            {
+                return true; // class 42 = syntax error or access rule violation (undefined column/table/etc.)
+            }
+        }
+        return false;
+    }
+
     private async Task<CheckpointSlot> RefetchSlotAsync(string projectorName, string projectorVersion, CancellationToken ct)
     {
         var read = await ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
@@ -444,6 +465,7 @@ public class PostgresMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
             return await ResolveWriteInDoubtAsync(payload, expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, ex);
         }
     }
@@ -454,12 +476,12 @@ public class PostgresMultiProjectionStateStore :
         CheckpointExpectation expectation,
         CancellationToken cancellationToken = default)
     {
+        if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+        {
+            return CheckpointCasOutcome.Corrupt();
+        }
         try
         {
-            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
-            {
-                return CheckpointCasOutcome.Corrupt();
-            }
             await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
             var serviceId = CurrentServiceId;
 
@@ -480,7 +502,12 @@ public class PostgresMultiProjectionStateStore :
         }
         catch (Exception ex)
         {
-            return CheckpointCasOutcome.ProviderFailed(ex);
+            // SEK-G20: a lost response on the tombstone UPDATE is UNKNOWN-commit too — a deterministic pre-commit/schema
+            // failure is ProviderFailure, but any other failure crossed a commit-capable boundary and MUST be resolved by
+            // a bounded independent re-read (Tombstoned at g+1 => our own commit; unconfirmable => typed retryable InDoubt).
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
+            return await ResolveInvalidateInDoubtAsync(
+                projectorName, projectorVersion, expectation.ExpectedGeneration + 1, expectedRevision + 1, ex);
         }
     }
 
@@ -539,6 +566,7 @@ public class PostgresMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
+            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
             return await ResolveWriteInDoubtAsync(payload, expectation.ExpectedGeneration, ex);
         }
     }
@@ -553,6 +581,18 @@ public class PostgresMultiProjectionStateStore :
             slot => slot.IsActive && slot.Generation == resultingGeneration && slot.Record is { } r
                 && string.Equals(r.LastSortableUniqueId, payload.LastSortableUniqueId, StringComparison.Ordinal)
                 && r.EventsProcessed == payload.EventsProcessed,
+            maxAttempts: 3,
+            cause: cause);
+
+    // Resolves a tombstone (invalidate) write whose response was lost. Our intended transition is uniquely identified by
+    // Tombstoned at the resulting (generation, revision) — only an invalidate from the exact Active token we observed can
+    // produce it, so a re-read that shows it confirms our own commit; an unconfirmable re-read is typed retryable InDoubt.
+    private Task<CheckpointCasOutcome> ResolveInvalidateInDoubtAsync(
+        string projectorName, string projectorVersion, long resultingGeneration, long resultingRevision, Exception cause) =>
+        CheckpointInDoubtResolver.ResolveAsync(
+            ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
+            slot => slot.IsTombstoned && slot.Generation == resultingGeneration
+                && string.Equals(slot.Revision, resultingRevision.ToString(), StringComparison.Ordinal),
             maxAttempts: 3,
             cause: cause);
 }

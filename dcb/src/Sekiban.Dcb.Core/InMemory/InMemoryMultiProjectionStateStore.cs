@@ -256,8 +256,17 @@ public class InMemoryMultiProjectionStateStore :
     // ConditionalUpsertAsync. PreCommitFault => the write is rolled back (row unchanged) and the failure is known-safe.
     // PostCommitResponseLoss => the write IS applied but its response is "lost", so the resolver's bounded re-read
     // confirms our own commit. PostCommitResponseLossUnverifiable => the write is NOT applied and its response is lost,
-    // so the re-read cannot confirm and the outcome is InDoubt.
-    internal enum WriteFaultMode { None, PreCommitFault, PostCommitResponseLoss, PostCommitResponseLossUnverifiable }
+    // so the re-read cannot confirm and the outcome is InDoubt. PostCommitRereadUnavailable => the write IS applied (it
+    // crossed the commit boundary) but EVERY bounded re-read throws (the authority is unreachable/timing out); the commit
+    // is therefore unknown and MUST remain InDoubt — never downgraded to ProviderFailure just because reads fail.
+    internal enum WriteFaultMode
+    {
+        None,
+        PreCommitFault,
+        PostCommitResponseLoss,
+        PostCommitResponseLossUnverifiable,
+        PostCommitRereadUnavailable
+    }
     internal WriteFaultMode NextConditionalUpsertFault { get; set; } = WriteFaultMode.None;
 
     private async Task<(CheckpointCasOutcome? Rejected, byte[] Bytes)> BufferAsync(Stream stream, CancellationToken ct)
@@ -329,6 +338,19 @@ public class InMemoryMultiProjectionStateStore :
                     generation, nextRevision, CheckpointLifecycle.Active, payload.LastSortableUniqueId, payload.EventsProcessed),
                 maxAttempts: 3,
                 cause: new IOException("injected post-commit response loss"));
+        }
+
+        // Post-commit re-read unavailable: the write DID commit (the row advanced above), but the response was lost AND
+        // every bounded independent re-read now throws (authority unreachable). Because the commit already happened, the
+        // outcome must be InDoubt — proving the resolver never downgrades unreadable-after-commit to ProviderFailure.
+        if (fault is WriteFaultMode.PostCommitRereadUnavailable)
+        {
+            return await CheckpointInDoubtResolver.ResolveAsync(
+                _ => throw new IOException("injected re-read authority unreachable"),
+                CheckpointInDoubtResolver.CommittedByExactResult(
+                    generation, nextRevision, CheckpointLifecycle.Active, payload.LastSortableUniqueId, payload.EventsProcessed),
+                maxAttempts: 3,
+                cause: new IOException("injected post-commit response loss (unreadable authority)"));
         }
 
         return CheckpointCasOutcome.Committed(committedSlot);

@@ -27,7 +27,14 @@ public static class CheckpointInDoubtResolver
     {
         ArgumentNullException.ThrowIfNull(reread);
         ArgumentNullException.ThrowIfNull(committedByUs);
-        var anyReadSucceeded = false;
+
+        // The caller invokes this ONLY when the write already crossed a commit-capable boundary (a dispatch/transport
+        // failure), so its commit is genuinely unknown. A bounded independent re-read that confirms our exact write ->
+        // Committed. ANY other outcome — a read that succeeds but does not show our write, OR a re-read that cannot
+        // complete at all (the authority is unreachable/timing out) — leaves the commit UNKNOWN and MUST remain typed
+        // retryable InDoubt, preserving the original safe cause/token. It is NEVER downgraded to ProviderFailure here:
+        // unreadable authority after a possible commit does not establish a known pre-commit failure. (A deterministic
+        // pre-commit / schema / preflight failure is classified ProviderFailure by the PROVIDER, before it calls this.)
         for (var attempt = 0; attempt < Math.Max(1, maxAttempts); attempt++)
         {
             ResultBox<CheckpointSlot> read;
@@ -38,23 +45,14 @@ public static class CheckpointInDoubtResolver
             }
             catch
             {
-                continue; // a failed verification read does not itself prove non-commit; keep within budget
+                continue; // an unreadable authority does not prove non-commit; keep within budget, then InDoubt
             }
-            if (!read.IsSuccess)
-            {
-                continue;
-            }
-            anyReadSucceeded = true;
-            if (committedByUs(read.GetValue()))
+            if (read.IsSuccess && committedByUs(read.GetValue()))
             {
                 return CheckpointCasOutcome.Committed(read.GetValue());
             }
         }
-
-        // A read that SUCCEEDED but did not show our write is a genuine ambiguity (typed retryable InDoubt). If NO read
-        // could even complete, the store itself is failing (e.g. an unapplied schema) — that is a deterministic
-        // ProviderFailure, not an in-doubt commit, so it fails closed without implying "maybe committed".
-        return anyReadSucceeded ? CheckpointCasOutcome.Doubt(cause) : CheckpointCasOutcome.ProviderFailed(cause);
+        return CheckpointCasOutcome.Doubt(cause);
     }
 
     /// <summary>

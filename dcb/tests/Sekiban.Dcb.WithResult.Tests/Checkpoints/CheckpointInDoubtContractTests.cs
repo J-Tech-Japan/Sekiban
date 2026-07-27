@@ -70,6 +70,32 @@ public class CheckpointInDoubtContractTests
     }
 
     [Fact]
+    public async Task PostCommit_WhenEveryBoundedRereadFails_StaysInDoubt_NeverProviderFailure()
+    {
+        var store = NewStore();
+        var cas = Cas(store);
+        await cas.ConditionalUpsertAsync(Req(1, "p1"), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = await Read(cas);
+
+        // The write CROSSED the commit boundary (the row really advances to p2), but its response is lost AND every
+        // bounded independent re-read throws — the authority is unreachable. An unreadable authority after a possible
+        // commit does NOT establish a known pre-commit failure, so the outcome MUST be typed retryable InDoubt, never
+        // ProviderFailure. (ProviderFailure is reserved for provable pre-commit / deterministic schema failures, which
+        // a provider classifies BEFORE it ever reaches this resolver.)
+        SetFault(store, "PostCommitRereadUnavailable");
+        var outcome = await cas.ConditionalUpsertAsync(Req(2, "p2"), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.InDoubt, outcome.Status);
+        Assert.NotEqual(CheckpointCasStatus.ProviderFailure, outcome.Status);
+        Assert.NotNull(outcome.Cause);
+
+        // The commit genuinely happened; a retry with the SAME old token now cleanly rejects (the token has moved),
+        // so the InDoubt classification is safe — no double-apply, no lost write.
+        var retry = await cas.ConditionalUpsertAsync(Req(2, "p2"), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.ConditionRejected, retry.Status);
+        Assert.Equal("p2", (await Read(cas)).Record!.LastSortableUniqueId);
+    }
+
+    [Fact]
     public async Task PreCommitFault_IsRollbackKnown_ProviderFailure_RowUnchanged()
     {
         var store = NewStore();

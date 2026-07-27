@@ -122,6 +122,48 @@ public class CosmosCheckpointGenerationCasTests
     }
 
     [Fact]
+    public async Task Invalidate_And_RebuiltCommit_PostAndPreAmbiguity_ResolveViaBoundedReread()
+    {
+        // SEK-G20 phase matrix for the OTHER two write ops (invalidate/tombstone, rebuilt commit) through the real Cosmos
+        // store over the in-memory container: a post-write loss (the Replace committed) resolves Committed via the bounded
+        // re-read; a pre-write loss (the Replace never committed) resolves typed InDoubt with the row unchanged.
+        var client = new InMemoryCosmosClient();
+        var store = NewStore(client);
+        await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = await ReadAsync(store);
+        var container = client.Container("multiProjectionStates");
+
+        // Invalidate, pre-write loss: nothing commits -> the row stays Active -> InDoubt.
+        container.WriteFaults.Enqueue(new IOException("injected: lost response, tombstone did not commit"));
+        var invPre = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
+        Assert.Equal(CheckpointCasStatus.InDoubt, invPre.Status);
+        Assert.True((await ReadAsync(store)).IsActive);
+
+        // Invalidate, post-write loss: the tombstone (g+1) is durably stored but the response is lost -> Committed.
+        container.PostWriteFaults.Enqueue(new IOException("injected: lost response after a committed tombstone"));
+        var invPost = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
+        Assert.Equal(CheckpointCasStatus.Committed, invPost.Status);
+        var tomb = await ReadAsync(store);
+        Assert.True(tomb.IsTombstoned);
+        Assert.Equal(active.Generation + 1, tomb.Generation);
+
+        // Rebuilt commit, pre-write loss: nothing commits -> the row stays Tombstoned -> InDoubt.
+        container.WriteFaults.Enqueue(new IOException("injected: lost response, rebuilt did not commit"));
+        var rebPre = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.InDoubt, rebPre.Status);
+        Assert.True((await ReadAsync(store)).IsTombstoned);
+
+        // Rebuilt commit, post-write loss: the rebuilt Active(g+1) is durably stored but the response is lost -> Committed.
+        container.PostWriteFaults.Enqueue(new IOException("injected: lost response after a committed rebuild"));
+        var rebPost = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, rebPost.Status);
+        var final = await ReadAsync(store);
+        Assert.True(final.IsActive);
+        Assert.Equal(tomb.Generation, final.Generation);
+        Assert.Equal(9, final.Record!.EventsProcessed);
+    }
+
+    [Fact]
     public async Task PreG20Doc_MissingControlProperties_ReadsAsGeneration0_Active()
     {
         // A legacy write leaves the generation/lifecycle properties absent; Newtonsoft defaults them to 0 → gen 0, Active.

@@ -50,6 +50,9 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         builder.Options.ClusterId = $"G20-retro-{name}-{uniqueId}";
         builder.Options.ServiceId = $"G20-retro-{name}-{uniqueId}";
         builder.AddSiloBuilderConfigurator<Configurator>();
+        // The silo's ConfigureServices (below) reads this to build a per-cluster gating decorator. Deploys are sequential
+        // (A then B, each awaited), so the static reliably identifies the cluster whose silo is being configured.
+        SharedStores.CurrentClusterName = name;
         var cluster = builder.Build();
         await cluster.DeployAsync();
         return cluster;
@@ -132,6 +135,119 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         Assert.True((await grainB2.GetStateAsync()).GetValue().IsSafeState);
         await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterA.Client, SharedStores.EventStore, SharedStores.Domain), "earlier");
         await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterB.Client, SharedStores.EventStore, SharedStores.Domain), "earlier");
+    }
+
+    [Fact]
+    public async Task DeterministicParkedStaleWriter_RejectedAgainstTombstone_ArmsBarrier_NoRecontamination()
+    {
+        // The packet-critical race, executed DETERMINISTICALLY through product code: cluster B captures the old Active
+        // token and PARKS its real grain persist at the store boundary; cluster A retrograde-rebuilds and its tombstone is
+        // held OPEN; B is released and its stale CAS is ConditionRejected against the tombstone — which arms B's query
+        // barrier — so the shared row is NEVER re-contaminated with B's stale winner. A then commits its rebuild and both
+        // converge on the globally-earliest winner. No polling for the race window: both critical writes are gated.
+        var grainA = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
+        var grainB = _clusterB.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
+        var gateA = SharedStores.GatesByCluster["A"];
+        var gateB = SharedStores.GatesByCluster["B"];
+        var execB = new OrleansDcbExecutor(_clusterB.Client, SharedStores.EventStore, SharedStores.Domain);
+
+        // (1) One already-safe event; both clusters catch up + persist through the CAS -> shared row Active(gen0), winner
+        //     "later"; both adopt the gen0 token.
+        var later = CreateEvent(new CreatedWithId("team-1", "later"), DateTime.UtcNow.AddSeconds(-30));
+        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) });
+        await grainA.RefreshAsync();
+        Assert.True((await grainA.PersistStateAsync()).IsSuccess);
+        await grainB.RefreshAsync();
+        _ = await grainB.PersistStateAsync();   // whoever loses the create adopts the gen0 token
+        var slot0 = await ReadSlotAsync();
+        Assert.True(slot0.IsActive);
+        Assert.Equal(0, slot0.Generation);
+
+        // (2) Deliver a B-ONLY safe event (not in the shared store) so B has a genuine pending persist on the gen0 token
+        //     whose stale winner ("team-2") would be detectable if it ever contaminated the row.
+        var bLocal = CreateEvent(new CreatedWithId("team-2", "B-stale"), DateTime.UtcNow.AddSeconds(-20));
+        await grainB.AddEventsAsync(new[] { ToSerializable(bLocal) });
+        await PollUnsafeContainsAsync(grainB, "team-2");
+
+        // (3) Arm B's upsert gate and launch B's REAL grain persist; it parks at the store boundary holding the gen0 token.
+        var bUpsert = new GatingCheckpointStore.Gate { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
+        gateB.UpsertGate = bUpsert;
+        var bPersist = grainB.PersistStateAsync();
+        await bUpsert.Arrived.Task;
+
+        // (4) Arm A's rebuilt-commit gate, then deliver the globally-earlier retrograde event to A and drive its rebuild
+        //     FIRE-AND-FORGET (never awaited — the driving call itself parks at the commit gate, so awaiting it would
+        //     deadlock). A invalidates the shared row (tombstone gen1) and then parks at its rebuilt commit, holding the
+        //     tombstone OPEN. B's stale writer is now guaranteed to meet a tombstone, not a fresh Active row.
+        var aCommit = new GatingCheckpointStore.Gate { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
+        gateA.CommitRebuiltGate = aCommit;
+        var earlier = CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31));
+        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) });
+        await grainA.AddEventsAsync(new[] { ToSerializable(earlier) });
+        var aDrive = grainA.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);   // drives invalidate -> parks at commit
+        await aCommit.Arrived.Task;   // A reached the rebuilt-commit boundary => the invalidate (tombstone) already committed
+        var tomb = await PollUntilTombstoneAsync();
+        Assert.True(tomb.IsTombstoned);
+        Assert.Equal(1, tomb.Generation);
+
+        // (5) Release B's parked stale persist. Its external-checkpoint CAS on the OLD gen0 token meets the tombstone ->
+        //     ConditionRejected, so the grain arms its query barrier and the shared row is byte-for-byte unchanged. (The
+        //     PersistStateAsync bool reflects the grain-state snapshot write, which is a SEPARATE store from the external
+        //     checkpoint row — the anti-recontamination guarantee is on the row itself, asserted here.)
+        bUpsert.Release!.SetResult();
+        _ = await bPersist;
+        var afterB = await ReadSlotAsync();
+        Assert.True(afterB.IsTombstoned, $"the shared row was re-contaminated by the stale writer: {afterB.Lifecycle} gen{afterB.Generation}");
+        Assert.Equal(1, afterB.Generation);
+        Assert.Equal(tomb.Revision, afterB.Revision);   // exact same token — B did not touch the row
+
+        // (6) Release A's rebuilt commit -> Active(gen1) with the rebuilt 2-event checkpoint, winner "earlier".
+        aCommit.Release!.SetResult();
+        _ = await aDrive;
+        var final = await ReadSlotAsync();
+        Assert.True(final.IsActive);
+        Assert.Equal(1, final.Generation);
+        Assert.Equal(2, final.Record!.EventsProcessed);
+
+        // (7) The retrograde "earlier" is delivered to B as well; B's armed query barrier drives a from-scratch rebuild
+        //     over the authoritative history (which has NO team-2, and folds "earlier" first) so B converges on the
+        //     globally-earliest winner. The stale "team-2" never re-contaminated the shared row and is gone.
+        await grainB.AddEventsAsync(new[] { ToSerializable(earlier) });
+        Assert.Equal("earlier", await PollWinnerAsync(grainB, "earlier"));
+        var listB = await execB.QueryAsync(new WinnerListQuery());
+        Assert.True(listB.IsSuccess, listB.IsSuccess ? "" : listB.GetException().ToString());
+        Assert.DoesNotContain(listB.GetValue().Items, r => r.Id == "team-2");
+        Assert.Contains(listB.GetValue().Items, r => r.Id == "team-1" && r.Value == "earlier");
+    }
+
+    private static async Task<CheckpointSlot> ReadSlotAsync() =>
+        (await SharedStores.StateStore.ReadCheckpointSlotAsync(FirstWinsProjector.MultiProjectorName, "1.0.0")).GetValue();
+
+    private static async Task<CheckpointSlot> PollUntilTombstoneAsync()
+    {
+        for (var i = 0; i < 200; i++)
+        {
+            var slot = await ReadSlotAsync();
+            if (slot.IsTombstoned)
+            {
+                return slot;
+            }
+            await Task.Delay(50);
+        }
+        return await ReadSlotAsync();
+    }
+
+    private static async Task PollUnsafeContainsAsync(IMultiProjectionGrain grain, string id)
+    {
+        for (var i = 0; i < 100; i++)
+        {
+            var rb = await grain.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);
+            if (rb.IsSuccess && ((FirstWinsProjector)rb.GetValue().Payload).Winners.ContainsKey(id))
+            {
+                return;
+            }
+            await Task.Delay(50);
+        }
     }
 
     private static string WinnerOf(MultiProjectionState state) =>
@@ -250,10 +366,17 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         public static InMemoryEventStore EventStore { get; private set; } = new(Domain.EventTypes);
         public static InMemoryMultiProjectionStateStore StateStore { get; } = new();
 
+        // SEK-G20 deterministic parked-writer harness: each cluster's silo gets its OWN gating decorator over the ONE shared
+        // row, registered here by cluster name so the test can park exactly one cluster's real grain persist.
+        public static string? CurrentClusterName;
+        public static readonly System.Collections.Concurrent.ConcurrentDictionary<string, GatingCheckpointStore> GatesByCluster = new();
+
         public static void Reset()
         {
             Domain = BuildDomain();
             EventStore = new InMemoryEventStore(Domain.EventTypes);
+            GatesByCluster.Clear();
+            CurrentClusterName = null;
             StateStore.DeleteAllAsync(FirstWinsProjector.MultiProjectorName).GetAwaiter().GetResult();
         }
 
@@ -271,6 +394,69 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         }
     }
 
+    // A transparent decorator over the ONE shared checkpoint store that can PARK the next ConditionalUpsertAsync — the exact
+    // call the grain's capability-aware persist path makes (_checkpointCas.ConditionalUpsertAsync). When armed, it signals
+    // the test that the real grain persist has ARRIVED at the store boundary (holding its captured expected token), then
+    // blocks until the test releases it — after a peer has tombstoned+rebuilt the shared row. It delegates every method to
+    // the shared store, and advertises the capability truthfully, so the grain treats it as a capable CAS store.
+    internal sealed class GatingCheckpointStore
+        : IMultiProjectionStateStore, IGenerationAwareCheckpointStore, ICheckpointStoreCapabilityProvider
+    {
+        private readonly InMemoryMultiProjectionStateStore _inner;
+        public GatingCheckpointStore(InMemoryMultiProjectionStateStore inner) => _inner = inner;
+
+        // A one-shot parking gate: Arrived completes when a matching op reaches the store boundary; the op then blocks on
+        // Release until the test lets it proceed. Two independent gates so a peer's ConditionalUpsert (the stale writer) and
+        // a peer's CommitRebuilt (the rebuild winner) can each be parked to stage the tombstone window deterministically.
+        public sealed class Gate
+        {
+            public readonly TaskCompletionSource Arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            public TaskCompletionSource? Release;
+        }
+
+        public Gate? UpsertGate;
+        public Gate? CommitRebuiltGate;
+
+        public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
+            CheckpointCapabilityResolver.Describe(_inner, "gating");
+
+        private static async Task Park(Gate gate)
+        {
+            gate.Arrived.TrySetResult();
+            if (gate.Release is not null)
+            {
+                await gate.Release.Task.ConfigureAwait(false);
+            }
+        }
+
+        public async Task<CheckpointCasOutcome> ConditionalUpsertAsync(
+            MultiProjectionStateWriteRequest r, Stream s, CheckpointExpectation e, int o, CancellationToken ct = default)
+        {
+            var gate = UpsertGate;
+            if (gate is not null) { UpsertGate = null; await Park(gate); }   // one-shot: only the first persist parks
+            return await _inner.ConditionalUpsertAsync(r, s, e, o, ct).ConfigureAwait(false);
+        }
+
+        public async Task<CheckpointCasOutcome> CommitRebuiltAsync(
+            MultiProjectionStateWriteRequest r, Stream s, CheckpointExpectation e, int o, CancellationToken ct = default)
+        {
+            var gate = CommitRebuiltGate;
+            if (gate is not null) { CommitRebuiltGate = null; await Park(gate); }
+            return await _inner.CommitRebuiltAsync(r, s, e, o, ct).ConfigureAwait(false);
+        }
+
+        public Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(string p, string v, CheckpointExpectation e, CancellationToken ct = default) => _inner.InvalidateWithTombstoneAsync(p, v, e, ct);
+        public Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default) => _inner.ReadCheckpointSlotAsync(p, v, ct);
+        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) => _inner.GetLatestForVersionAsync(p, v, ct);
+        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(p, ct);
+        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord r, int o = 1_000_000, CancellationToken ct = default) => _inner.UpsertAsync(r, o, ct);
+        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
+        public Task<ResultBox<bool>> DeleteAsync(string p, string v, CancellationToken ct = default) => _inner.DeleteAsync(p, v, ct);
+        public Task<ResultBox<int>> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _inner.DeleteAllAsync(p, ct);
+        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _inner.OpenStateDataReadStreamAsync(r, ct);
+        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest r, Stream s, int o, CancellationToken ct = default) => _inner.UpsertFromStreamAsync(r, s, o, ct);
+    }
+
     private class Configurator : ISiloConfigurator
     {
         public void Configure(ISiloBuilder siloBuilder)
@@ -280,7 +466,11 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
                 {
                     services.AddSingleton<DcbDomainTypes>(SharedStores.Domain);
                     services.AddSingleton<IEventStore>(SharedStores.EventStore);
-                    services.AddSingleton<IMultiProjectionStateStore>(SharedStores.StateStore);
+                    // Each cluster gets its OWN gating decorator over the ONE shared checkpoint row (transparent unless the
+                    // test arms its gate), so a single cluster's real grain persist can be parked deterministically.
+                    var clusterName = SharedStores.CurrentClusterName ?? Guid.NewGuid().ToString("N");
+                    var gating = SharedStores.GatesByCluster.GetOrAdd(clusterName, _ => new GatingCheckpointStore(SharedStores.StateStore));
+                    services.AddSingleton<IMultiProjectionStateStore>(gating);
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
