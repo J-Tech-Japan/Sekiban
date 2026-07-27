@@ -63,6 +63,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // durable safe position (exclusive) and never re-folds / double-counts already-reflected events. Consumed once.
     private SortableUniqueId? _restoredCatchUpPosition;
 
+    // SEK-G18 (#1086): the last SafeWindowThreshold persisted (seeded verbatim from the restored checkpoint record). While
+    // the safe checkpoint position is unchanged, the persist writes THIS value verbatim rather than a fresh wall-clock
+    // threshold, so a no-progress restart preserves the checkpoint's threshold exactly instead of drifting.
+    private string? _lastPersistedSafeWindowThreshold;
+
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
@@ -688,6 +693,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return true;
     }
 
+    // SEK-G18 (#1086): the SafeWindowThreshold value to persist. When the safe checkpoint POSITION is unchanged versus the
+    // committed checkpoint, the threshold is preserved VERBATIM (the last-persisted value, seeded from the restored record)
+    // rather than recomputed from wall-clock — so a restart that writes zero new events persists an IDENTICAL threshold.
+    // When the safe checkpoint advances, a fresh threshold is written and remembered.
+    private string ResolvePersistedSafeWindowThreshold(PersistCheckpoint checkpoint)
+    {
+        var fresh = checkpoint.SafeThresholdValue ?? _host!.PeekCurrentSafeWindowThreshold();
+        var safeUnchanged = string.Equals(
+            _stateStore.Committed.LastSortableUniqueId ?? string.Empty,
+            checkpoint.SafePosition ?? string.Empty,
+            StringComparison.Ordinal);
+        if (safeUnchanged && !string.IsNullOrEmpty(_lastPersistedSafeWindowThreshold))
+        {
+            return _lastPersistedSafeWindowThreshold;
+        }
+        _lastPersistedSafeWindowThreshold = fresh;
+        return fresh;
+    }
+
     private ResultBox<bool>? TryShortCircuitPersist(string projectorName, PersistCheckpoint checkpoint)
     {
         var lastGoodSafeVersion = _stateStore.Committed.LastGoodSafeVersion;
@@ -789,7 +813,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             OffloadProvider: null,
             OriginalSizeBytes: tempFileSize,
             CompressedSizeBytes: tempFileSize,
-            SafeWindowThreshold: checkpoint.SafeThresholdValue ?? _host!.PeekCurrentSafeWindowThreshold(),
+            SafeWindowThreshold: ResolvePersistedSafeWindowThreshold(checkpoint),
             CreatedAt: _stateStore.Committed.LastPersistTime == default
                 ? DateTime.UtcNow
                 : _stateStore.Committed.LastPersistTime,
@@ -1255,7 +1279,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     OffloadProvider: null,
                     OriginalSizeBytes: originalSizeBytes,
                     CompressedSizeBytes: compressedSizeBytes,
-                    SafeWindowThreshold: checkpoint.SafeThresholdValue ?? _host.PeekCurrentSafeWindowThreshold(),
+                    SafeWindowThreshold: ResolvePersistedSafeWindowThreshold(checkpoint),
                     CreatedAt: _stateStore.Committed.LastPersistTime == default
                         ? DateTime.UtcNow
                         : _stateStore.Committed.LastPersistTime,
@@ -2106,6 +2130,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                                 _restoredCatchUpPosition = string.IsNullOrEmpty(record.LastSortableUniqueId)
                                     ? null
                                     : new SortableUniqueId(record.LastSortableUniqueId);
+
+                                // SEK-G18 (#1086): seed the last-persisted SafeWindowThreshold verbatim so a no-progress
+                                // re-persist writes the SAME value instead of a fresh wall-clock threshold (no drift).
+                                _lastPersistedSafeWindowThreshold = record.SafeWindowThreshold;
 
                                 int? postSafeVersion = null;
                                 int? postUnsafeVersion = null;
