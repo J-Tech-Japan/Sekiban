@@ -380,28 +380,33 @@ events, the persisted checkpoint's position/`EventsProcessed` changes.
 - Application projectors should still implement create arms as true first-event-wins
   (`if (state.Contains(id)) return state;`) so the globally-earliest event is authoritative.
 
-### Known limitation (shared-store, multiple clusters) — closed in G20
+### Cross-cluster shared-store convergence — CLOSED in G20 (10.8.0)
 
-The single-cluster durable rebuild above is complete. One residual remains for a specific
-**multi-cluster** topology and is tracked/closed in **G20**: when two or more *independent*
-clusters share one external checkpoint row (`dcb_multi_projection_states`, keyed by
-`serviceId/projectorName/projectorVersion`), and one cluster performs a retrograde
-full-rebuild that invalidates the shared row, a peer cluster that is still holding the old
-checkpoint can re-upsert (re-contaminate) the row — with the LATER (post-retrograde) safe
-position — before it independently observes the retrograde event and rebuilds. The rebuild
-marker is cluster-local grain storage, and the shared-row upsert currently has no cross-cluster
-concurrency guard, so the activation-local protocol cannot prevent this by itself.
+**This was the SEK-G18 residual; SEK-G20 closes it.** When two or more *independent* clusters share
+one external checkpoint row (`dcb_multi_projection_states`, keyed by
+`serviceId/projectorName/projectorVersion`), and one cluster performs a retrograde full-rebuild, a
+peer still holding the old checkpoint used to be able to re-upsert (re-contaminate) the row — with
+the LATER (post-retrograde) safe position — before it observed the retrograde event. That was a
+**permanent false-safe**: a fresh activation restoring the recontaminated later-position checkpoint
+would let the exclusive-after-position catch-up start *after* that position and **permanently skip
+the missing earlier event**, reporting `IsSafeState=true` over a state that omits an authoritative
+event, never self-healing.
 
-**Danger — this is not a transient window; it can be a PERMANENT false-safe result.** Once a
-fresh activation restores the recontaminated later-position checkpoint, the exclusive-after-position
-catch-up starts *after* that later position and therefore **permanently skips the missing earlier
-event**. The projection then reports `IsSafeState=true` over a state that omits an authoritative
-event, and it never self-heals — the earlier event is below the restored catch-up floor forever.
-So the residual is: retrograde shared-row recontamination can yield a **permanent false-safe**
-result across clusters, not merely a brief divergence that later converges.
+**How G20 closes it** — a two-layer CAS on the shared checkpoint row (see
+[Storage Providers → Generation-aware checkpoint CAS](11_storage_providers.md#sek-g20-generation-aware-checkpoint-cas)):
+- Every product checkpoint persist is an **expected-token CAS**. A stale writer (a peer that parked
+  before another cluster tombstoned the row) is `ConditionRejected` and **never re-contaminates** the
+  row — this is the core fix.
+- Invalidation is a durable **generation bump + tombstone** (not a delete), visible to other clusters
+  before the local rebuild proceeds. The prior payload is retained under the tombstone.
+- A fresh activation reads the control plane (generation / exact token / lifecycle) **before** binding
+  any payload: a tombstone forces a full ordered replay and a rebuilt-commit on the exact tombstone
+  token (one atomic same-row CAS). Exactly one rebuilder wins; losers refetch.
+- Non-capable stores (a custom `IMultiProjectionStateStore` that does not implement the capability)
+  **fail closed** to the G14 fault path on a retrograde invalidation, rather than silently rebuilding.
 
-**G20** closes it with a shared-row generation bump + tombstone + expected-generation CAS-guarded
-conditional upsert across all providers. Until G20 ships, run this projection class single-cluster,
-or accept the permanent-false-safe risk under retrograde multi-cluster recontamination. (The
-normal-path two-cluster graduation reconcile — no retrograde shared-row rewrite — IS proven to
-converge in G18.)
+Existing checkpoint rows read as generation 0, revision 0, Active — an additive per-provider schema
+upgrade (proven against a real pre-G20 database), no event/payload migration. **Mixed-version
+hazard**: on SQLite the legacy `INSERT OR REPLACE` upsert resets the control columns, so a pre-G20
+WRITER can erase a tombstone — protection is complete only when every writer is upgraded to 10.8.0.
+The release gate for the full fix is G18 + G19 + G20.
