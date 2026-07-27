@@ -6,6 +6,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Storage.Checkpoints;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -207,11 +208,7 @@ public class MultiProjectionStateBuilder
                     compressedSizeBytes);
 
                 envelopeStream.Position = 0;
-                var saveResult = await _stateStore.UpsertFromStreamAsync(
-                    writeRequest,
-                    envelopeStream,
-                    options.OffloadThresholdBytes,
-                    ct);
+                var saveResult = await PersistCheckpointAsync(writeRequest, envelopeStream, options.OffloadThresholdBytes, ct);
                 if (!saveResult.IsSuccess)
                 {
                     return new ProjectorBuildResult(
@@ -429,4 +426,31 @@ public class MultiProjectionStateBuilder
         return await SnapshotEnvelopeResolver.ResolveInlineAsync(envelope, _blobAccessor, ct);
     }
 
+    // SEK-G20: the CLI/offline build persists through the generation/tombstone CAS when the store is capable, so it
+    // cannot re-contaminate a shared row outside the tombstone protocol — a tombstone -> rebuilt commit; an active row ->
+    // exact-token CAS; absent -> expected-absence create. Non-capable stores keep the legacy unconditional upsert. This is
+    // the ONLY direct UpsertFromStreamAsync call in the builder, gated by the non-capable LEGACY-FALLBACK branch.
+    private async Task<ResultBox<bool>> PersistCheckpointAsync(
+        MultiProjectionStateWriteRequest writeRequest, Stream stream, int offloadThreshold, CancellationToken ct)
+    {
+        if (_stateStore is IGenerationAwareCheckpointStore cas
+            && CheckpointCapabilityResolver.SupportsGenerationCas(_stateStore))
+        {
+            var slotResult = await cas.ReadCheckpointSlotAsync(writeRequest.ProjectorName, writeRequest.ProjectorVersion, ct);
+            var slot = slotResult.IsSuccess ? slotResult.GetValue() : CheckpointSlot.Absent;
+            var outcome = slot.IsTombstoned
+                ? await cas.CommitRebuiltAsync(writeRequest, stream, CheckpointExpectation.FromSlot(slot), offloadThreshold, ct)
+                : await cas.ConditionalUpsertAsync(
+                    writeRequest, stream,
+                    slot.IsActive ? CheckpointExpectation.FromSlot(slot) : CheckpointExpectation.Absent,
+                    offloadThreshold, ct);
+            return outcome.Status == CheckpointCasStatus.Committed
+                ? ResultBox.FromValue(true)
+                : ResultBox.Error<bool>(outcome.Cause ?? new InvalidOperationException(
+                    $"CLI checkpoint build CAS was {outcome.Status} for {writeRequest.ProjectorName}/{writeRequest.ProjectorVersion}."));
+        }
+
+        // LEGACY-FALLBACK (non-capable): unconditional upsert (byte-for-byte).
+        return await _stateStore.UpsertFromStreamAsync(writeRequest, stream, offloadThreshold, ct);
+    }
 }

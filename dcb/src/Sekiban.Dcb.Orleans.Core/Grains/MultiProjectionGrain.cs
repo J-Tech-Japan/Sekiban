@@ -2573,59 +2573,57 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         // Route the invalidation through the external-store coordinator so any parked/in-flight snapshot upsert completes
         // BEFORE this invalidation, and no upsert runs concurrently with it.
-        await _externalStore.InvalidateAsync(async () =>
-        {
-            // SEK-G20: on a capable store, replace delete-based invalidation with a durable bump+tombstone CAS. The
-            // generation bump + tombstone is durably visible to OTHER clusters before this cluster's local rebuild
-            // proceeds, and a stale peer's later upsert CAS-rejects instead of re-contaminating the row. This activation
-            // then rebuilds and commits on the exact tombstone token.
-            if (_checkpointCas is not null)
-            {
-                var projectorName = GetProjectorName();
-                var projectorVersion = _host.GetProjectorVersion();
-                var slotResult = await _checkpointCas.ReadCheckpointSlotAsync(projectorName, projectorVersion);
-                if (!slotResult.IsSuccess)
-                {
-                    throw new InvalidOperationException(
-                        $"Failed to read the checkpoint slot for tombstone invalidation: {slotResult.GetException().Message}",
-                        slotResult.GetException());
-                }
-                var slot = slotResult.GetValue();
-                if (slot.IsActive)
-                {
-                    var outcome = await _checkpointCas.InvalidateWithTombstoneAsync(
-                        projectorName, projectorVersion, CheckpointExpectation.FromSlot(slot));
-                    // Committed => we tombstoned it. ConditionRejected => a peer already moved the row (e.g. tombstoned it
-                    // first); either way the row is now non-Active and this cluster rebuilds. Adopt the resulting/current
-                    // tombstone slot so the rebuilt commit targets the exact token.
-                    var resulting = outcome.ResultingSlot ?? outcome.CurrentSlot;
-                    _adoptedCheckpointSlot = resulting ?? slot;
-                    _pendingRebuiltCommit = true;
-                    if (outcome.Status is CheckpointCasStatus.ProviderFailure or CheckpointCasStatus.Corruption)
-                    {
-                        throw new InvalidOperationException(
-                            "Failed to durably bump+tombstone the checkpoint for a full rebuild.", outcome.Cause);
-                    }
-                }
-                else
-                {
-                    // Already tombstoned or absent — adopt it; the rebuilt commit (if tombstoned) or a fresh create (if
-                    // absent) happens on the next persist.
-                    _adoptedCheckpointSlot = slot.Exists ? slot : null;
-                    _pendingRebuiltCommit = slot.IsTombstoned;
-                }
-                return;
-            }
+        await _externalStore.InvalidateAsync(PerformCheckpointInvalidationCoreAsync);
+    }
 
-            // Non-capable store: legacy delete-based invalidation (byte-for-byte unchanged).
-            var deleteResult = await _multiProjectionStateStore.DeleteAsync(GetProjectorName(), _host.GetProjectorVersion());
-            if (!deleteResult.IsSuccess)
+    // The SINGLE capability-aware invalidation body shared by the retrograde-rebuild path and the admin
+    // DeleteExternalStateAsync path — always run inside the external-store coordinator. On a capable store it performs a
+    // durable bump+tombstone CAS (visible to other clusters before the local rebuild; a stale peer's later upsert
+    // CAS-rejects instead of re-contaminating). Non-capable stores keep the legacy delete byte-for-byte. There is no
+    // direct DeleteAsync bypass anywhere else in a product mutation path.
+    private async Task PerformCheckpointInvalidationCoreAsync()
+    {
+        if (_checkpointCas is not null)
+        {
+            var projectorName = GetProjectorName();
+            var projectorVersion = _host!.GetProjectorVersion();
+            var slotResult = await _checkpointCas.ReadCheckpointSlotAsync(projectorName, projectorVersion);
+            if (!slotResult.IsSuccess)
             {
                 throw new InvalidOperationException(
-                    $"Failed to invalidate the external derived snapshot for a full rebuild: {deleteResult.GetException().Message}",
-                    deleteResult.GetException());
+                    $"Failed to read the checkpoint slot for tombstone invalidation: {slotResult.GetException().Message}",
+                    slotResult.GetException());
             }
-        });
+            var slot = slotResult.GetValue();
+            if (slot.IsActive)
+            {
+                var outcome = await _checkpointCas.InvalidateWithTombstoneAsync(
+                    projectorName, projectorVersion, CheckpointExpectation.FromSlot(slot));
+                var resulting = outcome.ResultingSlot ?? outcome.CurrentSlot;
+                _adoptedCheckpointSlot = resulting ?? slot;
+                _pendingRebuiltCommit = true;
+                if (outcome.Status is CheckpointCasStatus.ProviderFailure or CheckpointCasStatus.Corruption)
+                {
+                    throw new InvalidOperationException(
+                        "Failed to durably bump+tombstone the checkpoint for a full rebuild.", outcome.Cause);
+                }
+            }
+            else
+            {
+                _adoptedCheckpointSlot = slot.Exists ? slot : null;
+                _pendingRebuiltCommit = slot.IsTombstoned;
+            }
+            return;
+        }
+
+        // Non-capable store: legacy delete-based invalidation (byte-for-byte unchanged). LEGACY-FALLBACK (non-capable).
+        var deleteResult = await _multiProjectionStateStore!.DeleteAsync(GetProjectorName(), _host!.GetProjectorVersion());
+        if (!deleteResult.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                $"Failed to invalidate the external derived snapshot for a full rebuild: {deleteResult.GetException().Message}",
+                deleteResult.GetException());
+        }
     }
 
     // True while a fault exists on the live actor OR the committed persisted descriptor. No external snapshot may be
@@ -2658,6 +2656,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return _externalStore.UpsertAsync(() => CheckpointCasPersistAsync(request, stream, offloadThreshold));
         }
 
+        // LEGACY-FALLBACK (non-capable): unconditional upsert (byte-for-byte).
         return _externalStore.UpsertAsync(() =>
             _multiProjectionStateStore.UpsertFromStreamAsync(request, stream, offloadThreshold, CancellationToken.None));
     }
@@ -3329,18 +3328,24 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public async Task<bool> DeleteExternalStateAsync()
     {
         if (_multiProjectionStateStore == null || _host == null) return false;
-        var projectorName = GetProjectorName();
-        var projectorVersion = _host.GetProjectorVersion();
-        // Route through the coordinator like every other external-store mutation, so this delete WAITS for any
-        // parked/in-flight snapshot upsert to commit and never runs concurrently with one. No direct DeleteAsync
-        // bypass may remain, or the interleaving catch-up timer could recreate the snapshot right after this delete.
-        var deleted = false;
+        // SEK-G20: admin delete is routed through the SAME capability-aware invalidation as a retrograde rebuild — on a
+        // capable shared store it is a durable bump+tombstone (a stale peer cannot recreate/re-contaminate outside the
+        // tombstone protocol), NOT an unconditional DeleteAsync. Non-capable stores keep the legacy hard delete. Always
+        // through the coordinator, so it waits for any parked/in-flight upsert and never runs concurrently with one.
+        var ok = true;
         await _externalStore.InvalidateAsync(async () =>
         {
-            var result = await _multiProjectionStateStore.DeleteAsync(projectorName, projectorVersion);
-            deleted = result.IsSuccess && result.GetValue();
+            try
+            {
+                await PerformCheckpointInvalidationCoreAsync();
+            }
+            catch
+            {
+                ok = false;
+                throw;
+            }
         });
-        return deleted;
+        return ok;
     }
 
     public async Task SeedEventsAsync(IReadOnlyList<SerializableEvent> events)
