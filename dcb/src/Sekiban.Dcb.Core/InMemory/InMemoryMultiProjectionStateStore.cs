@@ -252,6 +252,14 @@ public class InMemoryMultiProjectionStateStore :
 
     private static bool WouldOverflow(long value) => value == long.MaxValue;
 
+    // SEK-G20 test seams for the post-commit ambiguity contract (never set in production). One-shot: consumed by the next
+    // ConditionalUpsertAsync. PreCommitFault => the write is rolled back (row unchanged) and the failure is known-safe.
+    // PostCommitResponseLoss => the write IS applied but its response is "lost", so the resolver's bounded re-read
+    // confirms our own commit. PostCommitResponseLossUnverifiable => the write is NOT applied and its response is lost,
+    // so the re-read cannot confirm and the outcome is InDoubt.
+    internal enum WriteFaultMode { None, PreCommitFault, PostCommitResponseLoss, PostCommitResponseLossUnverifiable }
+    internal WriteFaultMode NextConditionalUpsertFault { get; set; } = WriteFaultMode.None;
+
     private async Task<(CheckpointCasOutcome? Rejected, byte[] Bytes)> BufferAsync(Stream stream, CancellationToken ct)
     {
         using var ms = new MemoryStream();
@@ -268,6 +276,12 @@ public class InMemoryMultiProjectionStateStore :
     {
         var (_, bytes) = await BufferAsync(stream, cancellationToken).ConfigureAwait(false);
         var key = (CurrentServiceId, payload.ProjectorName, payload.ProjectorVersion);
+        var fault = NextConditionalUpsertFault;
+        NextConditionalUpsertFault = WriteFaultMode.None;
+
+        long generation;
+        long nextRevision;
+        CheckpointSlot committedSlot;
         lock (_casGate)
         {
             if (!ExpectationHoldsUnlocked(expectation, key, out var current, out var entry))
@@ -282,18 +296,42 @@ public class InMemoryMultiProjectionStateStore :
                 return CheckpointCasOutcome.Rejected(current);
             }
 
-            var generation = entry?.Generation ?? 0;
-            var nextRevision = entry is null ? 1 : entry.Revision + 1;
+            generation = entry?.Generation ?? 0;
+            nextRevision = entry is null ? 1 : entry.Revision + 1;
             if (WouldOverflow(nextRevision))
             {
                 return CheckpointCasOutcome.Corrupt();
             }
 
-            _states[key] = payload.ToRecord();
-            _stateData[key] = bytes;
-            _control[key] = new ControlEntry(generation, nextRevision, CheckpointLifecycle.Active);
-            return CheckpointCasOutcome.Committed(BuildSlotUnlocked(key));
+            if (fault == WriteFaultMode.PreCommitFault)
+            {
+                // Rolled back BEFORE any durable change: the row is untouched, so the failure is known-safe to retry.
+                return CheckpointCasOutcome.ProviderFailed(new IOException("injected pre-commit transport fault"));
+            }
+
+            // PostCommitResponseLossUnverifiable simulates a write whose commit did NOT take (but whose response was lost).
+            if (fault != WriteFaultMode.PostCommitResponseLossUnverifiable)
+            {
+                _states[key] = payload.ToRecord();
+                _stateData[key] = bytes;
+                _control[key] = new ControlEntry(generation, nextRevision, CheckpointLifecycle.Active);
+            }
+            committedSlot = BuildSlotUnlocked(key);
         }
+
+        // Post-commit response loss: the write's outcome is UNKNOWN to the caller — resolve it by a bounded, independent
+        // re-read that confirms our exact resulting token + payload identity, else report InDoubt (typed retryable).
+        if (fault is WriteFaultMode.PostCommitResponseLoss or WriteFaultMode.PostCommitResponseLossUnverifiable)
+        {
+            return await CheckpointInDoubtResolver.ResolveAsync(
+                ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
+                CheckpointInDoubtResolver.CommittedByExactResult(
+                    generation, nextRevision, CheckpointLifecycle.Active, payload.LastSortableUniqueId, payload.EventsProcessed),
+                maxAttempts: 3,
+                cause: new IOException("injected post-commit response loss"));
+        }
+
+        return CheckpointCasOutcome.Committed(committedSlot);
     }
 
     public Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(
