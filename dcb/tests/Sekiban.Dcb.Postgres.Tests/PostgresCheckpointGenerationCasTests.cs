@@ -99,6 +99,53 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TwoClusters_SharedRow_RetrogradeRebuild_StaleCasRejected_NoRecontamination_Converges()
+    {
+        // AUTHORITATIVE two-cluster re-contamination proof against a REAL Postgres row. Cluster A and cluster B are two
+        // independent store instances (separate DbContext lifetimes) resolving the SAME shared checkpoint row.
+        var clusterA = NewStore();
+        var clusterB = NewStore();
+
+        // Both converge on an Active checkpoint; B adopts the Active token.
+        Assert.Equal(CheckpointCasStatus.Committed,
+            (await clusterA.ConditionalUpsertAsync(Req(1), Payload("v1"), CheckpointExpectation.Absent, 1_000_000)).Status);
+        var bAdopted = await ReadAsync(clusterB);
+        Assert.True(bAdopted.IsActive);
+        Assert.Equal(0, bAdopted.Generation);
+
+        // A performs a retrograde full rebuild: durable bump + tombstone (generation 1), cross-cluster visible.
+        var aActive = await ReadAsync(clusterA);
+        Assert.Equal(CheckpointCasStatus.Committed,
+            (await clusterA.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(aActive))).Status);
+        var tomb = await ReadAsync(clusterA);
+        Assert.True(tomb.IsTombstoned);
+        Assert.Equal(1, tomb.Generation);
+
+        // B releases its parked STALE normal persist on the old Active token — REJECTED at the database; the row is
+        // byte-for-byte unchanged (still A's tombstone at generation 1). NO re-contamination.
+        var bStale = await clusterB.ConditionalUpsertAsync(Req(99, "STALE"), Payload("STALE"), CheckpointExpectation.FromSlot(bAdopted), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.ConditionRejected, bStale.Status);
+        var afterStale = await ReadAsync(clusterA);
+        Assert.True(afterStale.IsTombstoned);
+        Assert.Equal(tomb.Revision, afterStale.Revision);   // exact same token — the row was not touched
+
+        // Exactly one rebuilt-commit winner on the exact tombstone token; both clusters converge Active at generation 1.
+        var winners = await Task.WhenAll(
+            clusterA.CommitRebuiltAsync(Req(2, "A"), Payload("REBUILT"), CheckpointExpectation.FromSlot(tomb), 1_000_000),
+            clusterB.CommitRebuiltAsync(Req(2, "B"), Payload("REBUILT"), CheckpointExpectation.FromSlot(tomb), 1_000_000));
+        Assert.Equal(1, winners.Count(w => w.Status == CheckpointCasStatus.Committed));
+        Assert.Equal(1, winners.Count(w => w.Status == CheckpointCasStatus.ConditionRejected));
+
+        var final = await ReadAsync(clusterA);
+        Assert.True(final.IsActive);
+        Assert.Equal(1, final.Generation);
+    }
+
+    private static MultiProjectionStateWriteRequest Req(long ep, string tag) => new(
+        Projector, Version, "T", $"pos-{tag}", ep, false, null, null, 1, 1, "w",
+        new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "test", tag);
+
+    [Fact]
     public async Task ConcurrentInvalidators_SameActiveToken_ExactlyOneWinner_AtTheDatabase()
     {
         var store = NewStore();
