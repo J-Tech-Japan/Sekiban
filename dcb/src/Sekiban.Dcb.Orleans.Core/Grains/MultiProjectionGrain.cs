@@ -1082,6 +1082,41 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Block queries in THIS activation before touching any durable state.
         _firstQueryGate.Arm();
 
+        // SEK-G20: capture the FULL offending-event context (id + position) behind the rebuild signal BEFORE the host is
+        // recreated (which clears it). It is written into the durable marker, and — on a non-capable store — into the G14
+        // fault descriptor for the fail-closed fallback.
+        var offendingEventId = (_host as IRebuildSignalingHost)?.RebuildOffendingEventId;
+        var offendingPosition = (_host as IRebuildSignalingHost)?.RebuildOffendingPosition;
+
+        // SEK-G20 FAIL-CLOSED FALLBACK: a retrograde rebuild against an EXTERNAL store that does NOT support the
+        // generation/tombstone CAS cannot be made cross-cluster safe (a peer's unconditional write could re-contaminate).
+        // Rather than silently rebuild (the G18 single-cluster behavior, unsafe when the store is shared), enter the G14
+        // persisted-fault path with FULL context so the projection fails closed and an operator reset is required.
+        if (_multiProjectionStateStore is not null && _checkpointCas is null)
+        {
+            var fault = new ProjectionFaultDescriptor(
+                EventId: Guid.TryParse(offendingEventId, out var oid) ? oid : Guid.Empty,
+                EventType: string.Empty,
+                ProjectorName: GetProjectorName(),
+                Position: offendingPosition ?? string.Empty,
+                Message: "SEK-G20: a retrograde full rebuild is required but the checkpoint store does not support the "
+                    + "generation/tombstone CAS capability; failing closed (operator reset required) rather than risk a "
+                    + "cross-cluster stale re-contamination.",
+                FaultedAtUtc: DateTime.UtcNow.Ticks);
+            _projectionFault = fault;
+            try
+            {
+                await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.FaultDescriptor, s => WriteFaultIntoState(s, fault));
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"Projection non-capable-store rebuild fault persist failed: {ex.Message}";
+            }
+            PinFaultedActivation();
+            _firstQueryGate.Arm();
+            return;
+        }
+
         // (1) FAIL-FIRST durable marker: commit RebuildRequired=true to grain state BEFORE the external snapshot is
         //     touched. A process/silo loss AFTER this commit is safe — a fresh activation observes the marker (checked
         //     before restore) and forces a full ordered replay even though the external snapshot is still intact. If the
@@ -1093,7 +1128,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             markerOutcome = await _stateStore.ExecuteWriteAsync(
                 GrainStateWriteKind.MetadataMaintenance,
-                s => s.RebuildRequired = true);
+                s =>
+                {
+                    s.RebuildRequired = true;
+                    s.RebuildOffendingEventId = offendingEventId;
+                    s.RebuildOffendingPosition = offendingPosition;
+                });
         }
         catch (Exception ex)
         {
@@ -1383,6 +1423,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     // SEK-G18 #6: the rebuilt checkpoint is now durably committed to the external store, so the durable
                     // rebuild marker can be cleared — a subsequent activation may safely restore this fresh checkpoint.
                     s.RebuildRequired = false;
+                    s.RebuildOffendingEventId = null;
+                    s.RebuildOffendingPosition = null;
                 }
 
                 // Clear legacy fields

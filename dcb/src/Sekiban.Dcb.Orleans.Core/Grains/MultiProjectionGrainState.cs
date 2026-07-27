@@ -111,6 +111,14 @@ public class MultiProjectionGrainState : IReadOnlyMultiProjectionGrainState
     [Id(18)]
     internal bool RebuildRequired { get; set; }
 
+    // SEK-G20: the offending event identity behind the rebuild marker (additive internal [Id 19/20]; old state
+    // deserializes to null). Carries FULL context (id + position) so a rebuild/fault names the poison, not just a boolean.
+    [Id(19)]
+    internal string? RebuildOffendingEventId { get; set; }
+
+    [Id(20)]
+    internal string? RebuildOffendingPosition { get; set; }
+
     /// <summary>
     ///     A complete copy of every field. All fields are value types or immutable strings, so a member-wise copy is a
     ///     deep clone. Used for copy-on-write: a write mutates a clone and publishes it only after a successful commit.
@@ -136,6 +144,8 @@ public class MultiProjectionGrainState : IReadOnlyMultiProjectionGrainState
             FaultPosition = FaultPosition,
             FaultMessage = FaultMessage,
             FaultedAtUtcTicks = FaultedAtUtcTicks,
-            RebuildRequired = RebuildRequired
+            RebuildRequired = RebuildRequired,
+            RebuildOffendingEventId = RebuildOffendingEventId,
+            RebuildOffendingPosition = RebuildOffendingPosition
         };
 }

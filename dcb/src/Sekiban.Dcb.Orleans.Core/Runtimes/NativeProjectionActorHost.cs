@@ -16,6 +16,10 @@ namespace Sekiban.Dcb.Runtime.Native;
 internal interface IRebuildSignalingHost
 {
     bool RebuildRequired { get; }
+
+    /// <summary>SEK-G20: the offending event id + position behind <see cref="RebuildRequired" /> (null if none).</summary>
+    string? RebuildOffendingEventId { get; }
+    string? RebuildOffendingPosition { get; }
 }
 
 /// <summary>
@@ -178,6 +182,8 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
 
     // SEK-G18 internal seam — not on the public IProjectionActorHost surface.
     bool IRebuildSignalingHost.RebuildRequired => _actor.RebuildRequired;
+    string? IRebuildSignalingHost.RebuildOffendingEventId => _actor.RebuildOffendingEventId;
+    string? IRebuildSignalingHost.RebuildOffendingPosition => _actor.RebuildOffendingPosition;
 
     public void ForcePromoteAllBufferedEvents()
     {
