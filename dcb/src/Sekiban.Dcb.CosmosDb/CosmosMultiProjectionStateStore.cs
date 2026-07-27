@@ -555,7 +555,9 @@ public class CosmosMultiProjectionStateStore :
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
             if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await ResolveWriteInDoubtAsync(payload, expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, ex);
+            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+                ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
+                expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
         }
     }
 
@@ -576,28 +578,6 @@ public class CosmosMultiProjectionStateStore :
         }
         return false;
     }
-
-    // Resolves a write whose response was lost: a bounded re-read that verifies our exact resulting generation + Active
-    // lifecycle + payload identity reports Committed; otherwise typed retryable InDoubt (a retry uses the same exact
-    // token, so it is idempotent). Never a false Committed — a concurrent winner with a different payload fails identity.
-    private Task<CheckpointCasOutcome> ResolveWriteInDoubtAsync(
-        MultiProjectionStateWriteRequest payload, long resultingGeneration, Exception cause) =>
-        CheckpointInDoubtResolver.ResolveAsync(
-            ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-            CheckpointInDoubtResolver.CommittedActiveByPayload(resultingGeneration, payload.LastSortableUniqueId, payload.EventsProcessed),
-            maxAttempts: 3,
-            cause: cause);
-
-    // Resolves a tombstone (invalidate) write whose response was lost. The resulting generation (g+1) is deterministic and
-    // only an invalidate from the exact Active token we observed can produce Tombstoned at it, so a re-read that shows it
-    // confirms our intended transition is durable. The _etag is opaque, so identity is by generation alone (revision -1).
-    private Task<CheckpointCasOutcome> ResolveInvalidateInDoubtAsync(
-        string projectorName, string projectorVersion, long resultingGeneration, Exception cause) =>
-        CheckpointInDoubtResolver.ResolveAsync(
-            ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
-            CheckpointInDoubtResolver.CommittedTombstoneByExact(resultingGeneration, -1),
-            maxAttempts: 3,
-            cause: cause);
 
     public async Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(
         string projectorName,
@@ -640,7 +620,8 @@ public class CosmosMultiProjectionStateStore :
             // SEK-G20: a lost response on the tombstone Replace is UNKNOWN-commit — deterministic pre-commit is
             // ProviderFailure, otherwise resolve by a bounded independent re-read (Tombstoned at g+1 => our own commit).
             if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await ResolveInvalidateInDoubtAsync(projectorName, projectorVersion, expectation.ExpectedGeneration + 1, ex);
+            return await CheckpointInDoubtResolver.ResolveTombstoneWriteAsync(
+                ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct), expectation.ExpectedGeneration + 1, -1, ex);
         }
     }
 
@@ -673,7 +654,9 @@ public class CosmosMultiProjectionStateStore :
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
             if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await ResolveWriteInDoubtAsync(payload, expectation.ExpectedGeneration, ex);
+            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+                ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
+                expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
         }
     }
 

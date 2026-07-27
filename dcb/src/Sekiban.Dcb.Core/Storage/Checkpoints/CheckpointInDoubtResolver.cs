@@ -93,4 +93,24 @@ public static class CheckpointInDoubtResolver
     public static Func<CheckpointSlot, bool> CommittedTombstoneByExact(long resultingGeneration, long resultingRevision) =>
         slot => slot.IsTombstoned && slot.Generation == resultingGeneration
             && (resultingRevision < 0 || string.Equals(slot.Revision, resultingRevision.ToString(), StringComparison.Ordinal));
+
+    /// <summary>
+    ///     Provider-shared resolution of a normal-persist / rebuilt-commit whose response was lost: a bounded re-read (via
+    ///     the provider's <paramref name="reread" />) that confirms our exact resulting generation + Active + payload
+    ///     identity reports Committed, else typed retryable InDoubt. Keeps the resolution shape in one place across stores.
+    /// </summary>
+    public static Task<CheckpointCasOutcome> ResolveActiveWriteAsync(
+        Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
+        long resultingGeneration, string lastSortableUniqueId, long eventsProcessed, Exception cause) =>
+        ResolveAsync(reread, CommittedActiveByPayload(resultingGeneration, lastSortableUniqueId, eventsProcessed), 3, cause);
+
+    /// <summary>
+    ///     Provider-shared resolution of an invalidate (tombstone) whose response was lost: a bounded re-read that confirms
+    ///     Tombstoned at the resulting (generation, revision) reports Committed, else typed retryable InDoubt. Pass a
+    ///     negative <paramref name="resultingRevision" /> for stores with an opaque token (match on generation alone).
+    /// </summary>
+    public static Task<CheckpointCasOutcome> ResolveTombstoneWriteAsync(
+        Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
+        long resultingGeneration, long resultingRevision, Exception cause) =>
+        ResolveAsync(reread, CommittedTombstoneByExact(resultingGeneration, resultingRevision), 3, cause);
 }

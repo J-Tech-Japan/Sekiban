@@ -466,7 +466,9 @@ public class PostgresMultiProjectionStateStore :
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
             if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await ResolveWriteInDoubtAsync(payload, expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, ex);
+            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+                ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
+                expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
         }
     }
 
@@ -506,8 +508,9 @@ public class PostgresMultiProjectionStateStore :
             // failure is ProviderFailure, but any other failure crossed a commit-capable boundary and MUST be resolved by
             // a bounded independent re-read (Tombstoned at g+1 => our own commit; unconfirmable => typed retryable InDoubt).
             if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await ResolveInvalidateInDoubtAsync(
-                projectorName, projectorVersion, expectation.ExpectedGeneration + 1, expectedRevision + 1, ex);
+            return await CheckpointInDoubtResolver.ResolveTombstoneWriteAsync(
+                ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
+                expectation.ExpectedGeneration + 1, expectedRevision + 1, ex);
         }
     }
 
@@ -567,29 +570,9 @@ public class PostgresMultiProjectionStateStore :
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
             if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await ResolveWriteInDoubtAsync(payload, expectation.ExpectedGeneration, ex);
+            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+                ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
+                expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
         }
     }
-
-    // Resolves a write whose response was lost: a bounded re-read that verifies our exact resulting generation + Active
-    // lifecycle + payload identity reports Committed; otherwise typed retryable InDoubt (retry with the same exact token
-    // is idempotent). Never a false Committed — a concurrent winner with a different payload fails identity.
-    private Task<CheckpointCasOutcome> ResolveWriteInDoubtAsync(
-        MultiProjectionStateWriteRequest payload, long resultingGeneration, Exception cause) =>
-        CheckpointInDoubtResolver.ResolveAsync(
-            ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-            CheckpointInDoubtResolver.CommittedActiveByPayload(resultingGeneration, payload.LastSortableUniqueId, payload.EventsProcessed),
-            maxAttempts: 3,
-            cause: cause);
-
-    // Resolves a tombstone (invalidate) write whose response was lost. Only an invalidate from the exact Active token we
-    // observed can produce Tombstoned at the resulting (generation, revision), so a re-read that shows it confirms our own
-    // commit; an unconfirmable re-read is typed retryable InDoubt.
-    private Task<CheckpointCasOutcome> ResolveInvalidateInDoubtAsync(
-        string projectorName, string projectorVersion, long resultingGeneration, long resultingRevision, Exception cause) =>
-        CheckpointInDoubtResolver.ResolveAsync(
-            ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
-            CheckpointInDoubtResolver.CommittedTombstoneByExact(resultingGeneration, resultingRevision),
-            maxAttempts: 3,
-            cause: cause);
 }
