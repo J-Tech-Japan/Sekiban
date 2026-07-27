@@ -73,4 +73,24 @@ public static class CheckpointInDoubtResolver
             && slot.Record is { } record
             && string.Equals(record.LastSortableUniqueId, lastSortableUniqueId, StringComparison.Ordinal)
             && record.EventsProcessed == eventsProcessed;
+
+    /// <summary>
+    ///     Confirms a normal-persist / rebuilt-commit whose response was lost: the row is Active at the resulting
+    ///     generation AND carries our exact payload identity (position + processed count). Shared by every provider's
+    ///     write-in-doubt resolution so the identity rule lives in one place.
+    /// </summary>
+    public static Func<CheckpointSlot, bool> CommittedActiveByPayload(
+        long resultingGeneration, string lastSortableUniqueId, long eventsProcessed) =>
+        slot => slot.IsActive && slot.Generation == resultingGeneration && slot.Record is { } r
+            && string.Equals(r.LastSortableUniqueId, lastSortableUniqueId, StringComparison.Ordinal)
+            && r.EventsProcessed == eventsProcessed;
+
+    /// <summary>
+    ///     Confirms an invalidate (tombstone) whose response was lost by its resulting (generation, revision) — only an
+    ///     invalidate from the exact Active token we observed can produce it. For stores with an opaque per-mutation token
+    ///     (e.g. an ETag), pass <paramref name="resultingRevision" /> as a negative value to match on generation alone.
+    /// </summary>
+    public static Func<CheckpointSlot, bool> CommittedTombstoneByExact(long resultingGeneration, long resultingRevision) =>
+        slot => slot.IsTombstoned && slot.Generation == resultingGeneration
+            && (resultingRevision < 0 || string.Equals(slot.Revision, resultingRevision.ToString(), StringComparison.Ordinal));
 }

@@ -748,9 +748,7 @@ public class DynamoMultiProjectionStateStore :
         MultiProjectionStateWriteRequest payload, long resultingGeneration, Exception cause) =>
         CheckpointInDoubtResolver.ResolveAsync(
             ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-            slot => slot.IsActive && slot.Generation == resultingGeneration && slot.Record is { } r
-                && string.Equals(r.LastSortableUniqueId, payload.LastSortableUniqueId, StringComparison.Ordinal)
-                && r.EventsProcessed == payload.EventsProcessed,
+            CheckpointInDoubtResolver.CommittedActiveByPayload(resultingGeneration, payload.LastSortableUniqueId, payload.EventsProcessed),
             maxAttempts: 3,
             cause: cause);
 
@@ -761,8 +759,7 @@ public class DynamoMultiProjectionStateStore :
         string projectorName, string projectorVersion, long resultingGeneration, long resultingRevision, Exception cause) =>
         CheckpointInDoubtResolver.ResolveAsync(
             ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
-            slot => slot.IsTombstoned && slot.Generation == resultingGeneration
-                && string.Equals(slot.Revision, resultingRevision.ToString(), StringComparison.Ordinal),
+            CheckpointInDoubtResolver.CommittedTombstoneByExact(resultingGeneration, resultingRevision),
             maxAttempts: 3,
             cause: cause);
 }

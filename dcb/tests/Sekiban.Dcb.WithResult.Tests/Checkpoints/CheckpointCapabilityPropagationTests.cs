@@ -93,86 +93,38 @@ public class CheckpointCapabilityPropagationTests
     }
 
     // A composite that honestly intersects the capability of its underlying stores (the discipline any real composite
-    // MUST follow). Reads/writes delegate to the primary; capability is the intersection.
-    private sealed class HonestCompositeStore : IMultiProjectionStateStore, IGenerationAwareCheckpointStore
+    // MUST follow). Reads/writes delegate to the primary (capable inner); capability is the intersection.
+    private sealed class HonestCompositeStore : DelegatingCheckpointStore
     {
-        private readonly InMemoryMultiProjectionStateStore _primary;
         private readonly IReadOnlyList<object> _underlying;
-
-        public HonestCompositeStore(InMemoryMultiProjectionStateStore capableInner, NonCapableStore? nonCapableInner)
-        {
-            _primary = capableInner;
+        public HonestCompositeStore(InMemoryMultiProjectionStateStore capableInner, NonCapableStore? nonCapableInner) : base(capableInner) =>
             _underlying = nonCapableInner is null ? new object[] { capableInner } : new object[] { capableInner, nonCapableInner };
-        }
-
-        public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
+        public override CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
             CheckpointStoreCapabilityDescriptor.Intersect("Composite",
                 _underlying.Select(u => CheckpointCapabilityResolver.Describe(u, "inner")).ToList());
-
-        public Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default) => _primary.ReadCheckpointSlotAsync(p, v, ct);
-        public Task<CheckpointCasOutcome> ConditionalUpsertAsync(MultiProjectionStateWriteRequest r, Stream s, CheckpointExpectation e, int o, CancellationToken ct = default) => _primary.ConditionalUpsertAsync(r, s, e, o, ct);
-        public Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(string p, string v, CheckpointExpectation e, CancellationToken ct = default) => _primary.InvalidateWithTombstoneAsync(p, v, e, ct);
-        public Task<CheckpointCasOutcome> CommitRebuiltAsync(MultiProjectionStateWriteRequest r, Stream s, CheckpointExpectation e, int o, CancellationToken ct = default) => _primary.CommitRebuiltAsync(r, s, e, o, ct);
-
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) => _primary.GetLatestForVersionAsync(p, v, ct);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _primary.GetLatestAnyVersionAsync(p, ct);
-        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord r, int o = 1_000_000, CancellationToken ct = default) => _primary.UpsertAsync(r, o, ct);
-        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken ct = default) => _primary.ListAllAsync(ct);
-        public Task<ResultBox<bool>> DeleteAsync(string p, string v, CancellationToken ct = default) => _primary.DeleteAsync(p, v, ct);
-        public Task<ResultBox<int>> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _primary.DeleteAllAsync(p, ct);
-        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _primary.OpenStateDataReadStreamAsync(r, ct);
-        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest r, Stream s, int o, CancellationToken ct = default) => _primary.UpsertFromStreamAsync(r, s, o, ct);
     }
 
     // Deception A: DESCRIBES itself as CAS-capable but does NOT implement IGenerationAwareCheckpointStore. The lie must not
     // grant capability — the resolver requires the actual API on the live instance.
-    private sealed class LyingDescriptorNoInterfaceStore : IMultiProjectionStateStore, ICheckpointStoreCapabilityProvider
+    private sealed class LyingDescriptorNoInterfaceStore : DelegatingMultiProjectionStateStore, ICheckpointStoreCapabilityProvider
     {
-        private readonly InMemoryMultiProjectionStateStore _inner = new();
+        public LyingDescriptorNoInterfaceStore() : base(new InMemoryMultiProjectionStateStore()) { }
         public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
             CheckpointStoreCapabilityDescriptor.Supporting("Lying", CheckpointCapabilityKind.GenerationTombstoneCas);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) => _inner.GetLatestForVersionAsync(p, v, ct);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(p, ct);
-        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord r, int o = 1_000_000, CancellationToken ct = default) => _inner.UpsertAsync(r, o, ct);
-        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
-        public Task<ResultBox<bool>> DeleteAsync(string p, string v, CancellationToken ct = default) => _inner.DeleteAsync(p, v, ct);
-        public Task<ResultBox<int>> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _inner.DeleteAllAsync(p, ct);
-        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _inner.OpenStateDataReadStreamAsync(r, ct);
-        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest r, Stream s, int o, CancellationToken ct = default) => _inner.UpsertFromStreamAsync(r, s, o, ct);
     }
 
     // Deception B: IMPLEMENTS the CAS interface but its descriptor disclaims the capability (None). Capability must not be
     // granted — the two signals must AGREE positively; disagreement fails closed.
-    private sealed class CasInterfaceButDisclaimingDescriptorStore : IMultiProjectionStateStore, IGenerationAwareCheckpointStore
+    private sealed class CasInterfaceButDisclaimingDescriptorStore : DelegatingCheckpointStore
     {
-        private readonly InMemoryMultiProjectionStateStore _inner = new();
-        public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
+        public CasInterfaceButDisclaimingDescriptorStore() : base(new InMemoryMultiProjectionStateStore()) { }
+        public override CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
             CheckpointStoreCapabilityDescriptor.None("Disclaiming");
-        public Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default) => _inner.ReadCheckpointSlotAsync(p, v, ct);
-        public Task<CheckpointCasOutcome> ConditionalUpsertAsync(MultiProjectionStateWriteRequest r, Stream s, CheckpointExpectation e, int o, CancellationToken ct = default) => _inner.ConditionalUpsertAsync(r, s, e, o, ct);
-        public Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(string p, string v, CheckpointExpectation e, CancellationToken ct = default) => _inner.InvalidateWithTombstoneAsync(p, v, e, ct);
-        public Task<CheckpointCasOutcome> CommitRebuiltAsync(MultiProjectionStateWriteRequest r, Stream s, CheckpointExpectation e, int o, CancellationToken ct = default) => _inner.CommitRebuiltAsync(r, s, e, o, ct);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) => _inner.GetLatestForVersionAsync(p, v, ct);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(p, ct);
-        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord r, int o = 1_000_000, CancellationToken ct = default) => _inner.UpsertAsync(r, o, ct);
-        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
-        public Task<ResultBox<bool>> DeleteAsync(string p, string v, CancellationToken ct = default) => _inner.DeleteAsync(p, v, ct);
-        public Task<ResultBox<int>> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _inner.DeleteAllAsync(p, ct);
-        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _inner.OpenStateDataReadStreamAsync(r, ct);
-        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest r, Stream s, int o, CancellationToken ct = default) => _inner.UpsertFromStreamAsync(r, s, o, ct);
     }
 
     // Deliberately does NOT implement IGenerationAwareCheckpointStore.
-    private sealed class NonCapableStore : IMultiProjectionStateStore
+    private sealed class NonCapableStore : DelegatingMultiProjectionStateStore
     {
-        private readonly InMemoryMultiProjectionStateStore _inner = new();
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) => _inner.GetLatestForVersionAsync(p, v, ct);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(p, ct);
-        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord r, int o = 1_000_000, CancellationToken ct = default) => _inner.UpsertAsync(r, o, ct);
-        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
-        public Task<ResultBox<bool>> DeleteAsync(string p, string v, CancellationToken ct = default) => _inner.DeleteAsync(p, v, ct);
-        public Task<ResultBox<int>> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _inner.DeleteAllAsync(p, ct);
-        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _inner.OpenStateDataReadStreamAsync(r, ct);
-        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest r, Stream s, int o, CancellationToken ct = default) => _inner.UpsertFromStreamAsync(r, s, o, ct);
+        public NonCapableStore() : base(new InMemoryMultiProjectionStateStore()) { }
     }
 }

@@ -399,11 +399,9 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
     // the test that the real grain persist has ARRIVED at the store boundary (holding its captured expected token), then
     // blocks until the test releases it — after a peer has tombstoned+rebuilt the shared row. It delegates every method to
     // the shared store, and advertises the capability truthfully, so the grain treats it as a capable CAS store.
-    internal sealed class GatingCheckpointStore
-        : IMultiProjectionStateStore, IGenerationAwareCheckpointStore, ICheckpointStoreCapabilityProvider
+    internal sealed class GatingCheckpointStore : DelegatingCheckpointStore
     {
-        private readonly InMemoryMultiProjectionStateStore _inner;
-        public GatingCheckpointStore(InMemoryMultiProjectionStateStore inner) => _inner = inner;
+        public GatingCheckpointStore(InMemoryMultiProjectionStateStore inner) : base(inner) { }
 
         // A one-shot parking gate: Arrived completes when a matching op reaches the store boundary; the op then blocks on
         // Release until the test lets it proceed. Two independent gates so a peer's ConditionalUpsert (the stale writer) and
@@ -417,9 +415,6 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         public Gate? UpsertGate;
         public Gate? CommitRebuiltGate;
 
-        public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
-            CheckpointCapabilityResolver.Describe(_inner, "gating");
-
         private static async Task Park(Gate gate)
         {
             gate.Arrived.TrySetResult();
@@ -429,32 +424,21 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
             }
         }
 
-        public async Task<CheckpointCasOutcome> ConditionalUpsertAsync(
+        public override async Task<CheckpointCasOutcome> ConditionalUpsertAsync(
             MultiProjectionStateWriteRequest r, Stream s, CheckpointExpectation e, int o, CancellationToken ct = default)
         {
             var gate = UpsertGate;
             if (gate is not null) { UpsertGate = null; await Park(gate); }   // one-shot: only the first persist parks
-            return await _inner.ConditionalUpsertAsync(r, s, e, o, ct).ConfigureAwait(false);
+            return await base.ConditionalUpsertAsync(r, s, e, o, ct).ConfigureAwait(false);
         }
 
-        public async Task<CheckpointCasOutcome> CommitRebuiltAsync(
+        public override async Task<CheckpointCasOutcome> CommitRebuiltAsync(
             MultiProjectionStateWriteRequest r, Stream s, CheckpointExpectation e, int o, CancellationToken ct = default)
         {
             var gate = CommitRebuiltGate;
             if (gate is not null) { CommitRebuiltGate = null; await Park(gate); }
-            return await _inner.CommitRebuiltAsync(r, s, e, o, ct).ConfigureAwait(false);
+            return await base.CommitRebuiltAsync(r, s, e, o, ct).ConfigureAwait(false);
         }
-
-        public Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(string p, string v, CheckpointExpectation e, CancellationToken ct = default) => _inner.InvalidateWithTombstoneAsync(p, v, e, ct);
-        public Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default) => _inner.ReadCheckpointSlotAsync(p, v, ct);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) => _inner.GetLatestForVersionAsync(p, v, ct);
-        public Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestAnyVersionAsync(string p, CancellationToken ct = default) => _inner.GetLatestAnyVersionAsync(p, ct);
-        public Task<ResultBox<bool>> UpsertAsync(MultiProjectionStateRecord r, int o = 1_000_000, CancellationToken ct = default) => _inner.UpsertAsync(r, o, ct);
-        public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken ct = default) => _inner.ListAllAsync(ct);
-        public Task<ResultBox<bool>> DeleteAsync(string p, string v, CancellationToken ct = default) => _inner.DeleteAsync(p, v, ct);
-        public Task<ResultBox<int>> DeleteAllAsync(string? p = null, CancellationToken ct = default) => _inner.DeleteAllAsync(p, ct);
-        public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) => _inner.OpenStateDataReadStreamAsync(r, ct);
-        public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest r, Stream s, int o, CancellationToken ct = default) => _inner.UpsertFromStreamAsync(r, s, o, ct);
     }
 
     private class Configurator : ISiloConfigurator

@@ -578,21 +578,18 @@ public class PostgresMultiProjectionStateStore :
         MultiProjectionStateWriteRequest payload, long resultingGeneration, Exception cause) =>
         CheckpointInDoubtResolver.ResolveAsync(
             ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-            slot => slot.IsActive && slot.Generation == resultingGeneration && slot.Record is { } r
-                && string.Equals(r.LastSortableUniqueId, payload.LastSortableUniqueId, StringComparison.Ordinal)
-                && r.EventsProcessed == payload.EventsProcessed,
+            CheckpointInDoubtResolver.CommittedActiveByPayload(resultingGeneration, payload.LastSortableUniqueId, payload.EventsProcessed),
             maxAttempts: 3,
             cause: cause);
 
-    // Resolves a tombstone (invalidate) write whose response was lost. Our intended transition is uniquely identified by
-    // Tombstoned at the resulting (generation, revision) — only an invalidate from the exact Active token we observed can
-    // produce it, so a re-read that shows it confirms our own commit; an unconfirmable re-read is typed retryable InDoubt.
+    // Resolves a tombstone (invalidate) write whose response was lost. Only an invalidate from the exact Active token we
+    // observed can produce Tombstoned at the resulting (generation, revision), so a re-read that shows it confirms our own
+    // commit; an unconfirmable re-read is typed retryable InDoubt.
     private Task<CheckpointCasOutcome> ResolveInvalidateInDoubtAsync(
         string projectorName, string projectorVersion, long resultingGeneration, long resultingRevision, Exception cause) =>
         CheckpointInDoubtResolver.ResolveAsync(
             ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
-            slot => slot.IsTombstoned && slot.Generation == resultingGeneration
-                && string.Equals(slot.Revision, resultingRevision.ToString(), StringComparison.Ordinal),
+            CheckpointInDoubtResolver.CommittedTombstoneByExact(resultingGeneration, resultingRevision),
             maxAttempts: 3,
             cause: cause);
 }

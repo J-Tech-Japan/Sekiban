@@ -584,21 +584,18 @@ public class CosmosMultiProjectionStateStore :
         MultiProjectionStateWriteRequest payload, long resultingGeneration, Exception cause) =>
         CheckpointInDoubtResolver.ResolveAsync(
             ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-            slot => slot.IsActive && slot.Generation == resultingGeneration && slot.Record is { } r
-                && string.Equals(r.LastSortableUniqueId, payload.LastSortableUniqueId, StringComparison.Ordinal)
-                && r.EventsProcessed == payload.EventsProcessed,
+            CheckpointInDoubtResolver.CommittedActiveByPayload(resultingGeneration, payload.LastSortableUniqueId, payload.EventsProcessed),
             maxAttempts: 3,
             cause: cause);
 
     // Resolves a tombstone (invalidate) write whose response was lost. The resulting generation (g+1) is deterministic and
     // only an invalidate from the exact Active token we observed can produce Tombstoned at it, so a re-read that shows it
-    // confirms our intended transition is durable (the _etag is opaque, so identity is by generation + Tombstoned only);
-    // an unconfirmable re-read is typed retryable InDoubt.
+    // confirms our intended transition is durable. The _etag is opaque, so identity is by generation alone (revision -1).
     private Task<CheckpointCasOutcome> ResolveInvalidateInDoubtAsync(
         string projectorName, string projectorVersion, long resultingGeneration, Exception cause) =>
         CheckpointInDoubtResolver.ResolveAsync(
             ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
-            slot => slot.IsTombstoned && slot.Generation == resultingGeneration,
+            CheckpointInDoubtResolver.CommittedTombstoneByExact(resultingGeneration, -1),
             maxAttempts: 3,
             cause: cause);
 
