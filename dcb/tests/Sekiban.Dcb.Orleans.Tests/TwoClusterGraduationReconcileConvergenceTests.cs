@@ -8,6 +8,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
+using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Queries;
@@ -82,6 +83,13 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
         Assert.False(servedA.IsSafeState);
         Assert.False(servedB.IsSafeState);
 
+        // SCALAR + LIST query surfaces are SEPARATE code paths from GetStateAsync — assert them explicitly on BOTH clusters.
+        // Before graduation the reconcile already makes them return the globally-earliest value (not the arrival-order one).
+        var execA = new OrleansDcbExecutor(_clusterA.Client, SharedStores.EventStore, SharedStores.Domain);
+        var execB = new OrleansDcbExecutor(_clusterB.Client, SharedStores.EventStore, SharedStores.Domain);
+        await AssertScalarAndListAsync(execA, "earlier");
+        await AssertScalarAndListAsync(execB, "earlier");
+
         // After the window passes and both events graduate, the SAFE state converges identically on both clusters, and the
         // served state is now truthfully safe. Both must equal a from-scratch global ordered replay.
         await Task.Delay(4000);
@@ -100,6 +108,23 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
         Assert.True(servedAfterB.IsSafeState);
         Assert.Equal("earlier", ((FirstWinsProjector)servedAfterA.Payload).Winners["team-1"]);
         Assert.Equal("earlier", ((FirstWinsProjector)servedAfterB.Payload).Winners["team-1"]);
+
+        // After graduation: state + scalar + list agree on the same globally-earliest value on BOTH clusters.
+        await AssertScalarAndListAsync(execA, "earlier");
+        await AssertScalarAndListAsync(execB, "earlier");
+    }
+
+    private static async Task AssertScalarAndListAsync(ISekibanExecutor executor, string expectedWinner)
+    {
+        var scalar = await executor.QueryAsync(new WinnerQuery("team-1"));
+        Assert.True(scalar.IsSuccess, scalar.IsSuccess ? "" : scalar.GetException().ToString());
+        Assert.Equal(expectedWinner, scalar.GetValue().Value);
+
+        var list = await executor.QueryAsync(new WinnerListQuery());
+        Assert.True(list.IsSuccess, list.IsSuccess ? "" : list.GetException().ToString());
+        var rows = list.GetValue().Items.ToList();
+        var row = Assert.Single(rows, r => r.Id == "team-1");
+        Assert.Equal(expectedWinner, row.Value);
     }
 
     private static async Task<(FirstWinsProjector State, bool IsSafeState)> PollUntilAsync(
@@ -154,6 +179,33 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
 
     public record CreatedWithId(string Id, string Value) : IEventPayload;
 
+    // Scalar + list query surfaces (separate code paths from GetStateAsync) over the same projector.
+    public record WinnerResult(string Value);
+
+    public record WinnerQuery(string Id) : IMultiProjectionQuery<FirstWinsProjector, WinnerQuery, WinnerResult>
+    {
+        public static ResultBox<WinnerResult> HandleQuery(
+            FirstWinsProjector projector, WinnerQuery query, IQueryContext context) =>
+            ResultBox.FromValue(new WinnerResult(projector.Winners.TryGetValue(query.Id, out var v) ? v : string.Empty));
+    }
+
+    public record WinnerRow(string Id, string Value);
+
+    public record WinnerListQuery : IMultiProjectionListQuery<FirstWinsProjector, WinnerListQuery, WinnerRow>,
+        Sekiban.Dcb.Queries.IQueryPagingParameter
+    {
+        public int? PageNumber { get; init; }
+        public int? PageSize { get; init; }
+
+        public static ResultBox<IEnumerable<WinnerRow>> HandleFilter(
+            FirstWinsProjector projector, WinnerListQuery query, IQueryContext context) =>
+            ResultBox.FromValue(projector.Winners.Select(kv => new WinnerRow(kv.Key, kv.Value)));
+
+        public static ResultBox<IEnumerable<WinnerRow>> HandleSort(
+            IEnumerable<WinnerRow> filtered, WinnerListQuery query, IQueryContext context) =>
+            ResultBox.FromValue(filtered.OrderBy(r => r.Id, StringComparer.Ordinal).AsEnumerable());
+    }
+
     [global::Orleans.GenerateSerializer]
     public record FirstWinsProjector : IMultiProjector<FirstWinsProjector>
     {
@@ -199,9 +251,12 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
             eventTypes.RegisterEventType<CreatedWithId>("CreatedWithId");
             var multiProjectorTypes = new SimpleMultiProjectorTypes();
             multiProjectorTypes.RegisterProjector<FirstWinsProjector>();
+            var queryTypes = new SimpleQueryTypes();
+            queryTypes.RegisterQuery<WinnerQuery>();
+            queryTypes.RegisterListQuery<WinnerListQuery>();
             return new DcbDomainTypes(
                 eventTypes, new SimpleTagTypes(), new SimpleTagProjectorTypes(), new SimpleTagStatePayloadTypes(),
-                multiProjectorTypes, new SimpleQueryTypes(), new JsonSerializerOptions());
+                multiProjectorTypes, queryTypes, new JsonSerializerOptions());
         }
     }
 
