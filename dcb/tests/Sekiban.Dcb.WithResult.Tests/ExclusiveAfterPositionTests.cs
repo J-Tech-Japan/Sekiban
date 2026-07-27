@@ -15,9 +15,11 @@ namespace Sekiban.Dcb.Tests;
 ///     exclusive of that position — an event whose SortableUniqueId equals the checkpoint position is already reflected in
 ///     the restored payload and must NOT be re-read (which would double-count / re-fold). This pins the
 ///     exclusive-after-position boundary with LITERAL at-position vectors for the in-memory core store (the store the
-///     projection catch-up uses in tests) and SQLite. The Postgres / Cosmos / DynamoDB stores use the same
-///     "SortableUniqueId &gt; @since" filter (verified in each provider's ReadAllEventsAsync) and are pinned with the same
-///     boundary vector in their own Testcontainers-backed provider test projects.
+///     projection catch-up uses in tests) and SQLite. Postgres pins the same boundary vector against a REAL store in its
+///     Testcontainers-backed provider test project (PostgresExclusiveAfterPositionTests, which runs in CI). The Cosmos
+///     ("c.sortableUniqueId &gt; @since"), DynamoDB ("sortableUniqueId &gt; :since") and Hybrid (delegates to the hot/cold
+///     stores) providers use the identical strictly-greater-than filter — verified by inspection of each ReadAllEventsAsync;
+///     they have no in-repo emulator test project, so Postgres is the runnable cross-provider proof.
 /// </summary>
 public class ExclusiveAfterPositionTests
 {

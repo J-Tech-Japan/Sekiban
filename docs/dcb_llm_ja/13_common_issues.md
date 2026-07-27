@@ -328,6 +328,10 @@ DCB の Dapr 版は未提供です。`Sekiban.Pure.Dapr` は古いランタイ�
   (未再構成ペイロードに対する虚偽)。
 - チェックポイント復元時、キャッチアップ開始位置がレコードの `LastSortableUniqueId` からではなく
   再推論され、反映済みイベントを再度畳み込んだ(#1086)。
+- 永続化される `EventsProcessed` が served の総数(safe + まだ unsafe)だったのに対し、レコードの位置は
+  safe 位置。復元時にこの総数をカウンタの初期値とし、safe 位置からの排他的キャッチアップが
+  まだ unsafe のイベントを再加算して**二重計上**していた。さらにクラスタ間の staleness ガードが
+  safe 同士ではなく total 同士を比較していた(#1086 / #2)。
 
 **対処**(フレームワーク SEK-G18 — アップグレード以外の対応は不要):
 - served 状態は昇格のたびに `safe + 順序付き残バッファ` として再導出されます。`IsSafeState=true` は
@@ -335,6 +339,13 @@ DCB の Dapr 版は未提供です。`Sekiban.Pure.Dapr` は古いランタイ�
   権威ストアからの完全な順序付き再構築を発動し、クエリは再構築バリアを待つか fail-closed します
   (古い値で success は返しません)。
 - 復元後のキャッチアップはレコードの `LastSortableUniqueId` を排他的に読み取って開始します。
+- 永続化される `EventsProcessed` は safe チェックポイントのカウント(永続化した safe 位置で safe 状態に
+  反映済みのイベント数)となり、その位置と対で保存されます。よって復元 + 排他的キャッチアップは
+  まだ unsafe のイベントをちょうど一度だけ再加算し(二重計上なし)、クラスタ間の staleness ガードは
+  safe 同士で比較します。旧来の総数で書かれたレガシーレコードは自身の safe カウント以上なので、比較は
+  最悪でも保守的にスキップ寄りになるだけで、stale 上書きは起きません。(排他的な after-position 境界は
+  CI 上の実 Postgres ストアで固定。in-memory + SQLite はコアテストで固定。Cosmos/DynamoDB/Hybrid は
+  同一の `> since` フィルタを共有します。)
 - アプリのプロジェクタは create アームを真の first-event-wins(`if (state.Contains(id)) return state;`)
   で実装し、グローバルに最も早いイベントが権威となるようにしてください。
 

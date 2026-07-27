@@ -356,6 +356,11 @@ events, the persisted checkpoint's position/`EventsProcessed` changes.
   unreconciled payload).
 - On checkpoint restore, catch-up start was re-inferred rather than taken from the record's
   `LastSortableUniqueId`, re-folding an already-reflected event (#1086).
+- The persisted `EventsProcessed` was the TOTAL served count (safe + still-unsafe), but the
+  record's position is the SAFE position. On restore the total seeded the counter and the
+  exclusive catch-up from the safe position re-added the still-unsafe events, DOUBLE-COUNTING
+  them; the cross-cluster staleness guard then compared total-vs-total instead of
+  safe-vs-safe (#1086 / #2).
 
 **Fixes** (framework, SEK-G18 — no action required beyond upgrading):
 - The served state is now re-derived at every graduation as `safe + ordered remaining buffer`;
@@ -363,6 +368,14 @@ events, the persisted checkpoint's position/`EventsProcessed` changes.
   compacted baseline trigger a full ordered rebuild from the authoritative store; queries await
   the rebuild barrier or fail closed (never a stale success).
 - Catch-up after restore starts exclusive of the record's `LastSortableUniqueId`.
+- The persisted `EventsProcessed` is now the SAFE-checkpoint count (the events reflected in the
+  safe state at the persisted safe position), paired with that position, so restore + exclusive
+  catch-up re-adds the still-unsafe events exactly once (no double count) and the cross-cluster
+  staleness guard compares safe-vs-safe. A legacy record written with the old total count is
+  `>=` its safe count, so the comparison is at worst conservatively skip-biased, never a stale
+  overwrite. (The exclusive-after-position boundary is pinned against the real Postgres store in
+  CI, with in-memory + SQLite pins in the core tests; Cosmos/DynamoDB/Hybrid share the identical
+  `> since` filter.)
 - Application projectors should still implement create arms as true first-event-wins
   (`if (state.Contains(id)) return state;`) so the globally-earliest event is authoritative.
 
