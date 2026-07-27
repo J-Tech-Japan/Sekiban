@@ -499,6 +499,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 new InvalidOperationException("Projection host not initialized"));
         }
 
+        var rebuildBlock = await ResolveRebuildBeforeQueryAsync();
+        if (rebuildBlock is not null)
+        {
+            return ResultBox.Error<MultiProjectionState>(rebuildBlock); // SEK-G18 #6 fail-closed while rebuild pending
+        }
+
         try
         {
             await EnsureFirstQuerySyncCatchUpAsync();
@@ -932,6 +938,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 new InvalidOperationException("Projection host not initialized"));
         }
 
+        var rebuildBlock = await ResolveRebuildBeforeQueryAsync();
+        if (rebuildBlock is not null)
+        {
+            return ResultBox.Error<string>(rebuildBlock); // SEK-G18 #6 fail-closed while rebuild pending
+        }
+
         try
         {
             await EnsureFirstQuerySyncCatchUpAsync();
@@ -1061,6 +1073,32 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         //     full ordered history from the authoritative store before it can answer. The durable marker is cleared only
         //     after the rebuilt checkpoint is durably committed (in the persist path).
         RecreateHostForFullRebuild();
+    }
+
+    // SEK-G18 #6: called at the start of EVERY state/scalar/list query, before the first-query barrier. If the live host is
+    // signalling RebuildRequired, drive the durable transition. On marker-commit success the host is recreated (live
+    // RebuildRequired cleared) and this returns null so the query proceeds into the barrier's full ordered replay. While
+    // the marker store write keeps failing, the live host retains RebuildRequired and this returns a fail-closed error so
+    // the query NEVER serves the stale pre-rebuild payload — the activation stays pinned (no discard/deactivation) and the
+    // external snapshot is untouched, and the next query retries. (option (c): a marker-commit failure plus a simultaneous
+    // hard crash is the documented known residual.)
+    private async Task<Exception?> ResolveRebuildBeforeQueryAsync()
+    {
+        if (_host is not IRebuildSignalingHost { RebuildRequired: true })
+        {
+            return null;
+        }
+
+        await TriggerDurableFullRebuildAsync();
+
+        if (_host is IRebuildSignalingHost { RebuildRequired: true })
+        {
+            return new InvalidOperationException(
+                "Projection rebuild is pending: the durable rebuild marker is not yet committed, so the query fails "
+                + "closed rather than serve a stale pre-rebuild result.");
+        }
+
+        return null;
     }
 
     public async Task<MultiProjectionGrainStatus> GetStatusAsync()
@@ -1642,6 +1680,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
+            var rebuildBlock = await ResolveRebuildBeforeQueryAsync();
+            if (rebuildBlock is not null)
+            {
+                throw rebuildBlock; // SEK-G18 #6 fail-closed while rebuild pending
+            }
+
             await EnsureFirstQuerySyncCatchUpAsync();
 
             var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
@@ -1696,6 +1740,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
+            var rebuildBlock = await ResolveRebuildBeforeQueryAsync();
+            if (rebuildBlock is not null)
+            {
+                throw rebuildBlock; // SEK-G18 #6 fail-closed while rebuild pending
+            }
+
             await EnsureFirstQuerySyncCatchUpAsync();
 
             var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
