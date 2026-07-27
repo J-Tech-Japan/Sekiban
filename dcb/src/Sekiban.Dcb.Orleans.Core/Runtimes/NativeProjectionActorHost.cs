@@ -10,12 +10,21 @@ using Sekiban.Dcb.Snapshots;
 namespace Sekiban.Dcb.Runtime.Native;
 
 /// <summary>
+///     SEK-G18 INTERNAL seam: surfaces the actor's out-of-global-order rebuild signal to the grain without adding a member
+///     to the public <see cref="IProjectionActorHost" /> surface.
+/// </summary>
+internal interface IRebuildSignalingHost
+{
+    bool RebuildRequired { get; }
+}
+
+/// <summary>
 ///     Native C# implementation of IProjectionActorHost.
 ///     Uses NativeMultiProjectionProjectionPrimitive to create the underlying actor via the
 ///     primitive/accumulator abstraction.
 ///     Query execution and snapshot handling are delegated to focused helper classes.
 /// </summary>
-public class NativeProjectionActorHost : IProjectionActorHost
+public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignalingHost
 {
     private readonly DcbDomainTypes _domainTypes;
     private readonly GeneralMultiProjectionActor _actor;
@@ -166,6 +175,9 @@ public class NativeProjectionActorHost : IProjectionActorHost
     {
         _actor.CompactSafeHistory();
     }
+
+    // SEK-G18 internal seam — not on the public IProjectionActorHost surface.
+    bool IRebuildSignalingHost.RebuildRequired => _actor.RebuildRequired;
 
     public void ForcePromoteAllBufferedEvents()
     {

@@ -60,6 +60,11 @@
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>Sekiban.Dcb.DynamoDB</_Parameter1>
         </AssemblyAttribute>
+        <!-- SEK-G18: the Orleans host reads the internal rebuild-required signal (GeneralMultiProjectionActor.RebuildRequired)
+             without any public API addition. -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>Sekiban.Dcb.Orleans.Core</_Parameter1>
+        </AssemblyAttribute>
     </ItemGroup>
 
 </Project>

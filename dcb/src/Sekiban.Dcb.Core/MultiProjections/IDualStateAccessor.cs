@@ -37,3 +37,25 @@ public interface IDualStateAccessor
     /// </summary>
     void CompactSafeHistory();
 }
+
+/// <summary>
+///     SEK-G18 INTERNAL seam (no public API change): the dual-state wrapper surfaces the reconcile fact and the
+///     out-of-global-order integrity signal to the in-repo actor without adding members to the public
+///     <see cref="IDualStateAccessor" /> (which external code implements). External <see cref="IDualStateAccessor" />
+///     implementors do not implement this seam, so the actor falls back safely when the cast misses.
+/// </summary>
+internal interface IDualStateRebuildSignals
+{
+    /// <summary>
+    ///     True when the served (unsafe) state was published identical to the safe state — no events remain buffered and no
+    ///     rebuild is pending. The actor derives a TRUTHFUL <c>IsSafeState</c> from this fact, not a timestamp comparison.
+    /// </summary>
+    bool IsServedIdenticalToSafe { get; }
+
+    /// <summary>
+    ///     Set when an incremental safe promotion / already-under-threshold arrival was observed OUT of global
+    ///     SortableUniqueId order versus the held safe head — which the incremental path cannot reorder. The mandated remedy
+    ///     is a full ordered rebuild from the authoritative event store; the wrapper never folds it out of order.
+    /// </summary>
+    bool RebuildRequired { get; }
+}

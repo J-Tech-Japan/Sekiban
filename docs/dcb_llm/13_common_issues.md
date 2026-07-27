@@ -341,3 +341,67 @@ null-reference 500 on a request that looks structurally off.
   and a malformed shape with `MalformedSerializedCommitException` — before any side effect, instead of a null-reference 500.
 - A downstream adapter that collapses per-event tags into per-commit tags may do so ONLY when every event in the commit
   shares an identical tag set, and must reject the rest explicitly.
+
+## Multi-Projection Cross-Instance Divergence / Checkpoint Drift (SEK-G18)
+
+**Symptoms**: In a scale-out topology (2+ instances over one shared event store), two
+instances answer the SAME query with DIFFERENT values for a racing-create entity and never
+converge, yet report `IsSafeState=true`. Or, across an independent-host restart with zero new
+events, the persisted checkpoint's position/`EventsProcessed` changes.
+
+**Causes**:
+- The served (unsafe) multi-projection state used to fold events in ARRIVAL order and was
+  never reconciled against the globally-ordered safe state (#1092), so first-arrival won
+  permanently and `IsSafeState` was attached from a timestamp comparison (a lie for an
+  unreconciled payload).
+- On checkpoint restore, catch-up start was re-inferred rather than taken from the record's
+  `LastSortableUniqueId`, re-folding an already-reflected event (#1086).
+- The persisted `EventsProcessed` was the TOTAL served count (safe + still-unsafe), but the
+  record's position is the SAFE position. On restore the total seeded the counter and the
+  exclusive catch-up from the safe position re-added the still-unsafe events, DOUBLE-COUNTING
+  them; the cross-cluster staleness guard then compared total-vs-total instead of
+  safe-vs-safe (#1086 / #2).
+
+**Fixes** (framework, SEK-G18 — no action required beyond upgrading):
+- The served state is now re-derived at every graduation as `safe + ordered remaining buffer`;
+  `IsSafeState=true` means served-identical-to-safe. Out-of-global-order safe promotions on a
+  compacted baseline trigger a full ordered rebuild from the authoritative store; queries await
+  the rebuild barrier or fail closed (never a stale success).
+- Catch-up after restore starts exclusive of the record's `LastSortableUniqueId`.
+- The persisted `EventsProcessed` is now the SAFE-checkpoint count (the events reflected in the
+  safe state at the persisted safe position), paired with that position, so restore + exclusive
+  catch-up re-adds the still-unsafe events exactly once (no double count) and the cross-cluster
+  staleness guard compares safe-vs-safe. A legacy record written with the old total count is
+  `>=` its safe count, so the comparison is at worst conservatively skip-biased, never a stale
+  overwrite. (The exclusive-after-position boundary is pinned with EXECUTABLE vectors for every
+  provider path — in-memory + SQLite in the core tests, real Postgres in CI Testcontainers, and
+  Cosmos, DynamoDB and Hybrid each driving the real store's production read construction through a
+  faithful seam that fails if `> since` regresses to `>= since`.)
+- Application projectors should still implement create arms as true first-event-wins
+  (`if (state.Contains(id)) return state;`) so the globally-earliest event is authoritative.
+
+### Known limitation (shared-store, multiple clusters) — closed in G20
+
+The single-cluster durable rebuild above is complete. One residual remains for a specific
+**multi-cluster** topology and is tracked/closed in **G20**: when two or more *independent*
+clusters share one external checkpoint row (`dcb_multi_projection_states`, keyed by
+`serviceId/projectorName/projectorVersion`), and one cluster performs a retrograde
+full-rebuild that invalidates the shared row, a peer cluster that is still holding the old
+checkpoint can re-upsert (re-contaminate) the row — with the LATER (post-retrograde) safe
+position — before it independently observes the retrograde event and rebuilds. The rebuild
+marker is cluster-local grain storage, and the shared-row upsert currently has no cross-cluster
+concurrency guard, so the activation-local protocol cannot prevent this by itself.
+
+**Danger — this is not a transient window; it can be a PERMANENT false-safe result.** Once a
+fresh activation restores the recontaminated later-position checkpoint, the exclusive-after-position
+catch-up starts *after* that later position and therefore **permanently skips the missing earlier
+event**. The projection then reports `IsSafeState=true` over a state that omits an authoritative
+event, and it never self-heals — the earlier event is below the restored catch-up floor forever.
+So the residual is: retrograde shared-row recontamination can yield a **permanent false-safe**
+result across clusters, not merely a brief divergence that later converges.
+
+**G20** closes it with a shared-row generation bump + tombstone + expected-generation CAS-guarded
+conditional upsert across all providers. Until G20 ships, run this projection class single-cluster,
+or accept the permanent-false-safe risk under retrograde multi-cluster recontamination. (The
+normal-path two-cluster graduation reconcile — no retrograde shared-row rewrite — IS proven to
+converge in G18.)

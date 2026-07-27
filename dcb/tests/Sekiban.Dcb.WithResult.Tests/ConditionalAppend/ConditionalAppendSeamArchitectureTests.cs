@@ -187,14 +187,16 @@ public class ConditionalAppendSeamArchitectureTests
     [Fact]
     public void InternalsVisibleTo_Allowlist_IsExactlyTheIntendedAssemblies()
     {
-        // The provider assemblies grant internals only to the intended test assembly; Core grants ONLY the four provider
-        // assemblies (for the internal post-commit-response-loss signal) — never a test assembly. Postgres's own IVT is
-        // asserted in Sekiban.Dcb.Postgres.Tests (that test assembly is where the Postgres seam is reachable).
+        // The provider assemblies grant internals only to the intended test assembly; Core grants the four provider
+        // assemblies (for the internal post-commit-response-loss signal) plus Sekiban.Dcb.Orleans.Core (SEK-G18: the Orleans
+        // host reads the internal projection rebuild-required signal without any public API addition) — never a test
+        // assembly. Postgres's own IVT is asserted in Sekiban.Dcb.Postgres.Tests (where the Postgres seam is reachable).
         AssertIvtAllowlist(typeof(SqliteEventStore).Assembly, "Sekiban.Dcb.WithResult.Tests");
         AssertIvtAllowlist(typeof(CosmosDbEventStore).Assembly, "Sekiban.Dcb.WithResult.Tests");
         AssertIvtAllowlist(
             typeof(IConditionalEventStore).Assembly,
-            "Sekiban.Dcb.Postgres", "Sekiban.Dcb.Sqlite", "Sekiban.Dcb.CosmosDb", "Sekiban.Dcb.DynamoDB");
+            "Sekiban.Dcb.Postgres", "Sekiban.Dcb.Sqlite", "Sekiban.Dcb.CosmosDb", "Sekiban.Dcb.DynamoDB",
+            "Sekiban.Dcb.Orleans.Core");
     }
 
     [Theory]

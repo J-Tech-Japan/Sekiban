@@ -1,4 +1,5 @@
 using System;
+using Sekiban.Dcb.Runtime.Native;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -56,6 +57,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // persisted LastPosition), so it is kept as an ephemeral grain field rather than mutating the persisted payload
     // outside the coordinator. Seeded from the committed state on activation; surfaced by status queries.
     private string? _liveLastPosition;
+
+    // SEK-G18 (#1086): the authoritative catch-up start after a checkpoint restore is the checkpoint record's own
+    // LastSortableUniqueId — taken verbatim rather than re-inferred — so the first catch-up reads strictly AFTER the
+    // durable safe position (exclusive) and never re-folds / double-counts already-reflected events. Consumed once.
+    private SortableUniqueId? _restoredCatchUpPosition;
+
+    // SEK-G18 (#1086): the last SafeWindowThreshold persisted (seeded verbatim from the restored checkpoint record). While
+    // the safe checkpoint position is unchanged, the persist writes THIS value verbatim rather than a fresh wall-clock
+    // threshold, so a no-progress restart preserves the checkpoint's threshold exactly instead of drifting.
+    private string? _lastPersistedSafeWindowThreshold;
+
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
@@ -492,6 +504,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 new InvalidOperationException("Projection host not initialized"));
         }
 
+        var rebuildBlock = await ResolveRebuildBeforeQueryAsync();
+        if (rebuildBlock is not null)
+        {
+            return ResultBox.Error<MultiProjectionState>(rebuildBlock); // SEK-G18 #6 fail-closed while rebuild pending
+        }
+
         try
         {
             await EnsureFirstQuerySyncCatchUpAsync();
@@ -675,6 +693,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return true;
     }
 
+    // SEK-G18 (#1086): the SafeWindowThreshold value to persist. When the safe checkpoint POSITION is unchanged versus the
+    // committed checkpoint, the threshold is preserved VERBATIM (the last-persisted value, seeded from the restored record)
+    // rather than recomputed from wall-clock — so a restart that writes zero new events persists an IDENTICAL threshold.
+    // When the safe checkpoint advances, a fresh threshold is written and remembered.
+    private string ResolvePersistedSafeWindowThreshold(PersistCheckpoint checkpoint)
+    {
+        var fresh = checkpoint.SafeThresholdValue ?? _host!.PeekCurrentSafeWindowThreshold();
+        var safeUnchanged = string.Equals(
+            _stateStore.Committed.LastSortableUniqueId ?? string.Empty,
+            checkpoint.SafePosition ?? string.Empty,
+            StringComparison.Ordinal);
+        if (safeUnchanged && !string.IsNullOrEmpty(_lastPersistedSafeWindowThreshold))
+        {
+            return _lastPersistedSafeWindowThreshold;
+        }
+        _lastPersistedSafeWindowThreshold = fresh;
+        return fresh;
+    }
+
     private ResultBox<bool>? TryShortCircuitPersist(string projectorName, PersistCheckpoint checkpoint)
     {
         var lastGoodSafeVersion = _stateStore.Committed.LastGoodSafeVersion;
@@ -709,7 +746,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return ResultBox.FromValue(true);
     }
 
-    private async Task<bool> CanSaveToExternalStoreAsync(string projectorName, string projectorVersion)
+    // SEK-G18 #2: the persisted EventsProcessed is the SAFE-checkpoint count (events reflected in the safe state at
+    // SafePosition), NOT the total served count. The external record's LastSortableUniqueId is the safe position, so its
+    // EventsProcessed must be the matching safe count: on restore _eventsProcessed is seeded from it (the safe baseline)
+    // and the exclusive catch-up from the safe position re-adds the still-unsafe + new events exactly once (no double
+    // count). SafeVersion is best-effort metadata; fall back to _eventsProcessed when it is unavailable.
+    private long ResolveSafeEventsProcessed(PersistCheckpoint checkpoint) =>
+        checkpoint.SafeVersion is { } safeVersion ? safeVersion : _eventsProcessed;
+
+    private async Task<bool> CanSaveToExternalStoreAsync(
+        string projectorName,
+        string projectorVersion,
+        long localSafeEventsProcessed)
     {
         if (_multiProjectionStateStore is null)
         {
@@ -727,16 +775,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return false;
         }
 
+        // Compare SAFE count vs SAFE count: the external record's EventsProcessed is the count at its safe position, and
+        // localSafeEventsProcessed is ours. (A legacy record persisted with the old total count is >= its safe count, so
+        // the comparison is at worst conservatively skip-biased against a legacy peer — never a stale overwrite.)
         var latestOptional = latestResult.GetValue();
         if (latestOptional.HasValue &&
             latestOptional.Value is { } latestRecord &&
-            latestRecord.EventsProcessed > _eventsProcessed)
+            latestRecord.EventsProcessed > localSafeEventsProcessed)
         {
-            _lastError = $"External store has newer state ({latestRecord.EventsProcessed}) than local ({_eventsProcessed})";
+            _lastError = $"External store has newer safe state ({latestRecord.EventsProcessed}) than local ({localSafeEventsProcessed})";
             _logger.LogWarning(
-                "Skip external store save: latest EventsProcessed {LatestEvents} > local {LocalEvents} for {ProjectorName} v{ProjectorVersion}.",
+                "Skip external store save: latest safe EventsProcessed {LatestEvents} > local {LocalEvents} for {ProjectorName} v{ProjectorVersion}.",
                 latestRecord.EventsProcessed,
-                _eventsProcessed,
+                localSafeEventsProcessed,
                 projectorName,
                 projectorVersion);
             return false;
@@ -757,7 +808,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         var uploadStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
-        if (!await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion))
+        if (!await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint)))
         {
             _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
             return new StreamingExternalStorePersistResult(
@@ -770,13 +821,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             ProjectorVersion: checkpoint.ProjectorVersion,
             PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
             LastSortableUniqueId: checkpoint.SafePosition ?? string.Empty,
-            EventsProcessed: _eventsProcessed,
+            EventsProcessed: ResolveSafeEventsProcessed(checkpoint),
             IsOffloaded: false,
             OffloadKey: null,
             OffloadProvider: null,
             OriginalSizeBytes: tempFileSize,
             CompressedSizeBytes: tempFileSize,
-            SafeWindowThreshold: checkpoint.SafeThresholdValue ?? _host!.PeekCurrentSafeWindowThreshold(),
+            SafeWindowThreshold: ResolvePersistedSafeWindowThreshold(checkpoint),
             CreatedAt: _stateStore.Committed.LastPersistTime == default
                 ? DateTime.UtcNow
                 : _stateStore.Committed.LastPersistTime,
@@ -925,6 +976,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 new InvalidOperationException("Projection host not initialized"));
         }
 
+        var rebuildBlock = await ResolveRebuildBeforeQueryAsync();
+        if (rebuildBlock is not null)
+        {
+            return ResultBox.Error<string>(rebuildBlock); // SEK-G18 #6 fail-closed while rebuild pending
+        }
+
         try
         {
             await EnsureFirstQuerySyncCatchUpAsync();
@@ -975,7 +1032,111 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 _lastEventTime = DateTime.UtcNow;
             }
+
+            await RebuildProjectionIfSignaledAsync();
         }
+    }
+
+    // SEK-G18: the dual-state accessor signals RebuildRequired when a live event promoted to safe OUT of global
+    // SortableUniqueId order versus the held safe head — which the incremental (compacted-baseline) path cannot reorder.
+    // The single mandated remedy is a full ordered rebuild from the authoritative event store. NOT the G14 fault path —
+    // that is reserved for failures OF the rebuild itself.
+    private async Task RebuildProjectionIfSignaledAsync()
+    {
+        if (_host is IRebuildSignalingHost { RebuildRequired: true })
+        {
+            await TriggerDurableFullRebuildAsync();
+        }
+    }
+
+    // SEK-G18 #6: durably establish the rebuild BEFORE discarding the live host. First arm the first-query barrier so no
+    // query can serve the stale pre-rebuild payload; then, inside the single-writer gate, invalidate the derived EXTERNAL
+    // snapshot (beforeWrite) and clear the persisted grain-state checkpoint copy-on-write. Only after that durable clear
+    // commits is the live host recreated and the barrier re-armed, so the next state/scalar/list query synchronously
+    // replays the full ordered history from the authoritative store before it can answer. A process/silo loss at ANY point
+    // after the external snapshot is invalidated leaves a fresh activation with no snapshot to restore, forcing the same
+    // full replay. If the durable transition itself fails, the barrier stays armed and the live host keeps RebuildRequired,
+    // so queries remain fail-closed and the next apply/query retries — never a stale success. The authoritative store is
+    // read in SortableUniqueId order, so the from-beginning replay does not re-trip the guard; a poison event on replay
+    // establishes the G14 persisted fault via the existing per-event boundary.
+    private async Task TriggerDurableFullRebuildAsync()
+    {
+        // Block queries in THIS activation before touching any durable state.
+        _firstQueryGate.Arm();
+
+        // (1) FAIL-FIRST durable marker: commit RebuildRequired=true to grain state BEFORE the external snapshot is
+        //     touched. A process/silo loss AFTER this commit is safe — a fresh activation observes the marker (checked
+        //     before restore) and forces a full ordered replay even though the external snapshot is still intact. If the
+        //     marker commit fails, the external snapshot is NOT invalidated (nothing half-done): pin the activation so it
+        //     does not deactivate into a crash window, keep the barrier armed and the live host's RebuildRequired set, and
+        //     the next apply/query retries.
+        GrainStateWriteOutcome markerOutcome;
+        try
+        {
+            markerOutcome = await _stateStore.ExecuteWriteAsync(
+                GrainStateWriteKind.MetadataMaintenance,
+                s => s.RebuildRequired = true);
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Projection rebuild marker persist failed: {ex.Message}";
+            PinFaultedActivation();
+            _firstQueryGate.Arm();
+            return;
+        }
+
+        if (markerOutcome != GrainStateWriteOutcome.Committed)
+        {
+            _lastError = "Projection rebuild marker was not committed.";
+            PinFaultedActivation();
+            _firstQueryGate.Arm();
+            return;
+        }
+
+        // (2) Marker is durable. Invalidate the derived EXTERNAL snapshot and clear the derived checkpoint (the marker
+        //     STAYS true — a failure here still leaves a durable rebuild requirement, so a crash rebuilds correctly).
+        try
+        {
+            await InvalidateExternalDerivedSnapshotAsync();
+            await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.OperatorReset, ResetDerivedStateForFullRebuild);
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Projection rebuild external/checkpoint clear failed: {ex.Message}";
+            _firstQueryGate.Arm();
+            return; // marker durable; the barrier stays armed and a retry / fresh activation completes the rebuild.
+        }
+
+        // (3) Recreate the live host + re-arm the barrier so the next state/scalar/list query synchronously replays the
+        //     full ordered history from the authoritative store before it can answer. The durable marker is cleared only
+        //     after the rebuilt checkpoint is durably committed (in the persist path).
+        RecreateHostForFullRebuild();
+    }
+
+    // SEK-G18 #6: called at the start of EVERY state/scalar/list query, before the first-query barrier. If the live host is
+    // signalling RebuildRequired, drive the durable transition. On marker-commit success the host is recreated (live
+    // RebuildRequired cleared) and this returns null so the query proceeds into the barrier's full ordered replay. While
+    // the marker store write keeps failing, the live host retains RebuildRequired and this returns a fail-closed error so
+    // the query NEVER serves the stale pre-rebuild payload — the activation stays pinned (no discard/deactivation) and the
+    // external snapshot is untouched, and the next query retries. (option (c): a marker-commit failure plus a simultaneous
+    // hard crash is the documented known residual.)
+    private async Task<Exception?> ResolveRebuildBeforeQueryAsync()
+    {
+        if (_host is not IRebuildSignalingHost { RebuildRequired: true })
+        {
+            return null;
+        }
+
+        await TriggerDurableFullRebuildAsync();
+
+        if (_host is IRebuildSignalingHost { RebuildRequired: true })
+        {
+            return new InvalidOperationException(
+                "Projection rebuild is pending: the durable rebuild marker is not yet committed, so the query fails "
+                + "closed rather than serve a stale pre-rebuild result.");
+        }
+
+        return null;
     }
 
     public async Task<MultiProjectionGrainStatus> GetStatusAsync()
@@ -1115,7 +1276,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             var externalStoreSaved = _multiProjectionStateStore == null;
             var allowExternalStoreSave = _multiProjectionStateStore is not null &&
-                                         await CanSaveToExternalStoreAsync(projectorName, projectorVersion);
+                                         await CanSaveToExternalStoreAsync(projectorName, projectorVersion, ResolveSafeEventsProcessed(checkpoint));
 
             // v10: Save to external store (Postgres/Cosmos) if available
             if (_multiProjectionStateStore != null && allowExternalStoreSave)
@@ -1126,13 +1287,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     ProjectorVersion: projectorVersion,
                     PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
                     LastSortableUniqueId: safePosition ?? string.Empty,
-                    EventsProcessed: _eventsProcessed,
+                    EventsProcessed: ResolveSafeEventsProcessed(checkpoint),
                     IsOffloaded: false,
                     OffloadKey: null,
                     OffloadProvider: null,
                     OriginalSizeBytes: originalSizeBytes,
                     CompressedSizeBytes: compressedSizeBytes,
-                    SafeWindowThreshold: checkpoint.SafeThresholdValue ?? _host.PeekCurrentSafeWindowThreshold(),
+                    SafeWindowThreshold: ResolvePersistedSafeWindowThreshold(checkpoint),
                     CreatedAt: _stateStore.Committed.LastPersistTime == default
                         ? DateTime.UtcNow
                         : _stateStore.Committed.LastPersistTime,
@@ -1200,6 +1361,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         s.LastGoodOriginalSizeBytes = originalSizeBytes;
                     }
                     s.LastGoodEventsProcessed = _eventsProcessed;
+
+                    // SEK-G18 #6: the rebuilt checkpoint is now durably committed to the external store, so the durable
+                    // rebuild marker can be cleared — a subsequent activation may safely restore this fresh checkpoint.
+                    s.RebuildRequired = false;
                 }
 
                 // Clear legacy fields
@@ -1553,6 +1718,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
+            var rebuildBlock = await ResolveRebuildBeforeQueryAsync();
+            if (rebuildBlock is not null)
+            {
+                throw rebuildBlock; // SEK-G18 #6 fail-closed while rebuild pending
+            }
+
             await EnsureFirstQuerySyncCatchUpAsync();
 
             var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
@@ -1607,6 +1778,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
+            var rebuildBlock = await ResolveRebuildBeforeQueryAsync();
+            if (rebuildBlock is not null)
+            {
+                throw rebuildBlock; // SEK-G18 #6 fail-closed while rebuild pending
+            }
+
             await EnsureFirstQuerySyncCatchUpAsync();
 
             var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
@@ -1871,8 +2048,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var projectorVersion = _host.GetProjectorVersion();
             bool restoredFromExternalStore = false;
 
-            // Restore from external store (Postgres/Cosmos)
-            if (_multiProjectionStateStore != null)
+            // SEK-G18 #6: a durable RebuildRequired marker means the persisted/external checkpoint may be the stale
+            // pre-rebuild payload. Checked BEFORE any restore: do NOT restore it — arm the shared query barrier and force a
+            // full ordered replay from the authoritative store. The marker is cleared only after the rebuilt checkpoint is
+            // durably committed (persist path), so a fresh activation cannot serve stale success in the crash window.
+            var durableRebuildPending = _stateStore.Committed is IRebuildMarkerState { RebuildRequired: true };
+            if (durableRebuildPending)
+            {
+                _logger.LogWarning(
+                    "Durable rebuild marker set on activation: {ProjectorName} — forcing full ordered replay, skipping restore",
+                    projectorName);
+                _firstQueryGate.Arm();
+                forceFullCatchUp = true;
+            }
+
+            // Restore from external store (Postgres/Cosmos) — skipped when a durable rebuild is pending.
+            if (_multiProjectionStateStore != null && !durableRebuildPending)
             {
                 try
                 {
@@ -1947,6 +2138,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             {
                                 _eventsProcessed = record.EventsProcessed;
                                 ClearProcessedEventCache();
+
+                                // SEK-G18 (#1086): take the catch-up start verbatim from the restored checkpoint record, so
+                                // catch-up reads strictly AFTER the durable safe position (exclusive) without re-folding it.
+                                _restoredCatchUpPosition = string.IsNullOrEmpty(record.LastSortableUniqueId)
+                                    ? null
+                                    : new SortableUniqueId(record.LastSortableUniqueId);
+
+                                // SEK-G18 (#1086): seed the last-persisted SafeWindowThreshold verbatim so a no-progress
+                                // re-persist writes the SAME value instead of a fresh wall-clock threshold (no drift).
+                                _lastPersistedSafeWindowThreshold = record.SafeWindowThreshold;
 
                                 int? postSafeVersion = null;
                                 int? postUnsafeVersion = null;
@@ -2975,8 +3176,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             BeginCatchUpDeactivationDelay();
 
-            // Get current position (fast operation - reads from local state)
-            SortableUniqueId? currentPosition = forceFull ? null : await GetCurrentPositionAsync();
+            // Get current position (fast operation - reads from local state).
+            // SEK-G18 (#1086): immediately after a checkpoint restore, take the catch-up start verbatim from the restored
+            // record's LastSortableUniqueId (consumed once) rather than re-inferring it, so the read is strictly AFTER the
+            // durable safe position and already-reflected events are not re-folded / double-counted.
+            SortableUniqueId? currentPosition;
+            if (forceFull)
+            {
+                currentPosition = null;
+                _restoredCatchUpPosition = null;
+            }
+            else if (_restoredCatchUpPosition is { } restored)
+            {
+                currentPosition = restored;
+                _restoredCatchUpPosition = null;
+            }
+            else
+            {
+                currentPosition = await GetCurrentPositionAsync();
+            }
 
             // NOTE: We intentionally skip reading all events to determine target position.
             // Reading 200k+ events just to find the latest position causes activation timeout.
@@ -4093,6 +4311,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
 
                 _lastEventTime = DateTime.UtcNow;
+
+                // SEK-G18: live events can arrive out of global order; rebuild from the authoritative store if signaled.
+                if (_host is IRebuildSignalingHost { RebuildRequired: true })
+                {
+                    await TriggerDurableFullRebuildAsync();
+                    return;
+                }
             }
 
             // Update position to the maximum SortableUniqueId in the batch (monotonic)
@@ -4193,6 +4418,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             foreach (var ev in events)
             {
                 TrackProcessedEventId(ev.Id);
+            }
+
+            // SEK-G18: live events can arrive out of global order; rebuild from the authoritative store if signaled.
+            if (_host is IRebuildSignalingHost { RebuildRequired: true })
+            {
+                await TriggerDurableFullRebuildAsync();
+                return;
             }
 
             // Update position
