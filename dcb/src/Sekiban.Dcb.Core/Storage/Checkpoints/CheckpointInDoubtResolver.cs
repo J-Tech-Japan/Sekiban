@@ -27,6 +27,7 @@ public static class CheckpointInDoubtResolver
     {
         ArgumentNullException.ThrowIfNull(reread);
         ArgumentNullException.ThrowIfNull(committedByUs);
+        var anyReadSucceeded = false;
         for (var attempt = 0; attempt < Math.Max(1, maxAttempts); attempt++)
         {
             ResultBox<CheckpointSlot> read;
@@ -39,12 +40,21 @@ public static class CheckpointInDoubtResolver
             {
                 continue; // a failed verification read does not itself prove non-commit; keep within budget
             }
-            if (read.IsSuccess && committedByUs(read.GetValue()))
+            if (!read.IsSuccess)
+            {
+                continue;
+            }
+            anyReadSucceeded = true;
+            if (committedByUs(read.GetValue()))
             {
                 return CheckpointCasOutcome.Committed(read.GetValue());
             }
         }
-        return CheckpointCasOutcome.Doubt(cause);
+
+        // A read that SUCCEEDED but did not show our write is a genuine ambiguity (typed retryable InDoubt). If NO read
+        // could even complete, the store itself is failing (e.g. an unapplied schema) — that is a deterministic
+        // ProviderFailure, not an in-doubt commit, so it fails closed without implying "maybe committed".
+        return anyReadSucceeded ? CheckpointCasOutcome.Doubt(cause) : CheckpointCasOutcome.ProviderFailed(cause);
     }
 
     /// <summary>

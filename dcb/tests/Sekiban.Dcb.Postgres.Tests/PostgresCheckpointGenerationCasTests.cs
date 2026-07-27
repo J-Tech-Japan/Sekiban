@@ -163,6 +163,80 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PostCommitResponseLoss_OnCreate_ResolvesCommittedOrInDoubt_ViaBoundedReread_RealDb()
+    {
+        // Inject a lost response at the EF SaveChanges boundary on the create path against a REAL Postgres:
+        // a fault AFTER the INSERT commits -> the store's bounded re-read confirms our own commit -> Committed;
+        // a fault BEFORE the INSERT commits -> the re-read cannot confirm -> typed InDoubt (row absent).
+        string conn;
+        await using (var ctx = await _fixture.DbContextFactory.CreateDbContextAsync())
+        {
+            conn = ctx.Database.GetConnectionString()!;
+        }
+
+        var interceptor = new SaveChangesFaultInterceptor();
+        var faultFactory = new InterceptingDbContextFactory(conn, interceptor);
+        var store = new PostgresMultiProjectionStateStore(faultFactory, new FixedServiceId("svc"));
+
+        interceptor.PostCommitFault = true;
+        var committed = await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, committed.Status);
+        Assert.True((await ReadAsync(store)).IsActive);   // the row really committed despite the lost response
+
+        // Fresh row for the in-doubt case.
+        await using (var ctx = await _fixture.DbContextFactory.CreateDbContextAsync())
+        {
+            await ctx.Database.ExecuteSqlRawAsync("DELETE FROM dcb_multi_projection_states");
+        }
+        interceptor.PreCommitFault = true;
+        var indoubt = await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        Assert.Equal(CheckpointCasStatus.InDoubt, indoubt.Status);
+        Assert.NotNull(indoubt.Cause);
+        Assert.False((await ReadAsync(store)).Exists);    // the write did not commit
+    }
+
+    private sealed class InterceptingDbContextFactory : Microsoft.EntityFrameworkCore.IDbContextFactory<SekibanDcbDbContext>
+    {
+        private readonly string _conn;
+        private readonly Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor _interceptor;
+        public InterceptingDbContextFactory(string conn, Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor interceptor)
+        {
+            _conn = conn;
+            _interceptor = interceptor;
+        }
+        public SekibanDcbDbContext CreateDbContext()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<SekibanDcbDbContext>()
+                .UseNpgsql(_conn).AddInterceptors(_interceptor).Options;
+            return new SekibanDcbDbContext(options);
+        }
+    }
+
+    private sealed class SaveChangesFaultInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        public bool PreCommitFault;
+        public bool PostCommitFault;
+
+        public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (PreCommitFault) { PreCommitFault = false; throw new IOException("injected: lost response, write did not commit"); }
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<int> SavedChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesCompletedEventData eventData,
+            int result,
+            CancellationToken cancellationToken = default)
+        {
+            if (PostCommitFault) { PostCommitFault = false; throw new IOException("injected: lost response after a committed write"); }
+            return base.SavedChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
+    [Fact]
     public async Task UnappliedSchema_MissingControlColumns_FailsClosed_NoSilentSuccess()
     {
         // Simulate a database on which the G20 additive migration has NOT been applied: drop the control columns, then
