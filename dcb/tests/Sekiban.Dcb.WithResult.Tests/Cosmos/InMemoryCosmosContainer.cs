@@ -177,6 +177,62 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(default!, HttpStatusCode.NoContent));
     }
 
+    // SEK-G20: exact-token CAS via ETag IfMatch. A Replace pinned to an ETag that has moved is refused (412), exactly as
+    // Cosmos behaves — so the generation/tombstone CAS is proven, not assumed. A new ETag is stamped on success.
+    public override Task<ItemResponse<T>> ReplaceItemAsync<T>(
+        T item,
+        string id,
+        PartitionKey? partitionKey = null,
+        ItemRequestOptions? requestOptions = null,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            ThrowIfFaulted();
+            var document = JObject.FromObject(item!);
+            var pk = partitionKey is null ? Pk(document) : UnwrapPartitionKey(partitionKey.Value);
+            var key = (pk, id);
+
+            if (!_items.TryGetValue(key, out var existing))
+            {
+                throw CosmosFailures.NotFound();
+            }
+
+            var ifMatch = requestOptions?.IfMatchEtag;
+            if (!string.IsNullOrEmpty(ifMatch) && !string.Equals(ifMatch, ETagOf(existing), StringComparison.Ordinal))
+            {
+                throw CosmosFailures.PreconditionFailed();
+            }
+
+            OnWrite?.Invoke(Creates);
+            Creates++;
+            Stamp(document);
+            _items[key] = document;
+            return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.OK));
+        }
+    }
+
+    // Unconditional create-or-replace (the legacy checkpoint write path uses this). Stamps a fresh ETag.
+    public override Task<ItemResponse<T>> UpsertItemAsync<T>(
+        T item,
+        PartitionKey? partitionKey = null,
+        ItemRequestOptions? requestOptions = null,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            ThrowIfFaulted();
+            var document = JObject.FromObject(item!);
+            var pk = partitionKey is null ? Pk(document) : UnwrapPartitionKey(partitionKey.Value);
+            var key = (pk, Id_(document));
+            OnWrite?.Invoke(Creates);
+            Creates++;
+            Stamp(document);
+            _items[key] = document;
+            return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.OK));
+        }
+    }
+
     public override TransactionalBatch CreateTransactionalBatch(PartitionKey partitionKey) =>
         new InMemoryTransactionalBatch(this, UnwrapPartitionKey(partitionKey));
 

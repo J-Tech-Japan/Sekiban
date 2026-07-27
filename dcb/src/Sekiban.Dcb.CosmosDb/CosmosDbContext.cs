@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 namespace Sekiban.Dcb.CosmosDb;
 
@@ -25,7 +26,10 @@ public class CosmosDbContext : IDisposable
     private readonly string _databaseName;
     private readonly ILogger<CosmosDbContext>? _logger;
     private readonly CosmosDbEventStoreOptions _options;
-    private readonly Dictionary<string, Container> _containers = new();
+    // ConcurrentDictionary: the fast-path read (below) is lock-free, so a plain Dictionary being written under
+    // _containerLock would be a torn-read/resize hazard across async thread hops. SEK-G20's checkpoint CAS depends on a
+    // consistent container resolution across sequential awaited calls.
+    private readonly ConcurrentDictionary<string, Container> _containers = new();
     private CosmosClient? _cosmosClient;
     private Database? _database;
     private bool _disposed;
