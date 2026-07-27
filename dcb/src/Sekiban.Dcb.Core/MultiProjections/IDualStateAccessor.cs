@@ -18,6 +18,21 @@ public interface IDualStateAccessor
     object GetSafeProjectorPayload();
     object GetUnsafeProjectorPayload();
 
+    /// <summary>
+    ///     SEK-G18: true when the served (unsafe) state was published identical to the safe state — i.e. no events remain
+    ///     buffered and no rebuild is pending. The actor derives a TRUTHFUL <c>IsSafeState</c> from this reconcile fact,
+    ///     never from a timestamp comparison alone.
+    /// </summary>
+    bool IsServedIdenticalToSafe { get; }
+
+    /// <summary>
+    ///     SEK-G18 integrity guard: set when an incremental safe promotion (or an already-under-threshold arrival) was
+    ///     observed OUT of global SortableUniqueId order versus the held safe head — which the incremental path cannot
+    ///     reorder. The single mandated remedy is a full ordered rebuild from the authoritative event store driven by the
+    ///     grain/host; the wrapper never folds the out-of-order event into the safe accumulator.
+    /// </summary>
+    bool RebuildRequired { get; }
+
     IDualStateAccessor ProcessEventAs(
         Event evt,
         SortableUniqueId safeWindowThreshold,

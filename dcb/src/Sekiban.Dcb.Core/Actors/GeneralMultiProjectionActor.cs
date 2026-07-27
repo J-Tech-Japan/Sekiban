@@ -949,16 +949,10 @@ public class GeneralMultiProjectionActor
                 lastEventId = dualAccessor.UnsafeLastEventId;
                 stateVersion = dualAccessor.UnsafeVersion;
 
-                if (!string.IsNullOrEmpty(lastSortableId))
-                {
-                    var lastEventTime = new SortableUniqueId(lastSortableId).GetDateTime();
-                    var safeThresholdTime = safeWindowThreshold.GetDateTime();
-                    isSafeState = lastEventTime <= safeThresholdTime;
-                }
-                else
-                {
-                    isSafeState = true;
-                }
+                // SEK-G18: IsSafeState reflects the RECONCILE FACT — the served state was published identical to the safe
+                // state (no buffered events remain, no rebuild pending) — never a timestamp comparison that can report
+                // true for an unreconciled, arrival-ordered payload (#1092).
+                isSafeState = dualAccessor.IsServedIdenticalToSafe;
             }
             else
             {

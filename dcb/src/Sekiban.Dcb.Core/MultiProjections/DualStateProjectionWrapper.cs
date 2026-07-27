@@ -28,13 +28,17 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
     private readonly JsonSerializerOptions _jsonOptions;
     private bool _useIncrementalSafePromotion;
 
+    // SEK-G18 integrity-guard signal: an out-of-global-order safe promotion / arrival was observed that the incremental
+    // path cannot reorder. The grain/host must respond with a full ordered rebuild from the authoritative event store.
+    private bool _rebuildRequired;
+
     // Safe state - events older than SafeWindow
     private T _safeProjector;
     private int _safeVersion;
     private Guid _safeLastEventId;
     private string _safeLastSortableUniqueId = string.Empty;
 
-    // Unsafe state - includes all events
+    // Unsafe (served) state - the safe baseline reconciled with the still-buffered events in global SortableUniqueId order.
     private T _unsafeProjector;
     private int _unsafeVersion;
     private Guid _unsafeLastEventId;
@@ -110,64 +114,79 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         var eventTime = new SortableUniqueId(evt.SortableUniqueIdValue);
         var isInSafeWindow = !eventTime.IsEarlierThanOrEqual(safeWindowThreshold);
 
-        // Debug logging removed to avoid noisy console output.
-
         if (_processedEventIds.Contains(evt.Id))
         {
             // Event already processed, skip it
             return this;
         }
 
-        // Process the event through projection
-        var tags = evt.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
-
-        var unsafeProjected = _types.Project(
-            _projectorName,
-            _unsafeProjector,
-            evt,
-            tags,
-            domainTypes,
-            safeWindowThreshold);
-
-        if (!unsafeProjected.IsSuccess)
-        {
-            throw unsafeProjected.GetException();
-        }
-
-        _unsafeProjector = (T)unsafeProjected.GetValue();
-        _unsafeLastEventId = evt.Id;
-        _unsafeLastSortableUniqueId = evt.SortableUniqueIdValue;
-        _unsafeVersion++;
         _processedEventIds.Add(evt.Id);
 
-        // Store event based on safe window
+        var tags = evt.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
+
         if (isInSafeWindow)
         {
-            // Buffer event for later processing
+            // Still inside the safe window: hold it in the buffer. The served state is (safe baseline + ordered buffer),
+            // so an in-order arrival can be folded onto the served accumulator directly; an out-of-order arrival forces a
+            // re-derivation so the served state never depends on arrival order.
+            var inOrder = IsStrictlyAfterServedHead(evt.SortableUniqueIdValue);
             _bufferedEvents[evt.Id] = evt;
+
+            if (inOrder)
+            {
+                var served = _types.Project(_projectorName, _unsafeProjector, evt, tags, domainTypes, safeWindowThreshold);
+                if (!served.IsSuccess)
+                {
+                    throw served.GetException();
+                }
+                _unsafeProjector = (T)served.GetValue();
+                _unsafeLastEventId = evt.Id;
+                _unsafeLastSortableUniqueId = evt.SortableUniqueIdValue;
+                _unsafeVersion = _safeVersion + _bufferedEvents.Count;
+            }
+            else
+            {
+                ReconcileServedState(safeWindowThreshold, domainTypes);
+            }
+
+            return this;
+        }
+
+        // Already at/under the safe threshold. It must fold onto the safe state IN GLOBAL ORDER — never out of order into
+        // the accumulator.
+        _allSafeEvents[evt.Id] = evt;
+
+        if (IsStrictlyAfterSafeHead(evt.SortableUniqueIdValue))
+        {
+            // In order: fold directly onto the safe baseline.
+            var safeProjected = _types.Project(_projectorName, _safeProjector, evt, tags, domainTypes, ZeroThreshold);
+            if (!safeProjected.IsSuccess)
+            {
+                throw safeProjected.GetException();
+            }
+            _safeProjector = (T)safeProjected.GetValue();
+            _safeLastEventId = evt.Id;
+            _safeLastSortableUniqueId = evt.SortableUniqueIdValue;
+            _safeVersion++;
+        }
+        else if (!_useIncrementalSafePromotion)
+        {
+            // Fresh path still retains the FULL safe history in _allSafeEvents, so a global re-sort places the
+            // out-of-order arrival correctly (no compacted baseline, no data loss).
+            RebuildSafeState(domainTypes);
+            _safeVersion++;
         }
         else
         {
-            _allSafeEvents[evt.Id] = evt;
-
-            // Process the new safe event directly on the current safe projector.
-            var safeProjected = _types.Project(
-                _projectorName,
-                _safeProjector,
-                evt,
-                tags,
-                domainTypes,
-                new SortableUniqueId("000000000000000000000000000000000000000000000000"));
-
-            if (safeProjected.IsSuccess)
-            {
-                _safeProjector = (T)safeProjected.GetValue();
-                _safeLastEventId = evt.Id;
-                _safeLastSortableUniqueId = evt.SortableUniqueIdValue;
-                _safeVersion++;
-            }
+            // Compacted/incremental baseline: the full history is gone, so the wrapper cannot reorder locally. Signal a
+            // full ordered rebuild from the authoritative event store (SEK-G18 integrity guard) rather than fold out of
+            // order or rebuild a compacted baseline from the initial payload.
+            _rebuildRequired = true;
+            return this;
         }
 
+        // The safe baseline advanced; re-derive the served state from it plus the still-buffered events.
+        ReconcileServedState(safeWindowThreshold, domainTypes);
         return this;
     }
 
@@ -179,6 +198,8 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         string.IsNullOrEmpty(_safeLastSortableUniqueId) ? null : _safeLastSortableUniqueId;
     object IDualStateAccessor.GetSafeProjectorPayload() => _safeProjector!;
     object IDualStateAccessor.GetUnsafeProjectorPayload() => _unsafeProjector!;
+    bool IDualStateAccessor.IsServedIdenticalToSafe => !_rebuildRequired && _bufferedEvents.Count == 0;
+    bool IDualStateAccessor.RebuildRequired => _rebuildRequired;
     IDualStateAccessor IDualStateAccessor.ProcessEventAs(
         Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
@@ -245,9 +266,71 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
                 RebuildSafeState(domainTypes);
             }
 
-            _safeVersion += eventsToProcess.Count;
+            // Do not advance the safe version if the incremental guard tripped — a full rebuild will re-establish it.
+            if (!_rebuildRequired)
+            {
+                _safeVersion += eventsToProcess.Count;
+            }
         }
+
+        // Re-derive the served (unsafe) state = safe baseline + still-buffered events in global SortableUniqueId order.
+        // Reads promote before reading, so this keeps the served payload converged and IsSafeState truthful.
+        ReconcileServedState(safeWindowThreshold, domainTypes);
     }
+
+    /// <summary>
+    ///     SEK-G18 graduation reconcile: re-derive the served (unsafe) state as the safe baseline plus the still-buffered
+    ///     events replayed in global SortableUniqueId ordinal order, then publish payload / last-event / position / version
+    ///     atomically. Because projector folds are pure and payloads immutable, folding onto <c>_safeProjector</c> never
+    ///     mutates it — this is the "clone(safe) + ordered buffer" derivation. When a rebuild is pending the served state is
+    ///     left untouched (queries are gated on the rebuild by the grain/host).
+    /// </summary>
+    private void ReconcileServedState(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
+    {
+        if (_rebuildRequired)
+        {
+            return;
+        }
+
+        var served = _safeProjector;
+        var lastEventId = _safeLastEventId;
+        var lastSortableId = _safeLastSortableUniqueId;
+
+        if (_bufferedEvents.Count > 0)
+        {
+            var ordered = _bufferedEvents.Values
+                .OrderBy(ev => ev.SortableUniqueIdValue, StringComparer.Ordinal)
+                .ToList();
+            foreach (var ev in ordered)
+            {
+                var tags = ev.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
+                var projected = _types.Project(_projectorName, served, ev, tags, domainTypes, safeWindowThreshold);
+                if (!projected.IsSuccess)
+                {
+                    throw projected.GetException();
+                }
+                served = (T)projected.GetValue();
+                lastEventId = ev.Id;
+                lastSortableId = ev.SortableUniqueIdValue;
+            }
+        }
+
+        _unsafeProjector = served;
+        _unsafeLastEventId = lastEventId;
+        _unsafeLastSortableUniqueId = lastSortableId;
+        _unsafeVersion = _safeVersion + _bufferedEvents.Count;
+    }
+
+    private bool IsStrictlyAfterSafeHead(string sortableUniqueId) =>
+        string.IsNullOrEmpty(_safeLastSortableUniqueId)
+        || string.Compare(sortableUniqueId, _safeLastSortableUniqueId, StringComparison.Ordinal) > 0;
+
+    private bool IsStrictlyAfterServedHead(string sortableUniqueId) =>
+        string.IsNullOrEmpty(_unsafeLastSortableUniqueId)
+        || string.Compare(sortableUniqueId, _unsafeLastSortableUniqueId, StringComparison.Ordinal) > 0;
+
+    private static readonly SortableUniqueId ZeroThreshold =
+        new("000000000000000000000000000000000000000000000000");
 
     private void RebuildProcessedEventIdsFromBufferedEvents()
     {
@@ -322,6 +405,15 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
 
         foreach (var ev in events)
         {
+            // SEK-G18 integrity guard: an incrementally-promoted event MUST sort strictly after the held safe head.
+            // If it does not, the incremental (fold-onto-baseline) path cannot reorder it into the safe payload, so signal
+            // a full ordered rebuild rather than folding it out of global order.
+            if (!IsStrictlyAfterSafeHead(ev.SortableUniqueIdValue))
+            {
+                _rebuildRequired = true;
+                return;
+            }
+
             var tags = ev.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
             var projected = _types.Project(
                 _projectorName,
@@ -329,7 +421,7 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
                 ev,
                 tags,
                 domainTypes,
-                new SortableUniqueId("000000000000000000000000000000000000000000000000"));
+                ZeroThreshold);
 
             if (!projected.IsSuccess)
             {
