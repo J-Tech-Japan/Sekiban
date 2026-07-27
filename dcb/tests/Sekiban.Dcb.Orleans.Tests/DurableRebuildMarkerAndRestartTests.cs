@@ -86,6 +86,42 @@ public class DurableRebuildMarkerAndRestartTests : IAsyncLifetime
         Assert.Equal(recordA.LastSortableUniqueId, recordB.LastSortableUniqueId);
     }
 
+    [Fact]
+    public async Task SafeCheckpoint_PersistsSafeCount_NotTotal_AndRestartDoesNotDoubleCount()
+    {
+        var grain = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
+
+        // One already-safe event (well outside the window) and one RECENT event (inside the 3s safe window => unsafe).
+        // The grain processes BOTH (total = 2), but the safe checkpoint folds only the old one (safe count = 1).
+        var safeEvt = ToSerializable(CreateEvent(new Counted("safe"), DateTime.UtcNow.AddSeconds(-30)));
+        var recentEvt = ToSerializable(CreateEvent(new Counted("recent"), DateTime.UtcNow));
+        await Shared.EventStore.WriteSerializableEventsAsync(new[] { safeEvt, recentEvt });
+        await grain.RefreshAsync();
+
+        // Persist (the persist path does NOT go through the first-query barrier). The external record must carry the SAFE
+        // count (1), not the total processed (2), paired with the safe position. The pre-fix bug persisted the total.
+        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        var recordA = (await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue().GetValue();
+        Assert.Equal(1, recordA.EventsProcessed);                             // SAFE count, not the total processed (2)
+        Assert.Equal(safeEvt.SortableUniqueIdValue, recordA.LastSortableUniqueId);
+
+        // Restart, and wait until the once-recent event has aged past the 3s safe window so it is now safe. The fresh
+        // activation seeds _eventsProcessed from the SAFE baseline (recordA) and the exclusive catch-up from the safe
+        // position re-folds the now-safe event exactly ONCE — the served count is 2, never the double-counted 3.
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(4000);
+        var grain2 = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
+        await grain2.RefreshAsync();
+        var recovered = await grain2.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: true);
+        Assert.True(recovered.IsSuccess, recovered.IsSuccess ? "" : recovered.GetException().Message);
+        Assert.Equal(2, ((CountProjector)recovered.GetValue().Payload).Count);
+
+        _ = await grain2.PersistStateAsync();
+        var recordB = (await Shared.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue().GetValue();
+        Assert.Equal(2, recordB.EventsProcessed);                            // both events now safe, re-folded ONCE (not 3)
+        Assert.Equal(recentEvt.SortableUniqueIdValue, recordB.LastSortableUniqueId);
+    }
+
     private static Event CreateEvent(IEventPayload payload, DateTime timestamp) => new(
         payload,
         SortableUniqueId.Generate(timestamp, Guid.NewGuid()),

@@ -746,7 +746,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return ResultBox.FromValue(true);
     }
 
-    private async Task<bool> CanSaveToExternalStoreAsync(string projectorName, string projectorVersion)
+    // SEK-G18 #2: the persisted EventsProcessed is the SAFE-checkpoint count (events reflected in the safe state at
+    // SafePosition), NOT the total served count. The external record's LastSortableUniqueId is the safe position, so its
+    // EventsProcessed must be the matching safe count: on restore _eventsProcessed is seeded from it (the safe baseline)
+    // and the exclusive catch-up from the safe position re-adds the still-unsafe + new events exactly once (no double
+    // count). SafeVersion is best-effort metadata; fall back to _eventsProcessed when it is unavailable.
+    private long ResolveSafeEventsProcessed(PersistCheckpoint checkpoint) =>
+        checkpoint.SafeVersion is { } safeVersion ? safeVersion : _eventsProcessed;
+
+    private async Task<bool> CanSaveToExternalStoreAsync(
+        string projectorName,
+        string projectorVersion,
+        long localSafeEventsProcessed)
     {
         if (_multiProjectionStateStore is null)
         {
@@ -764,16 +775,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return false;
         }
 
+        // Compare SAFE count vs SAFE count: the external record's EventsProcessed is the count at its safe position, and
+        // localSafeEventsProcessed is ours. (A legacy record persisted with the old total count is >= its safe count, so
+        // the comparison is at worst conservatively skip-biased against a legacy peer — never a stale overwrite.)
         var latestOptional = latestResult.GetValue();
         if (latestOptional.HasValue &&
             latestOptional.Value is { } latestRecord &&
-            latestRecord.EventsProcessed > _eventsProcessed)
+            latestRecord.EventsProcessed > localSafeEventsProcessed)
         {
-            _lastError = $"External store has newer state ({latestRecord.EventsProcessed}) than local ({_eventsProcessed})";
+            _lastError = $"External store has newer safe state ({latestRecord.EventsProcessed}) than local ({localSafeEventsProcessed})";
             _logger.LogWarning(
-                "Skip external store save: latest EventsProcessed {LatestEvents} > local {LocalEvents} for {ProjectorName} v{ProjectorVersion}.",
+                "Skip external store save: latest safe EventsProcessed {LatestEvents} > local {LocalEvents} for {ProjectorName} v{ProjectorVersion}.",
                 latestRecord.EventsProcessed,
-                _eventsProcessed,
+                localSafeEventsProcessed,
                 projectorName,
                 projectorVersion);
             return false;
@@ -794,7 +808,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         var uploadStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
-        if (!await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion))
+        if (!await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint)))
         {
             _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
             return new StreamingExternalStorePersistResult(
@@ -807,7 +821,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             ProjectorVersion: checkpoint.ProjectorVersion,
             PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
             LastSortableUniqueId: checkpoint.SafePosition ?? string.Empty,
-            EventsProcessed: _eventsProcessed,
+            EventsProcessed: ResolveSafeEventsProcessed(checkpoint),
             IsOffloaded: false,
             OffloadKey: null,
             OffloadProvider: null,
@@ -1262,7 +1276,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             var externalStoreSaved = _multiProjectionStateStore == null;
             var allowExternalStoreSave = _multiProjectionStateStore is not null &&
-                                         await CanSaveToExternalStoreAsync(projectorName, projectorVersion);
+                                         await CanSaveToExternalStoreAsync(projectorName, projectorVersion, ResolveSafeEventsProcessed(checkpoint));
 
             // v10: Save to external store (Postgres/Cosmos) if available
             if (_multiProjectionStateStore != null && allowExternalStoreSave)
@@ -1273,7 +1287,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     ProjectorVersion: projectorVersion,
                     PayloadType: typeof(SerializableMultiProjectionStateEnvelope).FullName!,
                     LastSortableUniqueId: safePosition ?? string.Empty,
-                    EventsProcessed: _eventsProcessed,
+                    EventsProcessed: ResolveSafeEventsProcessed(checkpoint),
                     IsOffloaded: false,
                     OffloadKey: null,
                     OffloadProvider: null,
