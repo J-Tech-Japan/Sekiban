@@ -5,14 +5,20 @@ using Sekiban.Dcb.Postgres.DbModels;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Capabilities;
 
 namespace Sekiban.Dcb.Postgres;
 
 /// <summary>
-///     Postgres implementation of IMultiProjectionStateStore.
+///     Postgres implementation of IMultiProjectionStateStore. SEK-G20: also the generation/tombstone/exact-token CAS
+///     surface (<see cref="IGenerationAwareCheckpointStore" />) — the AUTHORITATIVE provider — using conditional
+///     row-count UPDATEs on the exact (Generation, Revision, Lifecycle) token.
 /// </summary>
-public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore, IStorageDurabilityDescriptorProvider
+public class PostgresMultiProjectionStateStore :
+    IMultiProjectionStateStore,
+    IStorageDurabilityDescriptorProvider,
+    IGenerationAwareCheckpointStore
 {
     /// <summary>Projection state lands in Postgres.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
@@ -313,4 +319,218 @@ public class PostgresMultiProjectionStateStore : IMultiProjectionStateStore, ISt
         }
     }
 
+    // ---------------------------------------------------------------------------------------------------------------
+    // SEK-G20 generation/tombstone/exact-token CAS (Postgres native, authoritative)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
+        CheckpointStoreCapabilityDescriptor.Supporting("Postgres", CheckpointCapabilityKind.GenerationTombstoneCas);
+
+    private static CheckpointSlot SlotFrom(DbMultiProjectionState e) => new(
+        true, e.Generation, e.Revision.ToString(), (CheckpointLifecycle)e.Lifecycle, e.ToRecord());
+
+    public async Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(
+        string projectorName,
+        string projectorVersion,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var serviceId = CurrentServiceId;
+            var entity = await ctx.MultiProjectionStates
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s =>
+                    s.ServiceId == serviceId && s.ProjectorName == projectorName && s.ProjectorVersion == projectorVersion,
+                    cancellationToken);
+            return ResultBox.FromValue(entity is null ? CheckpointSlot.Absent : SlotFrom(entity));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<CheckpointSlot>(ex);
+        }
+    }
+
+    /// <summary>Parses the opaque revision token; a non-numeric token is a corrupt/foreign token (fail closed).</summary>
+    private static bool TryToken(CheckpointExpectation e, out long revision) =>
+        long.TryParse(e.ExpectedRevision, out revision);
+
+    private async Task<CheckpointSlot> RefetchSlotAsync(string projectorName, string projectorVersion, CancellationToken ct)
+    {
+        var read = await ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
+        return read.IsSuccess ? read.GetValue() : CheckpointSlot.Absent;
+    }
+
+    public async Task<CheckpointCasOutcome> ConditionalUpsertAsync(
+        MultiProjectionStateWriteRequest payload,
+        Stream stream,
+        CheckpointExpectation expectation,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var offload = await StreamOffloadHelper.ProcessAsync(
+                stream, $"{payload.ProjectorName}/{payload.ProjectorVersion}", offloadThresholdBytes, _blobAccessor, cancellationToken);
+            var record = (payload with
+            {
+                IsOffloaded = offload.IsOffloaded,
+                OffloadKey = offload.OffloadKey,
+                OffloadProvider = offload.OffloadProvider,
+                UpdatedAt = DateTime.UtcNow
+            }).ToRecord();
+
+            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var serviceId = CurrentServiceId;
+
+            if (expectation.ExpectAbsent)
+            {
+                // First-ever create = expected-absence CAS. The composite PK enforces atomicity; a concurrent create
+                // raises a unique violation which we classify as ConditionRejected (refetch).
+                var db = DbMultiProjectionState.FromRecord(record, serviceId, offload.InlineData);
+                db.Generation = 0;
+                db.Revision = 1;
+                db.Lifecycle = (int)CheckpointLifecycle.Active;
+                ctx.MultiProjectionStates.Add(db);
+                try
+                {
+                    await ctx.SaveChangesAsync(cancellationToken);
+                    return CheckpointCasOutcome.Committed(SlotFrom(db));
+                }
+                catch (DbUpdateException)
+                {
+                    return CheckpointCasOutcome.Rejected(
+                        await RefetchSlotAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken));
+                }
+            }
+
+            if (!TryToken(expectation, out var expectedRevision))
+            {
+                return CheckpointCasOutcome.Corrupt();
+            }
+
+            // Conditional UPDATE on the EXACT (generation, revision, Active) token — a single-round-trip atomic CAS.
+            var affected = await ctx.MultiProjectionStates
+                .Where(s => s.ServiceId == serviceId && s.ProjectorName == payload.ProjectorName
+                    && s.ProjectorVersion == payload.ProjectorVersion
+                    && s.Generation == expectation.ExpectedGeneration && s.Revision == expectedRevision
+                    && s.Lifecycle == (int)CheckpointLifecycle.Active)
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(s => s.PayloadType, record.PayloadType)
+                    .SetProperty(s => s.LastSortableUniqueId, record.LastSortableUniqueId)
+                    .SetProperty(s => s.EventsProcessed, record.EventsProcessed)
+                    .SetProperty(s => s.StateData, offload.InlineData)
+                    .SetProperty(s => s.IsOffloaded, record.IsOffloaded)
+                    .SetProperty(s => s.OffloadKey, record.OffloadKey)
+                    .SetProperty(s => s.OffloadProvider, record.OffloadProvider)
+                    .SetProperty(s => s.OriginalSizeBytes, record.OriginalSizeBytes)
+                    .SetProperty(s => s.CompressedSizeBytes, record.CompressedSizeBytes)
+                    .SetProperty(s => s.SafeWindowThreshold, record.SafeWindowThreshold)
+                    .SetProperty(s => s.UpdatedAt, record.UpdatedAt)
+                    .SetProperty(s => s.BuildSource, record.BuildSource)
+                    .SetProperty(s => s.BuildHost, record.BuildHost)
+                    .SetProperty(s => s.Revision, s => s.Revision + 1), cancellationToken);
+
+            var slot = await RefetchSlotAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken);
+            return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
+        }
+        catch (Exception ex)
+        {
+            return CheckpointCasOutcome.ProviderFailed(ex);
+        }
+    }
+
+    public async Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(
+        string projectorName,
+        string projectorVersion,
+        CheckpointExpectation expectation,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+            {
+                return CheckpointCasOutcome.Corrupt();
+            }
+            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var serviceId = CurrentServiceId;
+
+            // Bump generation + revision, flip to Tombstoned, on the exact Active token. Prior payload/offload retained.
+            var affected = await ctx.MultiProjectionStates
+                .Where(s => s.ServiceId == serviceId && s.ProjectorName == projectorName
+                    && s.ProjectorVersion == projectorVersion
+                    && s.Generation == expectation.ExpectedGeneration && s.Revision == expectedRevision
+                    && s.Lifecycle == (int)CheckpointLifecycle.Active)
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(s => s.Generation, s => s.Generation + 1)
+                    .SetProperty(s => s.Revision, s => s.Revision + 1)
+                    .SetProperty(s => s.Lifecycle, (int)CheckpointLifecycle.Tombstoned)
+                    .SetProperty(s => s.UpdatedAt, DateTime.UtcNow), cancellationToken);
+
+            var slot = await RefetchSlotAsync(projectorName, projectorVersion, cancellationToken);
+            return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
+        }
+        catch (Exception ex)
+        {
+            return CheckpointCasOutcome.ProviderFailed(ex);
+        }
+    }
+
+    public async Task<CheckpointCasOutcome> CommitRebuiltAsync(
+        MultiProjectionStateWriteRequest payload,
+        Stream stream,
+        CheckpointExpectation expectation,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+            {
+                return CheckpointCasOutcome.Corrupt();
+            }
+            var offload = await StreamOffloadHelper.ProcessAsync(
+                stream, $"{payload.ProjectorName}/{payload.ProjectorVersion}", offloadThresholdBytes, _blobAccessor, cancellationToken);
+            var record = (payload with
+            {
+                IsOffloaded = offload.IsOffloaded,
+                OffloadKey = offload.OffloadKey,
+                OffloadProvider = offload.OffloadProvider,
+                UpdatedAt = DateTime.UtcNow
+            }).ToRecord();
+
+            await using var ctx = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var serviceId = CurrentServiceId;
+
+            // One atomic same-row CAS on the exact Tombstoned token: write rebuilt payload AND clear the tombstone.
+            var affected = await ctx.MultiProjectionStates
+                .Where(s => s.ServiceId == serviceId && s.ProjectorName == payload.ProjectorName
+                    && s.ProjectorVersion == payload.ProjectorVersion
+                    && s.Generation == expectation.ExpectedGeneration && s.Revision == expectedRevision
+                    && s.Lifecycle == (int)CheckpointLifecycle.Tombstoned)
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(s => s.PayloadType, record.PayloadType)
+                    .SetProperty(s => s.LastSortableUniqueId, record.LastSortableUniqueId)
+                    .SetProperty(s => s.EventsProcessed, record.EventsProcessed)
+                    .SetProperty(s => s.StateData, offload.InlineData)
+                    .SetProperty(s => s.IsOffloaded, record.IsOffloaded)
+                    .SetProperty(s => s.OffloadKey, record.OffloadKey)
+                    .SetProperty(s => s.OffloadProvider, record.OffloadProvider)
+                    .SetProperty(s => s.OriginalSizeBytes, record.OriginalSizeBytes)
+                    .SetProperty(s => s.CompressedSizeBytes, record.CompressedSizeBytes)
+                    .SetProperty(s => s.SafeWindowThreshold, record.SafeWindowThreshold)
+                    .SetProperty(s => s.UpdatedAt, record.UpdatedAt)
+                    .SetProperty(s => s.BuildSource, record.BuildSource)
+                    .SetProperty(s => s.BuildHost, record.BuildHost)
+                    .SetProperty(s => s.Lifecycle, (int)CheckpointLifecycle.Active)
+                    .SetProperty(s => s.Revision, s => s.Revision + 1), cancellationToken);
+
+            var slot = await RefetchSlotAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken);
+            return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
+        }
+        catch (Exception ex)
+        {
+            return CheckpointCasOutcome.ProviderFailed(ex);
+        }
+    }
 }

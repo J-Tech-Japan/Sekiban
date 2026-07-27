@@ -59,6 +59,16 @@ public class DbMultiProjectionState
     [MaxLength(256)]
     public string? BuildHost { get; set; }
 
+    // SEK-G20 control plane (additive; existing rows read as generation 0, revision 0, lifecycle 0 = Active). NOT part of
+    // MultiProjectionStateRecord — the generation/tombstone/exact-token CAS travels out-of-band.
+    public long Generation { get; set; }
+
+    /// <summary>Monotonic per-mutation revision — the exact-CAS token (a generation-only compare is not a CAS).</summary>
+    public long Revision { get; set; }
+
+    /// <summary>0 = Active, 1 = Tombstoned. Backs <c>CheckpointLifecycle</c>.</summary>
+    public int Lifecycle { get; set; }
+
     public static DbMultiProjectionState FromRecord(
         MultiProjectionStateRecord record,
         string serviceId,
