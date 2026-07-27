@@ -237,7 +237,10 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
 
         public Task WriteStateAsync<T>(string grainType, GrainId grainId, IGrainState<T> grainState)
         {
-            var rebuildRequired = grainState.State?.GetType().GetProperty("RebuildRequired")?.GetValue(grainState.State) as bool?;
+            // The durable marker property is INTERNAL (kept off the public API), so include non-public in the lookup.
+            var rebuildRequired = grainState.State?.GetType()
+                .GetProperty("RebuildRequired", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                ?.GetValue(grainState.State) as bool?;
             lock (Gate)
             {
                 if (FailMarkerWrites && rebuildRequired == true)

@@ -2052,7 +2052,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // pre-rebuild payload. Checked BEFORE any restore: do NOT restore it — arm the shared query barrier and force a
             // full ordered replay from the authoritative store. The marker is cleared only after the rebuilt checkpoint is
             // durably committed (persist path), so a fresh activation cannot serve stale success in the crash window.
-            var durableRebuildPending = _stateStore.Committed.RebuildRequired;
+            var durableRebuildPending = _stateStore.Committed is IRebuildMarkerState { RebuildRequired: true };
             if (durableRebuildPending)
             {
                 _logger.LogWarning(

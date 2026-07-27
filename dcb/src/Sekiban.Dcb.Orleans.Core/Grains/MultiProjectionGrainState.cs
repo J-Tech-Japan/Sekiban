@@ -24,13 +24,19 @@ public interface IReadOnlyMultiProjectionGrainState
     string? FaultPosition { get; }
     string? FaultMessage { get; }
     long FaultedAtUtcTicks { get; }
+}
 
-    /// <summary>
-    ///     SEK-G18: a durable "full ordered rebuild required" marker committed BEFORE the derived external snapshot is
-    ///     invalidated. A fresh activation that sees this true must NOT restore the (possibly stale) external snapshot and
-    ///     must force a full ordered replay from the authoritative store behind the shared query barrier. Cleared only after
-    ///     a rebuilt checkpoint is durably committed. Default false (old state deserializes to false — no migration).
-    /// </summary>
+/// <summary>
+///     SEK-G18: INTERNAL read seam for the durable "full ordered rebuild required" marker. Kept OFF the public
+///     <see cref="IReadOnlyMultiProjectionGrainState" /> surface (packet: no public API additions) — the marker is an
+///     Orleans-persisted implementation detail. A committed state read that satisfies <c>{ RebuildRequired: true }</c>
+///     means a fresh activation must NOT restore the (possibly stale) external snapshot and must force a full ordered
+///     replay from the authoritative store behind the shared query barrier. The marker is committed BEFORE the derived
+///     external snapshot is invalidated, and cleared only after a rebuilt checkpoint is durably committed (old state
+///     deserializes to false — no migration).
+/// </summary>
+internal interface IRebuildMarkerState
+{
     bool RebuildRequired { get; }
 }
 
@@ -100,9 +106,10 @@ public class MultiProjectionGrainState : IReadOnlyMultiProjectionGrainState
     [Id(17)]
     public long FaultedAtUtcTicks { get; set; }
 
-    // SEK-G18: durable rebuild-required marker (see interface doc). Additive [Id(18)]; old state deserializes to false.
+    // SEK-G18: durable rebuild-required marker (see IRebuildMarkerState). INTERNAL — additive Orleans [Id(18)] serialized
+    // by same-assembly codegen, kept off the public API surface; old state deserializes to false (no migration).
     [Id(18)]
-    public bool RebuildRequired { get; set; }
+    internal bool RebuildRequired { get; set; }
 
     /// <summary>
     ///     A complete copy of every field. All fields are value types or immutable strings, so a member-wise copy is a

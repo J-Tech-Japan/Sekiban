@@ -15,11 +15,14 @@ namespace Sekiban.Dcb.Tests;
 ///     exclusive of that position — an event whose SortableUniqueId equals the checkpoint position is already reflected in
 ///     the restored payload and must NOT be re-read (which would double-count / re-fold). This pins the
 ///     exclusive-after-position boundary with LITERAL at-position vectors for the in-memory core store (the store the
-///     projection catch-up uses in tests) and SQLite. Postgres pins the same boundary vector against a REAL store in its
-///     Testcontainers-backed provider test project (PostgresExclusiveAfterPositionTests, which runs in CI). The Cosmos
-///     ("c.sortableUniqueId &gt; @since"), DynamoDB ("sortableUniqueId &gt; :since") and Hybrid (delegates to the hot/cold
-///     stores) providers use the identical strictly-greater-than filter — verified by inspection of each ReadAllEventsAsync;
-///     they have no in-repo emulator test project, so Postgres is the runnable cross-provider proof.
+///     projection catch-up uses in tests) and SQLite. The full provider matrix is pinned with EXECUTABLE vectors, each
+///     driving the production read construction so a `&gt;` → `&gt;=` regression fails the test:
+///     Postgres against a REAL store (PostgresExclusiveAfterPositionTests, Testcontainers, CI); Cosmos through the real
+///     CosmosDbEventStore over the in-memory Cosmos container, which honors the operator emitted by the production query
+///     (CosmosExclusiveAfterPositionTests); DynamoDB through the real DynamoDbEventStore over a round-trip DispatchProxy
+///     fake that honors the production KeyConditionExpression operator (DynamoDbExclusiveAfterPositionTests); and Hybrid
+///     through the real cold/hot catch-up composition (HybridEventStoreCatchUpPathTests — the P1/P2/P3 cold-boundary
+///     vector).
 /// </summary>
 public class ExclusiveAfterPositionTests
 {

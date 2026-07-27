@@ -322,6 +322,15 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     ///     Recognizes the query shapes the production code issues. Deliberately narrow: if a new query shape
     ///     appears, this throws rather than quietly returning nothing and turning a real bug into a green test.
     /// </summary>
+    // SEK-G18 (#1086): honor the ACTUAL comparison operator emitted by the production query text — '> @since'
+    // (exclusive) vs '>= @since' (inclusive) — instead of assuming exclusive. This keeps the fake faithful to the
+    // read construction, so an exclusive-after-position boundary test fails if production regresses '>' to '>='.
+    private static bool SinceMatches(string text, string sortableUniqueId, string since)
+    {
+        var cmp = string.CompareOrdinal(sortableUniqueId, since);
+        return text.Contains("sortableUniqueId >= @since", StringComparison.Ordinal) ? cmp >= 0 : cmp > 0;
+    }
+
     private List<JObject> Execute(string text, IReadOnlyDictionary<string, object> parameters)
     {
         var rows = _items.Values.AsEnumerable();
@@ -346,8 +355,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
             if (parameters.TryGetValue("@since", out var since))
             {
-                rows = rows.Where(row =>
-                    string.CompareOrdinal(row["sortableUniqueId"]!.Value<string>(), (string)since) > 0);
+                rows = rows.Where(row => SinceMatches(text, row["sortableUniqueId"]!.Value<string>(), (string)since));
             }
 
             if (text.Contains("COUNT(1)", StringComparison.Ordinal))
@@ -370,8 +378,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
             if (parameters.TryGetValue("@since", out var since))
             {
-                rows = rows.Where(row =>
-                    string.CompareOrdinal(row["sortableUniqueId"]!.Value<string>(), (string)since) > 0);
+                rows = rows.Where(row => SinceMatches(text, row["sortableUniqueId"]!.Value<string>(), (string)since));
             }
 
             if (parameters.TryGetValue("@from", out var from))

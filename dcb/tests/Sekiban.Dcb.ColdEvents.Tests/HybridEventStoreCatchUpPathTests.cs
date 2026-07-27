@@ -252,6 +252,29 @@ public class HybridEventStoreCatchUpPathTests
     /// <summary>
     ///     Stub IEventStore that tracks serializable read usage.
     /// </summary>
+    [Fact]
+    public async Task SEK_G18_ExclusiveAfterPosition_AtColdHotBoundary_ExcludesTheEventAtThePosition()
+    {
+        // SEK-G18 (#1086) provider boundary matrix — Hybrid cold/hot composition. A read since=P2 must EXCLUDE P1 (< P2,
+        // cold) and the at-position P2 (== P2, cold) and yield ONLY the strictly-later P3 (hot), exercising the real
+        // HybridEventStore cold-side exclusive filter AND the hot-store merge — not a single delegate in isolation. If the
+        // cold-side filter regressed from '> since' to '>= since', P2 would leak in and this fails.
+        var coldTime = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var p1 = CreateSerializableEvent(coldTime, "P1");                     // cold, < P2
+        var p2 = CreateSerializableEvent(coldTime.AddSeconds(1), "P2");       // cold, == boundary
+        await StoreColdManifestAndSegmentsAsync([p1, p2], p2.SortableUniqueIdValue);
+
+        var p3 = CreateSerializableEvent(coldTime.AddMinutes(10), "P3");      // hot, > P2
+        var hotStore = new TrackingEventStore([p3]);
+        var hybrid = CreateHybrid(hotStore);
+
+        var read = (await hybrid.ReadAllSerializableEventsAsync(new SortableUniqueId(p2.SortableUniqueIdValue), maxCount: 500))
+            .GetValue().ToList();
+
+        Assert.Single(read);                                                  // P1 (<) and P2 (==) both excluded
+        Assert.Equal("P3", read[0].EventPayloadName);                         // only the strictly-later hot event
+    }
+
     private sealed class TrackingEventStore : IEventStore
     {
         private readonly IReadOnlyList<SerializableEvent> _serializableEvents;

@@ -54,7 +54,7 @@ internal sealed record MultiProjectionGrainStateSnapshot(
     string? FaultPosition,
     string? FaultMessage,
     long FaultedAtUtcTicks,
-    bool RebuildRequired) : IReadOnlyMultiProjectionGrainState
+    bool RebuildRequired) : IReadOnlyMultiProjectionGrainState, IRebuildMarkerState
 {
     public static MultiProjectionGrainStateSnapshot From(MultiProjectionGrainState s) =>
         new(

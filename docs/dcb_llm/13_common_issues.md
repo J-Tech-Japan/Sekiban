@@ -373,9 +373,10 @@ events, the persisted checkpoint's position/`EventsProcessed` changes.
   catch-up re-adds the still-unsafe events exactly once (no double count) and the cross-cluster
   staleness guard compares safe-vs-safe. A legacy record written with the old total count is
   `>=` its safe count, so the comparison is at worst conservatively skip-biased, never a stale
-  overwrite. (The exclusive-after-position boundary is pinned against the real Postgres store in
-  CI, with in-memory + SQLite pins in the core tests; Cosmos/DynamoDB/Hybrid share the identical
-  `> since` filter.)
+  overwrite. (The exclusive-after-position boundary is pinned with EXECUTABLE vectors for every
+  provider path — in-memory + SQLite in the core tests, real Postgres in CI Testcontainers, and
+  Cosmos, DynamoDB and Hybrid each driving the real store's production read construction through a
+  faithful seam that fails if `> since` regresses to `>= since`.)
 - Application projectors should still implement create arms as true first-event-wins
   (`if (state.Contains(id)) return state;`) so the globally-earliest event is authoritative.
 
@@ -386,11 +387,21 @@ The single-cluster durable rebuild above is complete. One residual remains for a
 clusters share one external checkpoint row (`dcb_multi_projection_states`, keyed by
 `serviceId/projectorName/projectorVersion`), and one cluster performs a retrograde
 full-rebuild that invalidates the shared row, a peer cluster that is still holding the old
-checkpoint can, in a narrow window, re-upsert (re-contaminate) the row before it independently
-observes the retrograde event and rebuilds. The rebuild marker is cluster-local grain storage,
-and the shared-row upsert currently has no cross-cluster concurrency guard, so the
-activation-local protocol cannot prevent this by itself. **Danger**: a third activation
-restoring in that window can serve the stale value as a healthy success. **G20** closes it with
-a shared-row generation bump + tombstone + expected-generation CAS-guarded conditional upsert
-across all providers. Until G20 ships, run this projection class single-cluster, or accept the
-narrow multi-cluster re-contamination window.
+checkpoint can re-upsert (re-contaminate) the row — with the LATER (post-retrograde) safe
+position — before it independently observes the retrograde event and rebuilds. The rebuild
+marker is cluster-local grain storage, and the shared-row upsert currently has no cross-cluster
+concurrency guard, so the activation-local protocol cannot prevent this by itself.
+
+**Danger — this is not a transient window; it can be a PERMANENT false-safe result.** Once a
+fresh activation restores the recontaminated later-position checkpoint, the exclusive-after-position
+catch-up starts *after* that later position and therefore **permanently skips the missing earlier
+event**. The projection then reports `IsSafeState=true` over a state that omits an authoritative
+event, and it never self-heals — the earlier event is below the restored catch-up floor forever.
+So the residual is: retrograde shared-row recontamination can yield a **permanent false-safe**
+result across clusters, not merely a brief divergence that later converges.
+
+**G20** closes it with a shared-row generation bump + tombstone + expected-generation CAS-guarded
+conditional upsert across all providers. Until G20 ships, run this projection class single-cluster,
+or accept the permanent-false-safe risk under retrograde multi-cluster recontamination. (The
+normal-path two-cluster graduation reconcile — no retrograde shared-row rewrite — IS proven to
+converge in G18.)

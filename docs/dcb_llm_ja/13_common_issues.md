@@ -344,8 +344,9 @@ DCB の Dapr 版は未提供です。`Sekiban.Pure.Dapr` は古いランタイ�
   まだ unsafe のイベントをちょうど一度だけ再加算し(二重計上なし)、クラスタ間の staleness ガードは
   safe 同士で比較します。旧来の総数で書かれたレガシーレコードは自身の safe カウント以上なので、比較は
   最悪でも保守的にスキップ寄りになるだけで、stale 上書きは起きません。(排他的な after-position 境界は
-  CI 上の実 Postgres ストアで固定。in-memory + SQLite はコアテストで固定。Cosmos/DynamoDB/Hybrid は
-  同一の `> since` フィルタを共有します。)
+  全プロバイダ経路で**実行可能ベクタ**により固定——in-memory + SQLite はコアテスト、実 Postgres は CI の
+  Testcontainers、Cosmos・DynamoDB・Hybrid は各実ストアの本番読み取り構築を忠実なシームで駆動し、
+  `> since` が `>= since` に退行すれば失敗します。)
 - アプリのプロジェクタは create アームを真の first-event-wins(`if (state.Contains(id)) return state;`)
   で実装し、グローバルに最も早いイベントが権威となるようにしてください。
 
@@ -355,10 +356,20 @@ DCB の Dapr 版は未提供です。`Sekiban.Pure.Dapr` は古いランタイ�
 **G20** で追跡・解消されます。2つ以上の*独立した*クラスタが 1 つの外部チェックポイント行
 (`dcb_multi_projection_states`、`serviceId/projectorName/projectorVersion` がキー)を共有し、一方の
 クラスタが retrograde な完全再構築を行って共有行を無効化した場合、まだ古いチェックポイントを保持する
-別クラスタが、retrograde イベントを独立に観測して再構築する前の狭いウィンドウで、その行を再 upsert
-(再汚染)し得ます。再構築マーカーはクラスタローカルの grain storage で、共有行 upsert には現状
-クラスタ間の並行性ガードが無いため、activation-local プロトコル単独ではこれを防げません。**危険性**:
-そのウィンドウ内で復元する第三の活性化が、古い値を正常成功として返し得ます。**G20** は共有行の
-generation bump + tombstone + expected-generation CAS 条件付き upsert(全プロバイダ)で解消します。
-G20 提供までは、このプロジェクションクラスは単一クラスタで運用するか、狭いマルチクラスタ再汚染
-ウィンドウを受容してください。
+別クラスタが、retrograde イベントを独立に観測して再構築する前に、その行を——retrograde 後の
+**より後方(later)の safe 位置**で——再 upsert(再汚染)し得ます。再構築マーカーはクラスタローカルの
+grain storage で、共有行 upsert には現状クラスタ間の並行性ガードが無いため、activation-local プロトコル
+単独ではこれを防げません。
+
+**危険性——これは一過性のウィンドウではなく、恒久的な false-safe になり得ます。** 再汚染された
+later 位置のチェックポイントを fresh な活性化が復元すると、排他的 after-position キャッチアップは
+その later 位置の *後* から開始するため、**欠落した earlier イベントを恒久的にスキップ**します。
+以後そのプロジェクションは、権威イベントを欠いた状態に対して `IsSafeState=true` を報告し、自己修復
+しません(earlier イベントは復元後のキャッチアップ下限より下に永久に留まる)。つまり残余は、retrograde
+共有行再汚染がクラスタ間で**恒久的な false-safe** を生じ得る、というものであり、後で収束する一時的な
+乖離ではありません。
+
+**G20** は共有行の generation bump + tombstone + expected-generation CAS 条件付き upsert(全プロバイダ)
+で解消します。G20 提供までは、このプロジェクションクラスは単一クラスタで運用するか、retrograde な
+マルチクラスタ再汚染下の恒久 false-safe リスクを受容してください。(retrograde な共有行書換えを伴わない
+通常経路の 2 クラスタ graduation reconcile は G18 で収束が実証済みです。)
