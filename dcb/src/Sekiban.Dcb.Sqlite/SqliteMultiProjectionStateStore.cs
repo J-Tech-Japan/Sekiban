@@ -4,14 +4,25 @@ using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Capabilities;
 
 namespace Sekiban.Dcb.Sqlite;
 
 /// <summary>
-///     SQLite implementation of IMultiProjectionStateStore
+///     SQLite implementation of IMultiProjectionStateStore. SEK-G20: also the generation/tombstone/exact-token CAS
+///     surface (<see cref="IGenerationAwareCheckpointStore" />) via conditional row-count UPDATEs.
+///     <para>
+///     MIXED-VERSION HAZARD (documented): the legacy <see cref="UpsertFromStreamAsync" /> uses <c>INSERT OR REPLACE</c>,
+///     which deletes+reinserts the row and therefore RESETS the control columns to their defaults — a pre-G20 (old)
+///     WRITER can thus erase a tombstone. Protection is complete only when every writer is upgraded; the G20 product path
+///     never uses the legacy upsert on a capable store (it routes through the CAS methods below).
+///     </para>
 /// </summary>
-public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore, IStorageDurabilityDescriptorProvider
+public class SqliteMultiProjectionStateStore :
+    IMultiProjectionStateStore,
+    IStorageDurabilityDescriptorProvider,
+    IGenerationAwareCheckpointStore
 {
     /// <summary>
     ///     Sqlite is durable when it is a file, and volatile when it is <c>:memory:</c> — same type, same class name,
@@ -34,7 +45,11 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore, IStor
     };
     private static readonly HashSet<string> AllowedColumnNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ServiceId"
+        "ServiceId",
+        // SEK-G20 additive control-plane columns (generation/tombstone/exact-token CAS).
+        "Generation",
+        "Revision",
+        "Lifecycle"
     };
     private readonly string _connectionString;
     private readonly string _databasePath;
@@ -86,6 +101,24 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore, IStor
         {
             EnsureIndexes(connection);
         }
+
+        // SEK-G20 additive upgrade: add the control-plane columns to a pre-G20 table. Existing rows default to 0/0/0
+        // (generation 0, revision 0, Active). Additive ALTER only — no event/payload migration.
+        EnsureControlColumns(connection);
+    }
+
+    private static void EnsureControlColumns(SqliteConnection connection)
+    {
+        foreach (var column in new[] { "Generation", "Revision", "Lifecycle" })
+        {
+            if (!HasColumn(connection, "dcb_multi_projection_states", column))
+            {
+                using var alter = connection.CreateCommand();
+                // Identifier validated against AllowedColumnNames by HasColumn above; literal type/default is constant.
+                alter.CommandText = $"ALTER TABLE dcb_multi_projection_states ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0;";
+                alter.ExecuteNonQuery();
+            }
+        }
     }
 
     private static void CreateSchema(SqliteConnection connection)
@@ -110,6 +143,9 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore, IStor
                 UpdatedAt TEXT NOT NULL,
                 BuildSource TEXT,
                 BuildHost TEXT,
+                Generation INTEGER NOT NULL DEFAULT 0,
+                Revision INTEGER NOT NULL DEFAULT 0,
+                Lifecycle INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (ServiceId, ProjectorName, ProjectorVersion)
             );
             CREATE INDEX IF NOT EXISTS IX_MultiProjectionStates_Service_ProjectorName
@@ -557,5 +593,232 @@ public class SqliteMultiProjectionStateStore : IMultiProjectionStateStore, IStor
             UpdatedAt: DateTime.Parse(reader.GetString(13)),
             BuildSource: reader.IsDBNull(14) ? "" : reader.GetString(14),
             BuildHost: reader.IsDBNull(15) ? null : reader.GetString(15));
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // SEK-G20 generation/tombstone/exact-token CAS (SQLite native, conditional row-count UPDATEs)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
+        CheckpointStoreCapabilityDescriptor.Supporting("Sqlite", CheckpointCapabilityKind.GenerationTombstoneCas);
+
+    private static bool TryToken(CheckpointExpectation e, out long revision) => long.TryParse(e.ExpectedRevision, out revision);
+
+    public async Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(
+        string projectorName,
+        string projectorVersion,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var serviceId = CurrentServiceId;
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT ProjectorName, ProjectorVersion, PayloadType, LastSortableUniqueId, EventsProcessed,
+                       StateData, IsOffloaded, OffloadKey, OffloadProvider, OriginalSizeBytes, CompressedSizeBytes,
+                       SafeWindowThreshold, CreatedAt, UpdatedAt, BuildSource, BuildHost, Generation, Revision, Lifecycle
+                FROM dcb_multi_projection_states
+                WHERE ServiceId = {ParamServiceId} AND ProjectorName = @projectorName AND ProjectorVersion = @projectorVersion
+                """;
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+            cmd.Parameters.AddWithValue("@projectorName", projectorName);
+            cmd.Parameters.AddWithValue("@projectorVersion", projectorVersion);
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                return ResultBox.FromValue(CheckpointSlot.Absent);
+            }
+            var record = ReadRecord(reader);
+            var generation = reader.GetInt64(16);
+            var revision = reader.GetInt64(17);
+            var lifecycle = (CheckpointLifecycle)reader.GetInt32(18);
+            return ResultBox.FromValue(new CheckpointSlot(true, generation, revision.ToString(), lifecycle, record));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<CheckpointSlot>(ex);
+        }
+    }
+
+    private async Task<CheckpointSlot> RefetchAsync(string projectorName, string projectorVersion, CancellationToken ct)
+    {
+        var read = await ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
+        return read.IsSuccess ? read.GetValue() : CheckpointSlot.Absent;
+    }
+
+    private static void BindPayloadParams(SqliteCommand cmd, MultiProjectionStateWriteRequest r, byte[] stateData)
+    {
+        cmd.Parameters.AddWithValue("@payloadType", r.PayloadType);
+        cmd.Parameters.AddWithValue("@lastSortableUniqueId", r.LastSortableUniqueId);
+        cmd.Parameters.AddWithValue("@eventsProcessed", r.EventsProcessed);
+        cmd.Parameters.AddWithValue("@stateData", stateData);
+        cmd.Parameters.AddWithValue("@originalSizeBytes", r.OriginalSizeBytes);
+        cmd.Parameters.AddWithValue("@compressedSizeBytes", r.CompressedSizeBytes);
+        cmd.Parameters.AddWithValue("@safeWindowThreshold", r.SafeWindowThreshold);
+        cmd.Parameters.AddWithValue("@updatedAt", DateTime.UtcNow.ToString("O"));
+        cmd.Parameters.AddWithValue("@buildSource", (object?)r.BuildSource ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@buildHost", (object?)r.BuildHost ?? DBNull.Value);
+    }
+
+    public async Task<CheckpointCasOutcome> ConditionalUpsertAsync(
+        MultiProjectionStateWriteRequest payload,
+        Stream stream,
+        CheckpointExpectation expectation,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+            var stateData = ms.ToArray();
+
+            var serviceId = CurrentServiceId;
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+
+            if (expectation.ExpectAbsent)
+            {
+                // Expected-absence create as a plain INSERT with ON CONFLICT DO NOTHING; changes()==1 means we created it.
+                await using var insert = connection.CreateCommand();
+                insert.CommandText = $"""
+                    INSERT INTO dcb_multi_projection_states
+                    (ServiceId, ProjectorName, ProjectorVersion, PayloadType, LastSortableUniqueId, EventsProcessed,
+                     StateData, IsOffloaded, OffloadKey, OffloadProvider, OriginalSizeBytes, CompressedSizeBytes,
+                     SafeWindowThreshold, CreatedAt, UpdatedAt, BuildSource, BuildHost, Generation, Revision, Lifecycle)
+                    VALUES
+                    ({ParamServiceId}, @projectorName, @projectorVersion, @payloadType, @lastSortableUniqueId, @eventsProcessed,
+                     @stateData, 0, NULL, NULL, @originalSizeBytes, @compressedSizeBytes,
+                     @safeWindowThreshold, @createdAt, @updatedAt, @buildSource, @buildHost, 0, 1, 0)
+                    ON CONFLICT(ServiceId, ProjectorName, ProjectorVersion) DO NOTHING
+                    """;
+                insert.Parameters.AddWithValue(ParamServiceId, serviceId);
+                insert.Parameters.AddWithValue("@projectorName", payload.ProjectorName);
+                insert.Parameters.AddWithValue("@projectorVersion", payload.ProjectorVersion);
+                insert.Parameters.AddWithValue("@createdAt", payload.CreatedAt.ToString("O"));
+                BindPayloadParams(insert, payload, stateData);
+                var inserted = await insert.ExecuteNonQueryAsync(cancellationToken);
+                var slot0 = await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken);
+                return inserted == 1 ? CheckpointCasOutcome.Committed(slot0) : CheckpointCasOutcome.Rejected(slot0);
+            }
+
+            if (!TryToken(expectation, out var expectedRevision))
+            {
+                return CheckpointCasOutcome.Corrupt();
+            }
+
+            await using var update = connection.CreateCommand();
+            update.CommandText = $"""
+                UPDATE dcb_multi_projection_states
+                SET PayloadType = @payloadType, LastSortableUniqueId = @lastSortableUniqueId, EventsProcessed = @eventsProcessed,
+                    StateData = @stateData, IsOffloaded = 0, OffloadKey = NULL, OffloadProvider = NULL,
+                    OriginalSizeBytes = @originalSizeBytes, CompressedSizeBytes = @compressedSizeBytes,
+                    SafeWindowThreshold = @safeWindowThreshold, UpdatedAt = @updatedAt, BuildSource = @buildSource,
+                    BuildHost = @buildHost, Revision = Revision + 1
+                WHERE ServiceId = {ParamServiceId} AND ProjectorName = @projectorName AND ProjectorVersion = @projectorVersion
+                    AND Generation = @g AND Revision = @rev AND Lifecycle = 0
+                """;
+            update.Parameters.AddWithValue(ParamServiceId, serviceId);
+            update.Parameters.AddWithValue("@projectorName", payload.ProjectorName);
+            update.Parameters.AddWithValue("@projectorVersion", payload.ProjectorVersion);
+            update.Parameters.AddWithValue("@g", expectation.ExpectedGeneration);
+            update.Parameters.AddWithValue("@rev", expectedRevision);
+            BindPayloadParams(update, payload, stateData);
+            var affected = await update.ExecuteNonQueryAsync(cancellationToken);
+            var slot = await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken);
+            return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
+        }
+        catch (Exception ex)
+        {
+            return CheckpointCasOutcome.ProviderFailed(ex);
+        }
+    }
+
+    public async Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(
+        string projectorName,
+        string projectorVersion,
+        CheckpointExpectation expectation,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+            {
+                return CheckpointCasOutcome.Corrupt();
+            }
+            var serviceId = CurrentServiceId;
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"""
+                UPDATE dcb_multi_projection_states
+                SET Generation = Generation + 1, Revision = Revision + 1, Lifecycle = 1, UpdatedAt = @updatedAt
+                WHERE ServiceId = {ParamServiceId} AND ProjectorName = @projectorName AND ProjectorVersion = @projectorVersion
+                    AND Generation = @g AND Revision = @rev AND Lifecycle = 0
+                """;
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+            cmd.Parameters.AddWithValue("@projectorName", projectorName);
+            cmd.Parameters.AddWithValue("@projectorVersion", projectorVersion);
+            cmd.Parameters.AddWithValue("@g", expectation.ExpectedGeneration);
+            cmd.Parameters.AddWithValue("@rev", expectedRevision);
+            cmd.Parameters.AddWithValue("@updatedAt", DateTime.UtcNow.ToString("O"));
+            var affected = await cmd.ExecuteNonQueryAsync(cancellationToken);
+            var slot = await RefetchAsync(projectorName, projectorVersion, cancellationToken);
+            return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
+        }
+        catch (Exception ex)
+        {
+            return CheckpointCasOutcome.ProviderFailed(ex);
+        }
+    }
+
+    public async Task<CheckpointCasOutcome> CommitRebuiltAsync(
+        MultiProjectionStateWriteRequest payload,
+        Stream stream,
+        CheckpointExpectation expectation,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+            {
+                return CheckpointCasOutcome.Corrupt();
+            }
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+            var stateData = ms.ToArray();
+
+            var serviceId = CurrentServiceId;
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var cmd = connection.CreateCommand();
+            // One atomic same-row CAS: write rebuilt payload AND clear the tombstone on the exact Tombstoned token.
+            cmd.CommandText = $"""
+                UPDATE dcb_multi_projection_states
+                SET PayloadType = @payloadType, LastSortableUniqueId = @lastSortableUniqueId, EventsProcessed = @eventsProcessed,
+                    StateData = @stateData, IsOffloaded = 0, OffloadKey = NULL, OffloadProvider = NULL,
+                    OriginalSizeBytes = @originalSizeBytes, CompressedSizeBytes = @compressedSizeBytes,
+                    SafeWindowThreshold = @safeWindowThreshold, UpdatedAt = @updatedAt, BuildSource = @buildSource,
+                    BuildHost = @buildHost, Lifecycle = 0, Revision = Revision + 1
+                WHERE ServiceId = {ParamServiceId} AND ProjectorName = @projectorName AND ProjectorVersion = @projectorVersion
+                    AND Generation = @g AND Revision = @rev AND Lifecycle = 1
+                """;
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+            cmd.Parameters.AddWithValue("@projectorName", payload.ProjectorName);
+            cmd.Parameters.AddWithValue("@projectorVersion", payload.ProjectorVersion);
+            cmd.Parameters.AddWithValue("@g", expectation.ExpectedGeneration);
+            cmd.Parameters.AddWithValue("@rev", expectedRevision);
+            BindPayloadParams(cmd, payload, stateData);
+            var affected = await cmd.ExecuteNonQueryAsync(cancellationToken);
+            var slot = await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken);
+            return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
+        }
+        catch (Exception ex)
+        {
+            return CheckpointCasOutcome.ProviderFailed(ex);
+        }
     }
 }
