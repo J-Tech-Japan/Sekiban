@@ -96,6 +96,32 @@ public class CosmosCheckpointGenerationCasTests
     }
 
     [Fact]
+    public async Task PostCommitResponseLoss_ResolvesCommittedOrInDoubt_ViaBoundedReread()
+    {
+        var client = new InMemoryCosmosClient();
+        var store = NewStore(client);
+        await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = await ReadAsync(store);
+        var container = client.Container("multiProjectionStates");
+
+        // The Replace COMMITS but its response is lost (post-write fault). The store's bounded re-read confirms our own
+        // committed write -> Committed.
+        container.PostWriteFaults.Enqueue(new IOException("injected: lost response after a committed write"));
+        var committed = await store.ConditionalUpsertAsync(Req(2), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, committed.Status);
+        Assert.Equal(2, (await ReadAsync(store)).Record!.EventsProcessed);
+
+        // The Replace FAILS before committing (pre-write fault). It targets the CURRENT valid token (so it reaches the
+        // dispatch), but the write does not commit, so the bounded re-read cannot confirm our payload -> typed InDoubt.
+        var current = await ReadAsync(store);
+        container.WriteFaults.Enqueue(new IOException("injected: lost response, write did not commit"));
+        var indoubt = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(current), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.InDoubt, indoubt.Status);
+        Assert.NotNull(indoubt.Cause);
+        Assert.Equal(current.Revision, (await ReadAsync(store)).Revision);   // row unchanged by the failed write
+    }
+
+    [Fact]
     public async Task PreG20Doc_MissingControlProperties_ReadsAsGeneration0_Active()
     {
         // A legacy write leaves the generation/lifecycle properties absent; Newtonsoft defaults them to 0 → gen 0, Active.

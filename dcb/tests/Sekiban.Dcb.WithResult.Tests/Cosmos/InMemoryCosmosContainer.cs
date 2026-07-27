@@ -31,6 +31,20 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     public Queue<Exception> WriteFaults { get; } = new();
 
     /// <summary>
+    ///     SEK-G20: fails the next N writes AFTER the document is durably stored — models a lost response on a write that
+    ///     DID commit, so the caller's bounded re-read can confirm its own commit.
+    /// </summary>
+    public Queue<Exception> PostWriteFaults { get; } = new();
+
+    private void ThrowIfPostFaulted()
+    {
+        if (PostWriteFaults.Count > 0)
+        {
+            throw PostWriteFaults.Dequeue();
+        }
+    }
+
+    /// <summary>
     ///     Called with the running count before each document is written. Lets a test act on the Nth write —
     ///     cancel, crash, race a concurrent writer — at an exact point, instead of polling for one.
     /// </summary>
@@ -116,6 +130,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
             Stamp(document);
             _items[key] = document;
+            ThrowIfPostFaulted();
             return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.Created));
         }
     }
@@ -208,6 +223,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             Creates++;
             Stamp(document);
             _items[key] = document;
+            ThrowIfPostFaulted();
             return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.OK));
         }
     }
@@ -229,6 +245,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             Creates++;
             Stamp(document);
             _items[key] = document;
+            ThrowIfPostFaulted();
             return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.OK));
         }
     }

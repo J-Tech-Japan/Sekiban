@@ -103,6 +103,28 @@ public class DynamoDbCheckpointGenerationCasTests
     }
 
     [Fact]
+    public async Task PostCommitResponseLoss_ResolvesCommittedOrInDoubt_ViaBoundedReread()
+    {
+        var client = NewClient();
+        var fake = (FakeDynamoDb)client;
+        var store = NewStore(client);
+        await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = await ReadAsync(store);
+
+        // The PutItem COMMITS but its response is lost -> the store's bounded re-read confirms our own commit -> Committed.
+        fake.PostWriteFaults.Enqueue(new IOException("injected: lost response after a committed write"));
+        var committed = await store.ConditionalUpsertAsync(Req(2), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.Committed, committed.Status);
+
+        // The PutItem FAILS before committing -> the re-read cannot confirm our payload -> typed InDoubt with a cause.
+        var current = await ReadAsync(store);
+        fake.PreWriteFaults.Enqueue(new IOException("injected: lost response, write did not commit"));
+        var indoubt = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(current), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.InDoubt, indoubt.Status);
+        Assert.NotNull(indoubt.Cause);
+    }
+
+    [Fact]
     public async Task PreG20Item_MissingControlAttributes_ReadsAsGeneration0_Active()
     {
         var store = NewStore(NewClient());
@@ -120,6 +142,10 @@ public class DynamoDbCheckpointGenerationCasTests
     public class FakeDynamoDb : DispatchProxy
     {
         private readonly Dictionary<(string Pk, string Sk), Dictionary<string, AttributeValue>> _items = new();
+
+        // SEK-G20: inject a lost response BEFORE the write commits (PreWriteFaults) or AFTER it commits (PostWriteFaults).
+        public readonly Queue<Exception> PreWriteFaults = new();
+        public readonly Queue<Exception> PostWriteFaults = new();
         private readonly object _gate = new();
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
@@ -163,7 +189,9 @@ public class DynamoDbCheckpointGenerationCasTests
                 {
                     throw new ConditionalCheckFailedException("The conditional request failed");
                 }
+                if (PreWriteFaults.Count > 0) throw PreWriteFaults.Dequeue();   // lost response, write did NOT commit
                 _items[key] = new Dictionary<string, AttributeValue>(req.Item);
+                if (PostWriteFaults.Count > 0) throw PostWriteFaults.Dequeue(); // lost response AFTER a committed write
                 return new PutItemResponse();
             }
         }

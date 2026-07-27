@@ -553,9 +553,23 @@ public class CosmosMultiProjectionStateStore :
         }
         catch (Exception ex)
         {
-            return CheckpointCasOutcome.ProviderFailed(ex);
+            // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
+            return await ResolveWriteInDoubtAsync(payload, expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, ex);
         }
     }
+
+    // Resolves a write whose response was lost: a bounded re-read that verifies our exact resulting generation + Active
+    // lifecycle + payload identity reports Committed; otherwise typed retryable InDoubt (a retry uses the same exact
+    // token, so it is idempotent). Never a false Committed — a concurrent winner with a different payload fails identity.
+    private Task<CheckpointCasOutcome> ResolveWriteInDoubtAsync(
+        MultiProjectionStateWriteRequest payload, long resultingGeneration, Exception cause) =>
+        CheckpointInDoubtResolver.ResolveAsync(
+            ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
+            slot => slot.IsActive && slot.Generation == resultingGeneration && slot.Record is { } r
+                && string.Equals(r.LastSortableUniqueId, payload.LastSortableUniqueId, StringComparison.Ordinal)
+                && r.EventsProcessed == payload.EventsProcessed,
+            maxAttempts: 3,
+            cause: cause);
 
     public async Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(
         string projectorName,
@@ -626,7 +640,8 @@ public class CosmosMultiProjectionStateStore :
         }
         catch (Exception ex)
         {
-            return CheckpointCasOutcome.ProviderFailed(ex);
+            // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
+            return await ResolveWriteInDoubtAsync(payload, expectation.ExpectedGeneration, ex);
         }
     }
 
