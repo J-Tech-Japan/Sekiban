@@ -886,13 +886,13 @@ public class GeneralMultiProjectionActor
     }
 
     /// <summary>
-    ///     SEK-G18: true when the dual-state accessor detected an out-of-global-order safe promotion / arrival that the
-    ///     incremental (compacted-baseline) path cannot reorder. The grain/host must respond with a full ordered rebuild
-    ///     from the authoritative event store — this is NOT a fault; the G14 fault path is reserved for failures OF the
-    ///     rebuild itself.
+    ///     SEK-G18 INTERNAL seam (no public API change): true when the dual-state accessor detected an out-of-global-order
+    ///     safe promotion / arrival that the incremental (compacted-baseline) path cannot reorder. The grain/host responds
+    ///     with a full ordered rebuild from the authoritative event store — NOT the G14 fault path. Visible to the Orleans
+    ///     host via InternalsVisibleTo; not part of the public surface.
     /// </summary>
-    public bool RebuildRequired =>
-        _singleStateAccessor is IDualStateAccessor dualAccessor && dualAccessor.RebuildRequired;
+    internal bool RebuildRequired =>
+        _singleStateAccessor is IDualStateRebuildSignals signals && signals.RebuildRequired;
 
     public void ForcePromoteAllBufferedEvents()
     {
@@ -960,8 +960,20 @@ public class GeneralMultiProjectionActor
 
                 // SEK-G18: IsSafeState reflects the RECONCILE FACT — the served state was published identical to the safe
                 // state (no buffered events remain, no rebuild pending) — never a timestamp comparison that can report
-                // true for an unreconciled, arrival-ordered payload (#1092).
-                isSafeState = dualAccessor.IsServedIdenticalToSafe;
+                // true for an unreconciled, arrival-ordered payload (#1092). Read via the internal signal seam; fall back
+                // to the legacy timestamp comparison only for external accessors that do not implement the seam.
+                if (dualAccessor is IDualStateRebuildSignals signals)
+                {
+                    isSafeState = signals.IsServedIdenticalToSafe;
+                }
+                else if (!string.IsNullOrEmpty(lastSortableId))
+                {
+                    isSafeState = new SortableUniqueId(lastSortableId).GetDateTime() <= safeWindowThreshold.GetDateTime();
+                }
+                else
+                {
+                    isSafeState = true;
+                }
             }
             else
             {

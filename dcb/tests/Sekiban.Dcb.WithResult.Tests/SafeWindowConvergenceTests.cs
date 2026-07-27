@@ -150,11 +150,19 @@ public class SafeWindowConvergenceTests
 
         // First a later (by SortableUniqueId) already-safe event graduates the safe head.
         accessor.ProcessEventAs(CreateEvent(new CreatedWithId("t", "B"), DateTime.UtcNow.AddSeconds(-8)), threshold, _domainTypes);
-        Assert.False(accessor.RebuildRequired);
+        Assert.False(ReadRebuildRequired(accessor));
 
         // Then a globally-EARLIER already-safe event arrives out of order — incremental path cannot reorder it.
         accessor.ProcessEventAs(CreateEvent(new CreatedWithId("t", "A"), DateTime.UtcNow.AddSeconds(-9)), threshold, _domainTypes);
-        Assert.True(accessor.RebuildRequired);
+        Assert.True(ReadRebuildRequired(accessor));
+    }
+
+    // The rebuild signal is an INTERNAL seam (IDualStateRebuildSignals) — no public API. Read it via reflection for the
+    // wrapper-level unit assertion; the grain-level observable behavior is covered by the Orleans rebuild tests.
+    private static bool ReadRebuildRequired(object wrapper)
+    {
+        var seam = typeof(IDualStateAccessor).Assembly.GetType("Sekiban.Dcb.MultiProjections.IDualStateRebuildSignals")!;
+        return (bool)seam.GetProperty("RebuildRequired")!.GetValue(wrapper)!;
     }
 
     [Fact]

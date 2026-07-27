@@ -1,4 +1,5 @@
 using System;
+using Sekiban.Dcb.Runtime.Native;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -994,7 +995,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // does not re-trip the guard. This is NOT the G14 fault path — that is reserved for failures OF the rebuild itself.
     private void RebuildProjectionIfSignaled()
     {
-        if (_host is { RebuildRequired: true })
+        if (_host is IRebuildSignalingHost { RebuildRequired: true })
         {
             RecreateHostForFullRebuild();
         }
@@ -4140,7 +4141,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _lastEventTime = DateTime.UtcNow;
 
                 // SEK-G18: live events can arrive out of global order; rebuild from the authoritative store if signaled.
-                if (_host is { RebuildRequired: true })
+                if (_host is IRebuildSignalingHost { RebuildRequired: true })
                 {
                     RecreateHostForFullRebuild();
                     return;
@@ -4248,7 +4249,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             // SEK-G18: live events can arrive out of global order; rebuild from the authoritative store if signaled.
-            if (_host is { RebuildRequired: true })
+            if (_host is IRebuildSignalingHost { RebuildRequired: true })
             {
                 RecreateHostForFullRebuild();
                 return;

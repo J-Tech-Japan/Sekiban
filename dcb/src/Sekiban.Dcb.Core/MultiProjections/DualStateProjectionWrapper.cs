@@ -11,7 +11,8 @@ namespace Sekiban.Dcb.MultiProjections;
 ///     Wrapper class that adapts traditional IMultiProjectionPayload implementations
 ///     to work with the ISafeAndUnsafeStateAccessor interface by managing safe and unsafe states internally.
 /// </summary>
-public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMultiProjectionPayload, IDualStateAccessor
+public class DualStateProjectionWrapper<T>
+    : ISafeAndUnsafeStateAccessor<T>, IMultiProjectionPayload, IDualStateAccessor, IDualStateRebuildSignals
     where T : IMultiProjectionPayload
 {
     // Keep track of safe events until the next persisted safe snapshot boundary.
@@ -198,8 +199,10 @@ public class DualStateProjectionWrapper<T> : ISafeAndUnsafeStateAccessor<T>, IMu
         string.IsNullOrEmpty(_safeLastSortableUniqueId) ? null : _safeLastSortableUniqueId;
     object IDualStateAccessor.GetSafeProjectorPayload() => _safeProjector!;
     object IDualStateAccessor.GetUnsafeProjectorPayload() => _unsafeProjector!;
-    bool IDualStateAccessor.IsServedIdenticalToSafe => !_rebuildRequired && _bufferedEvents.Count == 0;
-    bool IDualStateAccessor.RebuildRequired => _rebuildRequired;
+
+    // SEK-G18 internal seam (not on the public IDualStateAccessor surface).
+    bool IDualStateRebuildSignals.IsServedIdenticalToSafe => !_rebuildRequired && _bufferedEvents.Count == 0;
+    bool IDualStateRebuildSignals.RebuildRequired => _rebuildRequired;
     IDualStateAccessor IDualStateAccessor.ProcessEventAs(
         Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
