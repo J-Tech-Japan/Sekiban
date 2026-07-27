@@ -1011,31 +1011,55 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // establishes the G14 persisted fault via the existing per-event boundary.
     private async Task TriggerDurableFullRebuildAsync()
     {
+        // Block queries in THIS activation before touching any durable state.
         _firstQueryGate.Arm();
 
-        GrainStateWriteOutcome outcome;
+        // (1) FAIL-FIRST durable marker: commit RebuildRequired=true to grain state BEFORE the external snapshot is
+        //     touched. A process/silo loss AFTER this commit is safe — a fresh activation observes the marker (checked
+        //     before restore) and forces a full ordered replay even though the external snapshot is still intact. If the
+        //     marker commit fails, the external snapshot is NOT invalidated (nothing half-done): pin the activation so it
+        //     does not deactivate into a crash window, keep the barrier armed and the live host's RebuildRequired set, and
+        //     the next apply/query retries.
+        GrainStateWriteOutcome markerOutcome;
         try
         {
-            outcome = await _stateStore.ExecuteGuardedWriteAsync(
-                GrainStateWriteKind.OperatorReset,
-                _ => true,
-                ResetDerivedStateForFullRebuild,
-                beforeWrite: InvalidateExternalDerivedSnapshotAsync);
+            markerOutcome = await _stateStore.ExecuteWriteAsync(
+                GrainStateWriteKind.MetadataMaintenance,
+                s => s.RebuildRequired = true);
         }
         catch (Exception ex)
         {
-            _lastError = $"Projection integrity rebuild transition failed: {ex.Message}";
+            _lastError = $"Projection rebuild marker persist failed: {ex.Message}";
+            PinFaultedActivation();
             _firstQueryGate.Arm();
             return;
         }
 
-        if (outcome != GrainStateWriteOutcome.Committed)
+        if (markerOutcome != GrainStateWriteOutcome.Committed)
         {
-            _lastError = "Projection integrity rebuild transition was not committed.";
+            _lastError = "Projection rebuild marker was not committed.";
+            PinFaultedActivation();
             _firstQueryGate.Arm();
             return;
         }
 
+        // (2) Marker is durable. Invalidate the derived EXTERNAL snapshot and clear the derived checkpoint (the marker
+        //     STAYS true — a failure here still leaves a durable rebuild requirement, so a crash rebuilds correctly).
+        try
+        {
+            await InvalidateExternalDerivedSnapshotAsync();
+            await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.OperatorReset, ResetDerivedStateForFullRebuild);
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Projection rebuild external/checkpoint clear failed: {ex.Message}";
+            _firstQueryGate.Arm();
+            return; // marker durable; the barrier stays armed and a retry / fresh activation completes the rebuild.
+        }
+
+        // (3) Recreate the live host + re-arm the barrier so the next state/scalar/list query synchronously replays the
+        //     full ordered history from the authoritative store before it can answer. The durable marker is cleared only
+        //     after the rebuilt checkpoint is durably committed (in the persist path).
         RecreateHostForFullRebuild();
     }
 
@@ -1261,6 +1285,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         s.LastGoodOriginalSizeBytes = originalSizeBytes;
                     }
                     s.LastGoodEventsProcessed = _eventsProcessed;
+
+                    // SEK-G18 #6: the rebuilt checkpoint is now durably committed to the external store, so the durable
+                    // rebuild marker can be cleared — a subsequent activation may safely restore this fresh checkpoint.
+                    s.RebuildRequired = false;
                 }
 
                 // Clear legacy fields
@@ -1932,8 +1960,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var projectorVersion = _host.GetProjectorVersion();
             bool restoredFromExternalStore = false;
 
-            // Restore from external store (Postgres/Cosmos)
-            if (_multiProjectionStateStore != null)
+            // SEK-G18 #6: a durable RebuildRequired marker means the persisted/external checkpoint may be the stale
+            // pre-rebuild payload. Checked BEFORE any restore: do NOT restore it — arm the shared query barrier and force a
+            // full ordered replay from the authoritative store. The marker is cleared only after the rebuilt checkpoint is
+            // durably committed (persist path), so a fresh activation cannot serve stale success in the crash window.
+            var durableRebuildPending = _stateStore.Committed.RebuildRequired;
+            if (durableRebuildPending)
+            {
+                _logger.LogWarning(
+                    "Durable rebuild marker set on activation: {ProjectorName} — forcing full ordered replay, skipping restore",
+                    projectorName);
+                _firstQueryGate.Arm();
+                forceFullCatchUp = true;
+            }
+
+            // Restore from external store (Postgres/Cosmos) — skipped when a durable rebuild is pending.
+            if (_multiProjectionStateStore != null && !durableRebuildPending)
             {
                 try
                 {

@@ -24,6 +24,14 @@ public interface IReadOnlyMultiProjectionGrainState
     string? FaultPosition { get; }
     string? FaultMessage { get; }
     long FaultedAtUtcTicks { get; }
+
+    /// <summary>
+    ///     SEK-G18: a durable "full ordered rebuild required" marker committed BEFORE the derived external snapshot is
+    ///     invalidated. A fresh activation that sees this true must NOT restore the (possibly stale) external snapshot and
+    ///     must force a full ordered replay from the authoritative store behind the shared query barrier. Cleared only after
+    ///     a rebuilt checkpoint is durably committed. Default false (old state deserializes to false — no migration).
+    /// </summary>
+    bool RebuildRequired { get; }
 }
 
 /// <summary>
@@ -92,6 +100,10 @@ public class MultiProjectionGrainState : IReadOnlyMultiProjectionGrainState
     [Id(17)]
     public long FaultedAtUtcTicks { get; set; }
 
+    // SEK-G18: durable rebuild-required marker (see interface doc). Additive [Id(18)]; old state deserializes to false.
+    [Id(18)]
+    public bool RebuildRequired { get; set; }
+
     /// <summary>
     ///     A complete copy of every field. All fields are value types or immutable strings, so a member-wise copy is a
     ///     deep clone. Used for copy-on-write: a write mutates a clone and publishes it only after a successful commit.
@@ -116,6 +128,7 @@ public class MultiProjectionGrainState : IReadOnlyMultiProjectionGrainState
             FaultEventType = FaultEventType,
             FaultPosition = FaultPosition,
             FaultMessage = FaultMessage,
-            FaultedAtUtcTicks = FaultedAtUtcTicks
+            FaultedAtUtcTicks = FaultedAtUtcTicks,
+            RebuildRequired = RebuildRequired
         };
 }
