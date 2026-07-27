@@ -983,22 +983,60 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _lastEventTime = DateTime.UtcNow;
             }
 
-            RebuildProjectionIfSignaled();
+            await RebuildProjectionIfSignaledAsync();
         }
     }
 
     // SEK-G18: the dual-state accessor signals RebuildRequired when a live event promoted to safe OUT of global
     // SortableUniqueId order versus the held safe head — which the incremental (compacted-baseline) path cannot reorder.
-    // The single mandated remedy is a full ordered rebuild from the authoritative event store: recreate the host and re-arm
-    // the first-query barrier so the next state/scalar/list query awaits the rebuilt payload (or fails closed) and never
-    // returns a stale success. The authoritative store is read in SortableUniqueId order, so the from-beginning rebuild
-    // does not re-trip the guard. This is NOT the G14 fault path — that is reserved for failures OF the rebuild itself.
-    private void RebuildProjectionIfSignaled()
+    // The single mandated remedy is a full ordered rebuild from the authoritative event store. NOT the G14 fault path —
+    // that is reserved for failures OF the rebuild itself.
+    private async Task RebuildProjectionIfSignaledAsync()
     {
         if (_host is IRebuildSignalingHost { RebuildRequired: true })
         {
-            RecreateHostForFullRebuild();
+            await TriggerDurableFullRebuildAsync();
         }
+    }
+
+    // SEK-G18 #6: durably establish the rebuild BEFORE discarding the live host. First arm the first-query barrier so no
+    // query can serve the stale pre-rebuild payload; then, inside the single-writer gate, invalidate the derived EXTERNAL
+    // snapshot (beforeWrite) and clear the persisted grain-state checkpoint copy-on-write. Only after that durable clear
+    // commits is the live host recreated and the barrier re-armed, so the next state/scalar/list query synchronously
+    // replays the full ordered history from the authoritative store before it can answer. A process/silo loss at ANY point
+    // after the external snapshot is invalidated leaves a fresh activation with no snapshot to restore, forcing the same
+    // full replay. If the durable transition itself fails, the barrier stays armed and the live host keeps RebuildRequired,
+    // so queries remain fail-closed and the next apply/query retries — never a stale success. The authoritative store is
+    // read in SortableUniqueId order, so the from-beginning replay does not re-trip the guard; a poison event on replay
+    // establishes the G14 persisted fault via the existing per-event boundary.
+    private async Task TriggerDurableFullRebuildAsync()
+    {
+        _firstQueryGate.Arm();
+
+        GrainStateWriteOutcome outcome;
+        try
+        {
+            outcome = await _stateStore.ExecuteGuardedWriteAsync(
+                GrainStateWriteKind.OperatorReset,
+                _ => true,
+                ResetDerivedStateForFullRebuild,
+                beforeWrite: InvalidateExternalDerivedSnapshotAsync);
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Projection integrity rebuild transition failed: {ex.Message}";
+            _firstQueryGate.Arm();
+            return;
+        }
+
+        if (outcome != GrainStateWriteOutcome.Committed)
+        {
+            _lastError = "Projection integrity rebuild transition was not committed.";
+            _firstQueryGate.Arm();
+            return;
+        }
+
+        RecreateHostForFullRebuild();
     }
 
     public async Task<MultiProjectionGrainStatus> GetStatusAsync()
@@ -4143,7 +4181,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 // SEK-G18: live events can arrive out of global order; rebuild from the authoritative store if signaled.
                 if (_host is IRebuildSignalingHost { RebuildRequired: true })
                 {
-                    RecreateHostForFullRebuild();
+                    await TriggerDurableFullRebuildAsync();
                     return;
                 }
             }
@@ -4251,7 +4289,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // SEK-G18: live events can arrive out of global order; rebuild from the authoritative store if signaled.
             if (_host is IRebuildSignalingHost { RebuildRequired: true })
             {
-                RecreateHostForFullRebuild();
+                await TriggerDurableFullRebuildAsync();
                 return;
             }
 
