@@ -337,3 +337,17 @@ DCB の Dapr 版は未提供です。`Sekiban.Pure.Dapr` は古いランタイ�
 - 復元後のキャッチアップはレコードの `LastSortableUniqueId` を排他的に読み取って開始します。
 - アプリのプロジェクタは create アームを真の first-event-wins(`if (state.Contains(id)) return state;`)
   で実装し、グローバルに最も早いイベントが権威となるようにしてください。
+
+### 既知の制限(共有ストア・複数クラスタ)— G20 で解消
+
+上記の単一クラスタの耐久再構築は完結しています。特定の**マルチクラスタ**トポロジにのみ残余があり、
+**G20** で追跡・解消されます。2つ以上の*独立した*クラスタが 1 つの外部チェックポイント行
+(`dcb_multi_projection_states`、`serviceId/projectorName/projectorVersion` がキー)を共有し、一方の
+クラスタが retrograde な完全再構築を行って共有行を無効化した場合、まだ古いチェックポイントを保持する
+別クラスタが、retrograde イベントを独立に観測して再構築する前の狭いウィンドウで、その行を再 upsert
+(再汚染)し得ます。再構築マーカーはクラスタローカルの grain storage で、共有行 upsert には現状
+クラスタ間の並行性ガードが無いため、activation-local プロトコル単独ではこれを防げません。**危険性**:
+そのウィンドウ内で復元する第三の活性化が、古い値を正常成功として返し得ます。**G20** は共有行の
+generation bump + tombstone + expected-generation CAS 条件付き upsert(全プロバイダ)で解消します。
+G20 提供までは、このプロジェクションクラスは単一クラスタで運用するか、狭いマルチクラスタ再汚染
+ウィンドウを受容してください。

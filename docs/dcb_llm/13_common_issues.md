@@ -365,3 +365,19 @@ events, the persisted checkpoint's position/`EventsProcessed` changes.
 - Catch-up after restore starts exclusive of the record's `LastSortableUniqueId`.
 - Application projectors should still implement create arms as true first-event-wins
   (`if (state.Contains(id)) return state;`) so the globally-earliest event is authoritative.
+
+### Known limitation (shared-store, multiple clusters) — closed in G20
+
+The single-cluster durable rebuild above is complete. One residual remains for a specific
+**multi-cluster** topology and is tracked/closed in **G20**: when two or more *independent*
+clusters share one external checkpoint row (`dcb_multi_projection_states`, keyed by
+`serviceId/projectorName/projectorVersion`), and one cluster performs a retrograde
+full-rebuild that invalidates the shared row, a peer cluster that is still holding the old
+checkpoint can, in a narrow window, re-upsert (re-contaminate) the row before it independently
+observes the retrograde event and rebuilds. The rebuild marker is cluster-local grain storage,
+and the shared-row upsert currently has no cross-cluster concurrency guard, so the
+activation-local protocol cannot prevent this by itself. **Danger**: a third activation
+restoring in that window can serve the stale value as a healthy success. **G20** closes it with
+a shared-row generation bump + tombstone + expected-generation CAS-guarded conditional upsert
+across all providers. Until G20 ships, run this projection class single-cluster, or accept the
+narrow multi-cluster re-contamination window.
