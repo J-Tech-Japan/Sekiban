@@ -191,6 +191,7 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
         interceptor.PreCommitFault = true;
         var indoubt = await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, indoubt.Status);
+        Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, indoubt.InDoubtReason);
         Assert.NotNull(indoubt.Cause);
         Assert.False((await ReadAsync(store)).Exists);    // the write did not commit
     }
@@ -277,6 +278,7 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
         cmdFault.PreCommitFault = true;
         var persistPre = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(afterPersist), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, persistPre.Status);
+        Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, persistPre.InDoubtReason);
         Assert.Equal(2, (await ReadAsync(store)).Record!.EventsProcessed);
         var persistRetry = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(afterPersist), 1_000_000);
         Assert.Equal(CheckpointCasStatus.Committed, persistRetry.Status);
@@ -286,6 +288,7 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
         cmdFault.PreCommitFault = true;
         var invPre = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(beforeInvalidate));
         Assert.Equal(CheckpointCasStatus.InDoubt, invPre.Status);
+        Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, invPre.InDoubtReason);
         Assert.True((await ReadAsync(store)).IsActive);
         cmdFault.PostCommitFault = true;
         var invPost = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(beforeInvalidate));
@@ -298,6 +301,7 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
         cmdFault.PreCommitFault = true;
         var rebPre = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, rebPre.Status);
+        Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, rebPre.InDoubtReason);
         Assert.True((await ReadAsync(store)).IsTombstoned);
         cmdFault.PostCommitFault = true;
         var rebPost = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);

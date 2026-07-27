@@ -30,11 +30,13 @@ public static class CheckpointInDoubtResolver
 
         // The caller invokes this ONLY when the write already crossed a commit-capable boundary (a dispatch/transport
         // failure), so its commit is genuinely unknown. A bounded independent re-read that confirms our exact write ->
-        // Committed. ANY other outcome — a read that succeeds but does not show our write, OR a re-read that cannot
-        // complete at all (the authority is unreachable/timing out) — leaves the commit UNKNOWN and MUST remain typed
-        // retryable InDoubt, preserving the original safe cause/token. It is NEVER downgraded to ProviderFailure here:
-        // unreadable authority after a possible commit does not establish a known pre-commit failure. (A deterministic
-        // pre-commit / schema / preflight failure is classified ProviderFailure by the PROVIDER, before it calls this.)
+        // Committed. ANY other outcome leaves the commit UNKNOWN and MUST remain typed retryable InDoubt, preserving the
+        // original safe cause/token. It is NEVER downgraded to ProviderFailure here (a deterministic pre-commit / schema
+        // failure is classified ProviderFailure by the PROVIDER, before it calls this). The closed InDoubt reason records
+        // WHY the winner is unknown:
+        //   - at least one re-read SUCCEEDED but none confirmed our write => AmbiguousAfterWrite;
+        //   - EVERY bounded re-read failed/timed out (authority unreachable) => VerificationUnavailable.
+        var anyReadSucceeded = false;
         for (var attempt = 0; attempt < Math.Max(1, maxAttempts); attempt++)
         {
             ResultBox<CheckpointSlot> read;
@@ -45,14 +47,21 @@ public static class CheckpointInDoubtResolver
             }
             catch
             {
-                continue; // an unreadable authority does not prove non-commit; keep within budget, then InDoubt
+                continue; // an unreadable authority does not prove non-commit; keep within budget
             }
-            if (read.IsSuccess && committedByUs(read.GetValue()))
+            if (!read.IsSuccess)
+            {
+                continue; // a failed ResultBox is also an unavailable read
+            }
+            anyReadSucceeded = true;
+            if (committedByUs(read.GetValue()))
             {
                 return CheckpointCasOutcome.Committed(read.GetValue());
             }
         }
-        return CheckpointCasOutcome.Doubt(cause);
+        return CheckpointCasOutcome.Doubt(
+            anyReadSucceeded ? CheckpointInDoubtReason.AmbiguousAfterWrite : CheckpointInDoubtReason.VerificationUnavailable,
+            cause);
     }
 
     /// <summary>

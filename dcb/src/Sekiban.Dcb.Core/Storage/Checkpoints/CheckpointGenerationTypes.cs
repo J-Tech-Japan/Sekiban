@@ -153,16 +153,38 @@ public enum CheckpointCasStatus
 }
 
 /// <summary>
+///     Closed reason set for an <see cref="CheckpointCasStatus.InDoubt" /> outcome. Both values are typed retryable (the
+///     caller must re-read, never blind-retry with the stale token); neither is ever a false success. The distinction lets
+///     a caller/telemetry tell WHY the winner is unknown after a commit-capable boundary was crossed.
+/// </summary>
+public enum CheckpointInDoubtReason
+{
+    /// <summary>
+    ///     At least one bounded independent re-read SUCCEEDED but none confirmed OUR own write (the authoritative row shows
+    ///     a not-yet-visible or a foreign state), so whether our write committed is genuinely unknown.
+    /// </summary>
+    AmbiguousAfterWrite,
+
+    /// <summary>
+    ///     EVERY bounded independent re-read failed/timed out — the authority was unreachable, so verification could not be
+    ///     performed at all. Unreadable authority after a possible commit is NEVER a known pre-commit failure.
+    /// </summary>
+    VerificationUnavailable
+}
+
+/// <summary>
 ///     The result of a conditional checkpoint operation. On <see cref="CheckpointCasStatus.Committed" />, <see
 ///     cref="ResultingSlot" /> carries the new control-plane identity. On <see cref="CheckpointCasStatus.ConditionRejected" />,
-///     <see cref="CurrentSlot" /> carries the row as it actually is (the refetch signal). Provider causes are attached only
-///     when present and must be surfaced secret-safe by callers.
+///     <see cref="CurrentSlot" /> carries the row as it actually is (the refetch signal). On <see
+///     cref="CheckpointCasStatus.InDoubt" />, <see cref="InDoubtReason" /> is the closed typed reason. Provider causes are
+///     attached only when present and must be surfaced secret-safe by callers (see <see cref="SafeDescribe" />).
 /// </summary>
 public sealed record CheckpointCasOutcome(
     CheckpointCasStatus Status,
     CheckpointSlot? CurrentSlot = null,
     CheckpointSlot? ResultingSlot = null,
-    Exception? Cause = null)
+    Exception? Cause = null,
+    CheckpointInDoubtReason? InDoubtReason = null)
 {
     public static CheckpointCasOutcome Committed(CheckpointSlot resultingSlot) =>
         new(CheckpointCasStatus.Committed, ResultingSlot: resultingSlot);
@@ -179,6 +201,25 @@ public sealed record CheckpointCasOutcome(
     public static CheckpointCasOutcome Corrupt(Exception? cause = null) =>
         new(CheckpointCasStatus.Corruption, Cause: cause);
 
-    public static CheckpointCasOutcome Doubt(Exception? cause = null) =>
-        new(CheckpointCasStatus.InDoubt, Cause: cause);
+    public static CheckpointCasOutcome Doubt(CheckpointInDoubtReason reason, Exception? cause = null) =>
+        new(CheckpointCasStatus.InDoubt, Cause: cause, InDoubtReason: reason);
+
+    /// <summary>Whether the caller may safely retry (after a fresh read): InDoubt and ProviderFailure are both retryable.</summary>
+    public bool IsRetryable => Status is CheckpointCasStatus.InDoubt or CheckpointCasStatus.ProviderFailure;
+
+    /// <summary>
+    ///     A SECRET-SAFE one-line description: the status, the typed InDoubt reason, and the EXCEPTION TYPE chain only —
+    ///     never any exception message (which may embed a connection string, key, or row value). Recursively walks inner
+    ///     exceptions emitting type names alone.
+    /// </summary>
+    public string SafeDescribe()
+    {
+        var reason = InDoubtReason is { } r ? $"/{r}" : string.Empty;
+        var causeChain = string.Empty;
+        for (Exception? e = Cause; e is not null; e = e.InnerException)
+        {
+            causeChain += (causeChain.Length == 0 ? " cause=" : "->") + e.GetType().Name;
+        }
+        return $"{Status}{reason}{causeChain}";
+    }
 }

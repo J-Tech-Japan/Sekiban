@@ -65,6 +65,9 @@ public class CheckpointInDoubtContractTests
         SetFault(store, "PostCommitResponseLossUnverifiable");
         var outcome = await cas.ConditionalUpsertAsync(Req(2, "p2"), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, outcome.Status);
+        // Reads SUCCEEDED (the row is reachable) but none confirmed our write -> AmbiguousAfterWrite, typed retryable.
+        Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, outcome.InDoubtReason);
+        Assert.True(outcome.IsRetryable);
         Assert.NotNull(outcome.Cause);
         Assert.Equal("p1", (await Read(cas)).Record!.LastSortableUniqueId);   // the row is unchanged
     }
@@ -86,7 +89,13 @@ public class CheckpointInDoubtContractTests
         var outcome = await cas.ConditionalUpsertAsync(Req(2, "p2"), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, outcome.Status);
         Assert.NotEqual(CheckpointCasStatus.ProviderFailure, outcome.Status);
+        // EVERY bounded re-read threw -> VerificationUnavailable (never ProviderFailure), typed retryable.
+        Assert.Equal(CheckpointInDoubtReason.VerificationUnavailable, outcome.InDoubtReason);
+        Assert.True(outcome.IsRetryable);
         Assert.NotNull(outcome.Cause);
+        // The secret-safe description carries the status + reason + exception TYPE only, never a message.
+        Assert.Contains("VerificationUnavailable", outcome.SafeDescribe());
+        Assert.DoesNotContain("injected", outcome.SafeDescribe());
 
         // The commit genuinely happened; a retry with the SAME old token now cleanly rejects (the token has moved),
         // so the InDoubt classification is safe — no double-apply, no lost write.

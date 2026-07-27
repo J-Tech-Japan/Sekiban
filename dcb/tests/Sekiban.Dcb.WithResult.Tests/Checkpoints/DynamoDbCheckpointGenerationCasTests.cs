@@ -121,6 +121,7 @@ public class DynamoDbCheckpointGenerationCasTests
         fake.PreWriteFaults.Enqueue(new IOException("injected: lost response, write did not commit"));
         var indoubt = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(current), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, indoubt.Status);
+        Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, indoubt.InDoubtReason);
         Assert.NotNull(indoubt.Cause);
     }
 
@@ -140,6 +141,7 @@ public class DynamoDbCheckpointGenerationCasTests
         fake.PreWriteFaults.Enqueue(new IOException("injected: lost response, tombstone did not commit"));
         var invPre = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
         Assert.Equal(CheckpointCasStatus.InDoubt, invPre.Status);
+        Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, invPre.InDoubtReason);
         Assert.True((await ReadAsync(store)).IsActive);
 
         // Invalidate, post-write loss: the tombstone (g+1) is durably written but the response is lost -> Committed.
@@ -154,6 +156,7 @@ public class DynamoDbCheckpointGenerationCasTests
         fake.PreWriteFaults.Enqueue(new IOException("injected: lost response, rebuilt did not commit"));
         var rebPre = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, rebPre.Status);
+        Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, rebPre.InDoubtReason);
         Assert.True((await ReadAsync(store)).IsTombstoned);
 
         // Rebuilt commit, post-write loss: the rebuilt Active(g+1) is durably written but the response is lost -> Committed.

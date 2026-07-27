@@ -112,6 +112,7 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
         store.NextUpsertFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PreCommit;
         var pre = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(afterPost), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, pre.Status);
+        Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, pre.InDoubtReason);   // the row stayed readable
         Assert.NotNull(pre.Cause);
         Assert.Equal(2, (await ReadAsync(store)).Record!.EventsProcessed);   // unchanged
 
@@ -132,6 +133,7 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
         store.NextInvalidateFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PreCommit;
         var pre = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
         Assert.Equal(CheckpointCasStatus.InDoubt, pre.Status);
+        Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, pre.InDoubtReason);   // the row stayed readable
         Assert.True((await ReadAsync(store)).IsActive);   // unchanged
 
         // Post-commit: the tombstone (g+1) is durably written but the response is lost -> the re-read confirms it -> Committed.
@@ -156,6 +158,7 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
         store.NextRebuiltFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PreCommit;
         var pre = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, pre.Status);
+        Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, pre.InDoubtReason);   // the row stayed readable
         Assert.True((await ReadAsync(store)).IsTombstoned);   // unchanged
 
         // Post-commit: the rebuilt Active(g+1) is durably written but the response is lost -> the re-read confirms our exact
