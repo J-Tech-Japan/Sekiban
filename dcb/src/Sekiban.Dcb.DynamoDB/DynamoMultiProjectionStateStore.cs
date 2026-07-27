@@ -6,6 +6,7 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Capabilities;
 
 namespace Sekiban.Dcb.DynamoDB;
@@ -13,9 +14,15 @@ namespace Sekiban.Dcb.DynamoDB;
 #pragma warning disable CA1031
 
 /// <summary>
-///     DynamoDB implementation of IMultiProjectionStateStore.
+///     DynamoDB implementation of IMultiProjectionStateStore. SEK-G20: also the generation/tombstone/exact-token CAS
+///     surface (<see cref="IGenerationAwareCheckpointStore" />) via conditional PutItem/UpdateItem — the ConditionExpression
+///     on the exact (generation, revision, lifecycle) is the version condition; the required SOURCE lifecycle is hardcoded
+///     per op so a tombstone can never be resurrected by a normal persist.
 /// </summary>
-public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore, IStorageDurabilityDescriptorProvider
+public class DynamoMultiProjectionStateStore :
+    IMultiProjectionStateStore,
+    IStorageDurabilityDescriptorProvider,
+    IGenerationAwareCheckpointStore
 {
     /// <summary>Projection state lands in DynamoDB.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
@@ -477,4 +484,232 @@ public class DynamoMultiProjectionStateStore : IMultiProjectionStateStore, IStor
 
     private static Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken) =>
         StreamReadHelper.ReadAllBytesAsync(stream, cancellationToken);
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // SEK-G20 generation/tombstone/exact-token CAS (DynamoDB native — conditional PutItem/UpdateItem version condition)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
+        CheckpointStoreCapabilityDescriptor.Supporting("DynamoDB", CheckpointCapabilityKind.GenerationTombstoneCas);
+
+    private static bool TryToken(CheckpointExpectation e, out long revision) => long.TryParse(e.ExpectedRevision, out revision);
+
+    private static readonly Dictionary<string, string> ControlNames = new()
+    {
+        ["#g"] = "generation",
+        ["#r"] = "revision",
+        ["#l"] = "lifecycle",
+        ["#u"] = "updatedAt"
+    };
+
+    private static Dictionary<string, AttributeValue> ExactTokenValues(long generation, long revision, int lifecycle) => new()
+    {
+        [":eg"] = new AttributeValue { N = generation.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+        [":er"] = new AttributeValue { N = revision.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+        [":el"] = new AttributeValue { N = lifecycle.ToString(System.Globalization.CultureInfo.InvariantCulture) }
+    };
+
+    public async Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(
+        string projectorName,
+        string projectorVersion,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+            var serviceId = CurrentServiceId;
+            var response = await _client.GetItemAsync(new GetItemRequest
+            {
+                TableName = _context.ProjectionStatesTableName,
+                Key = BuildProjectionKey(serviceId, projectorName, projectorVersion),
+                ConsistentRead = true
+            }, cancellationToken).ConfigureAwait(false);
+
+            if (response.Item == null || response.Item.Count == 0)
+            {
+                return ResultBox.FromValue(CheckpointSlot.Absent);
+            }
+            var doc = DynamoMultiProjectionState.FromAttributeValues(response.Item);
+            return ResultBox.FromValue(new CheckpointSlot(
+                true, doc.Generation, doc.Revision.ToString(), (CheckpointLifecycle)doc.Lifecycle, doc.ToRecord()));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<CheckpointSlot>(ex);
+        }
+    }
+
+    private async Task<CheckpointSlot> RefetchAsync(string projectorName, string projectorVersion, CancellationToken ct)
+    {
+        var read = await ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
+        return read.IsSuccess ? read.GetValue() : CheckpointSlot.Absent;
+    }
+
+    public async Task<CheckpointCasOutcome> ConditionalUpsertAsync(
+        MultiProjectionStateWriteRequest payload,
+        Stream stream,
+        CheckpointExpectation expectation,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+            var offload = await StreamOffloadHelper.ProcessAsync(
+                stream, $"{payload.ProjectorName}/{payload.ProjectorVersion}", GetEffectiveThreshold(offloadThresholdBytes), _blobAccessor, cancellationToken).ConfigureAwait(false);
+            var record = (payload with
+            {
+                IsOffloaded = offload.IsOffloaded, OffloadKey = offload.OffloadKey,
+                OffloadProvider = offload.OffloadProvider, UpdatedAt = DateTime.UtcNow
+            }).ToRecord();
+            var doc = DynamoMultiProjectionState.FromRecord(record, CurrentServiceId, offload.InlineData);
+
+            if (expectation.ExpectAbsent)
+            {
+                doc.Generation = 0;
+                doc.Revision = 1;
+                doc.Lifecycle = (int)CheckpointLifecycle.Active;
+                try
+                {
+                    await _client.PutItemAsync(new PutItemRequest
+                    {
+                        TableName = _context.ProjectionStatesTableName,
+                        Item = doc.ToAttributeValues(),
+                        ConditionExpression = "attribute_not_exists(pk)"
+                    }, cancellationToken).ConfigureAwait(false);
+                    return CheckpointCasOutcome.Committed(await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken));
+                }
+                catch (ConditionalCheckFailedException)
+                {
+                    return CheckpointCasOutcome.Rejected(await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken));
+                }
+            }
+
+            if (!TryToken(expectation, out var expectedRevision))
+            {
+                return CheckpointCasOutcome.Corrupt();
+            }
+
+            // Full-item conditional replace on the exact ACTIVE token (source lifecycle hardcoded to Active so a
+            // tombstone cannot be resurrected by a normal persist).
+            doc.Generation = expectation.ExpectedGeneration;
+            doc.Revision = expectedRevision + 1;
+            doc.Lifecycle = (int)CheckpointLifecycle.Active;
+            try
+            {
+                await _client.PutItemAsync(new PutItemRequest
+                {
+                    TableName = _context.ProjectionStatesTableName,
+                    Item = doc.ToAttributeValues(),
+                    ConditionExpression = "#g = :eg AND #r = :er AND #l = :el",
+                    ExpressionAttributeNames = ControlNames,
+                    ExpressionAttributeValues = ExactTokenValues(expectation.ExpectedGeneration, expectedRevision, (int)CheckpointLifecycle.Active)
+                }, cancellationToken).ConfigureAwait(false);
+                return CheckpointCasOutcome.Committed(await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken));
+            }
+            catch (ConditionalCheckFailedException)
+            {
+                return CheckpointCasOutcome.Rejected(await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken));
+            }
+        }
+        catch (Exception ex)
+        {
+            return CheckpointCasOutcome.ProviderFailed(ex);
+        }
+    }
+
+    public async Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(
+        string projectorName,
+        string projectorVersion,
+        CheckpointExpectation expectation,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+            {
+                return CheckpointCasOutcome.Corrupt();
+            }
+            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+            var serviceId = CurrentServiceId;
+
+            // Partial UpdateItem retains the payload/offload under the tombstone; bump generation + revision, flip
+            // lifecycle to Tombstoned, on the exact ACTIVE token.
+            var values = ExactTokenValues(expectation.ExpectedGeneration, expectedRevision, (int)CheckpointLifecycle.Active);
+            values[":ng"] = new AttributeValue { N = (expectation.ExpectedGeneration + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) };
+            values[":nr"] = new AttributeValue { N = (expectedRevision + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) };
+            values[":nl"] = new AttributeValue { N = ((int)CheckpointLifecycle.Tombstoned).ToString(System.Globalization.CultureInfo.InvariantCulture) };
+            values[":nu"] = new AttributeValue { S = DateTime.UtcNow.ToString("O") };
+            try
+            {
+                await _client.UpdateItemAsync(new UpdateItemRequest
+                {
+                    TableName = _context.ProjectionStatesTableName,
+                    Key = BuildProjectionKey(serviceId, projectorName, projectorVersion),
+                    UpdateExpression = "SET #g = :ng, #r = :nr, #l = :nl, #u = :nu",
+                    ConditionExpression = "#g = :eg AND #r = :er AND #l = :el",
+                    ExpressionAttributeNames = ControlNames,
+                    ExpressionAttributeValues = values
+                }, cancellationToken).ConfigureAwait(false);
+                return CheckpointCasOutcome.Committed(await RefetchAsync(projectorName, projectorVersion, cancellationToken));
+            }
+            catch (ConditionalCheckFailedException)
+            {
+                return CheckpointCasOutcome.Rejected(await RefetchAsync(projectorName, projectorVersion, cancellationToken));
+            }
+        }
+        catch (Exception ex)
+        {
+            return CheckpointCasOutcome.ProviderFailed(ex);
+        }
+    }
+
+    public async Task<CheckpointCasOutcome> CommitRebuiltAsync(
+        MultiProjectionStateWriteRequest payload,
+        Stream stream,
+        CheckpointExpectation expectation,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+            {
+                return CheckpointCasOutcome.Corrupt();
+            }
+            await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
+            var offload = await StreamOffloadHelper.ProcessAsync(
+                stream, $"{payload.ProjectorName}/{payload.ProjectorVersion}", GetEffectiveThreshold(offloadThresholdBytes), _blobAccessor, cancellationToken).ConfigureAwait(false);
+            var record = (payload with
+            {
+                IsOffloaded = offload.IsOffloaded, OffloadKey = offload.OffloadKey,
+                OffloadProvider = offload.OffloadProvider, UpdatedAt = DateTime.UtcNow
+            }).ToRecord();
+            var doc = DynamoMultiProjectionState.FromRecord(record, CurrentServiceId, offload.InlineData);
+            // One atomic conditional put on the exact TOMBSTONED token: rebuilt payload AND clear the tombstone.
+            doc.Generation = expectation.ExpectedGeneration;
+            doc.Revision = expectedRevision + 1;
+            doc.Lifecycle = (int)CheckpointLifecycle.Active;
+            try
+            {
+                await _client.PutItemAsync(new PutItemRequest
+                {
+                    TableName = _context.ProjectionStatesTableName,
+                    Item = doc.ToAttributeValues(),
+                    ConditionExpression = "#g = :eg AND #r = :er AND #l = :el",
+                    ExpressionAttributeNames = ControlNames,
+                    ExpressionAttributeValues = ExactTokenValues(expectation.ExpectedGeneration, expectedRevision, (int)CheckpointLifecycle.Tombstoned)
+                }, cancellationToken).ConfigureAwait(false);
+                return CheckpointCasOutcome.Committed(await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken));
+            }
+            catch (ConditionalCheckFailedException)
+            {
+                return CheckpointCasOutcome.Rejected(await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken));
+            }
+        }
+        catch (Exception ex)
+        {
+            return CheckpointCasOutcome.ProviderFailed(ex);
+        }
+    }
 }
