@@ -4,19 +4,32 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Storage.Checkpoints;
 
 namespace Sekiban.Dcb.InMemory;
 
 /// <summary>
-///     In-memory implementation for tests.
+///     In-memory implementation for tests. SEK-G20: this is also the deterministic REFERENCE implementation of the
+///     generation/tombstone/exact-token CAS state machine (<see cref="IGenerationAwareCheckpointStore" />). All control-
+///     plane transitions run under a single gate so concurrent writers observe exact-token CAS semantics.
 /// </summary>
 [Obsolete(
     "Moved to Sekiban.Dcb.Core.Testing (namespace Sekiban.Dcb.Testing). This type is volatile/in-process and is for tests only; it lives in a production package for historical reasons, which is how it reached production once. Behaviour is unchanged and it will not be removed before the next major version.")]
-public class InMemoryMultiProjectionStateStore : IMultiProjectionStateStore, IStorageDurabilityDescriptorProvider
+public class InMemoryMultiProjectionStateStore :
+    IMultiProjectionStateStore,
+    IStorageDurabilityDescriptorProvider,
+    IGenerationAwareCheckpointStore
 {
     private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), MultiProjectionStateRecord> _states = new();
     private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), byte[]> _stateData = new();
+
+    // SEK-G20 control plane: generation (rebuild epoch) + monotonic revision (exact-CAS token) + lifecycle. Guarded by
+    // _casGate so every read-modify-write is atomic — the reference for what a native provider CAS must guarantee.
+    private readonly Dictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), ControlEntry> _control = new();
+    private readonly object _casGate = new();
     private readonly IServiceIdProvider _serviceIdProvider;
+
+    private sealed record ControlEntry(long Generation, long Revision, CheckpointLifecycle Lifecycle);
 
     public InMemoryMultiProjectionStateStore(IServiceIdProvider? serviceIdProvider = null)
     {
@@ -40,6 +53,13 @@ public class InMemoryMultiProjectionStateStore : IMultiProjectionStateStore, ISt
         {
             _states.TryRemove(key, out _);
             _stateData.TryRemove(key, out _);
+        }
+        lock (_casGate)
+        {
+            foreach (var key in _control.Keys.Where(k => k.ServiceId == serviceId).ToList())
+            {
+                _control.Remove(key);
+            }
         }
     }
 
@@ -92,8 +112,16 @@ public class InMemoryMultiProjectionStateStore : IMultiProjectionStateStore, ISt
 
         var serviceId = CurrentServiceId;
         var key = (serviceId, request.ProjectorName, request.ProjectorVersion);
-        _states[key] = request.ToRecord();
-        _stateData[key] = bytes;
+        lock (_casGate)
+        {
+            _states[key] = request.ToRecord();
+            _stateData[key] = bytes;
+            // Legacy unconditional upsert == an Active write: keep the control plane consistent (generation preserved,
+            // revision advanced) so a later CAS read/observe is coherent. Existing rows default to generation 0.
+            var generation = _control.TryGetValue(key, out var existing) ? existing.Generation : 0;
+            var revision = existing is null ? 1 : existing.Revision + 1;
+            _control[key] = new ControlEntry(generation, revision, CheckpointLifecycle.Active);
+        }
         return ResultBox.FromValue(true);
     }
 
@@ -139,7 +167,13 @@ public class InMemoryMultiProjectionStateStore : IMultiProjectionStateStore, ISt
         CancellationToken cancellationToken = default)
     {
         var serviceId = CurrentServiceId;
-        var removed = _states.TryRemove((serviceId, projectorName, projectorVersion), out _);
+        var key = (serviceId, projectorName, projectorVersion);
+        var removed = _states.TryRemove(key, out _);
+        _stateData.TryRemove(key, out _);
+        lock (_casGate)
+        {
+            _control.Remove(key);
+        }
         return Task.FromResult(ResultBox.FromValue(removed));
     }
 
@@ -148,30 +182,178 @@ public class InMemoryMultiProjectionStateStore : IMultiProjectionStateStore, ISt
         CancellationToken cancellationToken = default)
     {
         var serviceId = CurrentServiceId;
-        if (string.IsNullOrEmpty(projectorName))
+        var keysToRemove = string.IsNullOrEmpty(projectorName)
+            ? _states.Keys.Where(k => k.ServiceId == serviceId).ToList()
+            : _states.Keys.Where(k => k.ServiceId == serviceId && k.ProjectorName == projectorName).ToList();
+
+        foreach (var key in keysToRemove)
         {
-            var keysToRemove = _states.Keys.Where(k => k.ServiceId == serviceId).ToList();
-            foreach (var key in keysToRemove)
-            {
-                _states.TryRemove(key, out _);
-                _stateData.TryRemove(key, out _);
-            }
-            var count = keysToRemove.Count;
-            return Task.FromResult(ResultBox.FromValue(count));
+            _states.TryRemove(key, out _);
+            _stateData.TryRemove(key, out _);
         }
-        else
+        lock (_casGate)
         {
-            var keysToRemove = _states.Keys
-                .Where(k => k.ServiceId == serviceId && k.ProjectorName == projectorName)
-                .ToList();
-
             foreach (var key in keysToRemove)
             {
-                _states.TryRemove(key, out _);
-                _stateData.TryRemove(key, out _);
+                _control.Remove(key);
+            }
+        }
+
+        return Task.FromResult(ResultBox.FromValue(keysToRemove.Count));
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // SEK-G20 generation/tombstone/exact-token CAS (reference implementation)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
+        CheckpointStoreCapabilityDescriptor.Supporting("InMemory", CheckpointCapabilityKind.GenerationTombstoneCas);
+
+    private CheckpointSlot BuildSlotUnlocked((string, string, string) key)
+    {
+        if (!_control.TryGetValue(key, out var entry))
+        {
+            return CheckpointSlot.Absent;
+        }
+        _states.TryGetValue(key, out var record);
+        return new CheckpointSlot(true, entry.Generation, entry.Revision.ToString(), entry.Lifecycle, record);
+    }
+
+    public Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(
+        string projectorName,
+        string projectorVersion,
+        CancellationToken cancellationToken = default)
+    {
+        var key = (CurrentServiceId, projectorName, projectorVersion);
+        lock (_casGate)
+        {
+            return Task.FromResult(ResultBox.FromValue(BuildSlotUnlocked(key)));
+        }
+    }
+
+    /// <summary>Whether the observed expectation exactly matches the current control entry (or absence).</summary>
+    private bool ExpectationHoldsUnlocked(
+        CheckpointExpectation expectation,
+        (string, string, string) key,
+        out CheckpointSlot current,
+        out ControlEntry? entry)
+    {
+        current = BuildSlotUnlocked(key);
+        _control.TryGetValue(key, out entry);
+        if (expectation.ExpectAbsent)
+        {
+            return !current.Exists;
+        }
+        return current.Exists
+            && current.Generation == expectation.ExpectedGeneration
+            && string.Equals(current.Revision, expectation.ExpectedRevision, StringComparison.Ordinal)
+            && current.Lifecycle == expectation.ExpectedLifecycle;
+    }
+
+    private static bool WouldOverflow(long value) => value == long.MaxValue;
+
+    private async Task<(CheckpointCasOutcome? Rejected, byte[] Bytes)> BufferAsync(Stream stream, CancellationToken ct)
+    {
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
+        return (null, ms.ToArray());
+    }
+
+    public async Task<CheckpointCasOutcome> ConditionalUpsertAsync(
+        MultiProjectionStateWriteRequest payload,
+        Stream stream,
+        CheckpointExpectation expectation,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        var (_, bytes) = await BufferAsync(stream, cancellationToken).ConfigureAwait(false);
+        var key = (CurrentServiceId, payload.ProjectorName, payload.ProjectorVersion);
+        lock (_casGate)
+        {
+            if (!ExpectationHoldsUnlocked(expectation, key, out var current, out var entry))
+            {
+                return CheckpointCasOutcome.Rejected(current);
             }
 
-            return Task.FromResult(ResultBox.FromValue(keysToRemove.Count));
+            // A normal persist must target either a first-ever create (absent) or an ACTIVE row. Tombstoned rows are
+            // only advanced by CommitRebuiltAsync.
+            if (current.Exists && current.Lifecycle != CheckpointLifecycle.Active)
+            {
+                return CheckpointCasOutcome.Rejected(current);
+            }
+
+            var generation = entry?.Generation ?? 0;
+            var nextRevision = entry is null ? 1 : entry.Revision + 1;
+            if (WouldOverflow(nextRevision))
+            {
+                return CheckpointCasOutcome.Corrupt();
+            }
+
+            _states[key] = payload.ToRecord();
+            _stateData[key] = bytes;
+            _control[key] = new ControlEntry(generation, nextRevision, CheckpointLifecycle.Active);
+            return CheckpointCasOutcome.Committed(BuildSlotUnlocked(key));
+        }
+    }
+
+    public Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(
+        string projectorName,
+        string projectorVersion,
+        CheckpointExpectation expectation,
+        CancellationToken cancellationToken = default)
+    {
+        var key = (CurrentServiceId, projectorName, projectorVersion);
+        lock (_casGate)
+        {
+            if (!ExpectationHoldsUnlocked(expectation, key, out var current, out var entry))
+            {
+                return Task.FromResult(CheckpointCasOutcome.Rejected(current));
+            }
+            if (!current.IsActive || entry is null)
+            {
+                // Only an Active row can be invalidated; an already-tombstoned row means another cluster won the bump.
+                return Task.FromResult(CheckpointCasOutcome.Rejected(current));
+            }
+            if (WouldOverflow(entry.Generation) || WouldOverflow(entry.Revision + 1))
+            {
+                return Task.FromResult(CheckpointCasOutcome.Corrupt());
+            }
+
+            // Bump generation + revision, flip to Tombstoned. The prior payload/offload is RETAINED under the tombstone.
+            _control[key] = new ControlEntry(entry.Generation + 1, entry.Revision + 1, CheckpointLifecycle.Tombstoned);
+            return Task.FromResult(CheckpointCasOutcome.Committed(BuildSlotUnlocked(key)));
+        }
+    }
+
+    public async Task<CheckpointCasOutcome> CommitRebuiltAsync(
+        MultiProjectionStateWriteRequest payload,
+        Stream stream,
+        CheckpointExpectation expectation,
+        int offloadThresholdBytes,
+        CancellationToken cancellationToken = default)
+    {
+        var (_, bytes) = await BufferAsync(stream, cancellationToken).ConfigureAwait(false);
+        var key = (CurrentServiceId, payload.ProjectorName, payload.ProjectorVersion);
+        lock (_casGate)
+        {
+            if (!ExpectationHoldsUnlocked(expectation, key, out var current, out var entry))
+            {
+                return CheckpointCasOutcome.Rejected(current);
+            }
+            if (!current.IsTombstoned || entry is null)
+            {
+                return CheckpointCasOutcome.Rejected(current);
+            }
+            if (WouldOverflow(entry.Revision + 1))
+            {
+                return CheckpointCasOutcome.Corrupt();
+            }
+
+            // One atomic same-row CAS: write the rebuilt payload AND clear the tombstone (Tombstoned(g+1) -> Active(g+1)).
+            _states[key] = payload.ToRecord();
+            _stateData[key] = bytes;
+            _control[key] = new ControlEntry(entry.Generation, entry.Revision + 1, CheckpointLifecycle.Active);
+            return CheckpointCasOutcome.Committed(BuildSlotUnlocked(key));
         }
     }
 }
