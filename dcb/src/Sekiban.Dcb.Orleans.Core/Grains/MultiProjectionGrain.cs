@@ -56,6 +56,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // persisted LastPosition), so it is kept as an ephemeral grain field rather than mutating the persisted payload
     // outside the coordinator. Seeded from the committed state on activation; surfaced by status queries.
     private string? _liveLastPosition;
+
+    // SEK-G18 (#1086): the authoritative catch-up start after a checkpoint restore is the checkpoint record's own
+    // LastSortableUniqueId — taken verbatim rather than re-inferred — so the first catch-up reads strictly AFTER the
+    // durable safe position (exclusive) and never re-folds / double-counts already-reflected events. Consumed once.
+    private SortableUniqueId? _restoredCatchUpPosition;
+
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
@@ -975,6 +981,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 _lastEventTime = DateTime.UtcNow;
             }
+
+            RebuildProjectionIfSignaled();
+        }
+    }
+
+    // SEK-G18: the dual-state accessor signals RebuildRequired when a live event promoted to safe OUT of global
+    // SortableUniqueId order versus the held safe head — which the incremental (compacted-baseline) path cannot reorder.
+    // The single mandated remedy is a full ordered rebuild from the authoritative event store: recreate the host and re-arm
+    // the first-query barrier so the next state/scalar/list query awaits the rebuilt payload (or fails closed) and never
+    // returns a stale success. The authoritative store is read in SortableUniqueId order, so the from-beginning rebuild
+    // does not re-trip the guard. This is NOT the G14 fault path — that is reserved for failures OF the rebuild itself.
+    private void RebuildProjectionIfSignaled()
+    {
+        if (_host is { RebuildRequired: true })
+        {
+            RecreateHostForFullRebuild();
         }
     }
 
@@ -1947,6 +1969,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             {
                                 _eventsProcessed = record.EventsProcessed;
                                 ClearProcessedEventCache();
+
+                                // SEK-G18 (#1086): take the catch-up start verbatim from the restored checkpoint record, so
+                                // catch-up reads strictly AFTER the durable safe position (exclusive) without re-folding it.
+                                _restoredCatchUpPosition = string.IsNullOrEmpty(record.LastSortableUniqueId)
+                                    ? null
+                                    : new SortableUniqueId(record.LastSortableUniqueId);
 
                                 int? postSafeVersion = null;
                                 int? postUnsafeVersion = null;
@@ -2975,8 +3003,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             BeginCatchUpDeactivationDelay();
 
-            // Get current position (fast operation - reads from local state)
-            SortableUniqueId? currentPosition = forceFull ? null : await GetCurrentPositionAsync();
+            // Get current position (fast operation - reads from local state).
+            // SEK-G18 (#1086): immediately after a checkpoint restore, take the catch-up start verbatim from the restored
+            // record's LastSortableUniqueId (consumed once) rather than re-inferring it, so the read is strictly AFTER the
+            // durable safe position and already-reflected events are not re-folded / double-counted.
+            SortableUniqueId? currentPosition;
+            if (forceFull)
+            {
+                currentPosition = null;
+                _restoredCatchUpPosition = null;
+            }
+            else if (_restoredCatchUpPosition is { } restored)
+            {
+                currentPosition = restored;
+                _restoredCatchUpPosition = null;
+            }
+            else
+            {
+                currentPosition = await GetCurrentPositionAsync();
+            }
 
             // NOTE: We intentionally skip reading all events to determine target position.
             // Reading 200k+ events just to find the latest position causes activation timeout.
@@ -4093,6 +4138,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
 
                 _lastEventTime = DateTime.UtcNow;
+
+                // SEK-G18: live events can arrive out of global order; rebuild from the authoritative store if signaled.
+                if (_host is { RebuildRequired: true })
+                {
+                    RecreateHostForFullRebuild();
+                    return;
+                }
             }
 
             // Update position to the maximum SortableUniqueId in the batch (monotonic)
@@ -4193,6 +4245,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             foreach (var ev in events)
             {
                 TrackProcessedEventId(ev.Id);
+            }
+
+            // SEK-G18: live events can arrive out of global order; rebuild from the authoritative store if signaled.
+            if (_host is { RebuildRequired: true })
+            {
+                RecreateHostForFullRebuild();
+                return;
             }
 
             // Update position

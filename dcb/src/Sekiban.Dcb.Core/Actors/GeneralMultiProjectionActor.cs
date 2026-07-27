@@ -885,6 +885,15 @@ public class GeneralMultiProjectionActor
         }
     }
 
+    /// <summary>
+    ///     SEK-G18: true when the dual-state accessor detected an out-of-global-order safe promotion / arrival that the
+    ///     incremental (compacted-baseline) path cannot reorder. The grain/host must respond with a full ordered rebuild
+    ///     from the authoritative event store — this is NOT a fault; the G14 fault path is reserved for failures OF the
+    ///     rebuild itself.
+    /// </summary>
+    public bool RebuildRequired =>
+        _singleStateAccessor is IDualStateAccessor dualAccessor && dualAccessor.RebuildRequired;
+
     public void ForcePromoteAllBufferedEvents()
     {
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)

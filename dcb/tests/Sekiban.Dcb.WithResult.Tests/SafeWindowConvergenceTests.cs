@@ -157,6 +157,35 @@ public class SafeWindowConvergenceTests
         Assert.True(accessor.RebuildRequired);
     }
 
+    [Fact]
+    public async Task TwoIndependentInstances_SharedEvents_DifferentArrivalOrder_ConvergeToGloballyEarliest()
+    {
+        // Two independent projection instances (the closest in-repo equivalent of two independent clusters over a shared
+        // store) each receive the SAME two racing create events for the same id, but in DIFFERENT arrival order. After the
+        // events become safe, both must converge to the globally-earliest (by SortableUniqueId) winner — independent of
+        // SEK-G19's reservation fix (both duplicate creates are permitted to land).
+        var earlier = CreateEvent(new CreatedWithId("team-shared", "A"), DateTime.UtcNow.AddSeconds(-9));
+        var later = CreateEvent(new CreatedWithId("team-shared", "B"), DateTime.UtcNow.AddSeconds(-8));
+
+        var instanceA = new GeneralMultiProjectionActor(_domainTypes, FirstWinsProjector.MultiProjectorName, _options);
+        var instanceB = new GeneralMultiProjectionActor(_domainTypes, FirstWinsProjector.MultiProjectorName, _options);
+
+        // Instance A sees its locally-originated (later) event first, then the cross-instance (earlier) event.
+        await instanceA.AddEventsAsync(new[] { later });
+        await instanceA.AddEventsAsync(new[] { earlier });
+
+        // Instance B sees them in the opposite order.
+        await instanceB.AddEventsAsync(new[] { earlier });
+        await instanceB.AddEventsAsync(new[] { later });
+
+        var safeA = (FirstWinsProjector)(await instanceA.GetStateAsync(canGetUnsafeState: false)).GetValue().Payload;
+        var safeB = (FirstWinsProjector)(await instanceB.GetStateAsync(canGetUnsafeState: false)).GetValue().Payload;
+
+        Assert.Equal("A", safeA.Winners["team-shared"]);
+        Assert.Equal("A", safeB.Winners["team-shared"]); // both converged to the globally-earliest event
+        Assert.Equal(safeA.Winners["team-shared"], safeB.Winners["team-shared"]);
+    }
+
     private static IEnumerable<Event> Scramble(List<Event> events)
     {
         // Deterministic non-sorted order: interleave from both ends.

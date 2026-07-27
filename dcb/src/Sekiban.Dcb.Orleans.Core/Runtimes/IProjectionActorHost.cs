@@ -92,6 +92,12 @@ public interface IProjectionActorHost
     void CompactSafeHistory();
 
     /// <summary>
+    ///     SEK-G18: true when the dual-state accessor requires a full ordered rebuild from the authoritative event store
+    ///     (an out-of-global-order safe promotion the incremental path cannot reorder). Not a fault.
+    /// </summary>
+    bool RebuildRequired => false;
+
+    /// <summary>
     ///     Force promotion of ALL buffered events regardless of window.
     /// </summary>
     void ForcePromoteAllBufferedEvents();

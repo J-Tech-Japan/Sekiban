@@ -167,6 +167,8 @@ public class NativeProjectionActorHost : IProjectionActorHost
         _actor.CompactSafeHistory();
     }
 
+    public bool RebuildRequired => _actor.RebuildRequired;
+
     public void ForcePromoteAllBufferedEvents()
     {
         _actor.ForcePromoteAllBufferedEvents();
