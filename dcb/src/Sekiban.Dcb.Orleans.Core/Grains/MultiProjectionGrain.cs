@@ -15,6 +15,7 @@ using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.ColdEvents;
 using System.Text;
@@ -70,6 +71,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
+
+    // SEK-G20: the live external store as the generation/tombstone/exact-token CAS surface, resolved from the instance
+    // (never a type name) and only when it advertises the capability. Null => not capable => the fail-closed legacy path.
+    private IGenerationAwareCheckpointStore? _checkpointCas;
+
+    // The last checkpoint control-plane identity this activation observed/committed (generation + exact token +
+    // lifecycle). Threads through restore -> persist (CAS ConditionalUpsert) and invalidate -> rebuilt commit. A stale
+    // token here means another cluster moved the row: the CAS rejects and this activation refetches + rebuilds.
+    private CheckpointSlot? _adoptedCheckpointSlot;
+
+    // True when this activation is rebuilding over a TOMBSTONE it (or a fresh activation) observed: the next external
+    // persist must be a CommitRebuilt on the exact tombstone token (one atomic same-row CAS that also clears the
+    // tombstone), not a normal ConditionalUpsert. Cleared once the rebuilt checkpoint is durably committed.
+    private bool _pendingRebuiltCommit;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
     private readonly ILogger<MultiProjectionGrain> _logger;
     private readonly IEventStoreFactory? _eventStoreFactory;
@@ -260,6 +275,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
         _multiProjectionStateStore = multiProjectionStateStore;
+        _checkpointCas = CheckpointCapabilityResolver.SupportsGenerationCas(multiProjectionStateStore)
+            ? multiProjectionStateStore as IGenerationAwareCheckpointStore
+            : null;
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
         _injectedActorOptions = actorOptions;
         _tempFileSnapshotManager = tempFileSnapshotManager;
@@ -2062,8 +2080,39 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 forceFullCatchUp = true;
             }
 
-            // Restore from external store (Postgres/Cosmos) — skipped when a durable rebuild is pending.
-            if (_multiProjectionStateStore != null && !durableRebuildPending)
+            // SEK-G20 RESTORE AUTHORITY: on a capable store, read the checkpoint control plane (generation/token/lifecycle)
+            // BEFORE binding any payload. A TOMBSTONE means a retrograde rebuild is in flight (possibly by another cluster);
+            // do NOT bind the possibly-stale payload — force a full ordered replay and mark this activation to CommitRebuilt
+            // on the exact tombstone token. An ACTIVE slot is ADOPTED so the first persist CASes on its exact token, so a
+            // stale writer is rejected rather than re-contaminating the shared row.
+            var checkpointTombstoned = false;
+            if (_checkpointCas is not null && !durableRebuildPending)
+            {
+                var slotResult = await _checkpointCas.ReadCheckpointSlotAsync(projectorName, projectorVersion, cancellationToken);
+                if (slotResult.IsSuccess)
+                {
+                    var slot = slotResult.GetValue();
+                    if (slot.IsTombstoned)
+                    {
+                        _logger.LogWarning(
+                            "Checkpoint tombstone observed on activation: {ProjectorName} — forcing full ordered replay (rebuilt commit pending)",
+                            projectorName);
+                        _adoptedCheckpointSlot = slot;
+                        _pendingRebuiltCommit = true;
+                        _firstQueryGate.Arm();
+                        forceFullCatchUp = true;
+                        checkpointTombstoned = true;
+                    }
+                    else if (slot.IsActive)
+                    {
+                        _adoptedCheckpointSlot = slot;
+                    }
+                }
+            }
+
+            // Restore from external store (Postgres/Cosmos) — skipped when a durable rebuild is pending or a tombstone was
+            // observed (the payload under a tombstone is not authoritative).
+            if (_multiProjectionStateStore != null && !durableRebuildPending && !checkpointTombstoned)
             {
                 try
                 {
@@ -2480,11 +2529,53 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return;
         }
 
-        // Route the delete through the external-store coordinator so any parked/in-flight snapshot upsert completes
-        // BEFORE this delete, and no upsert runs concurrently with it. Combined with UpsertExternalStateCoordinatedAsync
-        // rejecting upserts while a fault exists, no stale upsert can recreate the snapshot this delete removes.
+        // Route the invalidation through the external-store coordinator so any parked/in-flight snapshot upsert completes
+        // BEFORE this invalidation, and no upsert runs concurrently with it.
         await _externalStore.InvalidateAsync(async () =>
         {
+            // SEK-G20: on a capable store, replace delete-based invalidation with a durable bump+tombstone CAS. The
+            // generation bump + tombstone is durably visible to OTHER clusters before this cluster's local rebuild
+            // proceeds, and a stale peer's later upsert CAS-rejects instead of re-contaminating the row. This activation
+            // then rebuilds and commits on the exact tombstone token.
+            if (_checkpointCas is not null)
+            {
+                var projectorName = GetProjectorName();
+                var projectorVersion = _host.GetProjectorVersion();
+                var slotResult = await _checkpointCas.ReadCheckpointSlotAsync(projectorName, projectorVersion);
+                if (!slotResult.IsSuccess)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to read the checkpoint slot for tombstone invalidation: {slotResult.GetException().Message}",
+                        slotResult.GetException());
+                }
+                var slot = slotResult.GetValue();
+                if (slot.IsActive)
+                {
+                    var outcome = await _checkpointCas.InvalidateWithTombstoneAsync(
+                        projectorName, projectorVersion, CheckpointExpectation.FromSlot(slot));
+                    // Committed => we tombstoned it. ConditionRejected => a peer already moved the row (e.g. tombstoned it
+                    // first); either way the row is now non-Active and this cluster rebuilds. Adopt the resulting/current
+                    // tombstone slot so the rebuilt commit targets the exact token.
+                    var resulting = outcome.ResultingSlot ?? outcome.CurrentSlot;
+                    _adoptedCheckpointSlot = resulting ?? slot;
+                    _pendingRebuiltCommit = true;
+                    if (outcome.Status is CheckpointCasStatus.ProviderFailure or CheckpointCasStatus.Corruption)
+                    {
+                        throw new InvalidOperationException(
+                            "Failed to durably bump+tombstone the checkpoint for a full rebuild.", outcome.Cause);
+                    }
+                }
+                else
+                {
+                    // Already tombstoned or absent — adopt it; the rebuilt commit (if tombstoned) or a fresh create (if
+                    // absent) happens on the next persist.
+                    _adoptedCheckpointSlot = slot.Exists ? slot : null;
+                    _pendingRebuiltCommit = slot.IsTombstoned;
+                }
+                return;
+            }
+
+            // Non-capable store: legacy delete-based invalidation (byte-for-byte unchanged).
             var deleteResult = await _multiProjectionStateStore.DeleteAsync(GetProjectorName(), _host.GetProjectorVersion());
             if (!deleteResult.IsSuccess)
             {
@@ -2516,8 +2607,110 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return Task.FromResult(ResultBox.FromValue(false));
         }
 
+        // SEK-G20: on a capable store, every product persist is an EXPECTED-TOKEN CAS — a stale writer (e.g. a peer
+        // cluster that parked before another cluster tombstoned the shared row) is ConditionRejected and NEVER
+        // re-contaminates the row. A rebuilt commit (this activation rebuilt over a tombstone) is one atomic same-row CAS
+        // on the exact tombstone token. Non-capable stores keep the legacy unconditional upsert (byte-for-byte).
+        if (_checkpointCas is not null)
+        {
+            return _externalStore.UpsertAsync(() => CheckpointCasPersistAsync(request, stream, offloadThreshold));
+        }
+
         return _externalStore.UpsertAsync(() =>
             _multiProjectionStateStore.UpsertFromStreamAsync(request, stream, offloadThreshold, CancellationToken.None));
+    }
+
+    // Persists via the generation/tombstone CAS surface. Runs INSIDE the external-store coordinator gate, so it must NOT
+    // re-enter the coordinator. Returns Error on a rejected/failed CAS so callers take the not-saved branch and do not
+    // advance persisted metadata. On a rejection this refetches + adopts the current token; a tombstone flips this
+    // activation into rebuilt-commit mode and arms the query barrier so the next query replays from the authoritative
+    // store before answering.
+    private async Task<ResultBox<bool>> CheckpointCasPersistAsync(
+        MultiProjectionStateWriteRequest request,
+        Stream stream,
+        int offloadThreshold)
+    {
+        var cas = _checkpointCas!;
+
+        // The adopted slot is per (projectorName, projectorVersion). A request that targets a DIFFERENT version (a version
+        // rewrite) is not governed by the adopted token: read that version's current slot fresh and CAS on it (Absent =>
+        // a first-ever create). The adopted-token anti-recontamination applies only to same-version persists.
+        var adoptedMatchesRequest = _adoptedCheckpointSlot?.Record is { } r
+            && string.Equals(r.ProjectorName, request.ProjectorName, StringComparison.Ordinal)
+            && string.Equals(r.ProjectorVersion, request.ProjectorVersion, StringComparison.Ordinal);
+
+        if (!adoptedMatchesRequest)
+        {
+            var freshResult = await cas.ReadCheckpointSlotAsync(request.ProjectorName, request.ProjectorVersion, CancellationToken.None);
+            var freshExpectation = freshResult.IsSuccess && freshResult.GetValue() is { IsActive: true } freshActive
+                ? CheckpointExpectation.FromSlot(freshActive)
+                : CheckpointExpectation.Absent;
+            var freshOutcome = await cas.ConditionalUpsertAsync(request, stream, freshExpectation, offloadThreshold, CancellationToken.None);
+            if (freshOutcome.Status == CheckpointCasStatus.Committed)
+            {
+                _adoptedCheckpointSlot = freshOutcome.ResultingSlot;
+                return ResultBox.FromValue(true);
+            }
+            return ResultBox.Error<bool>(freshOutcome.Cause ?? new InvalidOperationException(
+                $"Checkpoint CAS for version {request.ProjectorVersion} was {freshOutcome.Status}."));
+        }
+
+        // Rebuilt commit: this activation rebuilt over a tombstone — commit on the exact tombstone token (one atomic CAS
+        // that also clears the tombstone).
+        if (_pendingRebuiltCommit && _adoptedCheckpointSlot is { IsTombstoned: true } tombstone)
+        {
+            var commit = await cas.CommitRebuiltAsync(request, stream, CheckpointExpectation.FromSlot(tombstone), offloadThreshold, CancellationToken.None);
+            switch (commit.Status)
+            {
+                case CheckpointCasStatus.Committed:
+                    _adoptedCheckpointSlot = commit.ResultingSlot;
+                    _pendingRebuiltCommit = false;
+                    return ResultBox.FromValue(true);
+                case CheckpointCasStatus.ConditionRejected:
+                    // A peer rebuilt first (row is now Active at the bumped generation) OR re-tombstoned. Adopt the
+                    // current slot; if it is Active a peer's rebuilt commit is authoritative and ours is unnecessary.
+                    AdoptAfterRejection(commit.CurrentSlot);
+                    return ResultBox.Error<bool>(new InvalidOperationException(
+                        "Rebuilt-commit CAS was rejected (a peer moved the checkpoint); refetched and will re-evaluate."));
+                default:
+                    return ResultBox.Error<bool>(commit.Cause ?? new InvalidOperationException("Rebuilt-commit CAS failed."));
+            }
+        }
+
+        // Normal persist: CAS on the adopted Active token, or a first-ever expected-absence create.
+        var expectation = _adoptedCheckpointSlot is { IsActive: true } active
+            ? CheckpointExpectation.FromSlot(active)
+            : CheckpointExpectation.Absent;
+        var outcome = await cas.ConditionalUpsertAsync(request, stream, expectation, offloadThreshold, CancellationToken.None);
+        switch (outcome.Status)
+        {
+            case CheckpointCasStatus.Committed:
+                _adoptedCheckpointSlot = outcome.ResultingSlot;
+                return ResultBox.FromValue(true);
+            case CheckpointCasStatus.ConditionRejected:
+                AdoptAfterRejection(outcome.CurrentSlot);
+                return ResultBox.Error<bool>(new InvalidOperationException(
+                    "Checkpoint CAS was rejected (a peer moved the shared row); refetched — no stale write applied."));
+            default:
+                return ResultBox.Error<bool>(outcome.Cause ?? new InvalidOperationException("Checkpoint CAS failed."));
+        }
+    }
+
+    // After a rejected CAS, adopt the freshly-observed slot. A TOMBSTONE means a peer began a retrograde rebuild: flip to
+    // rebuilt-commit mode and arm the query barrier so the next query replays the authoritative history from the
+    // beginning (never serving the stale local state), then commits the rebuilt checkpoint on the exact tombstone token.
+    private void AdoptAfterRejection(CheckpointSlot? current)
+    {
+        _adoptedCheckpointSlot = current is { Exists: true } ? current : null;
+        if (current is { IsTombstoned: true })
+        {
+            _pendingRebuiltCommit = true;
+            _firstQueryGate.Arm();
+        }
+        else
+        {
+            _pendingRebuiltCommit = false;
+        }
     }
 
     // Recreates a fresh actor host in the current activation and re-arms the first-query barrier, so the next query
