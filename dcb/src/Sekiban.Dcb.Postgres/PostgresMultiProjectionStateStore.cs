@@ -355,6 +355,10 @@ public class PostgresMultiProjectionStateStore :
     private static bool TryToken(CheckpointExpectation e, out long revision) =>
         long.TryParse(e.ExpectedRevision, out revision);
 
+    /// <summary>True only for a Postgres unique-violation (23505) — the "row already exists" conflict on an insert.</summary>
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation };
+
     private async Task<CheckpointSlot> RefetchSlotAsync(string projectorName, string projectorVersion, CancellationToken ct)
     {
         var read = await ReadCheckpointSlotAsync(projectorName, projectorVersion, ct);
@@ -397,8 +401,11 @@ public class PostgresMultiProjectionStateStore :
                     await ctx.SaveChangesAsync(cancellationToken);
                     return CheckpointCasOutcome.Committed(SlotFrom(db));
                 }
-                catch (DbUpdateException)
+                catch (DbUpdateException ex) when (IsUniqueViolation(ex))
                 {
+                    // Only a PK unique violation is a "row already exists" conflict (ConditionRejected). Any OTHER failure
+                    // (e.g. an undefined column when the additive schema has not been applied) must FAIL CLOSED, never be
+                    // laundered into a rejection — it propagates to the outer catch as a ProviderFailure.
                     return CheckpointCasOutcome.Rejected(
                         await RefetchSlotAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken));
                 }

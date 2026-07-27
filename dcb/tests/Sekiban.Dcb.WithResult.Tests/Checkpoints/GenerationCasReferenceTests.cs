@@ -1,6 +1,7 @@
 using System.Text;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Testing;
 using Xunit;
@@ -139,6 +140,27 @@ public class GenerationCasReferenceTests
         var final = await ReadAsync(store);
         Assert.True(final.IsActive);
         Assert.Equal(active.Generation + 1, final.Generation);
+    }
+
+    [Fact]
+    public async Task OldReader_LegacyGetLatest_SeesRetainedPayloadUnderTombstone_DocumentedHazard()
+    {
+        // Mixed-version hazard (old READER): a pre-G20 reader uses the legacy GetLatestForVersionAsync, which returns the
+        // payload record WITHOUT the lifecycle. The tombstone RETAINS the prior payload (readers gate on the tombstone,
+        // not on payload absence), so a legacy reader still sees a record and cannot tell the row is tombstoned. Only a
+        // capable reader (ReadCheckpointSlotAsync) sees the tombstone. Protection is complete only when readers are
+        // upgraded too — this test pins that reality.
+        var store = (IMultiProjectionStateStore)new InMemoryMultiProjectionStateStore(new FixedServiceIdProvider("svc"));
+        var cas = (IGenerationAwareCheckpointStore)store;
+
+        await cas.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = (await cas.ReadCheckpointSlotAsync(Projector, Version)).GetValue();
+        await cas.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
+
+        // Capable reader sees the tombstone...
+        Assert.True((await cas.ReadCheckpointSlotAsync(Projector, Version)).GetValue().IsTombstoned);
+        // ...but the legacy reader still sees a (retained) record — the documented old-reader hazard.
+        Assert.True((await store.GetLatestForVersionAsync(Projector, Version)).GetValue().HasValue);
     }
 
     [Fact]

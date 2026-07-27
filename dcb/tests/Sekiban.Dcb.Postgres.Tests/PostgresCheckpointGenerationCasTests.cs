@@ -116,6 +116,39 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UnappliedSchema_MissingControlColumns_FailsClosed_NoSilentSuccess()
+    {
+        // Simulate a database on which the G20 additive migration has NOT been applied: drop the control columns, then
+        // prove that every CAS operation FAILS CLOSED (no Committed, no silent legacy fallback). Restore the columns
+        // afterwards so the shared fixture stays consistent for other tests.
+        await using (var ctx = await _fixture.DbContextFactory.CreateDbContextAsync())
+        {
+            await ctx.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE dcb_multi_projection_states DROP COLUMN IF EXISTS \"Generation\", "
+                + "DROP COLUMN IF EXISTS \"Revision\", DROP COLUMN IF EXISTS \"Lifecycle\"");
+        }
+        try
+        {
+            var store = NewStore();
+            var read = await store.ReadCheckpointSlotAsync(Projector, Version);
+            Assert.False(read.IsSuccess);   // read fails closed (column does not exist)
+
+            var create = await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+            Assert.NotEqual(CheckpointCasStatus.Committed, create.Status);   // never a silent success
+            Assert.Equal(CheckpointCasStatus.ProviderFailure, create.Status);
+        }
+        finally
+        {
+            await using var ctx = await _fixture.DbContextFactory.CreateDbContextAsync();
+            await ctx.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE dcb_multi_projection_states "
+                + "ADD COLUMN IF NOT EXISTS \"Generation\" bigint NOT NULL DEFAULT 0, "
+                + "ADD COLUMN IF NOT EXISTS \"Revision\" bigint NOT NULL DEFAULT 0, "
+                + "ADD COLUMN IF NOT EXISTS \"Lifecycle\" integer NOT NULL DEFAULT 0");
+        }
+    }
+
+    [Fact]
     public async Task PreG20Row_WrittenViaLegacyUpsert_ReadsAsGeneration0_Revision0Baseline_Active()
     {
         // A legacy write (UpsertFromStreamAsync) does not touch the new control columns; the additive migration defaults
