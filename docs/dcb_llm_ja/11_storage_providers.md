@@ -569,6 +569,48 @@ var executor = new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore());
 
 **境界は耐久クレーム1つ。** 本コントラクトはキーごとに高々1つの耐久クレームを保証しますが、マイグレーションの副作用をちょうど1回にはしません。マイグレーション自体が外部副作用（他システムへの書き込み、通知送信）を行う場合は、それらを勝者クレームの背後にアウトボックス／冪等層で置いてください — クレームが伝えるのは*誰が勝ったか*であって、副作用がちょうど1回実行されたことではありません。
 
+## SEK-G20 generation-aware checkpoint CAS
+
+**バージョン: 10.8.0(マイナー)。** SEK-G18 のクラスタ間・共有ストアの穴を解消します
+([よくある問題 → クラスタ間・共有ストア収束](13_common_issues.md) 参照)。マルチプロジェクションの
+チェックポイントストア(`IMultiProjectionStateStore`)上の**任意**の capability で、G15/G16 の
+conditional-append と同じく LIVE インスタンスから feature-detect します——ストアは
+`IGenerationAwareCheckpointStore` を実装し、`DescribeCheckpointCapability()` で
+`CheckpointCapabilityKind.GenerationTombstoneCas` を返すことで宣言します。`IMultiProjectionStateStore`
+にメンバ追加はなく、positional records(`MultiProjectionStateRecord` / `MultiProjectionStateWriteRequest`)
+にもフィールド追加はありません。
+
+**2 層 CAS。** 各チェックポイント行は **generation**(rebuild epoch)と**不透明な per-mutation トークン**
+——exact-CAS の revision(Postgres/SQLite: `Revision` 列、Cosmos: `_etag`、DynamoDB: `revision` 属性)——
+に加え **lifecycle**(Active / Tombstoned)を保持します。すべての条件付き操作は正確なトークンを比較し、
+generation のみの比較は CAS ではありません。固定の状態機械は
+`Active(g,rev) → CAS Invalidate → Tombstoned(g+1,rev') → CAS CommitRebuilt → Active(g+1,new rev)` で、
+rebuilt ペイロードのコミットと tombstone クリアは同一行の 1 CAS です。
+
+**何を守るか。** retrograde 完全再構築は delete ベースの無効化を耐久的な bump+tombstone に置き換え、
+stale peer の後続 persist は `ConditionRejected` となり行を再汚染しません。fresh な活性化はペイロード
+束縛の前に制御面を読み、tombstone なら完全な順序付き再生を強制します。すべての product チェックポイント
+変更が surface を経由します(無条件 write/delete のバイパスなし)。
+
+| プロバイダ | exact-token プリミティブ | スキーマ更新 |
+|-----------|------------------------|-------------|
+| Postgres | 条件付き `UPDATE … WHERE Generation=@g AND Revision=@r AND Lifecycle=@l`(行数) | 加算 EF migration(`Generation`/`Revision`/`Lifecycle`、既定 0) |
+| SQLite | 条件付き `UPDATE`(行数) | 加算 `ALTER TABLE … ADD COLUMN … DEFAULT 0` |
+| Cosmos | `ReplaceItem` の `IfMatchEtag`(412 → 拒否) | `generation`/`lifecycle` プロパティ(欠損 → 0) |
+| DynamoDB | 条件付き `PutItem`/`UpdateItem` の `ConditionExpression` | `generation`/`revision`/`lifecycle` 属性(欠損 → 0) |
+
+**互換性。** 既存行は **generation 0 / revision 0 / Active** として読まれます——イベント/ペイロードの移行は
+なく、加算のチェックポイントスキーマ更新のみが必要で、プロバイダごとに実 pre-G20 DB で検証済みです。
+スキーマ未適用の間、capability 操作はフェイルクローズします(黙ってレガシーへフォールバックしません)。
+capability を実装しないストアはレガシーの無条件書き込みをバイト単位で維持し、それに対する retrograde
+無効化は cross-cluster の stale 再汚染を避けるため **G14 fault パスへフェイルクローズ**します(operator
+reset 必要)。
+
+**mixed-version の注意(デプロイごとに要記載)。** 保護が完成するのは全 WRITER・READER がアップグレード
+された時のみです。**SQLite** ではレガシーの `INSERT OR REPLACE` upsert が行を delete+reinsert して制御列を
+リセットするため、pre-G20 の writer が tombstone を消します。cross-cluster 保証に依存する前に全クラスタ/
+writer を 10.8.0 へ更新してください。
+
 ## 関連資料
 
 現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。

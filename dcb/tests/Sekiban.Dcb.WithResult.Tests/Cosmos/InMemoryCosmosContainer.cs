@@ -31,6 +31,20 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     public Queue<Exception> WriteFaults { get; } = new();
 
     /// <summary>
+    ///     SEK-G20: fails the next N writes AFTER the document is durably stored — models a lost response on a write that
+    ///     DID commit, so the caller's bounded re-read can confirm its own commit.
+    /// </summary>
+    public Queue<Exception> PostWriteFaults { get; } = new();
+
+    private void ThrowIfPostFaulted()
+    {
+        if (PostWriteFaults.Count > 0)
+        {
+            throw PostWriteFaults.Dequeue();
+        }
+    }
+
+    /// <summary>
     ///     Called with the running count before each document is written. Lets a test act on the Nth write —
     ///     cancel, crash, race a concurrent writer — at an exact point, instead of polling for one.
     /// </summary>
@@ -116,6 +130,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
             Stamp(document);
             _items[key] = document;
+            ThrowIfPostFaulted();
             return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.Created));
         }
     }
@@ -175,6 +190,64 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
         _items.Remove(key);
         return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(default!, HttpStatusCode.NoContent));
+    }
+
+    // SEK-G20: exact-token CAS via ETag IfMatch. A Replace pinned to an ETag that has moved is refused (412), exactly as
+    // Cosmos behaves — so the generation/tombstone CAS is proven, not assumed. A new ETag is stamped on success.
+    public override Task<ItemResponse<T>> ReplaceItemAsync<T>(
+        T item,
+        string id,
+        PartitionKey? partitionKey = null,
+        ItemRequestOptions? requestOptions = null,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            ThrowIfFaulted();
+            var document = JObject.FromObject(item!);
+            var pk = partitionKey is null ? Pk(document) : UnwrapPartitionKey(partitionKey.Value);
+            var key = (pk, id);
+
+            if (!_items.TryGetValue(key, out var existing))
+            {
+                throw CosmosFailures.NotFound();
+            }
+
+            var ifMatch = requestOptions?.IfMatchEtag;
+            if (!string.IsNullOrEmpty(ifMatch) && !string.Equals(ifMatch, ETagOf(existing), StringComparison.Ordinal))
+            {
+                throw CosmosFailures.PreconditionFailed();
+            }
+
+            OnWrite?.Invoke(Creates);
+            Creates++;
+            Stamp(document);
+            _items[key] = document;
+            ThrowIfPostFaulted();
+            return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.OK));
+        }
+    }
+
+    // Unconditional create-or-replace (the legacy checkpoint write path uses this). Stamps a fresh ETag.
+    public override Task<ItemResponse<T>> UpsertItemAsync<T>(
+        T item,
+        PartitionKey? partitionKey = null,
+        ItemRequestOptions? requestOptions = null,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            ThrowIfFaulted();
+            var document = JObject.FromObject(item!);
+            var pk = partitionKey is null ? Pk(document) : UnwrapPartitionKey(partitionKey.Value);
+            var key = (pk, Id_(document));
+            OnWrite?.Invoke(Creates);
+            Creates++;
+            Stamp(document);
+            _items[key] = document;
+            ThrowIfPostFaulted();
+            return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(item, HttpStatusCode.OK));
+        }
     }
 
     public override TransactionalBatch CreateTransactionalBatch(PartitionKey partitionKey) =>

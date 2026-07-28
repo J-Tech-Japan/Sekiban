@@ -58,4 +58,10 @@ internal interface IDualStateRebuildSignals
     ///     is a full ordered rebuild from the authoritative event store; the wrapper never folds it out of order.
     /// </summary>
     bool RebuildRequired { get; }
+
+    /// <summary>SEK-G20: the id of the offending event that forced <see cref="RebuildRequired" /> (null if none).</summary>
+    string? RebuildOffendingEventId { get; }
+
+    /// <summary>SEK-G20: the SortableUniqueId position of the offending event (null if none).</summary>
+    string? RebuildOffendingPosition { get; }
 }

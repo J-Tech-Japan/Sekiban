@@ -104,6 +104,15 @@ public class DynamoMultiProjectionState
     /// </summary>
     public string? BuildHost { get; set; }
 
+    /// <summary>SEK-G20 rebuild epoch. Absent on pre-G20 items → defaults to 0.</summary>
+    public long Generation { get; set; }
+
+    /// <summary>SEK-G20 monotonic per-mutation revision — the exact-CAS token. Absent → defaults to 0.</summary>
+    public long Revision { get; set; }
+
+    /// <summary>SEK-G20 lifecycle: 0 = Active, 1 = Tombstoned. Absent → defaults to 0 (Active).</summary>
+    public int Lifecycle { get; set; }
+
     /// <summary>
     ///     Converts to DynamoDB attribute values.
     /// </summary>
@@ -125,7 +134,10 @@ public class DynamoMultiProjectionState
             ["safeWindowThreshold"] = new AttributeValue { S = SafeWindowThreshold },
             ["updatedAt"] = new AttributeValue { S = UpdatedAt },
             ["createdAt"] = new AttributeValue { S = CreatedAt },
-            ["buildSource"] = new AttributeValue { S = BuildSource }
+            ["buildSource"] = new AttributeValue { S = BuildSource },
+            ["generation"] = new AttributeValue { N = Generation.ToString(CultureInfo.InvariantCulture) },
+            ["revision"] = new AttributeValue { N = Revision.ToString(CultureInfo.InvariantCulture) },
+            ["lifecycle"] = new AttributeValue { N = Lifecycle.ToString(CultureInfo.InvariantCulture) }
         };
 
         if (!string.IsNullOrEmpty(StateData))
@@ -165,7 +177,10 @@ public class DynamoMultiProjectionState
             UpdatedAt = item.GetValueOrDefault("updatedAt")?.S ?? string.Empty,
             CreatedAt = item.GetValueOrDefault("createdAt")?.S ?? string.Empty,
             BuildSource = item.GetValueOrDefault("buildSource")?.S ?? string.Empty,
-            BuildHost = item.GetValueOrDefault("buildHost")?.S
+            BuildHost = item.GetValueOrDefault("buildHost")?.S,
+            Generation = long.TryParse(item.GetValueOrDefault("generation")?.N, out var gen) ? gen : 0,
+            Revision = long.TryParse(item.GetValueOrDefault("revision")?.N, out var rev) ? rev : 0,
+            Lifecycle = int.TryParse(item.GetValueOrDefault("lifecycle")?.N, out var lc) ? lc : 0
         };
     }
 

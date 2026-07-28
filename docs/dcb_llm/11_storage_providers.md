@@ -552,6 +552,48 @@ The canonical use: N replicas boot and each tries to perform the same one-time m
 
 **One durable claim is the boundary.** The contract guarantees at most one durable claim per key; it does **not** make the migration's side effects exactly-once. If the migration itself performs external effects (writes to another system, sends notifications), gate those behind the winning claim through an outbox / idempotency layer — the claim tells you *who won*, not that the effect ran exactly once.
 
+## SEK-G20 generation-aware checkpoint CAS
+
+**Version: 10.8.0 (minor).** Closes the cross-cluster shared-store hole from SEK-G18 (see
+[Common Issues → cross-cluster shared-store convergence](13_common_issues.md)). It is an **optional**
+capability on the multi-projection checkpoint store (`IMultiProjectionStateStore`), feature-detected
+from the LIVE instance exactly like the G15/G16 conditional-append discipline — a store advertises it
+by implementing `IGenerationAwareCheckpointStore` and returning `CheckpointCapabilityKind.GenerationTombstoneCas`
+from `DescribeCheckpointCapability()`. No member is added to `IMultiProjectionStateStore`, and no field
+is added to the positional records (`MultiProjectionStateRecord` / `MultiProjectionStateWriteRequest`).
+
+**Two-layer CAS.** Each checkpoint row carries a **generation** (rebuild epoch) and an **opaque
+per-mutation token** — the exact-CAS revision (Postgres/SQLite: a `Revision` column; Cosmos: the
+`_etag`; DynamoDB: a `revision` attribute) — plus a **lifecycle** (Active / Tombstoned). Every
+conditional operation compares the EXACT token; a generation-only comparison is not a CAS. The fixed
+state machine is `Active(g,rev) → CAS Invalidate → Tombstoned(g+1,rev') → CAS CommitRebuilt →
+Active(g+1,new rev)`; the rebuilt payload commit and the tombstone clear are ONE atomic same-row CAS.
+
+**What it protects.** A retrograde full-rebuild replaces delete-based invalidation with a durable
+bump+tombstone; a stale peer's later persist is `ConditionRejected` and never re-contaminates the row;
+a fresh activation reads the control plane before binding any payload, so a tombstone forces a full
+ordered replay. Every product checkpoint mutation routes through the surface (no unconditional
+write/delete bypass).
+
+| Provider | Exact-token primitive | Schema upgrade |
+|----------|----------------------|----------------|
+| Postgres | conditional `UPDATE … WHERE Generation=@g AND Revision=@r AND Lifecycle=@l` (row-count) | additive EF migration (`Generation`/`Revision`/`Lifecycle`, default 0) |
+| SQLite | conditional `UPDATE` (row-count) | additive `ALTER TABLE … ADD COLUMN … DEFAULT 0` |
+| Cosmos | `ReplaceItem` with `IfMatchEtag` (412 → rejected) | `generation`/`lifecycle` item properties (absent → 0) |
+| DynamoDB | conditional `PutItem`/`UpdateItem` `ConditionExpression` | `generation`/`revision`/`lifecycle` attributes (absent → 0) |
+
+**Compatibility.** Existing rows read as **generation 0, revision 0, Active** — no event or payload
+migration; only the additive checkpoint-store schema upgrade is required and is proven against a real
+pre-G20 database per provider. Until the schema is applied, capability operations fail closed (no
+silent legacy fallback). A store that does **not** implement the capability keeps its legacy
+unconditional write byte-for-byte, and a retrograde invalidation against it **fails closed to the G14
+fault path** (operator reset required) rather than risking a cross-cluster stale re-contamination.
+
+**Mixed-version hazards (must be documented per deployment).** Protection is complete only when every
+WRITER and READER is upgraded. On **SQLite**, the legacy `INSERT OR REPLACE` upsert deletes+reinserts
+the row and therefore RESETS the control columns — a pre-G20 writer erases a tombstone. Roll all
+clusters/writers to 10.8.0 before relying on the cross-cluster guarantee.
+
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).

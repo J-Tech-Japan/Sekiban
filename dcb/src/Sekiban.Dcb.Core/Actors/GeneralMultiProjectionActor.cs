@@ -894,6 +894,14 @@ public class GeneralMultiProjectionActor
     internal bool RebuildRequired =>
         _singleStateAccessor is IDualStateRebuildSignals signals && signals.RebuildRequired;
 
+    /// <summary>SEK-G20: the offending event id behind <see cref="RebuildRequired" /> (null if none). Internal seam.</summary>
+    internal string? RebuildOffendingEventId =>
+        _singleStateAccessor is IDualStateRebuildSignals signals ? signals.RebuildOffendingEventId : null;
+
+    /// <summary>SEK-G20: the offending event position behind <see cref="RebuildRequired" /> (null if none). Internal seam.</summary>
+    internal string? RebuildOffendingPosition =>
+        _singleStateAccessor is IDualStateRebuildSignals signals ? signals.RebuildOffendingPosition : null;
+
     public void ForcePromoteAllBufferedEvents()
     {
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)

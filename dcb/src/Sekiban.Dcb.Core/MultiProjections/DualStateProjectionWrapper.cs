@@ -33,6 +33,19 @@ public class DualStateProjectionWrapper<T>
     // path cannot reorder. The grain/host must respond with a full ordered rebuild from the authoritative event store.
     private bool _rebuildRequired;
 
+    // SEK-G20: the identity of the offending event that forced the rebuild signal (out-of-global-order safe promotion on
+    // a compacted baseline). Retained so the durable rebuild marker / a non-capable-store G14 fault carries FULL context
+    // (projector + event id + position), not just a boolean.
+    private string? _rebuildOffendingEventId;
+    private string? _rebuildOffendingPosition;
+
+    private void SignalRebuild(Event offending)
+    {
+        _rebuildRequired = true;
+        _rebuildOffendingEventId = offending.Id.ToString();
+        _rebuildOffendingPosition = offending.SortableUniqueIdValue;
+    }
+
     // Safe state - events older than SafeWindow
     private T _safeProjector;
     private int _safeVersion;
@@ -182,7 +195,7 @@ public class DualStateProjectionWrapper<T>
             // Compacted/incremental baseline: the full history is gone, so the wrapper cannot reorder locally. Signal a
             // full ordered rebuild from the authoritative event store (SEK-G18 integrity guard) rather than fold out of
             // order or rebuild a compacted baseline from the initial payload.
-            _rebuildRequired = true;
+            SignalRebuild(evt);
             return this;
         }
 
@@ -203,6 +216,8 @@ public class DualStateProjectionWrapper<T>
     // SEK-G18 internal seam (not on the public IDualStateAccessor surface).
     bool IDualStateRebuildSignals.IsServedIdenticalToSafe => !_rebuildRequired && _bufferedEvents.Count == 0;
     bool IDualStateRebuildSignals.RebuildRequired => _rebuildRequired;
+    string? IDualStateRebuildSignals.RebuildOffendingEventId => _rebuildOffendingEventId;
+    string? IDualStateRebuildSignals.RebuildOffendingPosition => _rebuildOffendingPosition;
     IDualStateAccessor IDualStateAccessor.ProcessEventAs(
         Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
@@ -413,7 +428,7 @@ public class DualStateProjectionWrapper<T>
             // a full ordered rebuild rather than folding it out of global order.
             if (!IsStrictlyAfterSafeHead(ev.SortableUniqueIdValue))
             {
-                _rebuildRequired = true;
+                SignalRebuild(ev);
                 return;
             }
 

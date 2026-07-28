@@ -15,6 +15,7 @@ using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.ColdEvents;
 using System.Text;
@@ -70,6 +71,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
+
+    // SEK-G20: the SOLE checkpoint-mutation coordinator. It — not the grain — holds the generation/tombstone CAS surface
+    // and is the only type that calls any checkpoint mutation (CAS or legacy). It owns the adopted-token + rebuilt-pending
+    // state and arms this grain's query barrier on a tombstone rejection. Null only when no external store is configured.
+    private CheckpointMutationCoordinator? _checkpointMutation;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
     private readonly ILogger<MultiProjectionGrain> _logger;
     private readonly IEventStoreFactory? _eventStoreFactory;
@@ -260,6 +266,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _subscriptionResolver = subscriptionResolver ?? new DefaultOrleansEventSubscriptionResolver();
         _multiProjectionStateStore = multiProjectionStateStore;
+        _checkpointMutation = multiProjectionStateStore is null
+            ? null
+            : new CheckpointMutationCoordinator(multiProjectionStateStore, () => _firstQueryGate.Arm());
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
         _injectedActorOptions = actorOptions;
         _tempFileSnapshotManager = tempFileSnapshotManager;
@@ -1064,6 +1073,41 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Block queries in THIS activation before touching any durable state.
         _firstQueryGate.Arm();
 
+        // SEK-G20: capture the FULL offending-event context (id + position) behind the rebuild signal BEFORE the host is
+        // recreated (which clears it). It is written into the durable marker, and — on a non-capable store — into the G14
+        // fault descriptor for the fail-closed fallback.
+        var offendingEventId = (_host as IRebuildSignalingHost)?.RebuildOffendingEventId;
+        var offendingPosition = (_host as IRebuildSignalingHost)?.RebuildOffendingPosition;
+
+        // SEK-G20 FAIL-CLOSED FALLBACK: a retrograde rebuild against an EXTERNAL store that does NOT support the
+        // generation/tombstone CAS cannot be made cross-cluster safe (a peer's unconditional write could re-contaminate).
+        // Rather than silently rebuild (the G18 single-cluster behavior, unsafe when the store is shared), enter the G14
+        // persisted-fault path with FULL context so the projection fails closed and an operator reset is required.
+        if (_multiProjectionStateStore is not null && _checkpointMutation is { IsCapable: false })
+        {
+            var fault = new ProjectionFaultDescriptor(
+                EventId: Guid.TryParse(offendingEventId, out var oid) ? oid : Guid.Empty,
+                EventType: string.Empty,
+                ProjectorName: GetProjectorName(),
+                Position: offendingPosition ?? string.Empty,
+                Message: "SEK-G20: a retrograde full rebuild is required but the checkpoint store does not support the "
+                    + "generation/tombstone CAS capability; failing closed (operator reset required) rather than risk a "
+                    + "cross-cluster stale re-contamination.",
+                FaultedAtUtc: DateTime.UtcNow.Ticks);
+            _projectionFault = fault;
+            try
+            {
+                await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.FaultDescriptor, s => WriteFaultIntoState(s, fault));
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"Projection non-capable-store rebuild fault persist failed: {ex.Message}";
+            }
+            PinFaultedActivation();
+            _firstQueryGate.Arm();
+            return;
+        }
+
         // (1) FAIL-FIRST durable marker: commit RebuildRequired=true to grain state BEFORE the external snapshot is
         //     touched. A process/silo loss AFTER this commit is safe — a fresh activation observes the marker (checked
         //     before restore) and forces a full ordered replay even though the external snapshot is still intact. If the
@@ -1075,7 +1119,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             markerOutcome = await _stateStore.ExecuteWriteAsync(
                 GrainStateWriteKind.MetadataMaintenance,
-                s => s.RebuildRequired = true);
+                s =>
+                {
+                    s.RebuildRequired = true;
+                    s.RebuildOffendingEventId = offendingEventId;
+                    s.RebuildOffendingPosition = offendingPosition;
+                });
         }
         catch (Exception ex)
         {
@@ -1365,6 +1414,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     // SEK-G18 #6: the rebuilt checkpoint is now durably committed to the external store, so the durable
                     // rebuild marker can be cleared — a subsequent activation may safely restore this fresh checkpoint.
                     s.RebuildRequired = false;
+                    s.RebuildOffendingEventId = null;
+                    s.RebuildOffendingPosition = null;
                 }
 
                 // Clear legacy fields
@@ -2062,8 +2113,38 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 forceFullCatchUp = true;
             }
 
-            // Restore from external store (Postgres/Cosmos) — skipped when a durable rebuild is pending.
-            if (_multiProjectionStateStore != null && !durableRebuildPending)
+            // SEK-G20 RESTORE AUTHORITY: on a capable store, read the checkpoint control plane (generation/token/lifecycle)
+            // BEFORE binding any payload. A TOMBSTONE means a retrograde rebuild is in flight (possibly by another cluster);
+            // do NOT bind the possibly-stale payload — force a full ordered replay and mark this activation to CommitRebuilt
+            // on the exact tombstone token. An ACTIVE slot is ADOPTED so the first persist CASes on its exact token, so a
+            // stale writer is rejected rather than re-contaminating the shared row.
+            var checkpointTombstoned = false;
+            if (_checkpointMutation is { IsCapable: true } && !durableRebuildPending)
+            {
+                var slotResult = await _checkpointMutation.ReadSlotAsync(projectorName, projectorVersion, cancellationToken);
+                if (slotResult.IsSuccess)
+                {
+                    var slot = slotResult.GetValue();
+                    if (slot.IsTombstoned)
+                    {
+                        _logger.LogWarning(
+                            "Checkpoint tombstone observed on activation: {ProjectorName} — forcing full ordered replay (rebuilt commit pending)",
+                            projectorName);
+                        _checkpointMutation.AdoptTombstone(slot);
+                        _firstQueryGate.Arm();
+                        forceFullCatchUp = true;
+                        checkpointTombstoned = true;
+                    }
+                    else if (slot.IsActive)
+                    {
+                        _checkpointMutation.AdoptActive(slot);
+                    }
+                }
+            }
+
+            // Restore from external store (Postgres/Cosmos) — skipped when a durable rebuild is pending or a tombstone was
+            // observed (the payload under a tombstone is not authoritative).
+            if (_multiProjectionStateStore != null && !durableRebuildPending && !checkpointTombstoned)
             {
                 try
                 {
@@ -2480,20 +2561,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return;
         }
 
-        // Route the delete through the external-store coordinator so any parked/in-flight snapshot upsert completes
-        // BEFORE this delete, and no upsert runs concurrently with it. Combined with UpsertExternalStateCoordinatedAsync
-        // rejecting upserts while a fault exists, no stale upsert can recreate the snapshot this delete removes.
-        await _externalStore.InvalidateAsync(async () =>
-        {
-            var deleteResult = await _multiProjectionStateStore.DeleteAsync(GetProjectorName(), _host.GetProjectorVersion());
-            if (!deleteResult.IsSuccess)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to invalidate the external derived snapshot for a full rebuild: {deleteResult.GetException().Message}",
-                    deleteResult.GetException());
-            }
-        });
+        // Route the invalidation through the external-store coordinator so any parked/in-flight snapshot upsert completes
+        // BEFORE this invalidation, and no upsert runs concurrently with it.
+        await _externalStore.InvalidateAsync(PerformCheckpointInvalidationCoreAsync);
     }
+
+    // The SINGLE capability-aware invalidation shared by the retrograde-rebuild path and the admin DeleteExternalStateAsync
+    // path — always run inside the external-store coordinator. Delegates to the sole CheckpointMutationCoordinator (durable
+    // bump+tombstone CAS on a capable store; legacy delete otherwise). The grain holds no raw checkpoint mutation reach.
+    private Task PerformCheckpointInvalidationCoreAsync() =>
+        _checkpointMutation!.InvalidateAsync(GetProjectorName(), _host!.GetProjectorVersion());
 
     // True while a fault exists on the live actor OR the committed persisted descriptor. No external snapshot may be
     // upserted in this state — a faulted projection has no valid derived state, and this stops a stale/late upsert from
@@ -2511,13 +2588,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         Stream stream,
         int offloadThreshold)
     {
-        if (_multiProjectionStateStore is null)
+        if (_checkpointMutation is null)
         {
             return Task.FromResult(ResultBox.FromValue(false));
         }
 
-        return _externalStore.UpsertAsync(() =>
-            _multiProjectionStateStore.UpsertFromStreamAsync(request, stream, offloadThreshold, CancellationToken.None));
+        // SEK-G20: every product persist goes through the sole CheckpointMutationCoordinator — an EXPECTED-TOKEN CAS on a
+        // capable store (a stale writer is ConditionRejected and NEVER re-contaminates the row; a rebuilt commit is one
+        // atomic same-row CAS on the exact tombstone token), or the legacy unconditional upsert on a non-capable store.
+        // The grain holds no raw checkpoint mutation reach. Serialised on the external-store coordinator gate here.
+        return _externalStore.UpsertAsync(() => _checkpointMutation.PersistAsync(request, stream, offloadThreshold));
     }
 
     // Recreates a fresh actor host in the current activation and re-arms the first-query barrier, so the next query
@@ -3094,18 +3174,24 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public async Task<bool> DeleteExternalStateAsync()
     {
         if (_multiProjectionStateStore == null || _host == null) return false;
-        var projectorName = GetProjectorName();
-        var projectorVersion = _host.GetProjectorVersion();
-        // Route through the coordinator like every other external-store mutation, so this delete WAITS for any
-        // parked/in-flight snapshot upsert to commit and never runs concurrently with one. No direct DeleteAsync
-        // bypass may remain, or the interleaving catch-up timer could recreate the snapshot right after this delete.
-        var deleted = false;
+        // SEK-G20: admin delete is routed through the SAME capability-aware invalidation as a retrograde rebuild — on a
+        // capable shared store it is a durable bump+tombstone (a stale peer cannot recreate/re-contaminate outside the
+        // tombstone protocol), NOT an unconditional DeleteAsync. Non-capable stores keep the legacy hard delete. Always
+        // through the coordinator, so it waits for any parked/in-flight upsert and never runs concurrently with one.
+        var ok = true;
         await _externalStore.InvalidateAsync(async () =>
         {
-            var result = await _multiProjectionStateStore.DeleteAsync(projectorName, projectorVersion);
-            deleted = result.IsSuccess && result.GetValue();
+            try
+            {
+                await PerformCheckpointInvalidationCoreAsync();
+            }
+            catch
+            {
+                ok = false;
+                throw;
+            }
         });
-        return deleted;
+        return ok;
     }
 
     public async Task SeedEventsAsync(IReadOnlyList<SerializableEvent> events)

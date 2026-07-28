@@ -6,6 +6,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Storage.Checkpoints;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -22,6 +23,8 @@ public class MultiProjectionStateBuilder
     private readonly IMultiProjectionStateStore _stateStore;
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
     private readonly ILogger<MultiProjectionStateBuilder> _logger;
+    // SEK-G20: all checkpoint mutation goes through the sole coordinator — the builder never calls a raw store mutation.
+    private readonly CheckpointMutationCoordinator _checkpointMutation;
 
     public MultiProjectionStateBuilder(
         DcbDomainTypes domainTypes,
@@ -35,6 +38,7 @@ public class MultiProjectionStateBuilder
         _stateStore = stateStore;
         _blobAccessor = blobAccessor;
         _logger = logger ?? NullLogger<MultiProjectionStateBuilder>.Instance;
+        _checkpointMutation = new CheckpointMutationCoordinator(stateStore, () => { });
     }
 
     /// <summary>
@@ -207,11 +211,7 @@ public class MultiProjectionStateBuilder
                     compressedSizeBytes);
 
                 envelopeStream.Position = 0;
-                var saveResult = await _stateStore.UpsertFromStreamAsync(
-                    writeRequest,
-                    envelopeStream,
-                    options.OffloadThresholdBytes,
-                    ct);
+                var saveResult = await PersistCheckpointAsync(writeRequest, envelopeStream, options.OffloadThresholdBytes, ct);
                 if (!saveResult.IsSuccess)
                 {
                     return new ProjectorBuildResult(
@@ -429,4 +429,10 @@ public class MultiProjectionStateBuilder
         return await SnapshotEnvelopeResolver.ResolveInlineAsync(envelope, _blobAccessor, ct);
     }
 
+    // SEK-G20: the CLI/offline build persists through the sole checkpoint-mutation coordinator (generation/tombstone CAS
+    // when capable, legacy upsert otherwise), so it cannot re-contaminate a shared row outside the tombstone protocol. The
+    // builder holds NO raw store mutation reach — all mutation lives in CheckpointMutationCoordinator.
+    private Task<ResultBox<bool>> PersistCheckpointAsync(
+        MultiProjectionStateWriteRequest writeRequest, Stream stream, int offloadThreshold, CancellationToken ct) =>
+        _checkpointMutation.PersistOnceAsync(writeRequest, stream, offloadThreshold, ct);
 }

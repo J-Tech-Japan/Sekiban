@@ -131,10 +131,18 @@ public class CosmosMultiProjectionState
     public string? BuildHost { get; set; }
 
     /// <summary>
-    ///     CosmosDB ETag for optimistic concurrency.
+    ///     CosmosDB ETag for optimistic concurrency. SEK-G20 uses the ETag as the exact per-mutation CAS token (IfMatch).
     /// </summary>
     [JsonProperty("_etag")]
     public string? ETag { get; set; }
+
+    /// <summary>SEK-G20 rebuild epoch. Absent on pre-G20 docs → defaults to 0.</summary>
+    [JsonProperty("generation")]
+    public long Generation { get; set; }
+
+    /// <summary>SEK-G20 lifecycle: 0 = Active, 1 = Tombstoned. Absent on pre-G20 docs → defaults to 0 (Active).</summary>
+    [JsonProperty("lifecycle")]
+    public int Lifecycle { get; set; }
 
     /// <summary>
     ///     Creates a CosmosMultiProjectionState from a MultiProjectionStateRecord.

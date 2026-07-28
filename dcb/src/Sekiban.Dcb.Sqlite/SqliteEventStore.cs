@@ -258,8 +258,8 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
     {
         EnsureMetaTable(connection);
 
-        var hasEvents = TableExists(connection, "dcb_events");
-        var hasTags = TableExists(connection, "dcb_tags");
+        var hasEvents = SqliteSchemaSupport.TableExists(connection, "dcb_events");
+        var hasTags = SqliteSchemaSupport.TableExists(connection, "dcb_tags");
 
         if (!hasEvents || !hasTags)
         {
@@ -268,8 +268,8 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
             return;
         }
 
-        var hasServiceId = HasColumn(connection, "dcb_events", "ServiceId")
-            && HasColumn(connection, "dcb_tags", "ServiceId");
+        var hasServiceId = SqliteSchemaSupport.HasColumn(connection, "dcb_events", "ServiceId", AllowedTableNames, AllowedColumnNames)
+            && SqliteSchemaSupport.HasColumn(connection, "dcb_tags", "ServiceId", AllowedTableNames, AllowedColumnNames);
 
         if (!hasServiceId)
         {
@@ -432,41 +432,6 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
         {
             transaction.Rollback();
             throw;
-        }
-    }
-
-    private static bool TableExists(SqliteConnection connection, string tableName)
-    {
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name = @name";
-        cmd.Parameters.AddWithValue("@name", tableName);
-        var result = cmd.ExecuteScalar();
-        return result != null && result != DBNull.Value;
-    }
-
-    private static bool HasColumn(SqliteConnection connection, string tableName, string columnName)
-    {
-        ValidateSchemaIdentifier(tableName, columnName);
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT name FROM pragma_table_info(@tableName);";
-        cmd.Parameters.AddWithValue("@tableName", tableName);
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
-        {
-            if (string.Equals(reader.GetString(0), columnName, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static void ValidateSchemaIdentifier(string tableName, string columnName)
-    {
-        if (!AllowedTableNames.Contains(tableName) || !AllowedColumnNames.Contains(columnName))
-        {
-            throw new ArgumentException($"Unsupported schema identifier: {tableName}.{columnName}");
         }
     }
 
