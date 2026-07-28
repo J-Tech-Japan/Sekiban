@@ -204,12 +204,21 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
 
             var latestSortableUniqueId = latestSortableUniqueIdResult.GetValue();
 
-            // If there's a latest sortable unique ID, the tag exists
+            // If there's a latest sortable unique ID, the tag EXISTS.
             if (!string.IsNullOrEmpty(latestSortableUniqueId))
             {
-                // Since we're checking existence, we need to get the full state for tracking
-                // We can't track without having the full TagState
-                // For now, we'll skip tracking in TagExistsAsync to avoid double-fetching
+                // SEK-G19: track the existing tag's version as accessed state (if not already tracked by a GetStateAsync),
+                // so a later write that REFERENCES this existing tag reserves on its CURRENT version (an exact-token match,
+                // an update) rather than defaulting to expect-empty. Without this, a tag that a command only checks for
+                // EXISTENCE would reserve with an empty expected version and — now that empty means "expect the tag to be
+                // empty" — be wrongly rejected against its own committed state. A tag that does NOT exist stays untracked, so
+                // a first write still reserves expect-empty and a second first-write conflicts (the #1085 fix is preserved).
+                if (!_accessedTagStates.ContainsKey(tag))
+                {
+                    var tagContent = tag.GetTag().Substring(tag.GetTagGroup().Length + 1);
+                    _accessedTagStates[tag] = new TagState(
+                        new EmptyTagStatePayload(), 0, latestSortableUniqueId, tag.GetTagGroup(), tagContent, string.Empty, string.Empty);
+                }
                 return ResultBox.FromValue(true);
             }
 

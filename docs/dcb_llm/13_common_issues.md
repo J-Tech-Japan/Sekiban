@@ -410,3 +410,23 @@ upgrade (proven against a real pre-G20 database), no event/payload migration. **
 hazard**: on SQLite the legacy `INSERT OR REPLACE` upsert resets the control columns, so a pre-G20
 WRITER can erase a tombstone — protection is complete only when every writer is upgraded to 10.8.0.
 The release gate for the full fix is G18 + G19 + G20.
+
+## Duplicate first-writes on one cluster — CLOSED in G19 (10.8.0)
+
+**Symptom.** Two create commands for the *same* consistency tag both succeed on a single cluster (non-overlapping
+reservations), so applications cannot rely on a "this ID already exists" command error and every create projector must be
+duplicate-tolerant.
+
+**Cause.** The tag first-write reservation compared versions only when *both* the expected and the current version were
+non-empty. An empty expected version (a first write) skipped the check, so a second first write against a tag that already
+had committed state passed.
+
+**How G19 closes it.** The reservation now compares the expected version as an **exact match after null/empty
+normalization**, in the actor lock and after catch-up: an empty expected version means "expect the tag to be empty", so a
+second non-overlapping first write **conflicts** through the existing `ResultBox.Error` channel (no new public exception
+type). See [First-write reservation semantics](03_aggregate_command_events.md#first-write-reservation-semantics-sek-g19).
+
+**Boundary (per cluster).** This holds **at-most-one first write per cluster** (one Orleans actor activation per tag).
+Independent clusters do not coordinate through the actor — cross-cluster uniqueness is the storage layer's conditional
+unique-append (G15/G16), and convergence over durable duplicates is SEK-G18. **Behavior change**: from 10.8.0 one side of
+a racing create now fails with a consistency error. The release gate for the full fix is G18 + G19 + G20.

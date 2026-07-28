@@ -76,6 +76,36 @@ public record StudentTag(Guid StudentId) : IGuidTagGroup<StudentTag>
 Use helper tags for secondary dimensions. In the sample domain `YearlyStudentsTag` aggregates statistics by year but
 returns `false` for `IsConsistencyTag()` so it never blocks writes.
 
+### First-write reservation semantics (SEK-G19)
+
+A write to a consistency tag reserves it with an **expected version** (the tag's last `SortableUniqueId`), compared
+inside the actor as an **exact match after null/empty normalization**:
+
+- An **empty** expected version means "**I expect this tag to be empty**" — a first write. It succeeds only when the tag
+  has no committed state; a second, non-overlapping first write against a tag that already has state **conflicts**
+  (surfaced through the existing `ResultBox.Error` channel — there is no new public exception type).
+- A **non-empty** expected version must match the tag's current version exactly. A non-empty expectation against an empty
+  tag, or a mismatch, conflicts; an exact match is an ordinary update.
+
+How the expected version is chosen for a write:
+
+- If the command **accessed the tag state** (`GetStateAsync`) or confirmed it **exists** (`TagExistsAsync`), the write
+  reserves on the tag's **current** version — an update.
+- Otherwise the write reserves **expect-empty** — a first write. So a command that only emits an event for a tag it never
+  read is treated as a create, and a second such create conflicts.
+- A `ConsistencyTag.FromTagWithSortableUniqueId(...)` supplies an explicit expected version used verbatim.
+
+**Guarantee boundary (per cluster).** With Orleans this holds **at-most-one first write PER CLUSTER** — one actor
+activation per tag serialises reservations. Independent clusters do **not** coordinate through the actor: two clusters can
+each reserve-empty and durably append a duplicate create for the same tag. Cross-cluster uniqueness is the **storage
+layer's** job — the conditional unique-append contract (see [Storage Providers](11_storage_providers.md)); convergence
+over any durable duplicates is handled by the multi-projection layer (SEK-G18). Applications that need a hard "this ID
+already exists" guarantee across clusters must rely on storage unique-append, not the actor reservation.
+
+**Behavior change**: before 10.8.0 an empty expected version skipped the check, so one side of a racing create could
+silently succeed. From 10.8.0 that side now fails with a consistency error — create projectors that were written to
+tolerate duplicate first writes on a single cluster can retire that workaround.
+
 ## Tag State Payloads
 
 Projectors rebuild tag state into `ITagStatePayload` records. Keep them small and immutable.

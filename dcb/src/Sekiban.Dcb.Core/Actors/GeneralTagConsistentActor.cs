@@ -85,17 +85,27 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
                     new Exception($"Tag {await GetTagActorIdAsync()} is currently reserved"));
             }
 
-            // Check for optimistic concurrency - if a specific version was requested, it must match
-            if (!string.IsNullOrEmpty(lastSortableUniqueId) &&
-                !string.IsNullOrEmpty(_latestSortableUniqueId) &&
-                lastSortableUniqueId != _latestSortableUniqueId)
+            // SEK-G19: EXACT-MATCH optimistic-concurrency check after null/empty NORMALIZATION, in-lock and post-catch-up. An
+            // empty caller version means "I expect this tag to be EMPTY" (a first write) — NOT "skip the check". Comparing
+            // the normalized expected against the normalized current (both null/empty collapse to "") covers all five
+            // classes: empty/empty pass (first write on an empty tag); empty/non-empty CONFLICT (a second first-write against
+            // a tag that already has committed state — the #1085 hole); non-empty/empty CONFLICT (an update expecting a
+            // version the tag never had — the secondary hole); non-empty mismatch CONFLICT; non-empty match pass. The
+            // active-reservation rejection above is unchanged. GUARANTEE BOUNDARY: this holds at-most-one first write PER
+            // CLUSTER (Orleans single activation per tag); cross-cluster uniqueness remains the storage layer's job
+            // (G15/G16 conditional unique-append). Conflicts surface through the EXISTING ResultBox.Error channel — no new
+            // public exception type is added.
+            var expectedVersion = string.IsNullOrEmpty(lastSortableUniqueId) ? string.Empty : lastSortableUniqueId;
+            var currentVersion = string.IsNullOrEmpty(_latestSortableUniqueId) ? string.Empty : _latestSortableUniqueId;
+            if (!string.Equals(expectedVersion, currentVersion, StringComparison.Ordinal))
             {
                 return ResultBox.Error<TagWriteReservation>(
                     new Exception(
                         $"Tag {await GetTagActorIdAsync()} has been modified. Expected version: {lastSortableUniqueId}, Current version: {_latestSortableUniqueId}"));
             }
 
-            // Update the latest sortable unique ID if provided
+            // On a matching non-empty expectation the current version is already equal (no-op); an empty expectation leaves
+            // the empty current untouched. The authoritative version advance happens on the durable commit, not here.
             if (!string.IsNullOrEmpty(lastSortableUniqueId))
             {
                 _latestSortableUniqueId = lastSortableUniqueId;
