@@ -183,6 +183,61 @@ public class ConsistencyReservationRulesTest
         Assert.True(state2.GetValue().Version > state1.GetValue().Version);
     }
 
+    [Fact]
+    public async Task TagExistsAsync_OnExistingTag_TracksExactCurrentVersion_ReferenceWriteSucceeds()
+    {
+        // SEK-G19 companion (CoreGeneralCommandContext.TagExistsAsync): a command that ONLY confirms an existing tag's
+        // existence must still reserve on the tag's EXACT current version (an update), not expect-empty.
+        var baseTag = new BaseTag(Guid.NewGuid().ToString());
+
+        // Establish committed state (a first write, expect-empty on a fresh tag).
+        var first = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("V1"), ConsistencyTag.From(baseTag))));
+        Assert.True(first.IsSuccess);
+
+        // A command that ONLY checks existence (TagExistsAsync) then writes. The existing tag is tracked with its exact
+        // current version, so the write reserves as an exact-token UPDATE and SUCCEEDS. NON-VACUOUS: if the tracking branch
+        // were removed — or recorded empty instead of the current version — this would reserve expect-empty and be rejected
+        // (empty-expected vs existing state, a conflict).
+        var reference = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            async (cmd, ctx) =>
+            {
+                var exists = await ctx.TagExistsAsync(baseTag);
+                Assert.True(exists.IsSuccess && exists.GetValue());   // it EXISTS
+                return EventOrNone.Event(new DummyEvent("V2"), ConsistencyTag.From(baseTag));
+            });
+        Assert.True(reference.IsSuccess);   // fails if TagExistsAsync did not track the current version
+    }
+
+    [Fact]
+    public async Task TagExistsAsync_OnNonexistentTag_StaysUntracked_UsesExpectEmpty()
+    {
+        // SEK-G19 companion: a NONEXISTENT tag stays UNTRACKED, so the write reserves expect-empty (a first write).
+        var baseTag = new BaseTag(Guid.NewGuid().ToString());
+
+        // Existence check returns false (nothing tracked) -> the write reserves expect-empty and succeeds. NON-VACUOUS: if a
+        // nonexistent tag were tracked with a non-empty version, this first write would be rejected (non-empty-expected vs
+        // empty tag).
+        var firstWrite = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            async (cmd, ctx) =>
+            {
+                var exists = await ctx.TagExistsAsync(baseTag);
+                Assert.True(exists.IsSuccess && !exists.GetValue());   // does NOT exist
+                return EventOrNone.Event(new DummyEvent("C1"), ConsistencyTag.From(baseTag));
+            });
+        Assert.True(firstWrite.IsSuccess);
+
+        // A SECOND blind write (no state access, no existence check) reserves expect-empty against the now-existing tag and
+        // CONFLICTS — proving the first write really used expect-empty and the tag is not silently re-created.
+        var secondBlind = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("C2"), ConsistencyTag.From(baseTag))));
+        Assert.False(secondBlind.IsSuccess);
+    }
+
     private record DummyEvent(string Name) : IEventPayload;
     private record BaseTag(string Id) : IStringTagGroup<BaseTag>
     {

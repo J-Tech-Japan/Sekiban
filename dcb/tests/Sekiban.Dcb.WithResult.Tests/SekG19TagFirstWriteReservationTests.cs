@@ -185,11 +185,23 @@ public class SekG19TagFirstWriteReservationTests
         Assert.True(ra.IsSuccess);
         Assert.True(rb.IsSuccess);   // BOTH per-cluster reservations succeed — this is expected, not a regression
 
-        // Both flows durably append their create to the shared store: the duplicates land in storage (the cross-cluster
-        // authority) exactly as the boundary documents.
-        await CommitCreateAsync(store, studentId, tag, "A");
-        await CommitCreateAsync(store, studentId, tag, "B");
-        var latest = await store.GetLatestTagAsync(_domainTypes.TagTypes.GetTag(tag.GetTag()));
-        Assert.True(latest.IsSuccess);   // the shared store carries the duplicate-create state; storage unique-append is the fix vector
+        // Both flows durably append their create to the shared store. Prove TWO DISTINCT PHYSICAL events landed — not
+        // merely that a tag read succeeds — by capturing each event's identity and reading them back authoritatively.
+        var eventA = EventTestHelper.CreateEvent(new StudentCreated(studentId, "A"), tag);
+        var eventB = EventTestHelper.CreateEvent(new StudentCreated(studentId, "B"), tag);
+        await store.WriteEventAsync(eventA, _domainTypes.EventTypes);
+        await store.WriteEventAsync(eventB, _domainTypes.EventTypes);
+        Assert.NotEqual(eventA.Id, eventB.Id);                                       // distinct event identities
+        Assert.NotEqual(eventA.SortableUniqueIdValue, eventB.SortableUniqueIdValue); // distinct positions
+
+        // Authoritative event-store read by tag: exactly TWO events, distinct ids + positions + content. This FAILS if the
+        // second append were deduplicated (count would be 1) — the cross-cluster duplicate is real, and unique-append (the
+        // storage layer, not the actor) is the tool that would collapse it; convergence over it is SEK-G18.
+        var stored = (await store.ReadEventsByTagAsync(tag, _domainTypes.EventTypes)).GetValue().ToList();
+        Assert.Equal(2, stored.Count);
+        Assert.Equal(new[] { eventA.Id, eventB.Id }.OrderBy(g => g), stored.Select(e => e.Id).OrderBy(g => g));
+        Assert.Equal(2, stored.Select(e => e.SortableUniqueIdValue).Distinct().Count());
+        var names = stored.Select(e => ((StudentCreated)e.Payload).Name).OrderBy(n => n).ToList();
+        Assert.Equal(new[] { "A", "B" }, names);                                     // both distinct creates are present
     }
 }
