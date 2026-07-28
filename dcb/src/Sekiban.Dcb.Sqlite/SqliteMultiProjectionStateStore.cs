@@ -87,13 +87,13 @@ public class SqliteMultiProjectionStateStore :
 
     private static void EnsureSchema(SqliteConnection connection)
     {
-        if (!TableExists(connection, "dcb_multi_projection_states"))
+        if (!SqliteSchemaSupport.TableExists(connection, "dcb_multi_projection_states"))
         {
             CreateSchema(connection);
             return;
         }
 
-        if (!HasColumn(connection, "dcb_multi_projection_states", "ServiceId"))
+        if (!SqliteSchemaSupport.HasColumn(connection, "dcb_multi_projection_states", "ServiceId", AllowedTableNames, AllowedColumnNames))
         {
             MigrateSchemaToServiceId(connection);
         }
@@ -120,7 +120,7 @@ public class SqliteMultiProjectionStateStore :
     {
         foreach (var (column, ddl) in ControlColumnDdl)
         {
-            if (!HasColumn(connection, "dcb_multi_projection_states", column))
+            if (!SqliteSchemaSupport.HasColumn(connection, "dcb_multi_projection_states", column, AllowedTableNames, AllowedColumnNames))
             {
                 using var alter = connection.CreateCommand();
                 alter.CommandText = ddl; // constant literal — not dynamically formatted
@@ -241,41 +241,6 @@ public class SqliteMultiProjectionStateStore :
         {
             transaction.Rollback();
             throw;
-        }
-    }
-
-    private static bool TableExists(SqliteConnection connection, string tableName)
-    {
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name = @name";
-        cmd.Parameters.AddWithValue("@name", tableName);
-        var result = cmd.ExecuteScalar();
-        return result != null && result != DBNull.Value;
-    }
-
-    private static bool HasColumn(SqliteConnection connection, string tableName, string columnName)
-    {
-        ValidateSchemaIdentifier(tableName, columnName);
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT name FROM pragma_table_info(@tableName);";
-        cmd.Parameters.AddWithValue("@tableName", tableName);
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
-        {
-            if (string.Equals(reader.GetString(0), columnName, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static void ValidateSchemaIdentifier(string tableName, string columnName)
-    {
-        if (!AllowedTableNames.Contains(tableName) || !AllowedColumnNames.Contains(columnName))
-        {
-            throw new ArgumentException($"Unsupported schema identifier: {tableName}.{columnName}");
         }
     }
 
