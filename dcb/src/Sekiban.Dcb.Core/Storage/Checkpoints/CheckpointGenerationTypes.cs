@@ -122,6 +122,17 @@ public sealed record CheckpointExpectation(
     public static CheckpointExpectation FromSlot(CheckpointSlot slot) => slot.Exists
         ? new CheckpointExpectation(false, slot.Generation, slot.Revision, slot.Lifecycle)
         : Absent;
+
+    /// <summary>
+    ///     The shared invalidate/rebuilt-commit guard: a mutation that advances an EXISTING row requires an exact numeric
+    ///     revision token (never expected-absence). Returns false — the caller returns Corruption — for an ExpectAbsent or
+    ///     an unparseable revision. Centralised so every provider validates identically.
+    /// </summary>
+    public bool TryGetExactRevision(out long revision)
+    {
+        revision = 0;
+        return !ExpectAbsent && long.TryParse(ExpectedRevision, out revision);
+    }
 }
 
 /// <summary>Closed outcome set for a conditional checkpoint operation.</summary>

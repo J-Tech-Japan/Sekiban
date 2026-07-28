@@ -122,4 +122,29 @@ public static class CheckpointInDoubtResolver
         Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
         long resultingGeneration, long resultingRevision, Exception cause) =>
         ResolveAsync(reread, CommittedTombstoneByExact(resultingGeneration, resultingRevision), 3, cause);
+
+    /// <summary>
+    ///     The provider-shared write-failure classification (SEK-G20). A DETERMINISTIC pre-commit / schema failure (the
+    ///     provider proves it never crossed the commit boundary) is ProviderFailure; otherwise the commit is unknown and is
+    ///     resolved by the bounded re-read (Active + exact payload => Committed, else typed retryable InDoubt). One place so
+    ///     the phase-marker rule cannot drift per provider.
+    /// </summary>
+    public static Task<CheckpointCasOutcome> ClassifyActiveWriteFailure(
+        bool deterministicPreCommit,
+        Exception cause,
+        Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
+        long resultingGeneration, string lastSortableUniqueId, long eventsProcessed) =>
+        deterministicPreCommit
+            ? Task.FromResult(CheckpointCasOutcome.ProviderFailed(cause))
+            : ResolveActiveWriteAsync(reread, resultingGeneration, lastSortableUniqueId, eventsProcessed, cause);
+
+    /// <summary>The tombstone (invalidate) counterpart of <see cref="ClassifyActiveWriteFailure" />.</summary>
+    public static Task<CheckpointCasOutcome> ClassifyTombstoneWriteFailure(
+        bool deterministicPreCommit,
+        Exception cause,
+        Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
+        long resultingGeneration, long resultingRevision) =>
+        deterministicPreCommit
+            ? Task.FromResult(CheckpointCasOutcome.ProviderFailed(cause))
+            : ResolveTombstoneWriteAsync(reread, resultingGeneration, resultingRevision, cause);
 }

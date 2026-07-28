@@ -351,10 +351,6 @@ public class PostgresMultiProjectionStateStore :
         }
     }
 
-    /// <summary>Parses the opaque revision token; a non-numeric token is a corrupt/foreign token (fail closed).</summary>
-    private static bool TryToken(CheckpointExpectation e, out long revision) =>
-        long.TryParse(e.ExpectedRevision, out revision);
-
     /// <summary>True only for a Postgres unique-violation (23505) — the "row already exists" conflict on an insert.</summary>
     private static bool IsUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation };
@@ -432,7 +428,7 @@ public class PostgresMultiProjectionStateStore :
                 }
             }
 
-            if (!TryToken(expectation, out var expectedRevision))
+            if (!expectation.TryGetExactRevision(out var expectedRevision))
             {
                 return CheckpointCasOutcome.Corrupt();
             }
@@ -465,10 +461,10 @@ public class PostgresMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+            return await CheckpointInDoubtResolver.ClassifyActiveWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
                 ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-                expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
+                expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed);
         }
     }
 
@@ -478,7 +474,7 @@ public class PostgresMultiProjectionStateStore :
         CheckpointExpectation expectation,
         CancellationToken cancellationToken = default)
     {
-        if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+        if (!expectation.TryGetExactRevision(out var expectedRevision))
         {
             return CheckpointCasOutcome.Corrupt();
         }
@@ -507,10 +503,9 @@ public class PostgresMultiProjectionStateStore :
             // SEK-G20: a lost response on the tombstone UPDATE is UNKNOWN-commit too — a deterministic pre-commit/schema
             // failure is ProviderFailure, but any other failure crossed a commit-capable boundary and MUST be resolved by
             // a bounded independent re-read (Tombstoned at g+1 => our own commit; unconfirmable => typed retryable InDoubt).
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveTombstoneWriteAsync(
-                ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
-                expectation.ExpectedGeneration + 1, expectedRevision + 1, ex);
+            return await CheckpointInDoubtResolver.ClassifyTombstoneWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
+                ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),expectation.ExpectedGeneration + 1, expectedRevision + 1);
         }
     }
 
@@ -523,7 +518,7 @@ public class PostgresMultiProjectionStateStore :
     {
         try
         {
-            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+            if (!expectation.TryGetExactRevision(out var expectedRevision))
             {
                 return CheckpointCasOutcome.Corrupt();
             }
@@ -569,10 +564,10 @@ public class PostgresMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+            return await CheckpointInDoubtResolver.ClassifyActiveWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
                 ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-                expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
+                expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed);
         }
     }
 }

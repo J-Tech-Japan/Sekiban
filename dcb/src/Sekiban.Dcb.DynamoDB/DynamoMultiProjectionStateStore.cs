@@ -492,8 +492,6 @@ public class DynamoMultiProjectionStateStore :
     public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
         CheckpointStoreCapabilityDescriptor.Supporting("DynamoDB", CheckpointCapabilityKind.GenerationTombstoneCas);
 
-    private static bool TryToken(CheckpointExpectation e, out long revision) => long.TryParse(e.ExpectedRevision, out revision);
-
     private static readonly Dictionary<string, string> ControlNames = new()
     {
         ["#g"] = "generation",
@@ -585,7 +583,7 @@ public class DynamoMultiProjectionStateStore :
                 }
             }
 
-            if (!TryToken(expectation, out var expectedRevision))
+            if (!expectation.TryGetExactRevision(out var expectedRevision))
             {
                 return CheckpointCasOutcome.Corrupt();
             }
@@ -615,10 +613,10 @@ public class DynamoMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+            return await CheckpointInDoubtResolver.ClassifyActiveWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
                 ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-                expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
+                expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed);
         }
     }
 
@@ -628,7 +626,7 @@ public class DynamoMultiProjectionStateStore :
         CheckpointExpectation expectation,
         CancellationToken cancellationToken = default)
     {
-        if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+        if (!expectation.TryGetExactRevision(out var expectedRevision))
         {
             return CheckpointCasOutcome.Corrupt();
         }
@@ -666,10 +664,9 @@ public class DynamoMultiProjectionStateStore :
         {
             // SEK-G20: a lost response on the tombstone UpdateItem is UNKNOWN-commit — deterministic pre-commit/validation
             // is ProviderFailure, otherwise resolve by a bounded independent re-read (Tombstoned at g+1 => our own commit).
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveTombstoneWriteAsync(
-                ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
-                expectation.ExpectedGeneration + 1, expectedRevision + 1, ex);
+            return await CheckpointInDoubtResolver.ClassifyTombstoneWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
+                ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),expectation.ExpectedGeneration + 1, expectedRevision + 1);
         }
     }
 
@@ -682,7 +679,7 @@ public class DynamoMultiProjectionStateStore :
     {
         try
         {
-            if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+            if (!expectation.TryGetExactRevision(out var expectedRevision))
             {
                 return CheckpointCasOutcome.Corrupt();
             }
@@ -719,10 +716,10 @@ public class DynamoMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+            return await CheckpointInDoubtResolver.ClassifyActiveWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
                 ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-                expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
+                expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed);
         }
     }
 

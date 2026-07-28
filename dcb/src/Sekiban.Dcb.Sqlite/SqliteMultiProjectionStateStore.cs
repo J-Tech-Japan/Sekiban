@@ -575,8 +575,6 @@ public class SqliteMultiProjectionStateStore :
     public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() =>
         CheckpointStoreCapabilityDescriptor.Supporting("Sqlite", CheckpointCapabilityKind.GenerationTombstoneCas);
 
-    private static bool TryToken(CheckpointExpectation e, out long revision) => long.TryParse(e.ExpectedRevision, out revision);
-
     /// <summary>
     ///     A DETERMINISTIC pre-commit failure — a schema/syntax error (e.g. "no such column" when the additive ALTER is
     ///     unapplied) or an already-cancelled token. Provably NOT post-commit, so ProviderFailure/fail-closed, never in-doubt.
@@ -722,7 +720,7 @@ public class SqliteMultiProjectionStateStore :
                 return inserted == 1 ? CheckpointCasOutcome.Committed(slot0) : CheckpointCasOutcome.Rejected(slot0);
             }
 
-            if (!TryToken(expectation, out var expectedRevision))
+            if (!expectation.TryGetExactRevision(out var expectedRevision))
             {
                 return CheckpointCasOutcome.Corrupt();
             }
@@ -753,10 +751,10 @@ public class SqliteMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+            return await CheckpointInDoubtResolver.ClassifyActiveWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
                 ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-                expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
+                expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed);
         }
     }
 
@@ -766,7 +764,7 @@ public class SqliteMultiProjectionStateStore :
         CheckpointExpectation expectation,
         CancellationToken cancellationToken = default)
     {
-        if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+        if (!expectation.TryGetExactRevision(out var expectedRevision))
         {
             return CheckpointCasOutcome.Corrupt();
         }
@@ -800,10 +798,9 @@ public class SqliteMultiProjectionStateStore :
         {
             // SEK-G20: a lost response on the tombstone UPDATE is UNKNOWN-commit — deterministic pre-commit/schema is
             // ProviderFailure, otherwise resolve by a bounded independent re-read (Tombstoned at g+1 => our own commit).
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveTombstoneWriteAsync(
-                ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),
-                expectation.ExpectedGeneration + 1, expectedRevision + 1, ex);
+            return await CheckpointInDoubtResolver.ClassifyTombstoneWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
+                ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),expectation.ExpectedGeneration + 1, expectedRevision + 1);
         }
     }
 
@@ -814,7 +811,7 @@ public class SqliteMultiProjectionStateStore :
         int offloadThresholdBytes,
         CancellationToken cancellationToken = default)
     {
-        if (expectation.ExpectAbsent || !TryToken(expectation, out var expectedRevision))
+        if (!expectation.TryGetExactRevision(out var expectedRevision))
         {
             return CheckpointCasOutcome.Corrupt();
         }
@@ -856,10 +853,10 @@ public class SqliteMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+            return await CheckpointInDoubtResolver.ClassifyActiveWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
                 ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-                expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
+                expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed);
         }
     }
 }

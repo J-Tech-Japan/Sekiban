@@ -554,10 +554,10 @@ public class CosmosMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+            return await CheckpointInDoubtResolver.ClassifyActiveWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
                 ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-                expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
+                expectation.ExpectAbsent ? 0 : expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed);
         }
     }
 
@@ -619,9 +619,9 @@ public class CosmosMultiProjectionStateStore :
         {
             // SEK-G20: a lost response on the tombstone Replace is UNKNOWN-commit — deterministic pre-commit is
             // ProviderFailure, otherwise resolve by a bounded independent re-read (Tombstoned at g+1 => our own commit).
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveTombstoneWriteAsync(
-                ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct), expectation.ExpectedGeneration + 1, -1, ex);
+            return await CheckpointInDoubtResolver.ClassifyTombstoneWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
+                ct => ReadCheckpointSlotAsync(projectorName, projectorVersion, ct),expectation.ExpectedGeneration + 1, -1);
         }
     }
 
@@ -653,10 +653,10 @@ public class CosmosMultiProjectionStateStore :
         catch (Exception ex)
         {
             // SEK-G20: a dispatch/transport failure whose commit is UNKNOWN — resolve via a bounded independent re-read.
-            if (IsDeterministicPreCommitFailure(ex, cancellationToken)) return CheckpointCasOutcome.ProviderFailed(ex);
-            return await CheckpointInDoubtResolver.ResolveActiveWriteAsync(
+            return await CheckpointInDoubtResolver.ClassifyActiveWriteFailure(
+                IsDeterministicPreCommitFailure(ex, cancellationToken), ex,
                 ct => ReadCheckpointSlotAsync(payload.ProjectorName, payload.ProjectorVersion, ct),
-                expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed, ex);
+                expectation.ExpectedGeneration, payload.LastSortableUniqueId, payload.EventsProcessed);
         }
     }
 
