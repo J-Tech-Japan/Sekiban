@@ -178,7 +178,7 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
         var faultFactory = new InterceptingDbContextFactory(conn, interceptor);
         var store = new PostgresMultiProjectionStateStore(faultFactory, new FixedServiceId("svc"));
 
-        interceptor.PostCommitFault = true;
+        interceptor.PostCommitResponseLostFault = true;
         var committed = await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
         Assert.Equal(CheckpointCasStatus.Committed, committed.Status);
         Assert.True((await ReadAsync(store)).IsActive);   // the row really committed despite the lost response
@@ -188,7 +188,7 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
         {
             await ctx.Database.ExecuteSqlRawAsync("DELETE FROM dcb_multi_projection_states");
         }
-        interceptor.PreCommitFault = true;
+        interceptor.AfterDispatchFault = true;
         var indoubt = await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, indoubt.Status);
         Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, indoubt.InDoubtReason);
@@ -213,16 +213,19 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
         }
     }
 
-    // SEK-G20: injects a lost response at the DbCommand NonQuery boundary — the mechanism the conditional CAS UPDATE (a
-    // single ExecuteUpdateAsync) uses for a normal persist, an invalidate/tombstone, and a rebuilt commit. PreCommitFault
-    // throws BEFORE the UPDATE dispatches (nothing committed); PostCommitFault throws AFTER it executes (with Npgsql
-    // autocommit the row is durably committed), so the store's bounded re-read on a fresh command either confirms our own
-    // commit (Committed) or, if unconfirmable, reports typed retryable InDoubt. Fires only on UPDATE — a SELECT re-read is
-    // a Reader, not a NonQuery, so verification is never blocked. One-shot each.
+    // SEK-G20 phase taxonomy at the DbCommand NonQuery boundary of the conditional CAS UPDATE (one ExecuteUpdateAsync per
+    // normal persist / invalidate / rebuilt commit):
+    //   - AfterDispatchFault throws an OPAQUE loss around the UPDATE. The store CANNOT prove whether it committed (an
+    //     opaque IOException is not a deterministic pre-commit/schema signal), so the commit is UNKNOWABLE and the bounded
+    //     re-read reports typed retryable InDoubt (AmbiguousAfterWrite). This is NOT a provable pre-commit — a provable
+    //     deterministic failure (an unapplied-schema column) is ProviderFailure, proven by UnappliedSchema_MissingControlColumns.
+    //   - PostCommitResponseLostFault throws AFTER the UPDATE executes (Npgsql autocommit => the row IS durably committed),
+    //     so the bounded re-read confirms our own commit => Committed.
+    // Fires only on UPDATE — a SELECT re-read is a Reader, not a NonQuery, so verification is never blocked. One-shot each.
     private sealed class NonQueryCommandFaultInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
     {
-        public bool PreCommitFault;
-        public bool PostCommitFault;
+        public bool AfterDispatchFault;
+        public bool PostCommitResponseLostFault;
 
         public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> NonQueryExecutingAsync(
             System.Data.Common.DbCommand command,
@@ -230,7 +233,7 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
             Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
             CancellationToken cancellationToken = default)
         {
-            if (PreCommitFault) { PreCommitFault = false; throw new IOException("injected: lost response, write did not commit"); }
+            if (AfterDispatchFault) { AfterDispatchFault = false; throw new IOException("injected: lost response, commit unknowable"); }
             return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
         }
 
@@ -241,13 +244,13 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
             CancellationToken cancellationToken = default)
         {
             var value = await base.NonQueryExecutedAsync(command, eventData, result, cancellationToken);
-            if (PostCommitFault) { PostCommitFault = false; throw new IOException("injected: lost response after a committed write"); }
+            if (PostCommitResponseLostFault) { PostCommitResponseLostFault = false; throw new IOException("injected: lost response after a committed write"); }
             return value;
         }
     }
 
     [Fact]
-    public async Task PhaseMatrix_NormalUpsert_Invalidate_RebuiltCommit_PostAndPreAmbiguity_RealDb()
+    public async Task PhaseMatrix_NormalUpsert_Invalidate_RebuiltCommit_PostCommitResponseLost_And_AfterDispatchUnknown_RealDb()
     {
         // Extends the create-only seam to the ExecuteUpdate CAS ops (normal persist, invalidate/tombstone, rebuilt commit)
         // against a REAL Postgres: each op's post-commit loss resolves Committed via the bounded re-read, and each pre-commit
@@ -268,14 +271,14 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
         var active = await ReadAsync(store);
 
         // Normal persist — post-commit loss confirms our own commit.
-        cmdFault.PostCommitFault = true;
+        cmdFault.PostCommitResponseLostFault = true;
         var persistPost = await store.ConditionalUpsertAsync(Req(2), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
         Assert.Equal(CheckpointCasStatus.Committed, persistPost.Status);
         var afterPersist = await ReadAsync(store);
         Assert.Equal(2, afterPersist.Record!.EventsProcessed);
 
-        // Normal persist — pre-commit loss stays InDoubt; row unchanged; same-token retry converges.
-        cmdFault.PreCommitFault = true;
+        // Normal persist — after-dispatch opaque loss (unknowable) stays InDoubt (Ambiguous); row unchanged; same-token retry converges.
+        cmdFault.AfterDispatchFault = true;
         var persistPre = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(afterPersist), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, persistPre.Status);
         Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, persistPre.InDoubtReason);
@@ -284,26 +287,26 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
         Assert.Equal(CheckpointCasStatus.Committed, persistRetry.Status);
         var beforeInvalidate = await ReadAsync(store);
 
-        // Invalidate — pre-commit loss stays InDoubt (still Active); post-commit loss confirms the tombstone.
-        cmdFault.PreCommitFault = true;
+        // Invalidate — after-dispatch opaque loss (unknowable) stays InDoubt (Ambiguous, still Active); post-commit response-lost confirms the tombstone.
+        cmdFault.AfterDispatchFault = true;
         var invPre = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(beforeInvalidate));
         Assert.Equal(CheckpointCasStatus.InDoubt, invPre.Status);
         Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, invPre.InDoubtReason);
         Assert.True((await ReadAsync(store)).IsActive);
-        cmdFault.PostCommitFault = true;
+        cmdFault.PostCommitResponseLostFault = true;
         var invPost = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(beforeInvalidate));
         Assert.Equal(CheckpointCasStatus.Committed, invPost.Status);
         var tomb = await ReadAsync(store);
         Assert.True(tomb.IsTombstoned);
         Assert.Equal(beforeInvalidate.Generation + 1, tomb.Generation);
 
-        // Rebuilt commit — pre-commit loss stays InDoubt (still Tombstoned); post-commit loss confirms our own commit.
-        cmdFault.PreCommitFault = true;
+        // Rebuilt commit — after-dispatch opaque loss (unknowable) stays InDoubt (Ambiguous, still Tombstoned); post-commit response-lost confirms our own commit.
+        cmdFault.AfterDispatchFault = true;
         var rebPre = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, rebPre.Status);
         Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, rebPre.InDoubtReason);
         Assert.True((await ReadAsync(store)).IsTombstoned);
-        cmdFault.PostCommitFault = true;
+        cmdFault.PostCommitResponseLostFault = true;
         var rebPost = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
         Assert.Equal(CheckpointCasStatus.Committed, rebPost.Status);
         var final = await ReadAsync(store);
@@ -314,15 +317,15 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
 
     private sealed class SaveChangesFaultInterceptor : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
     {
-        public bool PreCommitFault;
-        public bool PostCommitFault;
+        public bool AfterDispatchFault;
+        public bool PostCommitResponseLostFault;
 
         public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
             Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData,
             Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
             CancellationToken cancellationToken = default)
         {
-            if (PreCommitFault) { PreCommitFault = false; throw new IOException("injected: lost response, write did not commit"); }
+            if (AfterDispatchFault) { AfterDispatchFault = false; throw new IOException("injected: lost response, commit unknowable"); }
             return base.SavingChangesAsync(eventData, result, cancellationToken);
         }
 
@@ -331,7 +334,7 @@ public class PostgresCheckpointGenerationCasTests : IAsyncLifetime
             int result,
             CancellationToken cancellationToken = default)
         {
-            if (PostCommitFault) { PostCommitFault = false; throw new IOException("injected: lost response after a committed write"); }
+            if (PostCommitResponseLostFault) { PostCommitResponseLostFault = false; throw new IOException("injected: lost response after a committed write"); }
             return base.SavedChangesAsync(eventData, result, cancellationToken);
         }
     }

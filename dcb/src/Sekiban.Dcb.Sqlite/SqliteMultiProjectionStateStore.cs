@@ -656,22 +656,28 @@ public class SqliteMultiProjectionStateStore :
         cmd.Parameters.AddWithValue("@buildHost", (object?)r.BuildHost ?? DBNull.Value);
     }
 
-    // SEK-G20 test seams (never set in production) that prove a REAL SQLite production-path commit boundary for each write
-    // op: PreCommit throws BEFORE the ExecuteNonQuery dispatches (nothing committed); PostCommit throws AFTER it returns
-    // (the row is durably committed to the SQLite file), so the store's bounded re-read against a fresh connection either
-    // confirms our own commit (Committed) or, if unconfirmable, reports typed retryable InDoubt. One-shot per op.
-    internal enum CheckpointFaultPhase { None, PreCommit, PostCommit }
+    // SEK-G20 test seams (never set in production) that exercise a REAL SQLite production-path commit boundary for each
+    // write op. TAXONOMY (see the review phase model):
+    //   - AfterDispatch: throws an OPAQUE transport failure around the ExecuteNonQuery. The store CANNOT prove whether the
+    //     write committed (an opaque IOException is not a deterministic pre-commit/schema signal), so it treats the commit
+    //     as UNKNOWABLE and the bounded re-read reports typed retryable InDoubt (AmbiguousAfterWrite). This is deliberately
+    //     NOT a provable pre-commit — a provable pre-commit (a cancelled token or a schema error) is ProviderFailure, proven
+    //     separately by the cancelled-token test.
+    //   - PostCommitResponseLost: throws AFTER the ExecuteNonQuery returns (the row IS durably committed to the SQLite
+    //     file), so the store's bounded re-read against a fresh connection confirms our own commit => Committed.
+    // One-shot per op.
+    internal enum CheckpointFaultPhase { None, AfterDispatch, PostCommitResponseLost }
     internal CheckpointFaultPhase NextUpsertFault { get; set; } = CheckpointFaultPhase.None;
     internal CheckpointFaultPhase NextInvalidateFault { get; set; } = CheckpointFaultPhase.None;
     internal CheckpointFaultPhase NextRebuiltFault { get; set; } = CheckpointFaultPhase.None;
 
-    private static void FaultPreCommit(CheckpointFaultPhase fault)
+    private static void FaultBeforeDispatch(CheckpointFaultPhase fault)
     {
-        if (fault == CheckpointFaultPhase.PreCommit) throw new IOException("injected: lost response, write did not commit");
+        if (fault == CheckpointFaultPhase.AfterDispatch) throw new IOException("injected: lost response, commit unknowable");
     }
-    private static void FaultPostCommit(CheckpointFaultPhase fault)
+    private static void FaultAfterCommit(CheckpointFaultPhase fault)
     {
-        if (fault == CheckpointFaultPhase.PostCommit) throw new IOException("injected: lost response after a committed write");
+        if (fault == CheckpointFaultPhase.PostCommitResponseLost) throw new IOException("injected: lost response after a committed write");
     }
 
     public async Task<CheckpointCasOutcome> ConditionalUpsertAsync(
@@ -713,9 +719,9 @@ public class SqliteMultiProjectionStateStore :
                 insert.Parameters.AddWithValue("@projectorVersion", payload.ProjectorVersion);
                 insert.Parameters.AddWithValue("@createdAt", payload.CreatedAt.ToString("O"));
                 BindPayloadParams(insert, payload, stateData);
-                FaultPreCommit(fault);
+                FaultBeforeDispatch(fault);
                 var inserted = await insert.ExecuteNonQueryAsync(cancellationToken);
-                FaultPostCommit(fault);
+                FaultAfterCommit(fault);
                 var slot0 = await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken);
                 return inserted == 1 ? CheckpointCasOutcome.Committed(slot0) : CheckpointCasOutcome.Rejected(slot0);
             }
@@ -742,9 +748,9 @@ public class SqliteMultiProjectionStateStore :
             update.Parameters.AddWithValue("@g", expectation.ExpectedGeneration);
             update.Parameters.AddWithValue("@rev", expectedRevision);
             BindPayloadParams(update, payload, stateData);
-            FaultPreCommit(fault);
+            FaultBeforeDispatch(fault);
             var affected = await update.ExecuteNonQueryAsync(cancellationToken);
-            FaultPostCommit(fault);
+            FaultAfterCommit(fault);
             var slot = await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken);
             return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
         }
@@ -788,9 +794,9 @@ public class SqliteMultiProjectionStateStore :
             cmd.Parameters.AddWithValue("@g", expectation.ExpectedGeneration);
             cmd.Parameters.AddWithValue("@rev", expectedRevision);
             cmd.Parameters.AddWithValue("@updatedAt", DateTime.UtcNow.ToString("O"));
-            FaultPreCommit(fault);
+            FaultBeforeDispatch(fault);
             var affected = await cmd.ExecuteNonQueryAsync(cancellationToken);
-            FaultPostCommit(fault);
+            FaultAfterCommit(fault);
             var slot = await RefetchAsync(projectorName, projectorVersion, cancellationToken);
             return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
         }
@@ -844,9 +850,9 @@ public class SqliteMultiProjectionStateStore :
             cmd.Parameters.AddWithValue("@g", expectation.ExpectedGeneration);
             cmd.Parameters.AddWithValue("@rev", expectedRevision);
             BindPayloadParams(cmd, payload, stateData);
-            FaultPreCommit(fault);
+            FaultBeforeDispatch(fault);
             var affected = await cmd.ExecuteNonQueryAsync(cancellationToken);
-            FaultPostCommit(fault);
+            FaultAfterCommit(fault);
             var slot = await RefetchAsync(payload.ProjectorName, payload.ProjectorVersion, cancellationToken);
             return affected == 1 ? CheckpointCasOutcome.Committed(slot) : CheckpointCasOutcome.Rejected(slot);
         }

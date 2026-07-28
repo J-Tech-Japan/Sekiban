@@ -116,7 +116,7 @@ public class DynamoDbCheckpointGenerationCasTests
         var committed = await store.ConditionalUpsertAsync(Req(2), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
         Assert.Equal(CheckpointCasStatus.Committed, committed.Status);
 
-        // The PutItem FAILS before committing -> the re-read cannot confirm our payload -> typed InDoubt with a cause.
+        // The PutItem fails with an OPAQUE loss the store cannot classify as pre-commit (after-dispatch, unknowable) -> the re-read cannot confirm -> typed InDoubt (Ambiguous).
         var current = await ReadAsync(store);
         fake.PreWriteFaults.Enqueue(new IOException("injected: lost response, write did not commit"));
         var indoubt = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(current), 1_000_000);
@@ -126,18 +126,18 @@ public class DynamoDbCheckpointGenerationCasTests
     }
 
     [Fact]
-    public async Task Invalidate_And_RebuiltCommit_PostAndPreAmbiguity_ResolveViaBoundedReread()
+    public async Task Invalidate_And_RebuiltCommit_PostCommitResponseLost_And_AfterDispatchUnknown_ResolveViaBoundedReread()
     {
         // SEK-G20 phase matrix for the OTHER two write ops (invalidate via UpdateItem, rebuilt via PutItem) through the real
         // Dynamo store over the round-trip fake: a post-write loss (the write committed) resolves Committed via the bounded
-        // re-read; a pre-write loss (nothing committed) resolves typed InDoubt with the row unchanged.
+        // re-read; an after-dispatch opaque loss (commit unknowable) resolves typed InDoubt (Ambiguous) with the row unchanged.
         var client = NewClient();
         var fake = (FakeDynamoDb)client;
         var store = NewStore(client);
         await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
         var active = await ReadAsync(store);
 
-        // Invalidate, pre-write loss: nothing commits -> the row stays Active -> InDoubt.
+        // Invalidate, after-dispatch opaque loss (unknowable): the row stays Active -> InDoubt (Ambiguous).
         fake.PreWriteFaults.Enqueue(new IOException("injected: lost response, tombstone did not commit"));
         var invPre = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
         Assert.Equal(CheckpointCasStatus.InDoubt, invPre.Status);
@@ -152,7 +152,7 @@ public class DynamoDbCheckpointGenerationCasTests
         Assert.True(tomb.IsTombstoned);
         Assert.Equal(active.Generation + 1, tomb.Generation);
 
-        // Rebuilt commit, pre-write loss: nothing commits -> the row stays Tombstoned -> InDoubt.
+        // Rebuilt commit, after-dispatch opaque loss (unknowable): the row stays Tombstoned -> InDoubt (Ambiguous).
         fake.PreWriteFaults.Enqueue(new IOException("injected: lost response, rebuilt did not commit"));
         var rebPre = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, rebPre.Status);
@@ -167,6 +167,22 @@ public class DynamoDbCheckpointGenerationCasTests
         Assert.True(final.IsActive);
         Assert.Equal(tomb.Generation, final.Generation);
         Assert.Equal(9, final.Record!.EventsProcessed);
+    }
+
+    [Fact]
+    public async Task DeterministicValidationException_ProviderFailure_NotInDoubt()
+    {
+        // The OTHER side of the taxonomy: a DETERMINISTIC provider-specific failure. A DynamoDB ValidationException is a
+        // malformed-request error the store PROVES occurred before commit => ProviderFailure, NEVER InDoubt.
+        var client = NewClient();
+        var fake = (FakeDynamoDb)client;
+        var store = NewStore(client);
+        await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = await ReadAsync(store);
+        fake.PreWriteFaults.Enqueue(new Amazon.Runtime.AmazonServiceException("validation error") { ErrorCode = "ValidationException" });
+        var outcome = await store.ConditionalUpsertAsync(Req(2), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.ProviderFailure, outcome.Status);
+        Assert.Null(outcome.InDoubtReason);
     }
 
     [Fact]

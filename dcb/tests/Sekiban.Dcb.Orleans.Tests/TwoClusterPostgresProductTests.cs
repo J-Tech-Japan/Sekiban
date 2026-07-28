@@ -176,19 +176,45 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
         Assert.Equal(gen0Key, afterB.Record!.OffloadKey);                 // OffloadKey unchanged
         Assert.Equal(Blob.TryGet(gen0Key), Blob.TryGet(afterB.Record.OffloadKey!));   // blob bytes unchanged
 
-        // (6) Release A's rebuilt commit => Active(gen1), winner "earlier", a fresh offloaded blob.
+        // (5b) STALE-QUERY WINDOW — A's rebuilt commit stays PARKED (the shared row is held OPEN at the tombstone). Deliver
+        //      the retrograde "earlier" to B and start B's product state + scalar + list queries as background tasks. B's
+        //      armed barrier drives a from-scratch rebuild; B's rebuilt commit PARKS at its own gate (a deterministic
+        //      barrier-entry signal — NO sleeps). While parked, none of B's queries may normal-succeed with the stale
+        //      "later"/"team-2": each is either still pending on the shared barrier or has surfaced the fail-closed channel.
+        await grainB.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31))) });
+        var bCommit = new GatingCheckpointStore.Gate { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
+        gateB.CommitRebuiltGate = bCommit;
+        var execB = new OrleansDcbExecutor(_clusterB.Client, eventStore, G20Shared.BuildDomain());
+        var bState = grainB.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+        var bScalar = execB.QueryAsync(new WinnerQuery("team-1"));
+        var bList = execB.QueryAsync(new WinnerListQuery());
+        await bCommit.Arrived.Task;   // deterministic barrier-entry: B's rebuild reached its rebuilt-commit boundary (parked)
+
+        // With BOTH A and B rebuilt commits parked on the tombstone, none of B's queries has served a stale success — each
+        // is pending on the shared barrier OR surfaced the fail-closed channel; NONE normal-succeeded with "later"/"team-2".
+        Assert.False(IsStaleStateSuccess(bState), "B state query normal-succeeded STALE while the barrier/tombstone was open");
+        Assert.False(IsStaleScalarSuccess(bScalar), "B scalar query normal-succeeded STALE while the barrier/tombstone was open");
+        Assert.False(IsStaleListSuccess(bList), "B list query normal-succeeded STALE while the barrier/tombstone was open");
+
+        // (6) TWO-SIDED rebuilt-commit race on the SAME exact tombstone token: release A and B together. Exactly ONE wins
+        //     (row advances Active(gen1) once), the loser is ConditionRejected and refetches/rebuilds.
+        var rowBeforeRace = await ReadRowAsync();
+        Assert.True(rowBeforeRace.IsTombstoned);   // still open right up to the release
         aCommit.Release!.SetResult();
+        bCommit.Release!.SetResult();
         _ = await aDrive;
+        _ = await bState;   // now B's queries may resolve
         var final = await ReadRowAsync();
-        Assert.True(final.IsActive);
+        Assert.True(final.IsActive);                                     // exactly one winner advanced the row
         Assert.Equal(1, final.Generation);
+        // The revision advanced EXACTLY ONCE from the tombstone token. Two commits winning the same token (i.e. the token
+        // CAS removed) would advance it TWICE — this pins one-winner at the product level, so removing the token CAS fails.
+        Assert.Equal((long.Parse(tomb.Revision) + 1).ToString(), final.Revision);
         Assert.Equal(2, final.Record!.EventsProcessed);
         Assert.True(final.Record.IsOffloaded);
-        Assert.NotNull(Blob.TryGet(final.Record.OffloadKey!));            // the winning blob is readable
+        Assert.NotNull(Blob.TryGet(final.Record.OffloadKey!));          // the winning blob is readable
 
-        // (7) QUERY-BARRIER OBSERVATION: the ConditionRejected armed B's barrier, so B cannot serve a stale success. The
-        //     "earlier" event reaches B; the barrier drives a from-scratch rebuild that discards the stale "team-2".
-        await grainB.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31))) });
+        // (7) After the release, B converges to the exact globally-earliest winner + safe state; the stale "team-2" is gone.
         var safeB = await PollSafeWinnerAsync(grainB, "earlier");
         Assert.Equal("earlier", WinnerOf(safeB));
         Assert.True(safeB.IsSafeState);
@@ -223,6 +249,19 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
         public SekibanDcbDbContext CreateDbContext() =>
             new(new DbContextOptionsBuilder<SekibanDcbDbContext>().UseNpgsql(_conn).Options);
     }
+
+    // A query is a STALE success only if it COMPLETED successfully AND carries the pre-rebuild value ("later" winner or the
+    // "team-2" phantom). A pending task (blocked on the barrier) or a fail-closed error is NOT a stale success.
+    private static bool IsStaleStateSuccess(Task<ResultBoxes.ResultBox<MultiProjectionState>> t) =>
+        t.IsCompletedSuccessfully && t.Result.IsSuccess
+        && (WinnerOf(t.Result.GetValue()) == "later" || ((FirstWinsProjector)t.Result.GetValue().Payload).Winners.ContainsKey("team-2"));
+
+    private static bool IsStaleScalarSuccess(Task<ResultBoxes.ResultBox<WinnerResult>> t) =>
+        t.IsCompletedSuccessfully && t.Result.IsSuccess && t.Result.GetValue().Value == "later";
+
+    private static bool IsStaleListSuccess(Task<ResultBoxes.ResultBox<Sekiban.Dcb.Queries.ListQueryResult<WinnerRow>>> t) =>
+        t.IsCompletedSuccessfully && t.Result.IsSuccess
+        && t.Result.GetValue().Items.Any(r => r.Id == "team-2" || (r.Id == "team-1" && r.Value == "later"));
 
     private async Task<CheckpointSlot> PollUntilTombstoneAsync()
     {

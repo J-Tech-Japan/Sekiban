@@ -19,38 +19,56 @@ namespace Sekiban.Dcb.Storage.Checkpoints;
 /// </summary>
 public static class CheckpointInDoubtResolver
 {
+    /// <summary>The stable default bounded verification budget. A test seam may override it per call (never in production).</summary>
+    public static readonly TimeSpan DefaultVerificationBudget = TimeSpan.FromSeconds(10);
+
+    /// <summary>The default number of bounded re-read attempts. Secondary to the time budget below.</summary>
+    public const int DefaultVerificationAttempts = 3;
+
     public static async Task<CheckpointCasOutcome> ResolveAsync(
         Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
         Func<CheckpointSlot, bool> committedByUs,
         int maxAttempts,
-        Exception cause)
+        Exception cause,
+        TimeSpan? verificationBudget = null)
     {
         ArgumentNullException.ThrowIfNull(reread);
         ArgumentNullException.ThrowIfNull(committedByUs);
 
         // The caller invokes this ONLY when the write already crossed a commit-capable boundary (a dispatch/transport
-        // failure), so its commit is genuinely unknown. A bounded independent re-read that confirms our exact write ->
-        // Committed. ANY other outcome leaves the commit UNKNOWN and MUST remain typed retryable InDoubt, preserving the
-        // original safe cause/token. It is NEVER downgraded to ProviderFailure here (a deterministic pre-commit / schema
-        // failure is classified ProviderFailure by the PROVIDER, before it calls this). The closed InDoubt reason records
-        // WHY the winner is unknown:
+        // failure), so its commit is genuinely unknown. Verification runs on a caller-INDEPENDENT, TIME-BOUNDED budget: a
+        // fresh CancellationTokenSource (NEVER the caller's possibly-already-cancelled token, NEVER CancellationToken.None),
+        // whose token is passed into EVERY re-read + committed-state verification. A hung/unreachable authority is
+        // cancelled PROMPTLY at the budget — the provider read task exits cooperatively (it observes the token) and there is
+        // ZERO background read/write/mutation after this returns. A re-read that confirms our exact write -> Committed. ANY
+        // other outcome remains typed retryable InDoubt, preserving the original safe cause/token; it is NEVER downgraded to
+        // ProviderFailure here (a deterministic pre-commit / schema failure is classified ProviderFailure by the PROVIDER
+        // before it calls this). The closed InDoubt reason records WHY the winner is unknown:
         //   - at least one re-read SUCCEEDED but none confirmed our write => AmbiguousAfterWrite;
-        //   - EVERY bounded re-read failed/timed out (authority unreachable) => VerificationUnavailable.
+        //   - EVERY bounded re-read failed / timed out (authority unreachable) => VerificationUnavailable.
+        using var budgetCts = new CancellationTokenSource(verificationBudget ?? DefaultVerificationBudget);
         var anyReadSucceeded = false;
-        for (var attempt = 0; attempt < Math.Max(1, maxAttempts); attempt++)
+        for (var attempt = 0; attempt < Math.Max(1, maxAttempts) && !budgetCts.IsCancellationRequested; attempt++)
         {
             ResultBox<CheckpointSlot> read;
             try
             {
-                // Independent of the caller's (possibly cancelled) token — the verification budget is caller-independent.
-                read = await reread(CancellationToken.None).ConfigureAwait(false);
+                read = await reread(budgetCts.Token).ConfigureAwait(false);
             }
             catch
             {
-                continue; // an unreadable authority does not prove non-commit; keep within budget
+                if (budgetCts.IsCancellationRequested)
+                {
+                    break; // the budget is exhausted (the read observed the token and cancelled) -> stop promptly
+                }
+                continue; // a transient unreadable authority does not prove non-commit; keep within budget
             }
             if (!read.IsSuccess)
             {
+                if (budgetCts.IsCancellationRequested)
+                {
+                    break;
+                }
                 continue; // a failed ResultBox is also an unavailable read
             }
             anyReadSucceeded = true;
@@ -110,8 +128,10 @@ public static class CheckpointInDoubtResolver
     /// </summary>
     public static Task<CheckpointCasOutcome> ResolveActiveWriteAsync(
         Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
-        long resultingGeneration, string lastSortableUniqueId, long eventsProcessed, Exception cause) =>
-        ResolveAsync(reread, CommittedActiveByPayload(resultingGeneration, lastSortableUniqueId, eventsProcessed), 3, cause);
+        long resultingGeneration, string lastSortableUniqueId, long eventsProcessed, Exception cause,
+        TimeSpan? verificationBudget = null) =>
+        ResolveAsync(reread, CommittedActiveByPayload(resultingGeneration, lastSortableUniqueId, eventsProcessed),
+            DefaultVerificationAttempts, cause, verificationBudget);
 
     /// <summary>
     ///     Provider-shared resolution of an invalidate (tombstone) whose response was lost: a bounded re-read that confirms
@@ -120,8 +140,10 @@ public static class CheckpointInDoubtResolver
     /// </summary>
     public static Task<CheckpointCasOutcome> ResolveTombstoneWriteAsync(
         Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
-        long resultingGeneration, long resultingRevision, Exception cause) =>
-        ResolveAsync(reread, CommittedTombstoneByExact(resultingGeneration, resultingRevision), 3, cause);
+        long resultingGeneration, long resultingRevision, Exception cause,
+        TimeSpan? verificationBudget = null) =>
+        ResolveAsync(reread, CommittedTombstoneByExact(resultingGeneration, resultingRevision),
+            DefaultVerificationAttempts, cause, verificationBudget);
 
     /// <summary>
     ///     The provider-shared write-failure classification (SEK-G20). A DETERMINISTIC pre-commit / schema failure (the
@@ -133,18 +155,20 @@ public static class CheckpointInDoubtResolver
         bool deterministicPreCommit,
         Exception cause,
         Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
-        long resultingGeneration, string lastSortableUniqueId, long eventsProcessed) =>
+        long resultingGeneration, string lastSortableUniqueId, long eventsProcessed,
+        TimeSpan? verificationBudget = null) =>
         deterministicPreCommit
             ? Task.FromResult(CheckpointCasOutcome.ProviderFailed(cause))
-            : ResolveActiveWriteAsync(reread, resultingGeneration, lastSortableUniqueId, eventsProcessed, cause);
+            : ResolveActiveWriteAsync(reread, resultingGeneration, lastSortableUniqueId, eventsProcessed, cause, verificationBudget);
 
     /// <summary>The tombstone (invalidate) counterpart of <see cref="ClassifyActiveWriteFailure" />.</summary>
     public static Task<CheckpointCasOutcome> ClassifyTombstoneWriteFailure(
         bool deterministicPreCommit,
         Exception cause,
         Func<CancellationToken, Task<ResultBox<CheckpointSlot>>> reread,
-        long resultingGeneration, long resultingRevision) =>
+        long resultingGeneration, long resultingRevision,
+        TimeSpan? verificationBudget = null) =>
         deterministicPreCommit
             ? Task.FromResult(CheckpointCasOutcome.ProviderFailed(cause))
-            : ResolveTombstoneWriteAsync(reread, resultingGeneration, resultingRevision, cause);
+            : ResolveTombstoneWriteAsync(reread, resultingGeneration, resultingRevision, cause, verificationBudget);
 }

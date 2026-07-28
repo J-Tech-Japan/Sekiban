@@ -111,7 +111,7 @@ public class CosmosCheckpointGenerationCasTests
         Assert.Equal(CheckpointCasStatus.Committed, committed.Status);
         Assert.Equal(2, (await ReadAsync(store)).Record!.EventsProcessed);
 
-        // The Replace FAILS before committing (pre-write fault). It targets the CURRENT valid token (so it reaches the
+        // The Replace fails with an OPAQUE loss the store cannot classify as pre-commit (after-dispatch, unknowable). It targets the CURRENT valid token (so it reaches the
         // dispatch), but the write does not commit, so the bounded re-read cannot confirm our payload -> typed InDoubt.
         var current = await ReadAsync(store);
         container.WriteFaults.Enqueue(new IOException("injected: lost response, write did not commit"));
@@ -123,18 +123,18 @@ public class CosmosCheckpointGenerationCasTests
     }
 
     [Fact]
-    public async Task Invalidate_And_RebuiltCommit_PostAndPreAmbiguity_ResolveViaBoundedReread()
+    public async Task Invalidate_And_RebuiltCommit_PostCommitResponseLost_And_AfterDispatchUnknown_ResolveViaBoundedReread()
     {
         // SEK-G20 phase matrix for the OTHER two write ops (invalidate/tombstone, rebuilt commit) through the real Cosmos
         // store over the in-memory container: a post-write loss (the Replace committed) resolves Committed via the bounded
-        // re-read; a pre-write loss (the Replace never committed) resolves typed InDoubt with the row unchanged.
+        // re-read; a an after-dispatch opaque loss (commit unknowable) resolves typed InDoubt (Ambiguous) with the row unchanged.
         var client = new InMemoryCosmosClient();
         var store = NewStore(client);
         await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
         var active = await ReadAsync(store);
         var container = client.Container("multiProjectionStates");
 
-        // Invalidate, pre-write loss: nothing commits -> the row stays Active -> InDoubt.
+        // Invalidate, after-dispatch opaque loss (unknowable): the row stays Active -> InDoubt (Ambiguous).
         container.WriteFaults.Enqueue(new IOException("injected: lost response, tombstone did not commit"));
         var invPre = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
         Assert.Equal(CheckpointCasStatus.InDoubt, invPre.Status);
@@ -149,7 +149,7 @@ public class CosmosCheckpointGenerationCasTests
         Assert.True(tomb.IsTombstoned);
         Assert.Equal(active.Generation + 1, tomb.Generation);
 
-        // Rebuilt commit, pre-write loss: nothing commits -> the row stays Tombstoned -> InDoubt.
+        // Rebuilt commit, after-dispatch opaque loss (unknowable): the row stays Tombstoned -> InDoubt (Ambiguous).
         container.WriteFaults.Enqueue(new IOException("injected: lost response, rebuilt did not commit"));
         var rebPre = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, rebPre.Status);
@@ -164,6 +164,23 @@ public class CosmosCheckpointGenerationCasTests
         Assert.True(final.IsActive);
         Assert.Equal(tomb.Generation, final.Generation);
         Assert.Equal(9, final.Record!.EventsProcessed);
+    }
+
+    [Fact]
+    public async Task DeterministicBadRequest_ProviderFailure_NotInDoubt()
+    {
+        // The OTHER side of the taxonomy: a DETERMINISTIC provider-specific failure. A Cosmos 400 Bad Request is a
+        // malformed-op / preflight error the store PROVES occurred before commit => ProviderFailure, NEVER InDoubt.
+        var client = new InMemoryCosmosClient();
+        var store = NewStore(client);
+        await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = await ReadAsync(store);
+        client.Container("multiProjectionStates").WriteFaults.Enqueue(
+            new Microsoft.Azure.Cosmos.CosmosException("bad request", System.Net.HttpStatusCode.BadRequest, 0, "act", 0));
+        var outcome = await store.ConditionalUpsertAsync(Req(2), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
+        Assert.Equal(CheckpointCasStatus.ProviderFailure, outcome.Status);
+        Assert.Null(outcome.InDoubtReason);
+        Assert.Equal(1, (await ReadAsync(store)).Record!.EventsProcessed);   // row unchanged
     }
 
     [Fact]

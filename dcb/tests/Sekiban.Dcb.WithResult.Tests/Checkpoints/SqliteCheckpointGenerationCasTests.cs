@@ -94,7 +94,7 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
     // whose same-token retry then converges — proving the real provider commit boundary, not a generic InMemory resolver.
 
     [Fact]
-    public async Task NormalUpsert_PostCommitLoss_ConfirmsOwnCommit_PreCommitLoss_InDoubtThenConverges()
+    public async Task NormalUpsert_PostCommitResponseLost_ConfirmsOwnCommit_AfterDispatchUnknown_InDoubtThenConverges()
     {
         var store = NewStore();
         await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
@@ -102,14 +102,14 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
 
         // Post-commit: the UPDATE durably advances the row, but the response is lost -> the bounded re-read confirms our
         // exact resulting token + payload identity -> Committed.
-        store.NextUpsertFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PostCommit;
+        store.NextUpsertFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PostCommitResponseLost;
         var post = await store.ConditionalUpsertAsync(Req(2), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000);
         Assert.Equal(CheckpointCasStatus.Committed, post.Status);
         var afterPost = await ReadAsync(store);
         Assert.Equal(2, afterPost.Record!.EventsProcessed);   // the row really advanced
 
-        // Pre-commit: nothing is written -> the re-read cannot confirm -> InDoubt; the row is unchanged.
-        store.NextUpsertFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PreCommit;
+        // After-dispatch (opaque, unknowable): nothing is written -> the re-read cannot confirm -> InDoubt (Ambiguous); the row is unchanged.
+        store.NextUpsertFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.AfterDispatch;
         var pre = await store.ConditionalUpsertAsync(Req(3), Payload("c"), CheckpointExpectation.FromSlot(afterPost), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, pre.Status);
         Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, pre.InDoubtReason);   // the row stayed readable
@@ -123,21 +123,21 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
     }
 
     [Fact]
-    public async Task Invalidate_PostCommitLoss_ConfirmsTombstone_PreCommitLoss_InDoubtThenConverges()
+    public async Task Invalidate_PostCommitResponseLost_ConfirmsTombstone_AfterDispatchUnknown_InDoubtThenConverges()
     {
         var store = NewStore();
         await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
         var active = await ReadAsync(store);
 
-        // Pre-commit: nothing committed -> the row stays Active -> InDoubt.
-        store.NextInvalidateFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PreCommit;
+        // After-dispatch (opaque, unknowable): nothing committed -> the row stays Active -> InDoubt (Ambiguous).
+        store.NextInvalidateFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.AfterDispatch;
         var pre = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
         Assert.Equal(CheckpointCasStatus.InDoubt, pre.Status);
         Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, pre.InDoubtReason);   // the row stayed readable
         Assert.True((await ReadAsync(store)).IsActive);   // unchanged
 
         // Post-commit: the tombstone (g+1) is durably written but the response is lost -> the re-read confirms it -> Committed.
-        store.NextInvalidateFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PostCommit;
+        store.NextInvalidateFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PostCommitResponseLost;
         var post = await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
         Assert.Equal(CheckpointCasStatus.Committed, post.Status);
         var tomb = await ReadAsync(store);
@@ -146,7 +146,7 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
     }
 
     [Fact]
-    public async Task RebuiltCommit_PostCommitLoss_ConfirmsOwnCommit_PreCommitLoss_InDoubtThenConverges()
+    public async Task RebuiltCommit_PostCommitResponseLost_ConfirmsOwnCommit_AfterDispatchUnknown_InDoubtThenConverges()
     {
         var store = NewStore();
         await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
@@ -154,8 +154,8 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
         await store.InvalidateWithTombstoneAsync(Projector, Version, CheckpointExpectation.FromSlot(active));
         var tomb = await ReadAsync(store);
 
-        // Pre-commit: nothing committed -> the row stays Tombstoned -> InDoubt.
-        store.NextRebuiltFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PreCommit;
+        // After-dispatch (opaque, unknowable): nothing committed -> the row stays Tombstoned -> InDoubt (Ambiguous).
+        store.NextRebuiltFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.AfterDispatch;
         var pre = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
         Assert.Equal(CheckpointCasStatus.InDoubt, pre.Status);
         Assert.Equal(CheckpointInDoubtReason.AmbiguousAfterWrite, pre.InDoubtReason);   // the row stayed readable
@@ -163,13 +163,31 @@ public class SqliteCheckpointGenerationCasTests : IDisposable
 
         // Post-commit: the rebuilt Active(g+1) is durably written but the response is lost -> the re-read confirms our exact
         // resulting token + payload identity -> Committed.
-        store.NextRebuiltFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PostCommit;
+        store.NextRebuiltFault = SqliteMultiProjectionStateStore.CheckpointFaultPhase.PostCommitResponseLost;
         var post = await store.CommitRebuiltAsync(Req(9), Payload("R"), CheckpointExpectation.FromSlot(tomb), 1_000_000);
         Assert.Equal(CheckpointCasStatus.Committed, post.Status);
         var final = await ReadAsync(store);
         Assert.True(final.IsActive);
         Assert.Equal(tomb.Generation, final.Generation);
         Assert.Equal(9, final.Record!.EventsProcessed);
+    }
+
+    [Fact]
+    public async Task DeterministicPreCommit_AlreadyCancelledToken_ProviderFailure_NotInDoubt()
+    {
+        // The OTHER side of the taxonomy: a PROVABLE pre-commit. An already-cancelled token fails the op deterministically
+        // BEFORE any durable write, and the provider CLASSIFIES it (cancellation is a known pre-dispatch failure) =>
+        // ProviderFailure, NEVER InDoubt. The row is untouched.
+        var store = NewStore();
+        await store.ConditionalUpsertAsync(Req(1), Payload("a"), CheckpointExpectation.Absent, 1_000_000);
+        var active = await ReadAsync(store);
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        var outcome = await store.ConditionalUpsertAsync(
+            Req(2), Payload("b"), CheckpointExpectation.FromSlot(active), 1_000_000, cancelled.Token);
+        Assert.Equal(CheckpointCasStatus.ProviderFailure, outcome.Status);
+        Assert.Null(outcome.InDoubtReason);
+        Assert.Equal(1, (await ReadAsync(store)).Record!.EventsProcessed);   // row unchanged (no durable mutation)
     }
 
     [Fact]
