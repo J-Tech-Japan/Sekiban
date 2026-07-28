@@ -68,23 +68,24 @@ public class GeneralTagConsistentActorTests
     }
 
     [Fact]
-    public async Task TagConsistentActor_Should_Update_Latest_SortableUniqueId_On_Reservation()
+    public async Task TagConsistentActor_NonEmptyExpected_On_EmptyTag_Conflicts()
     {
-        // Arrange
+        // SEK-G19 (secondary hole, class 3): a caller that expects a specific non-empty version on a tag that has NO
+        // committed state must CONFLICT — the tag never had that version. (Previously this passed and silently adopted the
+        // expected version.) The conflict surfaces through the existing ResultBox.Error channel, no new exception type.
         var studentId = Guid.NewGuid();
         var studentTag = new StudentTag(studentId);
         var tagName = studentTag.GetTag();
         var actor = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes.TagTypes);
 
-        // Act
-        var newSortableUniqueId = SortableUniqueId.GenerateNew();
-        var reservationResult = await actor.MakeReservationAsync(newSortableUniqueId);
+        var reservationResult = await actor.MakeReservationAsync(SortableUniqueId.GenerateNew());
 
-        // Assert
-        Assert.True(reservationResult.IsSuccess);
+        Assert.False(reservationResult.IsSuccess);
+        Assert.NotNull(reservationResult.GetException());
+        // The tag stays empty — a rejected reservation does not adopt the expected version.
         var latestIdResult = await actor.GetLatestSortableUniqueIdAsync();
         Assert.True(latestIdResult.IsSuccess);
-        Assert.Equal(newSortableUniqueId, latestIdResult.GetValue());
+        Assert.Equal("", latestIdResult.GetValue());
     }
 
     [Fact]
@@ -177,9 +178,10 @@ public class GeneralTagConsistentActorTests
         Assert.True(result1.IsSuccess);
         Assert.Equal(event1.SortableUniqueIdValue, result1.GetValue());
 
-        // Test MakeReservation
+        // Test MakeReservation (still triggers catch-up). SEK-G19: the tag already has committed state (event1), so the
+        // reservation must EXPECT the current version to succeed — an expect-empty ("") here would (correctly) conflict.
         var actor2 = new GeneralTagConsistentActor(tagName, _eventStore, new TagConsistentActorOptions(), _domainTypes.TagTypes);
-        var reservation = await actor2.MakeReservationAsync("");
+        var reservation = await actor2.MakeReservationAsync(event1.SortableUniqueIdValue);
         Assert.True(reservation.IsSuccess);
         var result2 = await actor2.GetLatestSortableUniqueIdAsync();
         Assert.True(result2.IsSuccess);

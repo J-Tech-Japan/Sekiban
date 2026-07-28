@@ -36,10 +36,9 @@ public class InMemoryActorTests
         var studentId = Guid.NewGuid();
         var tagName = $"Student:{studentId}";
         var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes.TagTypes);
-        var lastSortableId = SortableUniqueId.GenerateNew();
 
-        // Act
-        var result = await actor.MakeReservationAsync(lastSortableId);
+        // Act — SEK-G19: a first write on an empty tag expects the tag to be empty ("")
+        var result = await actor.MakeReservationAsync("");
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -61,14 +60,13 @@ public class InMemoryActorTests
         var studentId = Guid.NewGuid();
         var tagName = $"Student:{studentId}";
         var actor = new GeneralTagConsistentActor(tagName, null, new TagConsistentActorOptions(), _domainTypes.TagTypes);
-        var lastSortableId = SortableUniqueId.GenerateNew();
 
-        // Make first reservation
-        var firstResult = await actor.MakeReservationAsync(lastSortableId);
+        // SEK-G19: first write on an empty tag = expect-empty (""); the SECOND reservation is rejected as already-reserved
+        var firstResult = await actor.MakeReservationAsync("");
         Assert.True(firstResult.IsSuccess);
 
         // Act - Try to make second reservation
-        var secondResult = await actor.MakeReservationAsync(lastSortableId);
+        var secondResult = await actor.MakeReservationAsync("");
 
         // Assert
         Assert.False(secondResult.IsSuccess);
@@ -162,7 +160,7 @@ public class InMemoryActorTests
         // In real implementation, expired reservations would be cleaned up
         // For this test, we verify the behavior through the public interface
 
-        // Since we can't modify the timeout easily, let's test that 
+        // Since we can't modify the timeout easily, let's test that
         // the reservation mechanism works correctly
         Assert.Single(await actor.GetActiveReservationsAsync());
 

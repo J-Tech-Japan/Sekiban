@@ -62,13 +62,27 @@ public class ConsistencyReservationRulesTest
     public async Task ConsistencyTag_With_Explicit_SortableUniqueId_Should_Use_It()
     {
         var baseTag = new BaseTag(Guid.NewGuid().ToString());
-        var explicitId = SortableUniqueId.GenerateNew();
-        var consistencyTag = ConsistencyTag.FromTagWithSortableUniqueId(baseTag, explicitId);
 
-        var result = await _executor.ExecuteAsync(
+        // First write establishes committed state (expect-empty on a fresh tag).
+        var first = await _executor.ExecuteAsync(
             new SimpleCommand(),
-            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("B"), consistencyTag)));
-        Assert.True(result.IsSuccess);
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("C1"), ConsistencyTag.From(baseTag))));
+        Assert.True(first.IsSuccess);
+        var committed = first.GetValue().SortableUniqueId!;   // the committed event's sortable id = the tag's current version
+
+        // SEK-G19: the EXPLICIT SortableUniqueId is USED for the exact-token check. The COMMITTED version matches -> success.
+        var matched = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(
+                new DummyEvent("B"), ConsistencyTag.FromTagWithSortableUniqueId(baseTag, new SortableUniqueId(committed)))));
+        Assert.True(matched.IsSuccess);
+
+        // A WRONG explicit id (that the tag never had) is used and therefore CONFLICTS through the existing error channel.
+        var mismatched = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(
+                new DummyEvent("B2"), ConsistencyTag.FromTagWithSortableUniqueId(baseTag, SortableUniqueId.GenerateNew()))));
+        Assert.False(mismatched.IsSuccess);
     }
 
     [Fact]
@@ -77,24 +91,22 @@ public class ConsistencyReservationRulesTest
         var baseTag = new BaseTag(Guid.NewGuid().ToString());
         var consistencyTag = ConsistencyTag.From(baseTag); // no explicit id
 
-        // First write to create state
+        // First write to create state (expect-empty on a fresh tag).
         var first = await _executor.ExecuteAsync(
             new SimpleCommand(),
             (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("C1"), consistencyTag)));
         Assert.True(first.IsSuccess);
 
-        // Second write should access state and use LastSortableUniqueId
-        // Access state beforehand to ensure it is tracked
-        await _executor.ExecuteAsync(
+        // SEK-G19: the second write ACCESSES the state IN THIS command, so the reservation uses the tag's CURRENT version
+        // (an exact-token match) rather than defaulting to expect-empty. A write that neither accesses the state nor checks
+        // existence would (correctly) reserve expect-empty and conflict against the existing state.
+        var second = await _executor.ExecuteAsync(
             new SimpleCommand(),
             async (cmd, ctx) =>
             {
-                await ctx.GetStateAsync<DummyProjector>(baseTag);
-                return EventOrNone.None; // just for tracking
+                await ctx.GetStateAsync<DummyProjector>(baseTag);   // tracked in THIS context -> its version is used
+                return EventOrNone.Event(new DummyEvent("C2"), consistencyTag);
             });
-        var second = await _executor.ExecuteAsync(
-            new SimpleCommand(),
-            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("C2"), consistencyTag)));
         Assert.True(second.IsSuccess);
     }
 
