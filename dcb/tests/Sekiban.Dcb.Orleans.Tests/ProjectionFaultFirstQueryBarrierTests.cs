@@ -25,6 +25,14 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// </summary>
 public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
 {
+    public enum FirstQuerySurface
+    {
+        State,
+        Snapshot,
+        Scalar,
+        List
+    }
+
     private static readonly FailableEventStore Store = new();
     private TestCluster _cluster = null!;
     private ISekibanExecutor _executor = null!;
@@ -68,6 +76,72 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         Assert.Contains("head-read failure", ex.Message);              // original message/context preserved
     }
 
+    [Theory]
+    [InlineData(FirstQuerySurface.State)]
+    [InlineData(FirstQuerySurface.Snapshot)]
+    [InlineData(FirstQuerySurface.Scalar)]
+    [InlineData(FirstQuerySurface.List)]
+    public async Task ColdFirstQuery_ReachesFixedHeadWithoutWaitingForSafeWindow(FirstQuerySurface surface)
+    {
+        var safeEvent = DomainTypes.Event(poison: false, tick: 1_000);
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { safeEvent });
+
+        var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
+        var baseline = await grain.GetStateAsync();
+        Assert.True(baseline.IsSuccess);
+        Assert.True(baseline.GetValue().IsSafeState);
+        Assert.Equal(1, ((DomainTypes.FaultTestProjector)baseline.GetValue().Payload).Count);
+        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+
+        await grain.RequestDeactivationAsync();
+
+        var inWindowEvent = DomainTypes.Event(poison: false, tick: DateTime.UtcNow.Ticks);
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { inWindowEvent });
+        var cold = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
+
+        var firstQuery = surface switch
+        {
+            FirstQuerySurface.State => AssertStateAsync(cold),
+            FirstQuerySurface.Snapshot => AssertSnapshotAsync(cold),
+            FirstQuerySurface.Scalar => AssertScalarAsync(),
+            FirstQuerySurface.List => AssertListAsync(),
+            _ => throw new ArgumentOutOfRangeException(nameof(surface))
+        };
+        await firstQuery.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var served = await cold.GetStateAsync(canGetUnsafeState: true);
+        Assert.True(served.IsSuccess);
+        Assert.False(served.GetValue().IsSafeState);
+        Assert.Equal(2, ((DomainTypes.FaultTestProjector)served.GetValue().Payload).Count);
+        Assert.Equal(inWindowEvent.SortableUniqueIdValue, served.GetValue().LastSortableUniqueId);
+
+        var safe = await cold.GetStateAsync(canGetUnsafeState: false);
+        Assert.True(safe.IsSuccess);
+        Assert.True(safe.GetValue().IsSafeState);
+        Assert.Equal(1, ((DomainTypes.FaultTestProjector)safe.GetValue().Payload).Count);
+        Assert.Equal(safeEvent.SortableUniqueIdValue, safe.GetValue().LastSortableUniqueId);
+
+        async Task AssertStateAsync(IMultiProjectionGrain target) =>
+            Assert.True((await target.GetStateAsync()).IsSuccess);
+
+        async Task AssertSnapshotAsync(IMultiProjectionGrain target) =>
+            Assert.True((await target.GetSnapshotJsonAsync()).IsSuccess);
+
+        async Task AssertScalarAsync()
+        {
+            var result = await _executor.QueryAsync(new DomainTypes.FaultCountQuery());
+            Assert.True(result.IsSuccess);
+            Assert.Equal(2, result.GetValue().Count);
+        }
+
+        async Task AssertListAsync()
+        {
+            var result = await _executor.QueryAsync(new DomainTypes.FaultRowListQuery());
+            Assert.True(result.IsSuccess);
+            Assert.Equal(2, result.GetValue().TotalCount);
+        }
+    }
+
     [Fact]
     public async Task EventReadFailure_FailsAllFirstQuerySurfacesClosed_AndALaterQueryDoesNotBypass()
     {
@@ -99,6 +173,69 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
+    }
+
+    [Fact]
+    public async Task ShortReadWithoutError_FailsAllSurfacesWithStableGuard_ThenRecoversAtHead()
+    {
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent>
+        {
+            DomainTypes.Event(poison: false, tick: 10_100),
+            DomainTypes.Event(poison: false, tick: 10_101)
+        });
+        Store.ShortReads = true;
+
+        var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
+
+        var state = await grain.GetStateAsync();
+        Assert.False(state.IsSuccess);
+        Assert.Contains("did not reach the event-store head", state.GetException().ToString());
+
+        var snapshot = await grain.GetSnapshotJsonAsync();
+        Assert.False(snapshot.IsSuccess);
+        Assert.Contains("did not reach the event-store head", snapshot.GetException().ToString());
+
+        var scalar = await _executor.QueryAsync(new DomainTypes.FaultCountQuery());
+        Assert.False(scalar.IsSuccess);
+        Assert.Contains("did not reach the event-store head", scalar.GetException().ToString());
+
+        var list = await _executor.QueryAsync(new DomainTypes.FaultRowListQuery());
+        Assert.False(list.IsSuccess);
+        Assert.Contains("did not reach the event-store head", list.GetException().ToString());
+
+        Store.ShortReads = false;
+        Assert.True((await grain.GetStateAsync()).IsSuccess);
+        Assert.True((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.True((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
+        Assert.True((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
+    }
+
+    [Fact]
+    public async Task InWindowPoisonAfterSafeBaseline_FaultsAllSurfaces_AndFreshActivationRestoresTheFault()
+    {
+        var safeEvent = DomainTypes.Event(poison: false, tick: 2_000);
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { safeEvent });
+        var seed = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
+        Assert.True((await seed.GetStateAsync()).IsSuccess);
+        Assert.True((await seed.PersistStateAsync()).IsSuccess);
+        await seed.RequestDeactivationAsync();
+
+        var poison = DomainTypes.Event(poison: true, tick: DateTime.UtcNow.Ticks);
+        await Store.WriteSerializableEventsAsync(new List<SerializableEvent> { poison });
+        var cold = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
+
+        Assert.False((await cold.GetStateAsync()).IsSuccess);
+        Assert.False((await cold.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.False((await _executor.QueryAsync(new DomainTypes.FaultCountQuery())).IsSuccess);
+        Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
+
+        await cold.RequestDeactivationAsync();
+        var fresh = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
+        var restored = await fresh.GetSnapshotJsonAsync();
+        Assert.False(restored.IsSuccess);
+        Assert.Contains(
+            DomainTypes.FaultTestProjector.MultiProjectorName,
+            restored.GetException().ToString());
     }
 
     [Fact]
@@ -154,7 +291,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
                     services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
                     services.AddSingleton<Sekiban.Dcb.Snapshots.IBlobStorageSnapshotAccessor, MockBlobStorageSnapshotAccessor>();
                     services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
-                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 1 });
+                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 20_000 });
                     services.AddSekibanDcbNativeRuntime();
                 })
                 .AddMemoryGrainStorageAsDefault()
@@ -175,6 +312,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         private readonly InMemoryEventStore _inner = new();
         public volatile bool FailReads;
         public volatile bool FailHeadReads;
+        public volatile bool ShortReads;
         private static readonly InvalidOperationException ReadError = new("injected event-store read failure");
         private static readonly InvalidOperationException HeadError = new("injected event-store head-read failure");
 
@@ -182,6 +320,7 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         {
             FailReads = false;
             FailHeadReads = false;
+            ShortReads = false;
             _inner.Clear();
         }
 
@@ -193,12 +332,28 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             ReadAllSerializableEventsAsync(since, null);
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
-            int? maxCount) =>
-            FailReads
-                ? Task.FromResult(ResultBox.Error<IEnumerable<SerializableEvent>>(ReadError))
-                : _inner.ReadAllSerializableEventsAsync(since, maxCount);
+            int? maxCount)
+        {
+            if (FailReads)
+            {
+                return ResultBox.Error<IEnumerable<SerializableEvent>>(ReadError);
+            }
+
+            var result = await _inner.ReadAllSerializableEventsAsync(since, maxCount);
+            if (!ShortReads || !result.IsSuccess)
+            {
+                return result;
+            }
+
+            // A stable, error-free lag: the first call exposes one row, then the provider keeps returning an empty
+            // short read even though the independently-read fixed head is later.
+            return ResultBox.FromValue(
+                since is null
+                    ? result.GetValue().Take(1)
+                    : Enumerable.Empty<SerializableEvent>());
+        }
 
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) =>

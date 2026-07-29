@@ -396,3 +396,17 @@ G18 + G19 + G20 です。
 活性化）。独立したクラスタはアクターを介して協調しません。クラスタ間の一意性はストレージ層の条件付きユニーク追加
 （G15/G16）、永続化された重複の収束は SEK-G18 が担います。**動作変更**: 10.8.0 から競合する作成の一方が整合性エラーで
 失敗します。完全な修正のリリースゲートは G18 + G19 + G20 です。
+
+## Cold な初回クエリが SafeWindow 全体を待つ — 10.8.1 で解決 (SEK-G21)
+
+**症状**。書き込み直後、cold な multi-projection activation への初回クエリが、自身の catch-up log では
+`CurrentPosition == TargetPosition == head` なのに、ほぼ `SafeWindow` 全体にわたり fail-closed になり得ました。
+
+**原因**。初回クエリ barrier は正しく safe/restored チェックポイントから開始していましたが、完了判定にも
+safe 位置を使っていました。そのため SafeWindow 内のイベントは graduation まで reached と判定されませんでした。
+
+**修正**。G14 poison を再読するため START は safe/restored チェックポイントのままです。REACHED はその in-call
+read 自身が返した権威 cursor のみを使い、共有 timer 進捗を証拠にしません。cold な state・snapshot・scalar・list
+クエリは、自身の catch-up が固定 head に到達すれば最新の `IsSafeState=false` 結果を返せます。真の short read と
+read failure は引き続き fail-closed かつ retryable で、poison fault、G18 rebuild、G20 tombstone/CAS、公開 API、
+schema、SafeWindow 設定は変更しません。

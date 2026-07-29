@@ -195,7 +195,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         public static ResultBox<FaultCountResult> HandleQuery(
             FaultTestProjector projector,
             FaultCountQuery query,
-            IQueryContext context) => ResultBox.FromValue(new FaultCountResult(0));
+            IQueryContext context) => ResultBox.FromValue(new FaultCountResult(projector.Count));
     }
 
     internal record FaultRow(int Value);
@@ -210,7 +210,8 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
         public static ResultBox<IEnumerable<FaultRow>> HandleFilter(
             FaultTestProjector projector,
             FaultRowListQuery query,
-            IQueryContext context) => ResultBox.FromValue(Enumerable.Empty<FaultRow>());
+            IQueryContext context) => ResultBox.FromValue(
+                Enumerable.Range(1, projector.Count).Select(value => new FaultRow(value)));
 
         public static ResultBox<IEnumerable<FaultRow>> HandleSort(
             IEnumerable<FaultRow> filtered,
@@ -219,11 +220,14 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
     }
 
     /// <summary>A projector that folds cleanly until it meets a poison event, then throws — a fold crash, deterministically.</summary>
-    internal record FaultTestProjector : IMultiProjector<FaultTestProjector>
+    [GenerateSerializer]
+    internal record FaultTestProjector([property: Id(0)] int Count) : IMultiProjector<FaultTestProjector>
     {
+        public FaultTestProjector() : this(0) { }
+
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "fault-test-projector";
-        public static FaultTestProjector GenerateInitialPayload() => new();
+        public static FaultTestProjector GenerateInitialPayload() => new(0);
 
         public static ResultBox<FaultTestProjector> Project(
             FaultTestProjector payload,
@@ -237,7 +241,7 @@ public class ProjectionFaultOrleansTests : IAsyncLifetime
                 throw new InvalidOperationException("poison event: this projector refuses to fold it");
             }
 
-            return ResultBox.FromValue(payload);
+            return ResultBox.FromValue(payload with { Count = payload.Count + 1 });
         }
     }
 }

@@ -114,6 +114,45 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
         await AssertScalarAndListAsync(execB, "earlier");
     }
 
+    [Fact]
+    public async Task TwoColdReplicas_WithSafeBaseline_ReachRecentHeadBeforeSafeWindow()
+    {
+        var baseline = CreateEvent(new CreatedWithId("baseline", "safe"), DateTime.UtcNow.AddMinutes(-1));
+        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(baseline) });
+
+        var seed = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
+        var seeded = await seed.GetStateAsync();
+        Assert.True(seeded.IsSuccess);
+        Assert.True(seeded.GetValue().IsSafeState);
+        Assert.True((await seed.PersistStateAsync()).IsSuccess);
+        await seed.RequestDeactivationAsync();
+
+        var recent = CreateEvent(new CreatedWithId("recent", "head"), DateTime.UtcNow);
+        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(recent) });
+
+        var grainA = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
+        var grainB = _clusterB.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
+        var states = await Task.WhenAll(grainA.GetStateAsync(), grainB.GetStateAsync())
+            .WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.All(states, state => Assert.True(state.IsSuccess, state.IsSuccess ? "" : state.GetException().ToString()));
+        Assert.All(
+            states,
+            state =>
+            {
+                Assert.False(state.GetValue().IsSafeState);
+                var payload = (FirstWinsProjector)state.GetValue().Payload;
+                Assert.Equal("safe", payload.Winners["baseline"]);
+                Assert.Equal("head", payload.Winners["recent"]);
+                Assert.Equal(recent.SortableUniqueIdValue, state.GetValue().LastSortableUniqueId);
+            });
+
+        var safeA = (await grainA.GetStateAsync(canGetUnsafeState: false)).GetValue();
+        var safeB = (await grainB.GetStateAsync(canGetUnsafeState: false)).GetValue();
+        Assert.DoesNotContain("recent", ((FirstWinsProjector)safeA.Payload).Winners.Keys);
+        Assert.DoesNotContain("recent", ((FirstWinsProjector)safeB.Payload).Winners.Keys);
+    }
+
     private static async Task AssertScalarAndListAsync(ISekibanExecutor executor, string expectedWinner)
     {
         var scalar = await executor.QueryAsync(new WinnerQuery("team-1"));

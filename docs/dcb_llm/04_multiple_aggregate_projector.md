@@ -131,3 +131,20 @@ in global `SortableUniqueId` order) and a **served/unsafe** state (what queries 
 - **`EventsProcessed` is a durable safe-checkpoint count** used as an integrity signal:
   restore takes it as the baseline; a restart that writes zero new events restores exactly the
   same payload/position/threshold/count.
+
+### First-query catch-up position contract (SEK-G21 / 10.8.1)
+
+A fresh Orleans activation places a fail-closed barrier in front of its first state, snapshot,
+scalar, or list query. The barrier uses two deliberately different positions:
+
+- **START** is the safe/restored checkpoint. A restored record's `LastSortableUniqueId` is leased
+  once by a single internal resolver shared by background and in-call catch-up. This deliberately
+  re-reads the complete uncheckpointed tail, including an in-window poison event.
+- **REACHED** is the authoritative cursor returned by that specific in-call event-store read. It is
+  not the safe position and is not read from shared timer progress. This lets a cold first query
+  return the current unsafe state immediately after its own read reaches the fixed head, without
+  waiting for safe-window graduation.
+
+A short read that does not reach the fixed head still fails closed and remains retryable. A failed
+read preserves the original exception. The safe checkpoint, SafeWindow behavior, public API, and
+storage schema are unchanged.
