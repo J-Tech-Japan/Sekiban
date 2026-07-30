@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Common;
+using System.Collections.Concurrent;
 
 namespace Sekiban.Dcb.Orleans.Grains;
 
@@ -24,12 +25,14 @@ internal enum CatchUpStartPositionSource
 internal sealed class CatchUpStartPositionLeaseResolver
 {
     private readonly object _sync = new();
+    private bool _hasPendingRestoredPosition;
     private SortableUniqueId? _pendingRestoredPosition;
 
     internal void Restore(SortableUniqueId? position)
     {
         lock (_sync)
         {
+            _hasPendingRestoredPosition = true;
             _pendingRestoredPosition = position;
         }
     }
@@ -38,6 +41,7 @@ internal sealed class CatchUpStartPositionLeaseResolver
     {
         lock (_sync)
         {
+            _hasPendingRestoredPosition = false;
             _pendingRestoredPosition = null;
         }
     }
@@ -54,8 +58,10 @@ internal sealed class CatchUpStartPositionLeaseResolver
 
         lock (_sync)
         {
-            if (_pendingRestoredPosition is { } restored)
+            if (_hasPendingRestoredPosition)
             {
+                var restored = _pendingRestoredPosition;
+                _hasPendingRestoredPosition = false;
                 _pendingRestoredPosition = null;
                 return new CatchUpStartPositionLease(restored, CatchUpStartPositionSource.RestoredCheckpoint);
             }
@@ -78,6 +84,68 @@ internal sealed record CatchUpInvocationResult(
 internal readonly record struct CatchUpBatchResult(
     int ProcessedCount,
     SortableUniqueId? AuthoritativeReadCursor);
+
+internal enum CatchUpProductionHookPoint
+{
+    BackgroundBeforeGate,
+    BackgroundEnteredGate,
+    BackgroundRejectedAsSuperseded,
+    InvocationBeforeGate,
+    InvocationEnteredGate,
+    InvocationCompleted
+}
+
+internal sealed record CatchUpProductionObservation(
+    string ServiceId,
+    string ProjectorName,
+    CatchUpStartPositionLease? Start,
+    SortableUniqueId? Cursor);
+
+/// <summary>
+///     Friend-test-only deterministic observation seam for the real grain wiring. Registrations are scoped by the
+///     activation's service/projector identity and absent in production, where the lookup is a no-op.
+/// </summary>
+internal static class CatchUpProductionTestHooks
+{
+    private static readonly ConcurrentDictionary<string, Func<CatchUpProductionHookPoint, CatchUpProductionObservation, Task>>
+        Observers = new(StringComparer.Ordinal);
+
+    internal static IDisposable Register(
+        string serviceId,
+        string projectorName,
+        Func<CatchUpProductionHookPoint, CatchUpProductionObservation, Task> observer)
+    {
+        var key = Key(serviceId, projectorName);
+        if (!Observers.TryAdd(key, observer))
+        {
+            throw new InvalidOperationException($"A catch-up test hook is already registered for '{key}'.");
+        }
+        return new Registration(key);
+    }
+
+    internal static Task PublishAsync(
+        CatchUpProductionHookPoint point,
+        CatchUpProductionObservation observation) =>
+        Observers.TryGetValue(Key(observation.ServiceId, observation.ProjectorName), out var observer)
+            ? observer(point, observation)
+            : Task.CompletedTask;
+
+    private static string Key(string serviceId, string projectorName) => $"{serviceId}\n{projectorName}";
+
+    private sealed class Registration(string key) : IDisposable
+    {
+        private string? _key = key;
+
+        public void Dispose()
+        {
+            var current = Interlocked.Exchange(ref _key, null);
+            if (current is not null)
+            {
+                Observers.TryRemove(current, out _);
+            }
+        }
+    }
+}
 
 /// <summary>
 ///     Activation-local single-writer gate for timer and in-call runs.

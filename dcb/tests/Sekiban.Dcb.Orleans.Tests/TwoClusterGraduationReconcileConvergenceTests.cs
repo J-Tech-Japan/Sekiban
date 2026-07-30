@@ -10,9 +10,11 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Snapshots;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
@@ -30,27 +32,37 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// </summary>
 public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
 {
+    private const string ReplicaServiceA = "replica-a";
+    private const string ReplicaServiceB = "replica-b";
     private TestCluster _clusterA = null!;
     private TestCluster _clusterB = null!;
 
     public async Task InitializeAsync()
     {
         SharedStores.Reset();
-        _clusterA = await BuildClusterAsync("A");
-        _clusterB = await BuildClusterAsync("B");
+        (_clusterA, _) = await BuildClusterAsync("A");
+        (_clusterB, _) = await BuildClusterAsync("B");
     }
 
-    private static async Task<TestCluster> BuildClusterAsync(string name)
+    private static async Task<(TestCluster Cluster, string ServiceId)> BuildClusterAsync(string name)
     {
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
         var uniqueId = Guid.NewGuid().ToString("N")[..8];
-        builder.Options.ClusterId = $"G18-2cluster-{name}-{uniqueId}";
-        builder.Options.ServiceId = $"G18-2cluster-{name}-{uniqueId}";
-        builder.AddSiloBuilderConfigurator<Configurator>();
+        var serviceId = $"G18-2cluster-{name}-{uniqueId}";
+        builder.Options.ClusterId = serviceId;
+        builder.Options.ServiceId = serviceId;
+        if (name == "A")
+        {
+            builder.AddSiloBuilderConfigurator<ConfiguratorA>();
+        }
+        else
+        {
+            builder.AddSiloBuilderConfigurator<ConfiguratorB>();
+        }
         var cluster = builder.Build();
         await cluster.DeployAsync();
-        return cluster;
+        return (cluster, serviceId);
     }
 
     public async Task DisposeAsync()
@@ -130,10 +142,70 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
         var recent = CreateEvent(new CreatedWithId("recent", "head"), DateTime.UtcNow);
         await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(recent) });
 
-        var grainA = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
-        var grainB = _clusterB.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
-        var states = await Task.WhenAll(grainA.GetStateAsync(), grainB.GetStateAsync())
-            .WaitAsync(TimeSpan.FromSeconds(1));
+        var grainA = _clusterA.Client.GetGrain<IMultiProjectionGrain>(
+            ServiceIdGrainKey.Build(ReplicaServiceA, FirstWinsProjector.MultiProjectorName));
+        var grainB = _clusterB.Client.GetGrain<IMultiProjectionGrain>(
+            ServiceIdGrainKey.Build(ReplicaServiceB, FirstWinsProjector.MultiProjectorName));
+        var readGateA = SharedStores.ReplicaA.ParkNextRead();
+        var readGateB = SharedStores.ReplicaB.ParkNextRead();
+        var invocationA = new TaskCompletionSource<CatchUpProductionObservation>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocationB = new TaskCompletionSource<CatchUpProductionObservation>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var hookA = CatchUpProductionTestHooks.Register(
+            ReplicaServiceA,
+            FirstWinsProjector.MultiProjectorName,
+            (point, observation) =>
+            {
+                if (point == CatchUpProductionHookPoint.InvocationCompleted &&
+                    observation.Cursor?.Value == recent.SortableUniqueIdValue)
+                {
+                    invocationA.TrySetResult(observation);
+                }
+                return Task.CompletedTask;
+            });
+        using var hookB = CatchUpProductionTestHooks.Register(
+            ReplicaServiceB,
+            FirstWinsProjector.MultiProjectorName,
+            (point, observation) =>
+            {
+                if (point == CatchUpProductionHookPoint.InvocationCompleted &&
+                    observation.Cursor?.Value == recent.SortableUniqueIdValue)
+                {
+                    invocationB.TrySetResult(observation);
+                }
+                return Task.CompletedTask;
+            });
+
+        var execA = new OrleansDcbExecutor(
+            _clusterA.Client,
+            SharedStores.ReplicaA,
+            SharedStores.Domain,
+            serviceIdProvider: new FixedServiceIdProvider(ReplicaServiceA));
+        var execB = new OrleansDcbExecutor(
+            _clusterB.Client,
+            SharedStores.ReplicaB,
+            SharedStores.Domain,
+            serviceIdProvider: new FixedServiceIdProvider(ReplicaServiceB));
+        var stateA = grainA.GetStateAsync();
+        var stateB = grainB.GetStateAsync();
+        var scalarA = execA.QueryAsync(new WinnerQuery("recent"));
+        var scalarB = execB.QueryAsync(new WinnerQuery("recent"));
+        var listA = execA.QueryAsync(new WinnerListQuery());
+        var listB = execB.QueryAsync(new WinnerListQuery());
+
+        await Task.WhenAll(readGateA.Entered, readGateB.Entered).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(stateA.IsCompleted);
+        Assert.False(stateB.IsCompleted);
+
+        // Release the replicas independently. Each first-query surface remains parked until that replica's own
+        // invocation-owned traversal returns the fixed head; no SafeWindow delay or polling is part of this proof.
+        readGateB.Release();
+        var observedB = await invocationB.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        readGateA.Release();
+        var observedA = await invocationA.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var states = await Task.WhenAll(stateA, stateB).WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.All(states, state => Assert.True(state.IsSuccess, state.IsSuccess ? "" : state.GetException().ToString()));
         Assert.All(
@@ -145,6 +217,23 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
                 Assert.Equal("safe", payload.Winners["baseline"]);
                 Assert.Equal("head", payload.Winners["recent"]);
                 Assert.Equal(recent.SortableUniqueIdValue, state.GetValue().LastSortableUniqueId);
+            });
+        Assert.Equal(recent.SortableUniqueIdValue, observedA.Cursor?.Value);
+        Assert.Equal(recent.SortableUniqueIdValue, observedB.Cursor?.Value);
+
+        var scalars = await Task.WhenAll(scalarA, scalarB).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.All(scalars, scalar => Assert.True(scalar.IsSuccess, scalar.IsSuccess ? "" : scalar.GetException().ToString()));
+        Assert.All(scalars, scalar => Assert.Equal("head", scalar.GetValue().Value));
+
+        var lists = await Task.WhenAll(listA, listB).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.All(lists, list => Assert.True(list.IsSuccess, list.IsSuccess ? "" : list.GetException().ToString()));
+        Assert.All(
+            lists,
+            list =>
+            {
+                var rows = list.GetValue().Items.ToList();
+                Assert.Equal("safe", Assert.Single(rows, row => row.Id == "baseline").Value);
+                Assert.Equal("head", Assert.Single(rows, row => row.Id == "recent").Value);
             });
 
         var safeA = (await grainA.GetStateAsync(canGetUnsafeState: false)).GetValue();
@@ -275,12 +364,16 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
     {
         public static DcbDomainTypes Domain { get; private set; } = BuildDomain();
         public static InMemoryEventStore EventStore { get; private set; } = new(Domain.EventTypes);
+        public static ReplicaEventStore ReplicaA { get; private set; } = new(EventStore);
+        public static ReplicaEventStore ReplicaB { get; private set; } = new(EventStore);
         public static InMemoryMultiProjectionStateStore StateStore { get; } = new();
 
         public static void Reset()
         {
             Domain = BuildDomain();
             EventStore = new InMemoryEventStore(Domain.EventTypes);
+            ReplicaA = new ReplicaEventStore(EventStore);
+            ReplicaB = new ReplicaEventStore(EventStore);
             StateStore.DeleteAllAsync(FirstWinsProjector.MultiProjectorName).GetAwaiter().GetResult();
         }
 
@@ -299,7 +392,68 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
         }
     }
 
-    private class Configurator : ISiloConfigurator
+    internal sealed class ReplicaEventStore(InMemoryEventStore inner) : IEventStore
+    {
+        private ReadGate? _nextReadGate;
+
+        internal ReadGate ParkNextRead()
+        {
+            var gate = new ReadGate();
+            Assert.Null(Interlocked.CompareExchange(ref _nextReadGate, gate, null));
+            return gate;
+        }
+
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
+            inner.GetLatestSortableUniqueIdAsync();
+
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+            SortableUniqueId? since = null) =>
+            ReadAllSerializableEventsAsync(since, null);
+
+        public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+            SortableUniqueId? since,
+            int? maxCount)
+        {
+            var gate = Interlocked.Exchange(ref _nextReadGate, null);
+            if (gate is not null)
+            {
+                gate.SignalEntered();
+                await gate.WaitForReleaseAsync();
+            }
+
+            return await inner.ReadAllSerializableEventsAsync(since, maxCount);
+        }
+
+        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+            WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) =>
+            inner.WriteSerializableEventsAsync(events);
+
+        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
+        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
+        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
+        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
+        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? tagGroup = null) => inner.GetAllTagsAsync(tagGroup);
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
+            inner.ReadSerializableEventAsync(eventId);
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
+
+        internal sealed class ReadGate
+        {
+            private readonly TaskCompletionSource _entered =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly TaskCompletionSource _release =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            internal Task Entered => _entered.Task;
+            internal void SignalEntered() => _entered.TrySetResult();
+            internal void Release() => _release.TrySetResult();
+            internal Task WaitForReleaseAsync() => _release.Task;
+        }
+    }
+
+    private abstract class Configurator(ReplicaEventStore eventStore) : ISiloConfigurator
     {
         public void Configure(ISiloBuilder siloBuilder)
         {
@@ -307,7 +461,7 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
                 .ConfigureServices(services =>
                 {
                     services.AddSingleton<DcbDomainTypes>(SharedStores.Domain);
-                    services.AddSingleton<IEventStore>(SharedStores.EventStore);           // SHARED authoritative events
+                    services.AddSingleton<IEventStore>(eventStore); // replica proxy over SHARED authoritative events
                     services.AddSingleton<IMultiProjectionStateStore>(SharedStores.StateStore); // SHARED external checkpoint
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
@@ -323,4 +477,7 @@ public class TwoClusterGraduationReconcileConvergenceTests : IAsyncLifetime
                 .AddMemoryGrainStorage("EventStreamProvider");
         }
     }
+
+    private sealed class ConfiguratorA() : Configurator(SharedStores.ReplicaA);
+    private sealed class ConfiguratorB() : Configurator(SharedStores.ReplicaB);
 }

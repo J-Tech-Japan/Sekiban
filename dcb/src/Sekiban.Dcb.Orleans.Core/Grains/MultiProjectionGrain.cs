@@ -1955,8 +1955,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 null);
         }
 
+        await CatchUpProductionTestHooks.PublishAsync(
+            CatchUpProductionHookPoint.InvocationBeforeGate,
+            new CatchUpProductionObservation(_serviceId, projectorName, null, null));
         await using (await _catchUpExecutionGate.EnterAsync())
         {
+            await CatchUpProductionTestHooks.PublishAsync(
+                CatchUpProductionHookPoint.InvocationEnteredGate,
+                new CatchUpProductionObservation(_serviceId, projectorName, _catchUpProgress.StartLease, null));
             var inheritedStart = forceEvenIfCatchUpActive && _catchUpProgress.IsActive
                 ? _catchUpProgress.StartLease
                 : null;
@@ -2038,7 +2044,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 await CaptureAndPersistProjectionFaultIfAnyAsync();
             }
 
-            return new CatchUpInvocationResult(startLease, invocationReached);
+            var result = new CatchUpInvocationResult(startLease, invocationReached);
+            await CatchUpProductionTestHooks.PublishAsync(
+                CatchUpProductionHookPoint.InvocationCompleted,
+                new CatchUpProductionObservation(_serviceId, projectorName, result.Start, result.AuthoritativeReachedPosition));
+            return result;
         }
     }
 
@@ -2791,14 +2801,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return; // empty store: nothing durable to be behind on.
         }
 
-        var current = await GetCurrentPositionAsync();
-        if (current is not null && string.CompareOrdinal(current.Value, head) >= 0)
-        {
-            return; // already at or past head: ordinary lag semantics resume.
-        }
-
-        // Behind the head: catch up IN-CALL (not on the background timer, which a non-reentrant grain turn held by the
-        // query would deadlock waiting on). RefreshAsync re-reads and re-folds the tail; a poison re-faults the actor.
+        // A non-empty head must be proven by this invocation's authoritative traversal. In particular, a safe-empty
+        // host may already expose a later unsafe cursor received from the stream while an earlier durable event is
+        // still missing. Shared unsafe metadata can neither skip this read nor serve as its START checkpoint.
+        // Catch up IN-CALL (not on the background timer, which a non-reentrant grain turn held by the query would
+        // deadlock waiting on). Refresh re-reads and re-folds the tail; a poison re-faults the actor.
         _catchUpReadException = null;
 
         CatchUpInvocationResult? invocation = null;
@@ -3399,9 +3406,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
+            await CatchUpProductionTestHooks.PublishAsync(
+                CatchUpProductionHookPoint.BackgroundBeforeGate,
+                new CatchUpProductionObservation(_serviceId, projectorName, scheduledRun.StartLease, scheduledRun.CurrentPosition));
             await using var runLease = await _catchUpExecutionGate.EnterAsync();
+            await CatchUpProductionTestHooks.PublishAsync(
+                CatchUpProductionHookPoint.BackgroundEnteredGate,
+                new CatchUpProductionObservation(_serviceId, projectorName, scheduledRun.StartLease, scheduledRun.CurrentPosition));
             if (!ReferenceEquals(_catchUpProgress, scheduledRun) || !scheduledRun.IsActive)
             {
+                await CatchUpProductionTestHooks.PublishAsync(
+                    CatchUpProductionHookPoint.BackgroundRejectedAsSuperseded,
+                    new CatchUpProductionObservation(_serviceId, projectorName, scheduledRun.StartLease, scheduledRun.CurrentPosition));
                 return;
             }
 
@@ -3780,6 +3796,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     exception,
                     "[{ProjectorName}] Failed to stream serializable events for catch-up",
                     projectorName);
+                // Match the enumerable path: the resilient background reader may retry later, but a first-query
+                // invocation must retain and rethrow this exact provider exception when its cursor did not reach head.
+                _catchUpReadException = exception;
                 return new CatchUpBatchResult(0, null);
             }
             if (fetchedCount == 0)
@@ -4206,8 +4225,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         if (_host == null) return null;
 
-        // Prefer the full state when available, but fall back to primitive metadata.
-        // Catch-up progress tracking should not depend on payload deserialization succeeding.
+        // START is derived only from the safe checkpoint. Unsafe metadata is observability/served-state information,
+        // not proof that every earlier durable event was traversed; using it here can skip a missing earlier event.
+        // Prefer the full safe state when available, but fall back to primitive safe metadata so catch-up progress
+        // tracking does not depend on payload deserialization succeeding.
         var currentState = await _host.GetStateAsync(canGetUnsafeState: false);
         if (currentState.IsSuccess)
         {
@@ -4222,11 +4243,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (metadata.IsSuccess)
         {
             var value = metadata.GetValue();
-            if (!string.IsNullOrWhiteSpace(value.UnsafeLastSortableUniqueId))
-            {
-                return new SortableUniqueId(value.UnsafeLastSortableUniqueId);
-            }
-
             if (!string.IsNullOrWhiteSpace(value.SafeLastSortableUniqueId))
             {
                 return new SortableUniqueId(value.SafeLastSortableUniqueId);

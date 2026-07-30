@@ -62,6 +62,36 @@ public class CatchUpPositionContractTests
     }
 
     [Fact]
+    public async Task Empty_restored_record_is_present_and_leased_once_without_host_inference()
+    {
+        var resolver = new CatchUpStartPositionLeaseResolver();
+        var inferred = Position(5);
+        var inferenceCalls = 0;
+        resolver.Restore(null);
+
+        var restored = await resolver.AcquireAsync(
+            false,
+            () =>
+            {
+                inferenceCalls++;
+                return Task.FromResult<SortableUniqueId?>(inferred);
+            });
+        var next = await resolver.AcquireAsync(
+            false,
+            () =>
+            {
+                inferenceCalls++;
+                return Task.FromResult<SortableUniqueId?>(inferred);
+            });
+
+        Assert.Equal(CatchUpStartPositionSource.RestoredCheckpoint, restored.Source);
+        Assert.Null(restored.StartPosition);
+        Assert.Equal(CatchUpStartPositionSource.InferredCheckpoint, next.Source);
+        Assert.Equal(inferred.Value, next.StartPosition?.Value);
+        Assert.Equal(1, inferenceCalls);
+    }
+
+    [Fact]
     public void Reached_cursor_is_invocation_owned_and_distinct_from_start()
     {
         var start = new CatchUpStartPositionLease(Position(40), CatchUpStartPositionSource.RestoredCheckpoint);
