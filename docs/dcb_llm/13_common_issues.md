@@ -430,3 +430,17 @@ type). See [First-write reservation semantics](03_aggregate_command_events.md#fi
 Independent clusters do not coordinate through the actor — cross-cluster uniqueness is the storage layer's conditional
 unique-append (G15/G16), and convergence over durable duplicates is SEK-G18. **Behavior change**: from 10.8.0 one side of
 a racing create now fails with a consistency error. The release gate for the full fix is G18 + G19 + G20.
+
+## Cold first query waits for the full SafeWindow — CLOSED in 10.8.1 (SEK-G21)
+
+**Symptom.** Immediately after a write, the first query to a cold multi-projection activation can fail closed for almost
+one full `SafeWindow`, even though that query's catch-up logs show `CurrentPosition == TargetPosition == head`.
+
+**Cause.** The first-query barrier correctly started at the safe/restored checkpoint, but incorrectly judged completion
+using the safe position. An event inside the SafeWindow therefore could not count as reached until graduation.
+
+**Fix.** START remains the safe/restored checkpoint so G14 poison events are re-read. REACHED now comes only from the
+authoritative cursor returned by the specific in-call read; shared timer progress is never proof. Cold state, snapshot,
+scalar, and list queries can therefore return the current `IsSafeState=false` result as soon as their own catch-up reaches
+the fixed head. Genuine short reads and read failures remain fail-closed and retryable, and poison faults, G18 rebuilds,
+G20 tombstone/CAS handling, public APIs, schemas, and SafeWindow settings are unchanged.

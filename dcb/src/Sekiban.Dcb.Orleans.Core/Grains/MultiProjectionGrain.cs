@@ -59,10 +59,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // outside the coordinator. Seeded from the committed state on activation; surfaced by status queries.
     private string? _liveLastPosition;
 
-    // SEK-G18 (#1086): the authoritative catch-up start after a checkpoint restore is the checkpoint record's own
-    // LastSortableUniqueId — taken verbatim rather than re-inferred — so the first catch-up reads strictly AFTER the
-    // durable safe position (exclusive) and never re-folds / double-counts already-reflected events. Consumed once.
-    private SortableUniqueId? _restoredCatchUpPosition;
+    // SEK-G18/G21: the sole resolver for catch-up START positions. A restored record position is leased exactly once
+    // across both the timer and in-call paths and cannot be displaced by host-payload inference while pending.
+    private readonly CatchUpStartPositionLeaseResolver _catchUpStartPositions = new();
 
     // SEK-G18 (#1086): the last SafeWindowThreshold persisted (seeded verbatim from the restored checkpoint record). While
     // the safe checkpoint position is unchanged, the persist writes THIS value verbatim rather than a fresh wall-clock
@@ -148,6 +147,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // Catch-up state management
     private class CatchUpProgress
     {
+        public CatchUpStartPositionLease? StartLease { get; set; }
         public SortableUniqueId? InitialPosition { get; set; }
         public SortableUniqueId? CurrentPosition { get; set; }
         public SortableUniqueId? TargetPosition { get; set; }
@@ -160,6 +160,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     }
 
     private CatchUpProgress _catchUpProgress = new();
+    // Serialises timer and in-call catch-up writers for this activation. Interleaving timers may wait here, but a
+    // superseded timer run can never write into the progress object installed by a first-query invocation.
+    private readonly CatchUpRunExecutionGate _catchUpExecutionGate = new();
     private IDisposable? _catchUpTimer;
     private readonly Queue<SerializableEvent> _pendingStreamEvents = new();
     private const int DefaultCatchUpBatchSize = 500;
@@ -1932,13 +1935,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return await _host.IsSortableUniqueIdReceivedAsync(sortableUniqueId);
     }
 
-    public Task RefreshAsync() => RefreshAsync(forceEvenIfCatchUpActive: false);
+    public async Task RefreshAsync() =>
+        _ = await RefreshWithAuthoritativeCursorAsync(forceEvenIfCatchUpActive: false);
 
     // forceEvenIfCatchUpActive: the first-query barrier needs the in-call catch-up to RUN even when a background
     // catch-up (re)started by EnsureInitializedAsync has flipped IsActive on — otherwise the barrier would return
     // without reading and could not re-establish a fault or reach the head. Normal RefreshAsync keeps the guard so a
     // manual refresh does not fight an already-running catch-up.
-    private async Task RefreshAsync(bool forceEvenIfCatchUpActive)
+    private async Task<CatchUpInvocationResult> RefreshWithAuthoritativeCursorAsync(bool forceEvenIfCatchUpActive)
     {
         var projectorName = GetProjectorName();
         _logger.LogDebug("[{ProjectorName}] Refreshing: Re-reading events from event store", projectorName);
@@ -1946,71 +1950,105 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         await EnsureInitializedAsync();
         if (_host == null)
         {
-            return;
+            return new CatchUpInvocationResult(
+                new CatchUpStartPositionLease(null, CatchUpStartPositionSource.InferredCheckpoint),
+                null);
         }
 
-        RecoverStaleCatchUpIfNeeded(projectorName);
-        if (_catchUpProgress.IsActive && !forceEvenIfCatchUpActive)
+        await CatchUpProductionTestHooks.PublishAsync(
+            CatchUpProductionHookPoint.InvocationBeforeGate,
+            new CatchUpProductionObservation(_serviceId, projectorName, null, null));
+        await using (await _catchUpExecutionGate.EnterAsync())
         {
-            _logger.LogDebug(
-                "[{ProjectorName}] Refresh skipped because catch-up is already active",
-                projectorName);
-            return;
-        }
-
-        // Refresh is expected to complete catch-up before returning.
-        // Use an in-call batch loop instead of timer-driven background catch-up.
-        _catchUpTimer?.Dispose();
-        _catchUpTimer = null;
-
-        var currentPosition = await GetCurrentPositionAsync();
-        _catchUpProgress = new CatchUpProgress
-        {
-            InitialPosition = currentPosition,
-            CurrentPosition = currentPosition,
-            TargetPosition = null,
-            IsActive = true,
-            HadNewEvents = false,
-            ConsecutiveEmptyBatches = 0,
-            BatchesProcessed = 0,
-            StartTime = DateTime.UtcNow,
-            LastAttempt = DateTime.MinValue
-        };
-        ResetHybridCatchUpLogging();
-        ResetCatchUpFailureTracking();
-        _catchUpBatchSkipCount = 0;
-
-        MoveBufferedStreamEventsToPending(currentPosition);
-
-        try
-        {
-            const int maxRefreshBatches = 20000;
-            for (var i = 0; i < maxRefreshBatches && _catchUpProgress.IsActive; i++)
+            await CatchUpProductionTestHooks.PublishAsync(
+                CatchUpProductionHookPoint.InvocationEnteredGate,
+                new CatchUpProductionObservation(_serviceId, projectorName, _catchUpProgress.StartLease, null));
+            var inheritedStart = forceEvenIfCatchUpActive && _catchUpProgress.IsActive
+                ? _catchUpProgress.StartLease
+                : null;
+            RecoverStaleCatchUpIfNeeded(projectorName);
+            if (_catchUpProgress.IsActive && !forceEvenIfCatchUpActive)
             {
-                var processed = await ProcessSingleCatchUpBatch();
-                if (processed == 0)
+                _logger.LogDebug(
+                    "[{ProjectorName}] Refresh skipped because catch-up is already active",
+                    projectorName);
+                return new CatchUpInvocationResult(
+                    _catchUpProgress.StartLease
+                    ?? new CatchUpStartPositionLease(
+                        _catchUpProgress.InitialPosition,
+                        CatchUpStartPositionSource.InferredCheckpoint),
+                    null);
+            }
+
+            // Refresh is expected to complete catch-up before returning. A forced first-query run inherits the active
+            // timer run's START lease before superseding it, so a restored record remains authoritative even when the
+            // background path won the one-shot lease race.
+            _catchUpTimer?.Dispose();
+            _catchUpTimer = null;
+
+            var startLease = inheritedStart
+                ?? await _catchUpStartPositions.AcquireAsync(
+                    forceFullReplay: false,
+                    GetCurrentPositionAsync);
+            var currentPosition = startLease.StartPosition;
+            var invocationReached = currentPosition;
+            _catchUpProgress = new CatchUpProgress
+            {
+                StartLease = startLease,
+                InitialPosition = currentPosition,
+                CurrentPosition = currentPosition,
+                TargetPosition = null,
+                IsActive = true,
+                HadNewEvents = false,
+                ConsecutiveEmptyBatches = 0,
+                BatchesProcessed = 0,
+                StartTime = DateTime.UtcNow,
+                LastAttempt = DateTime.MinValue
+            };
+            ResetHybridCatchUpLogging();
+            ResetCatchUpFailureTracking();
+            _catchUpBatchSkipCount = 0;
+
+            MoveBufferedStreamEventsToPending(currentPosition);
+
+            try
+            {
+                const int maxRefreshBatches = 20000;
+                for (var i = 0; i < maxRefreshBatches && _catchUpProgress.IsActive; i++)
                 {
-                    _catchUpProgress.ConsecutiveEmptyBatches++;
-                    if (_catchUpProgress.ConsecutiveEmptyBatches >= MaxConsecutiveEmptyBatches)
+                    var batch = await ProcessSingleCatchUpBatch();
+                    if (batch.AuthoritativeReadCursor is { } batchCursor &&
+                        (invocationReached is null || batchCursor.IsLaterThan(invocationReached)))
                     {
-                        await CompleteCatchUp();
+                        invocationReached = batchCursor;
+                    }
+
+                    if (batch.ProcessedCount == 0)
+                    {
+                        _catchUpProgress.ConsecutiveEmptyBatches++;
+                        if (_catchUpProgress.ConsecutiveEmptyBatches >= MaxConsecutiveEmptyBatches)
+                        {
+                            await CompleteCatchUp();
+                        }
+                    }
+                    else
+                    {
+                        _catchUpProgress.ConsecutiveEmptyBatches = 0;
                     }
                 }
-                else
-                {
-                    _catchUpProgress.ConsecutiveEmptyBatches = 0;
-                }
             }
-        }
-        finally
-        {
-            // RefreshAsync's in-call loop can fault the actor without going through the background failure handlers, and
-            // a deserialize/fold that throws propagates straight out of the loop. Capture-and-persist the fault in a
-            // finally so the descriptor is durable on THIS production path even when the loop threw — otherwise a
-            // RefreshAsync-triggered fault would only become durable at the next timer/deactivation persist.
-            // CaptureAndPersist handles its own write failures (pins + schedules a retry) and does not throw, so the
-            // original exception's identity is preserved as it propagates.
-            await CaptureAndPersistProjectionFaultIfAnyAsync();
+            finally
+            {
+                // RefreshAsync's in-call loop can fault the actor without going through the background failure handlers,
+                // so capture and persist the fault on this production path while preserving the original exception.
+                await CaptureAndPersistProjectionFaultIfAnyAsync();
+            }
+
+            var result = new CatchUpInvocationResult(startLease, invocationReached);
+            await CatchUpProductionTestHooks.PublishAsync(
+                CatchUpProductionHookPoint.InvocationCompleted,
+                new CatchUpProductionObservation(_serviceId, projectorName, result.Start, result.AuthoritativeReachedPosition));
+            return result;
         }
     }
 
@@ -2222,9 +2260,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                                 // SEK-G18 (#1086): take the catch-up start verbatim from the restored checkpoint record, so
                                 // catch-up reads strictly AFTER the durable safe position (exclusive) without re-folding it.
-                                _restoredCatchUpPosition = string.IsNullOrEmpty(record.LastSortableUniqueId)
-                                    ? null
-                                    : new SortableUniqueId(record.LastSortableUniqueId);
+                                _catchUpStartPositions.Restore(
+                                    string.IsNullOrEmpty(record.LastSortableUniqueId)
+                                        ? null
+                                        : new SortableUniqueId(record.LastSortableUniqueId));
 
                                 // SEK-G18 (#1086): seed the last-persisted SafeWindowThreshold verbatim so a no-progress
                                 // re-persist writes the SAME value instead of a fresh wall-clock threshold (no drift).
@@ -2762,22 +2801,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return; // empty store: nothing durable to be behind on.
         }
 
-        var current = await GetCurrentPositionAsync();
-        if (current is not null && string.CompareOrdinal(current.Value, head) >= 0)
-        {
-            return; // already at or past head: ordinary lag semantics resume.
-        }
-
-        // Behind the head: catch up IN-CALL (not on the background timer, which a non-reentrant grain turn held by the
-        // query would deadlock waiting on). RefreshAsync re-reads and re-folds the tail; a poison re-faults the actor.
-        _catchUpTimer?.Dispose();
-        _catchUpTimer = null;
-        _catchUpProgress.IsActive = false;
+        // A non-empty head must be proven by this invocation's authoritative traversal. In particular, a safe-empty
+        // host may already expose a later unsafe cursor received from the stream while an earlier durable event is
+        // still missing. Shared unsafe metadata can neither skip this read nor serve as its START checkpoint.
+        // Catch up IN-CALL (not on the background timer, which a non-reentrant grain turn held by the query would
+        // deadlock waiting on). Refresh re-reads and re-folds the tail; a poison re-faults the actor.
         _catchUpReadException = null;
 
+        CatchUpInvocationResult? invocation = null;
         try
         {
-            await RefreshAsync(forceEvenIfCatchUpActive: true);
+            invocation = await RefreshWithAuthoritativeCursorAsync(forceEvenIfCatchUpActive: true);
         }
         catch when (_host.CurrentFault is not null)
         {
@@ -2790,10 +2824,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return; // fault established and (via RefreshAsync) persisted; the query will fail closed on it.
         }
 
-        // No fault, but did catch-up actually REACH the head? Comparing the reached position with the head is the
-        // authoritative check: a read that failed was laundered into an empty batch by the resilient background path,
-        // so "catch-up completed" does not by itself prove we reached the head.
-        var reached = await GetCurrentPositionAsync();
+        // No fault, but did THIS invocation actually REACH the fixed head? Only the cursor returned by its own store
+        // reads is authoritative. The shared timer progress is observability state and may belong to a cancelled or
+        // replacement Interleave=true run, so it is deliberately never consulted for this judgment.
+        var reached = invocation?.AuthoritativeReachedPosition;
         if (reached is null || string.CompareOrdinal(reached.Value, head) < 0)
         {
             // Still behind: fail closed. Prefer the original read exception (a swallowed failed read) for context; the
@@ -3262,25 +3296,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             BeginCatchUpDeactivationDelay();
 
-            // Get current position (fast operation - reads from local state).
-            // SEK-G18 (#1086): immediately after a checkpoint restore, take the catch-up start verbatim from the restored
-            // record's LastSortableUniqueId (consumed once) rather than re-inferring it, so the read is strictly AFTER the
-            // durable safe position and already-reflected events are not re-folded / double-counted.
-            SortableUniqueId? currentPosition;
-            if (forceFull)
-            {
-                currentPosition = null;
-                _restoredCatchUpPosition = null;
-            }
-            else if (_restoredCatchUpPosition is { } restored)
-            {
-                currentPosition = restored;
-                _restoredCatchUpPosition = null;
-            }
-            else
-            {
-                currentPosition = await GetCurrentPositionAsync();
-            }
+            // Both background and first-query paths acquire START from the same one-shot resolver. The restored record
+            // wins over host-payload inference and is consumed exactly once.
+            var startLease = await _catchUpStartPositions.AcquireAsync(forceFull, GetCurrentPositionAsync);
+            var currentPosition = startLease.StartPosition;
 
             // NOTE: We intentionally skip reading all events to determine target position.
             // Reading 200k+ events just to find the latest position causes activation timeout.
@@ -3290,6 +3309,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Initialize catch-up progress (TargetPosition will be set during first batch)
             _catchUpProgress = new CatchUpProgress
             {
+                StartLease = startLease,
                 InitialPosition = currentPosition,
                 CurrentPosition = currentPosition,
                 TargetPosition = null, // Will be determined during catch-up
@@ -3355,7 +3375,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task ProcessCatchUpBatchAsync()
     {
-        if (!_catchUpProgress.IsActive)
+        var scheduledRun = _catchUpProgress;
+        if (!scheduledRun.IsActive)
         {
             _catchUpTimer?.Dispose();
             _catchUpTimer = null;
@@ -3385,11 +3406,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
+            await CatchUpProductionTestHooks.PublishAsync(
+                CatchUpProductionHookPoint.BackgroundBeforeGate,
+                new CatchUpProductionObservation(_serviceId, projectorName, scheduledRun.StartLease, scheduledRun.CurrentPosition));
+            await using var runLease = await _catchUpExecutionGate.EnterAsync();
+            await CatchUpProductionTestHooks.PublishAsync(
+                CatchUpProductionHookPoint.BackgroundEnteredGate,
+                new CatchUpProductionObservation(_serviceId, projectorName, scheduledRun.StartLease, scheduledRun.CurrentPosition));
+            if (!ReferenceEquals(_catchUpProgress, scheduledRun) || !scheduledRun.IsActive)
+            {
+                await CatchUpProductionTestHooks.PublishAsync(
+                    CatchUpProductionHookPoint.BackgroundRejectedAsSuperseded,
+                    new CatchUpProductionObservation(_serviceId, projectorName, scheduledRun.StartLease, scheduledRun.CurrentPosition));
+                return;
+            }
+
             // Process one batch
-            var processed = await ProcessSingleCatchUpBatch();
+            var batch = await ProcessSingleCatchUpBatch();
             ResetCatchUpFailureTracking();
 
-            if (processed == 0)
+            if (batch.ProcessedCount == 0)
             {
                 _catchUpProgress.ConsecutiveEmptyBatches++;
                 if (_catchUpProgress.ConsecutiveEmptyBatches >= MaxConsecutiveEmptyBatches)
@@ -3415,9 +3451,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
     }
 
-    private async Task<int> ProcessSingleCatchUpBatch()
+    private async Task<CatchUpBatchResult> ProcessSingleCatchUpBatch()
     {
-        if (_host == null) return 0;
+        if (_host == null) return new CatchUpBatchResult(0, null);
         _catchUpProgress.LastAttempt = DateTime.UtcNow;
         return await ProcessSerializableBatch();
     }
@@ -3460,7 +3496,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     /// <summary>
     ///     Catch-up via ReadAllSerializableEventsAsync (cold/hot merge path).
     /// </summary>
-    private async Task<int> ProcessSerializableBatch()
+    private async Task<CatchUpBatchResult> ProcessSerializableBatch()
     {
         var projectorName = GetProjectorName();
         var catchUpStore = GetCatchUpEventStore();
@@ -3542,7 +3578,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // failure must not be lost: the first-query barrier reads this to fail closed with the original exception
             // rather than treat a failed read as "caught up to an empty tail".
             _catchUpReadException = exception;
-            return 0;
+            return new CatchUpBatchResult(0, null);
         }
 
         _logger.LogDebug(
@@ -3580,7 +3616,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     PersistTriggered: false,
                     PersistReason: "none",
                     EventTypeSummary: EmptyLogValue));
-            return 0;
+            return new CatchUpBatchResult(0, _catchUpProgress.CurrentPosition);
         }
 
         UpdateTargetPosition(events[^1].SortableUniqueIdValue);
@@ -3617,7 +3653,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     PersistTriggered: false,
                     PersistReason: "none",
                     EventTypeSummary: EmptyLogValue));
-            return 0;
+            return new CatchUpBatchResult(
+                0,
+                new SortableUniqueId(events[^1].SortableUniqueIdValue));
         }
 
         var applyStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -3654,10 +3692,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             hybridReadBatchMetadata,
             BuildCatchUpEventTypeSummary(filtered.Select(e => e.EventPayloadName)));
 
-        return filtered.Count;
+        return new CatchUpBatchResult(
+            filtered.Count,
+            new SortableUniqueId(events[^1].SortableUniqueIdValue));
     }
 
-    private async Task<int> ProcessStreamingSerializableBatch(
+    private async Task<CatchUpBatchResult> ProcessStreamingSerializableBatch(
         IStreamingSerializableEventStore streamingCatchUpStore,
         HybridEventStore? hybridCatchUpStore,
         bool isHybridCatchUp,
@@ -3667,7 +3707,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         if (_host == null)
         {
-            return 0;
+            return new CatchUpBatchResult(0, null);
         }
 
         var processedIds = new List<Guid>(Math.Min(batchSize, StreamingCatchUpApplyChunkSize * 2));
@@ -3756,7 +3796,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     exception,
                     "[{ProjectorName}] Failed to stream serializable events for catch-up",
                     projectorName);
-                return 0;
+                // Match the enumerable path: the resilient background reader may retry later, but a first-query
+                // invocation must retain and rethrow this exact provider exception when its cursor did not reach head.
+                _catchUpReadException = exception;
+                return new CatchUpBatchResult(0, null);
             }
             if (fetchedCount == 0)
             {
@@ -3787,7 +3830,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         PersistTriggered: false,
                         PersistReason: "none",
                         EventTypeSummary: EmptyLogValue));
-                return 0;
+                return new CatchUpBatchResult(0, _catchUpProgress.CurrentPosition);
             }
 
             await FlushBufferAsync();
@@ -3822,7 +3865,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         PersistTriggered: false,
                         PersistReason: "none",
                         EventTypeSummary: EmptyLogValue));
-                return 0;
+                return new CatchUpBatchResult(
+                    0,
+                    new SortableUniqueId(lastFetchedSortableUniqueId!));
             }
 
             await UpdateCatchUpProgressAfterBatch(
@@ -3850,7 +3895,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             throw;
         }
 
-        return appliedCount;
+        return new CatchUpBatchResult(
+            appliedCount,
+            lastFetchedSortableUniqueId is null
+                ? _catchUpProgress.CurrentPosition
+                : new SortableUniqueId(lastFetchedSortableUniqueId));
     }
 
     private int ResolveCatchUpBatchSize(HybridEventStore? hybridCatchUpStore)
@@ -4176,8 +4225,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         if (_host == null) return null;
 
-        // Prefer the full state when available, but fall back to primitive metadata.
-        // Catch-up progress tracking should not depend on payload deserialization succeeding.
+        // START is derived only from the safe checkpoint. Unsafe metadata is observability/served-state information,
+        // not proof that every earlier durable event was traversed; using it here can skip a missing earlier event.
+        // Prefer the full safe state when available, but fall back to primitive safe metadata so catch-up progress
+        // tracking does not depend on payload deserialization succeeding.
         var currentState = await _host.GetStateAsync(canGetUnsafeState: false);
         if (currentState.IsSuccess)
         {
@@ -4192,11 +4243,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (metadata.IsSuccess)
         {
             var value = metadata.GetValue();
-            if (!string.IsNullOrWhiteSpace(value.UnsafeLastSortableUniqueId))
-            {
-                return new SortableUniqueId(value.UnsafeLastSortableUniqueId);
-            }
-
             if (!string.IsNullOrWhiteSpace(value.SafeLastSortableUniqueId))
             {
                 return new SortableUniqueId(value.SafeLastSortableUniqueId);

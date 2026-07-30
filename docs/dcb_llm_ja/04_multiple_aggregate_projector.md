@@ -122,3 +122,18 @@ Sekiban 内部だけで完結する読み取りならマルチプロジェクシ
   インメモリ、Hybrid の cold→hot 引き継ぎ — は厳密な `SortableUniqueId > since` フィルタを使用します。)
 - **`EventsProcessed` は永続的な safe チェックポイント数**で、整合性シグナルとして使用します。復元は
   これをベースラインとし、新規イベントゼロの再起動では同一の payload/position/threshold/count を復元します。
+
+### 初回クエリ catch-up の位置契約 (SEK-G21 / 10.8.1)
+
+Orleans の fresh activation は、最初の state・snapshot・scalar・list クエリの前に fail-closed
+barrier を置きます。この barrier は意図的に異なる 2 種類の位置を使います。
+
+- **START** は safe/restored チェックポイントです。復元レコードの `LastSortableUniqueId` は、
+  background と in-call catch-up が共有する単一の内部 resolver から一度だけ lease されます。
+  これにより SafeWindow 内の poison を含む未チェックポイント tail 全体を再読します。
+- **REACHED** は、その in-call event-store read 自身が返した権威 cursor です。safe 位置でも、
+  timer と共有する進捗値でもありません。自身の read が固定 head に到達すれば、cold な初回
+  クエリは safe-window graduation を待たず、最新の unsafe state を直ちに返せます。
+
+固定 head に届かない short read は引き続き fail-closed で retryable です。read failure は元の
+例外を保持します。safe チェックポイント、SafeWindow の動作、公開 API、storage schema は変更しません。
