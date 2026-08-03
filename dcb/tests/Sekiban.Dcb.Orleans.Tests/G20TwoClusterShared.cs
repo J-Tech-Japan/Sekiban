@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
@@ -21,6 +22,56 @@ namespace Sekiban.Dcb.Orleans.Tests;
 public record CreatedWithId(string Id, string Value) : IEventPayload;
 public record WinnerResult(string Value);
 public record WinnerRow(string Id, string Value);
+
+[global::Orleans.GenerateSerializer]
+public record G22Upserted(
+    [property: global::Orleans.Id(0)] Guid Id,
+    [property: global::Orleans.Id(1)] string Value) : IEventPayload;
+
+[global::Orleans.GenerateSerializer]
+public record G22UpsertCommand(
+    [property: global::Orleans.Id(0)] Guid Id,
+    [property: global::Orleans.Id(1)] string Value) : ICommandWithHandler<G22UpsertCommand>
+{
+    public static async Task<ResultBox<EventOrNone>> HandleAsync(G22UpsertCommand command, ICommandContext context)
+    {
+        var tag = new G22ReservationTag(command.Id);
+        var state = await context.GetStateAsync<G22ReservationProjector>(tag);
+        if (!state.IsSuccess)
+        {
+            return ResultBox.Error<EventOrNone>(state.GetException());
+        }
+
+        return EventOrNone.EventWithTags(new G22Upserted(command.Id, command.Value), tag);
+    }
+}
+
+[global::Orleans.GenerateSerializer]
+public record G22ReservationTag([property: global::Orleans.Id(0)] Guid Id) : ITagGroup<G22ReservationTag>
+{
+    public static string TagGroupName => "StaleEmptyReservation";
+    public static G22ReservationTag FromContent(string content) => new(Guid.Parse(content));
+    public bool IsConsistencyTag() => true;
+    public string GetTagContent() => Id.ToString();
+}
+
+[global::Orleans.GenerateSerializer]
+public record G22ReservationState(
+    [property: global::Orleans.Id(0)] IReadOnlyList<string> Values) : ITagStatePayload;
+
+public class G22ReservationProjector : ITagProjector<G22ReservationProjector>
+{
+    public static string ProjectorVersion => "1.0.0";
+    public static string ProjectorName => "StaleEmptyReservationProjector";
+
+    public static ITagStatePayload Project(ITagStatePayload current, Event ev)
+    {
+        var state = current as G22ReservationState ?? new G22ReservationState(Array.Empty<string>());
+        return ev.Payload is G22Upserted upserted
+            ? state with { Values = state.Values.Append(upserted.Value).ToList() }
+            : state;
+    }
+}
 
 public record WinnerQuery(string Id) : IMultiProjectionQuery<FirstWinsProjector, WinnerQuery, WinnerResult>
 {
@@ -65,13 +116,19 @@ public static class G20Shared
     {
         var eventTypes = new SimpleEventTypes();
         eventTypes.RegisterEventType<CreatedWithId>("CreatedWithId");
+        eventTypes.RegisterEventType<G22Upserted>("G22Upserted");
+        var tagTypes = new SimpleTagTypes();
+        tagTypes.RegisterTagGroupType<G22ReservationTag>();
+        var tagProjectors = new SimpleTagProjectorTypes();
+        tagProjectors.RegisterProjector<G22ReservationProjector>();
+        var tagPayloads = new SimpleTagStatePayloadTypes();
+        tagPayloads.RegisterPayloadType<G22ReservationState>();
         var mp = new SimpleMultiProjectorTypes();
         mp.RegisterProjector<FirstWinsProjector>();
         var q = new SimpleQueryTypes();
         q.RegisterQuery<WinnerQuery>();
         q.RegisterListQuery<WinnerListQuery>();
-        return new DcbDomainTypes(eventTypes, new SimpleTagTypes(), new SimpleTagProjectorTypes(),
-            new SimpleTagStatePayloadTypes(), mp, q, new JsonSerializerOptions());
+        return new DcbDomainTypes(eventTypes, tagTypes, tagProjectors, tagPayloads, mp, q, new JsonSerializerOptions());
     }
 
     public static Event CreateEvent(IEventPayload payload, DateTime timestamp) => new(

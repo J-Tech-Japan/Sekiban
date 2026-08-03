@@ -97,6 +97,26 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
             // public exception type is added.
             var expectedVersion = string.IsNullOrEmpty(lastSortableUniqueId) ? string.Empty : lastSortableUniqueId;
             var currentVersion = string.IsNullOrEmpty(_latestSortableUniqueId) ? string.Empty : _latestSortableUniqueId;
+
+            // SEK-G22: a different cluster may have committed after this actor successfully cached an empty tag. The
+            // command-side fold then carries a real non-empty expected version while this activation still sees empty.
+            // Re-read authoritatively only for that one anomalous shape. This helper assumes _reservationLock is held: it
+            // must never enter the ordinary catch-up path, which would try to acquire the same lock again. A successful
+            // read is reconciled into the cache before the exact-match decision, including a conflicting other version,
+            // so a later expect-empty reservation cannot reopen G19's first-write hole.
+            if (expectedVersion.Length > 0 && currentVersion.Length == 0)
+            {
+                var refreshResult = await RefreshLatestTagUnderReservationLockAsync();
+                if (refreshResult.IsSuccess)
+                {
+                    currentVersion = string.IsNullOrEmpty(_latestSortableUniqueId)
+                        ? string.Empty
+                        : _latestSortableUniqueId;
+                }
+                // A failed read changes no cache state. The unchanged empty current then reaches the ordinary exact-match
+                // conflict below, preserving the existing public failure channel while still failing closed.
+            }
+
             if (!string.Equals(expectedVersion, currentVersion, StringComparison.Ordinal))
             {
                 return ResultBox.Error<TagWriteReservation>(
@@ -126,6 +146,48 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
         finally
         {
             _reservationLock.Release();
+        }
+    }
+
+    /// <summary>
+    ///     Performs the bounded SEK-G22 authoritative re-check while <see cref="_reservationLock" /> is already held.
+    ///     This method deliberately does not call the catch-up path or acquire the reservation lock.
+    /// </summary>
+    private async Task<ResultBox<string>> RefreshLatestTagUnderReservationLockAsync()
+    {
+        if (_eventStore == null)
+        {
+            return ResultBox.Error<string>(
+                new InvalidOperationException($"Cannot authoritatively refresh tag {_tagName} without an event store"));
+        }
+
+        try
+        {
+            var tag = _tagTypes.GetTag(_tagName);
+            var latestTagResult = await _eventStore.GetLatestTagAsync(tag);
+            if (!latestTagResult.IsSuccess)
+            {
+                return ResultBox.Error<string>(latestTagResult.GetException());
+            }
+
+            var authoritativeVersion = latestTagResult.GetValue().LastSortedUniqueId ?? string.Empty;
+
+            // The reservation lock makes the normal entry condition (cached empty) stable across the await. Keep this
+            // monotonic guard as part of the primitive's contract so a future caller can never replace a newer non-empty
+            // cache value with an older/empty store observation.
+            if (string.IsNullOrEmpty(_latestSortableUniqueId) ||
+                (!string.IsNullOrEmpty(authoritativeVersion) &&
+                    string.Compare(authoritativeVersion, _latestSortableUniqueId, StringComparison.Ordinal) > 0))
+            {
+                _latestSortableUniqueId = authoritativeVersion;
+            }
+
+            return ResultBox.FromValue(_latestSortableUniqueId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[GeneralTagConsistentActor] Error during authoritative reservation refresh for tag {TagName}", _tagName);
+            return ResultBox.Error<string>(ex);
         }
     }
 

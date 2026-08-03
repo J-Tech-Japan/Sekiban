@@ -7,11 +7,13 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Storage.Checkpoints;
+using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -115,6 +117,55 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
     {
         var ev = CreateEvent(new CreatedWithId(id, value), DateTime.UtcNow.AddSeconds(-secondsAgo));
         await _rootSp.GetRequiredService<IEventStore>().WriteSerializableEventsAsync(new[] { ToSerializable(ev) });
+    }
+
+    [Fact]
+    public async Task StaleEmptyReservation_OnTwoClusters_SharedPostgres_BothUpsertsSucceed_AndConverge()
+    {
+        var domain = G20Shared.BuildDomain();
+        var eventStore = _rootSp.GetRequiredService<IEventStore>();
+        var execA = new OrleansDcbExecutor(_clusterA.Client, eventStore, domain);
+        var execB = new OrleansDcbExecutor(_clusterB.Client, eventStore, domain);
+        var id = Guid.NewGuid();
+        var tag = new G22ReservationTag(id);
+        var tagStateId = new TagStateId(tag, G22ReservationProjector.ProjectorName);
+        var serviceId = new DefaultServiceIdProvider().GetCurrentServiceId();
+
+        // Pin A's tag-consistent actor to a successfully caught-up EMPTY cache before B writes. The exact grain key is
+        // the one OrleansActorObjectAccessor uses for command reservations; no timing window or sleep is involved.
+        var reservationA = _clusterA.Client.GetGrain<ITagConsistentGrain>(
+            ServiceIdGrainKey.Build(serviceId, tag.GetTag()));
+        Assert.Equal(string.Empty, (await reservationA.GetLatestSortableUniqueIdAsync()).GetValue());
+
+        var b = await execB.ExecuteAsync(new G22UpsertCommand(id, "B"));
+        Assert.True(b.IsSuccess, b.IsSuccess ? string.Empty : b.GetException().ToString());
+
+        // Force A's command fold to observe B's durable version while reservationA remains pinned empty. Before SEK-G22,
+        // the following command deterministically failed G19's non-empty-expected/empty-current comparison.
+        var foldedOnA = await execA.GetTagStateAsync(tagStateId);
+        Assert.True(foldedOnA.IsSuccess, foldedOnA.IsSuccess ? string.Empty : foldedOnA.GetException().ToString());
+        Assert.Equal(1, foldedOnA.GetValue().Version);
+
+        var a = await execA.ExecuteAsync(new G22UpsertCommand(id, "A"));
+        Assert.True(a.IsSuccess, a.IsSuccess ? string.Empty : a.GetException().ToString());
+
+        var durable = (await eventStore.ReadSerializableEventsByTagAsync(tag)).GetValue().ToList();
+        Assert.Equal(2, durable.Count);
+
+        // Deterministic convergence: clear both cluster-local tag-state caches, then each folds the same two Postgres
+        // events. These are explicit cache barriers, not sleeps or eventual polling.
+        var grainStateId = ServiceIdGrainKey.Build(serviceId, tagStateId.GetTagStateId());
+        await _clusterA.Client.GetGrain<ITagStateGrain>(grainStateId).ClearCacheAsync();
+        await _clusterB.Client.GetGrain<ITagStateGrain>(grainStateId).ClearCacheAsync();
+        var finalA = await execA.GetTagStateAsync(tagStateId);
+        var finalB = await execB.GetTagStateAsync(tagStateId);
+        Assert.True(finalA.IsSuccess);
+        Assert.True(finalB.IsSuccess);
+        Assert.Equal(2, finalA.GetValue().Version);
+        Assert.Equal(2, finalB.GetValue().Version);
+        Assert.Equal(
+            ((G22ReservationState)finalA.GetValue().Payload).Values.OrderBy(x => x),
+            ((G22ReservationState)finalB.GetValue().Payload).Values.OrderBy(x => x));
     }
 
     [Fact]
@@ -298,6 +349,7 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
                     var pg = new PostgresMultiProjectionStateStore(new PgDbContextFactory(SharedConn!), new DefaultServiceIdProvider(), Blob);
                     var gate = Gates.GetOrAdd(clusterName, _ => new GatingCheckpointStore(pg));
                     services.AddSingleton<IMultiProjectionStateStore>(gate);
+                    services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
