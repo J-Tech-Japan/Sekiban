@@ -106,6 +106,21 @@ already exists" guarantee across clusters must rely on storage unique-append, no
 silently succeed. From 10.8.0 that side now fails with a consistency error — create projectors that were written to
 tolerate duplicate first writes on a single cluster can retire that workaround.
 
+### Shared-store stale-empty re-check (SEK-G22 / 10.8.2)
+
+In a multi-cluster deployment, an actor can have a successfully cached empty tag while a command fold already sees a
+write committed by another cluster. When that fold supplies the committed non-empty version, 10.8.0's exact-match check
+would compare it with the stale empty cache and falsely reject the update.
+
+From 10.8.2, that single anomalous shape — non-empty expected version with an empty actor cache — performs one bounded
+authoritative tag read while holding the reservation lock. A matching version proceeds; an authoritative empty or a
+different version remains a consistency conflict; a read failure fails closed. Successful reads are adopted before the
+final comparison, so a later expect-empty request cannot pass against known durable state. Normal matches, mismatches,
+and every empty-expected path perform no extra read.
+
+This is a false-rejection fix, not cross-cluster uniqueness. Storage conditional unique-append (G15/G16) remains the
+authority for preventing duplicate writes across clusters; no API, schema, default, or migration changes in 10.8.2.
+
 ## Tag State Payloads
 
 Projectors rebuild tag state into `ITagStatePayload` records. Keep them small and immutable.

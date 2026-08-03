@@ -431,6 +431,22 @@ Independent clusters do not coordinate through the actor — cross-cluster uniqu
 unique-append (G15/G16), and convergence over durable duplicates is SEK-G18. **Behavior change**: from 10.8.0 one side of
 a racing create now fails with a consistency error. The release gate for the full fix is G18 + G19 + G20.
 
+## Valid cross-cluster update is rejected against an empty actor cache — CLOSED in 10.8.2 (SEK-G22)
+
+**Symptom.** A command's tag-state fold sees a durable write from another cluster, but its reservation fails with a
+non-empty-expected/empty-current conflict. Retrying or reactivating the actor may make the same command succeed.
+
+**Cause.** The tag-consistent actor had successfully cached the tag as empty before the remote commit. Nothing notified
+that activation, while the command fold independently read the newer shared-store state.
+
+**Fix.** Only this stale-empty shape gets one authoritative `GetLatestTagAsync` re-check under the reservation lock. A
+match succeeds; still-empty, another version, or a read failure fails closed. Every successful result is adopted before
+the exact-match decision, preventing a subsequent expect-empty reservation from reopening G19. All normal and
+empty-expected paths remain read-free.
+
+**Boundary.** This removes a false rejection; it does not add cross-cluster uniqueness. Use G15/G16 conditional append
+for uniqueness across clusters. Version 10.8.2 changes no public API, schema, default, or migration requirement.
+
 ## Cold first query waits for the full SafeWindow — CLOSED in 10.8.1 (SEK-G21)
 
 **Symptom.** Immediately after a write, the first query to a cold multi-projection activation can fail closed for almost
