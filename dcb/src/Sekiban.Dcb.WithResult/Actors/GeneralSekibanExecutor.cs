@@ -20,6 +20,18 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     private readonly IActorObjectAccessor _actorAccessor;
     private static readonly AnonymousCommand NoCommandInstance = new();
 
+    /// <summary>
+    ///     Binary-compatible overload preserved for callers compiled against the pre-SEK-G23 constructor.
+    /// </summary>
+    public GeneralSekibanExecutor(
+        IEventStore eventStore,
+        IActorObjectAccessor actorAccessor,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher)
+        : this(eventStore, actorAccessor, domainTypes, eventPublisher, null)
+    {
+    }
+
     public GeneralSekibanExecutor(
         IEventStore eventStore,
         IActorObjectAccessor actorAccessor,

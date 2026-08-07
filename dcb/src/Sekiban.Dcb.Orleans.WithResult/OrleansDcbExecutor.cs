@@ -32,6 +32,19 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     private readonly GeneralSekibanExecutor _generalExecutor;
     private readonly IServiceIdProvider _serviceIdProvider;
 
+    /// <summary>
+    ///     Binary-compatible overload preserved for callers compiled against the pre-SEK-G23 constructor.
+    /// </summary>
+    public OrleansDcbExecutor(
+        IClusterClient clusterClient,
+        IEventStore eventStore,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher,
+        IServiceIdProvider? serviceIdProvider)
+        : this(clusterClient, eventStore, domainTypes, eventPublisher, serviceIdProvider, null)
+    {
+    }
+
     public OrleansDcbExecutor(
         IClusterClient clusterClient,
         IEventStore eventStore,

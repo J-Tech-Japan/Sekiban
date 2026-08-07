@@ -39,6 +39,18 @@ public class CoreGeneralSekibanExecutor
     private const string SerializedExecutedUser = "SerializedSekibanExecutor";
     private readonly IExecutedUserProvider? _executedUserProvider;
 
+    /// <summary>
+    ///     Binary-compatible overload preserved for callers compiled against the pre-SEK-G23 constructor.
+    /// </summary>
+    public CoreGeneralSekibanExecutor(
+        IEventStore eventStore,
+        IActorObjectAccessor actorAccessor,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher)
+        : this(eventStore, actorAccessor, domainTypes, eventPublisher, null)
+    {
+    }
+
     public CoreGeneralSekibanExecutor(
         IEventStore eventStore,
         IActorObjectAccessor actorAccessor,

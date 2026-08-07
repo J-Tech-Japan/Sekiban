@@ -436,7 +436,11 @@ schema、SafeWindow 設定は変更しません。
 **修正**。`IExecutedUserProvider` を実装して DI に登録してください。コマンド経路はコマンドごとに 1 回だけ評価し、そのコマンドが生成するすべてのイベントの `EventMetadata.ExecutedUser` に書き込みます。プロバイダーが未登録、または `null`/空文字を返した場合は、従来の既定値である `"GeneralSekibanExecutor"` にフォールバックします。シリアライズ/WASM コミット経路は常に `"SerializedSekibanExecutor"` を使用します。
 
 ```csharp
-services.AddSingleton<IExecutedUserProvider>(new HttpContextExecutedUserProvider(httpContextAccessor));
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IExecutedUserProvider>(sp =>
+    new HttpContextExecutedUserProvider(sp.GetRequiredService<IHttpContextAccessor>()));
 ```
+
+> **ライフタイムの指針。** executor はプロバイダーをキャプチャします。scoped または transient のプロバイダーを使う場合は、executor も scoped または transient で登録してください。アンビエント HTTP コンテキスト方式ではプロバイダーが singleton なので、executor も singleton にできます。
 
 プロバイダーはすべての実行ファサードのコンストラクタで省略可能な引数なので、既存の呼び出し元に変更は不要です。

@@ -83,6 +83,20 @@ public class ExecutedUserProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task DirectNullReturningProvider_FallsBackTo_Default_Literal()
+    {
+        var store = new Sekiban.Dcb.Testing.InMemoryEventStore(_domainTypes.EventTypes);
+        var executor = CreateExecutor(store, _domainTypes, new NullProvider());
+
+        var result = await executor.ExecuteAsync(new CreateSingleEventCommand(Guid.NewGuid(), "x"));
+        Assert.True(result.IsSuccess);
+
+        var events = (await store.ReadAllEventsAsync()).GetValue().ToList();
+        Assert.Single(events);
+        Assert.Equal("GeneralSekibanExecutor", events[0].EventMetadata.ExecutedUser);
+    }
+
+    [Fact]
     public async Task RegisteredProvider_Applies_Value_To_Command_Path()
     {
         var store = new Sekiban.Dcb.Testing.InMemoryEventStore(_domainTypes.EventTypes);
@@ -230,6 +244,11 @@ public class ExecutedUserProviderTests : IDisposable
         private readonly string? _value;
         public ConstantProvider(string? value) => _value = value;
         public string GetExecutedUser() => _value ?? string.Empty;
+    }
+
+    private sealed class NullProvider : IExecutedUserProvider
+    {
+        public string GetExecutedUser() => null!;
     }
 
     private sealed class SequenceProvider : IExecutedUserProvider

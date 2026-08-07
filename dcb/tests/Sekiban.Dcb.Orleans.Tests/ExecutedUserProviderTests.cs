@@ -97,9 +97,27 @@ public class ExecutedUserProviderTests : IAsyncLifetime
         Assert.Equal("GeneralSekibanExecutor", events[0].EventMetadata.ExecutedUser);
     }
 
+    [Fact]
+    public async Task Orleans_DirectNullReturningProvider_FallsBackTo_Default_Literal()
+    {
+        SetProvider(null);
+        ProviderSiloConfigurator.ReturnNull = true;
+
+        var executor = CreateExecutorFromSiloServices();
+
+        var studentId = Guid.NewGuid();
+        var result = await executor.ExecuteAsync(new CreateStudent(studentId, "Orleans Student", 5));
+        Assert.True(result.IsSuccess);
+
+        var events = (await _eventStore.ReadAllSerializableEventsAsync()).GetValue().ToList();
+        Assert.Single(events);
+        Assert.Equal("GeneralSekibanExecutor", events[0].EventMetadata.ExecutedUser);
+    }
+
     private void SetProvider(IExecutedUserProvider? provider)
     {
         ProviderSiloConfigurator.Provider = provider;
+        ProviderSiloConfigurator.ReturnNull = false;
     }
 
     private OrleansDcbExecutor CreateExecutorFromSiloServices()
@@ -148,7 +166,10 @@ public class ExecutedUserProviderTests : IAsyncLifetime
 
     private sealed class ConfigurableProvider : IExecutedUserProvider
     {
-        public string GetExecutedUser() => ProviderSiloConfigurator.Provider?.GetExecutedUser() ?? string.Empty;
+        public string GetExecutedUser() =>
+            ProviderSiloConfigurator.ReturnNull
+                ? null!
+                : ProviderSiloConfigurator.Provider?.GetExecutedUser() ?? string.Empty;
     }
 
     public class ProviderSiloConfigurator : ISiloConfigurator
@@ -156,6 +177,7 @@ public class ExecutedUserProviderTests : IAsyncLifetime
         internal static IEventStore? EventStore;
         internal static DcbDomainTypes? DomainTypes;
         internal static IExecutedUserProvider? Provider;
+        internal static bool ReturnNull;
 
         public void Configure(ISiloBuilder siloBuilder)
         {

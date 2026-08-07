@@ -24,6 +24,14 @@ namespace Sekiban.Dcb.Testing;
 public class InMemoryDcbExecutorForTesting : InMemoryDcbExecutor, IExecutorRuntimeDescriptorProvider
 {
     /// <summary>
+    ///     Binary-compatible overload preserved for callers compiled against the pre-SEK-G23 constructor.
+    /// </summary>
+    public InMemoryDcbExecutorForTesting(DcbDomainTypes domainTypes, IEventStore eventStore)
+        : base(domainTypes, eventStore)
+    {
+    }
+
+    /// <summary>
     ///     Creates the executor over the event store you pass. Pass the store you mean to use: in a unit test that is
     ///     <c>new InMemoryEventStore(domainTypes.EventTypes)</c>, and the point of passing it is that the choice is
     ///     visible in the code that made it.

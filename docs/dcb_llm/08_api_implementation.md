@@ -96,8 +96,14 @@ registered, or it returns `null`/empty, the value falls back to `"GeneralSekiban
 path always uses `"SerializedSekibanExecutor"` regardless of the provider.
 
 ```csharp
-services.AddSingleton<IExecutedUserProvider>(new HttpContextExecutedUserProvider(httpContextAccessor));
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IExecutedUserProvider>(sp =>
+    new HttpContextExecutedUserProvider(sp.GetRequiredService<IHttpContextAccessor>()));
 ```
+
+> **Lifetime guidance.** The executor captures the provider. A scoped or transient provider requires a scoped or
+transient executor registration. The ambient HTTP-context pattern keeps the provider singleton, so the executor may also
+be singleton.
 
 ## Streaming & Notification Hooks
 

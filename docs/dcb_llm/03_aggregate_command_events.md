@@ -219,7 +219,8 @@ public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInCl
 Every event carries `EventMetadata.ExecutedUser`. By default the command path writes the literal `"GeneralSekibanExecutor"`,
 and the serialized/WASM commit path writes `"SerializedSekibanExecutor"`.
 
-To record the real caller, implement `IExecutedUserProvider` and register it in DI:
+To record the real caller, implement `IExecutedUserProvider` and register it in DI. The canonical pattern is a singleton
+provider that reads the ambient HTTP context on every call:
 
 ```csharp
 public class HttpContextExecutedUserProvider : IExecutedUserProvider
@@ -229,13 +230,22 @@ public class HttpContextExecutedUserProvider : IExecutedUserProvider
     public string GetExecutedUser() => _accessor.HttpContext?.User.Identity?.Name ?? "anonymous";
 }
 
-services.AddSingleton<IExecutedUserProvider>(new HttpContextExecutedUserProvider(httpContextAccessor));
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IExecutedUserProvider>(sp =>
+    new HttpContextExecutedUserProvider(sp.GetRequiredService<IHttpContextAccessor>()));
 ```
 
 The provider is evaluated exactly once per command and the captured value is reused for every event that command emits.
-If the provider is absent or returns `null`/empty, the value falls back to `"GeneralSekibanExecutor"`. Constructor parameters
-for the provider are optional on all executor facades (`GeneralSekibanExecutor`, `OrleansDcbExecutor`,
-`InMemoryDcbExecutor`, and their WithoutResult/testing variants), so existing call sites are unchanged.
+If the provider is absent or returns `null`/empty, the value falls back to `"GeneralSekibanExecutor"`.
+
+> **Lifetime guidance.** `IExecutedUserProvider` is captured by the executor. If your provider is scoped or transient,
+> register the executor as scoped or transient as well so it does not hold a stale provider. The ambient HTTP-context
+> pattern above keeps the provider singleton, so the executor may also be singleton.
+
+Constructor parameters for the provider are optional on all executor facades (`GeneralSekibanExecutor`,
+`OrleansDcbExecutor`, `InMemoryDcbExecutor`, and their WithoutResult/testing variants), so existing call sites are
+unchanged.
 
 ## Tips
 

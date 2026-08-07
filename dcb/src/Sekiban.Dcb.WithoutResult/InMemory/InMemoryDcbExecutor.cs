@@ -35,6 +35,14 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
     private readonly DcbDomainTypes _domainTypes;
 
     /// <summary>
+    ///     Binary-compatible overload preserved for callers compiled against the pre-SEK-G23 constructor.
+    /// </summary>
+    public InMemoryDcbExecutor(DcbDomainTypes domainTypes, IEventStore eventStore)
+        : this(domainTypes, eventStore, null)
+    {
+    }
+
+    /// <summary>
     ///     Creates executor with provided in-memory event store implementation
     /// </summary>
     public InMemoryDcbExecutor(

@@ -6,6 +6,11 @@ namespace Sekiban.Dcb;
 ///     the command path. When no implementation is registered, or when it returns <c>null</c> or an empty string,
 ///     the default literal <c>"GeneralSekibanExecutor"</c> is preserved.
 /// </summary>
+/// <remarks>
+///     Release note (dcb-v10.9.0): <c>IExecutedUserProvider</c> is an opt-in addition. When it is absent or returns
+///     <c>null</c>/empty, the command path continues to write <c>"GeneralSekibanExecutor"</c>, so the default
+///     behavior is unchanged. The serialized/WASM commit path remains pinned to <c>"SerializedSekibanExecutor"</c>.
+/// </remarks>
 public interface IExecutedUserProvider
 {
     /// <summary>

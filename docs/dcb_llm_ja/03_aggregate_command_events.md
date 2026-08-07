@@ -212,7 +212,7 @@ public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInCl
 
 すべてのイベントは `EventMetadata.ExecutedUser` を持ちます。既定ではコマンド経路でリテラル `"GeneralSekibanExecutor"`、シリアライズ/WASM コミット経路で `"SerializedSekibanExecutor"` が書き込まれます。
 
-実際の呼び出し元を記録するには、`IExecutedUserProvider` を実装して DI に登録します。
+実際の呼び出し元を記録するには、`IExecutedUserProvider` を実装して DI に登録します。標準的なパターンは、呼び出しごとにアンビエント HTTP コンテキストを読み取る singleton プロバイダーです。
 
 ```csharp
 public class HttpContextExecutedUserProvider : IExecutedUserProvider
@@ -222,10 +222,17 @@ public class HttpContextExecutedUserProvider : IExecutedUserProvider
     public string GetExecutedUser() => _accessor.HttpContext?.User.Identity?.Name ?? "anonymous";
 }
 
-services.AddSingleton<IExecutedUserProvider>(new HttpContextExecutedUserProvider(httpContextAccessor));
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IExecutedUserProvider>(sp =>
+    new HttpContextExecutedUserProvider(sp.GetRequiredService<IHttpContextAccessor>()));
 ```
 
-プロバイダーはコマンドごとに 1 回だけ評価され、そのコマンドが生成するすべてのイベントで同じ値が使われます。プロバイダーが未登録、または `null`/空文字を返した場合は `"GeneralSekibanExecutor"` にフォールバックします。プロバイダーは `GeneralSekibanExecutor`、`OrleansDcbExecutor`、`InMemoryDcbExecutor` およびそれらの WithoutResult/テスト用版のコンストラクタで省略可能な引数として受け取れるため、既存の呼び出し元に影響はありません。
+プロバイダーはコマンドごとに 1 回だけ評価され、そのコマンドが生成するすべてのイベントで同じ値が使われます。プロバイダーが未登録、または `null`/空文字を返した場合は `"GeneralSekibanExecutor"` にフォールバックします。
+
+> **ライフタイムの指針。** `IExecutedUserProvider` は executor にキャプチャされます。プロバイダーが scoped または transient の場合、古いプロバイダーを保持しないよう executor も scoped または transient で登録してください。上記のアンビエント HTTP コンテキスト方式ではプロバイダーが singleton なので、executor も singleton にできます。
+
+プロバイダーは `GeneralSekibanExecutor`、`OrleansDcbExecutor`、`InMemoryDcbExecutor` およびそれらの WithoutResult/テスト用版のコンストラクタで省略可能な引数として受け取れるため、既存の呼び出し元に影響はありません。
 
 このように、DCB ではタグを中心にドメインを建て付けます。タグ定義・プロジェクター・コマンドハンドラーを
 組み合わせて一貫した整合性境界を実現してください。
