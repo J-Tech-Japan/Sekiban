@@ -65,6 +65,14 @@
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>Sekiban.Dcb.Orleans.Core</_Parameter1>
         </AssemblyAttribute>
+        <!-- SEK-G23: the WithResult / WithoutResult InMemory executors share the same private in-memory event store
+             implementation; keep it internal rather than copying it into both packages. -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>Sekiban.Dcb.WithResult</_Parameter1>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>Sekiban.Dcb.WithoutResult</_Parameter1>
+        </AssemblyAttribute>
     </ItemGroup>
 
 </Project>

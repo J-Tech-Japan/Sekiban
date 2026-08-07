@@ -56,9 +56,14 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         _clusterClient = clusterClient ?? throw new ArgumentNullException(nameof(clusterClient));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
-        _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
-        _actorAccessor = new OrleansActorObjectAccessor(clusterClient, eventStore, domainTypes, _serviceIdProvider);
-        _generalExecutor = new GeneralSekibanExecutor(eventStore, _actorAccessor, domainTypes, eventPublisher, executedUserProvider);
+        (_actorAccessor, _serviceIdProvider, _generalExecutor) = OrleansExecutorFactory.Create(
+            _clusterClient,
+            _eventStore,
+            _domainTypes,
+            eventPublisher,
+            serviceIdProvider,
+            executedUserProvider,
+            (es, acc, dt, pub, prov) => new GeneralSekibanExecutor(es, acc, dt, pub, prov));
     }
 
     /// <summary>

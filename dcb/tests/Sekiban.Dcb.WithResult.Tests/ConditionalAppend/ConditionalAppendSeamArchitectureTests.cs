@@ -196,7 +196,7 @@ public class ConditionalAppendSeamArchitectureTests
         AssertIvtAllowlist(
             typeof(IConditionalEventStore).Assembly,
             "Sekiban.Dcb.Postgres", "Sekiban.Dcb.Sqlite", "Sekiban.Dcb.CosmosDb", "Sekiban.Dcb.DynamoDB",
-            "Sekiban.Dcb.Orleans.Core");
+            "Sekiban.Dcb.Orleans.Core", "Sekiban.Dcb.WithResult", "Sekiban.Dcb.WithoutResult");
     }
 
     [Theory]

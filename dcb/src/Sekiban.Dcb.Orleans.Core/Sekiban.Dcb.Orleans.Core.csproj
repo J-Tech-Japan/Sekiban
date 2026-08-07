@@ -32,6 +32,8 @@
     <ItemGroup>
         <!-- Friend access for the Orleans test project to drive internal coordination components directly. -->
         <InternalsVisibleTo Include="Sekiban.Dcb.Orleans.Tests"/>
+        <InternalsVisibleTo Include="Sekiban.Dcb.Orleans.WithResult"/>
+        <InternalsVisibleTo Include="Sekiban.Dcb.Orleans.WithoutResult"/>
     </ItemGroup>
 
     <ItemGroup>

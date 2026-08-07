@@ -13,11 +13,10 @@ namespace Sekiban.Dcb.Actors;
 ///     Wraps CoreGeneralSekibanExecutor to provide the public API
 ///     This implementation uses ResultBox for all error handling
 /// </summary>
-public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider,
+public class GeneralSekibanExecutor : GeneralSekibanExecutorBase, ISekibanExecutor, ISerializedSekibanDcbExecutor,
+    IExecutorRuntimeDescriptorProvider,
     IConditionalCommandExecutor, ISerializedConditionalSekibanDcbExecutor
 {
-    private readonly CoreGeneralSekibanExecutor _core;
-    private readonly IActorObjectAccessor _actorAccessor;
     private static readonly AnonymousCommand NoCommandInstance = new();
 
     /// <summary>
@@ -38,18 +37,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         DcbDomainTypes domainTypes,
         IEventPublisher? eventPublisher = null,
         IExecutedUserProvider? executedUserProvider = null)
+        : base(eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider)
     {
-        _actorAccessor = actorAccessor;
-        _core = new CoreGeneralSekibanExecutor(eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider);
     }
-
-    /// <summary>
-    ///     This executor is whatever its accessor is. It has no runtime of its own — commands go wherever the accessor
-    ///     sends them — so it asks, rather than claiming. An accessor that will not say leaves this Unknown, and the
-    ///     production guard treats Unknown as unsafe, which is the only safe way to treat it.
-    /// </summary>
-    public ExecutorRuntimeDescriptor DescribeRuntime() =>
-        SekibanDcbCapabilityResolver.DescribeExecutor(_actorAccessor);
 
     /// <summary>
     ///     Execute a command with its built-in handler
@@ -131,14 +121,6 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
 
     public Task<ResultBox<EventStoreHeadStatus>> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false) =>
         _core.GetEventStoreHeadStatusAsync(includeTotalEventCount);
-
-    public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
-        _core.GetSerializableTagStateAsync(tagStateId);
-
-    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
-        SerializedCommitRequest request,
-        CancellationToken cancellationToken = default) =>
-        _core.CommitSerializableEventsAsync(request, cancellationToken);
 
     /// <summary>Opt-in: execute a self-handling command with conditional (unique-key) append options.</summary>
     public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(

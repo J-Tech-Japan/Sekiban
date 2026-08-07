@@ -131,7 +131,7 @@ public class ConditionalAppendFacadeInDoubtTests
         // allocation, these would be > 0.
         const System.Reflection.BindingFlags nonPublicInstance =
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        var core = typeof(GeneralSekibanExecutor).GetField("_core", nonPublicInstance)!.GetValue(executor)!;
+        var core = typeof(GeneralSekibanExecutor).BaseType!.GetField("_core", nonPublicInstance)!.GetValue(executor)!;
         var eventIdAllocations = 0;
         var sortableAllocations = 0;
         core.GetType().GetProperty("ConditionalEventIdFactory", nonPublicInstance)!
