@@ -426,3 +426,21 @@ read 自身が返した権威 cursor のみを使い、共有 timer 進捗を証
 クエリは、自身の catch-up が固定 head に到達すれば最新の `IsSafeState=false` 結果を返せます。真の short read と
 read failure は引き続き fail-closed かつ retryable で、poison fault、G18 rebuild、G20 tombstone/CAS、公開 API、
 schema、SafeWindow 設定は変更しません。
+
+## イベントの `ExecutedUser` が "GeneralSekibanExecutor" のまま — SEK-G23 で解決
+
+**症状**。ストア内のすべてのイベントで `ExecutedUser = "GeneralSekibanExecutor"` になっており、API が知っている呼び出し元のIDが反映されません。
+
+**原因**。コマンド経路は、明示的に提供しない限り HTTP コンテキストや呼び出し元の識別子にアクセスできません。
+
+**修正**。`IExecutedUserProvider` を実装して DI に登録してください。コマンド経路はコマンドごとに 1 回だけ評価し、そのコマンドが生成するすべてのイベントの `EventMetadata.ExecutedUser` に書き込みます。プロバイダーが未登録、または `null`/空文字を返した場合は、従来の既定値である `"GeneralSekibanExecutor"` にフォールバックします。シリアライズ/WASM コミット経路は常に `"SerializedSekibanExecutor"` を使用します。
+
+```csharp
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IExecutedUserProvider>(sp =>
+    new HttpContextExecutedUserProvider(sp.GetRequiredService<IHttpContextAccessor>()));
+```
+
+> **ライフタイムの指針。** executor はプロバイダーをキャプチャします。scoped または transient のプロバイダーを使う場合は、executor も scoped または transient で登録してください。アンビエント HTTP コンテキスト方式ではプロバイダーが singleton なので、executor も singleton にできます。
+
+プロバイダーはすべての実行ファサードのコンストラクタで省略可能な引数なので、既存の呼び出し元に変更は不要です。

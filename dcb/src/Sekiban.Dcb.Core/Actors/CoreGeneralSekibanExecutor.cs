@@ -35,16 +35,40 @@ public class CoreGeneralSekibanExecutor
     internal Func<Guid> ConditionalEventIdFactory { get; set; } = Guid.CreateVersion7;
     internal Func<string> ConditionalSortableIdFactory { get; set; } = () => SortableUniqueId.GenerateNew();
 
+    private const string DefaultExecutedUser = "GeneralSekibanExecutor";
+    private const string SerializedExecutedUser = "SerializedSekibanExecutor";
+    private readonly IExecutedUserProvider? _executedUserProvider;
+
+    /// <summary>
+    ///     Binary-compatible overload preserved for callers compiled against the pre-SEK-G23 constructor.
+    /// </summary>
     public CoreGeneralSekibanExecutor(
         IEventStore eventStore,
         IActorObjectAccessor actorAccessor,
         DcbDomainTypes domainTypes,
-        IEventPublisher? eventPublisher = null)
+        IEventPublisher? eventPublisher)
+        : this(eventStore, actorAccessor, domainTypes, eventPublisher, null)
+    {
+    }
+
+    public CoreGeneralSekibanExecutor(
+        IEventStore eventStore,
+        IActorObjectAccessor actorAccessor,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher = null,
+        IExecutedUserProvider? executedUserProvider = null)
     {
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _eventPublisher = eventPublisher;
+        _executedUserProvider = executedUserProvider;
+    }
+
+    private string GetExecutedUser()
+    {
+        var value = _executedUserProvider?.GetExecutedUser();
+        return string.IsNullOrEmpty(value) ? DefaultExecutedUser : value;
     }
 
     public async Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
@@ -181,12 +205,13 @@ public class CoreGeneralSekibanExecutor
             {
                 // Step 5: Write event to EventStore (handles both events and tags)
                 // Build Event objects for each collected event payload
+                var executedUser = GetExecutedUser();
                 var events = new List<Event>();
                 foreach (var e in collectedEvents)
                 {
                     var eId = Guid.CreateVersion7();
                     var sortable = SortableUniqueId.GenerateNew();
-                    var meta = new EventMetadata(eId.ToString(), command.GetType().Name, "GeneralSekibanExecutor");
+                    var meta = new EventMetadata(eId.ToString(), command.GetType().Name, executedUser);
                     events.Add(
                         new Event(
                             e.Event,
@@ -943,9 +968,10 @@ public class CoreGeneralSekibanExecutor
             var single = collectedEvents[0];
             TagValidator.ValidateTagsAndThrow(new HashSet<ITag>(single.Tags));
 
+            var executedUser = GetExecutedUser();
             var eventId = ConditionalEventIdFactory();
             var sortable = SortableUniqueId.GenerateNew();
-            var metadata = new EventMetadata(eventId.ToString(), command.GetType().Name, "GeneralSekibanExecutor");
+            var metadata = new EventMetadata(eventId.ToString(), command.GetType().Name, executedUser);
             var domainEvent = new Event(
                 single.Event,
                 sortable,

@@ -85,6 +85,16 @@ apiRoute.MapGet("/students", async (ISekibanExecutor executor, int? pageNumber, 
 テンプレートには組み込まれていないため、`RequireAuthorization` などで API 層に追加してください。
 ユーザーID を `EventMetadata.ExecutedUser` に書き込むには `ISekibanExecutor` をデコレートします。
 
+SEK-G23 からは、`IExecutedUserProvider` を DI に登録することもできます。コマンド経路ではコマンドごとに 1 回だけ評価され、そのコマンドが生成するすべてのイベントの `EventMetadata.ExecutedUser` に書き込まれます。プロバイダーが未登録、または `null`/空文字を返した場合は `"GeneralSekibanExecutor"` にフォールバックします。シリアライズ/WASM コミット経路は常に `"SerializedSekibanExecutor"` を使用します。
+
+```csharp
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IExecutedUserProvider>(sp =>
+    new HttpContextExecutedUserProvider(sp.GetRequiredService<IHttpContextAccessor>()));
+```
+
+> **ライフタイムの指針。** executor はプロバイダーをキャプチャします。scoped または transient のプロバイダーを使う場合は、executor も scoped または transient で登録してください。アンビエント HTTP コンテキスト方式ではプロバイダーが singleton なので、executor も singleton にできます。
+
 ## ストリーム連携
 
 `IEventPublisher` を登録すると Orleans ストリームや外部キューにイベントを配信できます。
