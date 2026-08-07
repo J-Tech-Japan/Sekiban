@@ -95,7 +95,6 @@
     <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.Tests/Sekiban.Dcb.MaterializedView.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.Postgres.Tests/Sekiban.Dcb.MaterializedView.Postgres.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj" />
-    <Project Path="dcb/tests/Sekiban.Dcb.ExecutorBinaryCompatibility.Tests/Sekiban.Dcb.ExecutorBinaryCompatibility.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj" />
