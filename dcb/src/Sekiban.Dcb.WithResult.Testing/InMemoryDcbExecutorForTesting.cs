@@ -28,8 +28,11 @@ public class InMemoryDcbExecutorForTesting : InMemoryDcbExecutor, IExecutorRunti
     ///     <c>new InMemoryEventStore(domainTypes.EventTypes)</c>, and the point of passing it is that the choice is
     ///     visible in the code that made it.
     /// </summary>
-    public InMemoryDcbExecutorForTesting(DcbDomainTypes domainTypes, IEventStore eventStore)
-        : base(domainTypes, eventStore)
+    public InMemoryDcbExecutorForTesting(
+        DcbDomainTypes domainTypes,
+        IEventStore eventStore,
+        IExecutedUserProvider? executedUserProvider = null)
+        : base(domainTypes, eventStore, executedUserProvider)
     {
     }
 

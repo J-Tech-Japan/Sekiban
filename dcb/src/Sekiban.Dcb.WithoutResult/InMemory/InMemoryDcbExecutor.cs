@@ -37,13 +37,16 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
     /// <summary>
     ///     Creates executor with provided in-memory event store implementation
     /// </summary>
-    public InMemoryDcbExecutor(DcbDomainTypes domainTypes, IEventStore eventStore)
+    public InMemoryDcbExecutor(
+        DcbDomainTypes domainTypes,
+        IEventStore eventStore,
+        IExecutedUserProvider? executedUserProvider = null)
     {
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _accessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
         var eventPublisher = new InMemoryMultiProjectionEventPublisher(_accessor);
-        _inner = new GeneralSekibanExecutor(_eventStore, _accessor, _domainTypes, eventPublisher);
+        _inner = new GeneralSekibanExecutor(_eventStore, _accessor, _domainTypes, eventPublisher, executedUserProvider);
     }
 
     /// <summary>

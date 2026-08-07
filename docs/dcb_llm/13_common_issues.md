@@ -460,3 +460,21 @@ authoritative cursor returned by the specific in-call read; shared timer progres
 scalar, and list queries can therefore return the current `IsSafeState=false` result as soon as their own catch-up reaches
 the fixed head. Genuine short reads and read failures remain fail-closed and retryable, and poison faults, G18 rebuilds,
 G20 tombstone/CAS handling, public APIs, schemas, and SafeWindow settings are unchanged.
+
+## Events show "GeneralSekibanExecutor" instead of the real user — CLOSED in SEK-G23
+
+**Symptom.** Every event in the store has `ExecutedUser = "GeneralSekibanExecutor"`, even though the API knows the
+caller identity.
+
+**Cause.** The command path has no access to HTTP context or caller identity unless you provide it explicitly.
+
+**Fix.** Implement `IExecutedUserProvider` and register it in DI. The command path evaluates it once per command and
+writes the returned value into every `EventMetadata.ExecutedUser` produced by that command. If the provider is absent or
+returns `null`/empty, the value falls back to `"GeneralSekibanExecutor"` to preserve the historical default. The
+serialized/WASM commit path always uses `"SerializedSekibanExecutor"` regardless of the provider.
+
+```csharp
+services.AddSingleton<IExecutedUserProvider>(new HttpContextExecutedUserProvider(httpContextAccessor));
+```
+
+The provider parameter is optional on all executor facades, so existing call sites require no changes.

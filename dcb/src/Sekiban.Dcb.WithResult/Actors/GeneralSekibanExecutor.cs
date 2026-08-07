@@ -24,10 +24,11 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         IEventStore eventStore,
         IActorObjectAccessor actorAccessor,
         DcbDomainTypes domainTypes,
-        IEventPublisher? eventPublisher = null)
+        IEventPublisher? eventPublisher = null,
+        IExecutedUserProvider? executedUserProvider = null)
     {
         _actorAccessor = actorAccessor;
-        _core = new CoreGeneralSekibanExecutor(eventStore, actorAccessor, domainTypes, eventPublisher);
+        _core = new CoreGeneralSekibanExecutor(eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider);
     }
 
     /// <summary>

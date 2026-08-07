@@ -208,5 +208,24 @@ public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInCl
 }
 ```
 
+## 実行ユーザーの記録（SEK-G23）
+
+すべてのイベントは `EventMetadata.ExecutedUser` を持ちます。既定ではコマンド経路でリテラル `"GeneralSekibanExecutor"`、シリアライズ/WASM コミット経路で `"SerializedSekibanExecutor"` が書き込まれます。
+
+実際の呼び出し元を記録するには、`IExecutedUserProvider` を実装して DI に登録します。
+
+```csharp
+public class HttpContextExecutedUserProvider : IExecutedUserProvider
+{
+    private readonly IHttpContextAccessor _accessor;
+    public HttpContextExecutedUserProvider(IHttpContextAccessor accessor) => _accessor = accessor;
+    public string GetExecutedUser() => _accessor.HttpContext?.User.Identity?.Name ?? "anonymous";
+}
+
+services.AddSingleton<IExecutedUserProvider>(new HttpContextExecutedUserProvider(httpContextAccessor));
+```
+
+プロバイダーはコマンドごとに 1 回だけ評価され、そのコマンドが生成するすべてのイベントで同じ値が使われます。プロバイダーが未登録、または `null`/空文字を返した場合は `"GeneralSekibanExecutor"` にフォールバックします。プロバイダーは `GeneralSekibanExecutor`、`OrleansDcbExecutor`、`InMemoryDcbExecutor` およびそれらの WithoutResult/テスト用版のコンストラクタで省略可能な引数として受け取れるため、既存の呼び出し元に影響はありません。
+
 このように、DCB ではタグを中心にドメインを建て付けます。タグ定義・プロジェクター・コマンドハンドラーを
 組み合わせて一貫した整合性境界を実現してください。

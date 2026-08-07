@@ -90,6 +90,15 @@ The template leaves auth empty. Because command handlers should not inspect call
 API layer (e.g., `RequireAuthorization`). Propagate the user id into `EventMetadata` via a custom executor decorator so
 business events retain auditing information.
 
+Starting with SEK-G23, you can also register an `IExecutedUserProvider` in DI. The command path evaluates it once per
+command and writes the returned value into every `EventMetadata.ExecutedUser` produced by that command. If no provider is
+registered, or it returns `null`/empty, the value falls back to `"GeneralSekibanExecutor"`. The serialized/WASM commit
+path always uses `"SerializedSekibanExecutor"` regardless of the provider.
+
+```csharp
+services.AddSingleton<IExecutedUserProvider>(new HttpContextExecutedUserProvider(httpContextAccessor));
+```
+
 ## Streaming & Notification Hooks
 
 Register `IEventPublisher` implementations (e.g., `OrleansEventPublisher` in `src/Sekiban.Dcb.Orleans/OrleansEventPublisher.cs`)

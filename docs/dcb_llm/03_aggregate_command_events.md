@@ -214,6 +214,29 @@ public class EnrollStudentInClassRoomHandler : ICommandHandler<EnrollStudentInCl
 // Source: internalUsages/Dcb.Domain/Enrollment/EnrollStudentInClassRoomHandler.cs
 ```
 
+## Recording the executing user (SEK-G23)
+
+Every event carries `EventMetadata.ExecutedUser`. By default the command path writes the literal `"GeneralSekibanExecutor"`,
+and the serialized/WASM commit path writes `"SerializedSekibanExecutor"`.
+
+To record the real caller, implement `IExecutedUserProvider` and register it in DI:
+
+```csharp
+public class HttpContextExecutedUserProvider : IExecutedUserProvider
+{
+    private readonly IHttpContextAccessor _accessor;
+    public HttpContextExecutedUserProvider(IHttpContextAccessor accessor) => _accessor = accessor;
+    public string GetExecutedUser() => _accessor.HttpContext?.User.Identity?.Name ?? "anonymous";
+}
+
+services.AddSingleton<IExecutedUserProvider>(new HttpContextExecutedUserProvider(httpContextAccessor));
+```
+
+The provider is evaluated exactly once per command and the captured value is reused for every event that command emits.
+If the provider is absent or returns `null`/empty, the value falls back to `"GeneralSekibanExecutor"`. Constructor parameters
+for the provider are optional on all executor facades (`GeneralSekibanExecutor`, `OrleansDcbExecutor`,
+`InMemoryDcbExecutor`, and their WithoutResult/testing variants), so existing call sites are unchanged.
+
 ## Tips
 
 - Use helper classes such as `ConsistencyTag` when you need to carry a known `SortableUniqueId` across retries.

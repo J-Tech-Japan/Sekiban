@@ -38,14 +38,15 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         IEventStore eventStore,
         DcbDomainTypes domainTypes,
         IEventPublisher? eventPublisher = null,
-        IServiceIdProvider? serviceIdProvider = null)
+        IServiceIdProvider? serviceIdProvider = null,
+        IExecutedUserProvider? executedUserProvider = null)
     {
         _clusterClient = clusterClient ?? throw new ArgumentNullException(nameof(clusterClient));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
         _actorAccessor = new OrleansActorObjectAccessor(clusterClient, eventStore, domainTypes, _serviceIdProvider);
-        _generalExecutor = new GeneralSekibanExecutor(eventStore, _actorAccessor, domainTypes, eventPublisher);
+        _generalExecutor = new GeneralSekibanExecutor(eventStore, _actorAccessor, domainTypes, eventPublisher, executedUserProvider);
     }
 
     /// <summary>
