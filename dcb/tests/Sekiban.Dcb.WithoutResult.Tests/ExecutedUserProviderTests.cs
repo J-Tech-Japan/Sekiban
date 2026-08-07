@@ -4,17 +4,26 @@ using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
-using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
+using Sekiban.Dcb.TestSupport.ExecutedUser;
 using Xunit;
-
 namespace Sekiban.Dcb.WithoutResult.Tests;
 
 /// <summary>
-///     SEK-G23 executed-user provider parity acceptance tests for the WithoutResult command path.
+/// SEK-G23 executed-user provider parity acceptance tests for the WithoutResult command path.
+/// Common scenarios live in <see cref="ExecutedUserProviderScenarioTestsBase"/>.
 /// </summary>
-public class ExecutedUserProviderTests
+public class ExecutedUserProviderTests : ExecutedUserProviderScenarioTestsBase
 {
+    private readonly DcbDomainTypes _domainTypes;
+    private InMemoryEventStore _store = null!;
+    private GeneralSekibanExecutor _executor = null!;
+
+    public ExecutedUserProviderTests()
+    {
+        _domainTypes = CreateDomainTypes();
+    }
+
     private static DcbDomainTypes CreateDomainTypes() =>
         DcbDomainTypesExtensions.Simple(b =>
         {
@@ -23,177 +32,60 @@ public class ExecutedUserProviderTests
             b.TagTypes.RegisterTagGroupType<TestTag>();
         });
 
-    private static GeneralSekibanExecutor CreateExecutor(
-        IEventStore store,
-        DcbDomainTypes domainTypes,
-        IExecutedUserProvider? provider = null)
+    protected override Task BeginScenarioAsync(IExecutedUserProvider? provider)
     {
-        var accessor = new InMemoryObjectAccessor(store, domainTypes);
-        return new GeneralSekibanExecutor(store, accessor, domainTypes, null, provider);
+        _store = new InMemoryEventStore(_domainTypes.EventTypes);
+        var accessor = new InMemoryObjectAccessor(_store, _domainTypes);
+        _executor = new GeneralSekibanExecutor(_store, accessor, _domainTypes, null, provider);
+        return Task.CompletedTask;
     }
 
-    [Fact]
-    public async Task AbsentProvider_Preserves_Default_Literal()
+    private static Task<EventOrNone> HandleSingleEventAsync(
+        CreateSingleEventTestCommand command,
+        ICommandContext context) =>
+        Task.FromResult(EventOrNone.From(new TestCreated { Id = command.Id, Name = command.Name }, new TestTag(command.Id)));
+
+    private static async Task<EventOrNone> HandleMultiEventAsync(
+        CreateMultiEventTestCommand command,
+        ICommandContext context)
     {
-        var domainTypes = CreateDomainTypes();
-        var store = new InMemoryEventStore();
-        var executor = CreateExecutor(store, domainTypes);
-
-        await executor.ExecuteAsync(new CreateSingleEventCommand(Guid.NewGuid(), "x"));
-
-        var events = (await store.ReadAllEventsAsync()).GetValue().ToList();
-        Assert.Single(events);
-        Assert.Equal("GeneralSekibanExecutor", events[0].EventMetadata.ExecutedUser);
+        var tag = new TestTag(command.Id);
+        await context.AppendEvent(new TestCreated { Id = command.Id, Name = "first" }, tag);
+        await context.AppendEvent(new TestAdded { Id = command.Id }, tag);
+        return EventOrNone.Empty;
     }
 
-    [Fact]
-    public async Task RegisteredProvider_Applies_Value_To_Command_Path()
+    private static Task<EventOrNone> HandleNoEventAsync(
+        NoEventTestCommand _,
+        ICommandContext __) =>
+        Task.FromResult(EventOrNone.Empty);
+
+    protected override Task ExecuteSingleEventAsync(string name = "x") =>
+        _executor.ExecuteAsync(new CreateSingleEventTestCommand(Guid.NewGuid(), name), HandleSingleEventAsync);
+
+    protected override Task ExecuteMultiEventAsync() =>
+        _executor.ExecuteAsync(new CreateMultiEventTestCommand(Guid.NewGuid()), HandleMultiEventAsync);
+
+    protected override Task ExecuteNoEventAsync() =>
+        _executor.ExecuteAsync(new NoEventTestCommand(), HandleNoEventAsync);
+
+    protected override async Task<IReadOnlyList<Event>> ReadAllEventsAsync() =>
+        (await _store.ReadAllEventsAsync()).GetValue().ToList();
+
+    protected override async Task ExecuteSingleEventViaDiAsync(IExecutedUserProvider provider, string name = "x")
     {
-        var domainTypes = CreateDomainTypes();
-        var store = new InMemoryEventStore();
-        var executor = CreateExecutor(store, domainTypes, new ConstantProvider("subscriber@example.com"));
-
-        await executor.ExecuteAsync(new CreateSingleEventCommand(Guid.NewGuid(), "x"));
-
-        var events = (await store.ReadAllEventsAsync()).GetValue().ToList();
-        Assert.Single(events);
-        Assert.Equal("subscriber@example.com", events[0].EventMetadata.ExecutedUser);
-    }
-
-    [Fact]
-    public async Task Provider_Evaluated_Once_Per_Command_And_Reused_For_Multiple_Events()
-    {
-        var domainTypes = CreateDomainTypes();
-        var store = new InMemoryEventStore();
-        var sequence = new SequenceProvider("user-a", "user-b");
-        var executor = CreateExecutor(store, domainTypes, sequence);
-
-        await executor.ExecuteAsync(new CreateMultiEventCommand(Guid.NewGuid()));
-        await executor.ExecuteAsync(new CreateSingleEventCommand(Guid.NewGuid(), "second"));
-
-        Assert.Equal(2, sequence.CallCount);
-
-        var events = (await store.ReadAllEventsAsync()).GetValue().OrderBy(e => e.SortableUniqueIdValue).ToList();
-        Assert.Equal(3, events.Count);
-
-        Assert.All(events.Take(2), e => Assert.Equal("user-a", e.EventMetadata.ExecutedUser));
-        Assert.Equal("user-b", events[2].EventMetadata.ExecutedUser);
-    }
-
-    [Fact]
-    public async Task NullOrEmptyProvider_FallsBackTo_Default_Literal()
-    {
-        var domainTypes = CreateDomainTypes();
-        var store = new InMemoryEventStore();
-        var executor = CreateExecutor(store, domainTypes, new ConstantProvider(null));
-
-        await executor.ExecuteAsync(new CreateSingleEventCommand(Guid.NewGuid(), "x"));
-
-        var events = (await store.ReadAllEventsAsync()).GetValue().ToList();
-        Assert.Single(events);
-        Assert.Equal("GeneralSekibanExecutor", events[0].EventMetadata.ExecutedUser);
-    }
-
-    [Fact]
-    public async Task DirectNullReturningProvider_FallsBackTo_Default_Literal()
-    {
-        var domainTypes = CreateDomainTypes();
-        var store = new InMemoryEventStore();
-        var executor = CreateExecutor(store, domainTypes, new NullProvider());
-
-        await executor.ExecuteAsync(new CreateSingleEventCommand(Guid.NewGuid(), "x"));
-
-        var events = (await store.ReadAllEventsAsync()).GetValue().ToList();
-        Assert.Single(events);
-        Assert.Equal("GeneralSekibanExecutor", events[0].EventMetadata.ExecutedUser);
-    }
-
-    [Fact]
-    public async Task Provider_Resolves_As_Optional_Dependency_From_Same_ServiceProvider()
-    {
-        var domainTypes = CreateDomainTypes();
-        var store = new InMemoryEventStore();
-        var provider = new ConstantProvider("di-user");
+        var store = new InMemoryEventStore(_domainTypes.EventTypes);
+        _store = store;
         var services = new ServiceCollection();
         services.AddSingleton<IEventStore>(store);
-        services.AddSingleton(domainTypes);
-        services.AddSingleton<IExecutedUserProvider>(provider);
+        services.AddSingleton(_domainTypes);
+        services.AddSingleton(provider);
         services.AddTransient<IActorObjectAccessor>(sp =>
             new InMemoryObjectAccessor(sp.GetRequiredService<IEventStore>(), sp.GetRequiredService<DcbDomainTypes>()));
         services.AddTransient<GeneralSekibanExecutor>();
 
         var sp = services.BuildServiceProvider();
-        var executor = sp.GetRequiredService<GeneralSekibanExecutor>();
-
-        await executor.ExecuteAsync(new CreateSingleEventCommand(Guid.NewGuid(), "di"));
-
-        var events = (await store.ReadAllEventsAsync()).GetValue().ToList();
-        Assert.Single(events);
-        Assert.Equal("di-user", events[0].EventMetadata.ExecutedUser);
-    }
-
-    private sealed class ConstantProvider : IExecutedUserProvider
-    {
-        private readonly string? _value;
-        public ConstantProvider(string? value) => _value = value;
-        public string GetExecutedUser() => _value ?? string.Empty;
-    }
-
-    private sealed class NullProvider : IExecutedUserProvider
-    {
-        public string GetExecutedUser() => null!;
-    }
-
-    private sealed class SequenceProvider : IExecutedUserProvider
-    {
-        private readonly IReadOnlyList<string> _values;
-        private int _index;
-        public SequenceProvider(params string[] values) => _values = values;
-        public int CallCount => _index;
-        public string GetExecutedUser()
-        {
-            var value = _index < _values.Count ? _values[_index] : $"extra-{_index}";
-            _index++;
-            return value;
-        }
-    }
-
-    private sealed record TestTag : ITagGroup<TestTag>
-    {
-        private readonly Guid _id;
-        public TestTag(Guid id) => _id = id;
-        public bool IsConsistencyTag() => false;
-        public static string TagGroupName => "Test";
-        public string GetTag() => $"Test:{_id}";
-        public string GetTagContent() => _id.ToString();
-        public static TestTag FromContent(string content) => new(Guid.Parse(content));
-    }
-
-    public sealed record TestCreated : IEventPayload
-    {
-        public Guid Id { get; init; }
-        public string Name { get; init; } = string.Empty;
-    }
-
-    public sealed record TestAdded : IEventPayload
-    {
-        public Guid Id { get; init; }
-    }
-
-    private sealed record CreateSingleEventCommand(Guid Id, string Name) : ICommandWithHandler<CreateSingleEventCommand>
-    {
-        public static Task<EventOrNone> HandleAsync(CreateSingleEventCommand command, ICommandContext context) =>
-            Task.FromResult(EventOrNone.From(new TestCreated { Id = command.Id, Name = command.Name }, new TestTag(command.Id)));
-    }
-
-    private sealed record CreateMultiEventCommand(Guid Id) : ICommandWithHandler<CreateMultiEventCommand>
-    {
-        public static async Task<EventOrNone> HandleAsync(CreateMultiEventCommand command, ICommandContext context)
-        {
-            var tag = new TestTag(command.Id);
-            await context.AppendEvent(new TestCreated { Id = command.Id, Name = "first" }, tag);
-            await context.AppendEvent(new TestAdded { Id = command.Id }, tag);
-            return EventOrNone.Empty;
-        }
+        _executor = sp.GetRequiredService<GeneralSekibanExecutor>();
+        await _executor.ExecuteAsync(new CreateSingleEventTestCommand(Guid.NewGuid(), name), HandleSingleEventAsync);
     }
 }

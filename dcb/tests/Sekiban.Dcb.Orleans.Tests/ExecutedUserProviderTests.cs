@@ -19,6 +19,7 @@ using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
+using Sekiban.Dcb.TestSupport.ExecutedUser;
 using System.Text.Json;
 using Xunit;
 
@@ -60,7 +61,7 @@ public class ExecutedUserProviderTests : IAsyncLifetime
     [Fact]
     public async Task Orleans_Provider_Registered_In_Same_ServiceProvider_Is_Applied()
     {
-        var provider = new ConstantProvider("orleans-admin@contoso.com");
+        var provider = new ConstantExecutedUserProvider("orleans-admin@contoso.com");
         SetProvider(provider);
 
         var executor = CreateExecutorFromSiloServices();
@@ -79,7 +80,7 @@ public class ExecutedUserProviderTests : IAsyncLifetime
         SetProvider(null);
 
         var unseenServices = new ServiceCollection();
-        unseenServices.AddSingleton<IExecutedUserProvider>(new ConstantProvider("unseen-user"));
+        unseenServices.AddSingleton<IExecutedUserProvider>(new ConstantExecutedUserProvider("unseen-user"));
         var unseenSp = unseenServices.BuildServiceProvider();
 
         var executor = ActivatorUtilities.CreateInstance<OrleansDcbExecutor>(
@@ -155,13 +156,6 @@ public class ExecutedUserProviderTests : IAsyncLifetime
             multiProjectorTypes,
             queryTypes,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-    }
-
-    private sealed class ConstantProvider : IExecutedUserProvider
-    {
-        private readonly string _value;
-        public ConstantProvider(string value) => _value = value;
-        public string GetExecutedUser() => _value;
     }
 
     private sealed class ConfigurableProvider : IExecutedUserProvider

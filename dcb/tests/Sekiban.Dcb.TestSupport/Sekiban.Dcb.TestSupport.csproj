@@ -11,6 +11,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core.Model\Sekiban.Dcb.Core.Model.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Core.Testing\Sekiban.Dcb.Core.Testing.csproj" />
     </ItemGroup>
 
     <ItemGroup>
