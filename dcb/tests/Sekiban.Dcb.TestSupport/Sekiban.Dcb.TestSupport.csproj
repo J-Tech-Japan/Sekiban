@@ -5,6 +5,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
+        <IsTestProject>false</IsTestProject>
         <!-- Test-support only: shared fixtures for SEK-G13 and reused by SEK-G14. Not a product package. -->
     </PropertyGroup>
 

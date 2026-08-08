@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
@@ -44,6 +45,8 @@ public static class SekibanDcbPostgresExtensions
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
+        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
+        services.AddSekibanDcbProjectionStatusReader();
 
         return services;
     }
@@ -95,6 +98,8 @@ public static class SekibanDcbPostgresExtensions
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
+        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
+        services.AddSekibanDcbProjectionStatusReader();
 
         return services;
     }
@@ -129,6 +134,8 @@ public static class SekibanDcbPostgresExtensions
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
+        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
+        services.AddSekibanDcbProjectionStatusReader();
 
         return services;
     }

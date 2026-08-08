@@ -1,6 +1,7 @@
 using System;
 using Sekiban.Dcb.Runtime.Native;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Orleans.Streams;
@@ -70,6 +71,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly IMultiProjectionStateStore? _multiProjectionStateStore;
+    private readonly IProjectionStatusStore? _projectionStatusStore;
+    private readonly ProjectionStatusOptions _projectionStatusOptions;
+    private readonly string _activationId = Guid.CreateVersion7().ToString("N");
+    private long _projectionStatusSequence;
+    private int _projectionStatusDirty = 1;
+    private int _projectionStatusWriteInProgress;
+    private int _projectionStatusFailureAttempt;
+    private DateTimeOffset _projectionStatusNextAttemptUtc;
+    private DateTimeOffset _projectionStatusLastFailureLogUtc = DateTimeOffset.MinValue;
+    private DateTimeOffset _projectionStatusLastConflictLogUtc = DateTimeOffset.MinValue;
+    private IDisposable? _projectionStatusTimer;
+    private readonly object _projectionStatusCursorGate = new();
+    private string? _lastAppliedSortableUniqueId;
+    private string? _lastTraversedSortableUniqueId;
 
     // SEK-G20: the SOLE checkpoint-mutation coordinator. It — not the grain — holds the generation/tombstone CAS surface
     // and is the only type that calls any checkpoint mutation (CAS or legacy). It owns the adopted-token + rebuilt-pending
@@ -245,6 +260,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         bool ExternalStoreSaved,
         long UploadElapsedMs);
 
+    // Keep the pre-SEK-G24 constructor metadata intact for existing binary consumers. Orleans uses the annotated
+    // constructor below when the optional status services are registered; direct callers can continue using this
+    // compatibility overload and receive the original no-registry behavior.
     public MultiProjectionGrain(
         [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
         IProjectionActorHostFactory actorHostFactory,
@@ -257,6 +275,38 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         ILogger<MultiProjectionGrain>? logger = null,
         IEventStoreFactory? eventStoreFactory = null,
         IServiceIdProvider? serviceIdProvider = null)
+        : this(
+            state,
+            actorHostFactory,
+            eventStore,
+            subscriptionResolver,
+            multiProjectionStateStore,
+            eventStats,
+            actorOptions,
+            tempFileSnapshotManager,
+            logger,
+            eventStoreFactory,
+            serviceIdProvider,
+            projectionStatusStore: null,
+            projectionStatusOptions: null)
+    {
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public MultiProjectionGrain(
+        [PersistentState("multiProjection", "OrleansStorage")] IPersistentState<MultiProjectionGrainState> state,
+        IProjectionActorHostFactory actorHostFactory,
+        IEventStore eventStore,
+        IEventSubscriptionResolver? subscriptionResolver,
+        IMultiProjectionStateStore? multiProjectionStateStore,
+        Sekiban.Dcb.MultiProjections.IMultiProjectionEventStatistics? eventStats,
+        GeneralMultiProjectionActorOptions? actorOptions,
+        TempFileSnapshotManager? tempFileSnapshotManager = null,
+        ILogger<MultiProjectionGrain>? logger = null,
+        IEventStoreFactory? eventStoreFactory = null,
+        IServiceIdProvider? serviceIdProvider = null,
+        IProjectionStatusStore? projectionStatusStore = null,
+        ProjectionStatusOptions? projectionStatusOptions = null)
     {
         // Transfer ownership of the injected persistent state to the coordinated store immediately; keep no raw
         // IPersistentState reference on the grain so writes cannot bypass the single-writer gate. The live-fault
@@ -278,6 +328,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _logger = logger ?? NullLogger<MultiProjectionGrain>.Instance;
         _eventStoreFactory = eventStoreFactory;
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+        _projectionStatusStore = projectionStatusStore;
+        _projectionStatusOptions = projectionStatusOptions ?? new ProjectionStatusOptions();
 
         if (_injectedActorOptions is not null)
         {
@@ -1033,6 +1085,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             await _host.AddSerializableEventsAsync(newEvents, finishedCatchUp);
             _eventsProcessed += newEvents.Count;
+
+            var lastApplied = newEvents
+                .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+                .Last()
+                .SortableUniqueIdValue;
+            MarkProjectionStatusDirty(lastApplied, lastApplied);
 
             // Mark events as processed
             foreach (var ev in newEvents)
@@ -1991,6 +2049,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     forceFullReplay: false,
                     GetCurrentPositionAsync);
             var currentPosition = startLease.StartPosition;
+            MarkProjectionStatusDirty(currentPosition?.Value);
             var invocationReached = currentPosition;
             _catchUpProgress = new CatchUpProgress
             {
@@ -2256,6 +2315,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             else
                             {
                                 _eventsProcessed = record.EventsProcessed;
+                                MarkProjectionStatusDirty(record.LastSortableUniqueId, record.LastSortableUniqueId);
                                 ClearProcessedEventCache();
 
                                 // SEK-G18 (#1086): take the catch-up start verbatim from the restored checkpoint record, so
@@ -2514,6 +2574,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _batchTimer?.Dispose();
         _catchUpTimer?.Dispose();
         _faultPersistRetryTimer?.Dispose();
+        _projectionStatusTimer?.Dispose();
 
         await base.OnDeactivateAsync(reason, cancellationToken);
     }
@@ -2651,6 +2712,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _pendingStreamEvents.Clear();
         CompactRetainedCollections();
         _liveLastPosition = null;
+        lock (_projectionStatusCursorGate)
+        {
+            _lastAppliedSortableUniqueId = null;
+            _lastTraversedSortableUniqueId = null;
+        }
+        Interlocked.Exchange(ref _projectionStatusDirty, 1);
         _projectionFault = null;
         _catchUpTimer?.Dispose();
         _catchUpTimer = null;
@@ -2677,6 +2744,209 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         s.LastGoodEventsProcessed = 0;
         s.LastPersistTime = DateTime.UtcNow;
         ClearFaultFieldsOnCandidate(s);
+    }
+
+    private void MarkProjectionStatusDirty(
+        string? traversedPosition = null,
+        string? appliedPosition = null)
+    {
+        lock (_projectionStatusCursorGate)
+        {
+            if (!string.IsNullOrWhiteSpace(traversedPosition) &&
+                (string.IsNullOrWhiteSpace(_lastTraversedSortableUniqueId) ||
+                 string.Compare(traversedPosition, _lastTraversedSortableUniqueId, StringComparison.Ordinal) > 0))
+            {
+                _lastTraversedSortableUniqueId = traversedPosition;
+            }
+
+            if (!string.IsNullOrWhiteSpace(appliedPosition) &&
+                (string.IsNullOrWhiteSpace(_lastAppliedSortableUniqueId) ||
+                 string.Compare(appliedPosition, _lastAppliedSortableUniqueId, StringComparison.Ordinal) > 0))
+            {
+                _lastAppliedSortableUniqueId = appliedPosition;
+            }
+        }
+
+        Interlocked.Exchange(ref _projectionStatusDirty, 1);
+    }
+
+    private async Task WriteProjectionStatusHeartbeatAsync()
+    {
+        if (_projectionStatusStore is null || !_projectionStatusOptions.Enabled ||
+            Interlocked.Exchange(ref _projectionStatusWriteInProgress, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (_projectionStatusNextAttemptUtc > now)
+            {
+                return;
+            }
+
+            var projectorName = GetProjectorName();
+            var sequence = Volatile.Read(ref _projectionStatusSequence) + 1;
+            string? lastAppliedPosition;
+            string? lastTraversedPosition;
+            lock (_projectionStatusCursorGate)
+            {
+                lastAppliedPosition = _lastAppliedSortableUniqueId;
+                lastTraversedPosition = _lastTraversedSortableUniqueId;
+            }
+
+            var heartbeat = new ProjectionStatusHeartbeat(
+                _serviceId,
+                projectorName,
+                _stateStore.Committed.ProjectorVersion ?? _host?.GetProjectorVersion() ?? string.Empty,
+                string.IsNullOrWhiteSpace(_projectionStatusOptions.ClusterId)
+                    ? ProjectionStatusOptions.DefaultClusterId
+                    : _projectionStatusOptions.ClusterId,
+                _activationId,
+                sequence,
+                _eventsProcessed,
+                lastAppliedPosition ?? _liveLastPosition,
+                lastTraversedPosition,
+                now)
+            {
+                Phase = ResolveProjectionStatusPhase(),
+                LeaseExpiresAtUtc = now + ResolveProjectionStatusLeaseDuration(),
+                IsFaulted = IsProjectionStatusFaulted(),
+                FaultMessage = ResolveProjectionStatusFaultMessage()
+            };
+
+            var writeTimeout = _projectionStatusOptions.HeartbeatWriteTimeout > TimeSpan.Zero
+                ? _projectionStatusOptions.HeartbeatWriteTimeout
+                : TimeSpan.FromSeconds(5);
+            using var writeTimeoutCts = new CancellationTokenSource(writeTimeout);
+            var writeResult = await _projectionStatusStore.UpsertAsync(
+                heartbeat,
+                Volatile.Read(ref _projectionStatusSequence),
+                writeTimeoutCts.Token).ConfigureAwait(false);
+            if (!writeResult.IsSuccess)
+            {
+                ScheduleProjectionStatusRetry(now);
+                if (ShouldLogProjectionStatusFailure(now, ref _projectionStatusLastFailureLogUtc))
+                {
+                    _logger.LogDebug(
+                        writeResult.GetException(),
+                        "[{ProjectorName}] Projection status heartbeat failed; projection execution is unaffected",
+                        projectorName);
+                }
+                return;
+            }
+
+            var outcome = writeResult.GetValue();
+            if (outcome.Committed)
+            {
+                Volatile.Write(ref _projectionStatusSequence, sequence);
+                Interlocked.Exchange(ref _projectionStatusDirty, 0);
+                _projectionStatusFailureAttempt = 0;
+                _projectionStatusNextAttemptUtc = DateTimeOffset.MinValue;
+            }
+            else
+            {
+                // Another writer for this activation owns the newer sequence.  Re-base without replacing its row;
+                // the next timer tick will attempt the next sequence using the provider's observed token.
+                if (outcome.Current is { Sequence: var currentSequence } && currentSequence > sequence - 1)
+                {
+                    Volatile.Write(ref _projectionStatusSequence, currentSequence);
+                }
+
+                ScheduleProjectionStatusRetry(now);
+                if (ShouldLogProjectionStatusFailure(now, ref _projectionStatusLastConflictLogUtc))
+                {
+                    _logger.LogWarning(
+                        "[{ProjectorName}] Projection status heartbeat CAS conflict: {Reason}",
+                        projectorName,
+                        outcome.ConflictReason ?? "provider rejected stale sequence");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Status is observability only.  Await the provider operation, but never allow an outage to fault or slow
+            // the projection path.
+            ScheduleProjectionStatusRetry(DateTimeOffset.UtcNow);
+            var now = DateTimeOffset.UtcNow;
+            if (ShouldLogProjectionStatusFailure(now, ref _projectionStatusLastFailureLogUtc))
+            {
+                _logger.LogDebug(
+                    ex,
+                    "[{ProjectorName}] Projection status heartbeat exception; projection execution is unaffected",
+                    GetProjectorName());
+            }
+        }
+        finally
+        {
+            Volatile.Write(ref _projectionStatusWriteInProgress, 0);
+        }
+    }
+
+    private void ScheduleProjectionStatusRetry(DateTimeOffset now)
+    {
+        var attempt = Math.Min(6, ++_projectionStatusFailureAttempt);
+        var retryBase = _projectionStatusOptions.HeartbeatRetryBase > TimeSpan.Zero
+            ? _projectionStatusOptions.HeartbeatRetryBase
+            : TimeSpan.FromSeconds(1);
+        var retryCap = _projectionStatusOptions.HeartbeatRetryCap > TimeSpan.Zero
+            ? _projectionStatusOptions.HeartbeatRetryCap
+            : TimeSpan.FromSeconds(30);
+        var candidateTicks = retryBase.Ticks * Math.Pow(2, attempt - 1);
+        var delayTicks = Math.Min(retryCap.Ticks, Math.Max(1, (long)Math.Min(long.MaxValue, candidateTicks)));
+        var delay = TimeSpan.FromTicks(delayTicks);
+        _projectionStatusNextAttemptUtc = now + delay;
+        Interlocked.Exchange(ref _projectionStatusDirty, 1);
+    }
+
+    private bool ShouldLogProjectionStatusFailure(DateTimeOffset now, ref DateTimeOffset lastLoggedUtc)
+    {
+        var interval = _projectionStatusOptions.HeartbeatFailureLogInterval > TimeSpan.Zero
+            ? _projectionStatusOptions.HeartbeatFailureLogInterval
+            : TimeSpan.FromSeconds(30);
+        if (now - lastLoggedUtc < interval)
+        {
+            return false;
+        }
+
+        lastLoggedUtc = now;
+        return true;
+    }
+
+    private string ResolveProjectionStatusPhase()
+    {
+        if (IsProjectionStatusFaulted())
+        {
+            return ProjectionStatusPhases.Faulted;
+        }
+
+        if (!_isInitialized)
+        {
+            return ProjectionStatusPhases.Starting;
+        }
+
+        return _catchUpProgress.IsActive
+            ? ProjectionStatusPhases.CatchingUp
+            : ProjectionStatusPhases.Active;
+    }
+
+    private bool IsProjectionStatusFaulted() =>
+        _projectionFault is not null ||
+        _stateStore.Committed.FaultEventId is not null ||
+        !_activationHealthy;
+
+    private string? ResolveProjectionStatusFaultMessage() =>
+        _projectionFault?.Message ??
+        _stateStore.Committed.FaultMessage ??
+        _activationFailureReason;
+
+    private TimeSpan ResolveProjectionStatusLeaseDuration()
+    {
+        var interval = _projectionStatusOptions.HeartbeatInterval > TimeSpan.Zero
+            ? _projectionStatusOptions.HeartbeatInterval
+            : TimeSpan.FromSeconds(30);
+        return TimeSpan.FromTicks(Math.Max(TimeSpan.FromMinutes(1).Ticks, interval.Ticks * 2));
     }
 
     private async Task EnsureInitializedAsync()
@@ -2719,6 +2989,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 Period = _batchTimeout,
                 Interleave = true
             });
+
+        if (_projectionStatusStore is not null && _projectionStatusOptions.Enabled)
+        {
+            var interval = _projectionStatusOptions.HeartbeatInterval > TimeSpan.Zero
+                ? _projectionStatusOptions.HeartbeatInterval
+                : TimeSpan.FromSeconds(30);
+            _projectionStatusTimer = this.RegisterGrainTimer(
+                async () => await WriteProjectionStatusHeartbeatAsync(),
+                new GrainTimerCreationOptions
+                {
+                    DueTime = TimeSpan.Zero,
+                    Period = interval,
+                    Interleave = true,
+                    KeepAlive = false
+                });
+        }
     }
 
     public Task RequestDeactivationAsync()
@@ -3045,6 +3331,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         _liveLastPosition = null;
+        lock (_projectionStatusCursorGate)
+        {
+            _lastAppliedSortableUniqueId = null;
+            _lastTraversedSortableUniqueId = null;
+        }
+        Interlocked.Exchange(ref _projectionStatusDirty, 1);
     }
 
     /// <summary>Re-establishes a persisted fault into the freshly-activated host so the first query fails closed.</summary>
@@ -3300,6 +3592,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // wins over host-payload inference and is consumed exactly once.
             var startLease = await _catchUpStartPositions.AcquireAsync(forceFull, GetCurrentPositionAsync);
             var currentPosition = startLease.StartPosition;
+            MarkProjectionStatusDirty(currentPosition?.Value);
 
             // NOTE: We intentionally skip reading all events to determine target position.
             // Reading 200k+ events just to find the latest position causes activation timeout.
@@ -3620,12 +3913,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         UpdateTargetPosition(events[^1].SortableUniqueIdValue);
+        // The registry cursor is the last event fetched, including events filtered out before projector application.
+        // It is intentionally distinct from the applied-event count and checkpoint cursor.
+        MarkProjectionStatusDirty(events[^1].SortableUniqueIdValue);
 
         var filtered = FilterByPositionAndProcessed(events, e => e.Id, e => e.SortableUniqueIdValue);
         var filteredCount = Math.Max(0, events.Count - filtered.Count);
         if (filtered.Count == 0)
         {
             _catchUpProgress.CurrentPosition = new SortableUniqueId(events[^1].SortableUniqueIdValue);
+            MarkProjectionStatusDirty(events[^1].SortableUniqueIdValue);
             LogCatchUpBatchSummary(
                 projectorName,
                 new CatchUpBatchTelemetry(
@@ -3766,6 +4063,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     fetchedCount++;
                     lastFetchedSortableUniqueId = ev.SortableUniqueIdValue;
                     UpdateTargetPosition(ev.SortableUniqueIdValue);
+                    MarkProjectionStatusDirty(ev.SortableUniqueIdValue);
 
                     if (_processedEventIds.Contains(ev.Id))
                     {
@@ -3838,6 +4136,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (appliedCount == 0)
             {
                 _catchUpProgress.CurrentPosition = new SortableUniqueId(lastFetchedSortableUniqueId!);
+                MarkProjectionStatusDirty(lastFetchedSortableUniqueId!);
                 LogCatchUpBatchSummary(
                     projectorName,
                     new CatchUpBatchTelemetry(
@@ -3995,6 +4294,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         _catchUpProgress.CurrentPosition = new SortableUniqueId(lastSortableUniqueIdValue);
+        MarkProjectionStatusDirty(lastSortableUniqueIdValue, lastSortableUniqueIdValue);
 
         var persistDecision = GetCatchUpPersistDecision(hybridCatchUpStore, hybridReadBatchMetadata);
         long persistElapsedMs = 0;
@@ -4218,6 +4518,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
             _lastEventTime = DateTime.UtcNow;
             _liveLastPosition = allEvents.Last().SortableUniqueIdValue;
+            MarkProjectionStatusDirty(_liveLastPosition, _liveLastPosition);
         }
     }
 
@@ -4458,6 +4759,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 .Last()
                 .SortableUniqueIdValue;
             _liveLastPosition = maxSortableId;
+            MarkProjectionStatusDirty(maxSortableId, newEvents.Count > 0 ? maxSortableId : null);
 
             _logger.LogDebug(
                 "[{ProjectorName}] Processed {EventCount} events - Total: {EventsProcessed:N0} events",
@@ -4565,6 +4867,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 .Last()
                 .SortableUniqueIdValue;
             _liveLastPosition = maxSortableId;
+            MarkProjectionStatusDirty(maxSortableId, maxSortableId);
 
             _logger.LogDebug(
                 "[{ProjectorName}] Processed {EventCount} buffered events - Total: {EventsProcessed:N0} events",
@@ -4713,6 +5016,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         var grainKey = GetGrainKey();
         var projectorName = GetProjectorName();
+        await CatchUpProductionTestHooks.PublishAsync(
+            CatchUpProductionHookPoint.ActivationLifecycleStarted,
+            new CatchUpProductionObservation(_serviceId, projectorName, null, null));
         _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] InitStreamsAsync called in lifecycle stage", projectorName);
 
         var streamInfo = _subscriptionResolver.Resolve(grainKey);

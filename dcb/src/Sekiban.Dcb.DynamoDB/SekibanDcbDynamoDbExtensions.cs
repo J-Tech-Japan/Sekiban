@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sekiban.Dcb;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
@@ -40,6 +41,8 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
+        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
+        services.AddSekibanDcbProjectionStatusReader();
         services.AddHostedService<DynamoDbInitializer>();
 
         return services;
@@ -65,6 +68,8 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
+        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
+        services.AddSekibanDcbProjectionStatusReader();
         services.AddHostedService<DynamoDbInitializer>();
 
         return services;
@@ -94,6 +99,8 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
         services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
+        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
+        services.AddSekibanDcbProjectionStatusReader();
         services.AddHostedService<DynamoDbInitializer>();
 
         return services;

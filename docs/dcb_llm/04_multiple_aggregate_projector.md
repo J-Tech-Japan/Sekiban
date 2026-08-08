@@ -56,6 +56,37 @@ The sample domain registers multiple generic projectors in `internalUsages/Dcb.D
 
 `src/Sekiban.Dcb.Orleans/Grains/MultiProjectionGrain.cs` contains the orchestrator that wires these pieces together.
 
+## Passive projection status (SEK-G24 / dcb-v10.10.0)
+
+Fleet dashboards can read a catch-up sample without activating a projection grain. Provider registrations include the
+passive `IProjectionStatusReader` and `ISerializedProjectionStatusReader` surfaces:
+
+```csharp
+var reader = serviceProvider.GetRequiredService<IProjectionStatusReader>();
+var result = await reader.ReadAsync(new ProjectionStatusReadRequest(ProjectorName: "WeatherForecast"));
+```
+
+Each `MultiProjectionGrain` writes a best-effort heartbeat on a dedicated 30-second timer. The timer is interleaved,
+non-keep-alive, and uses one CAS row per `(ServiceId, ProjectorName, ProjectorVersion, ClusterId)`; `ActivationId` is
+data in that row, so a replacement activation cannot create a second row or bypass the sequence fence. Storage writes
+use an independent bounded timeout, retry with capped backoff, and rate-limit repeated failure logs. Projection
+execution is never blocked by a status write. The passive reader samples one event-store denominator per service per
+sampling window (five seconds by default), then counts events after each distinct `LastTraversedSortableUniqueId`
+with bounded parallelism; this cursor includes filtered events, so `AppliedEventCount` may be smaller than the
+traversed head while `RemainingEventCount` is zero. `IsCaughtUp` additionally requires a fresh leased row that is
+not faulted and has no fresh-cluster conflict. Every sample carries `SampledAtUtc` and `Consistency == "bestEffort"`;
+it is not an atomic head/count transaction.
+
+Use the three status tiers for different operator questions: (1) the passive registry for a fleet-wide catch-up
+overview, (2) the persisted snapshot APIs for restoration/checkpoint detail, and (3) an activated grain query when an
+authoritative, current projection result is required. The existing snapshot and grain status APIs remain unchanged.
+
+For Cloud/WASM transport, use the additive `ISerializedProjectionStatusReader` and its V1 envelope. The serialized
+boundary binds `ServiceId` from the server's `IServiceIdProvider`; a client cannot select another service. Keep the
+endpoint operator-only and default-deny it at the host boundary: map it only when needed and require an explicit
+authorization policy (for example, `RequireAuthorization("ProjectionStatusOperator")`). Do not expose it with
+`AllowAnonymous`; the existing `ISerializedSekibanDcbExecutor` contract is unchanged.
+
 ## Snapshot Offloading
 
 Large projections can use `Sekiban.Dcb.BlobStorage.AzureStorage` to persist snapshots in Azure Blob Storage.

@@ -142,6 +142,40 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 | DynamoDB | `Sekiban.Dcb.DynamoDB` | `Sekiban.Dcb.BlobStorage.S3` | Production |
 | SQLite | `Sekiban.Dcb.Sqlite` | N/A | Development |
 
+## Passive projection status registry (SEK-G24 / dcb-v10.10.0)
+
+The passive `IProjectionStatusStore` is registered alongside each provider's projection-state store, and the
+`IProjectionStatusReader` composes its rows with event-store counts without resolving a grain. The sample is explicitly
+best effort: one denominator is sampled per service per sampling window (five seconds by default), remaining counts are
+taken after each distinct traversed cursor with bounded parallelism, and `SampledAtUtc` identifies the sample window.
+The CAS row identity is `(ServiceId, ProjectorName, ProjectorVersion, ClusterId)`; `ActivationId` is retained as row
+data. More than one fresh row across clusters for a `(ProjectorName, ProjectorVersion)` is reported as a conflict, and
+providers reject stale activation replacements instead of silently last-write-wins updating a different row.
+
+Storage layout and upgrade behavior:
+
+- PostgreSQL and SQLite create a dedicated `dcb_projection_statuses` table automatically, including on an existing
+  database. Heartbeats use an atomic expected-sequence CAS.
+- Cosmos DB and DynamoDB co-locate status rows with projection snapshots and mark them with
+  `documentType = "projectionStatus"`. Snapshot list, delete, scan, and latest-version queries accept legacy
+  discriminator-less snapshots but exclude status rows.
+- DynamoDB status listing intentionally uses a bounded filtered scan in this slice; add a dedicated status GSI only if
+  fleet size makes that escalation worthwhile.
+- Status reads and count sampling are read-only with respect to projection state; no grain activation is required.
+
+The serialized surface is the new `ISerializedProjectionStatusReader` with a V1 envelope. Its `ServiceId` is always
+bound from the server-side provider. Hosts should keep the endpoint absent or protected by an explicit operator policy
+by default, for example:
+
+```csharp
+app.MapGet("/ops/projection-status", async (ISerializedProjectionStatusReader reader) =>
+        Results.Bytes((await reader.ReadSerializedAsync()).GetValue(), "application/json"))
+   .RequireAuthorization("ProjectionStatusOperator");
+```
+
+Never use `AllowAnonymous` for this surface. `ISerializedSekibanDcbExecutor` remains untouched. This is the
+dcb-v10.10.0 release-note entry for SEK-G24.
+
 ## Consistency Contract
 
 This section documents the actual atomicity guarantees of `IEventStore.WriteSerializableEventsAsync` / `WriteEventsAsync` per provider. The two-phase Cosmos write design itself is unchanged; what has changed is how a failure of that write is handled.

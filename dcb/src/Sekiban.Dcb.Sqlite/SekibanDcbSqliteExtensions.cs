@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Sqlite.Services;
 using Sekiban.Dcb.Storage;
@@ -48,6 +49,8 @@ public static class SekibanDcbSqliteExtensions
             var serviceIdProvider = sp.GetRequiredService<IServiceIdProvider>();
             return new SqliteMultiProjectionStateStore(databasePath, logger, serviceIdProvider);
         });
+        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
+        services.AddSekibanDcbProjectionStatusReader();
 
         return services;
     }

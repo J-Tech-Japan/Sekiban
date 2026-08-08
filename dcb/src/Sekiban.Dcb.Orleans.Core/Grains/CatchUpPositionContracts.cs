@@ -87,6 +87,7 @@ internal readonly record struct CatchUpBatchResult(
 
 internal enum CatchUpProductionHookPoint
 {
+    ActivationLifecycleStarted,
     BackgroundBeforeGate,
     BackgroundEnteredGate,
     BackgroundRejectedAsSuperseded,

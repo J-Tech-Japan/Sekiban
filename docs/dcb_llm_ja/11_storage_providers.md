@@ -147,6 +147,31 @@ builder.Services.AddSekibanDcbPostgres("Host=localhost;Database=sekiban_dcb;User
 
 マイグレーションは `Sekiban.Dcb.Postgres.MigrationHost` から実行するか、Aspire の初期化サービスに任せます。
 
+## 受動的なプロジェクション状態レジストリ (SEK-G24 / dcb-v10.10.0)
+
+各プロバイダーは、プロジェクション状態ストアと同時に受動的な `IProjectionStatusStore` と reader を登録します。
+`IProjectionStatusReader` は Grain を解決せず、heartbeat とイベントストアの件数だけで状況を組み立てます。
+分母は service ごとに sampling window（既定 5 秒）あたり 1 回、残数は bounded parallelism で distinct な
+traversed cursor ごとに取得し、`SampledAtUtc` を付けた best-effort サンプルとして返します。CAS の行 identity は
+`(ServiceId, ProjectorName, ProjectorVersion, ClusterId)` で、`ActivationId` は行データとして保持します。1 つの
+`(ProjectorName, ProjectorVersion)` に fresh な cluster 行が複数ある場合は conflict として返し、古い activation
+の replacement が別行へ書き込まれることも、last-write-wins で隠されることもありません。
+
+保存形式は次のとおりです。
+
+- PostgreSQL と SQLite は `dcb_projection_statuses` 専用テーブルを、既存 DB に対しても自動作成します。heartbeat
+  は expected-sequence CAS で書き込みます。
+- Cosmos DB と DynamoDB は projection snapshot と同じ領域に保存し、`documentType = "projectionStatus"` を付けます。
+  snapshot の list/delete/scan/latest-version は status 行を除外し、discriminator のない旧 snapshot は読み込めます。
+- DynamoDB の status 一覧はこの slice では bounded な filtered scan を使います。フリート規模で必要になった場合だけ
+  status 専用 GSI を追加する、という escalation path です。
+- 状態の読み取りと件数サンプルは projection state への書き込みではなく、Grain の activation も必要ありません。
+
+serialized 境界は新しい `ISerializedProjectionStatusReader` の V1 envelope です。`ServiceId` は常にサーバー側
+provider から決まり、ホストの endpoint は既定で deny としてください。必要な場合のみ operator 用 policy を明示し、
+例えば `RequireAuthorization("ProjectionStatusOperator")` を指定します。`AllowAnonymous` は使わず、既存の
+`ISerializedSekibanDcbExecutor` は変更しません。これは dcb-v10.10.0 の SEK-G24 release note です。
+
 ---
 
 ## 設定のポイント

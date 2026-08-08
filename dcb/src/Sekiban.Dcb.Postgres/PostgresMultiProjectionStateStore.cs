@@ -15,8 +15,9 @@ namespace Sekiban.Dcb.Postgres;
 ///     surface (<see cref="IGenerationAwareCheckpointStore" />) — the AUTHORITATIVE provider — using conditional
 ///     row-count UPDATEs on the exact (Generation, Revision, Lifecycle) token.
 /// </summary>
-public class PostgresMultiProjectionStateStore :
+public partial class PostgresMultiProjectionStateStore :
     IMultiProjectionStateStore,
+    IProjectionStatusStore,
     IStorageDurabilityDescriptorProvider,
     IGenerationAwareCheckpointStore
 {
