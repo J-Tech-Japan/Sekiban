@@ -212,6 +212,12 @@ public class ProjectionStatusOptions
     /// <summary>Minimum interval between repeated heartbeat failure/conflict log entries.</summary>
     public TimeSpan HeartbeatFailureLogInterval { get; set; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>Initial delay for a failed heartbeat retry.</summary>
+    public TimeSpan HeartbeatRetryBase { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>Maximum delay for exponential heartbeat retries.</summary>
+    public TimeSpan HeartbeatRetryCap { get; set; } = TimeSpan.FromSeconds(30);
+
     /// <summary>Allows a host to turn the heartbeat writer off while retaining the read surface.</summary>
     public bool Enabled { get; set; } = true;
 }

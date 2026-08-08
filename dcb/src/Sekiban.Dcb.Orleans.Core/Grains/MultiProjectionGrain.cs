@@ -2887,7 +2887,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private void ScheduleProjectionStatusRetry(DateTimeOffset now)
     {
         var attempt = Math.Min(6, ++_projectionStatusFailureAttempt);
-        var delay = TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, attempt - 1)));
+        var retryBase = _projectionStatusOptions.HeartbeatRetryBase > TimeSpan.Zero
+            ? _projectionStatusOptions.HeartbeatRetryBase
+            : TimeSpan.FromSeconds(1);
+        var retryCap = _projectionStatusOptions.HeartbeatRetryCap > TimeSpan.Zero
+            ? _projectionStatusOptions.HeartbeatRetryCap
+            : TimeSpan.FromSeconds(30);
+        var candidateTicks = retryBase.Ticks * Math.Pow(2, attempt - 1);
+        var delayTicks = Math.Min(retryCap.Ticks, Math.Max(1, (long)Math.Min(long.MaxValue, candidateTicks)));
+        var delay = TimeSpan.FromTicks(delayTicks);
         _projectionStatusNextAttemptUtc = now + delay;
         Interlocked.Exchange(ref _projectionStatusDirty, 1);
     }
@@ -5008,6 +5016,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         var grainKey = GetGrainKey();
         var projectorName = GetProjectorName();
+        await CatchUpProductionTestHooks.PublishAsync(
+            CatchUpProductionHookPoint.ActivationLifecycleStarted,
+            new CatchUpProductionObservation(_serviceId, projectorName, null, null));
         _logger.LogDebug("[SimplifiedPureGrain-{ProjectorName}] InitStreamsAsync called in lifecycle stage", projectorName);
 
         var streamInfo = _subscriptionResolver.Resolve(grainKey);

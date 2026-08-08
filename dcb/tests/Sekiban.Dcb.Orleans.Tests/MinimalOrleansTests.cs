@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.TestingHost;
 using ResultBoxes;
@@ -29,11 +30,13 @@ public class MinimalOrleansTests : IAsyncLifetime
     private static readonly CountingInMemoryEventStore SharedEventStore = CreateSharedEventStore();
     private static readonly Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore SharedStateStore = new();
     private static readonly TestProjectionStatusStore SharedStatusStore = new(SharedStateStore);
+    private static readonly ProjectionStatusOptions SharedStatusOptions = new();
     private TestCluster _cluster = null!;
     private IClusterClient _client => _cluster.Client;
 
     public async Task InitializeAsync()
     {
+        ResetStatusOptions();
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
         var uniqueId = Guid.NewGuid().ToString("N")[..8];
@@ -82,27 +85,63 @@ public class MinimalOrleansTests : IAsyncLifetime
     [Fact]
     public async Task PassiveStatusReader_DoesNotActivateGrain_WhileDirectGrainCallDoes()
     {
+        const string projectorName = "test-projector";
+        var activationCount = 0;
+        var backgroundCatchUpCount = 0;
+        var activationStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var backgroundStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var lifecycleObserver = CatchUpProductionTestHooks.Register(
+            DefaultServiceIdProvider.DefaultServiceId,
+            projectorName,
+            (point, _) =>
+            {
+                if (point == CatchUpProductionHookPoint.ActivationLifecycleStarted)
+                {
+                    Interlocked.Increment(ref activationCount);
+                    activationStarted.TrySetResult(true);
+                }
+                else if (point == CatchUpProductionHookPoint.BackgroundBeforeGate)
+                {
+                    Interlocked.Increment(ref backgroundCatchUpCount);
+                    backgroundStarted.TrySetResult(true);
+                }
+
+                return Task.CompletedTask;
+            });
+
         var reader = new ProjectionStatusReader(
             SharedStateStore,
             SharedEventStore,
             new DefaultServiceIdProvider(),
             new ProjectionStatusOptions { SamplingWindow = TimeSpan.Zero });
 
-        var before = await reader.ReadAsync(new ProjectionStatusReadRequest(ProjectorName: "empty-test"));
+        var before = await reader.ReadAsync(new ProjectionStatusReadRequest(ProjectorName: projectorName));
         Assert.True(before.IsSuccess);
         Assert.Empty(before.GetValue());
-        Assert.Empty((await SharedStateStore.ListAsync("empty-test", "1.0")).GetValue());
+        Assert.Empty((await SharedStateStore.ListAsync(projectorName, "1.0")).GetValue());
+
+        // Wait through the lifecycle/background-start interval. A passive reader must not cause even the grain
+        // lifecycle participant to run, so this is stronger than observing an empty heartbeat table.
+        await Task.Delay(TimeSpan.FromSeconds(1));
+        Assert.False(activationStarted.Task.IsCompleted);
+        Assert.Equal(0, Volatile.Read(ref activationCount));
+        Assert.Equal(0, Volatile.Read(ref backgroundCatchUpCount));
 
         // This is the contrast case: obtaining and calling a grain is the operation that creates the activation and
         // its dedicated heartbeat row.
-        var grain = _client.GetGrain<IMultiProjectionGrain>("empty-test");
+        var grain = _client.GetGrain<IMultiProjectionGrain>(projectorName);
         await grain.GetStatusAsync();
+
+        await activationStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await backgroundStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, Volatile.Read(ref activationCount));
+        Assert.Equal(1, Volatile.Read(ref backgroundCatchUpCount));
 
         var deadline = DateTime.UtcNow.AddSeconds(5);
         IReadOnlyList<ProjectionStatusHeartbeat> rows = Array.Empty<ProjectionStatusHeartbeat>();
         while (DateTime.UtcNow < deadline)
         {
-            rows = (await SharedStateStore.ListAsync("empty-test", "1.0")).GetValue();
+            rows = (await SharedStateStore.ListAsync(projectorName, "1.0")).GetValue();
             if (rows.Count > 0)
             {
                 break;
@@ -137,6 +176,89 @@ public class MinimalOrleansTests : IAsyncLifetime
             }
 
             Assert.True(SharedStatusStore.SawCancelableToken);
+        }
+        finally
+        {
+            SharedStatusStore.Reset();
+        }
+    }
+
+    [Fact]
+    public async Task FailingStatusRegistry_IsolatedFromRealGrainWork_AndRetriesWithCappedBackoff()
+    {
+        SharedStatusOptions.HeartbeatRetryBase = TimeSpan.FromSeconds(2);
+        SharedStatusOptions.HeartbeatRetryCap = TimeSpan.FromSeconds(3);
+        SharedStatusStore.ThrowOnUpsert = true;
+
+        try
+        {
+            var grain = _client.GetGrain<IMultiProjectionGrain>("test-projector");
+            var initialStatus = await grain.GetStatusAsync();
+            Assert.False(initialStatus.HasError);
+
+            await WaitUntilAsync(
+                () => SharedStatusStore.UpsertCalls >= 1,
+                TimeSpan.FromSeconds(2));
+            var callsBeforeProjectionWork = SharedStatusStore.UpsertCalls;
+
+            var baseTick = DateTime.UtcNow.Ticks;
+            var position = SortableUniqueId.GetTickString(baseTick) + SortableUniqueId.GetIdString(Guid.Empty);
+            var serializableEvent = new SerializableEvent(
+                Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new TestProjectionEvent(42))),
+                position,
+                Guid.CreateVersion7(),
+                new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "registry-failure-test"),
+                new List<string>(),
+                nameof(TestProjectionEvent));
+
+            // This is a real grain event/catch-up path. It must not synchronously write the passive registry; only the
+            // dedicated heartbeat timer is allowed to call the failing store.
+            await grain.SeedEventsAsync(new[] { serializableEvent });
+            MultiProjectionHeadStatusSnapshot projectionHead = await grain.GetProjectionHeadStatusAsync();
+            var projectionDeadline = DateTime.UtcNow.AddSeconds(5);
+            while (!string.Equals(projectionHead.CurrentLastSortableUniqueId, position, StringComparison.Ordinal) &&
+                   DateTime.UtcNow < projectionDeadline)
+            {
+                await grain.RefreshAsync();
+                projectionHead = await grain.GetProjectionHeadStatusAsync();
+                if (!string.Equals(projectionHead.CurrentLastSortableUniqueId, position, StringComparison.Ordinal))
+                {
+                    await Task.Delay(50);
+                }
+            }
+
+            var afterWorkStatus = await grain.GetStatusAsync();
+            var health = await grain.GetHealthStatusAsync();
+            var snapshot = await grain.GetSnapshotJsonAsync(canGetUnsafeState: false);
+            var received = await grain.IsSortableUniqueIdReceived(position);
+
+            Assert.True(
+                string.Equals(projectionHead.CurrentLastSortableUniqueId, position, StringComparison.Ordinal),
+                $"Expected current head {position}, actual current={projectionHead.CurrentLastSortableUniqueId}, " +
+                $"consistent={projectionHead.ConsistentLastSortableUniqueId}, " +
+                $"eventReads={SharedEventStore.ReadAllSerializableEventsCallCount}.");
+            Assert.True(SharedEventStore.ReadAllSerializableEventsCallCount > 0);
+            Assert.True(afterWorkStatus.EventsProcessed >= 1);
+            Assert.False(afterWorkStatus.HasError);
+            Assert.True(health.IsHealthy);
+            Assert.Null(health.LastError);
+            Assert.True(snapshot.IsSuccess, snapshot.IsSuccess ? string.Empty : snapshot.GetException().ToString());
+            Assert.True(received);
+            Assert.Equal(callsBeforeProjectionWork, SharedStatusStore.UpsertCalls);
+
+            // The failed write leaves the dirty/retry path armed. With a 2s base and 3s cap, later timer ticks
+            // provide observable intervals of approximately 2s, then 3s, and remain capped at 3s.
+            await WaitUntilAsync(
+                () => SharedStatusStore.UpsertCalls >= 4,
+                TimeSpan.FromSeconds(12));
+            var callTimes = SharedStatusStore.UpsertCallTimes;
+            Assert.True(callTimes.Count >= 4);
+            var intervals = callTimes
+                .Zip(callTimes.Skip(1), (first, second) => second - first)
+                .ToArray();
+            Assert.InRange(intervals[0], TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(4));
+            Assert.InRange(intervals[1], TimeSpan.FromSeconds(2.5), TimeSpan.FromSeconds(5));
+            Assert.InRange(intervals[2], TimeSpan.FromSeconds(2.5), TimeSpan.FromSeconds(5));
         }
         finally
         {
@@ -384,12 +506,7 @@ public class MinimalOrleansTests : IAsyncLifetime
                     services.AddSingleton(SharedStateStore);
                     services.AddSingleton<IMultiProjectionStateStore>(provider => provider.GetRequiredService<Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore>());
                     services.AddSingleton<IProjectionStatusStore>(SharedStatusStore);
-                    services.AddSingleton(new ProjectionStatusOptions
-                    {
-                        HeartbeatInterval = TimeSpan.FromMilliseconds(100),
-                        HeartbeatWriteTimeout = TimeSpan.FromMilliseconds(50),
-                        HeartbeatFailureLogInterval = TimeSpan.FromSeconds(1)
-                    });
+                    services.AddSingleton(SharedStatusOptions);
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
@@ -615,18 +732,41 @@ public class MinimalOrleansTests : IAsyncLifetime
     private sealed class TestProjectionStatusStore : IProjectionStatusStore
     {
         private readonly IProjectionStatusStore _inner;
+        private readonly ConcurrentQueue<DateTimeOffset> _upsertCallTimes = new();
+        private int _upsertCalls;
+        private int _sawCancelableToken;
+        private int _throwOnUpsert;
 
         public TestProjectionStatusStore(IProjectionStatusStore inner) => _inner = inner;
 
         public TimeSpan Delay { get; set; }
-        public bool SawCancelableToken { get; private set; }
+        public bool ThrowOnUpsert
+        {
+            get => Volatile.Read(ref _throwOnUpsert) != 0;
+            set => Volatile.Write(ref _throwOnUpsert, value ? 1 : 0);
+        }
+
+        public int UpsertCalls => Volatile.Read(ref _upsertCalls);
+        public bool SawCancelableToken => Volatile.Read(ref _sawCancelableToken) != 0;
+        public IReadOnlyList<DateTimeOffset> UpsertCallTimes => _upsertCallTimes.ToArray();
 
         public async Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
             ProjectionStatusHeartbeat heartbeat,
             long expectedSequence,
             CancellationToken cancellationToken = default)
         {
-            SawCancelableToken |= cancellationToken.CanBeCanceled;
+            Interlocked.Increment(ref _upsertCalls);
+            _upsertCallTimes.Enqueue(DateTimeOffset.UtcNow);
+            if (cancellationToken.CanBeCanceled)
+            {
+                Interlocked.Exchange(ref _sawCancelableToken, 1);
+            }
+
+            if (ThrowOnUpsert)
+            {
+                throw new InvalidOperationException("Injected projection status registry failure.");
+            }
+
             if (Delay > TimeSpan.Zero)
             {
                 await Task.Delay(Delay, cancellationToken);
@@ -644,7 +784,38 @@ public class MinimalOrleansTests : IAsyncLifetime
         public void Reset()
         {
             Delay = TimeSpan.Zero;
-            SawCancelableToken = false;
+            ThrowOnUpsert = false;
+            Interlocked.Exchange(ref _upsertCalls, 0);
+            Interlocked.Exchange(ref _sawCancelableToken, 0);
+            while (_upsertCallTimes.TryDequeue(out _))
+            {
+            }
         }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (predicate())
+            {
+                return;
+            }
+
+            await Task.Delay(20);
+        }
+
+        Assert.True(predicate(), $"Condition was not met within {timeout}.");
+    }
+
+    private static void ResetStatusOptions()
+    {
+        SharedStatusOptions.HeartbeatInterval = TimeSpan.FromMilliseconds(100);
+        SharedStatusOptions.HeartbeatWriteTimeout = TimeSpan.FromMilliseconds(50);
+        SharedStatusOptions.HeartbeatFailureLogInterval = TimeSpan.FromSeconds(1);
+        SharedStatusOptions.HeartbeatRetryBase = TimeSpan.FromSeconds(1);
+        SharedStatusOptions.HeartbeatRetryCap = TimeSpan.FromSeconds(30);
+        SharedStatusOptions.Enabled = true;
     }
 }
