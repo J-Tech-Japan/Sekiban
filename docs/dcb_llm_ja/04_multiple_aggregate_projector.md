@@ -67,11 +67,14 @@ var result = await reader.ReadAsync(new ProjectionStatusReadRequest(ProjectorNam
 ```
 
 各 `MultiProjectionGrain` は専用の 30 秒タイマーで best-effort の heartbeat を書き込みます。タイマーは
-interleave、keep-alive 無効で、`(ClusterId, ActivationId, Sequence)` の CAS で古い activation をフェンスします。
-ストレージ障害は上限付きバックオフで再試行しますが、状態書き込みによってプロジェクション処理を止めません。
-reader は読み取り窓ごとにイベント総数の分母を 1 回だけ取得し、異なる `LastTraversedSortableUniqueId` ごとに
-後続イベント数を数えます。filtered event も traversed cursor に含むため、`AppliedEventCount` が小さくても
-`RemainingEventCount` が 0 になり得ます。サンプルには `SampledAtUtc` と `Consistency == "bestEffort"` が付き、
+interleave、keep-alive 無効で、物理行は `(ServiceId, ProjectorName, ProjectorVersion, ClusterId)` の 1 行です。
+`ActivationId` は行のデータとして保持するため、replacement activation が別行を作ったり sequence fence を
+迂回したりしません。ストレージ書き込みは独立した timeout と上限付きバックオフを使い、同じ失敗のログを
+レート制限します。状態書き込みによってプロジェクション処理を止めません。reader は service ごとに
+sampling window（既定 5 秒）あたりイベント総数の分母を 1 回だけ取得し、bounded parallelism で異なる
+`LastTraversedSortableUniqueId` ごとに後続イベント数を数えます。filtered event も traversed cursor に含むため、
+`AppliedEventCount` が小さくても `RemainingEventCount` が 0 になり得ます。`IsCaughtUp` はさらに fresh な lease、
+非 fault、fresh cluster conflict なしを要求します。サンプルには `SampledAtUtc` と `Consistency == "bestEffort"` が付き、
 atomic な head/count を主張しません。
 
 運用上の status は 3 層で使い分けます。(1) フリート全体の catch-up 概要には Grain を起動しない passive

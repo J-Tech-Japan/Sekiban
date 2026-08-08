@@ -146,9 +146,11 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 
 The passive `IProjectionStatusStore` is registered alongside each provider's projection-state store, and the
 `IProjectionStatusReader` composes its rows with event-store counts without resolving a grain. The sample is explicitly
-best effort: one denominator is sampled per read, remaining counts are taken after each distinct traversed cursor, and
-`SampledAtUtc` identifies the read window. A fresh row per `(ProjectorName, ProjectorVersion, ClusterId)` with more than
-one `ActivationId` is reported as a conflict; providers never silently last-write-wins a stale activation.
+best effort: one denominator is sampled per service per sampling window (five seconds by default), remaining counts are
+taken after each distinct traversed cursor with bounded parallelism, and `SampledAtUtc` identifies the sample window.
+The CAS row identity is `(ServiceId, ProjectorName, ProjectorVersion, ClusterId)`; `ActivationId` is retained as row
+data. More than one fresh row across clusters for a `(ProjectorName, ProjectorVersion)` is reported as a conflict, and
+providers reject stale activation replacements instead of silently last-write-wins updating a different row.
 
 Storage layout and upgrade behavior:
 

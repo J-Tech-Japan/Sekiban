@@ -67,11 +67,15 @@ var result = await reader.ReadAsync(new ProjectionStatusReadRequest(ProjectorNam
 ```
 
 Each `MultiProjectionGrain` writes a best-effort heartbeat on a dedicated 30-second timer. The timer is interleaved,
-non-keep-alive, fenced by `(ClusterId, ActivationId, Sequence)`, and retries storage failures with bounded backoff.
-Projection execution is never blocked by a status write. The passive reader samples the event-store denominator once,
-then counts events after each distinct `LastTraversedSortableUniqueId`; this cursor includes filtered events, so
-`AppliedEventCount` may be smaller than the traversed head while `RemainingEventCount` is zero. Every sample carries
-`SampledAtUtc` and `Consistency == "bestEffort"`; it is not an atomic head/count transaction.
+non-keep-alive, and uses one CAS row per `(ServiceId, ProjectorName, ProjectorVersion, ClusterId)`; `ActivationId` is
+data in that row, so a replacement activation cannot create a second row or bypass the sequence fence. Storage writes
+use an independent bounded timeout, retry with capped backoff, and rate-limit repeated failure logs. Projection
+execution is never blocked by a status write. The passive reader samples one event-store denominator per service per
+sampling window (five seconds by default), then counts events after each distinct `LastTraversedSortableUniqueId`
+with bounded parallelism; this cursor includes filtered events, so `AppliedEventCount` may be smaller than the
+traversed head while `RemainingEventCount` is zero. `IsCaughtUp` additionally requires a fresh leased row that is
+not faulted and has no fresh-cluster conflict. Every sample carries `SampledAtUtc` and `Consistency == "bestEffort"`;
+it is not an atomic head/count transaction.
 
 Use the three status tiers for different operator questions: (1) the passive registry for a fleet-wide catch-up
 overview, (2) the persisted snapshot APIs for restoration/checkpoint detail, and (3) an activated grain query when an

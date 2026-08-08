@@ -17,12 +17,14 @@ public static class ProjectionStatusServiceCollectionExtensions
     public static IServiceCollection AddSekibanDcbProjectionStatusReader(this IServiceCollection services)
     {
         services.TryAddSingleton<ProjectionStatusOptions>();
+        services.TryAddSingleton<ProjectionStatusReadWindowCache>();
         services.TryAddTransient<IProjectionStatusReader>(serviceProvider =>
             new ProjectionStatusReader(
                 serviceProvider.GetRequiredService<IProjectionStatusStore>(),
                 serviceProvider.GetRequiredService<IEventStore>(),
                 serviceProvider.GetService<IServiceIdProvider>(),
-                serviceProvider.GetRequiredService<ProjectionStatusOptions>()));
+                serviceProvider.GetRequiredService<ProjectionStatusOptions>(),
+                serviceProvider.GetRequiredService<ProjectionStatusReadWindowCache>()));
         services.TryAddTransient<ISerializedProjectionStatusReader>(serviceProvider =>
             new SerializedProjectionStatusReader(
                 serviceProvider.GetRequiredService<IProjectionStatusReader>(),

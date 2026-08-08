@@ -174,6 +174,18 @@ public class CosmosMultiProjectionState
     [JsonProperty("recordedAtUtc")]
     public DateTimeOffset RecordedAtUtc { get; set; }
 
+    [JsonProperty("phase")]
+    public string? Phase { get; set; }
+
+    [JsonProperty("leaseExpiresAtUtc")]
+    public DateTimeOffset? LeaseExpiresAtUtc { get; set; }
+
+    [JsonProperty("isFaulted")]
+    public bool IsFaulted { get; set; }
+
+    [JsonProperty("faultMessage")]
+    public string? FaultMessage { get; set; }
+
     /// <summary>
     ///     Creates a CosmosMultiProjectionState from a MultiProjectionStateRecord.
     /// </summary>
@@ -237,7 +249,11 @@ public class CosmosMultiProjectionState
             AppliedEventCount = heartbeat.AppliedEventCount,
             LastAppliedSortableUniqueId = heartbeat.LastAppliedSortableUniqueId,
             LastTraversedSortableUniqueId = heartbeat.LastTraversedSortableUniqueId,
-            RecordedAtUtc = heartbeat.RecordedAtUtc
+            RecordedAtUtc = heartbeat.RecordedAtUtc,
+            Phase = heartbeat.Phase,
+            LeaseExpiresAtUtc = heartbeat.LeaseExpiresAtUtc,
+            IsFaulted = heartbeat.IsFaulted,
+            FaultMessage = heartbeat.FaultMessage
         };
     }
 
@@ -251,7 +267,13 @@ public class CosmosMultiProjectionState
         AppliedEventCount,
         LastAppliedSortableUniqueId,
         LastTraversedSortableUniqueId,
-        RecordedAtUtc);
+        RecordedAtUtc)
+    {
+        Phase = Phase ?? ProjectionStatusPhases.Unknown,
+        LeaseExpiresAtUtc = LeaseExpiresAtUtc,
+        IsFaulted = IsFaulted,
+        FaultMessage = FaultMessage
+    };
 
     /// <summary>
     ///     Converts this CosmosMultiProjectionState to a MultiProjectionStateRecord.

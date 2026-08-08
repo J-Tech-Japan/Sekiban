@@ -79,6 +79,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private int _projectionStatusWriteInProgress;
     private int _projectionStatusFailureAttempt;
     private DateTimeOffset _projectionStatusNextAttemptUtc;
+    private DateTimeOffset _projectionStatusLastFailureLogUtc = DateTimeOffset.MinValue;
+    private DateTimeOffset _projectionStatusLastConflictLogUtc = DateTimeOffset.MinValue;
     private IDisposable? _projectionStatusTimer;
     private readonly object _projectionStatusCursorGate = new();
     private string? _lastAppliedSortableUniqueId;
@@ -2806,19 +2808,32 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _eventsProcessed,
                 lastAppliedPosition ?? _liveLastPosition,
                 lastTraversedPosition,
-                now);
+                now)
+            {
+                Phase = ResolveProjectionStatusPhase(),
+                LeaseExpiresAtUtc = now + ResolveProjectionStatusLeaseDuration(),
+                IsFaulted = IsProjectionStatusFaulted(),
+                FaultMessage = ResolveProjectionStatusFaultMessage()
+            };
 
+            var writeTimeout = _projectionStatusOptions.HeartbeatWriteTimeout > TimeSpan.Zero
+                ? _projectionStatusOptions.HeartbeatWriteTimeout
+                : TimeSpan.FromSeconds(5);
+            using var writeTimeoutCts = new CancellationTokenSource(writeTimeout);
             var writeResult = await _projectionStatusStore.UpsertAsync(
                 heartbeat,
                 Volatile.Read(ref _projectionStatusSequence),
-                CancellationToken.None).ConfigureAwait(false);
+                writeTimeoutCts.Token).ConfigureAwait(false);
             if (!writeResult.IsSuccess)
             {
                 ScheduleProjectionStatusRetry(now);
-                _logger.LogDebug(
-                    writeResult.GetException(),
-                    "[{ProjectorName}] Projection status heartbeat failed; projection execution is unaffected",
-                    projectorName);
+                if (ShouldLogProjectionStatusFailure(now, ref _projectionStatusLastFailureLogUtc))
+                {
+                    _logger.LogDebug(
+                        writeResult.GetException(),
+                        "[{ProjectorName}] Projection status heartbeat failed; projection execution is unaffected",
+                        projectorName);
+                }
                 return;
             }
 
@@ -2840,10 +2855,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
 
                 ScheduleProjectionStatusRetry(now);
-                _logger.LogWarning(
-                    "[{ProjectorName}] Projection status heartbeat CAS conflict: {Reason}",
-                    projectorName,
-                    outcome.ConflictReason ?? "provider rejected stale sequence");
+                if (ShouldLogProjectionStatusFailure(now, ref _projectionStatusLastConflictLogUtc))
+                {
+                    _logger.LogWarning(
+                        "[{ProjectorName}] Projection status heartbeat CAS conflict: {Reason}",
+                        projectorName,
+                        outcome.ConflictReason ?? "provider rejected stale sequence");
+                }
             }
         }
         catch (Exception ex)
@@ -2851,10 +2869,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Status is observability only.  Await the provider operation, but never allow an outage to fault or slow
             // the projection path.
             ScheduleProjectionStatusRetry(DateTimeOffset.UtcNow);
-            _logger.LogDebug(
-                ex,
-                "[{ProjectorName}] Projection status heartbeat exception; projection execution is unaffected",
-                GetProjectorName());
+            var now = DateTimeOffset.UtcNow;
+            if (ShouldLogProjectionStatusFailure(now, ref _projectionStatusLastFailureLogUtc))
+            {
+                _logger.LogDebug(
+                    ex,
+                    "[{ProjectorName}] Projection status heartbeat exception; projection execution is unaffected",
+                    GetProjectorName());
+            }
         }
         finally
         {
@@ -2868,6 +2890,55 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var delay = TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, attempt - 1)));
         _projectionStatusNextAttemptUtc = now + delay;
         Interlocked.Exchange(ref _projectionStatusDirty, 1);
+    }
+
+    private bool ShouldLogProjectionStatusFailure(DateTimeOffset now, ref DateTimeOffset lastLoggedUtc)
+    {
+        var interval = _projectionStatusOptions.HeartbeatFailureLogInterval > TimeSpan.Zero
+            ? _projectionStatusOptions.HeartbeatFailureLogInterval
+            : TimeSpan.FromSeconds(30);
+        if (now - lastLoggedUtc < interval)
+        {
+            return false;
+        }
+
+        lastLoggedUtc = now;
+        return true;
+    }
+
+    private string ResolveProjectionStatusPhase()
+    {
+        if (IsProjectionStatusFaulted())
+        {
+            return ProjectionStatusPhases.Faulted;
+        }
+
+        if (!_isInitialized)
+        {
+            return ProjectionStatusPhases.Starting;
+        }
+
+        return _catchUpProgress.IsActive
+            ? ProjectionStatusPhases.CatchingUp
+            : ProjectionStatusPhases.Active;
+    }
+
+    private bool IsProjectionStatusFaulted() =>
+        _projectionFault is not null ||
+        _stateStore.Committed.FaultEventId is not null ||
+        !_activationHealthy;
+
+    private string? ResolveProjectionStatusFaultMessage() =>
+        _projectionFault?.Message ??
+        _stateStore.Committed.FaultMessage ??
+        _activationFailureReason;
+
+    private TimeSpan ResolveProjectionStatusLeaseDuration()
+    {
+        var interval = _projectionStatusOptions.HeartbeatInterval > TimeSpan.Zero
+            ? _projectionStatusOptions.HeartbeatInterval
+            : TimeSpan.FromSeconds(30);
+        return TimeSpan.FromTicks(Math.Max(TimeSpan.FromMinutes(1).Ticks, interval.Ticks * 2));
     }
 
     private async Task EnsureInitializedAsync()

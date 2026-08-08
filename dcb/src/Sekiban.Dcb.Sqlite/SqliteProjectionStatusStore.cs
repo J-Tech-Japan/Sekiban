@@ -20,7 +20,11 @@ public partial class SqliteMultiProjectionStateStore
                 LastAppliedSortableUniqueId TEXT NULL,
                 LastTraversedSortableUniqueId TEXT NULL,
                 RecordedAtUtc TEXT NOT NULL,
-                PRIMARY KEY (ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId)
+                Phase TEXT NULL,
+                LeaseExpiresAtUtc TEXT NULL,
+                IsFaulted INTEGER NOT NULL DEFAULT 0,
+                FaultMessage TEXT NULL,
+                PRIMARY KEY (ServiceId, ProjectorName, ProjectorVersion, ClusterId)
             );
             CREATE INDEX IF NOT EXISTS IX_ProjectionStatuses_Projector
                 ON dcb_projection_statuses(ServiceId, ProjectorName, ProjectorVersion, ClusterId);
@@ -57,21 +61,29 @@ public partial class SqliteMultiProjectionStateStore
             command.CommandText = """
                 INSERT INTO dcb_projection_statuses
                     (ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId, Sequence,
-                     AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc)
+                     AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc,
+                     Phase, LeaseExpiresAtUtc, IsFaulted, FaultMessage)
                 SELECT @serviceId, @projectorName, @projectorVersion, @clusterId, @activationId, @sequence,
-                       @appliedEventCount, @lastAppliedSortableUniqueId, @lastTraversedSortableUniqueId, @recordedAtUtc
+                       @appliedEventCount, @lastAppliedSortableUniqueId, @lastTraversedSortableUniqueId, @recordedAtUtc,
+                       @phase, @leaseExpiresAtUtc, @isFaulted, @faultMessage
                 WHERE @expectedSequence = 0
-                ON CONFLICT(ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId)
+                ON CONFLICT(ServiceId, ProjectorName, ProjectorVersion, ClusterId)
                 DO UPDATE SET
+                    ActivationId = excluded.ActivationId,
                     Sequence = excluded.Sequence,
                     AppliedEventCount = excluded.AppliedEventCount,
                     LastAppliedSortableUniqueId = excluded.LastAppliedSortableUniqueId,
                     LastTraversedSortableUniqueId = excluded.LastTraversedSortableUniqueId,
-                    RecordedAtUtc = excluded.RecordedAtUtc
+                    RecordedAtUtc = excluded.RecordedAtUtc,
+                    Phase = excluded.Phase,
+                    LeaseExpiresAtUtc = excluded.LeaseExpiresAtUtc,
+                    IsFaulted = excluded.IsFaulted,
+                    FaultMessage = excluded.FaultMessage
                 WHERE dcb_projection_statuses.Sequence = @expectedSequence
                   AND excluded.Sequence > dcb_projection_statuses.Sequence
                 RETURNING ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId, Sequence,
-                          AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc;
+                          AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc,
+                          Phase, LeaseExpiresAtUtc, IsFaulted, FaultMessage;
                 """;
             AddStatusParameter(command, "@serviceId", heartbeat.ServiceId);
             AddStatusParameter(command, "@projectorName", heartbeat.ProjectorName);
@@ -83,6 +95,10 @@ public partial class SqliteMultiProjectionStateStore
             AddStatusParameter(command, "@lastAppliedSortableUniqueId", (object?)heartbeat.LastAppliedSortableUniqueId ?? DBNull.Value);
             AddStatusParameter(command, "@lastTraversedSortableUniqueId", (object?)heartbeat.LastTraversedSortableUniqueId ?? DBNull.Value);
             AddStatusParameter(command, "@recordedAtUtc", heartbeat.RecordedAtUtc.ToString("O"));
+            AddStatusParameter(command, "@phase", heartbeat.Phase);
+            AddStatusParameter(command, "@leaseExpiresAtUtc", (object?)heartbeat.LeaseExpiresAtUtc?.ToString("O") ?? DBNull.Value);
+            AddStatusParameter(command, "@isFaulted", heartbeat.IsFaulted ? 1 : 0);
+            AddStatusParameter(command, "@faultMessage", (object?)heartbeat.FaultMessage ?? DBNull.Value);
             AddStatusParameter(command, "@expectedSequence", expectedSequence);
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -119,7 +135,8 @@ public partial class SqliteMultiProjectionStateStore
             await using var command = connection.CreateCommand();
             command.CommandText = """
                 SELECT ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId, Sequence,
-                       AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc
+                       AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc,
+                       Phase, LeaseExpiresAtUtc, IsFaulted, FaultMessage
                 FROM dcb_projection_statuses
                 WHERE ServiceId = @serviceId
                   AND (@projectorName IS NULL OR ProjectorName = @projectorName)
@@ -160,7 +177,15 @@ public partial class SqliteMultiProjectionStateStore
         reader.GetInt64(6),
         reader.IsDBNull(7) ? null : reader.GetString(7),
         reader.IsDBNull(8) ? null : reader.GetString(8),
-        DateTimeOffset.Parse(reader.GetString(9), System.Globalization.CultureInfo.InvariantCulture));
+        DateTimeOffset.Parse(reader.GetString(9), System.Globalization.CultureInfo.InvariantCulture))
+    {
+        Phase = reader.IsDBNull(10) ? ProjectionStatusPhases.Unknown : reader.GetString(10),
+        LeaseExpiresAtUtc = reader.IsDBNull(11)
+            ? null
+            : DateTimeOffset.Parse(reader.GetString(11), System.Globalization.CultureInfo.InvariantCulture),
+        IsFaulted = !reader.IsDBNull(12) && reader.GetInt64(12) != 0,
+        FaultMessage = reader.IsDBNull(13) ? null : reader.GetString(13)
+    };
 
     private static async Task<ProjectionStatusHeartbeat?> ReadCurrentHeartbeatAsync(
         SqliteConnection connection,
@@ -170,17 +195,16 @@ public partial class SqliteMultiProjectionStateStore
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT ServiceId, ProjectorName, ProjectorVersion, ClusterId, ActivationId, Sequence,
-                   AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc
+                   AppliedEventCount, LastAppliedSortableUniqueId, LastTraversedSortableUniqueId, RecordedAtUtc,
+                   Phase, LeaseExpiresAtUtc, IsFaulted, FaultMessage
             FROM dcb_projection_statuses
             WHERE ServiceId = @serviceId AND ProjectorName = @projectorName
-              AND ProjectorVersion = @projectorVersion AND ClusterId = @clusterId
-              AND ActivationId = @activationId;
+              AND ProjectorVersion = @projectorVersion AND ClusterId = @clusterId;
             """;
         AddStatusParameter(command, "@serviceId", heartbeat.ServiceId);
         AddStatusParameter(command, "@projectorName", heartbeat.ProjectorName);
         AddStatusParameter(command, "@projectorVersion", heartbeat.ProjectorVersion);
         AddStatusParameter(command, "@clusterId", heartbeat.ClusterId);
-        AddStatusParameter(command, "@activationId", heartbeat.ActivationId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ? ReadHeartbeat(reader) : null;
     }

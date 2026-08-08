@@ -18,17 +18,34 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
     private readonly IEventStore _eventStore;
     private readonly IServiceIdProvider _serviceIdProvider;
     private readonly ProjectionStatusOptions _options;
+    private readonly ProjectionStatusReadWindowCache _readWindowCache;
 
     public ProjectionStatusReader(
         IProjectionStatusStore statusStore,
         IEventStore eventStore,
         IServiceIdProvider? serviceIdProvider = null,
         ProjectionStatusOptions? options = null)
+        : this(
+            statusStore,
+            eventStore,
+            serviceIdProvider,
+            options,
+            new ProjectionStatusReadWindowCache())
+    {
+    }
+
+    public ProjectionStatusReader(
+        IProjectionStatusStore statusStore,
+        IEventStore eventStore,
+        IServiceIdProvider? serviceIdProvider,
+        ProjectionStatusOptions? options,
+        ProjectionStatusReadWindowCache? readWindowCache)
     {
         _statusStore = statusStore ?? throw new ArgumentNullException(nameof(statusStore));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
         _options = options ?? new ProjectionStatusOptions();
+        _readWindowCache = readWindowCache ?? new ProjectionStatusReadWindowCache();
     }
 
     public async Task<ResultBox<IReadOnlyList<ProjectionStatusSnapshot>>> ReadAsync(
@@ -54,17 +71,16 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
                 return ResultBox.Error<IReadOnlyList<ProjectionStatusSnapshot>>(rowsResult.GetException());
             }
 
-            // This is intentionally one call, even when the registry is empty: it defines the sample window's global
-            // denominator and keeps the counting contract observable to provider tests.
-            var totalResult = await _eventStore.GetEventCountAsync().ConfigureAwait(false);
-            if (!totalResult.IsSuccess)
-            {
-                return ResultBox.Error<IReadOnlyList<ProjectionStatusSnapshot>>(totalResult.GetException());
-            }
-
             var rows = rowsResult.GetValue();
-            var total = Math.Max(0, totalResult.GetValue());
-            var sampledAt = DateTimeOffset.UtcNow;
+            // The denominator is sampled once per service/read window and shared by all projector filters. It is
+            // deliberately read-side only; heartbeat writes never call this path.
+            var sample = await _readWindowCache.GetOrSampleAsync(
+                serviceId,
+                _options.SamplingWindow,
+                () => _eventStore.GetEventCountAsync(),
+                cancellationToken).ConfigureAwait(false);
+            var total = sample.TotalEventCount;
+            var sampledAt = sample.SampledAtUtc;
             var remainingByCursor = new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
             var cursors = rows
                 .Select(row => row.LastTraversedSortableUniqueId)
@@ -98,15 +114,25 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
                 ? _options.FreshnessWindow
                 : TimeSpan.FromMinutes(2));
             var conflicts = rows
-                .GroupBy(row => (row.ProjectorName, row.ProjectorVersion, row.ClusterId))
+                // A cluster is the CAS row identity, but conflict is a fleet-level signal: two fresh writers from
+                // distinct clusters for one projector/version must remain visible as a conflict.
+                .GroupBy(row => (row.ProjectorName, row.ProjectorVersion))
                 .ToDictionary(
                     group => group.Key,
-                    group => group
-                        .Where(row => row.RecordedAtUtc >= freshSince)
-                        .Select(row => row.ActivationId)
-                        .Distinct(StringComparer.Ordinal)
-                        .OrderBy(id => id, StringComparer.Ordinal)
-                        .ToArray());
+                    group =>
+                    {
+                        var freshRows = group.Where(row =>
+                                row.RecordedAtUtc >= freshSince &&
+                                (!row.LeaseExpiresAtUtc.HasValue || row.LeaseExpiresAtUtc.Value >= sampledAt))
+                            .ToArray();
+                        return (
+                            HasConflict: freshRows.Length > 1,
+                            ActivationIds: freshRows
+                                .Select(row => row.ActivationId)
+                                .Distinct(StringComparer.Ordinal)
+                                .OrderBy(id => id, StringComparer.Ordinal)
+                                .ToArray());
+                    });
 
             var snapshots = rows
                 .Select(row =>
@@ -114,8 +140,14 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
                     var remaining = string.IsNullOrWhiteSpace(row.LastTraversedSortableUniqueId)
                         ? total
                         : remainingByCursor[row.LastTraversedSortableUniqueId!];
-                    var activationIds = conflicts[(row.ProjectorName, row.ProjectorVersion, row.ClusterId)];
-                    var hasConflict = activationIds.Length > 1;
+                    var conflict = conflicts[(row.ProjectorName, row.ProjectorVersion)];
+                    var activationIds = conflict.ActivationIds;
+                    var hasConflict = conflict.HasConflict;
+                    var leaseFresh = !row.LeaseExpiresAtUtc.HasValue || row.LeaseExpiresAtUtc.Value >= sampledAt;
+                    var rowFresh = row.RecordedAtUtc >= freshSince && leaseFresh;
+                    var faulted = row.IsFaulted ||
+                        !string.IsNullOrWhiteSpace(row.FaultMessage) ||
+                        string.Equals(row.Phase, ProjectionStatusPhases.Faulted, StringComparison.Ordinal);
                     return new ProjectionStatusSnapshot(
                         row.ProjectorName,
                         row.ProjectorVersion,
@@ -129,9 +161,16 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
                         remaining,
                         sampledAt,
                         ProjectionStatusSnapshot.BestEffortConsistency,
-                        total == 0 || remaining == 0,
+                        remaining == 0 && rowFresh && !faulted && !hasConflict,
                         hasConflict,
-                        hasConflict ? activationIds : Array.Empty<string>());
+                        hasConflict ? activationIds : Array.Empty<string>())
+                    {
+                        Phase = row.Phase,
+                        LeaseExpiresAtUtc = row.LeaseExpiresAtUtc,
+                        IsFaulted = faulted,
+                        FaultMessage = row.FaultMessage,
+                        IsFresh = rowFresh
+                    };
                 })
                 .OrderBy(snapshot => snapshot.ProjectorName, StringComparer.Ordinal)
                 .ThenBy(snapshot => snapshot.ProjectorVersion, StringComparer.Ordinal)
@@ -164,6 +203,14 @@ public sealed class SerializedProjectionStatusReader : ISerializedProjectionStat
         WriteIndented = false
     };
 
+    private static readonly JsonSerializerOptions RequestJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        PropertyNameCaseInsensitive = false,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        WriteIndented = false
+    };
+
     private readonly IProjectionStatusReader _reader;
     private readonly IServiceIdProvider _serviceIdProvider;
 
@@ -173,6 +220,52 @@ public sealed class SerializedProjectionStatusReader : ISerializedProjectionStat
     {
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+    }
+
+    public async Task<ResultBox<byte[]>> AcceptAsync(
+        ReadOnlyMemory<byte> utf8Json,
+        CancellationToken cancellationToken = default)
+    {
+        // Phase 1: inspect only the raw discriminator. This must happen before request DTO binding and before the
+        // underlying reader is reachable, so malformed/unsupported input has zero registry/event-store reads.
+        var discriminator = ReadVersion(utf8Json.Span);
+        if (!discriminator.IsSuccess)
+        {
+            return ResultBox.Error<byte[]>(discriminator.GetException());
+        }
+
+        var version = discriminator.GetValue();
+        if (version != SerializedProjectionStatusRequestEnvelopeV1.CurrentVersion)
+        {
+            return ResultBox.Error<byte[]>(
+                new UnsupportedSerializedProjectionStatusVersionException(version));
+        }
+
+        try
+        {
+            // Phase 2: bind only the already-discriminated V1 shape. Unknown fields, wrong-typed filters, and null
+            // roots are shape errors, never version errors.
+            var envelope = JsonSerializer.Deserialize<SerializedProjectionStatusRequestEnvelopeV1>(
+                utf8Json.Span,
+                RequestJsonOptions);
+            if (envelope is null)
+            {
+                return ResultBox.Error<byte[]>(
+                    new SerializedProjectionStatusShapeException("Projection status request envelope is null."));
+            }
+
+            return await ReadSerializedAsync(envelope.ToRequest(), cancellationToken).ConfigureAwait(false);
+        }
+        catch (JsonException ex)
+        {
+            return ResultBox.Error<byte[]>(
+                new SerializedProjectionStatusShapeException(ex.Message));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or OverflowException)
+        {
+            return ResultBox.Error<byte[]>(
+                new SerializedProjectionStatusShapeException(ex.Message));
+        }
     }
 
     public async Task<ResultBox<byte[]>> ReadSerializedAsync(
@@ -191,6 +284,12 @@ public sealed class SerializedProjectionStatusReader : ISerializedProjectionStat
         return ResultBox.FromValue(JsonSerializer.SerializeToUtf8Bytes(envelope, JsonOptions));
     }
 
+    /// <summary>Serializes the canonical V1 request vector used by endpoints and wire-contract tests.</summary>
+    public static byte[] SerializeRequest(ProjectionStatusReadRequest? request = null) =>
+        JsonSerializer.SerializeToUtf8Bytes(
+            SerializedProjectionStatusRequestEnvelopeV1.Create(request),
+            RequestJsonOptions);
+
     public static ResultBox<SerializedProjectionStatusEnvelopeV1> Deserialize(ReadOnlySpan<byte> payload)
     {
         try
@@ -202,27 +301,13 @@ public sealed class SerializedProjectionStatusReader : ISerializedProjectionStat
                     new SerializedProjectionStatusShapeException("Projection status envelope root must be an object."));
             }
 
-            var versionProperties = document.RootElement
-                .EnumerateObject()
-                .Where(property => property.Name.Equals("version", StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-            var exactVersionProperties = versionProperties
-                .Where(property => property.Name.Equals("version", StringComparison.Ordinal))
-                .ToArray();
-            if (versionProperties.Any(property => !property.Name.Equals("version", StringComparison.Ordinal)) ||
-                exactVersionProperties.Length != 1)
+            var versionResult = ReadVersion(document.RootElement);
+            if (!versionResult.IsSuccess)
             {
-                return ResultBox.Error<SerializedProjectionStatusEnvelopeV1>(
-                    new SerializedProjectionStatusShapeException("Projection status envelope requires one exact version property."));
+                return ResultBox.Error<SerializedProjectionStatusEnvelopeV1>(versionResult.GetException());
             }
 
-            var versionElement = exactVersionProperties[0].Value;
-            if (versionElement.ValueKind != JsonValueKind.Number ||
-                !versionElement.TryGetInt32(out var version))
-            {
-                return ResultBox.Error<SerializedProjectionStatusEnvelopeV1>(
-                    new SerializedProjectionStatusShapeException("Projection status envelope requires integer version."));
-            }
+            var version = versionResult.GetValue();
 
             if (version != SerializedProjectionStatusEnvelopeV1.CurrentVersion)
             {
@@ -259,5 +344,54 @@ public sealed class SerializedProjectionStatusReader : ISerializedProjectionStat
             return ResultBox.Error<SerializedProjectionStatusEnvelopeV1>(
                 new SerializedProjectionStatusShapeException(ex.Message));
         }
+    }
+
+    private static ResultBox<int> ReadVersion(ReadOnlySpan<byte> payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload.ToArray());
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return ResultBox.Error<int>(
+                    new SerializedProjectionStatusShapeException(
+                        "Projection status request envelope root must be an object."));
+            }
+
+            return ReadVersion(document.RootElement);
+        }
+        catch (JsonException ex)
+        {
+            return ResultBox.Error<int>(new SerializedProjectionStatusShapeException(ex.Message));
+        }
+    }
+
+    private static ResultBox<int> ReadVersion(JsonElement root)
+    {
+        var versionProperties = root
+            .EnumerateObject()
+            .Where(property => property.Name.Equals("version", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var exactVersionProperties = versionProperties
+            .Where(property => property.Name.Equals("version", StringComparison.Ordinal))
+            .ToArray();
+        if (versionProperties.Any(property => !property.Name.Equals("version", StringComparison.Ordinal)) ||
+            exactVersionProperties.Length != 1)
+        {
+            return ResultBox.Error<int>(
+                new SerializedProjectionStatusShapeException(
+                    "Projection status envelope requires one exact version property."));
+        }
+
+        var versionElement = exactVersionProperties[0].Value;
+        if (versionElement.ValueKind != JsonValueKind.Number ||
+            !versionElement.TryGetInt32(out var version))
+        {
+            return ResultBox.Error<int>(
+                new SerializedProjectionStatusShapeException(
+                    "Projection status envelope requires integer version."));
+        }
+
+        return ResultBox.FromValue(version);
     }
 }

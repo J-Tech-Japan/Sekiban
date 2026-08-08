@@ -23,7 +23,9 @@ public class InMemoryMultiProjectionStateStore :
 {
     private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), MultiProjectionStateRecord> _states = new();
     private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), byte[]> _stateData = new();
-    private readonly Dictionary<(string ServiceId, string ProjectorName, string ProjectorVersion, string ClusterId, string ActivationId), ProjectionStatusHeartbeat> _statusRows = new();
+    // One CAS row per service/projector/version/cluster. ActivationId is data in the row, not part of its identity;
+    // this is what lets a replacement activation observe and fence the previous writer.
+    private readonly Dictionary<(string ServiceId, string ProjectorName, string ProjectorVersion, string ClusterId), ProjectionStatusHeartbeat> _statusRows = new();
 
     // SEK-G20 control plane: generation (rebuild epoch) + monotonic revision (exact-CAS token) + lifecycle. Guarded by
     // _casGate so every read-modify-write is atomic — the reference for what a native provider CAS must guarantee.
@@ -100,8 +102,7 @@ public class InMemoryMultiProjectionStateStore :
             serviceId,
             heartbeat.ProjectorName,
             heartbeat.ProjectorVersion,
-            heartbeat.ClusterId,
-            heartbeat.ActivationId);
+            heartbeat.ClusterId);
 
         lock (_casGate)
         {

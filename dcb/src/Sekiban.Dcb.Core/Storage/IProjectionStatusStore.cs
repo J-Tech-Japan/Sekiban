@@ -3,8 +3,9 @@ using ResultBoxes;
 namespace Sekiban.Dcb.Storage;
 
 /// <summary>
-///     Durable storage for passive projection heartbeat rows.  Implementations must enforce the expected-sequence
-///     compare-and-set atomically for a single (service, projector, version, cluster, activation) key.
+///     Durable storage for passive projection heartbeat rows. Implementations must enforce the expected-sequence
+///     compare-and-set atomically for a single (service, projector, version, cluster) row. ActivationId is data in
+///     that row, so a replacement activation cannot create a second physical row or bypass the CAS fence.
 /// </summary>
 public interface IProjectionStatusStore
 {

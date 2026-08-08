@@ -100,6 +100,34 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     private static string Id_(JObject item) => item["id"]?.Value<string>() ?? string.Empty;
     private static string? ETagOf(JObject item) => item["_etag"]?.Value<string>();
 
+    private static bool IsProjectionStateDocument(JObject item)
+    {
+        var documentType = item["documentType"]?.Value<string>();
+        return documentType is null || string.Equals(documentType, "projectionState", StringComparison.Ordinal);
+    }
+
+    private static IEnumerable<JObject> FilterDocumentKind(
+        IEnumerable<JObject> rows,
+        string text,
+        IReadOnlyDictionary<string, object> parameters)
+    {
+        if (text.Contains("c.documentType = @documentType", StringComparison.Ordinal))
+        {
+            var documentType = (string)parameters["@documentType"];
+            return rows.Where(row => string.Equals(
+                row["documentType"]?.Value<string>(),
+                documentType,
+                StringComparison.Ordinal));
+        }
+
+        if (text.Contains("@projectionState", StringComparison.Ordinal))
+        {
+            return rows.Where(IsProjectionStateDocument);
+        }
+
+        return rows;
+    }
+
     private void ThrowIfFaulted()
     {
         if (WriteFaults.Count > 0)
@@ -414,6 +442,17 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             var pk = (string)parameters["@pk"];
             rows = rows.Where(row => Pk(row) == pk);
 
+            if (text.Contains("documentType", StringComparison.Ordinal))
+            {
+                rows = FilterDocumentKind(rows, text, parameters);
+                if (text.Contains("eventsProcessed DESC", StringComparison.Ordinal))
+                {
+                    rows = rows.OrderByDescending(row => row["eventsProcessed"]?.Value<long>() ?? 0);
+                }
+
+                return rows.ToList();
+            }
+
             // Repair's candidate prefilter: every Guid rendering, compared case-insensitively.
             if (text.Contains("STRINGEQUALS(c.eventId", StringComparison.Ordinal))
             {
@@ -448,6 +487,22 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         {
             var serviceId = (string)parameters["@serviceId"];
             rows = rows.Where(row => row["serviceId"]?.Value<string>() == serviceId);
+
+            if (text.Contains("documentType", StringComparison.Ordinal))
+            {
+                rows = FilterDocumentKind(rows, text, parameters);
+                if (parameters.TryGetValue("@projectorName", out var projectorName) && projectorName is string name)
+                {
+                    rows = rows.Where(row => row["projectorName"]?.Value<string>() == name);
+                }
+
+                if (parameters.TryGetValue("@projectorVersion", out var projectorVersion) && projectorVersion is string version)
+                {
+                    rows = rows.Where(row => row["projectorVersion"]?.Value<string>() == version);
+                }
+
+                return rows.ToList();
+            }
 
             if (parameters.TryGetValue("@since", out var since))
             {

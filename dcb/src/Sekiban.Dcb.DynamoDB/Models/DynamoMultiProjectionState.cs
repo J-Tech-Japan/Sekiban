@@ -140,6 +140,18 @@ public class DynamoMultiProjectionState
     /// <summary>Status heartbeat timestamp.</summary>
     public DateTimeOffset? RecordedAtUtc { get; set; }
 
+    /// <summary>Status heartbeat lifecycle phase.</summary>
+    public string? Phase { get; set; }
+
+    /// <summary>Status heartbeat lease expiry.</summary>
+    public DateTimeOffset? LeaseExpiresAtUtc { get; set; }
+
+    /// <summary>Status heartbeat fault marker.</summary>
+    public bool IsFaulted { get; set; }
+
+    /// <summary>Secret-free status heartbeat fault summary.</summary>
+    public string? FaultMessage { get; set; }
+
     /// <summary>
     ///     Converts to DynamoDB attribute values.
     /// </summary>
@@ -185,6 +197,12 @@ public class DynamoMultiProjectionState
                 item["lastTraversedSortableUniqueId"] = new AttributeValue { S = LastTraversedSortableUniqueId };
             if (RecordedAtUtc.HasValue)
                 item["recordedAtUtc"] = new AttributeValue { S = RecordedAtUtc.Value.ToString("O") };
+            item["phase"] = new AttributeValue { S = Phase ?? ProjectionStatusPhases.Unknown };
+            if (LeaseExpiresAtUtc.HasValue)
+                item["leaseExpiresAtUtc"] = new AttributeValue { S = LeaseExpiresAtUtc.Value.ToString("O") };
+            item["isFaulted"] = new AttributeValue { BOOL = IsFaulted };
+            if (!string.IsNullOrWhiteSpace(FaultMessage))
+                item["faultMessage"] = new AttributeValue { S = FaultMessage };
         }
 
         if (!string.IsNullOrEmpty(StateData))
@@ -237,7 +255,13 @@ public class DynamoMultiProjectionState
             LastTraversedSortableUniqueId = item.GetValueOrDefault("lastTraversedSortableUniqueId")?.S,
             RecordedAtUtc = DateTimeOffset.TryParse(item.GetValueOrDefault("recordedAtUtc")?.S, out var recorded)
                 ? recorded
-                : null
+                : null,
+            Phase = item.GetValueOrDefault("phase")?.S,
+            LeaseExpiresAtUtc = DateTimeOffset.TryParse(item.GetValueOrDefault("leaseExpiresAtUtc")?.S, out var lease)
+                ? lease
+                : null,
+            IsFaulted = item.GetValueOrDefault("isFaulted")?.BOOL ?? false,
+            FaultMessage = item.GetValueOrDefault("faultMessage")?.S
         };
     }
 
@@ -298,7 +322,11 @@ public class DynamoMultiProjectionState
             AppliedEventCount = heartbeat.AppliedEventCount,
             LastAppliedSortableUniqueId = heartbeat.LastAppliedSortableUniqueId,
             LastTraversedSortableUniqueId = heartbeat.LastTraversedSortableUniqueId,
-            RecordedAtUtc = heartbeat.RecordedAtUtc
+            RecordedAtUtc = heartbeat.RecordedAtUtc,
+            Phase = heartbeat.Phase,
+            LeaseExpiresAtUtc = heartbeat.LeaseExpiresAtUtc,
+            IsFaulted = heartbeat.IsFaulted,
+            FaultMessage = heartbeat.FaultMessage
         };
     }
 
@@ -315,8 +343,14 @@ public class DynamoMultiProjectionState
             Sequence,
             AppliedEventCount,
             LastAppliedSortableUniqueId,
-            LastTraversedSortableUniqueId,
-            RecordedAtUtc ?? DateTimeOffset.UtcNow);
+        LastTraversedSortableUniqueId,
+        RecordedAtUtc ?? DateTimeOffset.UtcNow)
+    {
+        Phase = Phase ?? ProjectionStatusPhases.Unknown,
+        LeaseExpiresAtUtc = LeaseExpiresAtUtc,
+        IsFaulted = IsFaulted,
+        FaultMessage = FaultMessage
+    };
 
     /// <summary>
     ///     Converts to a MultiProjectionStateRecord.

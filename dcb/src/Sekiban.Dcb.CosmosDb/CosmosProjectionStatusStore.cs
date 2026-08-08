@@ -152,7 +152,9 @@ public partial class CosmosMultiProjectionStateStore
 
     private static string BuildStatusId(ProjectionStatusHeartbeat heartbeat)
     {
-        var identity = string.Join("\u001f", heartbeat.ProjectorVersion, heartbeat.ClusterId, heartbeat.ActivationId);
+        // ActivationId is row data, not identity. A replacement activation must contend on the same physical row and
+        // ETag as the writer it replaces.
+        var identity = string.Join("\u001f", heartbeat.ProjectorVersion, heartbeat.ClusterId);
         var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(identity))
             .TrimEnd('=')
             .Replace('+', '-')

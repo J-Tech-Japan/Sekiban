@@ -151,9 +151,11 @@ builder.Services.AddSekibanDcbPostgres("Host=localhost;Database=sekiban_dcb;User
 
 各プロバイダーは、プロジェクション状態ストアと同時に受動的な `IProjectionStatusStore` と reader を登録します。
 `IProjectionStatusReader` は Grain を解決せず、heartbeat とイベントストアの件数だけで状況を組み立てます。
-分母は読み取りごとに 1 回、残数は distinct な traversed cursor ごとに取得し、`SampledAtUtc` を付けた
-best-effort サンプルとして返します。同じ `(ProjectorName, ProjectorVersion, ClusterId)` に新しい
-`ActivationId` が複数ある場合は conflict として返し、古い activation の書き込みを last-write-wins で隠しません。
+分母は service ごとに sampling window（既定 5 秒）あたり 1 回、残数は bounded parallelism で distinct な
+traversed cursor ごとに取得し、`SampledAtUtc` を付けた best-effort サンプルとして返します。CAS の行 identity は
+`(ServiceId, ProjectorName, ProjectorVersion, ClusterId)` で、`ActivationId` は行データとして保持します。1 つの
+`(ProjectorName, ProjectorVersion)` に fresh な cluster 行が複数ある場合は conflict として返し、古い activation
+の replacement が別行へ書き込まれることも、last-write-wins で隠されることもありません。
 
 保存形式は次のとおりです。
 

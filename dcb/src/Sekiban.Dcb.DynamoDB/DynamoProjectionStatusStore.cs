@@ -190,7 +190,9 @@ public partial class DynamoMultiProjectionStateStore
 
     private static string BuildStatusSortKey(ProjectionStatusHeartbeat heartbeat)
     {
-        var identity = string.Join("|", heartbeat.ProjectorVersion, heartbeat.ClusterId, heartbeat.ActivationId);
+        // ActivationId is retained in the item as data. The physical CAS row is one row per service/projector/version
+        // and cluster, so a replacement activation cannot silently create a second row.
+        var identity = string.Join("|", heartbeat.ProjectorVersion, heartbeat.ClusterId);
         return $"STATUS#{Base64Url(identity)}";
     }
 

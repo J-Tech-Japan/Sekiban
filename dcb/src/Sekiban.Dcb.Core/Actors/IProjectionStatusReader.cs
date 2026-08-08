@@ -24,6 +24,14 @@ public interface IProjectionStatusReader
 /// </summary>
 public interface ISerializedProjectionStatusReader
 {
+    /// <summary>
+    ///     Accepts a raw V1 request envelope. The version discriminator and request shape are validated before the
+    ///     underlying reader is invoked, so rejected input performs zero status-store or event-store reads.
+    /// </summary>
+    Task<ResultBox<byte[]>> AcceptAsync(
+        ReadOnlyMemory<byte> utf8Json,
+        CancellationToken cancellationToken = default);
+
     Task<ResultBox<byte[]>> ReadSerializedAsync(
         ProjectionStatusReadRequest? request = null,
         CancellationToken cancellationToken = default);
