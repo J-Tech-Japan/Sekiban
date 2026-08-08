@@ -17,11 +17,13 @@ namespace Sekiban.Dcb.InMemory;
     "Moved to Sekiban.Dcb.Core.Testing (namespace Sekiban.Dcb.Testing). This type is volatile/in-process and is for tests only; it lives in a production package for historical reasons, which is how it reached production once. Behaviour is unchanged and it will not be removed before the next major version.")]
 public class InMemoryMultiProjectionStateStore :
     IMultiProjectionStateStore,
+    IProjectionStatusStore,
     IStorageDurabilityDescriptorProvider,
     IGenerationAwareCheckpointStore
 {
     private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), MultiProjectionStateRecord> _states = new();
     private readonly ConcurrentDictionary<(string ServiceId, string ProjectorName, string ProjectorVersion), byte[]> _stateData = new();
+    private readonly Dictionary<(string ServiceId, string ProjectorName, string ProjectorVersion, string ClusterId, string ActivationId), ProjectionStatusHeartbeat> _statusRows = new();
 
     // SEK-G20 control plane: generation (rebuild epoch) + monotonic revision (exact-CAS token) + lifecycle. Guarded by
     // _casGate so every read-modify-write is atomic — the reference for what a native provider CAS must guarantee.
@@ -60,6 +62,84 @@ public class InMemoryMultiProjectionStateStore :
             {
                 _control.Remove(key);
             }
+
+            foreach (var key in _statusRows.Keys.Where(k => k.ServiceId == serviceId).ToList())
+            {
+                _statusRows.Remove(key);
+            }
+        }
+    }
+
+    public Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+        ProjectionStatusHeartbeat heartbeat,
+        long expectedSequence,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(heartbeat);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var serviceId = CurrentServiceId;
+        if (!string.Equals(heartbeat.ServiceId, serviceId, StringComparison.Ordinal))
+        {
+            return Task.FromResult(ResultBox.Error<ProjectionStatusWriteResult>(
+                new UnauthorizedAccessException(
+                    $"Projection status heartbeat belongs to service '{heartbeat.ServiceId}', not '{serviceId}'.")));
+        }
+
+        if (string.IsNullOrWhiteSpace(heartbeat.ProjectorName) ||
+            string.IsNullOrWhiteSpace(heartbeat.ProjectorVersion) ||
+            string.IsNullOrWhiteSpace(heartbeat.ClusterId) ||
+            string.IsNullOrWhiteSpace(heartbeat.ActivationId) ||
+            heartbeat.Sequence <= 0)
+        {
+            return Task.FromResult(ResultBox.Error<ProjectionStatusWriteResult>(
+                new ArgumentException("Projection status heartbeat identity and sequence are required.")));
+        }
+
+        var key = (
+            serviceId,
+            heartbeat.ProjectorName,
+            heartbeat.ProjectorVersion,
+            heartbeat.ClusterId,
+            heartbeat.ActivationId);
+
+        lock (_casGate)
+        {
+            _statusRows.TryGetValue(key, out var current);
+            var currentSequence = current?.Sequence ?? 0;
+            if (currentSequence != expectedSequence || heartbeat.Sequence <= currentSequence)
+            {
+                return Task.FromResult(ResultBox.FromValue(
+                    ProjectionStatusWriteResult.Rejected(
+                        current,
+                        $"Heartbeat CAS rejected: expected sequence {expectedSequence}, current sequence {currentSequence}.")));
+            }
+
+            _statusRows[key] = heartbeat;
+            return Task.FromResult(ResultBox.FromValue(ProjectionStatusWriteResult.Success(heartbeat)));
+        }
+    }
+
+    public Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+        string? projectorName = null,
+        string? projectorVersion = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var serviceId = CurrentServiceId;
+        lock (_casGate)
+        {
+            var rows = _statusRows
+                .Where(pair => pair.Key.ServiceId == serviceId)
+                .Select(pair => pair.Value)
+                .Where(row => projectorName is null || string.Equals(row.ProjectorName, projectorName, StringComparison.Ordinal))
+                .Where(row => projectorVersion is null || string.Equals(row.ProjectorVersion, projectorVersion, StringComparison.Ordinal))
+                .OrderBy(row => row.ProjectorName, StringComparer.Ordinal)
+                .ThenBy(row => row.ProjectorVersion, StringComparer.Ordinal)
+                .ThenBy(row => row.ClusterId, StringComparer.Ordinal)
+                .ThenBy(row => row.ActivationId, StringComparer.Ordinal)
+                .ToArray();
+            return Task.FromResult(ResultBox.FromValue<IReadOnlyList<ProjectionStatusHeartbeat>>(rows));
         }
     }
 

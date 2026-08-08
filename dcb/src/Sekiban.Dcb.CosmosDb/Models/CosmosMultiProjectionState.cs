@@ -11,6 +11,13 @@ namespace Sekiban.Dcb.CosmosDb.Models;
 public class CosmosMultiProjectionState
 {
     /// <summary>
+    ///     Document discriminator.  New snapshots use <c>projectionState</c>; legacy snapshots without this property
+    ///     remain valid.  Status rows use <c>projectionStatus</c> and are excluded from snapshot scans.
+    /// </summary>
+    [JsonProperty("documentType")]
+    public string? DocumentType { get; set; }
+
+    /// <summary>
     ///     Composite partition key: "{serviceId}|{partitionKey}".
     /// </summary>
     [JsonProperty("pk")]
@@ -144,6 +151,29 @@ public class CosmosMultiProjectionState
     [JsonProperty("lifecycle")]
     public int Lifecycle { get; set; }
 
+    // Passive projection-status fields.  They intentionally share the document model because Cosmos/Dynamo status
+    // rows are co-located with snapshots and are separated by DocumentType.
+    [JsonProperty("clusterId")]
+    public string? ClusterId { get; set; }
+
+    [JsonProperty("activationId")]
+    public string? ActivationId { get; set; }
+
+    [JsonProperty("sequence")]
+    public long Sequence { get; set; }
+
+    [JsonProperty("appliedEventCount")]
+    public long AppliedEventCount { get; set; }
+
+    [JsonProperty("lastAppliedSortableUniqueId")]
+    public string? LastAppliedSortableUniqueId { get; set; }
+
+    [JsonProperty("lastTraversedSortableUniqueId")]
+    public string? LastTraversedSortableUniqueId { get; set; }
+
+    [JsonProperty("recordedAtUtc")]
+    public DateTimeOffset RecordedAtUtc { get; set; }
+
     /// <summary>
     ///     Creates a CosmosMultiProjectionState from a MultiProjectionStateRecord.
     /// </summary>
@@ -161,6 +191,7 @@ public class CosmosMultiProjectionState
         var partitionKey = record.GetPartitionKey();
         return new CosmosMultiProjectionState
         {
+            DocumentType = "projectionState",
             Pk = $"{serviceId}|{partitionKey}",
             ServiceId = serviceId,
             Id = record.ProjectorVersion,
@@ -183,6 +214,44 @@ public class CosmosMultiProjectionState
             BuildHost = record.BuildHost
         };
     }
+
+    public static CosmosMultiProjectionState FromStatusHeartbeat(
+        ProjectionStatusHeartbeat heartbeat,
+        string id,
+        string partitionKey,
+        string partitionValue)
+    {
+        ArgumentNullException.ThrowIfNull(heartbeat);
+        return new CosmosMultiProjectionState
+        {
+            DocumentType = "projectionStatus",
+            Pk = partitionValue,
+            ServiceId = heartbeat.ServiceId,
+            Id = id,
+            PartitionKey = partitionKey,
+            ProjectorName = heartbeat.ProjectorName,
+            ProjectorVersion = heartbeat.ProjectorVersion,
+            ClusterId = heartbeat.ClusterId,
+            ActivationId = heartbeat.ActivationId,
+            Sequence = heartbeat.Sequence,
+            AppliedEventCount = heartbeat.AppliedEventCount,
+            LastAppliedSortableUniqueId = heartbeat.LastAppliedSortableUniqueId,
+            LastTraversedSortableUniqueId = heartbeat.LastTraversedSortableUniqueId,
+            RecordedAtUtc = heartbeat.RecordedAtUtc
+        };
+    }
+
+    public ProjectionStatusHeartbeat ToStatusHeartbeat() => new(
+        ServiceId,
+        ProjectorName,
+        ProjectorVersion,
+        ClusterId ?? string.Empty,
+        ActivationId ?? string.Empty,
+        Sequence,
+        AppliedEventCount,
+        LastAppliedSortableUniqueId,
+        LastTraversedSortableUniqueId,
+        RecordedAtUtc);
 
     /// <summary>
     ///     Converts this CosmosMultiProjectionState to a MultiProjectionStateRecord.

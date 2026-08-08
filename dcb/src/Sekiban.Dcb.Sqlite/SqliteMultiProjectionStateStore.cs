@@ -19,8 +19,9 @@ namespace Sekiban.Dcb.Sqlite;
 ///     never uses the legacy upsert on a capable store (it routes through the CAS methods below).
 ///     </para>
 /// </summary>
-public class SqliteMultiProjectionStateStore :
+public partial class SqliteMultiProjectionStateStore :
     IMultiProjectionStateStore,
+    IProjectionStatusStore,
     IStorageDurabilityDescriptorProvider,
     IGenerationAwareCheckpointStore
 {
@@ -83,6 +84,7 @@ public class SqliteMultiProjectionStateStore :
         connection.Open();
 
         EnsureSchema(connection);
+        EnsureProjectionStatusSchema(connection);
     }
 
     private static void EnsureSchema(SqliteConnection connection)

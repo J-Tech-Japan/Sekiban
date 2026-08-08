@@ -16,8 +16,9 @@ namespace Sekiban.Dcb.CosmosDb;
 ///     surface (<see cref="IGenerationAwareCheckpointStore" />). The Cosmos <c>_etag</c> IS the exact per-mutation token
 ///     (IfMatch); generation + lifecycle are item fields (absent on pre-G20 docs → default 0 = generation 0, Active).
 /// </summary>
-public class CosmosMultiProjectionStateStore :
+public partial class CosmosMultiProjectionStateStore :
     IMultiProjectionStateStore,
+    IProjectionStatusStore,
     IStorageDurabilityDescriptorProvider,
     IGenerationAwareCheckpointStore
 {
@@ -104,8 +105,9 @@ public class CosmosMultiProjectionStateStore :
             var pk = GetPartitionKey(partitionKey, serviceId);
 
             var query = new QueryDefinition(
-                    "SELECT * FROM c WHERE c.pk = @pk ORDER BY c.eventsProcessed DESC")
-                .WithParameter("@pk", pk);
+                    "SELECT * FROM c WHERE c.pk = @pk AND (NOT IS_DEFINED(c.documentType) OR c.documentType = @projectionState) ORDER BY c.eventsProcessed DESC")
+                .WithParameter("@pk", pk)
+                .WithParameter("@projectionState", "projectionState");
 
             var iterator = container.GetItemQueryIterator<CosmosMultiProjectionState>(
                 query,
@@ -324,8 +326,10 @@ public class CosmosMultiProjectionStateStore :
             var settings = _containerResolver.ResolveStatesContainer(serviceId);
             var container = await _context.GetMultiProjectionStatesContainerAsync(settings).ConfigureAwait(false);
 
-            var query = new QueryDefinition("SELECT * FROM c WHERE c.serviceId = @serviceId")
-                .WithParameter("@serviceId", serviceId);
+            var query = new QueryDefinition(
+                    "SELECT * FROM c WHERE c.serviceId = @serviceId AND (NOT IS_DEFINED(c.documentType) OR c.documentType = @projectionState)")
+                .WithParameter("@serviceId", serviceId)
+                .WithParameter("@projectionState", "projectionState");
             var iterator = container.GetItemQueryIterator<CosmosMultiProjectionState>(query);
 
             var results = new List<ProjectorStateInfo>();
@@ -406,13 +410,17 @@ public class CosmosMultiProjectionStateStore :
             {
                 var partitionKey = $"MultiProjectionState_{projectorName}";
                 var pk = GetPartitionKey(partitionKey, serviceId);
-                query = new QueryDefinition("SELECT * FROM c WHERE c.pk = @pk")
-                    .WithParameter("@pk", pk);
+                query = new QueryDefinition(
+                        "SELECT * FROM c WHERE c.pk = @pk AND (NOT IS_DEFINED(c.documentType) OR c.documentType = @projectionState)")
+                    .WithParameter("@pk", pk)
+                    .WithParameter("@projectionState", "projectionState");
             }
             else
             {
-                query = new QueryDefinition("SELECT * FROM c WHERE c.serviceId = @serviceId")
-                    .WithParameter("@serviceId", serviceId);
+                query = new QueryDefinition(
+                        "SELECT * FROM c WHERE c.serviceId = @serviceId AND (NOT IS_DEFINED(c.documentType) OR c.documentType = @projectionState)")
+                    .WithParameter("@serviceId", serviceId)
+                    .WithParameter("@projectionState", "projectionState");
             }
 
             var iterator = container.GetItemQueryIterator<CosmosMultiProjectionState>(query);

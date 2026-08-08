@@ -19,10 +19,11 @@ namespace Sekiban.Dcb.DynamoDB;
 ///     on the exact (generation, revision, lifecycle) is the version condition; the required SOURCE lifecycle is hardcoded
 ///     per op so a tombstone can never be resurrected by a normal persist.
 /// </summary>
-public class DynamoMultiProjectionStateStore :
+public partial class DynamoMultiProjectionStateStore :
     IMultiProjectionStateStore,
     IStorageDurabilityDescriptorProvider,
-    IGenerationAwareCheckpointStore
+    IGenerationAwareCheckpointStore,
+    IProjectionStatusStore
 {
     /// <summary>Projection state lands in DynamoDB.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
@@ -262,10 +263,11 @@ public class DynamoMultiProjectionStateStore :
                 var response = await _client.ScanAsync(new ScanRequest
                 {
                     TableName = _context.ProjectionStatesTableName,
-                    FilterExpression = "serviceId = :serviceId",
+                    FilterExpression = "serviceId = :serviceId AND (attribute_not_exists(documentType) OR documentType = :projectionState)",
                     ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                     {
-                        [":serviceId"] = new AttributeValue { S = serviceId }
+                        [":serviceId"] = new AttributeValue { S = serviceId },
+                        [":projectionState"] = new AttributeValue { S = "projectionState" }
                     },
                     ExclusiveStartKey = lastKey,
                     Limit = _options.QueryPageSize
@@ -416,9 +418,11 @@ public class DynamoMultiProjectionStateStore :
             {
                 TableName = _context.ProjectionStatesTableName,
                 KeyConditionExpression = "pk = :pk",
+                FilterExpression = "attribute_not_exists(documentType) OR documentType = :projectionState",
                 ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
-                    [":pk"] = new AttributeValue { S = pk }
+                    [":pk"] = new AttributeValue { S = pk },
+                    [":projectionState"] = new AttributeValue { S = "projectionState" }
                 },
                 ExclusiveStartKey = lastKey,
                 Limit = _options.QueryPageSize
@@ -447,10 +451,11 @@ public class DynamoMultiProjectionStateStore :
             var response = await _client.ScanAsync(new ScanRequest
             {
                 TableName = _context.ProjectionStatesTableName,
-                FilterExpression = "serviceId = :serviceId",
+                FilterExpression = "serviceId = :serviceId AND (attribute_not_exists(documentType) OR documentType = :projectionState)",
                 ExpressionAttributeValues = new Dictionary<string, AttributeValue>
                 {
-                    [":serviceId"] = new AttributeValue { S = serviceId }
+                    [":serviceId"] = new AttributeValue { S = serviceId },
+                    [":projectionState"] = new AttributeValue { S = "projectionState" }
                 },
                 ExclusiveStartKey = lastKey,
                 Limit = _options.QueryPageSize

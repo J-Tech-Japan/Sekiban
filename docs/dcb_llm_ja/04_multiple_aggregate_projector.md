@@ -56,6 +56,35 @@ public class WeatherForecastProjection : IMultiProjector<WeatherForecastProjecti
 
 実装詳細は `src/Sekiban.Dcb.Orleans/Grains/MultiProjectionGrain.cs` を参照してください。
 
+## 受動的なプロジェクション状態 (SEK-G24 / dcb-v10.10.0)
+
+フリート監視は、プロジェクション Grain を起動せずにキャッチアップ状況をサンプルできます。プロバイダーの
+登録時に `IProjectionStatusReader` と `ISerializedProjectionStatusReader` が登録されるため、次のように読み取れます。
+
+```csharp
+var reader = serviceProvider.GetRequiredService<IProjectionStatusReader>();
+var result = await reader.ReadAsync(new ProjectionStatusReadRequest(ProjectorName: "WeatherForecast"));
+```
+
+各 `MultiProjectionGrain` は専用の 30 秒タイマーで best-effort の heartbeat を書き込みます。タイマーは
+interleave、keep-alive 無効で、`(ClusterId, ActivationId, Sequence)` の CAS で古い activation をフェンスします。
+ストレージ障害は上限付きバックオフで再試行しますが、状態書き込みによってプロジェクション処理を止めません。
+reader は読み取り窓ごとにイベント総数の分母を 1 回だけ取得し、異なる `LastTraversedSortableUniqueId` ごとに
+後続イベント数を数えます。filtered event も traversed cursor に含むため、`AppliedEventCount` が小さくても
+`RemainingEventCount` が 0 になり得ます。サンプルには `SampledAtUtc` と `Consistency == "bestEffort"` が付き、
+atomic な head/count を主張しません。
+
+運用上の status は 3 層で使い分けます。(1) フリート全体の catch-up 概要には Grain を起動しない passive
+registry、(2) restore/checkpoint の詳細には永続化 snapshot API、(3) authoritative な最新の projection 結果が
+必要な場合には Grain query を使います。既存の snapshot API と Grain の status API は変更されません。
+
+Cloud/WASM の転送には既存の `ISerializedSekibanDcbExecutor` ではなく、新しい
+`ISerializedProjectionStatusReader` の V1 envelope を使います。serialized 境界の `ServiceId` はサーバー側の
+`IServiceIdProvider` から決まり、クライアントが別サービスを選ぶことはできません。ホスト側の endpoint は
+operator 専用として既定で deny し、必要な場合だけ明示的な認可ポリシー
+(`RequireAuthorization("ProjectionStatusOperator")` など) を要求して公開してください。
+`AllowAnonymous` は使わないでください。
+
 ## スナップショット退避
 
 `Sekiban.Dcb.BlobStorage.AzureStorage` を利用すると大規模な状態を Blob Storage に退避できます。

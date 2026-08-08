@@ -1,5 +1,6 @@
 using Amazon.DynamoDBv2.Model;
 using System.Globalization;
+using Sekiban.Dcb;
 using Sekiban.Dcb.MultiProjections;
 
 namespace Sekiban.Dcb.DynamoDB.Models;
@@ -9,6 +10,11 @@ namespace Sekiban.Dcb.DynamoDB.Models;
 /// </summary>
 public class DynamoMultiProjectionState
 {
+    /// <summary>
+    ///     Logical document kind. Legacy projection snapshots may omit this field.
+    /// </summary>
+    public string? DocumentType { get; set; }
+
     /// <summary>
     ///     Partition key: SERVICE#{serviceId}#PROJECTOR#{projectorName}
     /// </summary>
@@ -113,6 +119,27 @@ public class DynamoMultiProjectionState
     /// <summary>SEK-G20 lifecycle: 0 = Active, 1 = Tombstoned. Absent → defaults to 0 (Active).</summary>
     public int Lifecycle { get; set; }
 
+    /// <summary>Status heartbeat cluster identity.</summary>
+    public string? ClusterId { get; set; }
+
+    /// <summary>Status heartbeat activation identity.</summary>
+    public string? ActivationId { get; set; }
+
+    /// <summary>Status heartbeat sequence.</summary>
+    public long Sequence { get; set; }
+
+    /// <summary>Status heartbeat applied event count.</summary>
+    public long AppliedEventCount { get; set; }
+
+    /// <summary>Status heartbeat last applied cursor.</summary>
+    public string? LastAppliedSortableUniqueId { get; set; }
+
+    /// <summary>Status heartbeat last traversed cursor.</summary>
+    public string? LastTraversedSortableUniqueId { get; set; }
+
+    /// <summary>Status heartbeat timestamp.</summary>
+    public DateTimeOffset? RecordedAtUtc { get; set; }
+
     /// <summary>
     ///     Converts to DynamoDB attribute values.
     /// </summary>
@@ -139,6 +166,26 @@ public class DynamoMultiProjectionState
             ["revision"] = new AttributeValue { N = Revision.ToString(CultureInfo.InvariantCulture) },
             ["lifecycle"] = new AttributeValue { N = Lifecycle.ToString(CultureInfo.InvariantCulture) }
         };
+
+        if (!string.IsNullOrWhiteSpace(DocumentType))
+            item["documentType"] = new AttributeValue { S = DocumentType };
+
+        if (string.Equals(DocumentType, "projectionStatus", StringComparison.Ordinal))
+        {
+            item["clusterId"] = new AttributeValue { S = ClusterId ?? string.Empty };
+            item["activationId"] = new AttributeValue { S = ActivationId ?? string.Empty };
+            item["sequence"] = new AttributeValue { N = Sequence.ToString(CultureInfo.InvariantCulture) };
+            item["appliedEventCount"] = new AttributeValue
+            {
+                N = AppliedEventCount.ToString(CultureInfo.InvariantCulture)
+            };
+            if (!string.IsNullOrWhiteSpace(LastAppliedSortableUniqueId))
+                item["lastAppliedSortableUniqueId"] = new AttributeValue { S = LastAppliedSortableUniqueId };
+            if (!string.IsNullOrWhiteSpace(LastTraversedSortableUniqueId))
+                item["lastTraversedSortableUniqueId"] = new AttributeValue { S = LastTraversedSortableUniqueId };
+            if (RecordedAtUtc.HasValue)
+                item["recordedAtUtc"] = new AttributeValue { S = RecordedAtUtc.Value.ToString("O") };
+        }
 
         if (!string.IsNullOrEmpty(StateData))
             item["stateData"] = new AttributeValue { S = StateData };
@@ -180,7 +227,17 @@ public class DynamoMultiProjectionState
             BuildHost = item.GetValueOrDefault("buildHost")?.S,
             Generation = long.TryParse(item.GetValueOrDefault("generation")?.N, out var gen) ? gen : 0,
             Revision = long.TryParse(item.GetValueOrDefault("revision")?.N, out var rev) ? rev : 0,
-            Lifecycle = int.TryParse(item.GetValueOrDefault("lifecycle")?.N, out var lc) ? lc : 0
+            Lifecycle = int.TryParse(item.GetValueOrDefault("lifecycle")?.N, out var lc) ? lc : 0,
+            DocumentType = item.GetValueOrDefault("documentType")?.S,
+            ClusterId = item.GetValueOrDefault("clusterId")?.S,
+            ActivationId = item.GetValueOrDefault("activationId")?.S,
+            Sequence = long.TryParse(item.GetValueOrDefault("sequence")?.N, out var seq) ? seq : 0,
+            AppliedEventCount = long.TryParse(item.GetValueOrDefault("appliedEventCount")?.N, out var applied) ? applied : 0,
+            LastAppliedSortableUniqueId = item.GetValueOrDefault("lastAppliedSortableUniqueId")?.S,
+            LastTraversedSortableUniqueId = item.GetValueOrDefault("lastTraversedSortableUniqueId")?.S,
+            RecordedAtUtc = DateTimeOffset.TryParse(item.GetValueOrDefault("recordedAtUtc")?.S, out var recorded)
+                ? recorded
+                : null
         };
     }
 
@@ -195,6 +252,7 @@ public class DynamoMultiProjectionState
         ArgumentNullException.ThrowIfNull(record);
         return new DynamoMultiProjectionState
         {
+            DocumentType = "projectionState",
             Pk = $"SERVICE#{serviceId}#PROJECTOR#{record.ProjectorName}",
             Sk = $"VERSION#{record.ProjectorVersion}",
             ServiceId = serviceId,
@@ -216,6 +274,49 @@ public class DynamoMultiProjectionState
             BuildHost = record.BuildHost
         };
     }
+
+    /// <summary>
+    ///     Creates a status document from a heartbeat.
+    /// </summary>
+    public static DynamoMultiProjectionState FromStatusHeartbeat(
+        ProjectionStatusHeartbeat heartbeat,
+        string serviceId,
+        string sortKey)
+    {
+        ArgumentNullException.ThrowIfNull(heartbeat);
+        return new DynamoMultiProjectionState
+        {
+            DocumentType = "projectionStatus",
+            Pk = $"SERVICE#{serviceId}#PROJECTOR#{heartbeat.ProjectorName}",
+            Sk = sortKey,
+            ServiceId = serviceId,
+            ProjectorName = heartbeat.ProjectorName,
+            ProjectorVersion = heartbeat.ProjectorVersion,
+            ClusterId = heartbeat.ClusterId,
+            ActivationId = heartbeat.ActivationId,
+            Sequence = heartbeat.Sequence,
+            AppliedEventCount = heartbeat.AppliedEventCount,
+            LastAppliedSortableUniqueId = heartbeat.LastAppliedSortableUniqueId,
+            LastTraversedSortableUniqueId = heartbeat.LastTraversedSortableUniqueId,
+            RecordedAtUtc = heartbeat.RecordedAtUtc
+        };
+    }
+
+    /// <summary>
+    ///     Converts a status document to a heartbeat.
+    /// </summary>
+    public ProjectionStatusHeartbeat ToStatusHeartbeat() =>
+        new(
+            ServiceId,
+            ProjectorName,
+            ProjectorVersion,
+            ClusterId ?? string.Empty,
+            ActivationId ?? string.Empty,
+            Sequence,
+            AppliedEventCount,
+            LastAppliedSortableUniqueId,
+            LastTraversedSortableUniqueId,
+            RecordedAtUtc ?? DateTimeOffset.UtcNow);
 
     /// <summary>
     ///     Converts to a MultiProjectionStateRecord.
