@@ -41,10 +41,8 @@ public sealed class MySqlMvExecutor : MvExecutorBase<MySqlConnection>, IMvExecut
         IOptions<MvOptions> options,
         ILogger<MySqlMvExecutor> logger,
         string connectionString)
-        : base(registryStore, options, logger, connectionString)
-    {
+        : base(registryStore, options, logger, connectionString) =>
         _eventStoreFactory = RequireEventStoreFactory(eventStoreFactory);
-    }
 
     public Task InitializeAsync(
         IMvApplyHost host,
@@ -58,17 +56,12 @@ public sealed class MySqlMvExecutor : MvExecutorBase<MySqlConnection>, IMvExecut
         CancellationToken cancellationToken = default)
     {
         var exactServiceId = ResolveServiceId(serviceId);
-        IEventStore eventStore;
-        if (_eventStoreFactory is not null)
-        {
-            eventStore = _eventStoreFactory.CreateForService(exactServiceId) ??
-                throw new InvalidOperationException($"The event-store factory returned null for ServiceId '{exactServiceId}'.");
-        }
-        else
-        {
-            eventStore = _legacyEventStore ??
-                throw new InvalidOperationException("No legacy event store is registered for materialized views.");
-        }
+        var eventStore = RequireSelectedEventStore(
+            _eventStoreFactory is null
+                ? _legacyEventStore
+                : _eventStoreFactory!.CreateForService(exactServiceId),
+            exactServiceId,
+            _eventStoreFactory is not null);
 
         return await CatchUpFromStoreAsync(host, exactServiceId, eventStore, cancellationToken).ConfigureAwait(false);
     }
@@ -81,10 +74,7 @@ public sealed class MySqlMvExecutor : MvExecutorBase<MySqlConnection>, IMvExecut
         => ApplyStreamEventsAtBoundaryAsync(host, events, ResolveServiceId(serviceId), cancellationToken);
 
     private string ResolveServiceId(string? requestedServiceId) =>
-        ValidateServiceId(
-            requestedServiceId,
-            _eventStoreFactory is null ? _legacyServiceIdProvider : null,
-            nameof(MySqlMvExecutor));
+        ValidateServiceId(requestedServiceId, _eventStoreFactory is null ? _legacyServiceIdProvider : null, nameof(MySqlMvExecutor));
 
     protected override async Task<MySqlConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {

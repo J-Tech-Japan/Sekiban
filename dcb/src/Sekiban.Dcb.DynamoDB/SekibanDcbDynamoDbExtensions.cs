@@ -33,16 +33,7 @@ public static class SekibanDcbDynamoDbExtensions
             return CreateClient(configuration, options);
         });
 
-        services.AddSingleton<DynamoDbContext>();
-        services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
-        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.TryAddSingleton<IEventStoreFactory, DynamoDbEventStoreFactory>();
-        services.AddEventStoreAliases<DynamoDbEventStore>();
-        services.AddConditionalEventStoreCapabilities();
-        services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
-        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
-        services.AddSekibanDcbProjectionStatusReader();
-        services.AddHostedService<DynamoDbInitializer>();
+        AddDynamoDbEventStoreServices(services);
 
         return services;
     }
@@ -59,16 +50,7 @@ public static class SekibanDcbDynamoDbExtensions
             .Configure(options => configure?.Invoke(options));
 
         services.AddSingleton(dynamoDbClient);
-        services.AddSingleton<DynamoDbContext>();
-        services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
-        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.TryAddSingleton<IEventStoreFactory, DynamoDbEventStoreFactory>();
-        services.AddEventStoreAliases<DynamoDbEventStore>();
-        services.AddConditionalEventStoreCapabilities();
-        services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
-        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
-        services.AddSekibanDcbProjectionStatusReader();
-        services.AddHostedService<DynamoDbInitializer>();
+        AddDynamoDbEventStoreServices(services);
 
         return services;
     }
@@ -89,6 +71,13 @@ public static class SekibanDcbDynamoDbExtensions
             return CreateClient(configuration, options);
         });
 
+        AddDynamoDbEventStoreServices(services);
+
+        return services;
+    }
+
+    private static void AddDynamoDbEventStoreServices(IServiceCollection services)
+    {
         services.AddSingleton<DynamoDbContext>();
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
@@ -99,8 +88,6 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
         services.AddSekibanDcbProjectionStatusReader();
         services.AddHostedService<DynamoDbInitializer>();
-
-        return services;
     }
 
     private static IAmazonDynamoDB CreateClient(IConfiguration configuration, DynamoDbEventStoreOptions options)

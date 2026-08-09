@@ -35,17 +35,7 @@ public static class SekibanDcbPostgresExtensions
 
         services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<SekibanDcbDbContext>>().CreateDbContext());
 
-        // Register IEventTypes from DcbDomainTypes (if not already registered)
-        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-
-        // Register IEventStore implementation
-        services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
-        services.TryAddSingleton<IEventStoreFactory, PostgresEventStoreFactory>();
-        services.AddEventStoreAliases<PostgresEventStore>();
-        services.AddConditionalEventStoreCapabilities();
-        services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
-        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
-        services.AddSekibanDcbProjectionStatusReader();
+        AddPostgresEventStoreServices(services);
 
         return services;
     }
@@ -87,17 +77,7 @@ public static class SekibanDcbPostgresExtensions
         // Add a hosted service to ensure database tables exist
         services.AddHostedService<DatabaseInitializerService>();
 
-        // Register IEventTypes from DcbDomainTypes (if not already registered)
-        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-
-        // IEventStore実装を登録
-        services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
-        services.TryAddSingleton<IEventStoreFactory, PostgresEventStoreFactory>();
-        services.AddEventStoreAliases<PostgresEventStore>();
-        services.AddConditionalEventStoreCapabilities();
-        services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
-        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
-        services.AddSekibanDcbProjectionStatusReader();
+        AddPostgresEventStoreServices(services);
 
         return services;
     }
@@ -340,6 +320,18 @@ public static class SekibanDcbPostgresExtensions
                 throw;
             }
         }
+    }
+
+    private static void AddPostgresEventStoreServices(IServiceCollection services)
+    {
+        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+        services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
+        services.TryAddSingleton<IEventStoreFactory, PostgresEventStoreFactory>();
+        services.AddEventStoreAliases<PostgresEventStore>();
+        services.AddConditionalEventStoreCapabilities();
+        services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
+        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
+        services.AddSekibanDcbProjectionStatusReader();
     }
 
     private static string? ResolveConnectionString(IConfiguration configuration, string connectionName)

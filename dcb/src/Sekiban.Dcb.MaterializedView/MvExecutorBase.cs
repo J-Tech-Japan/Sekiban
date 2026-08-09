@@ -55,6 +55,21 @@ public abstract class MvExecutorBase<TConnection>
     protected static IEventStoreFactory RequireEventStoreFactory(IEventStoreFactory eventStoreFactory) =>
         eventStoreFactory ?? throw new ArgumentNullException(nameof(eventStoreFactory));
 
+    protected static IEventStore RequireSelectedEventStore(
+        IEventStore? eventStore,
+        string exactServiceId,
+        bool selectedFromFactory)
+    {
+        if (eventStore is not null)
+        {
+            return eventStore;
+        }
+
+        throw selectedFromFactory
+            ? new InvalidOperationException($"The event-store factory returned null for ServiceId '{exactServiceId}'.")
+            : new InvalidOperationException("No legacy event store is registered for materialized views.");
+    }
+
     protected string ValidateServiceId(
         string? requestedServiceId,
         IServiceIdProvider? legacyServiceIdProvider,

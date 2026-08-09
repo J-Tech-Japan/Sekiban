@@ -64,13 +64,7 @@ public static class SekibanDcbCosmosDbExtensions
         });
 
         // Register store implementations
-        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.TryAddSingleton<IEventStoreFactory, CosmosDbEventStoreFactory>();
-        services.AddEventStoreAliases<CosmosDbEventStore>();
-        services.AddConditionalEventStoreCapabilities();
-        services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
-        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
-        services.AddSekibanDcbProjectionStatusReader();
+        AddCosmosDbEventStoreServices(services);
 
         return services;
     }
@@ -99,13 +93,7 @@ public static class SekibanDcbCosmosDbExtensions
         });
 
         // Register store implementations
-        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
-        services.TryAddSingleton<IEventStoreFactory, CosmosDbEventStoreFactory>();
-        services.AddEventStoreAliases<CosmosDbEventStore>();
-        services.AddConditionalEventStoreCapabilities();
-        services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
-        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
-        services.AddSekibanDcbProjectionStatusReader();
+        AddCosmosDbEventStoreServices(services);
 
         return services;
     }
@@ -349,6 +337,17 @@ public static class SekibanDcbCosmosDbExtensions
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<CosmosDbLegacyTagMigrationServiceFactory>();
         return services;
+    }
+
+    private static void AddCosmosDbEventStoreServices(IServiceCollection services)
+    {
+        services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+        services.TryAddSingleton<IEventStoreFactory, CosmosDbEventStoreFactory>();
+        services.AddEventStoreAliases<CosmosDbEventStore>();
+        services.AddConditionalEventStoreCapabilities();
+        services.AddSingleton<IMultiProjectionStateStore, CosmosMultiProjectionStateStore>();
+        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
+        services.AddSekibanDcbProjectionStatusReader();
     }
 
     private static void AddCosmosDbContext(IServiceCollection services, CosmosDbEventStoreOptions options)
