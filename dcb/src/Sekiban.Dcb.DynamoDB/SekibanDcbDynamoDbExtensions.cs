@@ -37,9 +37,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
         services.TryAddSingleton<IEventStoreFactory, DynamoDbEventStoreFactory>();
-        services.AddSingleton<DynamoDbEventStore>();
-        services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
-        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddEventStoreAliases<DynamoDbEventStore>();
         services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
@@ -65,9 +63,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
         services.TryAddSingleton<IEventStoreFactory, DynamoDbEventStoreFactory>();
-        services.AddSingleton<DynamoDbEventStore>();
-        services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
-        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddEventStoreAliases<DynamoDbEventStore>();
         services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
@@ -97,9 +93,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
         services.TryAddSingleton<IEventStoreFactory, DynamoDbEventStoreFactory>();
-        services.AddSingleton<DynamoDbEventStore>();
-        services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
-        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
+        services.AddEventStoreAliases<DynamoDbEventStore>();
         services.AddConditionalEventStoreCapabilities();
         services.AddSingleton<IMultiProjectionStateStore, DynamoMultiProjectionStateStore>();
         services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);

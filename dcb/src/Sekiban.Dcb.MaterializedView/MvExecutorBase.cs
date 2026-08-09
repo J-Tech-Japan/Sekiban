@@ -5,6 +5,8 @@ using Microsoft.Extensions.Options;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Storage;
 
 namespace Sekiban.Dcb.MaterializedView;
 
@@ -38,6 +40,26 @@ public abstract class MvExecutorBase<TConnection>
     protected MvOptions Options => _options;
 
     protected string ConnectionString => _connectionString;
+
+    // These helpers validate dependencies and move database-neutral workflow only. They never resolve or cache an
+    // event store; each provider executor keeps its own factory field and selects its service-scoped source.
+    protected static (IEventStore EventStore, IServiceIdProvider ServiceIdProvider) RequireLegacyCompatibilityDependencies(
+        IEventStore eventStore,
+        IServiceIdProvider serviceIdProvider)
+    {
+        return (
+            eventStore ?? throw new ArgumentNullException(nameof(eventStore)),
+            serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider)));
+    }
+
+    protected static IEventStoreFactory RequireEventStoreFactory(IEventStoreFactory eventStoreFactory) =>
+        eventStoreFactory ?? throw new ArgumentNullException(nameof(eventStoreFactory));
+
+    protected string ValidateServiceId(
+        string? requestedServiceId,
+        IServiceIdProvider? legacyServiceIdProvider,
+        string executorName) =>
+        MvServiceIdValidation.Validate(requestedServiceId, _options, legacyServiceIdProvider, executorName);
 
     protected abstract Task<TConnection> OpenConnectionAsync(CancellationToken cancellationToken);
 
@@ -133,6 +155,39 @@ public abstract class MvExecutorBase<TConnection>
         return entries
             .Select(entry => entry.CurrentPosition)
             .FirstOrDefault(position => !string.IsNullOrWhiteSpace(position));
+    }
+
+    protected async Task<MvCatchUpResult> CatchUpFromStoreAsync(
+        IMvApplyHost host,
+        string serviceId,
+        IEventStore eventStore,
+        CancellationToken cancellationToken)
+    {
+        var currentPosition = await GetCurrentPositionAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+        var readResult = await eventStore.ReadAllSerializableEventsAsync(
+                SortableUniqueId.NullableValue(currentPosition),
+                _options.BatchSize)
+            .ConfigureAwait(false);
+        return await CompleteCatchUpAsync(host, serviceId, readResult, cancellationToken).ConfigureAwait(false);
+    }
+
+    protected Task<int> ApplyStreamEventsAtBoundaryAsync(
+        IMvApplyHost host,
+        IReadOnlyList<SerializableEvent> events,
+        string exactServiceId,
+        CancellationToken cancellationToken)
+    {
+        if (events.Count == 0)
+        {
+            return Task.FromResult(0);
+        }
+
+        return ApplySerializableEventsCoreAsync(
+            host,
+            events,
+            exactServiceId,
+            MvApplySource.Stream,
+            cancellationToken);
     }
 
     protected async Task<MvCatchUpResult> CompleteCatchUpAsync(

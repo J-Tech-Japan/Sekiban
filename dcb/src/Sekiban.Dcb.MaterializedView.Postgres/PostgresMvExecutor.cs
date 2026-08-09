@@ -30,8 +30,8 @@ public sealed class PostgresMvExecutor : MvExecutorBase<NpgsqlConnection>, IMvEx
         string connectionString)
         : base(registryStore, options, logger, connectionString)
     {
-        _legacyEventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
-        _legacyServiceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
+        (_legacyEventStore, _legacyServiceIdProvider) =
+            RequireLegacyCompatibilityDependencies(eventStore, serviceIdProvider);
     }
 
     /// <summary>Creates an executor whose event reads use the standard service-scoped factory.</summary>
@@ -43,17 +43,14 @@ public sealed class PostgresMvExecutor : MvExecutorBase<NpgsqlConnection>, IMvEx
         string connectionString)
         : base(registryStore, options, logger, connectionString)
     {
-        _eventStoreFactory = eventStoreFactory ?? throw new ArgumentNullException(nameof(eventStoreFactory));
+        _eventStoreFactory = RequireEventStoreFactory(eventStoreFactory);
     }
 
     public Task InitializeAsync(
         IMvApplyHost host,
         string? serviceId = null,
         CancellationToken cancellationToken = default)
-    {
-        var exactServiceId = ResolveServiceId(serviceId);
-        return InitializeCoreAsync(host, exactServiceId, cancellationToken);
-    }
+        => InitializeCoreAsync(host, ResolveServiceId(serviceId), cancellationToken);
 
     public async Task<MvCatchUpResult> CatchUpOnceAsync(
         IMvApplyHost host,
@@ -61,7 +58,6 @@ public sealed class PostgresMvExecutor : MvExecutorBase<NpgsqlConnection>, IMvEx
         CancellationToken cancellationToken = default)
     {
         var exactServiceId = ResolveServiceId(serviceId);
-        var currentPosition = await GetCurrentPositionAsync(host, exactServiceId, cancellationToken).ConfigureAwait(false);
         IEventStore eventStore;
         if (_eventStoreFactory is not null)
         {
@@ -74,38 +70,19 @@ public sealed class PostgresMvExecutor : MvExecutorBase<NpgsqlConnection>, IMvEx
                 throw new InvalidOperationException("No legacy event store is registered for materialized views.");
         }
 
-        var readResult = await eventStore.ReadAllSerializableEventsAsync(
-                SortableUniqueId.NullableValue(currentPosition),
-                Options.BatchSize)
-            .ConfigureAwait(false);
-        return await CompleteCatchUpAsync(host, exactServiceId, readResult, cancellationToken).ConfigureAwait(false);
+        return await CatchUpFromStoreAsync(host, exactServiceId, eventStore, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<int> ApplySerializableEventsAsync(
+    public Task<int> ApplySerializableEventsAsync(
         IMvApplyHost host,
         IReadOnlyList<SerializableEvent> events,
         string? serviceId = null,
         CancellationToken cancellationToken = default)
-    {
-        var exactServiceId = ResolveServiceId(serviceId);
-        if (events.Count == 0)
-        {
-            return 0;
-        }
-
-        return await ApplySerializableEventsCoreAsync(
-                host,
-                events,
-                exactServiceId,
-                MvApplySource.Stream,
-                cancellationToken)
-            .ConfigureAwait(false);
-    }
+        => ApplyStreamEventsAtBoundaryAsync(host, events, ResolveServiceId(serviceId), cancellationToken);
 
     private string ResolveServiceId(string? requestedServiceId) =>
-        MvServiceIdValidation.Validate(
+        ValidateServiceId(
             requestedServiceId,
-            Options,
             _eventStoreFactory is null ? _legacyServiceIdProvider : null,
             nameof(PostgresMvExecutor));
 
