@@ -22,17 +22,20 @@ public abstract class MvExecutorBase<TConnection>
     private readonly ILogger _logger;
     private readonly MvOptions _options;
     private readonly string _connectionString;
+    private readonly IServiceIdProvider? _legacyServiceIdProvider;
 
     protected MvExecutorBase(
         IMvRegistryStore registryStore,
         IOptions<MvOptions> options,
         ILogger logger,
-        string connectionString)
+        string connectionString,
+        IServiceIdProvider? legacyServiceIdProvider = null)
     {
         _registryStore = registryStore;
         _logger = logger;
         _options = options.Value;
         _connectionString = connectionString;
+        _legacyServiceIdProvider = legacyServiceIdProvider;
     }
 
     protected IMvRegistryStore RegistryStore => _registryStore;
@@ -75,6 +78,29 @@ public abstract class MvExecutorBase<TConnection>
         IServiceIdProvider? legacyServiceIdProvider,
         string executorName) =>
         MvServiceIdValidation.Validate(requestedServiceId, _options, legacyServiceIdProvider, executorName);
+
+    protected Task InitializeAtBoundaryAsync(
+        IMvApplyHost host,
+        string? requestedServiceId,
+        CancellationToken cancellationToken) =>
+        InitializeCoreAsync(
+            host,
+            ValidateServiceId(requestedServiceId, _legacyServiceIdProvider, GetType().Name),
+            cancellationToken);
+
+    protected Task<int> ApplySerializableEventsAtBoundaryAsync(
+        IMvApplyHost host,
+        IReadOnlyList<SerializableEvent> events,
+        string? requestedServiceId,
+        CancellationToken cancellationToken) =>
+        ApplyStreamEventsAtBoundaryAsync(
+            host,
+            events,
+            ValidateServiceId(requestedServiceId, _legacyServiceIdProvider, GetType().Name),
+            cancellationToken);
+
+    protected string ValidateServiceIdAtBoundary(string? requestedServiceId) =>
+        ValidateServiceId(requestedServiceId, _legacyServiceIdProvider, GetType().Name);
 
     protected abstract Task<TConnection> OpenConnectionAsync(CancellationToken cancellationToken);
 

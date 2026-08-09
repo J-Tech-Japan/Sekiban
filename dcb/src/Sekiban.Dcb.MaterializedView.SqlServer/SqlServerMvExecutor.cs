@@ -28,7 +28,7 @@ public sealed class SqlServerMvExecutor : MvExecutorBase<SqlConnection>, IMvExec
         IOptions<MvOptions> options,
         ILogger<SqlServerMvExecutor> logger,
         string connectionString)
-        : base(registryStore, options, logger, connectionString)
+        : base(registryStore, options, logger, connectionString, serviceIdProvider)
     {
         (_legacyEventStore, _legacyServiceIdProvider) =
             RequireLegacyCompatibilityDependencies(eventStore, serviceIdProvider);
@@ -48,14 +48,14 @@ public sealed class SqlServerMvExecutor : MvExecutorBase<SqlConnection>, IMvExec
         IMvApplyHost host,
         string? serviceId = null,
         CancellationToken cancellationToken = default)
-        => InitializeCoreAsync(host, ResolveServiceId(serviceId), cancellationToken);
+        => InitializeAtBoundaryAsync(host, serviceId, cancellationToken);
 
     public async Task<MvCatchUpResult> CatchUpOnceAsync(
         IMvApplyHost host,
         string? serviceId = null,
         CancellationToken cancellationToken = default)
     {
-        var exactServiceId = ResolveServiceId(serviceId);
+        var exactServiceId = ValidateServiceIdAtBoundary(serviceId);
         var eventStore = RequireSelectedEventStore(
             _eventStoreFactory is null
                 ? _legacyEventStore
@@ -71,10 +71,7 @@ public sealed class SqlServerMvExecutor : MvExecutorBase<SqlConnection>, IMvExec
         IReadOnlyList<SerializableEvent> events,
         string? serviceId = null,
         CancellationToken cancellationToken = default)
-        => ApplyStreamEventsAtBoundaryAsync(host, events, ResolveServiceId(serviceId), cancellationToken);
-
-    private string ResolveServiceId(string? requestedServiceId) =>
-        ValidateServiceId(requestedServiceId, _eventStoreFactory is null ? _legacyServiceIdProvider : null, nameof(SqlServerMvExecutor));
+        => ApplySerializableEventsAtBoundaryAsync(host, events, serviceId, cancellationToken);
 
     protected override async Task<SqlConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {
