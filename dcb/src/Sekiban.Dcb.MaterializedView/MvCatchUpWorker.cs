@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Sekiban.Dcb.ServiceId;
 
 namespace Sekiban.Dcb.MaterializedView;
 
@@ -12,18 +13,33 @@ public sealed class MvCatchUpWorker : BackgroundService
     private readonly ILogger<MvCatchUpWorker> _logger;
     private readonly IReadOnlyList<MvApplyHostRegistration> _registrations;
     private readonly MvOptions _options;
+    private readonly string _serviceId;
 
     public MvCatchUpWorker(
         IMvApplyHostFactory hostFactory,
         IMvExecutor executor,
         IOptions<MvOptions> options,
         ILogger<MvCatchUpWorker> logger)
+        : this(hostFactory, executor, options, logger, serviceId: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates one immutable worker bound to one exact service identity.
+    /// </summary>
+    public MvCatchUpWorker(
+        IMvApplyHostFactory hostFactory,
+        IMvExecutor executor,
+        IOptions<MvOptions> options,
+        ILogger<MvCatchUpWorker> logger,
+        string? serviceId)
     {
         _executor = executor;
         _hostFactory = hostFactory;
         _logger = logger;
         _registrations = hostFactory.GetRegistrations();
         _options = options.Value;
+        _serviceId = ResolveWorkerServiceId(serviceId, _options);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -50,7 +66,7 @@ public sealed class MvCatchUpWorker : BackgroundService
         foreach (var registration in _registrations)
         {
             var host = _hostFactory.Create(registration.ViewName, registration.ViewVersion);
-            await _executor.InitializeAsync(host, cancellationToken: stoppingToken).ConfigureAwait(false);
+            await _executor.InitializeAsync(host, _serviceId, stoppingToken).ConfigureAwait(false);
         }
     }
 
@@ -81,7 +97,7 @@ public sealed class MvCatchUpWorker : BackgroundService
         var host = _hostFactory.Create(registration.ViewName, registration.ViewVersion);
         try
         {
-            var result = await _executor.CatchUpOnceAsync(host, cancellationToken: stoppingToken).ConfigureAwait(false);
+            var result = await _executor.CatchUpOnceAsync(host, _serviceId, stoppingToken).ConfigureAwait(false);
             _failureCounts.Remove(GetProjectorKey(registration));
             return new CatchUpCycleResult(result.AppliedEvents, result.ReachedUnsafeWindow, ShouldStop: false);
         }
@@ -129,6 +145,36 @@ public sealed class MvCatchUpWorker : BackgroundService
 
     private static string GetProjectorKey(MvApplyHostRegistration registration) =>
         $"{registration.ViewName}:{registration.ViewVersion}";
+
+    private static string ResolveWorkerServiceId(string? serviceId, MvOptions options)
+    {
+        var requested = string.IsNullOrWhiteSpace(serviceId) ? options.ServiceId : serviceId;
+        if (string.IsNullOrWhiteSpace(requested))
+        {
+            throw new InvalidOperationException(
+                "MvCatchUpWorker requires an exact ServiceId. Configure MvOptions.ServiceId or register a service-bound worker.");
+        }
+
+        var normalized = ServiceIdValidator.NormalizeAndValidate(requested);
+        if (!string.IsNullOrWhiteSpace(serviceId) && !string.IsNullOrWhiteSpace(options.ServiceId))
+        {
+            var configured = ServiceIdValidator.NormalizeAndValidate(options.ServiceId);
+            if (!string.Equals(configured, normalized, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"MvCatchUpWorker requested ServiceId '{normalized}', but MvOptions is bound to '{configured}'.");
+            }
+        }
+
+        if (string.Equals(normalized, DefaultServiceIdProvider.DefaultServiceId, StringComparison.Ordinal) &&
+            !options.AllowDefaultServiceId)
+        {
+            throw new InvalidOperationException(
+                "MvCatchUpWorker cannot use the implicit default ServiceId. Set AllowDefaultServiceId only for an explicit single-service compatibility registration.");
+        }
+
+        return normalized;
+    }
 
     private sealed record CatchUpCycleResult(int AppliedEvents, bool ShouldDelay, bool ShouldStop);
 }

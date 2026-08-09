@@ -87,6 +87,8 @@ public sealed class MaterializedViewPostgresOrleansFixture : IAsyncLifetime
         services.AddSekibanDcbPostgres(ConnectionString);
         services.AddSekibanDcbMaterializedView(options =>
         {
+            options.ServiceId = DefaultServiceIdProvider.DefaultServiceId;
+            options.AllowDefaultServiceId = true;
             options.BatchSize = 100;
             options.SafeWindowMs = 0;
             options.PollInterval = TimeSpan.FromMilliseconds(50);
@@ -221,6 +223,8 @@ public sealed class MaterializedViewPostgresOrleansFixture : IAsyncLifetime
                     services.AddSekibanDcbPostgres(SharedConnectionString);
                     services.AddSekibanDcbMaterializedView(options =>
                     {
+                        options.ServiceId = DefaultServiceIdProvider.DefaultServiceId;
+                        options.AllowDefaultServiceId = true;
                         options.BatchSize = 100;
                         options.SafeWindowMs = 0;
                         options.PollInterval = TimeSpan.FromMilliseconds(50);

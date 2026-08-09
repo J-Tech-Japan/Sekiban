@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.ServiceId;
 namespace Sekiban.Dcb.MaterializedView;
 
 public static class SekibanDcbMaterializedViewExtensions
@@ -34,6 +36,32 @@ public static class SekibanDcbMaterializedViewExtensions
     {
         services.TryAddSingleton<TView>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IMaterializedViewProjector, TView>(sp => sp.GetRequiredService<TView>()));
+        return services;
+    }
+
+    /// <summary>
+    /// Registers one hosted catch-up worker bound to an exact service id. Call once per service in a multi-service host.
+    /// The provider extension must be called with <c>registerHostedWorker: false</c> when using this method.
+    /// </summary>
+    public static IServiceCollection AddSekibanDcbMaterializedViewWorkerForService(
+        this IServiceCollection services,
+        string serviceId)
+    {
+        var normalized = ServiceIdValidator.NormalizeAndValidate(serviceId);
+        if (string.Equals(normalized, DefaultServiceIdProvider.DefaultServiceId, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "The service-bound worker API requires a non-default ServiceId. Use MvOptions.AllowDefaultServiceId for explicit single-service compatibility.",
+                nameof(serviceId));
+        }
+
+        services.AddSingleton<IHostedService>(sp =>
+            new MvCatchUpWorker(
+                sp.GetRequiredService<IMvApplyHostFactory>(),
+                sp.GetRequiredService<IMvExecutor>(),
+                sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<MvOptions>>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<MvCatchUpWorker>>(),
+                normalized));
         return services;
     }
 }

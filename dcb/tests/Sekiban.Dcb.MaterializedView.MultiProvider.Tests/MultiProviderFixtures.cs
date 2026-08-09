@@ -16,6 +16,7 @@ using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.MySql;
 using Sekiban.Dcb.MaterializedView.Sqlite;
 using Sekiban.Dcb.MaterializedView.SqlServer;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Testcontainers.MsSql;
 using Testcontainers.MySql;
@@ -230,6 +231,7 @@ public sealed class RegistryDbRow
 public abstract class MultiProviderFixtureBase : IAsyncLifetime
 {
     internal const string ForecastTable = "sekiban_mv_weatherforecastportable_v1_forecasts";
+    internal const string ServiceId = "multi-provider-service";
 
     private ServiceProvider? _services;
     private string? _connectionString;
@@ -237,6 +239,7 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
 
     public ServiceProvider Services => _services ?? throw new InvalidOperationException("Fixture not initialized.");
     public IMvExecutor Executor => Services.GetRequiredService<IMvExecutor>();
+    public IEventStoreFactory EventStoreFactory => Services.GetRequiredService<IEventStoreFactory>();
     public InMemoryEventStore EventStore => Services.GetRequiredService<InMemoryEventStore>();
     public InMemoryObjectAccessor ActorAccessor => Services.GetRequiredService<InMemoryObjectAccessor>();
     public DcbDomainTypes DomainTypes => Services.GetRequiredService<DcbDomainTypes>();
@@ -270,8 +273,13 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
         services.AddSingleton(DomainType.GetDomainTypes());
-        services.AddSingleton<InMemoryEventStore>(sp => new InMemoryEventStore(sp.GetRequiredService<DcbDomainTypes>().EventTypes));
+        services.AddSingleton<InMemoryEventStore>(sp =>
+            new InMemoryEventStore(
+                sp.GetRequiredService<DcbDomainTypes>().EventTypes,
+                new FixedServiceIdProvider(ServiceId)));
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<InMemoryEventStore>());
+        services.AddSingleton<IEventStoreFactory>(sp =>
+            new Sekiban.Dcb.InMemory.InMemoryEventStoreFactory(sp.GetRequiredService<InMemoryEventStore>()));
         services.AddSingleton<InMemoryObjectAccessor>(sp =>
             new InMemoryObjectAccessor(sp.GetRequiredService<IEventStore>(), sp.GetRequiredService<DcbDomainTypes>()));
         services.AddMaterializedView<CrossProviderWeatherForecastMvV1>();
@@ -340,6 +348,7 @@ public sealed class MySqlMvFixture : MultiProviderFixtureBase
     {
         services.AddSekibanDcbMaterializedView(options =>
         {
+            options.ServiceId = ServiceId;
             options.BatchSize = 100;
             options.SafeWindowMs = 0;
             options.PollInterval = TimeSpan.FromMilliseconds(10);
@@ -384,6 +393,7 @@ public sealed class SqlServerMvFixture : MultiProviderFixtureBase
     {
         services.AddSekibanDcbMaterializedView(options =>
         {
+            options.ServiceId = ServiceId;
             options.BatchSize = 100;
             options.SafeWindowMs = 0;
             options.PollInterval = TimeSpan.FromMilliseconds(10);
@@ -425,6 +435,7 @@ public sealed class SqliteMvFixture : MultiProviderFixtureBase
     {
         services.AddSekibanDcbMaterializedView(options =>
         {
+            options.ServiceId = ServiceId;
             options.BatchSize = 100;
             options.SafeWindowMs = 0;
             options.PollInterval = TimeSpan.FromMilliseconds(10);

@@ -40,6 +40,7 @@ public static class SekibanDcbPostgresExtensions
 
         // Register IEventStore implementation
         services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
+        services.TryAddSingleton<IEventStoreFactory, PostgresEventStoreFactory>();
         services.AddSingleton<PostgresEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<PostgresEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
@@ -93,6 +94,7 @@ public static class SekibanDcbPostgresExtensions
 
         // IEventStore実装を登録
         services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
+        services.TryAddSingleton<IEventStoreFactory, PostgresEventStoreFactory>();
         services.AddSingleton<PostgresEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<PostgresEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
@@ -129,6 +131,7 @@ public static class SekibanDcbPostgresExtensions
 
         // IEventStore実装を登録
         services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
+        services.TryAddSingleton<IEventStoreFactory, PostgresEventStoreFactory>();
         services.AddSingleton<PostgresEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<PostgresEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());

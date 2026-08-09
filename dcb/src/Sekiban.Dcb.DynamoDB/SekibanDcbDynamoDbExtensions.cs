@@ -36,6 +36,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbContext>();
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+        services.TryAddSingleton<IEventStoreFactory, DynamoDbEventStoreFactory>();
         services.AddSingleton<DynamoDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
@@ -63,6 +64,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbContext>();
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+        services.TryAddSingleton<IEventStoreFactory, DynamoDbEventStoreFactory>();
         services.AddSingleton<DynamoDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
@@ -94,6 +96,7 @@ public static class SekibanDcbDynamoDbExtensions
         services.AddSingleton<DynamoDbContext>();
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+        services.TryAddSingleton<IEventStoreFactory, DynamoDbEventStoreFactory>();
         services.AddSingleton<DynamoDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<DynamoDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());

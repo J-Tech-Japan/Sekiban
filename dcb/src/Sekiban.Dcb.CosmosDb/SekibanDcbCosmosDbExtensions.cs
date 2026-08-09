@@ -65,6 +65,7 @@ public static class SekibanDcbCosmosDbExtensions
 
         // Register store implementations
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+        services.TryAddSingleton<IEventStoreFactory, CosmosDbEventStoreFactory>();
         services.AddSingleton<CosmosDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
@@ -101,6 +102,7 @@ public static class SekibanDcbCosmosDbExtensions
 
         // Register store implementations
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+        services.TryAddSingleton<IEventStoreFactory, CosmosDbEventStoreFactory>();
         services.AddSingleton<CosmosDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
@@ -170,6 +172,7 @@ public static class SekibanDcbCosmosDbExtensions
 
         // Register store implementations
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+        services.TryAddSingleton<IEventStoreFactory, CosmosDbEventStoreFactory>();
         services.AddSingleton<CosmosDbEventStore>();
         services.AddSingleton<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());
@@ -207,6 +210,7 @@ public static class SekibanDcbCosmosDbExtensions
 
         AddCosmosDbContext(services, options);
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+        services.TryAddSingleton<IEventStoreFactory, CosmosDbEventStoreFactory>();
         services.AddScoped<CosmosDbEventStore>();
         services.AddScoped<IHotEventStore>(sp => sp.GetRequiredService<CosmosDbEventStore>());
         services.AddScoped<IEventStore>(sp => sp.GetRequiredService<IHotEventStore>());

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Storage;
 
 namespace Sekiban.Dcb.MaterializedView.Sqlite;
 
@@ -32,13 +33,21 @@ public static class SekibanDcbMaterializedViewSqliteExtensions
         services.TryAddSingleton<IMvStorageInfoProvider>(_ =>
             new MvStorageInfoProvider(new MvStorageInfo(MvDbType.Sqlite, connectionString)));
         services.TryAddSingleton<IMvExecutor>(sp =>
-            new SqliteMvExecutor(
-                sp.GetRequiredService<Sekiban.Dcb.Storage.IEventStore>(),
-                sp.GetRequiredService<IServiceIdProvider>(),
-                sp.GetRequiredService<IMvRegistryStore>(),
-                sp.GetRequiredService<IOptions<MvOptions>>(),
-                sp.GetRequiredService<ILogger<SqliteMvExecutor>>(),
-                connectionString));
+        {
+            var options = sp.GetRequiredService<IOptions<MvOptions>>();
+            var registry = sp.GetRequiredService<IMvRegistryStore>();
+            var logger = sp.GetRequiredService<ILogger<SqliteMvExecutor>>();
+            var factory = sp.GetService<IEventStoreFactory>();
+            return factory is not null
+                ? new SqliteMvExecutor(factory, registry, options, logger, connectionString)
+                : new SqliteMvExecutor(
+                    sp.GetRequiredService<IEventStore>(),
+                    sp.GetRequiredService<IServiceIdProvider>(),
+                    registry,
+                    options,
+                    logger,
+                    connectionString);
+        });
         if (registerHostedWorker)
         {
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MvCatchUpWorker>());

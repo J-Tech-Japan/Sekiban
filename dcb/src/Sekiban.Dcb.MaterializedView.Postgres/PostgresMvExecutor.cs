@@ -12,13 +12,18 @@ namespace Sekiban.Dcb.MaterializedView.Postgres;
 
 public sealed class PostgresMvExecutor : IMvExecutor
 {
-    private readonly IEventStore _eventStore;
+    private readonly IEventStoreFactory? _eventStoreFactory;
+    private readonly IEventStore? _legacyEventStore;
+    private readonly IServiceIdProvider? _legacyServiceIdProvider;
     private readonly ILogger<PostgresMvExecutor> _logger;
     private readonly MvOptions _options;
     private readonly IMvRegistryStore _registryStore;
     private readonly string _connectionString;
-    private readonly IServiceIdProvider _serviceIdProvider;
 
+    /// <summary>
+    /// Creates the legacy single-service compatibility executor over an aggregate event store.
+    /// Multi-service hosts should use the <see cref="IEventStoreFactory"/> constructor.
+    /// </summary>
     public PostgresMvExecutor(
         IEventStore eventStore,
         IServiceIdProvider serviceIdProvider,
@@ -27,8 +32,23 @@ public sealed class PostgresMvExecutor : IMvExecutor
         ILogger<PostgresMvExecutor> logger,
         string connectionString)
     {
-        _eventStore = eventStore;
-        _serviceIdProvider = serviceIdProvider;
+        _legacyEventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+        _legacyServiceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
+        _registryStore = registryStore;
+        _logger = logger;
+        _connectionString = connectionString;
+        _options = options.Value;
+    }
+
+    /// <summary>Creates an executor whose event reads use the standard service-scoped factory.</summary>
+    public PostgresMvExecutor(
+        IEventStoreFactory eventStoreFactory,
+        IMvRegistryStore registryStore,
+        IOptions<MvOptions> options,
+        ILogger<PostgresMvExecutor> logger,
+        string connectionString)
+    {
+        _eventStoreFactory = eventStoreFactory ?? throw new ArgumentNullException(nameof(eventStoreFactory));
         _registryStore = registryStore;
         _logger = logger;
         _connectionString = connectionString;
@@ -40,8 +60,8 @@ public sealed class PostgresMvExecutor : IMvExecutor
         string? serviceId = null,
         CancellationToken cancellationToken = default)
     {
-        await _registryStore.EnsureInfrastructureAsync(cancellationToken).ConfigureAwait(false);
         serviceId = ResolveServiceId(serviceId);
+        await _registryStore.EnsureInfrastructureAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -105,7 +125,19 @@ public sealed class PostgresMvExecutor : IMvExecutor
         var currentPosition = entries
             .Select(entry => entry.CurrentPosition)
             .FirstOrDefault(position => !string.IsNullOrWhiteSpace(position));
-        var readResult = await _eventStore.ReadAllSerializableEventsAsync(
+        IEventStore eventStore;
+        if (_eventStoreFactory is not null)
+        {
+            eventStore = _eventStoreFactory.CreateForService(serviceId) ??
+                throw new InvalidOperationException($"The event-store factory returned null for ServiceId '{serviceId}'.");
+        }
+        else
+        {
+            eventStore = _legacyEventStore ??
+                throw new InvalidOperationException("No legacy event store is registered for materialized views.");
+        }
+
+        var readResult = await eventStore.ReadAllSerializableEventsAsync(
             SortableUniqueId.NullableValue(currentPosition),
             _options.BatchSize).ConfigureAwait(false);
 
@@ -174,12 +206,12 @@ public sealed class PostgresMvExecutor : IMvExecutor
         string? serviceId = null,
         CancellationToken cancellationToken = default)
     {
+        serviceId = ResolveServiceId(serviceId);
         if (events.Count == 0)
         {
             return 0;
         }
 
-        serviceId = ResolveServiceId(serviceId);
         return await ApplySerializableEventsCoreAsync(host, events, serviceId, MvApplySource.Stream, cancellationToken).ConfigureAwait(false);
     }
 
@@ -301,10 +333,56 @@ public sealed class PostgresMvExecutor : IMvExecutor
         return true;
     }
 
-    private string ResolveServiceId(string? serviceId) =>
-        string.IsNullOrWhiteSpace(serviceId)
-            ? _serviceIdProvider.GetCurrentServiceId()
-            : serviceId;
+    private string ResolveServiceId(string? requestedServiceId)
+    {
+        var callerSuppliedServiceId = !string.IsNullOrWhiteSpace(requestedServiceId);
+        var resolvedServiceId = requestedServiceId;
+        if (string.IsNullOrWhiteSpace(resolvedServiceId))
+        {
+            resolvedServiceId = _options.ServiceId;
+        }
+
+        if (string.IsNullOrWhiteSpace(resolvedServiceId) && _eventStoreFactory is null)
+        {
+            resolvedServiceId = _legacyServiceIdProvider?.GetCurrentServiceId();
+        }
+
+        if (string.IsNullOrWhiteSpace(resolvedServiceId))
+        {
+            throw new InvalidOperationException(
+                $"{nameof(PostgresMvExecutor)} requires an explicit non-empty ServiceId. Configure MvOptions.ServiceId or pass the service id at the caller boundary.");
+        }
+
+        var normalizedServiceId = ServiceIdValidator.NormalizeAndValidate(resolvedServiceId);
+        if (string.Equals(normalizedServiceId, DefaultServiceIdProvider.DefaultServiceId, StringComparison.Ordinal) &&
+            !_options.AllowDefaultServiceId)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(PostgresMvExecutor)} cannot use the implicit default ServiceId. Opt into the named single-service compatibility option AllowDefaultServiceId or provide an explicit non-default service.");
+        }
+
+        if (callerSuppliedServiceId && !string.IsNullOrWhiteSpace(_options.ServiceId))
+        {
+            var configuredServiceId = ServiceIdValidator.NormalizeAndValidate(_options.ServiceId);
+            if (!string.Equals(configuredServiceId, normalizedServiceId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(PostgresMvExecutor)} requested ServiceId '{normalizedServiceId}', but MvOptions is bound to '{configuredServiceId}'.");
+            }
+        }
+
+        if (_legacyEventStore is not null)
+        {
+            var legacyServiceId = ServiceIdValidator.NormalizeAndValidate(_legacyServiceIdProvider!.GetCurrentServiceId());
+            if (!string.Equals(legacyServiceId, normalizedServiceId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(PostgresMvExecutor)} requested ServiceId '{normalizedServiceId}', but the legacy aggregate event store is bound to '{legacyServiceId}'. Register IEventStoreFactory for service-scoped MV reads.");
+            }
+        }
+
+        return normalizedServiceId;
+    }
 
     private MvTableBindings CreateBindings(IMvApplyHost host, IReadOnlyList<MvRegistryEntry> entries)
     {

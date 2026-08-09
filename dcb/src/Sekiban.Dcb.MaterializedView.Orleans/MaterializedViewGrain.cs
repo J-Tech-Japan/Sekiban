@@ -5,6 +5,7 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Orleans.Streams;
+using Sekiban.Dcb.ServiceId;
 
 namespace Sekiban.Dcb.MaterializedView.Orleans;
 
@@ -646,7 +647,25 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
         _grainKey = this.GetPrimaryKeyString();
         var (serviceId, viewName, viewVersion) = MvGrainKey.Parse(_grainKey);
-        _serviceId = serviceId;
+        var normalizedServiceId = ServiceIdValidator.NormalizeAndValidate(serviceId);
+        if (string.Equals(normalizedServiceId, DefaultServiceIdProvider.DefaultServiceId, StringComparison.Ordinal) &&
+            !_options.AllowDefaultServiceId)
+        {
+            throw new InvalidOperationException(
+                "MaterializedViewGrain cannot use the implicit default ServiceId. Set AllowDefaultServiceId only for an explicit single-service compatibility registration.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(_options.ServiceId))
+        {
+            var configuredServiceId = ServiceIdValidator.NormalizeAndValidate(_options.ServiceId);
+            if (!string.Equals(configuredServiceId, normalizedServiceId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"MaterializedViewGrain key ServiceId '{normalizedServiceId}' does not match configured ServiceId '{configuredServiceId}'.");
+            }
+        }
+
+        _serviceId = normalizedServiceId;
         _viewName = viewName;
         _viewVersion = viewVersion;
     }

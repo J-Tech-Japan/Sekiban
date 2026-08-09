@@ -36,6 +36,19 @@ public sealed class MvOptions
     ///     skip its scheduled cycle and retry on the next tick.
     /// </summary>
     public int CatchUpMaxConcurrentBatches { get; set; } = 1;
+
+    /// <summary>
+    ///     Optional exact service identity used by the hosted MV worker and by direct executor calls that omit an
+    ///     identity. Multi-service hosts should register one service-bound worker per service instead of relying on this
+    ///     ambient option.
+    /// </summary>
+    public string? ServiceId { get; set; }
+
+    /// <summary>
+    ///     Explicitly opts a single-service compatibility registration into the literal <c>default</c> identity.
+    ///     Ordinary multi-service registrations must supply a non-default service id.
+    /// </summary>
+    public bool AllowDefaultServiceId { get; set; }
 }
 
 public static class MvSchemaHelper
