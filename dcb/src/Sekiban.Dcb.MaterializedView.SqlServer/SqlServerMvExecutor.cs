@@ -50,14 +50,13 @@ public sealed class SqlServerMvExecutor : MvExecutorBase<SqlConnection>, IMvExec
         CancellationToken cancellationToken = default)
     {
         var exactServiceId = ValidateServiceIdAtBoundary(serviceId);
-        var eventStore = RequireSelectedEventStore(
-            _eventStoreFactory is null
-                ? _legacyEventStore
-                : _eventStoreFactory!.CreateForService(exactServiceId),
-            exactServiceId,
-            _eventStoreFactory is not null);
-
-        return await CatchUpFromStoreAsync(host, exactServiceId, eventStore, cancellationToken).ConfigureAwait(false);
+        return await CatchUpFromStoreAsync(
+                host,
+                exactServiceId,
+                _eventStoreFactory is null ? _legacyEventStore : _eventStoreFactory!.CreateForService(exactServiceId),
+                _eventStoreFactory is not null,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     protected override async Task<SqlConnection> OpenConnectionAsync(CancellationToken cancellationToken)

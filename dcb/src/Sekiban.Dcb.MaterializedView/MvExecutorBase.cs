@@ -219,11 +219,13 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor
     protected async Task<MvCatchUpResult> CatchUpFromStoreAsync(
         IMvApplyHost host,
         string serviceId,
-        IEventStore eventStore,
+        IEventStore? eventStore,
+        bool selectedFromFactory,
         CancellationToken cancellationToken)
     {
+        var selectedEventStore = RequireSelectedEventStore(eventStore, serviceId, selectedFromFactory);
         var currentPosition = await GetCurrentPositionAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
-        var readResult = await eventStore.ReadAllSerializableEventsAsync(
+        var readResult = await selectedEventStore.ReadAllSerializableEventsAsync(
                 SortableUniqueId.NullableValue(currentPosition),
                 _options.BatchSize)
             .ConfigureAwait(false);
