@@ -15,7 +15,7 @@ namespace Sekiban.Dcb.MaterializedView;
 /// Provider executors retain their own event-store factory and perform service validation/source selection
 /// at each public operation boundary before delegating database work here.
 /// </summary>
-public abstract class MvExecutorBase<TConnection>
+public abstract class MvExecutorBase<TConnection> : IMvExecutor
     where TConnection : DbConnection
 {
     private readonly IMvRegistryStore _registryStore;
@@ -101,6 +101,24 @@ public abstract class MvExecutorBase<TConnection>
 
     protected string ValidateServiceIdAtBoundary(string? requestedServiceId) =>
         ValidateServiceId(requestedServiceId, _legacyServiceIdProvider, GetType().Name);
+
+    public Task InitializeAsync(
+        IMvApplyHost host,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default) =>
+        InitializeAtBoundaryAsync(host, serviceId, cancellationToken);
+
+    public Task<int> ApplySerializableEventsAsync(
+        IMvApplyHost host,
+        IReadOnlyList<SerializableEvent> events,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default) =>
+        ApplySerializableEventsAtBoundaryAsync(host, events, serviceId, cancellationToken);
+
+    public abstract Task<MvCatchUpResult> CatchUpOnceAsync(
+        IMvApplyHost host,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default);
 
     protected abstract Task<TConnection> OpenConnectionAsync(CancellationToken cancellationToken);
 

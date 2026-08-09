@@ -44,13 +44,7 @@ public sealed class SqlServerMvExecutor : MvExecutorBase<SqlConnection>, IMvExec
         : base(registryStore, options, logger, connectionString) =>
         _eventStoreFactory = RequireEventStoreFactory(eventStoreFactory);
 
-    public Task InitializeAsync(
-        IMvApplyHost host,
-        string? serviceId = null,
-        CancellationToken cancellationToken = default)
-        => InitializeAtBoundaryAsync(host, serviceId, cancellationToken);
-
-    public async Task<MvCatchUpResult> CatchUpOnceAsync(
+    public override async Task<MvCatchUpResult> CatchUpOnceAsync(
         IMvApplyHost host,
         string? serviceId = null,
         CancellationToken cancellationToken = default)
@@ -65,13 +59,6 @@ public sealed class SqlServerMvExecutor : MvExecutorBase<SqlConnection>, IMvExec
 
         return await CatchUpFromStoreAsync(host, exactServiceId, eventStore, cancellationToken).ConfigureAwait(false);
     }
-
-    public Task<int> ApplySerializableEventsAsync(
-        IMvApplyHost host,
-        IReadOnlyList<SerializableEvent> events,
-        string? serviceId = null,
-        CancellationToken cancellationToken = default)
-        => ApplySerializableEventsAtBoundaryAsync(host, events, serviceId, cancellationToken);
 
     protected override async Task<SqlConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {
