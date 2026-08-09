@@ -1,8 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Storage;
 namespace Sekiban.Dcb.MaterializedView;
 
 public static class SekibanDcbMaterializedViewExtensions
@@ -29,6 +32,45 @@ public static class SekibanDcbMaterializedViewExtensions
         }
 
         return services;
+    }
+
+    /// <summary>
+    /// Selects a provider executor constructor during DI registration. This is only a constructor
+    /// registration helper; it never calls <c>CreateForService</c> and never resolves or caches an
+    /// event store for an operation.
+    /// </summary>
+    public static TExecutor CreateMaterializedViewExecutor<TExecutor>(
+        IServiceProvider services,
+        string connectionString,
+        Func<
+            IEventStoreFactory,
+            IMvRegistryStore,
+            IOptions<MvOptions>,
+            ILogger<TExecutor>,
+            string,
+            TExecutor> factoryConstructor,
+        Func<
+            IEventStore,
+            IServiceIdProvider,
+            IMvRegistryStore,
+            IOptions<MvOptions>,
+            ILogger<TExecutor>,
+            string,
+            TExecutor> legacyConstructor)
+    {
+        var options = services.GetRequiredService<IOptions<MvOptions>>();
+        var registry = services.GetRequiredService<IMvRegistryStore>();
+        var logger = services.GetRequiredService<ILogger<TExecutor>>();
+        var eventStoreFactory = services.GetService<IEventStoreFactory>();
+        return eventStoreFactory is not null
+            ? factoryConstructor(eventStoreFactory, registry, options, logger, connectionString)
+            : legacyConstructor(
+                services.GetRequiredService<IEventStore>(),
+                services.GetRequiredService<IServiceIdProvider>(),
+                registry,
+                options,
+                logger,
+                connectionString);
     }
 
     public static IServiceCollection AddMaterializedView<TView>(this IServiceCollection services)

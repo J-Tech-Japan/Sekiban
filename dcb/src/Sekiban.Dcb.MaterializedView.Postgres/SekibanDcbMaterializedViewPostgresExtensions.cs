@@ -33,21 +33,13 @@ public static class SekibanDcbMaterializedViewPostgresExtensions
         services.TryAddSingleton<IMvStorageInfoProvider>(_ =>
             new MvStorageInfoProvider(new MvStorageInfo(MvDbType.Postgres, connectionString)));
         services.TryAddSingleton<IMvExecutor>(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<MvOptions>>();
-            var registry = sp.GetRequiredService<IMvRegistryStore>();
-            var logger = sp.GetRequiredService<ILogger<PostgresMvExecutor>>();
-            var factory = sp.GetService<IEventStoreFactory>();
-            return factory is not null
-                ? new PostgresMvExecutor(factory, registry, options, logger, connectionString)
-                : new PostgresMvExecutor(
-                    sp.GetRequiredService<IEventStore>(),
-                    sp.GetRequiredService<IServiceIdProvider>(),
-                    registry,
-                    options,
-                    logger,
-                    connectionString);
-        });
+            SekibanDcbMaterializedViewExtensions.CreateMaterializedViewExecutor<PostgresMvExecutor>(
+                sp,
+                connectionString,
+                static (factory, registry, options, logger, connection) =>
+                    new PostgresMvExecutor(factory, registry, options, logger, connection),
+                static (eventStore, serviceIdProvider, registry, options, logger, connection) =>
+                    new PostgresMvExecutor(eventStore, serviceIdProvider, registry, options, logger, connection)));
         if (registerHostedWorker)
         {
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MvCatchUpWorker>());

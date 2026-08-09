@@ -33,21 +33,13 @@ public static class SekibanDcbMaterializedViewMySqlExtensions
         services.TryAddSingleton<IMvStorageInfoProvider>(_ =>
             new MvStorageInfoProvider(new MvStorageInfo(MvDbType.MySql, connectionString)));
         services.TryAddSingleton<IMvExecutor>(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<MvOptions>>();
-            var registry = sp.GetRequiredService<IMvRegistryStore>();
-            var logger = sp.GetRequiredService<ILogger<MySqlMvExecutor>>();
-            var factory = sp.GetService<IEventStoreFactory>();
-            return factory is not null
-                ? new MySqlMvExecutor(factory, registry, options, logger, connectionString)
-                : new MySqlMvExecutor(
-                    sp.GetRequiredService<IEventStore>(),
-                    sp.GetRequiredService<IServiceIdProvider>(),
-                    registry,
-                    options,
-                    logger,
-                    connectionString);
-        });
+            SekibanDcbMaterializedViewExtensions.CreateMaterializedViewExecutor<MySqlMvExecutor>(
+                sp,
+                connectionString,
+                static (factory, registry, options, logger, connection) =>
+                    new MySqlMvExecutor(factory, registry, options, logger, connection),
+                static (eventStore, serviceIdProvider, registry, options, logger, connection) =>
+                    new MySqlMvExecutor(eventStore, serviceIdProvider, registry, options, logger, connection)));
         if (registerHostedWorker)
         {
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MvCatchUpWorker>());

@@ -33,21 +33,13 @@ public static class SekibanDcbMaterializedViewSqliteExtensions
         services.TryAddSingleton<IMvStorageInfoProvider>(_ =>
             new MvStorageInfoProvider(new MvStorageInfo(MvDbType.Sqlite, connectionString)));
         services.TryAddSingleton<IMvExecutor>(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<MvOptions>>();
-            var registry = sp.GetRequiredService<IMvRegistryStore>();
-            var logger = sp.GetRequiredService<ILogger<SqliteMvExecutor>>();
-            var factory = sp.GetService<IEventStoreFactory>();
-            return factory is not null
-                ? new SqliteMvExecutor(factory, registry, options, logger, connectionString)
-                : new SqliteMvExecutor(
-                    sp.GetRequiredService<IEventStore>(),
-                    sp.GetRequiredService<IServiceIdProvider>(),
-                    registry,
-                    options,
-                    logger,
-                    connectionString);
-        });
+            SekibanDcbMaterializedViewExtensions.CreateMaterializedViewExecutor<SqliteMvExecutor>(
+                sp,
+                connectionString,
+                static (factory, registry, options, logger, connection) =>
+                    new SqliteMvExecutor(factory, registry, options, logger, connection),
+                static (eventStore, serviceIdProvider, registry, options, logger, connection) =>
+                    new SqliteMvExecutor(eventStore, serviceIdProvider, registry, options, logger, connection)));
         if (registerHostedWorker)
         {
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MvCatchUpWorker>());
