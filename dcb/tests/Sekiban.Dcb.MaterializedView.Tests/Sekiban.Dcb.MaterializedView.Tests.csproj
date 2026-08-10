@@ -9,6 +9,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.2" />
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.3" />
+        <PackageReference Include="MySqlConnector" Version="2.4.0" />
+        <PackageReference Include="Npgsql" Version="10.0.2" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
         <PackageReference Include="xunit" Version="2.9.3"/>
         <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
@@ -23,6 +27,10 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView\Sekiban.Dcb.MaterializedView.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.MySql\Sekiban.Dcb.MaterializedView.MySql.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.Postgres\Sekiban.Dcb.MaterializedView.Postgres.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.SqlServer\Sekiban.Dcb.MaterializedView.SqlServer.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.Sqlite\Sekiban.Dcb.MaterializedView.Sqlite.csproj"/>
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj"/>
     </ItemGroup>
 

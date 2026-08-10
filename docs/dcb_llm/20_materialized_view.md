@@ -56,6 +56,10 @@ The current runtime is split into provider-neutral core plus provider packages:
 
 The event source of truth is still the DCB event store. Materialized views are downstream projections from that store.
 
+The event source and the materialized-view target are separate dependencies. The source provider may be PostgreSQL,
+Cosmos DB, DynamoDB, SQLite, or another `IEventStore` implementation, while the target executor writes to the
+database registered by the materialized-view provider.
+
 ## High-Level Flow
 
 1. A DCB command writes an event to the global event store.
@@ -106,6 +110,47 @@ builder.Services.AddSekibanDcbMaterializedViewSqlServer(configuration, "DcbMater
 builder.Services.AddSekibanDcbMaterializedViewMySql(configuration, "DcbMaterializedViewMySql");
 builder.Services.AddSekibanDcbMaterializedViewSqlite(configuration, "DcbMaterializedViewSqlite");
 ```
+
+### Service-scoped event sources
+
+Every materialized-view catch-up worker must be bound to one exact, non-empty service id. In a process that hosts more
+than one service, disable the provider's automatic worker and register one immutable worker per service:
+
+```csharp
+builder.Services.AddSekibanDcbMaterializedView();
+builder.Services.AddMaterializedView<WeatherForecastMvV1>();
+
+// Event source and MV target can use different backends/connections.
+builder.Services.AddSekibanDcbPostgres(sourceConnectionString);
+builder.Services.AddSekibanDcbMaterializedViewPostgres(
+    targetConnectionString,
+    registerHostedWorker: false);
+
+builder.Services.AddSekibanDcbMaterializedViewWorkerForService("orders");
+builder.Services.AddSekibanDcbMaterializedViewWorkerForService("billing");
+```
+
+The standard PostgreSQL, Cosmos DB, DynamoDB, and SQLite event-store registrations provide `IEventStoreFactory`. Each
+of the four classic target executors resolves `CreateForService(serviceId)` before reading events, so two services
+sharing one source backend cannot consume one another's events. A custom event source can use the compatible executor
+constructor that accepts `IEventStore`; it must still provide an explicit service identity.
+
+Orleans grain keys carry the same identity. Build a key with
+`MvGrainKey.Build("orders", "WeatherForecast", 1)`; the grain validates and forwards that exact service id to the
+executor before stream setup or store access.
+
+For a deliberately single-service legacy deployment only, opt into the literal default explicitly:
+
+```csharp
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.ServiceId = DefaultServiceIdProvider.DefaultServiceId;
+    options.AllowDefaultServiceId = true;
+});
+```
+
+Do not rely on an implicit `default` identity for an ordinary multi-service registration. Missing, blank, default, or
+mismatched identities are rejected before materialized-view infrastructure or event-store I/O.
 
 Projectors still emit SQL directly. For portable projectors, branch on `ctx.DatabaseType` and emit the SQL dialect that
 matches the selected provider. Unsafe Window MV remains PostgreSQL-only in v1.
@@ -233,9 +278,9 @@ They are complementary. A service can use both.
 
 Current implementation status:
 
-- database backend for materialized views: PostgreSQL
+- database backends for materialized views: PostgreSQL, SQL Server, MySQL, and SQLite
 - orchestration host: Orleans
-- event source: existing DCB event store
+- event source: service-scoped existing DCB event store
 
 The sample application in `internalUsages/DcbOrleans.WithoutResult.ApiService` uses:
 

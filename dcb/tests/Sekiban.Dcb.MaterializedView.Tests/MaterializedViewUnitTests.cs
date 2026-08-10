@@ -146,7 +146,11 @@ public class MaterializedViewUnitTests
         using var worker = new MvCatchUpWorker(
             hostFactory,
             executor,
-            Options.Create(new MvOptions { PollInterval = TimeSpan.FromMilliseconds(10) }),
+            Options.Create(new MvOptions
+            {
+                ServiceId = "worker-test",
+                PollInterval = TimeSpan.FromMilliseconds(10)
+            }),
             NullLogger<MvCatchUpWorker>.Instance);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
@@ -156,6 +160,31 @@ public class MaterializedViewUnitTests
 
         Assert.True(executor.InitializeCalls >= 1);
         Assert.True(executor.CatchUpCalls >= 1);
+        Assert.All(executor.ServiceIds, serviceId => Assert.Equal("worker-test", serviceId));
+    }
+
+    [Fact]
+    public void CatchUpWorker_RejectsMissingOrImplicitDefaultServiceBeforeStarting()
+    {
+        var hostFactory = new FakeApplyHostFactory(new FakeApplyHost("Fake", 1));
+        var executor = new FakeMvExecutor();
+
+        Assert.Throws<InvalidOperationException>(() => new MvCatchUpWorker(
+            hostFactory,
+            executor,
+            Options.Create(new MvOptions()),
+            NullLogger<MvCatchUpWorker>.Instance));
+        Assert.Throws<InvalidOperationException>(() => new MvCatchUpWorker(
+            hostFactory,
+            executor,
+            Options.Create(new MvOptions { ServiceId = "default" }),
+            NullLogger<MvCatchUpWorker>.Instance));
+        Assert.Throws<InvalidOperationException>(() => new MvCatchUpWorker(
+            hostFactory,
+            executor,
+            Options.Create(new MvOptions { ServiceId = "orders" }),
+            NullLogger<MvCatchUpWorker>.Instance,
+            "billing"));
     }
 
     [Fact]
@@ -388,6 +417,7 @@ public class MaterializedViewUnitTests
     {
         public int InitializeCalls { get; private set; }
         public int CatchUpCalls { get; private set; }
+        public List<string?> ServiceIds { get; } = [];
 
         public Task InitializeAsync(
             IMvApplyHost host,
@@ -395,6 +425,7 @@ public class MaterializedViewUnitTests
             CancellationToken cancellationToken = default)
         {
             InitializeCalls++;
+            ServiceIds.Add(serviceId);
             return Task.CompletedTask;
         }
 
@@ -404,6 +435,7 @@ public class MaterializedViewUnitTests
             CancellationToken cancellationToken = default)
         {
             CatchUpCalls++;
+            ServiceIds.Add(serviceId);
             return Task.FromResult(new MvCatchUpResult(0, false));
         }
 

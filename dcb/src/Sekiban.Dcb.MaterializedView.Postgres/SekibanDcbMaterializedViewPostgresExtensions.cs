@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Storage;
 
 namespace Sekiban.Dcb.MaterializedView.Postgres;
 
@@ -32,13 +33,13 @@ public static class SekibanDcbMaterializedViewPostgresExtensions
         services.TryAddSingleton<IMvStorageInfoProvider>(_ =>
             new MvStorageInfoProvider(new MvStorageInfo(MvDbType.Postgres, connectionString)));
         services.TryAddSingleton<IMvExecutor>(sp =>
-            new PostgresMvExecutor(
-                sp.GetRequiredService<Sekiban.Dcb.Storage.IEventStore>(),
-                sp.GetRequiredService<IServiceIdProvider>(),
-                sp.GetRequiredService<IMvRegistryStore>(),
-                sp.GetRequiredService<IOptions<MvOptions>>(),
-                sp.GetRequiredService<ILogger<PostgresMvExecutor>>(),
-                connectionString));
+            SekibanDcbMaterializedViewExtensions.CreateMaterializedViewExecutor<PostgresMvExecutor>(
+                sp,
+                connectionString,
+                static (factory, registry, options, logger, connection) =>
+                    new PostgresMvExecutor(factory, registry, options, logger, connection),
+                static (eventStore, serviceIdProvider, registry, options, logger, connection) =>
+                    new PostgresMvExecutor(eventStore, serviceIdProvider, registry, options, logger, connection)));
         if (registerHostedWorker)
         {
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MvCatchUpWorker>());

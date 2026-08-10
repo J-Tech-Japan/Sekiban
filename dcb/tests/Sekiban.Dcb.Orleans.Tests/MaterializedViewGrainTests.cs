@@ -8,6 +8,7 @@ using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.Orleans;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.ServiceId;
 using Xunit;
@@ -47,8 +48,9 @@ public class MaterializedViewGrainTests : IAsyncLifetime
     [Fact]
     public async Task MaterializedViewGrain_Should_CatchUp_Then_Process_Stream_Events()
     {
-        var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, TestMaterializedViewProjector.ViewNameConst, 1);
+        var grainKey = MvGrainKey.Build("orders", TestMaterializedViewProjector.ViewNameConst, 1);
         var grain = _cluster.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        await grain.EnsureStartedAsync();
 
         await WaitUntilAsync(async () =>
         {
@@ -59,7 +61,9 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         var streamedEvent = CreateSerializableEvent(2, DateTime.UtcNow);
         var stream = _cluster.Client
             .GetStreamProvider("EventStreamProvider")
-            .GetStream<SerializableEvent>(StreamId.Create("AllEvents", Guid.Empty));
+            .GetStream<SerializableEvent>(StreamId.Create(
+                ServiceIdGrainKey.BuildStreamNamespace("AllEvents", "orders"),
+                Guid.Empty));
         await stream.OnNextAsync(streamedEvent);
 
         await WaitUntilAsync(() => grain.IsSortableUniqueIdReceived(streamedEvent.SortableUniqueIdValue));
@@ -69,6 +73,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         Assert.True(statusAfterStream.SubscriptionActive);
         Assert.Equal(streamedEvent.SortableUniqueIdValue, statusAfterStream.CurrentPosition);
         Assert.Contains(streamedEvent.Id, SharedExecutor.AppliedEventIds);
+        Assert.Contains("orders", SharedExecutor.ServiceIds);
     }
 
     [Fact]
@@ -126,6 +131,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
                     services.AddSingleton<IEventTypes>(_ => new SimpleEventTypes());
                     services.Configure<MvOptions>(options =>
                     {
+                        options.AllowDefaultServiceId = true;
                         options.PollInterval = TimeSpan.FromMilliseconds(20);
                         options.StreamReorderWindow = TimeSpan.FromMilliseconds(10);
                     });
@@ -178,11 +184,13 @@ public class MaterializedViewGrainTests : IAsyncLifetime
 
         public List<SerializableEvent> InitialEvents { get; } = [];
         public HashSet<Guid> AppliedEventIds { get; } = [];
+        public List<string> ServiceIds { get; } = [];
 
         public void Reset()
         {
             InitialEvents.Clear();
             AppliedEventIds.Clear();
+            ServiceIds.Clear();
         }
 
         public void SeedInitial(params SerializableEvent[] events) => InitialEvents.AddRange(events);
@@ -193,6 +201,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             CancellationToken cancellationToken = default)
         {
             serviceId ??= DefaultServiceIdProvider.DefaultServiceId;
+            ServiceIds.Add(serviceId);
             return _registry.RegisterViewAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken);
         }
 
@@ -202,6 +211,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             CancellationToken cancellationToken = default)
         {
             serviceId ??= DefaultServiceIdProvider.DefaultServiceId;
+            ServiceIds.Add(serviceId);
             await InitializeAsync(host, serviceId, cancellationToken);
 
             var currentPosition = await _registry.GetCurrentPositionAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken);
@@ -242,6 +252,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             CancellationToken cancellationToken = default)
         {
             serviceId ??= DefaultServiceIdProvider.DefaultServiceId;
+            ServiceIds.Add(serviceId);
             await InitializeAsync(host, serviceId, cancellationToken);
 
             var currentPosition = await _registry.GetCurrentPositionAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken);

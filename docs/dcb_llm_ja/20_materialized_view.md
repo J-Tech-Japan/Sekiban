@@ -57,6 +57,10 @@
 
 イベントの正本はあくまで DCB のイベントストアであり、マテリアライズドビューはその下流投影です。
 
+イベントソースとマテリアライズドビューの書き込み先は独立した依存関係です。イベントソースには PostgreSQL、
+Cosmos DB、DynamoDB、SQLite などの `IEventStore` 実装を使い、マテリアライズドビュー側は別の DB 接続・別の
+provider をターゲットとして使えます。
+
 ## 全体の流れ
 
 1. DCB のコマンドがイベントストアへイベントを書き込む
@@ -111,6 +115,46 @@ builder.Services.AddSekibanDcbMaterializedViewSqlServer(configuration, "DcbMater
 builder.Services.AddSekibanDcbMaterializedViewMySql(configuration, "DcbMaterializedViewMySql");
 builder.Services.AddSekibanDcbMaterializedViewSqlite(configuration, "DcbMaterializedViewSqlite");
 ```
+
+### ServiceId 単位のイベントソース
+
+各マテリアライズドビューの catch-up worker は、空でない 1 つの ServiceId に固定します。1 プロセスで複数
+サービスを動かす場合は provider の自動 worker を無効にし、サービスごとに immutable な worker を 1 つ登録します。
+
+```csharp
+builder.Services.AddSekibanDcbMaterializedView();
+builder.Services.AddMaterializedView<WeatherForecastMvV1>();
+
+// イベントソースと MV のターゲットは別 backend / 別 connection にできます。
+builder.Services.AddSekibanDcbPostgres(sourceConnectionString);
+builder.Services.AddSekibanDcbMaterializedViewPostgres(
+    targetConnectionString,
+    registerHostedWorker: false);
+
+builder.Services.AddSekibanDcbMaterializedViewWorkerForService("orders");
+builder.Services.AddSekibanDcbMaterializedViewWorkerForService("billing");
+```
+
+標準の PostgreSQL、Cosmos DB、DynamoDB、SQLite のイベントストア登録は `IEventStoreFactory` を提供します。
+4 種類の classic MV target executor はイベントを読む前に `CreateForService(serviceId)` を解決するため、同じ
+source backend を共有するサービス同士でもイベントが混ざりません。独自のイベントソースは、互換性のために
+残されている `IEventStore` を受け取る executor コンストラクターを使えますが、ServiceId は明示してください。
+
+Orleans の Grain key にも同じ ServiceId を含めます。`MvGrainKey.Build("orders", "WeatherForecast", 1)` で key を
+作成すると、Grain は stream の準備や store アクセスより前にその ServiceId を検証し、executor へそのまま渡します。
+
+単一サービスの旧構成で literal の `default` を使う場合だけ、明示的に opt-in します。
+
+```csharp
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.ServiceId = DefaultServiceIdProvider.DefaultServiceId;
+    options.AllowDefaultServiceId = true;
+});
+```
+
+通常の multi-service 登録で暗黙の `default` に依存しないでください。ServiceId が未指定、空白、default、または
+呼び出し元と不一致の場合は、MV の infrastructure やイベントストアへの I/O より前に拒否されます。
 
 プロジェクターは引き続き SQL を直接返します。複数 provider で 1 つの projector を使いたい場合は、
 `ctx.DatabaseType` を見て SQL 方言を切り替えてください。Unsafe Window MV は v1 時点では PostgreSQL のみです。
@@ -238,9 +282,9 @@ query context から取得できるもの:
 
 現時点の実装範囲:
 
-- DB backend: PostgreSQL
+- DB backend: PostgreSQL、SQL Server、MySQL、SQLite
 - 実行ホスト: Orleans
-- イベントの正本: 既存の DCB event store
+- イベントの正本: ServiceId 単位で解決する既存の DCB event store
 
 サンプル実装 `internalUsages/DcbOrleans.WithoutResult.ApiService` では、
 

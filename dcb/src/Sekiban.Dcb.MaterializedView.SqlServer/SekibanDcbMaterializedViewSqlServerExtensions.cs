@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Storage;
 
 namespace Sekiban.Dcb.MaterializedView.SqlServer;
 
@@ -32,13 +33,13 @@ public static class SekibanDcbMaterializedViewSqlServerExtensions
         services.TryAddSingleton<IMvStorageInfoProvider>(_ =>
             new MvStorageInfoProvider(new MvStorageInfo(MvDbType.SqlServer, connectionString)));
         services.TryAddSingleton<IMvExecutor>(sp =>
-            new SqlServerMvExecutor(
-                sp.GetRequiredService<Sekiban.Dcb.Storage.IEventStore>(),
-                sp.GetRequiredService<IServiceIdProvider>(),
-                sp.GetRequiredService<IMvRegistryStore>(),
-                sp.GetRequiredService<IOptions<MvOptions>>(),
-                sp.GetRequiredService<ILogger<SqlServerMvExecutor>>(),
-                connectionString));
+            SekibanDcbMaterializedViewExtensions.CreateMaterializedViewExecutor<SqlServerMvExecutor>(
+                sp,
+                connectionString,
+                static (factory, registry, options, logger, connection) =>
+                    new SqlServerMvExecutor(factory, registry, options, logger, connection),
+                static (eventStore, serviceIdProvider, registry, options, logger, connection) =>
+                    new SqlServerMvExecutor(eventStore, serviceIdProvider, registry, options, logger, connection)));
         if (registerHostedWorker)
         {
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MvCatchUpWorker>());

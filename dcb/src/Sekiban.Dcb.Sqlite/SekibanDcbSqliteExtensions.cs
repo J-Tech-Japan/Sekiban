@@ -33,6 +33,12 @@ public static class SekibanDcbSqliteExtensions
         services.AddSingleton(options);
         services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
+        services.TryAddSingleton<IEventStoreFactory>(sp =>
+            new SqliteEventStoreFactory(
+                databasePath,
+                sp.GetRequiredService<IEventTypes>(),
+                sp.GetRequiredService<SqliteEventStoreOptions>(),
+                sp.GetService<ILoggerFactory>()));
         services.AddSingleton<IHotEventStore>(sp =>
         {
             var eventTypes = sp.GetRequiredService<IEventTypes>();

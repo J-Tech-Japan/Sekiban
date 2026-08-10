@@ -10,6 +10,11 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 namespace Sekiban.Dcb.InMemory;
 
+internal sealed class InMemoryEventStoreBackend
+{
+    public ConcurrentDictionary<string, InMemoryEventStore.ServiceState> States { get; } = new(StringComparer.Ordinal);
+}
+
 /// <summary>
 ///     In-memory implementation of IEventStore for testing and development
 ///     Stores events and tag streams only - no tag state management
@@ -24,7 +29,7 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, I
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Volatile, "InMemory");
 
-    private sealed class ServiceState
+    internal sealed class ServiceState
     {
         public object Lock { get; } = new();
         public List<Event> EventOrder { get; } = new();
@@ -33,26 +38,36 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, I
         public string MaxSortableUniqueId { get; set; } = string.Empty;
     }
 
-    private readonly ConcurrentDictionary<string, ServiceState> _states = new(StringComparer.Ordinal);
+    private readonly InMemoryEventStoreBackend _backend;
     private readonly IServiceIdProvider _serviceIdProvider;
     private readonly IEventTypes? _eventTypes;
 
     public InMemoryEventStore(IServiceIdProvider? serviceIdProvider = null)
+        : this(new ReflectionEventTypes(), serviceIdProvider, new InMemoryEventStoreBackend())
     {
-        _eventTypes = new ReflectionEventTypes();
-        _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
     }
 
     public InMemoryEventStore(IEventTypes eventTypes, IServiceIdProvider? serviceIdProvider = null)
+        : this(eventTypes, serviceIdProvider, new InMemoryEventStoreBackend())
+    {
+    }
+
+    internal InMemoryEventStore(
+        IEventTypes eventTypes,
+        IServiceIdProvider? serviceIdProvider,
+        InMemoryEventStoreBackend backend)
     {
         _eventTypes = eventTypes;
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+        _backend = backend ?? throw new ArgumentNullException(nameof(backend));
     }
+
+    internal InMemoryEventStoreBackend Backend => _backend;
 
     private ServiceState GetState()
     {
         var serviceId = _serviceIdProvider.GetCurrentServiceId();
-        return _states.GetOrAdd(serviceId, _ => new ServiceState());
+        return _backend.States.GetOrAdd(serviceId, _ => new ServiceState());
     }
 
     public IEventTypes? EventTypes => _eventTypes;

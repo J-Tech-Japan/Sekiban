@@ -406,6 +406,8 @@ builder.Services.AddSekibanDcbNativeRuntime();
 builder.Services.AddSekibanDcbColdEventDefaults();
 builder.Services.AddSekibanDcbMaterializedView(options =>
 {
+    options.ServiceId = DefaultServiceIdProvider.DefaultServiceId;
+    options.AllowDefaultServiceId = true;
     options.BatchSize = 100;
     options.PollInterval = TimeSpan.FromSeconds(1);
 });

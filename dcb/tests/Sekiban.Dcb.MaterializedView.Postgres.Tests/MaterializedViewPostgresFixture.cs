@@ -10,6 +10,7 @@ using Npgsql;
 using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.MaterializedView.Postgres;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -73,6 +74,8 @@ public sealed class MaterializedViewPostgresFixture : IAsyncLifetime
         services.AddSekibanDcbPostgres(ConnectionString);
         services.AddSekibanDcbMaterializedView(options =>
         {
+            options.ServiceId = DefaultServiceIdProvider.DefaultServiceId;
+            options.AllowDefaultServiceId = true;
             options.BatchSize = 100;
             options.SafeWindowMs = 0;
             options.PollInterval = TimeSpan.FromMilliseconds(10);
