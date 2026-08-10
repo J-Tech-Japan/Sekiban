@@ -153,7 +153,7 @@ public class CoreGeneralSekibanExecutor
                     continue; // skip non-consistency tags (no reservation)
                 }
 
-                var lastSortableUniqueId = "";
+                string? lastSortableUniqueId = null;
 
                 if (tag is ConsistencyTag ctWithVersion && ctWithVersion.SortableUniqueId.HasValue)
                 {
@@ -389,6 +389,14 @@ public class CoreGeneralSekibanExecutor
 
         try
         {
+            if (request.ConsistencyTags.Any(entry => entry.LastSortableUniqueId is null))
+            {
+                return ResultBox.Error<SerializedCommitResult>(
+                    new ArgumentException(
+                        "Serialized consistency-tag reservations require a non-null lastSortableUniqueId. " +
+                        "Use an empty string to assert that the tag is empty."));
+            }
+
             if (request.EventCandidates.Count == 0)
             {
                 return ResultBox.FromValue(

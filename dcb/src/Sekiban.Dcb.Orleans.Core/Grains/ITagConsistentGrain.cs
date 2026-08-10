@@ -21,7 +21,7 @@ public interface ITagConsistentGrain : IGrainWithStringKey
     /// <summary>
     ///     Make a reservation for a tag write
     /// </summary>
-    Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string lastSortableUniqueId);
+    Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId);
 
     /// <summary>
     ///     Confirm a reservation

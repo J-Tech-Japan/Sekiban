@@ -118,7 +118,7 @@ WASM 境界で使用される公式 serialized-commit ワイヤ契約の正規�
 | `eventCandidates[].tags` | string[] | はい (空可) | **イベント単位のタグが正 (authoritative)**。各イベントは自身のタグリストを保持し、イベント間で平坦化・共有されません。形式は `"Group:Content"`。 |
 | `consistencyTags` | array | はい (空可) | 楽観的同時実行の予約。ここの各 `tag` はいずれかのイベント候補の `tags` にも存在する必要があります。 |
 | `consistencyTags[].tag` | string | はい | `"Group:Content"`。 |
-| `consistencyTags[].lastSortableUniqueId` | string | はい | 予約に対する直近の `SortableUniqueId`。空文字列は「事前期待なし」を意味します。 |
+| `consistencyTags[].lastSortableUniqueId` | string | はい | 予約に対する直近の `SortableUniqueId`。空文字列は AssertEmpty。`null` は executor/store I/O より前に拒否されます。serialized 予約が不要なら consistency-tag entry 自体を省略します。typed command の Unspecified parity は legacy/V1 の対象外です。 |
 
 ### シリアライザ正規化 (完全固定)
 

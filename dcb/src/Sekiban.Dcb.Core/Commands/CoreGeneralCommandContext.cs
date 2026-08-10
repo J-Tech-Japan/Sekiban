@@ -215,13 +215,12 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
                 // a first write still reserves expect-empty and a second first-write conflicts (the #1085 fix is preserved).
                 if (!_accessedTagStates.ContainsKey(tag))
                 {
-                    var tagContent = tag.GetTag().Substring(tag.GetTagGroup().Length + 1);
-                    _accessedTagStates[tag] = new TagState(
-                        new EmptyTagStatePayload(), 0, latestSortableUniqueId, tag.GetTagGroup(), tagContent, string.Empty, string.Empty);
+                    TrackObservedVersion(tag, latestSortableUniqueId);
                 }
                 return ResultBox.FromValue(true);
             }
 
+            TrackObservedVersion(tag, string.Empty);
             return ResultBox.FromValue(false);
         }
         catch (Exception ex)
@@ -334,4 +333,22 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
     /// </summary>
     [Obsolete("Use ClearResults() instead")]
     public void ClearAppendedEvents() => _appendedEvents.Clear();
+
+    private void TrackObservedVersion(ITag tag, string lastSortableUniqueId)
+    {
+        if (_accessedTagStates.ContainsKey(tag))
+        {
+            return;
+        }
+
+        var tagContent = tag.GetTag().Substring(tag.GetTagGroup().Length + 1);
+        _accessedTagStates[tag] = new TagState(
+            new EmptyTagStatePayload(),
+            0,
+            lastSortableUniqueId,
+            tag.GetTagGroup(),
+            tagContent,
+            string.Empty,
+            string.Empty);
+    }
 }

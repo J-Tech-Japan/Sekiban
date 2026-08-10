@@ -43,4 +43,15 @@ public class ExecutorBinaryCompatibilityTests
         Assert.NotNull(legacy);
         Assert.True(legacy!.IsPublic);
     }
+
+    [Theory]
+    [InlineData(typeof(ITagConsistentGrain))]
+    [InlineData(typeof(TagConsistentGrain))]
+    public void MakeReservationAsync_ClrStringSignature_IsUnchanged(Type type)
+    {
+        var method = type.GetMethod("MakeReservationAsync", BindingFlags.Instance | BindingFlags.Public);
+
+        Assert.NotNull(method);
+        Assert.Equal(typeof(string), Assert.Single(method!.GetParameters()).ParameterType);
+    }
 }

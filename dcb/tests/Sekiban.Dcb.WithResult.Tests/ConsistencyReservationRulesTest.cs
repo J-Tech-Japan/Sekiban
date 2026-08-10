@@ -1,5 +1,6 @@
 using Dcb.Domain;
 using Dcb.Domain.Weather;
+using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
@@ -212,14 +213,12 @@ public class ConsistencyReservationRulesTest
     }
 
     [Fact]
-    public async Task TagExistsAsync_OnNonexistentTag_StaysUntracked_UsesExpectEmpty()
+    public async Task TagExistsAsync_OnNonexistentTag_TracksAssertEmpty()
     {
-        // SEK-G19 companion: a NONEXISTENT tag stays UNTRACKED, so the write reserves expect-empty (a first write).
+        // SEK-G30 companion: a successful negative existence check is an observed-empty assertion, not Unspecified.
         var baseTag = new BaseTag(Guid.NewGuid().ToString());
 
-        // Existence check returns false (nothing tracked) -> the write reserves expect-empty and succeeds. NON-VACUOUS: if a
-        // nonexistent tag were tracked with a non-empty version, this first write would be rejected (non-empty-expected vs
-        // empty tag).
+        // Existence check returns false and records an empty expected version, so the first write succeeds.
         var firstWrite = await _executor.ExecuteAsync(
             new SimpleCommand(),
             async (cmd, ctx) =>
@@ -230,12 +229,176 @@ public class ConsistencyReservationRulesTest
             });
         Assert.True(firstWrite.IsSuccess);
 
-        // A SECOND blind write (no state access, no existence check) reserves expect-empty against the now-existing tag and
-        // CONFLICTS — proving the first write really used expect-empty and the tag is not silently re-created.
-        var secondBlind = await _executor.ExecuteAsync(
+        // A blind update is Unspecified and therefore succeeds against the existing tag. Replacing null derivation with
+        // the pre-SEK-G30 empty-string default makes this fail.
+        var blindUpdate = await _executor.ExecuteAsync(
             new SimpleCommand(),
             (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("C2"), ConsistencyTag.From(baseTag))));
-        Assert.False(secondBlind.IsSuccess);
+        Assert.True(blindUpdate.IsSuccess);
+    }
+
+    [Fact]
+    public async Task UnobservedSecondaryConsistencyTag_OnExistingStream_Succeeds()
+    {
+        var primary = new BaseTag(Guid.NewGuid().ToString());
+        var secondary = new BaseTag(Guid.NewGuid().ToString());
+        var first = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(
+                EventOrNone.Event(
+                    new DummyEvent("V1"),
+                    ConsistencyTag.From(primary),
+                    ConsistencyTag.From(secondary))));
+        Assert.True(first.IsSuccess);
+
+        var update = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            async (cmd, ctx) =>
+            {
+                var state = await ctx.GetStateAsync<DummyProjector>(primary);
+                Assert.True(state.IsSuccess);
+                return EventOrNone.Event(
+                    new DummyEvent("V2"),
+                    ConsistencyTag.From(primary),
+                    ConsistencyTag.From(secondary));
+            });
+
+        Assert.True(update.IsSuccess);
+        Assert.Equal(2, update.GetValue().TagWrites.Count);
+        foreach (var tag in new[] { primary, secondary })
+        {
+            var actor = (await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tag.GetTag())).GetValue();
+            Assert.Empty(await Assert.IsType<GeneralTagConsistentActor>(actor).GetActiveReservationsAsync());
+        }
+    }
+
+    [Fact]
+    public async Task NoReadCommand_AppendsToExistingConsistencyTag()
+    {
+        var tag = new BaseTag(Guid.NewGuid().ToString());
+        Assert.True(
+            (await _executor.ExecuteAsync(
+                new SimpleCommand(),
+                (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("V1"), ConsistencyTag.From(tag)))))
+            .IsSuccess);
+
+        var update = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("V2"), ConsistencyTag.From(tag))));
+
+        Assert.True(update.IsSuccess);
+    }
+
+    [Fact]
+    public async Task NegativeExistenceObservation_ConflictsWhenCompetingFirstWriteWinsBeforeReservation()
+    {
+        var tag = new BaseTag(Guid.NewGuid().ToString());
+        var observedEmpty = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowReservation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var observedCommand = _executor.ExecuteAsync(
+            new SimpleCommand(),
+            async (cmd, ctx) =>
+            {
+                var exists = await ctx.TagExistsAsync(tag);
+                Assert.True(exists.IsSuccess);
+                Assert.False(exists.GetValue());
+                observedEmpty.SetResult();
+                await allowReservation.Task;
+                return EventOrNone.Event(new DummyEvent("observed-empty"), ConsistencyTag.From(tag));
+            });
+
+        await observedEmpty.Task;
+        var competingWrite = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("winner"), ConsistencyTag.From(tag))));
+        Assert.True(competingWrite.IsSuccess);
+        allowReservation.SetResult();
+
+        var result = await observedCommand;
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Failed to reserve tags", result.GetException().Message);
+    }
+
+    [Fact]
+    public async Task EmptyStateObservation_ConflictsWhenCompetingFirstWriteWinsBeforeReservation()
+    {
+        var tag = new BaseTag(Guid.NewGuid().ToString());
+        var observedEmpty = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowReservation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var observedCommand = _executor.ExecuteAsync(
+            new SimpleCommand(),
+            async (cmd, ctx) =>
+            {
+                var state = await ctx.GetStateAsync<DummyProjector>(tag);
+                Assert.True(state.IsSuccess);
+                Assert.Equal(string.Empty, state.GetValue().LastSortedUniqueId);
+                observedEmpty.SetResult();
+                await allowReservation.Task;
+                return EventOrNone.Event(new DummyEvent("observed-empty"), ConsistencyTag.From(tag));
+            });
+
+        await observedEmpty.Task;
+        var competingWrite = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("winner"), ConsistencyTag.From(tag))));
+        Assert.True(competingWrite.IsSuccess);
+        allowReservation.SetResult();
+
+        var result = await observedCommand;
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Failed to reserve tags", result.GetException().Message);
+    }
+
+    [Fact]
+    public async Task NonemptyStateObservation_ConflictsWhenCompetingWriteAdvancesBeforeReservation()
+    {
+        var tag = new BaseTag(Guid.NewGuid().ToString());
+        var firstWrite = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("V1"), ConsistencyTag.From(tag))));
+        Assert.True(firstWrite.IsSuccess);
+        var observedVersion = firstWrite.GetValue().SortableUniqueId!;
+
+        var observedNonempty = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowReservation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var observedCommand = _executor.ExecuteAsync(
+            new SimpleCommand(),
+            async (cmd, ctx) =>
+            {
+                var state = await ctx.GetStateAsync<DummyProjector>(tag);
+                Assert.True(state.IsSuccess);
+                Assert.Equal(observedVersion, state.GetValue().LastSortedUniqueId);
+                observedNonempty.SetResult();
+                await allowReservation.Task;
+                return EventOrNone.Event(new DummyEvent("stale-observer"), ConsistencyTag.From(tag));
+            });
+
+        await observedNonempty.Task;
+        var competingWrite = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("V2"), ConsistencyTag.From(tag))));
+        Assert.True(competingWrite.IsSuccess);
+        Assert.NotEqual(observedVersion, competingWrite.GetValue().SortableUniqueId);
+        allowReservation.SetResult();
+
+        var result = await observedCommand;
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Failed to reserve tags", result.GetException().Message);
+    }
+
+    [Fact]
+    public async Task FailedExistenceRead_DoesNotRecordAssertEmpty()
+    {
+        var context = new CoreGeneralCommandContext(new FailingActorAccessor(), _domainTypes);
+        var tag = new BaseTag(Guid.NewGuid().ToString());
+
+        var result = await context.TagExistsAsync(tag);
+
+        Assert.True(result.IsSuccess);
+        Assert.False(result.GetValue());
+        Assert.Empty(context.GetAccessedTagStates());
     }
 
     private record DummyEvent(string Name) : IEventPayload;
@@ -254,5 +417,13 @@ public class ConsistencyReservationRulesTest
         public static string ProjectorVersion => "1";
         public static string ProjectorName => nameof(DummyProjector);
         public static ITagStatePayload Project(ITagStatePayload current, Event e) => current;
+    }
+
+    private sealed class FailingActorAccessor : IActorObjectAccessor
+    {
+        public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class =>
+            Task.FromResult(ResultBox.Error<T>(new IOException("read failed")));
+
+        public Task<bool> ActorExistsAsync(string actorId) => Task.FromResult(false);
     }
 }

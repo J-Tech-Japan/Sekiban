@@ -66,7 +66,7 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
         }
     }
 
-    public async Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string lastSortableUniqueId)
+    public async Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId)
     {
         // Ensure catch-up is completed before acquiring lock
         await EnsureCatchUpCompletedAsync();
@@ -85,9 +85,16 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
                     new Exception($"Tag {await GetTagActorIdAsync()} is currently reserved"));
             }
 
-            // SEK-G19: EXACT-MATCH optimistic-concurrency check after null/empty NORMALIZATION, in-lock and post-catch-up. An
+            // SEK-G30: null means the command never observed this tag. Keep the complete reservation lifecycle, but do
+            // not compare, refresh, or adopt a version. Empty remains G19 AssertEmpty and non-empty remains ExactMatch.
+            if (lastSortableUniqueId is null)
+            {
+                return ResultBox.FromValue(await CreateReservationAsync());
+            }
+
+            // SEK-G19: EXACT-MATCH optimistic-concurrency check after the SEK-G30 null branch, in-lock and post-catch-up. An
             // empty caller version means "I expect this tag to be EMPTY" (a first write) — NOT "skip the check". Comparing
-            // the normalized expected against the normalized current (both null/empty collapse to "") covers all five
+            // empty expected/current values normalized to "" covers all five
             // classes: empty/empty pass (first write on an empty tag); empty/non-empty CONFLICT (a second first-write against
             // a tag that already has committed state — the #1085 hole); non-empty/empty CONFLICT (an update expecting a
             // version the tag never had — the secondary hole); non-empty mismatch CONFLICT; non-empty match pass. The
@@ -131,22 +138,24 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
                 _latestSortableUniqueId = lastSortableUniqueId;
             }
 
-            // Create new reservation
-            var reservationCode = Guid.NewGuid().ToString();
-            var expiredUtc = DateTime.UtcNow.AddSeconds(_options.CancellationWindowSeconds);
-            var reservation = new TagWriteReservation(
-                reservationCode,
-                expiredUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'"),
-                await GetTagActorIdAsync());
-
-            _activeReservations[reservationCode] = reservation;
-
-            return ResultBox.FromValue(reservation);
+            return ResultBox.FromValue(await CreateReservationAsync());
         }
         finally
         {
             _reservationLock.Release();
         }
+    }
+
+    private async Task<TagWriteReservation> CreateReservationAsync()
+    {
+        var reservationCode = Guid.NewGuid().ToString();
+        var expiredUtc = DateTime.UtcNow.AddSeconds(_options.CancellationWindowSeconds);
+        var reservation = new TagWriteReservation(
+            reservationCode,
+            expiredUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'"),
+            await GetTagActorIdAsync());
+        _activeReservations[reservationCode] = reservation;
+        return reservation;
     }
 
     /// <summary>

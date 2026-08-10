@@ -76,11 +76,13 @@ public record StudentTag(Guid StudentId) : IGuidTagGroup<StudentTag>
 Use helper tags for secondary dimensions. In the sample domain `YearlyStudentsTag` aggregates statistics by year but
 returns `false` for `IsConsistencyTag()` so it never blocks writes.
 
-### First-write reservation semantics (SEK-G19)
+### Three-state reservation semantics (SEK-G19 / SEK-G30, 10.11.0)
 
 A write to a consistency tag reserves it with an **expected version** (the tag's last `SortableUniqueId`), compared
-inside the actor as an **exact match after null/empty normalization**:
+inside the actor according to three distinct states:
 
+- A **null** expected version means **Unspecified**: the command did not observe this tag. The actor still performs the
+  full reservation/confirm/cancel lifecycle, but skips version comparison and does not refresh or adopt a version.
 - An **empty** expected version means "**I expect this tag to be empty**" — a first write. It succeeds only when the tag
   has no committed state; a second, non-overlapping first write against a tag that already has state **conflicts**
   (surfaced through the existing `ResultBox.Error` channel — there is no new public exception type).
@@ -89,10 +91,11 @@ inside the actor as an **exact match after null/empty normalization**:
 
 How the expected version is chosen for a write:
 
-- If the command **accessed the tag state** (`GetStateAsync`) or confirmed it **exists** (`TagExistsAsync`), the write
-  reserves on the tag's **current** version — an update.
-- Otherwise the write reserves **expect-empty** — a first write. So a command that only emits an event for a tag it never
-  read is treated as a create, and a second such create conflicts.
+- If the command successfully observes an empty state through `GetStateAsync`, or `TagExistsAsync` returns `false`, the
+  write reserves **AssertEmpty**. A competing first write therefore conflicts.
+- If the command observes a non-empty state, the write reserves with that exact version.
+- Otherwise the expected version is **Unspecified**. A command may update existing secondary consistency tags that it did
+  not read; failures while reading never become an empty assertion.
 - A `ConsistencyTag.FromTagWithSortableUniqueId(...)` supplies an explicit expected version used verbatim.
 
 **Guarantee boundary (per cluster).** With Orleans this holds **at-most-one first write PER CLUSTER** — one actor
@@ -102,9 +105,10 @@ layer's** job — the conditional unique-append contract (see [Storage Providers
 over any durable duplicates is handled by the multi-projection layer (SEK-G18). Applications that need a hard "this ID
 already exists" guarantee across clusters must rely on storage unique-append, not the actor reservation.
 
-**Behavior change**: before 10.8.0 an empty expected version skipped the check, so one side of a racing create could
-silently succeed. From 10.8.0 that side now fails with a consistency error — create projectors that were written to
-tolerate duplicate first writes on a single cluster can retire that workaround.
+**10.11.0 release note.** Unread consistency tags once again use the 10.1.x no-comparison behavior, fixing commands that
+attach existing secondary tags without reading them. Asserted-empty first writes retain the 10.8.0 conflict guarantee.
+This is a minor release because nullable metadata now distinguishes Unspecified from AssertEmpty; the CLR method signature
+remains `MakeReservationAsync(System.String)`.
 
 ### Shared-store stale-empty re-check (SEK-G22 / 10.8.2)
 

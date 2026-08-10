@@ -133,7 +133,7 @@ golden vectors (`SerializedCommitWireGoldenTests`).
 | `eventCandidates[].tags` | string[] | yes (may be empty) | **Per-event tags are AUTHORITATIVE.** Each event keeps its OWN tag list; tags are never flattened or shared across events. Format `"Group:Content"`. |
 | `consistencyTags` | array | yes (may be empty) | Optimistic-concurrency reservations. Every `tag` here must also appear in some event candidate's `tags`. |
 | `consistencyTags[].tag` | string | yes | `"Group:Content"`. |
-| `consistencyTags[].lastSortableUniqueId` | string | yes | Last observed `SortableUniqueId` for the reservation; empty string means "no prior expectation". |
+| `consistencyTags[].lastSortableUniqueId` | string | yes | Last observed `SortableUniqueId`; empty string means AssertEmpty. `null` is rejected before executor/store I/O. Omit the whole consistency-tag entry when no serialized reservation is required. Typed-command Unspecified parity is intentionally outside legacy/V1. |
 
 ### Serializer normalization (fully pinned)
 

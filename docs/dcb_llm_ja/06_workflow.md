@@ -38,7 +38,8 @@
 
 - 非整合性タグ (`IsConsistencyTag()` が false) は予約スキップ。
 - `ConsistencyTag` で `SortableUniqueId` を指定するとそのバージョンでOCCを実施。
-- 取得済み状態がある場合は `TagState.LastSortedUniqueId` を使用。
+- 正常に空を観測したタグは `""`（AssertEmpty）、非空観測はその完全一致バージョンを使用。
+- 未観測タグは `null`（Unspecified）。予約ライフサイクルは維持し、バージョン比較のみスキップ。
 - 予約は `TagConsistentActorOptions.CancellationWindowSeconds` でタイムアウト管理されます。
 
 衝突が起こると例外を返し、成功していた予約はすべてキャンセルされます。

@@ -167,6 +167,27 @@ public class SerializedCommitAcceptorTests
         Assert.Equal(0, exec.CommitCalls); // binding failed before execution
     }
 
+    [Theory]
+    [InlineData(
+        SerializedCommitShapeError.LegacyPayloadInvalid,
+        "{\"eventCandidates\":[{\"payload\":\"AQID\",\"eventPayloadName\":\"E\",\"tags\":[\"G:1\"]}],\"consistencyTags\":[{\"tag\":\"G:1\",\"lastSortableUniqueId\":null}]}")]
+    [InlineData(
+        SerializedCommitShapeError.VersionedPayloadInvalid,
+        "{\"version\":1,\"eventCandidates\":[{\"payload\":\"AQID\",\"eventPayloadName\":\"E\",\"tags\":[\"G:1\"]}],\"consistencyTags\":[{\"tag\":\"G:1\",\"lastSortableUniqueId\":null}]}")]
+    public async Task NullReservationVersion_IsTypedShapeError_BeforeExecutorIo(
+        SerializedCommitShapeError expected,
+        string json)
+    {
+        var exec = new RecordingExecutor();
+        var acceptor = new SerializedCommitAcceptor(exec);
+
+        var result = await acceptor.AcceptAsync(Utf8(json));
+
+        var error = Assert.IsType<MalformedSerializedCommitException>(result.GetException());
+        Assert.Equal(expected, error.Reason);
+        Assert.Equal(0, exec.CommitCalls);
+    }
+
     [Fact]
     public async Task NonObjectRoot_IsShapeError_NeverNullReference()
     {

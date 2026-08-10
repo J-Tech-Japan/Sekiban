@@ -11,7 +11,7 @@ namespace Sekiban.Dcb.Tests;
 /// <summary>
 ///     SEK-G19: <c>GeneralTagConsistentActor.MakeReservationAsync</c> first-write reservation correctness. An empty caller
 ///     <c>lastSortableUniqueId</c> means "I expect this tag to be EMPTY" (a first write) — evaluated as an EXACT-MATCH
-///     comparison after null/empty normalization, in-lock and post-catch-up. This pins all five comparison classes, the
+///     comparison after SEK-G30's distinct null branch, in-lock and post-catch-up. This pins all five comparison classes, the
 ///     deterministic non-overlapping double-create reproduction (#1085), overlap races, the catch-up interaction, the
 ///     cancellation/expiry no-lockout property, and the honest PER-CLUSTER guarantee boundary (cross-cluster uniqueness is
 ///     the storage layer's job — G15/G16 unique-append — and SEK-G18 owns convergence over any durable duplicates).

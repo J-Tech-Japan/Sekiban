@@ -116,7 +116,7 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
 
         public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => _grain.GetLatestSortableUniqueIdAsync();
 
-        public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string lastSortableUniqueId) =>
+        public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId) =>
             _grain.MakeReservationAsync(lastSortableUniqueId);
 
         public Task<bool> ConfirmReservationAsync(TagWriteReservation reservation) =>
