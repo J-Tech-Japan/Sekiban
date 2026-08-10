@@ -75,16 +75,22 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
             .Select(column => column.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var column in new[] { "current_checkpoint_truth", "target_checkpoint_truth" })
+        if (!existingColumns.Contains("current_checkpoint_truth"))
         {
-            if (!existingColumns.Contains(column))
-            {
-                await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            $"ALTER TABLE sekiban_mv_registry ADD COLUMN {column} TEXT NULL;",
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
-            }
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE sekiban_mv_registry ADD COLUMN current_checkpoint_truth TEXT NULL;",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        if (!existingColumns.Contains("target_checkpoint_truth"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE sekiban_mv_registry ADD COLUMN target_checkpoint_truth TEXT NULL;",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
         }
     }
 
