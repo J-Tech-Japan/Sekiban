@@ -1,11 +1,18 @@
 using Dcb.Domain.WithoutResult;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MaterializedView;
+using Sekiban.Dcb.MaterializedView.MySql;
+using Sekiban.Dcb.MaterializedView.Postgres;
+using Sekiban.Dcb.MaterializedView.SqlServer;
 using Sekiban.Dcb.MaterializedView.Sqlite;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Testing;
 using Xunit;
 
@@ -90,12 +97,43 @@ public sealed class MvActivationEligibilityTests
             entries: [EligibleEntry() with { CurrentPosition = KnownCheckpoint("target", MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp)).PositionValue }]);
 
     [Fact]
-    public async Task FavorableWiredG24Observation_CannotAuthorizeBehindCandidate()
+    public async Task ProductionSqliteActivation_FavorableG24ObservationCannotAuthorizeUnknownTruth()
     {
         const string serviceId = "orders";
+        var connectionString = $"Data Source=file:sek-g27-g24-{Guid.NewGuid():N};Mode=Memory;Cache=Shared";
+        await using var anchor = new SqliteConnection(connectionString);
+        await anchor.OpenAsync();
+
         var serviceIdProvider = new FixedServiceIdProvider(serviceId);
         var statusStore = new InMemoryMultiProjectionStateStore(serviceIdProvider);
         var eventStore = new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes, serviceIdProvider);
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(DomainType.GetDomainTypes());
+        services.AddSingleton<IServiceIdProvider>(serviceIdProvider);
+        services.AddSingleton(eventStore);
+        services.AddSingleton<IEventStore>(eventStore);
+        services.AddSingleton<IEventStoreFactory>(new Sekiban.Dcb.InMemory.InMemoryEventStoreFactory(eventStore));
+        services.AddSingleton(statusStore);
+        services.AddSingleton<IProjectionStatusStore>(statusStore);
+        services.AddSingleton(new ProjectionStatusOptions { FreshnessWindow = TimeSpan.FromMinutes(1) });
+        services.AddSekibanDcbProjectionStatusReader();
+        services.AddSekibanDcbMaterializedView(options => options.ServiceId = serviceId);
+        services.AddSekibanDcbMaterializedViewSqlite(connectionString, registerHostedWorker: false);
+        using var provider = services.BuildServiceProvider();
+
+        var registry = provider.GetRequiredService<IMvRegistryStore>();
+        await registry.EnsureInfrastructureAsync();
+        var current = KnownCheckpoint("current", MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp));
+        await registry.RegisterAsync(
+            CreateEntry(
+                serviceId,
+                "Weather",
+                2,
+                MvStatus.Ready,
+                current,
+                MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable)));
+
         var now = DateTimeOffset.UtcNow;
         var write = await statusStore.UpsertAsync(
             new ProjectionStatusHeartbeat(
@@ -115,30 +153,44 @@ public sealed class MvActivationEligibilityTests
             },
             expectedSequence: 0);
         Assert.True(write.IsSuccess);
-        var statusResult = await new ProjectionStatusReader(
-                statusStore,
-                eventStore,
-                serviceIdProvider,
-                new ProjectionStatusOptions { FreshnessWindow = TimeSpan.FromMinutes(1) })
+        var statusResult = await provider.GetRequiredService<IProjectionStatusReader>()
             .ReadAsync(new ProjectionStatusReadRequest(serviceId, "Weather", "2"));
         Assert.True(statusResult.IsSuccess);
         var g24Observation = Assert.Single(statusResult.GetValue());
         Assert.True(g24Observation.IsCaughtUp);
 
-        var current = KnownCheckpoint("current", MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp));
-        var target = KnownCheckpoint("target", MvCheckpointProvenance.AuthoritativeTargetCapture());
-        var entry = CreateEntry(serviceId, "Weather", 2, MvStatus.Ready, current, target);
+        var providerExecutor = Assert.IsType<SqliteMvExecutor>(provider.GetRequiredService<IMvExecutor>());
+        var activationExecutor = Assert.IsAssignableFrom<IMvActivationExecutor>(providerExecutor);
+        var activePointerWritesBefore = await CountActivePointersAsync(anchor);
+        var result = await activationExecutor.TryActivateAsync(new ActivationHost(), serviceId);
 
-        var (eligibility, request) = MvActivationEligibility.Evaluate(
-            serviceId,
-            "Weather",
-            2,
-            [entry],
-            active: null);
+        Assert.False(result.Succeeded);
+        Assert.Equal(MvActivationFailureReason.TargetUnknown, result.FailureReason);
+        Assert.Null(await registry.GetActiveAsync(serviceId, "Weather"));
+        Assert.Equal(activePointerWritesBefore, await CountActivePointersAsync(anchor));
+        Assert.Equal(0, activePointerWritesBefore);
+    }
 
-        Assert.False(eligibility.IsEligible);
-        Assert.Equal(MvActivationFailureReason.BehindTarget, eligibility.FailureReason);
-        Assert.Null(request);
+    [Fact]
+    public void ProductionActivationSurface_HasNoG24AuthorizationDependency()
+    {
+        Type[] productionActivationTypes =
+        [
+            typeof(MvExecutorBase<>),
+            typeof(MySqlMvExecutor),
+            typeof(PostgresMvExecutor),
+            typeof(SqlServerMvExecutor),
+            typeof(SqliteMvExecutor)
+        ];
+
+        var dependencyTypes = productionActivationTypes.SelectMany(type =>
+            type.GetConstructors().SelectMany(constructor => constructor.GetParameters().Select(parameter => parameter.ParameterType))
+                .Concat(type.GetFields(System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Public |
+                    System.Reflection.BindingFlags.DeclaredOnly).Select(field => field.FieldType)));
+
+        Assert.DoesNotContain(dependencyTypes, IsG24AuthorizationType);
     }
 
     [Fact]
@@ -301,6 +353,38 @@ public sealed class MvActivationEligibilityTests
         return MvCheckpointTruth.Known(
             new SortableUniqueId(SortableUniqueId.Generate(DateTime.UnixEpoch.AddMinutes(1), id)),
             provenance);
+    }
+
+    private static async Task<long> CountActivePointersAsync(SqliteConnection connection)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM sekiban_mv_active";
+        return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
+
+    private static bool IsG24AuthorizationType(Type type) =>
+        type == typeof(IProjectionStatusReader) ||
+        type == typeof(ProjectionStatusSnapshot) ||
+        type == typeof(ProjectionStatusReadRequest);
+
+    private sealed class ActivationHost : IMvApplyHost
+    {
+        public string ViewName => "Weather";
+        public int ViewVersion => 2;
+        public IReadOnlyList<string> LogicalTables => ["main"];
+
+        public Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(
+            IMvTableBindings tables,
+            CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<MvSqlStatementDto>>([]);
+
+        public Task<IReadOnlyList<MvSqlStatementDto>> ApplyEventAsync(
+            SerializableEvent ev,
+            IMvTableBindings tables,
+            IMvApplyQueryPort queryPort,
+            string sortableUniqueId,
+            CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<MvSqlStatementDto>>([]);
     }
 }
 
