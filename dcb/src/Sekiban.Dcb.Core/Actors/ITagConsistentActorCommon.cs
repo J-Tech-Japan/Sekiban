@@ -18,7 +18,10 @@ public interface ITagConsistentActorCommon
     /// <returns>ResultBox containing the latest sortable unique ID (empty string if none) or error if something went wrong</returns>
     Task<ResultBox<string>> GetLatestSortableUniqueIdAsync();
 
-    Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string lastSortableUniqueId);
+    /// <param name="lastSortableUniqueId">
+    ///     null for an unobserved tag (reserve without comparison), empty to assert empty, or a non-empty exact version.
+    /// </param>
+    Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId);
     Task<bool> ConfirmReservationAsync(TagWriteReservation reservation);
     Task<bool> CancelReservationAsync(TagWriteReservation reservation);
 

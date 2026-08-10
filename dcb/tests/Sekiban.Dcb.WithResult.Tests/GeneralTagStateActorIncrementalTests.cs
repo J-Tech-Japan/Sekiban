@@ -352,7 +352,7 @@ public class GeneralTagStateActorIncrementalTests
         public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
             Task.FromResult(ResultBox.FromValue(_lastSortableUniqueId));
 
-        public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string lastSortableUniqueId) =>
+        public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId) =>
             Task.FromResult(
                 ResultBox.FromValue(
                     new TagWriteReservation(

@@ -27,4 +27,18 @@ public class ExecutorBinaryCompatibilityTests
         Assert.NotNull(matching);
         Assert.True(matching.IsPublic);
     }
+
+    [Theory]
+    [InlineData(typeof(ITagConsistentActorCommon))]
+    [InlineData(typeof(GeneralTagConsistentActor))]
+    [InlineData(typeof(TagReservationHelper))]
+    public void MakeReservationAsync_ClrStringSignature_IsUnchanged(Type type)
+    {
+        var method = type.GetMethod(
+            type == typeof(TagReservationHelper) ? "RequestReservationAsync" : "MakeReservationAsync",
+            BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public);
+
+        Assert.NotNull(method);
+        Assert.Equal(typeof(string), method!.GetParameters()[^1].ParameterType);
+    }
 }

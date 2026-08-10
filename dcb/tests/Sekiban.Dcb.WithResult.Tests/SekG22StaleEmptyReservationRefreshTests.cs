@@ -140,6 +140,28 @@ public class SekG22StaleEmptyReservationRefreshTests
     }
 
     [Fact]
+    public async Task Unspecified_UsesNoG22FallbackRead_AndDoesNotAdoptRemoteVersion()
+    {
+        var studentId = Guid.NewGuid();
+        var tag = new StudentTag(studentId);
+        var inner = new CoreInMemoryEventStore(_domainTypes.EventTypes);
+        var store = new CountingLatestTagEventStore(inner);
+        var actor = NewActor(tag, store);
+        Assert.Equal(string.Empty, (await actor.GetLatestSortableUniqueIdAsync()).GetValue());
+
+        var remote = EventTestHelper.CreateEvent(new StudentCreated(studentId, "remote"), tag);
+        await inner.WriteEventAsync(remote, _domainTypes.EventTypes);
+        store.ResetLatestTagCalls();
+
+        var result = await actor.MakeReservationAsync(null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, store.LatestTagCalls);
+        Assert.Equal(string.Empty, (await actor.GetLatestSortableUniqueIdAsync()).GetValue());
+        Assert.Single(await actor.GetActiveReservationsAsync());
+    }
+
+    [Fact]
     public async Task NonEmptyExpected_WithoutEventStore_FailsClosed()
     {
         var tag = new StudentTag(Guid.NewGuid());

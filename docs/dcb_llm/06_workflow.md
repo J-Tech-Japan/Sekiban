@@ -39,7 +39,8 @@ Source: `src/Sekiban.Dcb/Actors/GeneralSekibanExecutor.cs`.
 
 - Tags that return `false` from `IsConsistencyTag()` are skipped.
 - If the tag is a `ConsistencyTag` wrapper with a known `SortableUniqueId`, the executor reuses it for OCC.
-- Otherwise, the executor looks up the tag’s last `SortableUniqueId` from previously fetched state.
+- A successfully observed empty tag uses `""` (AssertEmpty); a non-empty observation uses its exact version.
+- An unobserved tag uses `null` (Unspecified): reservation lifecycle remains active, but version comparison is skipped.
 - Reservations time out based on `TagConsistentActorOptions.CancellationWindowSeconds`
   (`src/Sekiban.Dcb/Actors/GeneralTagConsistentActor.cs`).
 

@@ -421,10 +421,11 @@ duplicate-tolerant.
 non-empty. An empty expected version (a first write) skipped the check, so a second first write against a tag that already
 had committed state passed.
 
-**How G19 closes it.** The reservation now compares the expected version as an **exact match after null/empty
-normalization**, in the actor lock and after catch-up: an empty expected version means "expect the tag to be empty", so a
-second non-overlapping first write **conflicts** through the existing `ResultBox.Error` channel (no new public exception
-type). See [First-write reservation semantics](03_aggregate_command_events.md#first-write-reservation-semantics-sek-g19).
+**How G19 closes it.** In the actor lock and after catch-up, an empty expected version means "expect the tag to be empty",
+so a second non-overlapping first write **conflicts** through the existing `ResultBox.Error` channel (no new public
+exception type). SEK-G30 subsequently separated an unobserved tag (`null`, Unspecified: reserve without comparison) from
+an observed-empty tag (`""`, AssertEmpty); non-empty versions remain ExactMatch. See
+[Three-state reservation semantics](03_aggregate_command_events.md#three-state-reservation-semantics-sek-g19--sek-g30-10110).
 
 **Boundary (per cluster).** This holds **at-most-one first write per cluster** (one Orleans actor activation per tag).
 Independent clusters do not coordinate through the actor — cross-cluster uniqueness is the storage layer's conditional

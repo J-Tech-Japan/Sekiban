@@ -12,7 +12,7 @@ public static class TagReservationHelper
     public static async Task<ResultBox<TagWriteReservation>> RequestReservationAsync(
         IActorObjectAccessor actorAccessor,
         ITag tag,
-        string lastSortableUniqueId)
+        string? lastSortableUniqueId)
     {
         try
         {

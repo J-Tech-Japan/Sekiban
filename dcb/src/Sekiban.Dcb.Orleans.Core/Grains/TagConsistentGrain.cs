@@ -47,7 +47,7 @@ public class TagConsistentGrain : Grain, ITagConsistentGrain
         return _actor.GetLatestSortableUniqueIdAsync();
     }
 
-    public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string lastSortableUniqueId)
+    public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId)
     {
         if (_actor == null)
         {

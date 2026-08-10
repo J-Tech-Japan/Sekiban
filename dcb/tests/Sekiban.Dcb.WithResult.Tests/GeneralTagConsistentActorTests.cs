@@ -106,6 +106,32 @@ public class GeneralTagConsistentActorTests
     }
 
     [Fact]
+    public async Task Unspecified_KeepsReservationLifecycle_OnExistingTag()
+    {
+        var studentId = Guid.NewGuid();
+        var tag = new StudentTag(studentId);
+        var committed = EventTestHelper.CreateEvent(new StudentCreated(studentId, "existing"), tag);
+        await _eventStore.WriteEventAsync(committed, _domainTypes.EventTypes);
+        var actor = new GeneralTagConsistentActor(
+            tag.GetTag(),
+            _eventStore,
+            new TagConsistentActorOptions(),
+            _domainTypes.TagTypes);
+
+        var first = await actor.MakeReservationAsync(null);
+        Assert.True(first.IsSuccess);
+        Assert.Single(await actor.GetActiveReservationsAsync());
+        Assert.False((await actor.MakeReservationAsync(null)).IsSuccess);
+
+        Assert.True(await actor.CancelReservationAsync(first.GetValue()));
+        var second = await actor.MakeReservationAsync(null);
+        Assert.True(second.IsSuccess);
+        Assert.True(await actor.ConfirmReservationAsync(second.GetValue()));
+        Assert.Empty(await actor.GetActiveReservationsAsync());
+        Assert.Equal(committed.SortableUniqueIdValue, (await actor.GetLatestSortableUniqueIdAsync()).GetValue());
+    }
+
+    [Fact]
     public async Task TagConsistentActor_Should_Only_CatchUp_Once()
     {
         // Arrange

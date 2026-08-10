@@ -75,6 +75,10 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
         {
             return Malformed(SerializedCommitShapeError.LegacyPayloadInvalid);
         }
+        if (legacy.ConsistencyTags?.Any(entry => entry.LastSortableUniqueId is null) == true)
+        {
+            return Malformed(SerializedCommitShapeError.LegacyPayloadInvalid);
+        }
 
         // Lift losslessly to V1 (per-event tags preserved) before execution — the legacy path is not a shortcut.
         var envelope = LegacyUnversionedSerializedCommitAdapter.ToVersionedV1(legacy);
@@ -97,6 +101,10 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
         }
 
         if (envelope is null)
+        {
+            return Malformed(SerializedCommitShapeError.VersionedPayloadInvalid);
+        }
+        if (envelope.ConsistencyTags?.Any(entry => entry.LastSortableUniqueId is null) == true)
         {
             return Malformed(SerializedCommitShapeError.VersionedPayloadInvalid);
         }
