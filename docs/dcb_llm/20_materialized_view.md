@@ -248,6 +248,21 @@ This metadata is used to:
 - report status to operators
 - decide whether a view is catching up, ready, or active
 
+### Authoritative activation (SEK-G27)
+
+An MV version is not active merely because initialization succeeded or because no active row exists. The activation
+boundary first captures the event-store head as a `Known` target with
+`MvCheckpointProvenanceKind.AuthoritativeTargetCapture`. The candidate must then have matching service/view/version
+identity, `Ready` lifecycle, `Known` current and target truth, non-legacy provenance, and a current checkpoint at or
+after the captured target. Unknown, malformed, stale, behind, faulted, or unsafe candidates are rejected without
+changing the active pointer. G24 sampled status and event counts are diagnostics only; they are never cutover evidence.
+
+The four relational registry stores expose `TryActivateAsync`. It compares the expected active version and monotonic
+generation together with the exact candidate checkpoint snapshot inside one provider transaction. A conflicting or
+superseded attempt returns a typed conflict and leaves the former pointer unchanged. Initial activation uses this same
+capture, eligibility, and compare-and-switch path, so absence of an active row is only an expected input—not an
+authorization.
+
 ## Querying the Tables
 
 Applications should not hardcode the physical table name. Use `IMvOrleansQueryAccessor` to resolve it.

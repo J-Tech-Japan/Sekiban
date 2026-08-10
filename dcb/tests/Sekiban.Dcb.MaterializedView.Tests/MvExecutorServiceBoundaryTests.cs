@@ -58,6 +58,11 @@ public sealed class MvExecutorServiceBoundaryTests
             await Assert.ThrowsAsync<InvalidOperationException>(() => executor.CatchUpOnceAsync(host, " "));
             await Assert.ThrowsAsync<InvalidOperationException>(() => executor.CatchUpOnceAsync(host, "default"));
             await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ApplySerializableEventsAsync(host, [], "default"));
+            var activationExecutor = Assert.IsAssignableFrom<IMvActivationExecutor>(executor);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                activationExecutor.CaptureTargetCheckpointAsync(host, "default"));
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                activationExecutor.TryActivateAsync(host, "default"));
             Assert.Equal(0, registry.EnsureCalls);
         }
 

@@ -15,7 +15,7 @@ namespace Sekiban.Dcb.MaterializedView;
 /// Provider executors retain their own event-store factory and perform service validation/source selection
 /// at each public operation boundary before delegating database work here.
 /// </summary>
-public abstract class MvExecutorBase<TConnection> : IMvExecutor
+public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationExecutor
     where TConnection : DbConnection
 {
     private readonly IMvRegistryStore _registryStore;
@@ -133,6 +133,96 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor
         IDbTransaction transaction,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    ///     Provider-owned service selection. The caller validates the identity before this method is reached; each
+    ///     concrete executor keeps the factory field and performs its direct CreateForService call here.
+    /// </summary>
+    protected abstract IEventStore SelectEventStoreForService(string exactServiceId);
+
+    public async Task<MvCheckpointTruth> CaptureTargetCheckpointAsync(
+        IMvApplyHost host,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var exactServiceId = ValidateServiceIdAtBoundary(serviceId);
+        var entries = await _registryStore.GetEntriesAsync(
+                exactServiceId,
+                host.ViewName,
+                host.ViewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (entries.Count == 0)
+        {
+            await InitializeCoreAsync(host, exactServiceId, cancellationToken).ConfigureAwait(false);
+        }
+
+        var target = await CaptureTargetCheckpointFromStoreAsync(SelectEventStoreForService(exactServiceId))
+            .ConfigureAwait(false);
+        await _registryStore.SetTargetCheckpointAsync(
+                exactServiceId,
+                host.ViewName,
+                host.ViewVersion,
+                target,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        return target;
+    }
+
+    public async Task<MvActivationResult> TryActivateAsync(
+        IMvApplyHost host,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var exactServiceId = ValidateServiceIdAtBoundary(serviceId);
+        var entries = await _registryStore.GetEntriesAsync(
+                exactServiceId,
+                host.ViewName,
+                host.ViewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var active = await _registryStore.GetActiveAsync(
+                exactServiceId,
+                host.ViewName,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var (eligibility, request) = MvActivationEligibility.Evaluate(
+            exactServiceId,
+            host.ViewName,
+            host.ViewVersion,
+            entries,
+            active);
+        if (!eligibility.IsEligible || request is null)
+        {
+            return MvActivationResult.Rejected(eligibility.FailureReason, eligibility.Message);
+        }
+
+        try
+        {
+            return await _registryStore.TryActivateAsync(
+                    request,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (NotSupportedException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Atomic materialized-view activation is not available for {ViewName}/{ViewVersion}.",
+                host.ViewName,
+                host.ViewVersion);
+            return MvActivationResult.Rejected(MvActivationFailureReason.ProviderFailure, ex.Message);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Atomic materialized-view activation failed without changing the candidate contract for {ViewName}/{ViewVersion}.",
+                host.ViewName,
+                host.ViewVersion);
+            return MvActivationResult.Rejected(MvActivationFailureReason.ProviderFailure, ex.Message);
+        }
+    }
+
     protected async Task InitializeCoreAsync(
         IMvApplyHost host,
         string serviceId,
@@ -171,18 +261,6 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor
                         AppliedEventVersion = 0,
                         LastUpdated = DateTimeOffset.UtcNow
                     },
-                    transaction,
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        var active = await _registryStore.GetActiveAsync(serviceId, host.ViewName, cancellationToken).ConfigureAwait(false);
-        if (active is null)
-        {
-            await _registryStore.SetActiveAsync(
-                    serviceId,
-                    host.ViewName,
-                    host.ViewVersion,
                     transaction,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -228,12 +306,138 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor
         CancellationToken cancellationToken)
     {
         var selectedEventStore = RequireSelectedEventStore(eventStore, serviceId, selectedFromFactory);
+        await EnsureTargetCheckpointCapturedAsync(
+                host,
+                serviceId,
+                selectedEventStore,
+                cancellationToken)
+            .ConfigureAwait(false);
         var currentPosition = await GetCurrentPositionAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
         var readResult = await selectedEventStore.ReadAllSerializableEventsAsync(
                 SortableUniqueId.NullableValue(currentPosition),
                 _options.BatchSize)
             .ConfigureAwait(false);
-        return await CompleteCatchUpAsync(host, serviceId, readResult, cancellationToken).ConfigureAwait(false);
+        var result = await CompleteCatchUpAsync(host, serviceId, readResult, cancellationToken).ConfigureAwait(false);
+        if (result.AppliedEvents == 0 || result.ReachedUnsafeWindow)
+        {
+            await TryActivateIfEligibleAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    ///     Captures the source head once for a candidate until it has authoritative target provenance. A failed
+    ///     capture is persisted as Unknown and retried on the next catch-up turn; it never authorizes activation.
+    /// </summary>
+    private async Task EnsureTargetCheckpointCapturedAsync(
+        IMvApplyHost host,
+        string serviceId,
+        IEventStore eventStore,
+        CancellationToken cancellationToken)
+    {
+        var entries = await _registryStore.GetEntriesAsync(
+                serviceId,
+                host.ViewName,
+                host.ViewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (entries.Count == 0)
+        {
+            await InitializeCoreAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+            entries = await _registryStore.GetEntriesAsync(
+                    serviceId,
+                    host.ViewName,
+                    host.ViewVersion,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (entries.Count == 0 || entries.All(entry =>
+                entry.TargetCheckpointTruth.IsKnown &&
+                entry.TargetCheckpointTruth.Provenance?.Kind == MvCheckpointProvenanceKind.AuthoritativeTargetCapture))
+        {
+            return;
+        }
+
+        var target = await CaptureTargetCheckpointFromStoreAsync(eventStore).ConfigureAwait(false);
+        await _registryStore.SetTargetCheckpointAsync(
+                serviceId,
+                host.ViewName,
+                host.ViewVersion,
+                target,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     The direct executor/worker path and the Orleans path share this promotion boundary. A candidate may move
+    ///     from CatchingUp to Ready only after all non-lifecycle eligibility predicates pass. The final pointer write
+    ///     is always the provider transaction's expected-active/generation CAS.
+    /// </summary>
+    private async Task TryActivateIfEligibleAsync(
+        IMvApplyHost host,
+        string serviceId,
+        CancellationToken cancellationToken)
+    {
+        var entries = await _registryStore.GetEntriesAsync(
+                serviceId,
+                host.ViewName,
+                host.ViewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var active = await _registryStore.GetActiveAsync(
+                serviceId,
+                host.ViewName,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        // Retired and faulted rows are terminal lifecycle states. Only the normal catch-up/ready transition may be
+        // promoted by this automatic initial-activation path.
+        if (entries.Count == 0 || entries.Any(entry =>
+                entry.Status is not (MvStatus.CatchingUp or MvStatus.Ready)))
+        {
+            return;
+        }
+
+        // Evaluate the full contract before changing lifecycle state. The evaluator itself intentionally accepts
+        // only Ready, so use an immutable Ready projection only for this preflight; the real request is re-read after
+        // the status mutation and is checked again by the provider transaction.
+        var readyEntries = entries
+            .Select(entry => entry with { Status = MvStatus.Ready })
+            .ToList();
+        var (preflight, _) = MvActivationEligibility.Evaluate(
+            serviceId,
+            host.ViewName,
+            host.ViewVersion,
+            readyEntries,
+            active);
+        if (!preflight.IsEligible)
+        {
+            return;
+        }
+
+        if (entries.Any(entry => entry.Status != MvStatus.Ready))
+        {
+            await _registryStore.UpdateStatusAsync(
+                    serviceId,
+                    host.ViewName,
+                    host.ViewVersion,
+                    MvStatus.Ready,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var result = await TryActivateAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+        if (!result.Succeeded && !result.IsConflict && result.FailureReason != MvActivationFailureReason.AlreadyActive)
+        {
+            _logger.LogWarning(
+                "Materialized-view candidate was not activated for {ViewName}/{ViewVersion}: {Reason} ({Message})",
+                host.ViewName,
+                host.ViewVersion,
+                result.FailureReason,
+                result.Message);
+        }
     }
 
     protected Task<int> ApplyStreamEventsAtBoundaryAsync(
@@ -481,4 +685,34 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor
 
     private static SortableUniqueId CreateSafeThreshold(int safeWindowMs) =>
         new(SortableUniqueId.Generate(DateTime.UtcNow.AddMilliseconds(-safeWindowMs), Guid.Empty));
+
+    private static async Task<MvCheckpointTruth> CaptureTargetCheckpointFromStoreAsync(IEventStore eventStore)
+    {
+        try
+        {
+            var result = await eventStore.GetLatestSortableUniqueIdAsync().ConfigureAwait(false);
+            if (!result.IsSuccess)
+            {
+                return MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable);
+            }
+
+            var latestSortableUniqueId = result.GetValue();
+            if (string.IsNullOrWhiteSpace(latestSortableUniqueId))
+            {
+                return MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AuthoritativeTargetCapture());
+            }
+
+            return MvCheckpointTruth.Known(
+                new SortableUniqueId(latestSortableUniqueId),
+                MvCheckpointProvenance.AuthoritativeTargetCapture());
+        }
+        catch (MvCheckpointMalformedException)
+        {
+            return MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.Malformed);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable);
+        }
+    }
 }

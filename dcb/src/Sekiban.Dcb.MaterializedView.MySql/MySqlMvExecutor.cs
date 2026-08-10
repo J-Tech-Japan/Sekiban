@@ -53,11 +53,16 @@ public sealed class MySqlMvExecutor : MvExecutorBase<MySqlConnection>, IMvExecut
         return await CatchUpFromStoreAsync(
                 host,
                 exactServiceId,
-                _eventStoreFactory is null ? _legacyEventStore : _eventStoreFactory!.CreateForService(exactServiceId),
+                SelectEventStoreForService(exactServiceId),
                 _eventStoreFactory is not null,
                 cancellationToken)
             .ConfigureAwait(false);
     }
+
+    protected override IEventStore SelectEventStoreForService(string exactServiceId) =>
+        _eventStoreFactory is not null
+            ? _eventStoreFactory.CreateForService(exactServiceId)
+            : _legacyEventStore!;
 
     protected override async Task<MySqlConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {

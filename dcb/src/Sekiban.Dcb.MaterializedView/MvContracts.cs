@@ -19,7 +19,8 @@ public enum MvStatus
     CatchingUp = 1,
     Ready = 2,
     Active = 3,
-    Retired = 4
+    Retired = 4,
+    Faulted = 5
 }
 
 public enum MvApplySource
@@ -141,7 +142,13 @@ public sealed record MvActiveEntry(
     string ServiceId,
     string ViewName,
     int ActiveVersion,
-    DateTimeOffset ActivatedAt);
+    DateTimeOffset ActivatedAt)
+{
+    /// <summary>
+    ///     Monotonic compare-and-switch generation. Legacy active rows migrate with generation zero.
+    /// </summary>
+    public long Generation { get; init; }
+}
 
 public sealed record MvPositionUpdate(
     string ServiceId,
@@ -285,6 +292,30 @@ public interface IMvRegistryStore
         string viewName,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    ///     Stores one authoritative target snapshot without changing the current position or active pointer.
+    ///     Providers implement this operation for the G27 activation boundary; the default keeps older custom
+    ///     registry implementations source-compatible until they opt into activation.
+    /// </summary>
+    Task SetTargetCheckpointAsync(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        MvCheckpointTruth targetCheckpointTruth,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This registry store does not support authoritative activation targets.");
+
+    /// <summary>
+    ///     Provider-atomic expected-active/generation compare-and-switch. This is the only new activation mutation
+    ///     used by the G27 executors; <see cref="SetActiveAsync"/> remains as a legacy compatibility operation.
+    /// </summary>
+    Task<MvActivationResult> TryActivateAsync(
+        MvActivationRequest request,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This registry store does not support atomic materialized-view activation.");
+
     Task SetActiveAsync(
         string serviceId,
         string viewName,
@@ -317,6 +348,40 @@ public interface IMvExecutor
     Task<int> ApplySerializableEventsAsync(
         IMvApplyHost host,
         IReadOnlyList<SerializableEvent> events,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Additive G27 operation. Older custom executors retain source/binary compatibility and report unsupported
+    ///     activation until they implement the authoritative target boundary.
+    /// </summary>
+    Task<MvCheckpointTruth> CaptureTargetCheckpointAsync(
+        IMvApplyHost host,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This materialized-view executor does not support authoritative target capture.");
+
+    /// <summary>Additive G27 provider-atomic cutover operation.</summary>
+    Task<MvActivationResult> TryActivateAsync(
+        IMvApplyHost host,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This materialized-view executor does not support atomic activation.");
+}
+
+/// <summary>
+///     Additive G27 activation surface implemented by the four provider executors. It is separate from
+///     <see cref="IMvExecutor"/> so existing custom executors remain binary/source compatible.
+/// </summary>
+public interface IMvActivationExecutor
+{
+    Task<MvCheckpointTruth> CaptureTargetCheckpointAsync(
+        IMvApplyHost host,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default);
+
+    Task<MvActivationResult> TryActivateAsync(
+        IMvApplyHost host,
         string? serviceId = null,
         CancellationToken cancellationToken = default);
 }

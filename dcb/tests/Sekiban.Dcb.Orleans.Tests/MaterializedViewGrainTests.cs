@@ -199,7 +199,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             Task.FromResult<IReadOnlyList<MvSqlStatement>>([]);
     }
 
-    private sealed class FakeMvExecutor : IMvExecutor
+    private sealed class FakeMvExecutor : IMvExecutor, IMvActivationExecutor
     {
         private readonly FakeMvRegistryStore _registry;
 
@@ -248,18 +248,21 @@ public class MaterializedViewGrainTests : IAsyncLifetime
 
             if (batch.Count == 0)
             {
-                await _registry.UpdatePositionAsync(
-                    new MvPositionUpdate(
-                        serviceId,
-                        host.ViewName,
-                        host.ViewVersion,
-                        SortableUniqueId.MinValue.Value,
-                        MvApplySource.CatchUp,
-                        AppliedEventVersionDelta: 0)
-                    {
-                        CheckpointTruth = MvCheckpointTruth.KnownZero()
-                    },
-                    cancellationToken: cancellationToken);
+                if (string.IsNullOrWhiteSpace(currentPosition))
+                {
+                    await _registry.UpdatePositionAsync(
+                        new MvPositionUpdate(
+                            serviceId,
+                            host.ViewName,
+                            host.ViewVersion,
+                            SortableUniqueId.MinValue.Value,
+                            MvApplySource.CatchUp,
+                            AppliedEventVersionDelta: 0)
+                        {
+                            CheckpointTruth = MvCheckpointTruth.KnownZero()
+                        },
+                        cancellationToken: cancellationToken);
+                }
 
                 return new MvCatchUpResult(0, false);
             }
@@ -319,6 +322,58 @@ public class MaterializedViewGrainTests : IAsyncLifetime
                     ordered.Count),
                 cancellationToken: cancellationToken);
             return ordered.Count;
+        }
+
+        public async Task<MvCheckpointTruth> CaptureTargetCheckpointAsync(
+            IMvApplyHost host,
+            string? serviceId = null,
+            CancellationToken cancellationToken = default)
+        {
+            serviceId ??= DefaultServiceIdProvider.DefaultServiceId;
+            var latest = InitialEvents
+                .Select(serializableEvent => serializableEvent.SortableUniqueIdValue)
+                .OrderBy(value => value, StringComparer.Ordinal)
+                .LastOrDefault();
+            var target = string.IsNullOrWhiteSpace(latest)
+                ? MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AuthoritativeTargetCapture())
+                : MvCheckpointTruth.Known(
+                    new SortableUniqueId(latest),
+                    MvCheckpointProvenance.AuthoritativeTargetCapture());
+            await _registry.SetTargetCheckpointAsync(
+                    serviceId,
+                    host.ViewName,
+                    host.ViewVersion,
+                    target,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            return target;
+        }
+
+        public async Task<MvActivationResult> TryActivateAsync(
+            IMvApplyHost host,
+            string? serviceId = null,
+            CancellationToken cancellationToken = default)
+        {
+            serviceId ??= DefaultServiceIdProvider.DefaultServiceId;
+            var entries = await _registry.GetEntriesAsync(
+                    serviceId,
+                    host.ViewName,
+                    host.ViewVersion,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var active = await _registry.GetActiveAsync(serviceId, host.ViewName, cancellationToken).ConfigureAwait(false);
+            var (eligibility, request) = MvActivationEligibility.Evaluate(
+                serviceId,
+                host.ViewName,
+                host.ViewVersion,
+                entries,
+                active);
+            if (!eligibility.IsEligible || request is null)
+            {
+                return MvActivationResult.Rejected(eligibility.FailureReason, eligibility.Message);
+            }
+
+            return await _registry.TryActivateAsync(request, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -458,6 +513,79 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             return Task.CompletedTask;
         }
 
+        public Task SetTargetCheckpointAsync(
+            string serviceId,
+            string viewName,
+            int viewVersion,
+            MvCheckpointTruth targetCheckpointTruth,
+            System.Data.IDbTransaction? transaction = null,
+            CancellationToken cancellationToken = default)
+        {
+            foreach (var key in _entries.Keys.Where(key =>
+                         key.ServiceId == serviceId && key.ViewName == viewName && key.ViewVersion == viewVersion).ToList())
+            {
+                var entry = _entries[key];
+                _entries[key] = entry with
+                {
+                    TargetPosition = targetCheckpointTruth.PositionValue,
+                    TargetCheckpointTruth = targetCheckpointTruth,
+                    LastUpdated = DateTimeOffset.UtcNow
+                };
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task<MvActivationResult> TryActivateAsync(
+            MvActivationRequest request,
+            System.Data.IDbTransaction? transaction = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (!_active.TryGetValue((request.ServiceId, request.ViewName), out var active))
+            {
+                if (request.ExpectedActiveVersion is not null || request.ExpectedActiveGeneration != 0)
+                {
+                    return Task.FromResult(MvActivationResult.Rejected(
+                        MvActivationFailureReason.ConcurrentSuperseded,
+                        "The expected active pointer changed."));
+                }
+            }
+            else if (active.ActiveVersion != request.ExpectedActiveVersion ||
+                     active.Generation != request.ExpectedActiveGeneration)
+            {
+                return Task.FromResult(MvActivationResult.Rejected(
+                    MvActivationFailureReason.ConcurrentSuperseded,
+                    "The expected active pointer or generation changed."));
+            }
+
+            var keys = _entries.Keys.Where(key =>
+                key.ServiceId == request.ServiceId &&
+                key.ViewName == request.ViewName &&
+                key.ViewVersion == request.ViewVersion).ToList();
+            if (keys.Count != request.CandidateCount || keys.Any(key => _entries[key].Status != request.ExpectedStatus))
+            {
+                return Task.FromResult(MvActivationResult.Rejected(
+                    MvActivationFailureReason.ConcurrentSuperseded,
+                    "The candidate snapshot changed."));
+            }
+
+            var generation = request.ExpectedActiveGeneration + 1;
+            _active[(request.ServiceId, request.ViewName)] = new MvActiveEntry(
+                request.ServiceId,
+                request.ViewName,
+                request.ViewVersion,
+                DateTimeOffset.UtcNow)
+            {
+                Generation = generation
+            };
+            foreach (var key in keys)
+            {
+                _entries[key] = _entries[key] with { Status = MvStatus.Active };
+            }
+
+            return Task.FromResult(MvActivationResult.Success(generation));
+        }
+
         public async Task RegisterViewAsync(string serviceId, string viewName, int viewVersion, CancellationToken cancellationToken)
         {
             var key = (serviceId, viewName, viewVersion, "main");
@@ -479,7 +607,6 @@ public class MaterializedViewGrainTests : IAsyncLifetime
                     LastUpdated = DateTimeOffset.UtcNow
                 },
                 cancellationToken: cancellationToken);
-            await SetActiveAsync(serviceId, viewName, viewVersion, cancellationToken: cancellationToken);
         }
 
         public async Task<string?> GetCurrentPositionAsync(string serviceId, string viewName, int viewVersion, CancellationToken cancellationToken)
