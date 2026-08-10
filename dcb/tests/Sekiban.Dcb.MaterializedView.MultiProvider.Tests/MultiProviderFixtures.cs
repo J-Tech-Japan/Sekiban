@@ -257,6 +257,7 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
     protected abstract void RegisterProvider(IServiceCollection services, string connectionString);
     protected abstract DbConnection CreateConnection(string connectionString);
     protected abstract string ResetSql { get; }
+    protected abstract string LegacyRegistrySql { get; }
 
     public async Task InitializeAsync()
     {
@@ -314,6 +315,22 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
         await connection.ExecuteAsync(ResetSql).ConfigureAwait(false);
     }
 
+    public async Task PrepareLegacyRegistryAsync()
+    {
+        EnsureAvailable();
+        await ResetAsync().ConfigureAwait(false);
+        await using var connection = await OpenConnectionAsync().ConfigureAwait(false);
+        await connection.ExecuteAsync(LegacyRegistrySql).ConfigureAwait(false);
+        await connection.ExecuteAsync(
+                """
+                INSERT INTO sekiban_mv_registry (
+                    service_id, view_name, view_version, logical_table, physical_table, status, last_updated)
+                VALUES ('legacy-service', 'Legacy', 1, 'orders', 'legacy_orders', 'ready', @LastUpdated);
+                """,
+                new { LastUpdated = DateTimeOffset.UtcNow })
+            .ConfigureAwait(false);
+    }
+
     public void EnsureAvailable()
     {
         if (_skipReason is not null)
@@ -364,6 +381,30 @@ public sealed class MySqlMvFixture : MultiProviderFixtureBase
         DROP TABLE IF EXISTS sekiban_mv_registry;
         """;
 
+    protected override string LegacyRegistrySql => """
+        CREATE TABLE sekiban_mv_registry (
+            service_id VARCHAR(255) NOT NULL,
+            view_name VARCHAR(255) NOT NULL,
+            view_version INT NOT NULL,
+            logical_table VARCHAR(255) NOT NULL,
+            physical_table VARCHAR(255) NOT NULL,
+            status VARCHAR(32) NOT NULL,
+            current_position VARCHAR(64) NULL,
+            target_position VARCHAR(64) NULL,
+            last_sortable_unique_id VARCHAR(64) NULL,
+            applied_event_version BIGINT NOT NULL DEFAULT 0,
+            last_applied_source VARCHAR(32) NULL,
+            last_applied_at DATETIME(6) NULL,
+            last_stream_received_sortable_unique_id VARCHAR(64) NULL,
+            last_stream_received_at DATETIME(6) NULL,
+            last_stream_applied_sortable_unique_id VARCHAR(64) NULL,
+            last_catch_up_sortable_unique_id VARCHAR(64) NULL,
+            last_updated DATETIME(6) NOT NULL,
+            metadata LONGTEXT NULL,
+            PRIMARY KEY (service_id, view_name, view_version, logical_table)
+        );
+        """;
+
     public override async Task DisposeAsync()
     {
         await base.DisposeAsync().ConfigureAwait(false);
@@ -409,6 +450,30 @@ public sealed class SqlServerMvFixture : MultiProviderFixtureBase
         IF OBJECT_ID(N'sekiban_mv_registry', N'U') IS NOT NULL DROP TABLE sekiban_mv_registry;
         """;
 
+    protected override string LegacyRegistrySql => """
+        CREATE TABLE sekiban_mv_registry (
+            service_id NVARCHAR(255) NOT NULL,
+            view_name NVARCHAR(255) NOT NULL,
+            view_version INT NOT NULL,
+            logical_table NVARCHAR(255) NOT NULL,
+            physical_table NVARCHAR(255) NOT NULL,
+            status NVARCHAR(32) NOT NULL,
+            current_position NVARCHAR(64) NULL,
+            target_position NVARCHAR(64) NULL,
+            last_sortable_unique_id NVARCHAR(64) NULL,
+            applied_event_version BIGINT NOT NULL CONSTRAINT DF_legacy_registry_applied_event_version DEFAULT 0,
+            last_applied_source NVARCHAR(32) NULL,
+            last_applied_at DATETIMEOFFSET NULL,
+            last_stream_received_sortable_unique_id NVARCHAR(64) NULL,
+            last_stream_received_at DATETIMEOFFSET NULL,
+            last_stream_applied_sortable_unique_id NVARCHAR(64) NULL,
+            last_catch_up_sortable_unique_id NVARCHAR(64) NULL,
+            last_updated DATETIMEOFFSET NOT NULL,
+            metadata NVARCHAR(MAX) NULL,
+            CONSTRAINT PK_legacy_sekiban_mv_registry PRIMARY KEY (service_id, view_name, view_version, logical_table)
+        );
+        """;
+
     public override async Task DisposeAsync()
     {
         await base.DisposeAsync().ConfigureAwait(false);
@@ -449,6 +514,30 @@ public sealed class SqliteMvFixture : MultiProviderFixtureBase
         DROP TABLE IF EXISTS sekiban_mv_weatherforecastportable_v1_forecasts;
         DROP TABLE IF EXISTS sekiban_mv_active;
         DROP TABLE IF EXISTS sekiban_mv_registry;
+        """;
+
+    protected override string LegacyRegistrySql => """
+        CREATE TABLE sekiban_mv_registry (
+            service_id TEXT NOT NULL,
+            view_name TEXT NOT NULL,
+            view_version INTEGER NOT NULL,
+            logical_table TEXT NOT NULL,
+            physical_table TEXT NOT NULL,
+            status TEXT NOT NULL,
+            current_position TEXT NULL,
+            target_position TEXT NULL,
+            last_sortable_unique_id TEXT NULL,
+            applied_event_version INTEGER NOT NULL DEFAULT 0,
+            last_applied_source TEXT NULL,
+            last_applied_at TEXT NULL,
+            last_stream_received_sortable_unique_id TEXT NULL,
+            last_stream_received_at TEXT NULL,
+            last_stream_applied_sortable_unique_id TEXT NULL,
+            last_catch_up_sortable_unique_id TEXT NULL,
+            last_updated TEXT NOT NULL,
+            metadata TEXT NULL,
+            PRIMARY KEY (service_id, view_name, view_version, logical_table)
+        );
         """;
 
     public override async Task DisposeAsync()

@@ -1,5 +1,6 @@
 using System.Data;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Sekiban.Dcb.Events;
 
 namespace Sekiban.Dcb.MaterializedView;
@@ -77,6 +78,43 @@ public sealed record MvRegistryEntry
     public MvStatus Status { get; init; }
     public string? CurrentPosition { get; init; }
     public string? TargetPosition { get; init; }
+    /// <summary>
+    ///     Authoritative checkpoint truth. This is separate from the nullable legacy position fields so an old
+    ///     null row cannot be silently interpreted as a zero position.
+    /// </summary>
+    public MvCheckpointTruth CurrentCheckpointTruth { get; init; } = MvCheckpointTruth.Unknown();
+    public MvCheckpointTruth TargetCheckpointTruth { get; init; } = MvCheckpointTruth.Unknown();
+
+    [JsonIgnore]
+    public MvCheckpointTruth CurrentCheckpoint
+    {
+        get => CurrentCheckpointTruth;
+        init => CurrentCheckpointTruth = value;
+    }
+
+    [JsonIgnore]
+    public MvCheckpointTruth TargetCheckpoint
+    {
+        get => TargetCheckpointTruth;
+        init => TargetCheckpointTruth = value;
+    }
+
+    [JsonIgnore]
+    public string? EffectiveCurrentPosition => CurrentPosition ?? CurrentCheckpointTruth.PositionValue;
+
+    [JsonIgnore]
+    public string? EffectiveTargetPosition => TargetPosition ?? TargetCheckpointTruth.PositionValue;
+
+    [JsonIgnore]
+    public MvCheckpointDiagnostic CheckpointDiagnostic =>
+        new(
+            ServiceId,
+            ViewName,
+            ViewVersion,
+            LogicalTable,
+            Status,
+            CurrentCheckpointTruth,
+            TargetCheckpointTruth);
     public string? LastSortableUniqueId { get; init; }
     public long AppliedEventVersion { get; init; }
     public string? LastAppliedSource { get; init; }
@@ -88,6 +126,16 @@ public sealed record MvRegistryEntry
     public DateTimeOffset LastUpdated { get; init; }
     public string? Metadata { get; init; }
 }
+
+/// <summary>Secret-free diagnostics DTO exposing authoritative MV checkpoint truth for operators and query tooling.</summary>
+public sealed record MvCheckpointDiagnostic(
+    string ServiceId,
+    string ViewName,
+    int ViewVersion,
+    string LogicalTable,
+    MvStatus Status,
+    MvCheckpointTruth Current,
+    MvCheckpointTruth Target);
 
 public sealed record MvActiveEntry(
     string ServiceId,
@@ -101,7 +149,14 @@ public sealed record MvPositionUpdate(
     int ViewVersion,
     string SortableUniqueId,
     MvApplySource Source,
-    long AppliedEventVersionDelta = 1);
+    long AppliedEventVersionDelta = 1)
+{
+    /// <summary>Optional explicit truth. Null retains source-compatible position-update behavior.</summary>
+    public MvCheckpointTruth? CheckpointTruth { get; init; }
+
+    /// <summary>Optional target truth update used by registry diagnostics.</summary>
+    public MvCheckpointTruth? TargetCheckpointTruth { get; init; }
+}
 
 public interface IMvTableBindings
 {

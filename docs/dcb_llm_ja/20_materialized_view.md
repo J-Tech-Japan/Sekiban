@@ -236,6 +236,16 @@ WHERE id = @Id
 - 適用済みイベント数
 - stream 側 / catch-up 側の最終適用 sortable id
 
+`MvRegistryEntry.CurrentCheckpointTruth` と `TargetCheckpointTruth` がチェックポイントの正本です。それぞれは明示的な
+`Known` / `Unknown` 状態と provenance（適用したイベント、権威的な空履歴など）を持ちます。known zero は
+`SortableUniqueId.MinValue` で表し、unknown とは別の状態です。nullable の `CurrentPosition` / `TargetPosition` は
+ソース互換性と legacy 行の表示のために残っていますが、それだけで readiness や順序を判定することはありません。
+
+4 つの relational provider はチェックポイント列を追加して正本を保存し、既存の registry 行を失わずに migration
+します。legacy の null は `Unknown(LegacyNull)` として復号されます。シリアライズされた truth が不正なら型付きの
+`MvCheckpointMalformedException` を返し、どちらかが unknown または malformed の比較・readiness 判定は fail closed
+になります。
+
 用途は次の通りです。
 
 - 現在有効な物理テーブルの解決

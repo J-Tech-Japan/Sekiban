@@ -166,6 +166,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor
                         LogicalTable = table.LogicalName,
                         PhysicalTable = table.PhysicalName,
                         Status = MvStatus.CatchingUp,
+                        CurrentCheckpointTruth = MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.NotObserved),
+                        TargetCheckpointTruth = MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.NotObserved),
                         AppliedEventVersion = 0,
                         LastUpdated = DateTimeOffset.UtcNow
                     },
@@ -211,8 +213,10 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor
                 .ConfigureAwait(false);
         }
 
+        // Never use the nullable legacy position for a decisive read boundary. Old rows may contain a position but
+        // have no provenance, so they remain Unknown and are replayed fail-closed from the beginning.
         return entries
-            .Select(entry => entry.CurrentPosition)
+            .Select(entry => entry.CurrentCheckpointTruth.IsKnown ? entry.CurrentCheckpointTruth.PositionValue : null)
             .FirstOrDefault(position => !string.IsNullOrWhiteSpace(position));
     }
 
@@ -279,6 +283,19 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor
 
         if (batch.Count == 0)
         {
+            await _registryStore.UpdatePositionAsync(
+                    new MvPositionUpdate(
+                        serviceId,
+                        host.ViewName,
+                        host.ViewVersion,
+                        SortableUniqueId.MinValue.Value,
+                        MvApplySource.CatchUp,
+                        AppliedEventVersionDelta: 0)
+                    {
+                        CheckpointTruth = MvCheckpointTruth.KnownZero()
+                    },
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
             return new MvCatchUpResult(0, false);
         }
 
@@ -339,7 +356,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor
         }
 
         var currentPosition = entries
-            .Select(entry => entry.CurrentPosition)
+            .Select(entry => entry.CurrentCheckpointTruth.IsKnown ? entry.CurrentCheckpointTruth.PositionValue : null)
             .FirstOrDefault(position => !string.IsNullOrWhiteSpace(position));
         var orderedEvents = events
             .GroupBy(serializableEvent => serializableEvent.SortableUniqueIdValue)

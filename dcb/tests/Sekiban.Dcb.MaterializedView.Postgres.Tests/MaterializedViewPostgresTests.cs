@@ -2,11 +2,13 @@ using Dcb.Domain.WithoutResult.Order;
 using Dcb.Domain.WithoutResult.MaterializedViews;
 using Dcb.Domain.WithoutResult.Weather;
 using Dapper;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.Postgres;
+using Sekiban.Dcb.ServiceId;
 using Xunit;
 
 namespace Sekiban.Dcb.MaterializedView.Postgres.Tests;
@@ -25,6 +27,11 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
 
         await fixture.Executor.InitializeAsync(ApplyHost(fixture.Projector));
 
+        var initialEntries = await fixture.Services.GetRequiredService<IMvRegistryStore>()
+            .GetEntriesAsync(DefaultServiceIdProvider.DefaultServiceId, fixture.Projector.ViewName, fixture.Projector.ViewVersion);
+        Assert.NotEmpty(initialEntries);
+        Assert.All(initialEntries, entry => Assert.True(entry.CurrentCheckpointTruth.IsUnknown));
+
         await using var connection = await fixture.OpenConnectionAsync();
         var registryCount = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM sekiban_mv_registry;");
         var activeVersion = await connection.ExecuteScalarAsync<int>("SELECT active_version FROM sekiban_mv_active WHERE view_name = 'OrderSummary';");
@@ -40,11 +47,43 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
     }
 
     [SkippableFact]
+    public async Task LegacyRegistry_IsMigratedWithoutRowLoss()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres fixture is unavailable.");
+        await fixture.PrepareLegacyRegistryAsync();
+
+        var registryStore = fixture.Services.GetRequiredService<IMvRegistryStore>();
+        await registryStore.EnsureInfrastructureAsync();
+        var entries = await registryStore.GetEntriesAsync("legacy-service", "Legacy", 1);
+        var entry = Assert.Single(entries);
+
+        Assert.Equal("legacy_orders", entry.PhysicalTable);
+        Assert.True(entry.CurrentCheckpointTruth.IsUnknown);
+        Assert.Equal(MvCheckpointUnknownReason.LegacyNull, entry.CurrentCheckpointTruth.UnknownReason);
+        Assert.Null(entry.CurrentPosition);
+
+        await using var connection = await fixture.OpenConnectionAsync();
+        var rowCount = await connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM sekiban_mv_registry WHERE service_id = 'legacy-service';");
+        Assert.Equal(1, rowCount);
+    }
+
+    [SkippableFact]
     public async Task CatchUp_MaterializesRowsAndIsIdempotent()
     {
         Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres fixture is unavailable.");
         await fixture.ResetAsync();
         await fixture.Executor.InitializeAsync(ApplyHost(fixture.Projector));
+
+        var emptyCatchUp = await fixture.Executor.CatchUpOnceAsync(ApplyHost(fixture.Projector));
+        var emptyEntries = await fixture.Services.GetRequiredService<IMvRegistryStore>()
+            .GetEntriesAsync(DefaultServiceIdProvider.DefaultServiceId, fixture.Projector.ViewName, fixture.Projector.ViewVersion);
+        Assert.Equal(0, emptyCatchUp.AppliedEvents);
+        Assert.All(emptyEntries, entry =>
+        {
+            Assert.True(entry.CurrentCheckpointTruth.IsKnownZero);
+            Assert.False(entry.CurrentCheckpointTruth.IsUnknown);
+        });
 
         var executor = new GeneralSekibanExecutor(fixture.EventStore, fixture.ActorAccessor, fixture.DomainTypes);
         var orderId = Guid.CreateVersion7();
@@ -64,6 +103,10 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
 
         var firstCatchUp = await fixture.Executor.CatchUpOnceAsync(ApplyHost(fixture.Projector));
         var secondCatchUp = await fixture.Executor.CatchUpOnceAsync(ApplyHost(fixture.Projector));
+
+        var finalEntries = await fixture.Services.GetRequiredService<IMvRegistryStore>()
+            .GetEntriesAsync(DefaultServiceIdProvider.DefaultServiceId, fixture.Projector.ViewName, fixture.Projector.ViewVersion);
+        Assert.All(finalEntries, entry => Assert.True(entry.CurrentCheckpointTruth.IsKnown));
 
         await using var connection = await fixture.OpenConnectionAsync();
         var orderRow = await connection.QuerySingleAsync<OrderQueryRow>(
@@ -165,6 +208,7 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
                 """
                 UPDATE sekiban_mv_registry
                 SET current_position = NULL,
+                    current_checkpoint_truth = NULL,
                     last_sortable_unique_id = NULL
                 WHERE view_name = 'OrderSummary';
                 """);
