@@ -352,6 +352,43 @@ public class ConsistencyReservationRulesTest
     }
 
     [Fact]
+    public async Task NonemptyStateObservation_ConflictsWhenCompetingWriteAdvancesBeforeReservation()
+    {
+        var tag = new BaseTag(Guid.NewGuid().ToString());
+        var firstWrite = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("V1"), ConsistencyTag.From(tag))));
+        Assert.True(firstWrite.IsSuccess);
+        var observedVersion = firstWrite.GetValue().SortableUniqueId!;
+
+        var observedNonempty = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowReservation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var observedCommand = _executor.ExecuteAsync(
+            new SimpleCommand(),
+            async (cmd, ctx) =>
+            {
+                var state = await ctx.GetStateAsync<DummyProjector>(tag);
+                Assert.True(state.IsSuccess);
+                Assert.Equal(observedVersion, state.GetValue().LastSortedUniqueId);
+                observedNonempty.SetResult();
+                await allowReservation.Task;
+                return EventOrNone.Event(new DummyEvent("stale-observer"), ConsistencyTag.From(tag));
+            });
+
+        await observedNonempty.Task;
+        var competingWrite = await _executor.ExecuteAsync(
+            new SimpleCommand(),
+            (cmd, ctx) => Task.FromResult(EventOrNone.Event(new DummyEvent("V2"), ConsistencyTag.From(tag))));
+        Assert.True(competingWrite.IsSuccess);
+        Assert.NotEqual(observedVersion, competingWrite.GetValue().SortableUniqueId);
+        allowReservation.SetResult();
+
+        var result = await observedCommand;
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Failed to reserve tags", result.GetException().Message);
+    }
+
+    [Fact]
     public async Task FailedExistenceRead_DoesNotRecordAssertEmpty()
     {
         var context = new CoreGeneralCommandContext(new FailingActorAccessor(), _domainTypes);
