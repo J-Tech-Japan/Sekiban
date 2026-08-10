@@ -28,6 +28,8 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                 status VARCHAR(32) NOT NULL,
                 current_position VARCHAR(64) NULL,
                 target_position VARCHAR(64) NULL,
+                current_checkpoint_truth LONGTEXT NULL,
+                target_checkpoint_truth LONGTEXT NULL,
                 last_sortable_unique_id VARCHAR(64) NULL,
                 applied_event_version BIGINT NOT NULL DEFAULT 0,
                 last_applied_source VARCHAR(32) NULL,
@@ -53,6 +55,35 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             """;
 
         await connection.ExecuteAsync(new CommandDefinition(registrySql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        var checkpointColumns = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'sekiban_mv_registry'
+                      AND column_name IN ('current_checkpoint_truth', 'target_checkpoint_truth');
+                    """,
+                    cancellationToken: cancellationToken)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!checkpointColumns.Contains("current_checkpoint_truth"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE sekiban_mv_registry ADD COLUMN current_checkpoint_truth LONGTEXT NULL;",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
+        if (!checkpointColumns.Contains("target_checkpoint_truth"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE sekiban_mv_registry ADD COLUMN target_checkpoint_truth LONGTEXT NULL;",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+
         await connection.ExecuteAsync(new CommandDefinition(activeSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
@@ -68,6 +99,8 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                 status,
                 current_position,
                 target_position,
+                current_checkpoint_truth,
+                target_checkpoint_truth,
                 last_sortable_unique_id,
                 applied_event_version,
                 last_applied_source,
@@ -88,6 +121,8 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                 @Status,
                 @CurrentPosition,
                 @TargetPosition,
+                @CurrentCheckpointTruth,
+                @TargetCheckpointTruth,
                 @LastSortableUniqueId,
                 @AppliedEventVersion,
                 @LastAppliedSource,
@@ -102,6 +137,14 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             ON DUPLICATE KEY UPDATE
                 physical_table = VALUES(physical_table),
                 last_updated = VALUES(last_updated),
+                current_checkpoint_truth = CASE
+                    WHEN current_checkpoint_truth IS NULL AND current_position IS NULL THEN VALUES(current_checkpoint_truth)
+                    ELSE current_checkpoint_truth
+                END,
+                target_checkpoint_truth = CASE
+                    WHEN target_checkpoint_truth IS NULL AND target_position IS NULL THEN VALUES(target_checkpoint_truth)
+                    ELSE target_checkpoint_truth
+                END,
                 applied_event_version = applied_event_version,
                 last_applied_source = COALESCE(last_applied_source, VALUES(last_applied_source)),
                 last_applied_at = COALESCE(last_applied_at, VALUES(last_applied_at)),
@@ -120,8 +163,10 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             entry.LogicalTable,
             entry.PhysicalTable,
             Status = entry.Status.ToString().ToLowerInvariant(),
-            entry.CurrentPosition,
-            entry.TargetPosition,
+            CurrentPosition = entry.EffectiveCurrentPosition,
+            TargetPosition = entry.EffectiveTargetPosition,
+            CurrentCheckpointTruth = MvCheckpointTruthCodec.Encode(entry.CurrentCheckpointTruth),
+            TargetCheckpointTruth = MvCheckpointTruthCodec.Encode(entry.TargetCheckpointTruth),
             entry.LastSortableUniqueId,
             entry.AppliedEventVersion,
             entry.LastAppliedSource,
@@ -145,9 +190,21 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
         const string sql = """
             UPDATE sekiban_mv_registry
             SET current_position = CASE
-                    WHEN current_position IS NULL
+                    WHEN current_checkpoint_truth IS NULL
+                      OR current_position IS NULL
                       OR current_position < @SortableUniqueId THEN @SortableUniqueId
                     ELSE current_position
+                END,
+                current_checkpoint_truth = CASE
+                    WHEN @CheckpointTruth IS NOT NULL
+                      AND (current_checkpoint_truth IS NULL
+                        OR current_position IS NULL
+                        OR current_position <= @SortableUniqueId) THEN @CheckpointTruth
+                    ELSE current_checkpoint_truth
+                END,
+                target_checkpoint_truth = CASE
+                    WHEN @TargetCheckpointTruth IS NOT NULL THEN @TargetCheckpointTruth
+                    ELSE target_checkpoint_truth
                 END,
                 last_sortable_unique_id = CASE
                     WHEN last_sortable_unique_id IS NULL
@@ -155,8 +212,8 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                     ELSE last_sortable_unique_id
                 END,
                 applied_event_version = applied_event_version + @AppliedEventVersionDelta,
-                last_applied_source = @Source,
-                last_applied_at = UTC_TIMESTAMP(6),
+                last_applied_source = CASE WHEN @AppliedEventVersionDelta > 0 THEN @Source ELSE last_applied_source END,
+                last_applied_at = CASE WHEN @AppliedEventVersionDelta > 0 THEN UTC_TIMESTAMP(6) ELSE last_applied_at END,
                 last_stream_applied_sortable_unique_id = CASE
                     WHEN @Source = 'stream'
                       AND (last_stream_applied_sortable_unique_id IS NULL
@@ -164,7 +221,7 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                     ELSE last_stream_applied_sortable_unique_id
                 END,
                 last_catch_up_sortable_unique_id = CASE
-                    WHEN @Source = 'catchup'
+                    WHEN @Source = 'catchup' AND @AppliedEventVersionDelta > 0
                       AND (last_catch_up_sortable_unique_id IS NULL
                         OR last_catch_up_sortable_unique_id < @SortableUniqueId) THEN @SortableUniqueId
                     ELSE last_catch_up_sortable_unique_id
@@ -184,6 +241,10 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                 update.ViewVersion,
                 update.SortableUniqueId,
                 update.AppliedEventVersionDelta,
+                CheckpointTruth = MvCheckpointTruthCodec.Encode(MvCheckpointTruth.FromPositionUpdate(update)),
+                TargetCheckpointTruth = update.TargetCheckpointTruth is null
+                    ? null
+                    : MvCheckpointTruthCodec.Encode(update.TargetCheckpointTruth),
                 Source = update.Source == MvApplySource.Stream ? "stream" : "catchup"
             },
             transaction,
@@ -266,6 +327,8 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                    status AS Status,
                    current_position AS CurrentPosition,
                    target_position AS TargetPosition,
+                   current_checkpoint_truth AS CurrentCheckpointTruth,
+                   target_checkpoint_truth AS TargetCheckpointTruth,
                    last_sortable_unique_id AS LastSortableUniqueId,
                    applied_event_version AS AppliedEventVersion,
                    last_applied_source AS LastAppliedSource,
@@ -354,8 +417,11 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             new CommandDefinition(sql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    private static MvRegistryEntry MapEntry(IReadOnlyDictionary<string, object?> row) =>
-        new()
+    private static MvRegistryEntry MapEntry(IReadOnlyDictionary<string, object?> row)
+    {
+        var currentCheckpointTruth = MvCheckpointTruthCodec.Decode(ReadNullableString(row, "CurrentCheckpointTruth"));
+        var targetCheckpointTruth = MvCheckpointTruthCodec.Decode(ReadNullableString(row, "TargetCheckpointTruth"));
+        return new()
         {
             ServiceId = ReadRequiredString(row, "ServiceId"),
             ViewName = ReadRequiredString(row, "ViewName"),
@@ -363,8 +429,10 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             LogicalTable = ReadRequiredString(row, "LogicalTable"),
             PhysicalTable = ReadRequiredString(row, "PhysicalTable"),
             Status = Enum.Parse<MvStatus>(ReadRequiredString(row, "Status"), ignoreCase: true),
-            CurrentPosition = ReadNullableString(row, "CurrentPosition"),
-            TargetPosition = ReadNullableString(row, "TargetPosition"),
+            CurrentPosition = ReadNullableString(row, "CurrentPosition") ?? currentCheckpointTruth.PositionValue,
+            TargetPosition = ReadNullableString(row, "TargetPosition") ?? targetCheckpointTruth.PositionValue,
+            CurrentCheckpointTruth = currentCheckpointTruth,
+            TargetCheckpointTruth = targetCheckpointTruth,
             LastSortableUniqueId = ReadNullableString(row, "LastSortableUniqueId"),
             AppliedEventVersion = ReadRequiredLong(row, "AppliedEventVersion"),
             LastAppliedSource = ReadNullableString(row, "LastAppliedSource"),
@@ -376,6 +444,7 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             LastUpdated = ReadRequiredDateTimeOffset(row, "LastUpdated"),
             Metadata = ReadNullableString(row, "Metadata")
         };
+    }
 
     private static MvActiveEntry MapActiveEntry(IReadOnlyDictionary<string, object?> row) =>
         new(

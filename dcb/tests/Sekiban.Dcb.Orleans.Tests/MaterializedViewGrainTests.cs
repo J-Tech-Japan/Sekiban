@@ -95,6 +95,28 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         Assert.Equal("main", table.LogicalTable);
     }
 
+    [Fact]
+    public async Task UnknownCheckpoint_DoesNotPromoteGrainToReady()
+    {
+        SharedExecutor.InitialEvents.Clear();
+        SharedRegistry.ForceUnknownCheckpointReads = true;
+
+        var grainKey = MvGrainKey.Build("orders", TestMaterializedViewProjector.ViewNameConst, 1);
+        var grain = _cluster.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        await grain.EnsureStartedAsync();
+        await grain.RefreshAsync();
+
+        var entries = await SharedRegistry.GetEntriesAsync(
+            DefaultServiceIdProvider.DefaultServiceId,
+            TestMaterializedViewProjector.ViewNameConst,
+            1);
+        var entry = Assert.Single(entries);
+        Assert.True(
+            entry.CurrentCheckpointTruth.IsUnknown,
+            $"state={entry.CurrentCheckpointTruth.State}, position={entry.CurrentCheckpointTruth.PositionValue}, status={entry.Status}, initial={SharedExecutor.InitialEvents.Count}");
+        Assert.NotEqual(MvStatus.Ready, entry.Status);
+    }
+
     private static SerializableEvent CreateSerializableEvent(int ordinal, DateTime timestampUtc) =>
         new(
             Payload: [],
@@ -134,6 +156,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
                         options.AllowDefaultServiceId = true;
                         options.PollInterval = TimeSpan.FromMilliseconds(20);
                         options.StreamReorderWindow = TimeSpan.FromMilliseconds(10);
+                        options.CatchUpStallThreshold = TimeSpan.FromMilliseconds(150);
                     });
                     services.AddMaterializedView<TestMaterializedViewProjector>();
                     services.AddSekibanDcbMaterializedViewOrleans();
@@ -225,6 +248,19 @@ public class MaterializedViewGrainTests : IAsyncLifetime
 
             if (batch.Count == 0)
             {
+                await _registry.UpdatePositionAsync(
+                    new MvPositionUpdate(
+                        serviceId,
+                        host.ViewName,
+                        host.ViewVersion,
+                        SortableUniqueId.MinValue.Value,
+                        MvApplySource.CatchUp,
+                        AppliedEventVersionDelta: 0)
+                    {
+                        CheckpointTruth = MvCheckpointTruth.KnownZero()
+                    },
+                    cancellationToken: cancellationToken);
+
                 return new MvCatchUpResult(0, false);
             }
 
@@ -291,10 +327,13 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         private readonly Dictionary<(string ServiceId, string ViewName, int ViewVersion, string LogicalTable), MvRegistryEntry> _entries = [];
         private readonly Dictionary<(string ServiceId, string ViewName), MvActiveEntry> _active = [];
 
+        public bool ForceUnknownCheckpointReads { get; set; }
+
         public void Reset()
         {
             _entries.Clear();
             _active.Clear();
+            ForceUnknownCheckpointReads = false;
         }
 
         public Task EnsureInfrastructureAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -316,15 +355,17 @@ public class MaterializedViewGrainTests : IAsyncLifetime
                          key.ViewVersion == update.ViewVersion).ToList())
             {
                 var entry = _entries[key];
+                var checkpointTruth = MvCheckpointTruth.FromPositionUpdate(update);
                 _entries[key] = entry with
                 {
                     CurrentPosition = update.SortableUniqueId,
+                    CurrentCheckpointTruth = checkpointTruth,
                     LastSortableUniqueId = update.SortableUniqueId,
                     AppliedEventVersion = entry.AppliedEventVersion + update.AppliedEventVersionDelta,
                     LastAppliedSource = update.Source == MvApplySource.Stream ? "stream" : "catchup",
                     LastAppliedAt = DateTimeOffset.UtcNow,
                     LastStreamAppliedSortableUniqueId = update.Source == MvApplySource.Stream ? update.SortableUniqueId : entry.LastStreamAppliedSortableUniqueId,
-                    LastCatchUpSortableUniqueId = update.Source == MvApplySource.CatchUp ? update.SortableUniqueId : entry.LastCatchUpSortableUniqueId,
+                    LastCatchUpSortableUniqueId = update.Source == MvApplySource.CatchUp && update.AppliedEventVersionDelta > 0 ? update.SortableUniqueId : entry.LastCatchUpSortableUniqueId,
                     LastUpdated = DateTimeOffset.UtcNow
                 };
             }
@@ -387,7 +428,14 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         {
             IReadOnlyList<MvRegistryEntry> entries = _entries
                 .Where(pair => pair.Key.ServiceId == serviceId && pair.Key.ViewName == viewName && pair.Key.ViewVersion == viewVersion)
-                .Select(pair => pair.Value)
+                .Select(pair => ForceUnknownCheckpointReads
+                    ? pair.Value with
+                    {
+                        CurrentPosition = null,
+                        CurrentCheckpointTruth = MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable),
+                        Status = MvStatus.CatchingUp
+                    }
+                    : pair.Value)
                 .OrderBy(entry => entry.LogicalTable, StringComparer.Ordinal)
                 .ToList();
             return Task.FromResult(entries);

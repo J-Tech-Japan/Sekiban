@@ -232,6 +232,16 @@ The runtime stores operational metadata per logical table:
 - applied event version count
 - last stream-applied and catch-up-applied sortable ids
 
+`MvRegistryEntry.CurrentCheckpointTruth` and `TargetCheckpointTruth` are the authoritative checkpoint values. Each value is
+explicitly `Known` or `Unknown` and carries its provenance (for example, an applied event or an authoritative empty
+history). A known zero uses `SortableUniqueId.MinValue`; it is not the same state as unknown. The nullable
+`CurrentPosition` and `TargetPosition` properties remain for source compatibility and display of legacy rows, but they are
+not used to make a readiness or ordering decision on their own.
+
+The four relational providers store this truth in additive checkpoint columns and migrate existing registry tables without
+discarding rows. A legacy null column decodes as `Unknown(LegacyNull)`. Invalid serialized truth is rejected as a typed
+`MvCheckpointMalformedException`; comparisons and readiness checks fail closed whenever either side is unknown or malformed.
+
 This metadata is used to:
 
 - discover the active physical table

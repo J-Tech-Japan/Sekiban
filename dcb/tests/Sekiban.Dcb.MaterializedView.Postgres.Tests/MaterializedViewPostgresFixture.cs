@@ -122,6 +122,40 @@ public sealed class MaterializedViewPostgresFixture : IAsyncLifetime
             """);
     }
 
+    public async Task PrepareLegacyRegistryAsync()
+    {
+        EnsureAvailable();
+        await ResetAsync();
+        await using var connection = await OpenConnectionAsync();
+        await connection.ExecuteAsync(
+            """
+            CREATE TABLE sekiban_mv_registry (
+                service_id TEXT NOT NULL,
+                view_name TEXT NOT NULL,
+                view_version INT NOT NULL,
+                logical_table TEXT NOT NULL,
+                physical_table TEXT NOT NULL,
+                status TEXT NOT NULL,
+                current_position TEXT NULL,
+                target_position TEXT NULL,
+                last_sortable_unique_id TEXT NULL,
+                applied_event_version BIGINT NOT NULL DEFAULT 0,
+                last_applied_source TEXT NULL,
+                last_applied_at TIMESTAMPTZ NULL,
+                last_stream_received_sortable_unique_id TEXT NULL,
+                last_stream_received_at TIMESTAMPTZ NULL,
+                last_stream_applied_sortable_unique_id TEXT NULL,
+                last_catch_up_sortable_unique_id TEXT NULL,
+                last_updated TIMESTAMPTZ NOT NULL,
+                metadata JSONB NULL,
+                PRIMARY KEY (service_id, view_name, view_version, logical_table)
+            );
+            INSERT INTO sekiban_mv_registry (
+                service_id, view_name, view_version, logical_table, physical_table, status, last_updated)
+            VALUES ('legacy-service', 'Legacy', 1, 'orders', 'legacy_orders', 'ready', NOW());
+            """);
+    }
+
     public void EnsureAvailable()
     {
         if (_skipReason is not null)

@@ -33,6 +33,8 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
                 status TEXT NOT NULL,
                 current_position TEXT NULL,
                 target_position TEXT NULL,
+                current_checkpoint_truth TEXT NULL,
+                target_checkpoint_truth TEXT NULL,
                 last_sortable_unique_id TEXT NULL,
                 applied_event_version INTEGER NOT NULL DEFAULT 0,
                 last_applied_source TEXT NULL,
@@ -59,7 +61,31 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
 
         await connection.ExecuteAsync(new CommandDefinition(pragmaSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(registrySql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await EnsureCheckpointColumnsAsync(connection, cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(activeSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    private static async Task EnsureCheckpointColumnsAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var existingColumns = (await connection.QueryAsync<SqliteColumnInfo>(
+                new CommandDefinition("PRAGMA table_info('sekiban_mv_registry');", cancellationToken: cancellationToken))
+            .ConfigureAwait(false))
+            .Select(column => column.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var column in new[] { "current_checkpoint_truth", "target_checkpoint_truth" })
+        {
+            if (!existingColumns.Contains(column))
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            $"ALTER TABLE sekiban_mv_registry ADD COLUMN {column} TEXT NULL;",
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+        }
     }
 
     public async Task RegisterAsync(MvRegistryEntry entry, IDbTransaction? transaction = null, CancellationToken cancellationToken = default)
@@ -74,6 +100,8 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
                 status,
                 current_position,
                 target_position,
+                current_checkpoint_truth,
+                target_checkpoint_truth,
                 last_sortable_unique_id,
                 applied_event_version,
                 last_applied_source,
@@ -94,6 +122,8 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
                 @Status,
                 @CurrentPosition,
                 @TargetPosition,
+                @CurrentCheckpointTruth,
+                @TargetCheckpointTruth,
                 @LastSortableUniqueId,
                 @AppliedEventVersion,
                 @LastAppliedSource,
@@ -108,6 +138,16 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
             ON CONFLICT (service_id, view_name, view_version, logical_table) DO UPDATE SET
                 physical_table = excluded.physical_table,
                 last_updated = excluded.last_updated,
+                current_checkpoint_truth = CASE
+                    WHEN sekiban_mv_registry.current_checkpoint_truth IS NULL
+                      AND sekiban_mv_registry.current_position IS NULL THEN excluded.current_checkpoint_truth
+                    ELSE sekiban_mv_registry.current_checkpoint_truth
+                END,
+                target_checkpoint_truth = CASE
+                    WHEN sekiban_mv_registry.target_checkpoint_truth IS NULL
+                      AND sekiban_mv_registry.target_position IS NULL THEN excluded.target_checkpoint_truth
+                    ELSE sekiban_mv_registry.target_checkpoint_truth
+                END,
                 applied_event_version = sekiban_mv_registry.applied_event_version,
                 last_applied_source = COALESCE(sekiban_mv_registry.last_applied_source, excluded.last_applied_source),
                 last_applied_at = COALESCE(sekiban_mv_registry.last_applied_at, excluded.last_applied_at),
@@ -126,8 +166,10 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
             entry.LogicalTable,
             entry.PhysicalTable,
             Status = entry.Status.ToString().ToLowerInvariant(),
-            entry.CurrentPosition,
-            entry.TargetPosition,
+            CurrentPosition = entry.EffectiveCurrentPosition,
+            TargetPosition = entry.EffectiveTargetPosition,
+            CurrentCheckpointTruth = MvCheckpointTruthCodec.Encode(entry.CurrentCheckpointTruth),
+            TargetCheckpointTruth = MvCheckpointTruthCodec.Encode(entry.TargetCheckpointTruth),
             entry.LastSortableUniqueId,
             entry.AppliedEventVersion,
             entry.LastAppliedSource,
@@ -151,9 +193,21 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
         const string sql = """
             UPDATE sekiban_mv_registry
             SET current_position = CASE
-                    WHEN current_position IS NULL
+                    WHEN current_checkpoint_truth IS NULL
+                      OR current_position IS NULL
                       OR current_position < @SortableUniqueId THEN @SortableUniqueId
                     ELSE current_position
+                END,
+                current_checkpoint_truth = CASE
+                    WHEN @CheckpointTruth IS NOT NULL
+                      AND (current_checkpoint_truth IS NULL
+                        OR current_position IS NULL
+                        OR current_position <= @SortableUniqueId) THEN @CheckpointTruth
+                    ELSE current_checkpoint_truth
+                END,
+                target_checkpoint_truth = CASE
+                    WHEN @TargetCheckpointTruth IS NOT NULL THEN @TargetCheckpointTruth
+                    ELSE target_checkpoint_truth
                 END,
                 last_sortable_unique_id = CASE
                     WHEN last_sortable_unique_id IS NULL
@@ -161,8 +215,8 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
                     ELSE last_sortable_unique_id
                 END,
                 applied_event_version = applied_event_version + @AppliedEventVersionDelta,
-                last_applied_source = @Source,
-                last_applied_at = @Now,
+                last_applied_source = CASE WHEN @AppliedEventVersionDelta > 0 THEN @Source ELSE last_applied_source END,
+                last_applied_at = CASE WHEN @AppliedEventVersionDelta > 0 THEN @Now ELSE last_applied_at END,
                 last_stream_applied_sortable_unique_id = CASE
                     WHEN @Source = 'stream'
                       AND (last_stream_applied_sortable_unique_id IS NULL
@@ -170,7 +224,7 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
                     ELSE last_stream_applied_sortable_unique_id
                 END,
                 last_catch_up_sortable_unique_id = CASE
-                    WHEN @Source = 'catchup'
+                    WHEN @Source = 'catchup' AND @AppliedEventVersionDelta > 0
                       AND (last_catch_up_sortable_unique_id IS NULL
                         OR last_catch_up_sortable_unique_id < @SortableUniqueId) THEN @SortableUniqueId
                     ELSE last_catch_up_sortable_unique_id
@@ -190,6 +244,10 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
                 update.ViewVersion,
                 update.SortableUniqueId,
                 update.AppliedEventVersionDelta,
+                CheckpointTruth = MvCheckpointTruthCodec.Encode(MvCheckpointTruth.FromPositionUpdate(update)),
+                TargetCheckpointTruth = update.TargetCheckpointTruth is null
+                    ? null
+                    : MvCheckpointTruthCodec.Encode(update.TargetCheckpointTruth),
                 Source = update.Source == MvApplySource.Stream ? "stream" : "catchup",
                 Now = SerializeDate(DateTimeOffset.UtcNow)
             },
@@ -281,6 +339,8 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
                    status AS Status,
                    current_position AS CurrentPosition,
                    target_position AS TargetPosition,
+                   current_checkpoint_truth AS CurrentCheckpointTruth,
+                   target_checkpoint_truth AS TargetCheckpointTruth,
                    last_sortable_unique_id AS LastSortableUniqueId,
                    applied_event_version AS AppliedEventVersion,
                    last_applied_source AS LastAppliedSource,
@@ -375,8 +435,11 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
             new CommandDefinition(sql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    private static MvRegistryEntry MapEntry(IReadOnlyDictionary<string, object?> row) =>
-        new()
+    private static MvRegistryEntry MapEntry(IReadOnlyDictionary<string, object?> row)
+    {
+        var currentCheckpointTruth = MvCheckpointTruthCodec.Decode(ReadNullableString(row, "CurrentCheckpointTruth"));
+        var targetCheckpointTruth = MvCheckpointTruthCodec.Decode(ReadNullableString(row, "TargetCheckpointTruth"));
+        return new()
         {
             ServiceId = ReadRequiredString(row, "ServiceId"),
             ViewName = ReadRequiredString(row, "ViewName"),
@@ -384,8 +447,10 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
             LogicalTable = ReadRequiredString(row, "LogicalTable"),
             PhysicalTable = ReadRequiredString(row, "PhysicalTable"),
             Status = Enum.Parse<MvStatus>(ReadRequiredString(row, "Status"), ignoreCase: true),
-            CurrentPosition = ReadNullableString(row, "CurrentPosition"),
-            TargetPosition = ReadNullableString(row, "TargetPosition"),
+            CurrentPosition = ReadNullableString(row, "CurrentPosition") ?? currentCheckpointTruth.PositionValue,
+            TargetPosition = ReadNullableString(row, "TargetPosition") ?? targetCheckpointTruth.PositionValue,
+            CurrentCheckpointTruth = currentCheckpointTruth,
+            TargetCheckpointTruth = targetCheckpointTruth,
             LastSortableUniqueId = ReadNullableString(row, "LastSortableUniqueId"),
             AppliedEventVersion = ReadRequiredLong(row, "AppliedEventVersion"),
             LastAppliedSource = ReadNullableString(row, "LastAppliedSource"),
@@ -397,6 +462,7 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
             LastUpdated = ReadRequiredDateTimeOffset(row, "LastUpdated"),
             Metadata = ReadNullableString(row, "Metadata")
         };
+    }
 
     private static MvActiveEntry MapActiveEntry(IReadOnlyDictionary<string, object?> row) =>
         new(
@@ -404,6 +470,11 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
             ReadRequiredString(row, "ViewName"),
             ReadRequiredInt(row, "ActiveVersion"),
             ReadRequiredDateTimeOffset(row, "ActivatedAt"));
+
+    private sealed class SqliteColumnInfo
+    {
+        public string Name { get; init; } = string.Empty;
+    }
 
     private static IReadOnlyDictionary<string, object?> ToDictionary(object row)
     {

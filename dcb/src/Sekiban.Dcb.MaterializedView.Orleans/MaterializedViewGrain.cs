@@ -436,6 +436,22 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private async Task CompleteCatchUpAsync(CancellationToken cancellationToken)
     {
         await RefreshPositionFromRegistryAsync(cancellationToken);
+
+        // Registry truth is the readiness gate. A legacy row, failed read, or
+        // malformed/unknown checkpoint must never be promoted to Ready just
+        // because the executor returned an empty batch.
+        var entries = await _registryStore.GetEntriesAsync(
+            _serviceId!,
+            _host!.ViewName,
+            _host.ViewVersion,
+            cancellationToken);
+        if (entries.Count == 0 || entries.Any(entry => !entry.CurrentCheckpointTruth.IsKnown))
+        {
+            _lastError = "Materialized view checkpoint truth is Unknown; readiness remains fail-closed.";
+            _consecutiveEmptyBatches = 0;
+            return;
+        }
+
         await _registryStore.UpdateStatusAsync(
             _serviceId!,
             _host!.ViewName,
@@ -617,7 +633,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         ResolveHost();
         var entries = await _registryStore.GetEntriesAsync(_serviceId!, _host!.ViewName, _host.ViewVersion, cancellationToken);
         var currentPosition = entries
-            .Select(entry => entry.CurrentPosition)
+            .Select(entry => entry.CurrentCheckpointTruth.IsKnown ? entry.CurrentCheckpointTruth.PositionValue : null)
             .Where(position => !string.IsNullOrWhiteSpace(position))
             .OrderByDescending(position => position, StringComparer.Ordinal)
             .FirstOrDefault();

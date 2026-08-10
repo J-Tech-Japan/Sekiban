@@ -65,6 +65,9 @@ public sealed class MySqlMvIntegrationTests(MySqlMvFixture fixture)
 {
     [SkippableFact]
     public Task CatchUp_MaterializesRowsAndRegistry() => MultiProviderAssertions.AssertProviderWorksAsync(fixture);
+
+    [SkippableFact]
+    public Task LegacyRegistry_IsMigratedWithoutRowLoss() => MultiProviderAssertions.AssertLegacyRegistryMigratesAsync(fixture);
 }
 
 [Collection(nameof(SqlServerMvCollection))]
@@ -72,6 +75,9 @@ public sealed class SqlServerMvIntegrationTests(SqlServerMvFixture fixture)
 {
     [SkippableFact]
     public Task CatchUp_MaterializesRowsAndRegistry() => MultiProviderAssertions.AssertProviderWorksAsync(fixture);
+
+    [SkippableFact]
+    public Task LegacyRegistry_IsMigratedWithoutRowLoss() => MultiProviderAssertions.AssertLegacyRegistryMigratesAsync(fixture);
 }
 
 [Collection(nameof(SqliteMvCollection))]
@@ -81,12 +87,40 @@ public sealed class SqliteMvIntegrationTests(SqliteMvFixture fixture)
     public Task CatchUp_MaterializesRowsAndRegistry() => MultiProviderAssertions.AssertProviderWorksAsync(fixture);
 
     [SkippableFact]
+    public Task LegacyRegistry_IsMigratedWithoutRowLoss() => MultiProviderAssertions.AssertLegacyRegistryMigratesAsync(fixture);
+
+    [SkippableFact]
     public Task SharedEventBackend_UsesOnlyTheRequestedService() =>
         MultiProviderAssertions.AssertServiceIsolationAsync(fixture);
 }
 
 internal static class MultiProviderAssertions
 {
+    public static async Task AssertLegacyRegistryMigratesAsync(MultiProviderFixtureBase fixture)
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Integration fixture is unavailable.");
+
+        await fixture.PrepareLegacyRegistryAsync().ConfigureAwait(false);
+        var registryStore = fixture.Services.GetRequiredService<IMvRegistryStore>();
+        await registryStore.EnsureInfrastructureAsync().ConfigureAwait(false);
+
+        var entries = await registryStore.GetEntriesAsync("legacy-service", "Legacy", 1).ConfigureAwait(false);
+        var entry = Assert.Single(entries);
+        Assert.Equal("legacy_orders", entry.PhysicalTable);
+        Assert.True(entry.CurrentCheckpointTruth.IsUnknown);
+        Assert.Equal(MvCheckpointUnknownReason.LegacyNull, entry.CurrentCheckpointTruth.UnknownReason);
+        Assert.Null(entry.CurrentPosition);
+        Assert.Equal(1, await CountLegacyRowsAsync(fixture).ConfigureAwait(false));
+    }
+
+    private static async Task<long> CountLegacyRowsAsync(MultiProviderFixtureBase fixture)
+    {
+        await using var connection = await fixture.OpenConnectionAsync().ConfigureAwait(false);
+        return await connection.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM sekiban_mv_registry WHERE service_id = 'legacy-service';")
+            .ConfigureAwait(false);
+    }
+
     public static async Task AssertProviderWorksAsync(MultiProviderFixtureBase fixture)
     {
         Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Integration fixture is unavailable.");
@@ -96,6 +130,29 @@ internal static class MultiProviderAssertions
         var projector = fixture.Services.GetRequiredService<CrossProviderWeatherForecastMvV1>();
         await fixture.Executor.InitializeAsync(new NativeMvApplyHost(projector, fixture.DomainTypes.EventTypes, fixture.Services.GetRequiredService<IMvStorageInfoProvider>().GetStorageInfo().DatabaseType))
             .ConfigureAwait(false);
+        var registryStore = fixture.Services.GetRequiredService<IMvRegistryStore>();
+        var initialRegistryEntries = await registryStore.GetEntriesAsync(
+                MultiProviderFixtureBase.ServiceId,
+                projector.ViewName,
+                projector.ViewVersion)
+            .ConfigureAwait(false);
+        Assert.NotEmpty(initialRegistryEntries);
+        Assert.All(initialRegistryEntries, entry => Assert.True(entry.CurrentCheckpointTruth.IsUnknown));
+
+        var emptyCatchUp = await fixture.Executor.CatchUpOnceAsync(
+                new NativeMvApplyHost(projector, fixture.DomainTypes.EventTypes, fixture.Services.GetRequiredService<IMvStorageInfoProvider>().GetStorageInfo().DatabaseType))
+            .ConfigureAwait(false);
+        var emptyHistoryEntries = await registryStore.GetEntriesAsync(
+                MultiProviderFixtureBase.ServiceId,
+                projector.ViewName,
+                projector.ViewVersion)
+            .ConfigureAwait(false);
+        Assert.Equal(0, emptyCatchUp.AppliedEvents);
+        Assert.All(emptyHistoryEntries, entry =>
+        {
+            Assert.True(entry.CurrentCheckpointTruth.IsKnownZero);
+            Assert.False(entry.CurrentCheckpointTruth.IsUnknown);
+        });
 
         var executor = new GeneralSekibanExecutor(fixture.EventStore, fixture.ActorAccessor, fixture.DomainTypes);
         var forecastId = Guid.CreateVersion7();
@@ -130,6 +187,12 @@ internal static class MultiProviderAssertions
         var secondCatchUp = await fixture.Executor.CatchUpOnceAsync(
             new NativeMvApplyHost(projector, fixture.DomainTypes.EventTypes, fixture.Services.GetRequiredService<IMvStorageInfoProvider>().GetStorageInfo().DatabaseType))
             .ConfigureAwait(false);
+        var finalRegistryEntries = await registryStore.GetEntriesAsync(
+                MultiProviderFixtureBase.ServiceId,
+                projector.ViewName,
+                projector.ViewVersion)
+            .ConfigureAwait(false);
+        Assert.All(finalRegistryEntries, entry => Assert.True(entry.CurrentCheckpointTruth.IsKnown));
 
         await using var connection = await fixture.OpenConnectionAsync().ConfigureAwait(false);
         var row = await connection.QuerySingleAsync<ForecastDbRow>(
