@@ -100,6 +100,13 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
         ResolveHost();
         await _executor.InitializeAsync(_host!, _serviceId, CancellationToken.None);
+        if (_executor is IMvActivationExecutor activationExecutor)
+        {
+            // Target capture is an explicit lifecycle step. Initialization creates registry rows only; it never
+            // treats the absence of an active pointer as permission to cut over.
+            await activationExecutor.CaptureTargetCheckpointAsync(_host!, _serviceId, CancellationToken.None);
+        }
+
         await RefreshPositionFromRegistryAsync(CancellationToken.None);
         await StartSubscriptionAsync();
 
@@ -449,6 +456,67 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         {
             _lastError = "Materialized view checkpoint truth is Unknown; readiness remains fail-closed.";
             _consecutiveEmptyBatches = 0;
+            return;
+        }
+
+        if (_executor is IMvActivationExecutor activationExecutor)
+        {
+            if (entries.Any(entry =>
+                    entry.Status == MvStatus.Faulted ||
+                    !entry.TargetCheckpointTruth.IsKnown ||
+                    entry.TargetCheckpointTruth.Provenance?.Kind != MvCheckpointProvenanceKind.AuthoritativeTargetCapture ||
+                    !entry.CurrentCheckpointTruth.Satisfies(entry.TargetCheckpointTruth)))
+            {
+                _lastError = "Materialized view candidate is not at its authoritative target; readiness remains fail-closed.";
+                _consecutiveEmptyBatches = 0;
+                return;
+            }
+
+            var active = await _registryStore.GetActiveAsync(
+                    _serviceId!,
+                    _host!.ViewName,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (active?.ActiveVersion == _host.ViewVersion)
+            {
+                _isCatchUpActive = false;
+                _needsImmediateCatchUp = false;
+                _consecutiveEmptyBatches = 0;
+                _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
+                return;
+            }
+
+            if (entries.Any(entry => entry.Status is not (MvStatus.CatchingUp or MvStatus.Ready)))
+            {
+                _lastError = "Materialized view candidate lifecycle is not eligible for activation.";
+                _consecutiveEmptyBatches = 0;
+                return;
+            }
+
+            await _registryStore.UpdateStatusAsync(
+                    _serviceId!,
+                    _host.ViewName,
+                    _host.ViewVersion,
+                    MvStatus.Ready,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            var activation = await activationExecutor.TryActivateAsync(
+                    _host,
+                    _serviceId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (!activation.Succeeded && activation.FailureReason != MvActivationFailureReason.AlreadyActive)
+            {
+                _lastError = $"Materialized view activation was rejected: {activation.FailureReason}.";
+                _consecutiveEmptyBatches = 0;
+                return;
+            }
+
+            _isCatchUpActive = false;
+            _needsImmediateCatchUp = false;
+            _consecutiveEmptyBatches = 0;
+            _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
             return;
         }
 

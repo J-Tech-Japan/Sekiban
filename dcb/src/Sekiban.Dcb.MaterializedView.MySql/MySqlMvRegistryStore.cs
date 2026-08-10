@@ -49,6 +49,7 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                 service_id VARCHAR(200) NOT NULL,
                 view_name VARCHAR(200) NOT NULL,
                 active_version INT NOT NULL,
+                active_generation BIGINT NOT NULL DEFAULT 0,
                 activated_at DATETIME(6) NOT NULL,
                 PRIMARY KEY (service_id, view_name)
             );
@@ -85,6 +86,25 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
         }
 
         await connection.ExecuteAsync(new CommandDefinition(activeSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        var activeGenerationColumns = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'sekiban_mv_active'
+                      AND column_name = 'active_generation';
+                    """,
+                    cancellationToken: cancellationToken)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!activeGenerationColumns.Contains("active_generation"))
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE sekiban_mv_active ADD COLUMN active_generation BIGINT NOT NULL DEFAULT 0;",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
     }
 
     public async Task RegisterAsync(MvRegistryEntry entry, IDbTransaction? transaction = null, CancellationToken cancellationToken = default)
@@ -312,6 +332,38 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task SetTargetCheckpointAsync(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        MvCheckpointTruth targetCheckpointTruth,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(targetCheckpointTruth);
+        const string sql = """
+            UPDATE sekiban_mv_registry
+            SET target_position = @TargetPosition,
+                target_checkpoint_truth = @TargetCheckpointTruth,
+                last_updated = UTC_TIMESTAMP(6)
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ViewVersion;
+            """;
+        await ExecuteAsync(
+            sql,
+            new
+            {
+                ServiceId = serviceId,
+                ViewName = viewName,
+                ViewVersion = viewVersion,
+                TargetPosition = targetCheckpointTruth.PositionValue,
+                TargetCheckpointTruth = MvCheckpointTruthCodec.Encode(targetCheckpointTruth)
+            },
+            transaction,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<MvRegistryEntry>> GetEntriesAsync(
         string serviceId,
         string viewName,
@@ -363,6 +415,7 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             SELECT service_id AS ServiceId,
                    view_name AS ViewName,
                    active_version AS ActiveVersion,
+                   active_generation AS Generation,
                    activated_at AS ActivatedAt
             FROM sekiban_mv_active
             WHERE service_id = @ServiceId
@@ -385,10 +438,11 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            INSERT INTO sekiban_mv_active (service_id, view_name, active_version, activated_at)
-            VALUES (@ServiceId, @ViewName, @ActiveVersion, UTC_TIMESTAMP(6))
+            INSERT INTO sekiban_mv_active (service_id, view_name, active_version, active_generation, activated_at)
+            VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, UTC_TIMESTAMP(6))
             ON DUPLICATE KEY UPDATE
                 active_version = VALUES(active_version),
+                active_generation = active_generation + 1,
                 activated_at = VALUES(activated_at);
             """;
 
@@ -397,6 +451,181 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             new { ServiceId = serviceId, ViewName = viewName, ActiveVersion = activeVersion },
             transaction,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<MvActivationResult> TryActivateAsync(
+        MvActivationRequest request,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        var validation = ValidateActivationRequest(request);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        if (transaction is not null)
+        {
+            return await TryActivateInTransactionAsync(transaction, request, cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var localTransaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var result = await TryActivateInTransactionAsync(localTransaction, request, cancellationToken).ConfigureAwait(false);
+        if (!result.Succeeded)
+        {
+            await localTransaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return result;
+        }
+
+        await localTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return result;
+    }
+
+    private async Task<MvActivationResult> TryActivateInTransactionAsync(
+        IDbTransaction transaction,
+        MvActivationRequest request,
+        CancellationToken cancellationToken)
+    {
+        const string insertSql = """
+            INSERT INTO sekiban_mv_active (
+                service_id, view_name, active_version, active_generation, activated_at)
+            SELECT @ServiceId, @ViewName, @ViewVersion, 1, UTC_TIMESTAMP(6)
+            WHERE @ExpectedActiveVersion IS NULL
+              AND @ExpectedActiveGeneration = 0
+              AND (
+                    SELECT COUNT(*)
+                    FROM sekiban_mv_registry
+                    WHERE service_id = @ServiceId
+                      AND view_name = @ViewName
+                      AND view_version = @ViewVersion
+                  ) = @CandidateCount
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM sekiban_mv_registry
+                    WHERE service_id = @ServiceId
+                      AND view_name = @ViewName
+                      AND view_version = @ViewVersion
+                      AND (
+                            status <> @ExpectedStatus
+                         OR current_checkpoint_truth <> @ExpectedCurrentCheckpointTruth
+                         OR target_checkpoint_truth <> @ExpectedTargetCheckpointTruth
+                      )
+                  )
+            ON DUPLICATE KEY UPDATE active_version = active_version;
+            """;
+        const string updateSql = """
+            UPDATE sekiban_mv_active
+            SET active_version = @ViewVersion,
+                active_generation = active_generation + 1,
+                activated_at = UTC_TIMESTAMP(6)
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND active_version = @ExpectedActiveVersion
+              AND active_generation = @ExpectedActiveGeneration
+              AND (
+                    SELECT COUNT(*)
+                    FROM sekiban_mv_registry
+                    WHERE service_id = @ServiceId
+                      AND view_name = @ViewName
+                      AND view_version = @ViewVersion
+                  ) = @CandidateCount
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM sekiban_mv_registry
+                    WHERE service_id = @ServiceId
+                      AND view_name = @ViewName
+                      AND view_version = @ViewVersion
+                      AND (
+                            status <> @ExpectedStatus
+                         OR current_checkpoint_truth <> @ExpectedCurrentCheckpointTruth
+                         OR target_checkpoint_truth <> @ExpectedTargetCheckpointTruth
+                      )
+                  );
+            """;
+        var parameters = new
+        {
+            request.ServiceId,
+            request.ViewName,
+            request.ViewVersion,
+            request.ExpectedActiveVersion,
+            request.ExpectedActiveGeneration,
+            request.CandidateCount,
+            ExpectedStatus = request.ExpectedStatus.ToString().ToLowerInvariant(),
+            request.ExpectedCurrentCheckpointTruth,
+            request.ExpectedTargetCheckpointTruth
+        };
+        var affected = request.ExpectedActiveVersion is null
+            ? await transaction.Connection!.ExecuteAsync(new CommandDefinition(insertSql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false)
+            : await transaction.Connection!.ExecuteAsync(new CommandDefinition(updateSql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        if (affected == 0)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.ConcurrentSuperseded,
+                "The expected active pointer, generation, or candidate snapshot changed before activation.");
+        }
+
+        const string markActiveSql = """
+            UPDATE sekiban_mv_registry
+            SET status = 'active', last_updated = UTC_TIMESTAMP(6)
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ViewVersion
+              AND status = @ExpectedStatus
+              AND current_checkpoint_truth = @ExpectedCurrentCheckpointTruth
+              AND target_checkpoint_truth = @ExpectedTargetCheckpointTruth;
+            """;
+        await transaction.Connection!.ExecuteAsync(
+                new CommandDefinition(markActiveSql, parameters, transaction, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        return MvActivationResult.Success(request.ExpectedActiveGeneration + 1);
+    }
+
+    private static MvActivationResult? ValidateActivationRequest(MvActivationRequest request)
+    {
+        if (request.ExpectedActiveGeneration < 0)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.ExpectedGenerationConflict,
+                "The expected active generation cannot be negative.");
+        }
+
+        if (request.CandidateCount <= 0 || request.ExpectedStatus != MvStatus.Ready)
+        {
+            return MvActivationResult.Rejected(MvActivationFailureReason.UnsafeLifecycle, "Atomic activation accepts only a non-empty Ready candidate snapshot.");
+        }
+
+        try
+        {
+            var current = MvCheckpointTruthCodec.Decode(request.ExpectedCurrentCheckpointTruth);
+            var target = MvCheckpointTruthCodec.Decode(request.ExpectedTargetCheckpointTruth);
+            if (!current.IsKnown)
+            {
+                return MvActivationResult.Rejected(MvActivationFailureReason.CurrentCheckpointUnknown, "Atomic activation requires Known current checkpoint truth.");
+            }
+
+            if (current.Provenance is null || current.Provenance.Kind == MvCheckpointProvenanceKind.LegacyCompatibility)
+            {
+                return MvActivationResult.Rejected(MvActivationFailureReason.MissingProvenance, "Atomic activation requires non-legacy current checkpoint provenance.");
+            }
+
+            if (!target.IsKnown || target.Provenance?.Kind != MvCheckpointProvenanceKind.AuthoritativeTargetCapture)
+            {
+                return MvActivationResult.Rejected(MvActivationFailureReason.TargetUnknown, "Atomic activation requires an authoritative Known target checkpoint.");
+            }
+
+            if (!current.Satisfies(target))
+            {
+                return MvActivationResult.Rejected(MvActivationFailureReason.BehindTarget, "Atomic activation requires the current checkpoint to satisfy the target.");
+            }
+        }
+        catch (MvCheckpointMalformedException ex)
+        {
+            return MvActivationResult.Rejected(MvActivationFailureReason.ProviderFailure, ex.Message);
+        }
+
+        return null;
     }
 
     private async Task ExecuteAsync(
@@ -451,7 +680,10 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             ReadRequiredString(row, "ServiceId"),
             ReadRequiredString(row, "ViewName"),
             ReadRequiredInt(row, "ActiveVersion"),
-            ReadRequiredDateTimeOffset(row, "ActivatedAt"));
+            ReadRequiredDateTimeOffset(row, "ActivatedAt"))
+        {
+            Generation = ReadRequiredLong(row, "Generation")
+        };
 
     private static IReadOnlyDictionary<string, object?> ToDictionary(object row)
     {

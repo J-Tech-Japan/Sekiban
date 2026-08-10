@@ -34,14 +34,21 @@ public sealed class MaterializedViewPostgresTests(MaterializedViewPostgresFixtur
 
         await using var connection = await fixture.OpenConnectionAsync();
         var registryCount = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM sekiban_mv_registry;");
-        var activeVersion = await connection.ExecuteScalarAsync<int>("SELECT active_version FROM sekiban_mv_active WHERE view_name = 'OrderSummary';");
+        var activeVersionBeforeCatchUp = await connection.ExecuteScalarAsync<int?>(
+            "SELECT active_version FROM sekiban_mv_active WHERE view_name = 'OrderSummary';");
         var ordersExists = await connection.ExecuteScalarAsync<bool>(
             "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sekiban_mv_ordersummary_v1_orders');");
         var itemsExists = await connection.ExecuteScalarAsync<bool>(
             "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sekiban_mv_ordersummary_v1_items');");
 
         Assert.Equal(2, registryCount);
-        Assert.Equal(1, activeVersion);
+        Assert.Null(activeVersionBeforeCatchUp);
+
+        await fixture.Executor.CatchUpOnceAsync(ApplyHost(fixture.Projector));
+        await using var postCatchUpConnection = await fixture.OpenConnectionAsync();
+        var activeVersionAfterCatchUp = await postCatchUpConnection.ExecuteScalarAsync<int?>(
+            "SELECT active_version FROM sekiban_mv_active WHERE view_name = 'OrderSummary';");
+        Assert.Equal(1, activeVersionAfterCatchUp);
         Assert.True(ordersExists);
         Assert.True(itemsExists);
     }

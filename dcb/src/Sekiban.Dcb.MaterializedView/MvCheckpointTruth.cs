@@ -28,7 +28,8 @@ public enum MvCheckpointProvenanceKind
 {
     AppliedEvent = 0,
     AuthoritativeEmptyHistory = 1,
-    LegacyCompatibility = 2
+    LegacyCompatibility = 2,
+    AuthoritativeTargetCapture = 3
 }
 
 /// <summary>
@@ -45,6 +46,9 @@ public sealed record MvCheckpointProvenance(
 
     public static MvCheckpointProvenance AuthoritativeEmptyHistory(DateTimeOffset? observedAtUtc = null) =>
         new(MvCheckpointProvenanceKind.AuthoritativeEmptyHistory, observedAtUtc ?? DateTimeOffset.UtcNow, MvApplySource.CatchUp);
+
+    public static MvCheckpointProvenance AuthoritativeTargetCapture(DateTimeOffset? observedAtUtc = null) =>
+        new(MvCheckpointProvenanceKind.AuthoritativeTargetCapture, observedAtUtc ?? DateTimeOffset.UtcNow);
 }
 
 /// <summary>
@@ -339,6 +343,7 @@ public static class MvCheckpointTruthCodec
             "appliedEvent" or "AppliedEvent" => MvCheckpointProvenanceKind.AppliedEvent,
             "authoritativeEmptyHistory" or "AuthoritativeEmptyHistory" => MvCheckpointProvenanceKind.AuthoritativeEmptyHistory,
             "legacyCompatibility" or "LegacyCompatibility" => MvCheckpointProvenanceKind.LegacyCompatibility,
+            "authoritativeTargetCapture" or "AuthoritativeTargetCapture" => MvCheckpointProvenanceKind.AuthoritativeTargetCapture,
             _ => throw new MvCheckpointMalformedException($"Unknown checkpoint provenance kind '{wire.Kind}'.", "provenance.kind")
         };
 
@@ -378,6 +383,7 @@ public static class MvCheckpointTruthCodec
             MvCheckpointProvenanceKind.AppliedEvent => "appliedEvent",
             MvCheckpointProvenanceKind.AuthoritativeEmptyHistory => "authoritativeEmptyHistory",
             MvCheckpointProvenanceKind.LegacyCompatibility => "legacyCompatibility",
+            MvCheckpointProvenanceKind.AuthoritativeTargetCapture => "authoritativeTargetCapture",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown checkpoint provenance kind.")
         };
 

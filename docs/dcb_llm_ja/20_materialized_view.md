@@ -252,6 +252,20 @@ WHERE id = @Id
 - 運用向け status 表示
 - catch-up 中か ready か active かの判断
 
+### 権威的な activation（SEK-G27）
+
+MV の初期化が成功したことや active 行が存在しないことだけでは、version を active にしません。activation の境界で
+まず event store の head を `Known` target として取得し、`MvCheckpointProvenanceKind.AuthoritativeTargetCapture` の
+provenance を付けます。その後、candidate は service/view/version の identity、`Ready` lifecycle、`Known` の current と
+target、legacy ではない provenance、current が取得済み target 以上であることを満たす必要があります。Unknown、malformed、
+stale、behind、faulted、unsafe な candidate は型付き拒否となり、active pointer を変更しません。G24 の sampled status や
+event count は診断情報に過ぎず、cutover の証拠には使いません。
+
+4 つの relational registry store は `TryActivateAsync` を提供します。この操作は provider の 1 transaction 内で、期待する
+active version と単調増加する generation、さらに candidate の checkpoint snapshot 全体を比較します。競合または superseded
+された試行は型付き conflict を返し、以前の pointer を保持します。初回 activation も同じ capture、eligibility、
+compare-and-switch 経路を通るため、active 行がないことは許可ではなく、比較対象の一つに過ぎません。
+
 ## テーブルのクエリ方法
 
 物理テーブル名をアプリ側で決め打ちしないでください。`IMvOrleansQueryAccessor` を使って解決します。

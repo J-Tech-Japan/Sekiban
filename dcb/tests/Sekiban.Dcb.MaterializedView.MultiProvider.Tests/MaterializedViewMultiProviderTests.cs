@@ -137,6 +137,10 @@ internal static class MultiProviderAssertions
                 projector.ViewVersion)
             .ConfigureAwait(false);
         Assert.NotEmpty(initialRegistryEntries);
+        Assert.Null(await registryStore.GetActiveAsync(
+                MultiProviderFixtureBase.ServiceId,
+                projector.ViewName)
+            .ConfigureAwait(false));
         Assert.All(initialRegistryEntries, entry => Assert.True(entry.CurrentCheckpointTruth.IsUnknown));
 
         var emptyCatchUp = await fixture.Executor.CatchUpOnceAsync(
