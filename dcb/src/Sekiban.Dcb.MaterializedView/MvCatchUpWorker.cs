@@ -13,6 +13,7 @@ public sealed class MvCatchUpWorker : BackgroundService
     private readonly ILogger<MvCatchUpWorker> _logger;
     private readonly IReadOnlyList<MvApplyHostRegistration> _registrations;
     private readonly MvOptions _options;
+    private readonly MvProjectionStatusPublisher? _statusPublisher;
     private readonly string _serviceId;
 
     public MvCatchUpWorker(
@@ -20,7 +21,7 @@ public sealed class MvCatchUpWorker : BackgroundService
         IMvExecutor executor,
         IOptions<MvOptions> options,
         ILogger<MvCatchUpWorker> logger)
-        : this(hostFactory, executor, options, logger, serviceId: null)
+        : this(hostFactory, executor, options, logger, serviceId: null, statusPublisher: null)
     {
     }
 
@@ -33,6 +34,28 @@ public sealed class MvCatchUpWorker : BackgroundService
         IOptions<MvOptions> options,
         ILogger<MvCatchUpWorker> logger,
         string? serviceId)
+        : this(hostFactory, executor, options, logger, serviceId, statusPublisher: null)
+    {
+    }
+
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public MvCatchUpWorker(
+        IMvApplyHostFactory hostFactory,
+        IMvExecutor executor,
+        IOptions<MvOptions> options,
+        ILogger<MvCatchUpWorker> logger,
+        MvProjectionStatusPublisher statusPublisher)
+        : this(hostFactory, executor, options, logger, serviceId: null, statusPublisher)
+    {
+    }
+
+    public MvCatchUpWorker(
+        IMvApplyHostFactory hostFactory,
+        IMvExecutor executor,
+        IOptions<MvOptions> options,
+        ILogger<MvCatchUpWorker> logger,
+        string? serviceId,
+        MvProjectionStatusPublisher? statusPublisher)
     {
         _executor = executor;
         _hostFactory = hostFactory;
@@ -40,6 +63,7 @@ public sealed class MvCatchUpWorker : BackgroundService
         _registrations = hostFactory.GetRegistrations();
         _options = options.Value;
         _serviceId = ResolveWorkerServiceId(serviceId, _options);
+        _statusPublisher = statusPublisher;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -85,6 +109,16 @@ public sealed class MvCatchUpWorker : BackgroundService
 
             appliedEvents += projectorResult.AppliedEvents;
             shouldDelay |= projectorResult.ShouldDelay;
+            if (_statusPublisher is not null)
+            {
+                await _statusPublisher.PublishIfDueAsync(
+                        _serviceId,
+                        registration.ViewName,
+                        registration.ViewVersion,
+                        MvProjectionStatusPublisherKind.HostedWorker,
+                        stoppingToken)
+                    .ConfigureAwait(false);
+            }
         }
 
         return new CatchUpCycleResult(appliedEvents, shouldDelay, ShouldStop: false);

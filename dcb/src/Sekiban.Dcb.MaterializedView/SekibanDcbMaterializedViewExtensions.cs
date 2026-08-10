@@ -15,6 +15,13 @@ public static class SekibanDcbMaterializedViewExtensions
         Action<MvOptions>? configure = null)
     {
         services.AddOptions<MvOptions>();
+        services.TryAddSingleton<ProjectionStatusOptions>();
+        services.TryAddSingleton<MvProjectionStatusPublisher>(sp =>
+            new MvProjectionStatusPublisher(
+                sp.GetRequiredService<IMvRegistryStore>(),
+                sp.GetService<IProjectionStatusStore>(),
+                sp.GetRequiredService<ProjectionStatusOptions>(),
+                sp.GetRequiredService<ILogger<MvProjectionStatusPublisher>>()));
         services.TryAddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
         services.TryAddSingleton<IMvApplyHostFactory>(sp =>
         {
@@ -103,7 +110,8 @@ public static class SekibanDcbMaterializedViewExtensions
                 sp.GetRequiredService<IMvExecutor>(),
                 sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<MvOptions>>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<MvCatchUpWorker>>(),
-                normalized));
+                normalized,
+                sp.GetRequiredService<MvProjectionStatusPublisher>()));
         return services;
     }
 }

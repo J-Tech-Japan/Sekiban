@@ -2,6 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Orleans.Streams;
 using Orleans.TestingHost;
+using Orleans.Runtime;
+using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
@@ -11,6 +13,8 @@ using Sekiban.Dcb.MaterializedView.Orleans;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Testing;
 using Xunit;
 
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -19,6 +23,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
 {
     private static readonly FakeMvRegistryStore SharedRegistry = new();
     private static readonly FakeMvExecutor SharedExecutor = new(SharedRegistry);
+    private static readonly TestProjectionStatusStore SharedStatusStore = new();
 
     private TestCluster _cluster = null!;
 
@@ -26,6 +31,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
     {
         SharedRegistry.Reset();
         SharedExecutor.Reset();
+        SharedStatusStore.Reset();
         SharedExecutor.SeedInitial(CreateSerializableEvent(1, DateTime.UtcNow.AddSeconds(-5)));
 
         var builder = new TestClusterBuilder();
@@ -43,6 +49,68 @@ public class MaterializedViewGrainTests : IAsyncLifetime
     {
         await _cluster.StopAllSilosAsync();
         _cluster.Dispose();
+    }
+
+    [Fact]
+    public void MaterializedViewGrain_LegacyPublicConstructor_RemainsAvailable()
+    {
+        var legacy = typeof(MaterializedViewGrain).GetConstructor(
+        [
+            typeof(IMvApplyHostFactory),
+            typeof(IMvExecutor),
+            typeof(IMvRegistryStore),
+            typeof(IEventSubscriptionResolver),
+            typeof(Microsoft.Extensions.Options.IOptions<MvOptions>),
+            typeof(Microsoft.Extensions.Logging.ILogger<MaterializedViewGrain>)
+        ]);
+
+        Assert.NotNull(legacy);
+    }
+
+    [Fact]
+    public async Task PassiveG24Read_DoesNotActivateMvGrain_ButDirectStartActivatesAndPublishes()
+    {
+        var management = _cluster.Client.GetGrain<IManagementGrain>(0);
+        var before = await CountMaterializedViewActivationsAsync(management);
+        Assert.Equal(0, before);
+
+        var identity = MvProjectionStatusIdentity.Create(TestMaterializedViewProjector.ViewNameConst, 1);
+        var serviceIdProvider = new FixedServiceIdProvider("orders");
+        var reader = new ProjectionStatusReader(
+            SharedStatusStore,
+            new InMemoryEventStore(serviceIdProvider),
+            serviceIdProvider,
+            new ProjectionStatusOptions { SamplingWindow = TimeSpan.Zero });
+        var passive = await reader.ReadAsync(new ProjectionStatusReadRequest(
+            "orders",
+            identity.ProjectorName,
+            identity.ProjectorVersion));
+
+        Assert.True(passive.IsSuccess);
+        Assert.Empty(passive.GetValue());
+        Assert.Equal(0, await CountMaterializedViewActivationsAsync(management));
+
+        var grainKey = MvGrainKey.Build("orders", TestMaterializedViewProjector.ViewNameConst, 1);
+        var grain = _cluster.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        await grain.EnsureStartedAsync();
+        await SharedStatusStore.Written.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, await CountMaterializedViewActivationsAsync(management));
+        var published = await reader.ReadAsync(new ProjectionStatusReadRequest(
+            "orders",
+            identity.ProjectorName,
+            identity.ProjectorVersion));
+        Assert.True(published.IsSuccess);
+        var snapshot = Assert.Single(published.GetValue());
+        Assert.StartsWith("mv-orleans-", snapshot.ActivationId, StringComparison.Ordinal);
+        Assert.Equal("orders", SharedStatusStore.LastHeartbeat?.ServiceId);
+    }
+
+    private static async Task<int> CountMaterializedViewActivationsAsync(IManagementGrain management)
+    {
+        var statistics = await management.GetDetailedGrainStatistics(null!, null!);
+        return statistics.Count(statistic =>
+            statistic.GrainType.Contains(nameof(MaterializedViewGrain), StringComparison.Ordinal));
     }
 
     [Fact]
@@ -107,7 +175,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         await grain.RefreshAsync();
 
         var entries = await SharedRegistry.GetEntriesAsync(
-            DefaultServiceIdProvider.DefaultServiceId,
+            "orders",
             TestMaterializedViewProjector.ViewNameConst,
             1);
         var entry = Assert.Single(entries);
@@ -159,9 +227,17 @@ public class MaterializedViewGrainTests : IAsyncLifetime
                         options.CatchUpStallThreshold = TimeSpan.FromMilliseconds(150);
                     });
                     services.AddMaterializedView<TestMaterializedViewProjector>();
-                    services.AddSekibanDcbMaterializedViewOrleans();
+                    services.AddSekibanDcbMaterializedViewOrleans(activateOnStartup: false);
                     services.AddSingleton<IMvRegistryStore>(SharedRegistry);
                     services.AddSingleton<IMvExecutor>(SharedExecutor);
+                    services.AddSingleton<IProjectionStatusStore>(SharedStatusStore);
+                    services.AddSingleton(new ProjectionStatusOptions
+                    {
+                        ClusterId = "mv-test-cluster",
+                        HeartbeatInterval = TimeSpan.FromMilliseconds(20),
+                        HeartbeatWriteTimeout = TimeSpan.FromSeconds(1),
+                        SamplingWindow = TimeSpan.Zero
+                    });
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
@@ -180,6 +256,48 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         {
             clientBuilder.AddMemoryStreams("EventStreamProvider");
         }
+    }
+
+    private sealed class FixedServiceIdProvider(string serviceId) : IServiceIdProvider
+    {
+        public string GetCurrentServiceId() => serviceId;
+    }
+
+    private sealed class TestProjectionStatusStore : IProjectionStatusStore
+    {
+        private InMemoryMultiProjectionStateStore _inner = new(new FixedServiceIdProvider("orders"));
+
+        public TaskCompletionSource Written { get; private set; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public ProjectionStatusHeartbeat? LastHeartbeat { get; private set; }
+
+        public void Reset()
+        {
+            _inner = new InMemoryMultiProjectionStateStore(new FixedServiceIdProvider("orders"));
+            Written = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            LastHeartbeat = null;
+        }
+
+        public async Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+            ProjectionStatusHeartbeat heartbeat,
+            long expectedSequence,
+            CancellationToken cancellationToken = default)
+        {
+            var result = await _inner.UpsertAsync(heartbeat, expectedSequence, cancellationToken);
+            if (result.IsSuccess && result.GetValue().Committed)
+            {
+                LastHeartbeat = heartbeat;
+                Written.TrySetResult();
+            }
+
+            return result;
+        }
+
+        public Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+            string? projectorName = null,
+            string? projectorVersion = null,
+            CancellationToken cancellationToken = default) =>
+            _inner.ListAsync(projectorName, projectorVersion, cancellationToken);
     }
 
     private sealed class TestMaterializedViewProjector : IMaterializedViewProjector

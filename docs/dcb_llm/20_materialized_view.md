@@ -71,6 +71,45 @@ database registered by the materialized-view provider.
 
 This means correctness still depends on ordered event application, not on ad-hoc SQL updates.
 
+## Passive Projection Status
+
+Classic materialized views publish their progress through the existing G24 `IProjectionStatusReader` and
+`ISerializedProjectionStatusReader` surfaces. No materialized-view-specific reader or target-database status table is
+created. The publisher writes to the status store supplied by the event-source provider (PostgreSQL, Cosmos DB,
+DynamoDB, or SQLite).
+
+```mermaid
+flowchart LR
+    W[Hosted worker or started Orleans grain] -->|dedicated best-effort schedule| R[G26 MV registry truth]
+    R --> P[G24 source-side status store]
+    P --> T[IProjectionStatusReader]
+    P --> S[ISerializedProjectionStatusReader V1]
+    T -. passive read; no grain call .-> C[Caller]
+    S -. passive read; no grain call .-> C
+```
+
+Use `MvProjectionStatusIdentity.Create(viewName, viewVersion)` to obtain the exact `ProjectorName` and
+`ProjectorVersion` filters. The identity is stable and collision-free for punctuation and Unicode names. The worker or
+grain always publishes under its already validated, exact service id.
+
+The mapping is fail-closed:
+
+| G26 truth/lifecycle | G24 phase | `IsCaughtUp` eligibility |
+| --- | --- | --- |
+| `Unknown` | `unknown` | never |
+| Known + `Initializing` | `starting` | never |
+| Known + `CatchingUp` | `catchingUp` | never |
+| Known-zero/nonzero + `Ready` | `caughtUp` | only when the normal G24 freshness, remaining-count, fault, and conflict checks also pass |
+| Known-zero/nonzero + `Active` | `active` | only when the same G24 checks pass |
+| Known + `Retired` | `stopped` | never |
+| `Faulted` | `faulted` | never |
+
+Known-zero carries `SortableUniqueId.MinValue`; it is not represented as `Unknown`. Publication is not performed by
+event-apply, stream, query, or reader hot paths. Hosted workers publish after a catch-up cycle, and Orleans starts a
+separate publisher timer only after `EnsureStartedAsync`. Status reads therefore do not activate an MV grain. Writes
+are best-effort, independently timed out, and use generic secret-free failure diagnostics; publication failure does not
+stop event application or queries.
+
 ## Registering the Runtime
 
 Typical registration in an Orleans host looks like this:

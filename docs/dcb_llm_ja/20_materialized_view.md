@@ -72,6 +72,44 @@ provider をターゲットとして使えます。
 
 つまり、整合性の中心は SQL テーブルではなく、順序付きイベント適用です。
 
+## パッシブなプロジェクション状態
+
+classic マテリアライズドビューの進捗は、既存の G24 `IProjectionStatusReader` と
+`ISerializedProjectionStatusReader` から読み取れます。MV 専用 reader や target DB 側の status table は追加されません。
+publisher はイベントソース provider（PostgreSQL、Cosmos DB、DynamoDB、SQLite）が提供する既存 status store へ書き込みます。
+
+```mermaid
+flowchart LR
+    W[Hosted worker または開始済み Orleans grain] -->|専用 best-effort schedule| R[G26 MV registry truth]
+    R --> P[G24 source-side status store]
+    P --> T[IProjectionStatusReader]
+    P --> S[ISerializedProjectionStatusReader V1]
+    T -. grain を呼ばない passive read .-> C[呼び出し元]
+    S -. grain を呼ばない passive read .-> C
+```
+
+filter に使う正確な `ProjectorName` と `ProjectorVersion` は
+`MvProjectionStatusIdentity.Create(viewName, viewVersion)` で取得します。この identity は記号や Unicode を含む名前でも
+安定かつ衝突しません。worker / grain は、あらかじめ検証済みの正確な ServiceId をそのまま使用します。
+
+写像は fail-closed です。
+
+| G26 truth / lifecycle | G24 phase | `IsCaughtUp` の資格 |
+| --- | --- | --- |
+| `Unknown` | `unknown` | 常に不可 |
+| Known + `Initializing` | `starting` | 常に不可 |
+| Known + `CatchingUp` | `catchingUp` | 常に不可 |
+| Known-zero/nonzero + `Ready` | `caughtUp` | G24 の freshness、remaining count、fault、conflict 条件もすべて満たす場合のみ |
+| Known-zero/nonzero + `Active` | `active` | 同じ G24 条件をすべて満たす場合のみ |
+| Known + `Retired` | `stopped` | 常に不可 |
+| `Faulted` | `faulted` | 常に不可 |
+
+Known-zero は `SortableUniqueId.MinValue` を保持し、`Unknown` には変換されません。publication は event apply、stream、query、
+reader の hot path では実行されません。Hosted worker は catch-up cycle 後に publish し、Orleans は
+`EnsureStartedAsync` の後でのみ専用 publisher timer を開始します。そのため status read は MV grain を activate しません。
+書き込みは best-effort かつ独立 timeout 付きで、失敗診断は secret-free な固定メッセージです。publication の失敗はイベント適用や
+query を停止させません。
+
 ## 登録方法
 
 Orleans ホストでの基本的な登録例です。

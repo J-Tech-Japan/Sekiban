@@ -57,7 +57,10 @@ public sealed class ProjectionStatusRegistryTests
             1,
             events[0].SortableUniqueIdValue,
             events[1].SortableUniqueIdValue,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow)
+        {
+            Phase = ProjectionStatusPhases.Active
+        };
         var heartbeatWrite = await statusStore.UpsertAsync(heartbeat, 0);
         Assert.True(heartbeatWrite.IsSuccess);
 
