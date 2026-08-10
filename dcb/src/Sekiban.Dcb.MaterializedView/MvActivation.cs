@@ -94,67 +94,10 @@ public static class MvActivationEligibility
 
         foreach (var entry in entries)
         {
-            if (!string.Equals(entry.ServiceId, serviceId, StringComparison.Ordinal) ||
-                !string.Equals(entry.ViewName, viewName, StringComparison.Ordinal) ||
-                entry.ViewVersion != viewVersion)
+            var rejection = EvaluateEntry(serviceId, viewName, viewVersion, entry);
+            if (rejection is not null)
             {
-                return Reject(
-                    MvActivationFailureReason.IdentityMismatch,
-                    "The candidate registry row does not match the requested service, view, and version.");
-            }
-
-            if (entry.Status == MvStatus.Faulted)
-            {
-                return Reject(
-                    MvActivationFailureReason.Faulted,
-                    "A faulted materialized-view candidate cannot become active.");
-            }
-
-            if (entry.Status != MvStatus.Ready)
-            {
-                return Reject(
-                    MvActivationFailureReason.UnsafeLifecycle,
-                    $"The candidate lifecycle is '{entry.Status}', but only Ready candidates may become active.");
-            }
-
-            if (!entry.TargetCheckpointTruth.IsKnown)
-            {
-                return Reject(
-                    MvActivationFailureReason.TargetUnknown,
-                    "The candidate target checkpoint is Unknown.");
-            }
-
-            if (!entry.CurrentCheckpointTruth.IsKnown)
-            {
-                return Reject(
-                    MvActivationFailureReason.CurrentCheckpointUnknown,
-                    "The candidate current checkpoint is Unknown.");
-            }
-
-            if (entry.TargetCheckpointTruth.Provenance?.Kind != MvCheckpointProvenanceKind.AuthoritativeTargetCapture ||
-                entry.CurrentCheckpointTruth.Provenance is null ||
-                entry.CurrentCheckpointTruth.Provenance.Kind == MvCheckpointProvenanceKind.LegacyCompatibility)
-            {
-                return Reject(
-                    MvActivationFailureReason.MissingProvenance,
-                    "Activation requires authoritative target provenance and non-legacy current provenance.");
-            }
-
-            if ((entry.CurrentPosition is not null &&
-                 !string.Equals(entry.CurrentPosition, entry.CurrentCheckpointTruth.PositionValue, StringComparison.Ordinal)) ||
-                (entry.TargetPosition is not null &&
-                 !string.Equals(entry.TargetPosition, entry.TargetCheckpointTruth.PositionValue, StringComparison.Ordinal)))
-            {
-                return Reject(
-                    MvActivationFailureReason.CandidateStateMismatch,
-                    "Legacy position fields disagree with typed checkpoint truth.");
-            }
-
-            if (!entry.CurrentCheckpointTruth.Satisfies(entry.TargetCheckpointTruth))
-            {
-                return Reject(
-                    MvActivationFailureReason.BehindTarget,
-                    "The candidate current checkpoint is behind its captured target.");
+                return (rejection, null);
             }
         }
 
@@ -170,20 +113,10 @@ public static class MvActivationEligibility
                 "Materialized-view registry rows do not share one checkpoint snapshot.");
         }
 
-        if (active is not null &&
-            (!string.Equals(active.ServiceId, serviceId, StringComparison.Ordinal) ||
-             !string.Equals(active.ViewName, viewName, StringComparison.Ordinal)))
+        var activeRejection = EvaluateActivePointer(serviceId, viewName, viewVersion, active);
+        if (activeRejection is not null)
         {
-            return Reject(
-                MvActivationFailureReason.IdentityMismatch,
-                "The active pointer identity does not match the requested service and view.");
-        }
-
-        if (active is not null && active.ActiveVersion == viewVersion)
-        {
-            return Reject(
-                MvActivationFailureReason.AlreadyActive,
-                "The candidate version is already active.");
+            return (activeRejection, null);
         }
 
         var request = new MvActivationRequest(
@@ -197,6 +130,120 @@ public static class MvActivationEligibility
             expectedCurrentTruth,
             expectedTargetTruth);
         return (MvActivationEligibilityResult.Eligible(), request);
+    }
+
+    private static MvActivationEligibilityResult? EvaluateEntry(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        MvRegistryEntry entry) =>
+        EvaluateEntryIdentity(serviceId, viewName, viewVersion, entry) ??
+        EvaluateEntryLifecycle(entry) ??
+        EvaluateEntryTruth(entry) ??
+        EvaluateEntryPositionConsistency(entry) ??
+        EvaluateEntryOrdering(entry);
+
+    private static MvActivationEligibilityResult? EvaluateEntryIdentity(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        MvRegistryEntry entry) =>
+        string.Equals(entry.ServiceId, serviceId, StringComparison.Ordinal) &&
+        string.Equals(entry.ViewName, viewName, StringComparison.Ordinal) &&
+        entry.ViewVersion == viewVersion
+            ? null
+            : MvActivationEligibilityResult.Rejected(
+                MvActivationFailureReason.IdentityMismatch,
+                "The candidate registry row does not match the requested service, view, and version.");
+
+    private static MvActivationEligibilityResult? EvaluateEntryLifecycle(MvRegistryEntry entry)
+    {
+        if (entry.Status == MvStatus.Faulted)
+        {
+            return MvActivationEligibilityResult.Rejected(
+                MvActivationFailureReason.Faulted,
+                "A faulted materialized-view candidate cannot become active.");
+        }
+
+        return entry.Status == MvStatus.Ready
+            ? null
+            : MvActivationEligibilityResult.Rejected(
+                MvActivationFailureReason.UnsafeLifecycle,
+                $"The candidate lifecycle is '{entry.Status}', but only Ready candidates may become active.");
+    }
+
+    private static MvActivationEligibilityResult? EvaluateEntryTruth(MvRegistryEntry entry)
+    {
+        if (!entry.TargetCheckpointTruth.IsKnown)
+        {
+            return MvActivationEligibilityResult.Rejected(
+                MvActivationFailureReason.TargetUnknown,
+                "The candidate target checkpoint is Unknown.");
+        }
+
+        if (!entry.CurrentCheckpointTruth.IsKnown)
+        {
+            return MvActivationEligibilityResult.Rejected(
+                MvActivationFailureReason.CurrentCheckpointUnknown,
+                "The candidate current checkpoint is Unknown.");
+        }
+
+        return HasActivationProvenance(entry)
+            ? null
+            : MvActivationEligibilityResult.Rejected(
+                MvActivationFailureReason.MissingProvenance,
+                "Activation requires authoritative target provenance and non-legacy current provenance.");
+    }
+
+    private static bool HasActivationProvenance(MvRegistryEntry entry) =>
+        entry.TargetCheckpointTruth.Provenance?.Kind == MvCheckpointProvenanceKind.AuthoritativeTargetCapture &&
+        entry.CurrentCheckpointTruth.Provenance is not null &&
+        entry.CurrentCheckpointTruth.Provenance.Kind != MvCheckpointProvenanceKind.LegacyCompatibility;
+
+    private static MvActivationEligibilityResult? EvaluateEntryPositionConsistency(MvRegistryEntry entry)
+    {
+        var currentMatches = entry.CurrentPosition is null ||
+            string.Equals(entry.CurrentPosition, entry.CurrentCheckpointTruth.PositionValue, StringComparison.Ordinal);
+        var targetMatches = entry.TargetPosition is null ||
+            string.Equals(entry.TargetPosition, entry.TargetCheckpointTruth.PositionValue, StringComparison.Ordinal);
+        return currentMatches && targetMatches
+            ? null
+            : MvActivationEligibilityResult.Rejected(
+                MvActivationFailureReason.CandidateStateMismatch,
+                "Legacy position fields disagree with typed checkpoint truth.");
+    }
+
+    private static MvActivationEligibilityResult? EvaluateEntryOrdering(MvRegistryEntry entry) =>
+        entry.CurrentCheckpointTruth.Satisfies(entry.TargetCheckpointTruth)
+            ? null
+            : MvActivationEligibilityResult.Rejected(
+                MvActivationFailureReason.BehindTarget,
+                "The candidate current checkpoint is behind its captured target.");
+
+    private static MvActivationEligibilityResult? EvaluateActivePointer(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        MvActiveEntry? active)
+    {
+        if (active is null)
+        {
+            return null;
+        }
+
+        if (!string.Equals(active.ServiceId, serviceId, StringComparison.Ordinal) ||
+            !string.Equals(active.ViewName, viewName, StringComparison.Ordinal))
+        {
+            return MvActivationEligibilityResult.Rejected(
+                MvActivationFailureReason.IdentityMismatch,
+                "The active pointer identity does not match the requested service and view.");
+        }
+
+        return active.ActiveVersion == viewVersion
+            ? MvActivationEligibilityResult.Rejected(
+                MvActivationFailureReason.AlreadyActive,
+                "The candidate version is already active.")
+            : null;
     }
 
     private static (MvActivationEligibilityResult Eligibility, MvActivationRequest? Request) Reject(

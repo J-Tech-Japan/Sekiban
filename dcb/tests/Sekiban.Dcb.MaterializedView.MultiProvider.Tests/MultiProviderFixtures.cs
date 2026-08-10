@@ -9,17 +9,20 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;
+using Npgsql;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Testing;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.MySql;
+using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.MaterializedView.Sqlite;
 using Sekiban.Dcb.MaterializedView.SqlServer;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Testcontainers.MsSql;
 using Testcontainers.MySql;
+using Testcontainers.PostgreSql;
 using Xunit;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
@@ -258,6 +261,15 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
     protected abstract DbConnection CreateConnection(string connectionString);
     protected abstract string ResetSql { get; }
     protected abstract string LegacyRegistrySql { get; }
+    public abstract string CreateCandidateMismatchTriggerSql { get; }
+    public abstract string DropCandidateMismatchTriggerSql { get; }
+    public virtual string CandidateTruthUpdateSql => """
+        UPDATE sekiban_mv_registry
+        SET target_checkpoint_truth = @TargetTruth
+        WHERE service_id = @ServiceId
+          AND view_name = @ViewName
+          AND view_version = @ViewVersion;
+        """;
 
     public async Task InitializeAsync()
     {
@@ -343,6 +355,107 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
     private void ThrowUnavailable() => throw new InvalidOperationException(_skipReason);
 }
 
+public sealed class PostgresMvFixture : MultiProviderFixtureBase
+{
+    private PostgreSqlContainer? _container;
+
+    protected override MvDbType DatabaseType => MvDbType.Postgres;
+
+    protected override async Task<string> CreateConnectionStringAsync()
+    {
+        _container = new PostgreSqlBuilder("postgres:16-alpine")
+            .WithDatabase("sekiban_mv_test")
+            .WithUsername("test_user")
+            .WithPassword("test_password")
+            .Build();
+
+        await _container.StartAsync().ConfigureAwait(false);
+        return _container.GetConnectionString();
+    }
+
+    protected override void RegisterProvider(IServiceCollection services, string connectionString)
+    {
+        services.AddSekibanDcbMaterializedView(options =>
+        {
+            options.ServiceId = ServiceId;
+            options.BatchSize = 100;
+            options.SafeWindowMs = 0;
+            options.PollInterval = TimeSpan.FromMilliseconds(10);
+        });
+        services.AddSekibanDcbMaterializedViewPostgres(connectionString, registerHostedWorker: false);
+    }
+
+    protected override DbConnection CreateConnection(string connectionString) => new NpgsqlConnection(connectionString);
+
+    protected override string ResetSql => """
+        DROP TABLE IF EXISTS sekiban_mv_weatherforecastportable_v1_forecasts;
+        DROP TABLE IF EXISTS sekiban_mv_active;
+        DROP TABLE IF EXISTS sekiban_mv_registry;
+        """;
+
+    protected override string LegacyRegistrySql => """
+        CREATE TABLE sekiban_mv_registry (
+            service_id TEXT NOT NULL,
+            view_name TEXT NOT NULL,
+            view_version INT NOT NULL,
+            logical_table TEXT NOT NULL,
+            physical_table TEXT NOT NULL,
+            status TEXT NOT NULL,
+            current_position TEXT NULL,
+            target_position TEXT NULL,
+            last_sortable_unique_id TEXT NULL,
+            applied_event_version BIGINT NOT NULL DEFAULT 0,
+            last_applied_source TEXT NULL,
+            last_applied_at TIMESTAMPTZ NULL,
+            last_stream_received_sortable_unique_id TEXT NULL,
+            last_stream_received_at TIMESTAMPTZ NULL,
+            last_stream_applied_sortable_unique_id TEXT NULL,
+            last_catch_up_sortable_unique_id TEXT NULL,
+            last_updated TIMESTAMPTZ NOT NULL,
+            metadata JSONB NULL,
+            PRIMARY KEY (service_id, view_name, view_version, logical_table)
+        );
+        """;
+
+    public override string CandidateTruthUpdateSql => """
+        UPDATE sekiban_mv_registry
+        SET target_checkpoint_truth = CAST(@TargetTruth AS jsonb)
+        WHERE service_id = @ServiceId
+          AND view_name = @ViewName
+          AND view_version = @ViewVersion;
+        """;
+
+    public override string CreateCandidateMismatchTriggerSql => """
+        CREATE OR REPLACE FUNCTION sekiban_mv_force_candidate_mismatch() RETURNS trigger AS $$
+        BEGIN
+            UPDATE sekiban_mv_registry
+            SET status = 'catchingup'
+            WHERE service_id = NEW.service_id
+              AND view_name = NEW.view_name
+              AND view_version = NEW.active_version;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        CREATE TRIGGER sekiban_mv_force_candidate_mismatch
+        AFTER INSERT ON sekiban_mv_active
+        FOR EACH ROW EXECUTE FUNCTION sekiban_mv_force_candidate_mismatch();
+        """;
+
+    public override string DropCandidateMismatchTriggerSql => """
+        DROP TRIGGER IF EXISTS sekiban_mv_force_candidate_mismatch ON sekiban_mv_active;
+        DROP FUNCTION IF EXISTS sekiban_mv_force_candidate_mismatch();
+        """;
+
+    public override async Task DisposeAsync()
+    {
+        await base.DisposeAsync().ConfigureAwait(false);
+        if (_container is not null)
+        {
+            await _container.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+}
+
 public sealed class MySqlMvFixture : MultiProviderFixtureBase
 {
     private MySqlContainer? _container;
@@ -355,6 +468,7 @@ public sealed class MySqlMvFixture : MultiProviderFixtureBase
             .WithDatabase("sekiban_mv_test")
             .WithUsername("test_user")
             .WithPassword("test_password")
+            .WithCommand("--log-bin-trust-function-creators=1")
             .Build();
 
         await _container.StartAsync().ConfigureAwait(false);
@@ -404,6 +518,20 @@ public sealed class MySqlMvFixture : MultiProviderFixtureBase
             PRIMARY KEY (service_id, view_name, view_version, logical_table)
         );
         """;
+
+    public override string CreateCandidateMismatchTriggerSql => """
+        CREATE TRIGGER sekiban_mv_force_candidate_mismatch
+        AFTER INSERT ON sekiban_mv_active
+        FOR EACH ROW
+        UPDATE sekiban_mv_registry
+        SET status = 'catchingup'
+        WHERE service_id = NEW.service_id
+          AND view_name = NEW.view_name
+          AND view_version = NEW.active_version;
+        """;
+
+    public override string DropCandidateMismatchTriggerSql =>
+        "DROP TRIGGER IF EXISTS sekiban_mv_force_candidate_mismatch;";
 
     public override async Task DisposeAsync()
     {
@@ -474,6 +602,26 @@ public sealed class SqlServerMvFixture : MultiProviderFixtureBase
         );
         """;
 
+    public override string CreateCandidateMismatchTriggerSql => """
+        CREATE TRIGGER sekiban_mv_force_candidate_mismatch ON sekiban_mv_active
+        AFTER INSERT AS
+        BEGIN
+            SET NOCOUNT ON;
+            UPDATE registry
+            SET status = 'catchingup'
+            FROM sekiban_mv_registry AS registry
+            INNER JOIN inserted AS active
+                ON registry.service_id = active.service_id
+               AND registry.view_name = active.view_name
+               AND registry.view_version = active.active_version;
+        END;
+        """;
+
+    public override string DropCandidateMismatchTriggerSql => """
+        IF OBJECT_ID(N'sekiban_mv_force_candidate_mismatch', N'TR') IS NOT NULL
+            DROP TRIGGER sekiban_mv_force_candidate_mismatch;
+        """;
+
     public override async Task DisposeAsync()
     {
         await base.DisposeAsync().ConfigureAwait(false);
@@ -539,6 +687,21 @@ public sealed class SqliteMvFixture : MultiProviderFixtureBase
             PRIMARY KEY (service_id, view_name, view_version, logical_table)
         );
         """;
+
+    public override string CreateCandidateMismatchTriggerSql => """
+        CREATE TRIGGER sekiban_mv_force_candidate_mismatch
+        AFTER INSERT ON sekiban_mv_active
+        BEGIN
+            UPDATE sekiban_mv_registry
+            SET status = 'catchingup'
+            WHERE service_id = NEW.service_id
+              AND view_name = NEW.view_name
+              AND view_version = NEW.active_version;
+        END;
+        """;
+
+    public override string DropCandidateMismatchTriggerSql =>
+        "DROP TRIGGER IF EXISTS sekiban_mv_force_candidate_mismatch;";
 
     public override async Task DisposeAsync()
     {

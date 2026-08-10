@@ -1,13 +1,42 @@
+using Dcb.Domain.WithoutResult;
 using Microsoft.Data.Sqlite;
+using Sekiban.Dcb;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.Sqlite;
+using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Testing;
 using Xunit;
 
 namespace Sekiban.Dcb.MaterializedView.Tests;
 
 public sealed class MvActivationEligibilityTests
 {
+    [Fact]
+    public void MissingCandidate_HasTypedRejection() =>
+        AssertRejected(
+            MvActivationFailureReason.CandidateMissing,
+            "orders",
+            "Weather",
+            2,
+            []);
+
+    [Fact]
+    public void CandidateIdentityMismatch_HasTypedRejection()
+    {
+        var entry = EligibleEntry() with { ServiceId = "billing" };
+        AssertRejected(MvActivationFailureReason.IdentityMismatch, "orders", "Weather", 2, [entry]);
+    }
+
+    [Fact]
+    public void FaultedLifecycle_HasTypedRejection() =>
+        AssertRejected(MvActivationFailureReason.Faulted, entries: [EligibleEntry() with { Status = MvStatus.Faulted }]);
+
+    [Fact]
+    public void NonReadyLifecycle_HasTypedRejection() =>
+        AssertRejected(MvActivationFailureReason.UnsafeLifecycle, entries: [EligibleEntry() with { Status = MvStatus.CatchingUp }]);
+
     [Fact]
     public void UnknownTarget_IsRejectedBeforeAnyActivationRequestIsCreated()
     {
@@ -33,27 +62,116 @@ public sealed class MvActivationEligibilityTests
     }
 
     [Fact]
-    public void BehindCandidate_IsRejectedEvenWhenASeparateBestEffortStatusWouldSayCaughtUp()
+    public void UnknownCurrent_HasTypedRejection() =>
+        AssertRejected(
+            MvActivationFailureReason.CurrentCheckpointUnknown,
+            entries:
+            [
+                EligibleEntry() with
+                {
+                    CurrentPosition = null,
+                    CurrentCheckpointTruth = MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable)
+                }
+            ]);
+
+    [Fact]
+    public void MissingAuthoritativeProvenance_HasTypedRejection()
     {
-        // This value represents the kind of sampled G24 status that must not be consulted by G27. The eligibility
-        // API has no status/count input; only the persisted authoritative truth below can authorize a cutover.
-        var g24IsCaughtUp = true;
+        var same = KnownCheckpoint("same", MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp));
+        AssertRejected(
+            MvActivationFailureReason.MissingProvenance,
+            entries: [CreateEntry("orders", "Weather", 2, MvStatus.Ready, same, same)]);
+    }
+
+    [Fact]
+    public void LegacyPositionMismatch_HasTypedRejection() =>
+        AssertRejected(
+            MvActivationFailureReason.CandidateStateMismatch,
+            entries: [EligibleEntry() with { CurrentPosition = KnownCheckpoint("target", MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp)).PositionValue }]);
+
+    [Fact]
+    public async Task FavorableWiredG24Observation_CannotAuthorizeBehindCandidate()
+    {
+        const string serviceId = "orders";
+        var serviceIdProvider = new FixedServiceIdProvider(serviceId);
+        var statusStore = new InMemoryMultiProjectionStateStore(serviceIdProvider);
+        var eventStore = new InMemoryEventStore(DomainType.GetDomainTypes().EventTypes, serviceIdProvider);
+        var now = DateTimeOffset.UtcNow;
+        var write = await statusStore.UpsertAsync(
+            new ProjectionStatusHeartbeat(
+                serviceId,
+                "Weather",
+                "2",
+                "cluster-a",
+                "activation-a",
+                1,
+                0,
+                null,
+                null,
+                now)
+            {
+                Phase = ProjectionStatusPhases.CaughtUp,
+                LeaseExpiresAtUtc = now.AddMinutes(1)
+            },
+            expectedSequence: 0);
+        Assert.True(write.IsSuccess);
+        var statusResult = await new ProjectionStatusReader(
+                statusStore,
+                eventStore,
+                serviceIdProvider,
+                new ProjectionStatusOptions { FreshnessWindow = TimeSpan.FromMinutes(1) })
+            .ReadAsync(new ProjectionStatusReadRequest(serviceId, "Weather", "2"));
+        Assert.True(statusResult.IsSuccess);
+        var g24Observation = Assert.Single(statusResult.GetValue());
+        Assert.True(g24Observation.IsCaughtUp);
+
         var current = KnownCheckpoint("current", MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp));
         var target = KnownCheckpoint("target", MvCheckpointProvenance.AuthoritativeTargetCapture());
-        var entry = CreateEntry("orders", "Weather", 2, MvStatus.Ready, current, target);
+        var entry = CreateEntry(serviceId, "Weather", 2, MvStatus.Ready, current, target);
 
         var (eligibility, request) = MvActivationEligibility.Evaluate(
-            "orders",
+            serviceId,
             "Weather",
             2,
             [entry],
             active: null);
 
-        Assert.True(g24IsCaughtUp);
         Assert.False(eligibility.IsEligible);
         Assert.Equal(MvActivationFailureReason.BehindTarget, eligibility.FailureReason);
         Assert.Null(request);
     }
+
+    [Fact]
+    public void CandidateRowsWithDifferentTruthSnapshots_HaveTypedRejection()
+    {
+        var first = EligibleEntry() with { LogicalTable = "first" };
+        var later = MvCheckpointTruth.Known(
+            new SortableUniqueId(SortableUniqueId.Generate(
+                DateTime.UnixEpoch.AddMinutes(2),
+                GuidUtility.Create("target"))),
+            MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp));
+        var second = EligibleEntry() with
+        {
+            LogicalTable = "second",
+            CurrentPosition = later.PositionValue,
+            CurrentCheckpointTruth = later
+        };
+        AssertRejected(MvActivationFailureReason.CandidateStateMismatch, entries: [first, second]);
+    }
+
+    [Fact]
+    public void ActivePointerIdentityMismatch_HasTypedRejection() =>
+        AssertRejected(
+            MvActivationFailureReason.IdentityMismatch,
+            entries: [EligibleEntry()],
+            active: new MvActiveEntry("billing", "Weather", 1, DateTimeOffset.UtcNow));
+
+    [Fact]
+    public void AlreadyActive_HasTypedRejection() =>
+        AssertRejected(
+            MvActivationFailureReason.AlreadyActive,
+            entries: [EligibleEntry()],
+            active: new MvActiveEntry("orders", "Weather", 2, DateTimeOffset.UtcNow));
 
     [Fact]
     public void EligibleCandidate_CarriesExpectedActiveAndGenerationSnapshot()
@@ -148,6 +266,32 @@ public sealed class MvActivationEligibilityTests
             AppliedEventVersion = 1,
             LastUpdated = DateTimeOffset.UtcNow
         };
+
+    private static MvRegistryEntry EligibleEntry()
+    {
+        var current = KnownCheckpoint("same", MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp));
+        var target = KnownCheckpoint("same", MvCheckpointProvenance.AuthoritativeTargetCapture());
+        return CreateEntry("orders", "Weather", 2, MvStatus.Ready, current, target);
+    }
+
+    private static void AssertRejected(
+        MvActivationFailureReason expected,
+        string serviceId = "orders",
+        string viewName = "Weather",
+        int viewVersion = 2,
+        IReadOnlyList<MvRegistryEntry>? entries = null,
+        MvActiveEntry? active = null)
+    {
+        var (eligibility, request) = MvActivationEligibility.Evaluate(
+            serviceId,
+            viewName,
+            viewVersion,
+            entries ?? [EligibleEntry()],
+            active);
+        Assert.False(eligibility.IsEligible);
+        Assert.Equal(expected, eligibility.FailureReason);
+        Assert.Null(request);
+    }
 
     private static MvCheckpointTruth KnownCheckpoint(
         string seed,
