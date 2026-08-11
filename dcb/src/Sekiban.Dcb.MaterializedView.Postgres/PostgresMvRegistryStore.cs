@@ -408,30 +408,13 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
         return row is null ? null : MapActiveEntry(ToDictionary(row));
     }
 
-    public async Task SetActiveAsync(
+    public Task SetActiveAsync(
         string serviceId,
         string viewName,
         int activeVersion,
         IDbTransaction? transaction = null,
-        CancellationToken cancellationToken = default)
-    {
-        const string sql = """
-            INSERT INTO sekiban_mv_active (
-                service_id, view_name, active_version, active_generation, activated_at,
-                switch_kind, switch_reason, switched_at_utc)
-            VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, NOW(), 'legacy', NULL, NOW())
-            ON CONFLICT (service_id, view_name) DO UPDATE SET
-                active_version = EXCLUDED.active_version,
-                active_generation = sekiban_mv_active.active_generation + 1,
-                activated_at = EXCLUDED.activated_at,
-                switch_kind = 'legacy',
-                switch_reason = NULL,
-                switched_at_utc = EXCLUDED.switched_at_utc;
-            """;
-
-        var parameters = new { ServiceId = serviceId, ViewName = viewName, ActiveVersion = activeVersion };
-        await ExecuteAsync(sql, parameters, transaction, cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        SetLegacyActiveAsync(serviceId, viewName, activeVersion, transaction, cancellationToken);
 
     public async Task<MvActivationResult> TryActivateAsync(
         MvActivationRequest request,

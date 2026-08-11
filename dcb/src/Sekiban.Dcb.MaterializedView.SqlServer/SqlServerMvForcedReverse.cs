@@ -4,6 +4,15 @@ namespace Sekiban.Dcb.MaterializedView.SqlServer;
 
 public sealed partial class SqlServerMvRegistryStore
 {
+    private const string LegacyActiveUpsertSql = """
+        UPDATE sekiban_mv_active WITH (UPDLOCK, HOLDLOCK)
+        SET active_version = @ActiveVersion, active_generation = active_generation + 1, activated_at = SYSUTCDATETIME()
+        WHERE service_id = @ServiceId AND view_name = @ViewName;
+        IF @@ROWCOUNT = 0
+            INSERT INTO sekiban_mv_active (service_id, view_name, active_version, active_generation, activated_at)
+            VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, SYSUTCDATETIME());
+        """;
+
     private static readonly MvForcedReverseSqlPlan ForcedReverseSql = MvForcedReverseSqlPlan.Create(
         candidateFenceSql: """
             SELECT logical_table FROM sekiban_mv_registry WITH (UPDLOCK, HOLDLOCK)
@@ -28,5 +37,6 @@ public sealed partial class SqlServerMvRegistryStore
             """);
 
     protected override MvForcedReverseSqlPlan ForcedReversePlan => ForcedReverseSql;
+    protected override string LegacySetActiveSql => LegacyActiveUpsertSql;
     protected override SqlConnection CreateForcedReverseConnection() => new(_connectionString);
 }

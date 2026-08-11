@@ -423,46 +423,13 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
         return row is null ? null : MapActiveEntry(ToDictionary(row));
     }
 
-    public async Task SetActiveAsync(
+    public Task SetActiveAsync(
         string serviceId,
         string viewName,
         int activeVersion,
         IDbTransaction? transaction = null,
-        CancellationToken cancellationToken = default)
-    {
-        const string sql = """
-            UPDATE sekiban_mv_active WITH (UPDLOCK, HOLDLOCK)
-            SET active_version = @ActiveVersion,
-                active_generation = active_generation + 1,
-                activated_at = SYSUTCDATETIME(),
-                switch_kind = 'legacy',
-                switch_reason = NULL,
-                switched_at_utc = SYSUTCDATETIME()
-            WHERE service_id = @ServiceId
-              AND view_name = @ViewName;
-
-            IF @@ROWCOUNT = 0
-            BEGIN
-                INSERT INTO sekiban_mv_active (
-                    service_id, view_name, active_version, active_generation, activated_at,
-                    switch_kind, switch_reason, switched_at_utc)
-                VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, SYSUTCDATETIME(), 'legacy', NULL, SYSUTCDATETIME());
-            END;
-            """;
-
-        var parameters = new { ServiceId = serviceId, ViewName = viewName, ActiveVersion = activeVersion };
-        if (transaction is not null)
-        {
-            await ExecuteAsync(sql, parameters, transaction, cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var localTransaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(new CommandDefinition(sql, parameters, localTransaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
-        await localTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        SetLegacyActiveAsync(serviceId, viewName, activeVersion, transaction, cancellationToken);
 
     public async Task<MvActivationResult> TryActivateAsync(
         MvActivationRequest request,

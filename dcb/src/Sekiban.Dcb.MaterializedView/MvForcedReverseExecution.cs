@@ -87,6 +87,76 @@ public sealed record MvOrdinarySwitchAuditSqlPlan(
 /// </summary>
 public static class MvForcedReverseExecution
 {
+    private const string LegacySwitchAuditSql = """
+        UPDATE sekiban_mv_active
+        SET switch_kind = 'legacy', switch_reason = NULL, switched_at_utc = @SwitchedAtUtc
+        WHERE service_id = @ServiceId AND view_name = @ViewName AND active_version = @ActiveVersion;
+        """;
+
+    internal static async Task SetLegacyActiveAsync<TConnection>(
+        string serviceId,
+        string viewName,
+        int activeVersion,
+        System.Data.IDbTransaction? callerTransaction,
+        Func<TConnection> createConnection,
+        string pointerUpsertSql,
+        object switchedAtValue,
+        CancellationToken cancellationToken)
+        where TConnection : DbConnection
+    {
+        var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["ServiceId"] = serviceId,
+            ["ViewName"] = viewName,
+            ["ActiveVersion"] = activeVersion,
+            ["SwitchedAtUtc"] = switchedAtValue
+        };
+        if (callerTransaction is not null)
+        {
+            await SetLegacyActiveInTransactionAsync(
+                RequireDbTransaction(callerTransaction),
+                pointerUpsertSql,
+                parameters,
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await using var connection = createConnection();
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await SetLegacyActiveInTransactionAsync(
+                transaction,
+                pointerUpsertSql,
+                parameters,
+                cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private static async Task SetLegacyActiveInTransactionAsync(
+        DbTransaction transaction,
+        string pointerUpsertSql,
+        IReadOnlyDictionary<string, object?> parameters,
+        CancellationToken cancellationToken)
+    {
+        await ExecuteNonQueryAsync(transaction, pointerUpsertSql, parameters, cancellationToken).ConfigureAwait(false);
+        if (await ExecuteNonQueryAsync(
+                transaction,
+                LegacySwitchAuditSql,
+                parameters,
+                cancellationToken).ConfigureAwait(false) != 1)
+        {
+            throw new InvalidOperationException("The legacy active pointer changed before its switch audit was persisted.");
+        }
+    }
+
     internal static async Task PersistOrdinarySwitchAuditAsync(
         System.Data.IDbTransaction transaction,
         MvActivationRequest request,
@@ -347,6 +417,7 @@ public abstract class MvForcedReverseRegistryStoreBase<TConnection>
     where TConnection : DbConnection
 {
     protected abstract MvForcedReverseSqlPlan ForcedReversePlan { get; }
+    protected abstract string LegacySetActiveSql { get; }
     protected abstract TConnection CreateForcedReverseConnection();
     protected virtual object FormatForcedReverseTimestamp(DateTimeOffset value) => value;
 
@@ -360,6 +431,22 @@ public abstract class MvForcedReverseRegistryStoreBase<TConnection>
             CreateForcedReverseConnection,
             ForcedReversePlan,
             FormatForcedReverseTimestamp(request.RequestedAtUtc),
+            cancellationToken);
+
+    protected Task SetLegacyActiveAsync(
+        string serviceId,
+        string viewName,
+        int activeVersion,
+        System.Data.IDbTransaction? transaction,
+        CancellationToken cancellationToken) =>
+        MvForcedReverseExecution.SetLegacyActiveAsync(
+            serviceId,
+            viewName,
+            activeVersion,
+            transaction,
+            CreateForcedReverseConnection,
+            LegacySetActiveSql,
+            FormatForcedReverseTimestamp(DateTimeOffset.UtcNow),
             cancellationToken);
 
     protected Task PersistOrdinarySwitchAuditAsync(
