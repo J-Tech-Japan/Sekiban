@@ -80,8 +80,9 @@ publisher はイベントソース provider（PostgreSQL、Cosmos DB、DynamoDB�
 
 ```mermaid
 flowchart LR
-    W[Hosted worker または開始済み Orleans grain] -->|専用 best-effort schedule| R[G26 MV registry truth]
-    R --> P[G24 source-side status store]
+    R[通常の MV 処理で既に観測した G26 truth] --> C[メモリ上の runtime snapshot]
+    W[Hosted worker または開始済み Orleans grain] -->|専用 best-effort heartbeat| C
+    C --> P[G24 source-side status store]
     P --> T[IProjectionStatusReader]
     P --> S[ISerializedProjectionStatusReader V1]
     T -. grain を呼ばない passive read .-> C[呼び出し元]
@@ -108,7 +109,8 @@ Known-zero は `SortableUniqueId.MinValue` を保持し、`Unknown` には変換
 reader の hot path では実行されません。Hosted worker は catch-up cycle 後に publish し、Orleans は
 `EnsureStartedAsync` の後でのみ専用 publisher timer を開始します。そのため status read は MV grain を activate しません。
 書き込みは best-effort かつ独立 timeout 付きで、失敗診断は secret-free な固定メッセージです。publication の失敗はイベント適用や
-query を停止させません。
+query を停止させません。heartbeat が使うのは runtime がキャッシュした authoritative snapshot だけです。heartbeat と 2 種類の
+G24 reader は、いずれもマテリアライズドビューの target DB を resolve、open、query しません。
 
 ## 登録方法
 

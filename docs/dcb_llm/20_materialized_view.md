@@ -80,8 +80,9 @@ DynamoDB, or SQLite).
 
 ```mermaid
 flowchart LR
-    W[Hosted worker or started Orleans grain] -->|dedicated best-effort schedule| R[G26 MV registry truth]
-    R --> P[G24 source-side status store]
+    R[G26 truth already observed during normal MV work] --> C[In-memory runtime snapshot]
+    W[Hosted worker or started Orleans grain] -->|dedicated best-effort heartbeat| C
+    C --> P[G24 source-side status store]
     P --> T[IProjectionStatusReader]
     P --> S[ISerializedProjectionStatusReader V1]
     T -. passive read; no grain call .-> C[Caller]
@@ -108,7 +109,8 @@ Known-zero carries `SortableUniqueId.MinValue`; it is not represented as `Unknow
 event-apply, stream, query, or reader hot paths. Hosted workers publish after a catch-up cycle, and Orleans starts a
 separate publisher timer only after `EnsureStartedAsync`. Status reads therefore do not activate an MV grain. Writes
 are best-effort, independently timed out, and use generic secret-free failure diagnostics; publication failure does not
-stop event application or queries.
+stop event application or queries. The heartbeat consumes only the runtime's cached authoritative snapshot: neither
+the heartbeat nor either G24 reader resolves, opens, or queries the materialized-view target database.
 
 ## Registering the Runtime
 

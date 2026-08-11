@@ -40,6 +40,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private int _viewVersion;
     private IMvApplyHost? _host;
     private string? _lastAppliedSortableUniqueId;
+    private MvProjectionStatusSnapshot _publicationSnapshot = MvProjectionStatusSnapshot.Unknown();
     private string? _lastReceivedSortableUniqueId;
     private string? _lastError;
     private DateTimeOffset? _lastCatchUpStartedAt;
@@ -333,6 +334,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                     _serviceId!,
                     _viewName!,
                     _viewVersion,
+                    _publicationSnapshot,
                     MvProjectionStatusPublisherKind.Orleans,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -437,9 +439,14 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                     MvStatus.CatchingUp,
                     cancellationToken: cancellationToken);
                 _statusMarkedCatchingUp = true;
+                _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.CatchingUp };
             }
 
             var result = await _executor.CatchUpOnceAsync(_host!, _serviceId, cancellationToken);
+            if (result.ProjectionStatus is { } projectionStatus)
+            {
+                _publicationSnapshot = projectionStatus;
+            }
 
             if (!string.IsNullOrWhiteSpace(result.LastAppliedSortableUniqueId))
             {
@@ -469,6 +476,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         catch (Exception ex)
         {
             _lastError = ex.Message;
+            _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Faulted };
             _logger.LogError(
                 ex,
                 "Materialized view catch-up batch failed for {ViewName}/{ViewVersion}.",
@@ -502,6 +510,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             _host!.ViewName,
             _host.ViewVersion,
             cancellationToken);
+        _publicationSnapshot = MvProjectionStatusSnapshot.FromEntries(entries);
         if (entries.Count == 0 || entries.Any(entry => !entry.CurrentCheckpointTruth.IsKnown))
         {
             _lastError = "Materialized view checkpoint truth is Unknown; readiness remains fail-closed.";
@@ -529,6 +538,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 .ConfigureAwait(false);
             if (active?.ActiveVersion == _host.ViewVersion)
             {
+                _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
                 _isCatchUpActive = false;
                 _needsImmediateCatchUp = false;
                 _consecutiveEmptyBatches = 0;
@@ -550,6 +560,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                     MvStatus.Ready,
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Ready };
 
             var activation = await activationExecutor.TryActivateAsync(
                     _host,
@@ -563,6 +574,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 return;
             }
 
+            _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
             _isCatchUpActive = false;
             _needsImmediateCatchUp = false;
             _consecutiveEmptyBatches = 0;
@@ -576,6 +588,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             _host.ViewVersion,
             MvStatus.Ready,
             cancellationToken: cancellationToken);
+        _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Ready };
         _isCatchUpActive = false;
         _needsImmediateCatchUp = false;
         _consecutiveEmptyBatches = 0;
@@ -750,6 +763,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     {
         ResolveHost();
         var entries = await _registryStore.GetEntriesAsync(_serviceId!, _host!.ViewName, _host.ViewVersion, cancellationToken);
+        _publicationSnapshot = MvProjectionStatusSnapshot.FromEntries(entries);
         var currentPosition = entries
             .Select(entry => entry.CurrentCheckpointTruth.IsKnown ? entry.CurrentCheckpointTruth.PositionValue : null)
             .Where(position => !string.IsNullOrWhiteSpace(position))

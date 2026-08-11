@@ -18,7 +18,6 @@ public static class SekibanDcbMaterializedViewExtensions
         services.TryAddSingleton<ProjectionStatusOptions>();
         services.TryAddSingleton<MvProjectionStatusPublisher>(sp =>
             new MvProjectionStatusPublisher(
-                sp.GetRequiredService<IMvRegistryStore>(),
                 sp.GetService<IProjectionStatusStore>(),
                 sp.GetRequiredService<ProjectionStatusOptions>(),
                 sp.GetRequiredService<ILogger<MvProjectionStatusPublisher>>()));

@@ -269,7 +269,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    protected async Task<string?> GetCurrentPositionAsync(
+    protected async Task<MvProjectionStatusSnapshot> GetCurrentStatusAsync(
         IMvApplyHost host,
         string serviceId,
         CancellationToken cancellationToken)
@@ -291,11 +291,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 .ConfigureAwait(false);
         }
 
-        // Never use the nullable legacy position for a decisive read boundary. Old rows may contain a position but
-        // have no provenance, so they remain Unknown and are replayed fail-closed from the beginning.
-        return entries
-            .Select(entry => entry.CurrentCheckpointTruth.IsKnown ? entry.CurrentCheckpointTruth.PositionValue : null)
-            .FirstOrDefault(position => !string.IsNullOrWhiteSpace(position));
+        return MvProjectionStatusSnapshot.FromEntries(entries);
     }
 
     protected async Task<MvCatchUpResult> CatchUpFromStoreAsync(
@@ -312,15 +308,27 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 selectedEventStore,
                 cancellationToken)
             .ConfigureAwait(false);
-        var currentPosition = await GetCurrentPositionAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+        var currentStatus = await GetCurrentStatusAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+        // Never use the nullable legacy position for a decisive read boundary. Old rows may contain a position but
+        // have no provenance, so they remain Unknown and are replayed fail-closed from the beginning.
+        var currentPosition = currentStatus.CurrentCheckpointTruth.IsKnown
+            ? currentStatus.CurrentCheckpointTruth.PositionValue
+            : null;
         var readResult = await selectedEventStore.ReadAllSerializableEventsAsync(
                 SortableUniqueId.NullableValue(currentPosition),
                 _options.BatchSize)
             .ConfigureAwait(false);
-        var result = await CompleteCatchUpAsync(host, serviceId, readResult, cancellationToken).ConfigureAwait(false);
+        var result = await CompleteCatchUpAsync(host, serviceId, readResult, currentStatus, cancellationToken)
+            .ConfigureAwait(false);
         if (result.AppliedEvents == 0 || result.ReachedUnsafeWindow)
         {
-            await TryActivateIfEligibleAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+            var status = await TryActivateIfEligibleAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+            result = result with
+            {
+                ProjectionStatus = result.ProjectionStatus is { } snapshot
+                    ? snapshot with { Status = status }
+                    : currentStatus with { Status = status }
+            };
         }
 
         return result;
@@ -375,7 +383,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
     ///     from CatchingUp to Ready only after all non-lifecycle eligibility predicates pass. The final pointer write
     ///     is always the provider transaction's expected-active/generation CAS.
     /// </summary>
-    private async Task TryActivateIfEligibleAsync(
+    private async Task<MvStatus> TryActivateIfEligibleAsync(
         IMvApplyHost host,
         string serviceId,
         CancellationToken cancellationToken)
@@ -397,7 +405,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         if (entries.Count == 0 || entries.Any(entry =>
                 entry.Status is not (MvStatus.CatchingUp or MvStatus.Ready)))
         {
-            return;
+            return entries.FirstOrDefault()?.Status ?? MvStatus.Initializing;
         }
 
         // Evaluate the full contract before changing lifecycle state. The evaluator itself intentionally accepts
@@ -414,7 +422,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             active);
         if (!preflight.IsEligible)
         {
-            return;
+            return entries[0].Status;
         }
 
         if (entries.Any(entry => entry.Status != MvStatus.Ready))
@@ -438,6 +446,10 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 result.FailureReason,
                 result.Message);
         }
+
+        return result.Succeeded || result.FailureReason == MvActivationFailureReason.AlreadyActive
+            ? MvStatus.Active
+            : MvStatus.Ready;
     }
 
     protected Task<int> ApplyStreamEventsAtBoundaryAsync(
@@ -463,6 +475,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         IMvApplyHost host,
         string serviceId,
         ResultBox<IEnumerable<SerializableEvent>> readResult,
+        MvProjectionStatusSnapshot currentStatus,
         CancellationToken cancellationToken)
     {
         if (!readResult.IsSuccess)
@@ -478,7 +491,10 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 "Failed to read events for materialized view {ViewName}/{ViewVersion}.",
                 host.ViewName,
                 host.ViewVersion);
-            return new MvCatchUpResult(0, false);
+            return new MvCatchUpResult(0, false)
+            {
+                ProjectionStatus = currentStatus with { Status = MvStatus.Faulted }
+            };
         }
 
         var safeThreshold = CreateSafeThreshold(_options.SafeWindowMs);
@@ -500,7 +516,18 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                     },
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            return new MvCatchUpResult(0, false);
+            var emptyTruth = currentStatus.CurrentCheckpointTruth.IsKnown &&
+                !currentStatus.CurrentCheckpointTruth.IsKnownZero
+                    ? currentStatus.CurrentCheckpointTruth
+                    : MvCheckpointTruth.KnownZero();
+            return new MvCatchUpResult(0, false)
+            {
+                ProjectionStatus = currentStatus with
+                {
+                    CurrentCheckpointTruth = emptyTruth,
+                    Status = MvStatus.CatchingUp
+                }
+            };
         }
 
         var safeBatch = new List<SerializableEvent>(batch.Count);
@@ -517,7 +544,10 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
 
         if (safeBatch.Count == 0)
         {
-            return new MvCatchUpResult(0, reachedUnsafeWindow);
+            return new MvCatchUpResult(0, reachedUnsafeWindow)
+            {
+                ProjectionStatus = currentStatus with { Status = MvStatus.CatchingUp }
+            };
         }
 
         var appliedEvents = await ApplySerializableEventsCoreAsync(
@@ -532,7 +562,20 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             : null;
 
         reachedUnsafeWindow |= appliedEvents < safeBatch.Count;
-        return new MvCatchUpResult(appliedEvents, reachedUnsafeWindow, lastAppliedSortableUniqueId);
+        var truth = !string.IsNullOrWhiteSpace(lastAppliedSortableUniqueId)
+            ? MvCheckpointTruth.Known(
+                new SortableUniqueId(lastAppliedSortableUniqueId),
+                MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp))
+            : currentStatus.CurrentCheckpointTruth;
+        return new MvCatchUpResult(appliedEvents, reachedUnsafeWindow, lastAppliedSortableUniqueId)
+        {
+            ProjectionStatus = currentStatus with
+            {
+                CurrentCheckpointTruth = truth,
+                Status = MvStatus.CatchingUp,
+                AppliedEventCount = currentStatus.AppliedEventCount + appliedEvents
+            }
+        };
     }
 
     protected async Task<int> ApplySerializableEventsCoreAsync(

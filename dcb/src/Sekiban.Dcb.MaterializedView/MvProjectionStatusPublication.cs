@@ -38,8 +38,53 @@ public sealed record MvProjectionStatusIdentity(string ProjectorName, string Pro
 }
 
 /// <summary>
-/// Publishes G26 registry truth through the existing G24 source-side registry. This component never resolves an
-/// event store and is called only by dedicated hosted-worker/Orleans schedules.
+/// Immutable G26 progress already observed by an MV runtime while doing its normal target work.
+/// The status publisher consumes this value without resolving or querying the target provider.
+/// </summary>
+public sealed record MvProjectionStatusSnapshot(
+    MvCheckpointTruth CurrentCheckpointTruth,
+    MvStatus Status,
+    long AppliedEventCount)
+{
+    public static MvProjectionStatusSnapshot Unknown(MvStatus status = MvStatus.Initializing) =>
+        new(MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.NotObserved), status, 0);
+
+    public static MvProjectionStatusSnapshot FromEntries(IReadOnlyList<MvRegistryEntry> entries)
+    {
+        if (entries.Count == 0)
+        {
+            return Unknown();
+        }
+
+        var applied = entries.Max(entry => entry.AppliedEventVersion);
+        var status = entries.Any(entry => entry.Status == MvStatus.Faulted)
+            ? MvStatus.Faulted
+            : entries.Any(entry => entry.Status == MvStatus.Initializing)
+                ? MvStatus.Initializing
+                : entries.Any(entry => entry.Status == MvStatus.CatchingUp)
+                    ? MvStatus.CatchingUp
+                    : entries.Any(entry => entry.Status == MvStatus.Ready)
+                        ? MvStatus.Ready
+                        : entries.Any(entry => entry.Status == MvStatus.Active)
+                            ? MvStatus.Active
+                            : entries[0].Status;
+        var unknown = entries.FirstOrDefault(entry => !entry.CurrentCheckpointTruth.IsKnown);
+        if (unknown is not null)
+        {
+            return new(unknown.CurrentCheckpointTruth, status, applied);
+        }
+
+        var truth = entries
+            .Select(entry => entry.CurrentCheckpointTruth)
+            .OrderBy(entry => entry.PositionValue, StringComparer.Ordinal)
+            .First();
+        return new(truth, status, applied);
+    }
+}
+
+/// <summary>
+/// Publishes already-known G26 truth through the existing G24 source-side registry. This component has no target
+/// registry dependency and is called only by dedicated hosted-worker/Orleans schedules.
 /// </summary>
 public sealed class MvProjectionStatusPublisher
 {
@@ -48,16 +93,13 @@ public sealed class MvProjectionStatusPublisher
     private readonly string _activationRoot = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
     private readonly ILogger<MvProjectionStatusPublisher> _logger;
     private readonly ProjectionStatusOptions _options;
-    private readonly IMvRegistryStore _registryStore;
     private readonly IProjectionStatusStore? _statusStore;
 
     public MvProjectionStatusPublisher(
-        IMvRegistryStore registryStore,
         IProjectionStatusStore? statusStore,
         ProjectionStatusOptions options,
         ILogger<MvProjectionStatusPublisher> logger)
     {
-        _registryStore = registryStore ?? throw new ArgumentNullException(nameof(registryStore));
         _statusStore = statusStore;
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -70,11 +112,13 @@ public sealed class MvProjectionStatusPublisher
         string serviceId,
         string viewName,
         int viewVersion,
+        MvProjectionStatusSnapshot snapshot,
         MvProjectionStatusPublisherKind publisherKind,
         CancellationToken cancellationToken = default)
     {
         var normalizedServiceId = ServiceIdValidator.NormalizeAndValidate(serviceId);
         var identity = MvProjectionStatusIdentity.Create(viewName, viewVersion);
+        ArgumentNullException.ThrowIfNull(snapshot);
         if (!_options.Enabled || _statusStore is null)
         {
             return;
@@ -91,17 +135,7 @@ public sealed class MvProjectionStatusPublisher
         _nextDue[key] = now + PositiveOrDefault(_options.HeartbeatInterval, TimeSpan.FromSeconds(30));
         try
         {
-            var timeout = PositiveOrDefault(_options.HeartbeatWriteTimeout, TimeSpan.FromSeconds(5));
-            using var readCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            readCts.CancelAfter(timeout);
-            var entries = await _registryStore.GetEntriesAsync(
-                    normalizedServiceId,
-                    viewName,
-                    viewVersion,
-                    readCts.Token)
-                .WaitAsync(timeout, cancellationToken)
-                .ConfigureAwait(false);
-            var mapped = Map(entries);
+            var mapped = Map(snapshot);
             var fence = _fences.GetOrAdd(key, _ => new PublicationFence());
             await fence.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -204,38 +238,27 @@ public sealed class MvProjectionStatusPublisher
         _logger.LogWarning("Materialized view status publication failed; the projection runtime continues unaffected.");
     }
 
-    private static MappedStatus Map(IReadOnlyList<MvRegistryEntry> entries)
+    private static MappedStatus Map(MvProjectionStatusSnapshot snapshot)
     {
-        if (entries.Count == 0)
+        if (snapshot.Status == MvStatus.Faulted)
         {
-            return new(ProjectionStatusPhases.Unknown, null, 0, false);
+            return new(ProjectionStatusPhases.Faulted, null, snapshot.AppliedEventCount, true);
         }
 
-        var applied = entries.Max(entry => entry.AppliedEventVersion);
-        if (entries.Any(entry => entry.Status == MvStatus.Faulted))
+        if (!snapshot.CurrentCheckpointTruth.IsKnown)
         {
-            return new(ProjectionStatusPhases.Faulted, null, applied, true);
+            return new(ProjectionStatusPhases.Unknown, null, snapshot.AppliedEventCount, false);
         }
 
-        if (entries.Any(entry => !entry.CurrentCheckpointTruth.IsKnown))
+        var phase = snapshot.Status switch
         {
-            return new(ProjectionStatusPhases.Unknown, null, applied, false);
-        }
-
-        var position = entries
-            .Select(entry => entry.CurrentCheckpointTruth.PositionValue!)
-            .OrderBy(value => value, StringComparer.Ordinal)
-            .First();
-        var phase = entries.Any(entry => entry.Status == MvStatus.Initializing)
-            ? ProjectionStatusPhases.Starting
-            : entries.Any(entry => entry.Status == MvStatus.CatchingUp)
-                ? ProjectionStatusPhases.CatchingUp
-                : entries.Any(entry => entry.Status == MvStatus.Ready)
-                    ? ProjectionStatusPhases.CaughtUp
-                    : entries.Any(entry => entry.Status == MvStatus.Active)
-                        ? ProjectionStatusPhases.Active
-                        : ProjectionStatusPhases.Stopped;
-        return new(phase, position, applied, false);
+            MvStatus.Initializing => ProjectionStatusPhases.Starting,
+            MvStatus.CatchingUp => ProjectionStatusPhases.CatchingUp,
+            MvStatus.Ready => ProjectionStatusPhases.CaughtUp,
+            MvStatus.Active => ProjectionStatusPhases.Active,
+            _ => ProjectionStatusPhases.Stopped
+        };
+        return new(phase, snapshot.CurrentCheckpointTruth.PositionValue, snapshot.AppliedEventCount, false);
     }
 
     private static string BuildClusterId(string clusterId, string lane) =>

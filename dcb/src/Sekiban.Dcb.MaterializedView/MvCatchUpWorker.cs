@@ -8,6 +8,7 @@ namespace Sekiban.Dcb.MaterializedView;
 public sealed class MvCatchUpWorker : BackgroundService
 {
     private readonly Dictionary<string, int> _failureCounts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, MvProjectionStatusSnapshot> _publicationSnapshots = new(StringComparer.Ordinal);
     private readonly IMvExecutor _executor;
     private readonly IMvApplyHostFactory _hostFactory;
     private readonly ILogger<MvCatchUpWorker> _logger;
@@ -91,6 +92,8 @@ public sealed class MvCatchUpWorker : BackgroundService
         {
             var host = _hostFactory.Create(registration.ViewName, registration.ViewVersion);
             await _executor.InitializeAsync(host, _serviceId, stoppingToken).ConfigureAwait(false);
+            _publicationSnapshots[GetProjectorKey(registration)] =
+                MvProjectionStatusSnapshot.Unknown(MvStatus.CatchingUp);
         }
     }
 
@@ -98,10 +101,24 @@ public sealed class MvCatchUpWorker : BackgroundService
     {
         var appliedEvents = 0;
         var shouldDelay = false;
+        var lastSnapshot = MvProjectionStatusSnapshot.Unknown(MvStatus.CatchingUp);
 
         foreach (var registration in _registrations)
         {
             var projectorResult = await ProcessProjectorAsync(registration, stoppingToken).ConfigureAwait(false);
+            lastSnapshot = projectorResult.ProjectionStatus;
+            if (_statusPublisher is not null)
+            {
+                await _statusPublisher.PublishIfDueAsync(
+                        _serviceId,
+                        registration.ViewName,
+                        registration.ViewVersion,
+                        projectorResult.ProjectionStatus,
+                        MvProjectionStatusPublisherKind.HostedWorker,
+                        stoppingToken)
+                    .ConfigureAwait(false);
+            }
+
             if (projectorResult.ShouldStop)
             {
                 return projectorResult;
@@ -109,19 +126,9 @@ public sealed class MvCatchUpWorker : BackgroundService
 
             appliedEvents += projectorResult.AppliedEvents;
             shouldDelay |= projectorResult.ShouldDelay;
-            if (_statusPublisher is not null)
-            {
-                await _statusPublisher.PublishIfDueAsync(
-                        _serviceId,
-                        registration.ViewName,
-                        registration.ViewVersion,
-                        MvProjectionStatusPublisherKind.HostedWorker,
-                        stoppingToken)
-                    .ConfigureAwait(false);
-            }
         }
 
-        return new CatchUpCycleResult(appliedEvents, shouldDelay, ShouldStop: false);
+        return new CatchUpCycleResult(appliedEvents, shouldDelay, ShouldStop: false, lastSnapshot);
     }
 
     private async Task<CatchUpCycleResult> ProcessProjectorAsync(
@@ -133,7 +140,9 @@ public sealed class MvCatchUpWorker : BackgroundService
         {
             var result = await _executor.CatchUpOnceAsync(host, _serviceId, stoppingToken).ConfigureAwait(false);
             _failureCounts.Remove(GetProjectorKey(registration));
-            return new CatchUpCycleResult(result.AppliedEvents, result.ReachedUnsafeWindow, ShouldStop: false);
+            var snapshot = result.ProjectionStatus ?? GetSnapshot(registration);
+            _publicationSnapshots[GetProjectorKey(registration)] = snapshot;
+            return new CatchUpCycleResult(result.AppliedEvents, result.ReachedUnsafeWindow, ShouldStop: false, snapshot);
         }
         catch (NotSupportedException ex)
         {
@@ -142,7 +151,9 @@ public sealed class MvCatchUpWorker : BackgroundService
                 "Materialized view worker stopped because the configured event store cannot stream all events for {ViewName}/{ViewVersion}.",
                 registration.ViewName,
                 registration.ViewVersion);
-            return new CatchUpCycleResult(0, ShouldDelay: false, ShouldStop: true);
+            var snapshot = GetSnapshot(registration) with { Status = MvStatus.Faulted };
+            _publicationSnapshots[GetProjectorKey(registration)] = snapshot;
+            return new CatchUpCycleResult(0, ShouldDelay: false, ShouldStop: true, snapshot);
         }
         catch (Exception ex)
         {
@@ -155,7 +166,9 @@ public sealed class MvCatchUpWorker : BackgroundService
                     registration.ViewName,
                     registration.ViewVersion,
                     failures);
-                return new CatchUpCycleResult(0, ShouldDelay: false, ShouldStop: true);
+                var halted = GetSnapshot(registration) with { Status = MvStatus.Faulted };
+                _publicationSnapshots[GetProjectorKey(registration)] = halted;
+                return new CatchUpCycleResult(0, ShouldDelay: false, ShouldStop: true, halted);
             }
 
             _logger.LogWarning(
@@ -165,9 +178,16 @@ public sealed class MvCatchUpWorker : BackgroundService
                 registration.ViewVersion,
                 failures,
                 _options.MaxConsecutiveFailuresBeforeStop);
-            return new CatchUpCycleResult(0, ShouldDelay: true, ShouldStop: false);
+            var retrying = GetSnapshot(registration) with { Status = MvStatus.Faulted };
+            _publicationSnapshots[GetProjectorKey(registration)] = retrying;
+            return new CatchUpCycleResult(0, ShouldDelay: true, ShouldStop: false, retrying);
         }
     }
+
+    private MvProjectionStatusSnapshot GetSnapshot(MvApplyHostRegistration registration) =>
+        _publicationSnapshots.TryGetValue(GetProjectorKey(registration), out var snapshot)
+            ? snapshot
+            : MvProjectionStatusSnapshot.Unknown(MvStatus.CatchingUp);
 
     private int IncrementFailureCount(MvApplyHostRegistration registration)
     {
@@ -210,5 +230,9 @@ public sealed class MvCatchUpWorker : BackgroundService
         return normalized;
     }
 
-    private sealed record CatchUpCycleResult(int AppliedEvents, bool ShouldDelay, bool ShouldStop);
+    private sealed record CatchUpCycleResult(
+        int AppliedEvents,
+        bool ShouldDelay,
+        bool ShouldStop,
+        MvProjectionStatusSnapshot ProjectionStatus);
 }

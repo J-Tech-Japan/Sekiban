@@ -1,4 +1,4 @@
-using System.Data;
+using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -51,10 +51,10 @@ public class MvProjectionStatusPublicationTests
     {
         var serviceProvider = new FixedServiceIdProvider(ServiceId);
         var statusStore = new ObservingStatusStore(serviceProvider);
-        var registry = new StubRegistryStore(CreateEntry(truth, status));
-        var executor = new ObservingExecutor(blockFirstCall: true);
+        var snapshotToPublish = new MvProjectionStatusSnapshot(truth, status, 41);
+        var executor = new ObservingExecutor(snapshotToPublish, blockFirstCall: true);
         executor.StatusWriteCount = () => statusStore.UpsertCalls;
-        var publisher = CreatePublisher(registry, statusStore);
+        var publisher = CreatePublisher(statusStore);
         using var worker = CreateWorker(executor, publisher);
 
         await worker.StartAsync(CancellationToken.None);
@@ -95,23 +95,21 @@ public class MvProjectionStatusPublicationTests
 
     [Theory]
     [InlineData("blocking-status")]
-    [InlineData("blocking-registry")]
-    [InlineData("throwing-registry")]
+    [InlineData("throwing-status")]
     public async Task HostedWorker_IsolatesSlowFailingPublication_WithBoundedTimeoutAndSecretFreeLogging(string failureMode)
     {
         const string secret = "Password=super-secret";
-        var registry = new StubRegistryStore(CreateEntry(MvCheckpointTruth.KnownZero(), MvStatus.Active));
-        registry.BlockReads = failureMode == "blocking-registry";
-        registry.ThrowMessage = failureMode == "throwing-registry" ? secret : null;
         IProjectionStatusStore statusStore = failureMode == "blocking-status"
             ? new BlockingStatusStore()
-            : new ObservingStatusStore(new FixedServiceIdProvider(ServiceId));
+            : new ThrowingStatusStore(secret);
         var logger = new CapturingLogger<MvProjectionStatusPublisher>();
         var options = StatusOptions();
         options.HeartbeatWriteTimeout = TimeSpan.FromMilliseconds(30);
         options.HeartbeatInterval = TimeSpan.FromMilliseconds(1);
-        var publisher = new MvProjectionStatusPublisher(registry, statusStore, options, logger);
-        var executor = new ObservingExecutor(requiredCalls: 2);
+        var publisher = new MvProjectionStatusPublisher(statusStore, options, logger);
+        var executor = new ObservingExecutor(
+            new MvProjectionStatusSnapshot(MvCheckpointTruth.KnownZero(), MvStatus.Active, 0),
+            requiredCalls: 2);
         using var worker = CreateWorker(executor, publisher, TimeSpan.FromMilliseconds(1));
 
         await worker.StartAsync(CancellationToken.None);
@@ -137,26 +135,22 @@ public class MvProjectionStatusPublicationTests
     }
 
     [Fact]
-    public async Task Publication_ValidatesExactServiceBeforeAnyIo_AndDoesNoRegistryIoWithoutSourceStatusStore()
+    public async Task Publication_ValidatesExactServiceBeforeAnyIo_AndDoesNoStatusIoWhenDisabled()
     {
-        var invalidRegistry = new StubRegistryStore(CreateEntry(MvCheckpointTruth.KnownZero(), MvStatus.Active));
-        var invalidPublisher = CreatePublisher(
-            invalidRegistry,
-            new ObservingStatusStore(new FixedServiceIdProvider(ServiceId)));
+        var invalidStore = new ObservingStatusStore(new FixedServiceIdProvider(ServiceId));
+        var invalidPublisher = CreatePublisher(invalidStore);
+        var snapshot = new MvProjectionStatusSnapshot(MvCheckpointTruth.KnownZero(), MvStatus.Active, 0);
 
         await Assert.ThrowsAsync<ArgumentException>(() => invalidPublisher.PublishIfDueAsync(
-            " ", ViewName, ViewVersion, MvProjectionStatusPublisherKind.HostedWorker));
-        Assert.Equal(0, invalidRegistry.GetEntriesCalls);
+            " ", ViewName, ViewVersion, snapshot, MvProjectionStatusPublisherKind.HostedWorker));
+        Assert.Equal(0, invalidStore.UpsertCalls);
 
-        var disabledRegistry = new StubRegistryStore(CreateEntry(MvCheckpointTruth.KnownZero(), MvStatus.Active));
         var disabledPublisher = new MvProjectionStatusPublisher(
-            disabledRegistry,
             statusStore: null,
-            StatusOptions(),
-            NullLogger<MvProjectionStatusPublisher>.Instance);
+            options: StatusOptions(),
+            logger: NullLogger<MvProjectionStatusPublisher>.Instance);
         await disabledPublisher.PublishIfDueAsync(
-            ServiceId, ViewName, ViewVersion, MvProjectionStatusPublisherKind.HostedWorker);
-        Assert.Equal(0, disabledRegistry.GetEntriesCalls);
+            ServiceId, ViewName, ViewVersion, snapshot, MvProjectionStatusPublisherKind.HostedWorker);
     }
 
     [Theory]
@@ -164,7 +158,7 @@ public class MvProjectionStatusPublicationTests
     [InlineData("mysql")]
     [InlineData("sqlserver")]
     [InlineData("sqlite")]
-    public void AllRelationalTargets_ComposeWithTheSameSourceSideStatusPublisher(string provider)
+    public async Task AllRelationalTargets_RunHostedCadenceAndG24Readers_WithoutResolvingTargetProvider(string provider)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -185,8 +179,41 @@ public class MvProjectionStatusPublicationTests
                 break;
         }
 
+        var targetDescriptor = Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IMvRegistryStore));
+        services.Remove(targetDescriptor);
+        using var targetIo = new TargetProviderIoCounter();
+        services.AddSingleton<IMvRegistryStore>(sp =>
+        {
+            targetIo.FactoryResolutions++;
+            return (IMvRegistryStore)(targetDescriptor.ImplementationFactory?.Invoke(sp) ??
+                throw new InvalidOperationException("Provider registry descriptor must use its production factory."));
+        });
+
         using var serviceProvider = services.BuildServiceProvider();
-        Assert.NotNull(serviceProvider.GetRequiredService<MvProjectionStatusPublisher>());
+        var statusStore = Assert.IsType<ObservingStatusStore>(serviceProvider.GetRequiredService<IProjectionStatusStore>());
+        var publisher = serviceProvider.GetRequiredService<MvProjectionStatusPublisher>();
+        var executor = new ObservingExecutor(
+            new MvProjectionStatusSnapshot(MvCheckpointTruth.KnownZero(), MvStatus.Active, 0));
+        using var worker = CreateWorker(executor, publisher);
+        await worker.StartAsync(CancellationToken.None);
+        await statusStore.Written.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await worker.StopAsync(CancellationToken.None);
+
+        var serviceIdProvider = new FixedServiceIdProvider(ServiceId);
+        var reader = new ProjectionStatusReader(
+            statusStore,
+            new InMemoryEventStore(serviceIdProvider),
+            serviceIdProvider,
+            StatusOptions());
+        var identity = MvProjectionStatusIdentity.Create(ViewName, ViewVersion);
+        var request = new ProjectionStatusReadRequest(ServiceId, identity.ProjectorName, identity.ProjectorVersion);
+        Assert.Single((await reader.ReadAsync(request)).GetValue());
+        var serialized = new SerializedProjectionStatusReader(reader, serviceIdProvider);
+        Assert.True((await serialized.AcceptAsync(SerializedProjectionStatusReader.SerializeRequest(request))).IsSuccess);
+        Assert.Equal(0, targetIo.FactoryResolutions);
+        Assert.Equal(0, targetIo.OpenCalls);
+        Assert.Equal(0, targetIo.QueryCalls);
+        Assert.Equal(0, targetIo.ProviderCalls);
     }
 
     [Fact]
@@ -206,10 +233,9 @@ public class MvProjectionStatusPublicationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IMvRegistryStore>(new StubRegistryStore(CreateEntry(MvCheckpointTruth.KnownZero(), MvStatus.Active)));
         services.AddSingleton<IProjectionStatusStore>(new ObservingStatusStore(new FixedServiceIdProvider(ServiceId)));
         services.AddSingleton<IMvApplyHostFactory>(new StubHostFactory());
-        services.AddSingleton<IMvExecutor>(new ObservingExecutor());
+        services.AddSingleton<IMvExecutor>(new ObservingExecutor(MvProjectionStatusSnapshot.Unknown()));
         services.AddSekibanDcbMaterializedView(options => options.ServiceId = ServiceId);
         services.AddSingleton<IHostedService, MvCatchUpWorker>();
 
@@ -220,20 +246,6 @@ public class MvProjectionStatusPublicationTests
         Assert.Contains(selected.GetParameters(), parameter => parameter.ParameterType == typeof(MvProjectionStatusPublisher));
     }
 
-    private static MvRegistryEntry CreateEntry(MvCheckpointTruth truth, MvStatus status) => new()
-    {
-        ServiceId = ServiceId,
-        ViewName = ViewName,
-        ViewVersion = ViewVersion,
-        LogicalTable = "main",
-        PhysicalTable = "unused",
-        Status = status,
-        CurrentPosition = truth.PositionValue,
-        CurrentCheckpointTruth = truth,
-        AppliedEventVersion = 41,
-        LastUpdated = DateTimeOffset.UtcNow
-    };
-
     private static ProjectionStatusOptions StatusOptions() => new()
     {
         ClusterId = "test-cluster",
@@ -243,8 +255,8 @@ public class MvProjectionStatusPublicationTests
         HeartbeatWriteTimeout = TimeSpan.FromSeconds(1)
     };
 
-    private static MvProjectionStatusPublisher CreatePublisher(IMvRegistryStore registry, IProjectionStatusStore statusStore) =>
-        new(registry, statusStore, StatusOptions(), NullLogger<MvProjectionStatusPublisher>.Instance);
+    private static MvProjectionStatusPublisher CreatePublisher(IProjectionStatusStore statusStore) =>
+        new(statusStore, StatusOptions(), NullLogger<MvProjectionStatusPublisher>.Instance);
 
     private static MvCatchUpWorker CreateWorker(
         ObservingExecutor executor,
@@ -282,10 +294,15 @@ public class MvProjectionStatusPublicationTests
 
     private sealed class ObservingExecutor : IMvExecutor
     {
+        private readonly MvProjectionStatusSnapshot _snapshot;
         private readonly int _requiredCalls;
         private readonly bool _blockFirstCall;
-        public ObservingExecutor(int requiredCalls = 1, bool blockFirstCall = false)
+        public ObservingExecutor(
+            MvProjectionStatusSnapshot snapshot,
+            int requiredCalls = 1,
+            bool blockFirstCall = false)
         {
+            _snapshot = snapshot;
             _requiredCalls = requiredCalls;
             _blockFirstCall = blockFirstCall;
         }
@@ -309,7 +326,7 @@ public class MvProjectionStatusPublicationTests
             {
                 RequiredCallsReached.TrySetResult();
             }
-            return new MvCatchUpResult(0, false);
+            return new MvCatchUpResult(0, false) { ProjectionStatus = _snapshot };
         }
         public Task<int> ApplySerializableEventsAsync(IMvApplyHost host, IReadOnlyList<SerializableEvent> events, string? serviceId = null, CancellationToken cancellationToken = default) => Task.FromResult(0);
     }
@@ -339,35 +356,70 @@ public class MvProjectionStatusPublicationTests
             Task.FromResult(ResultBox.FromValue<IReadOnlyList<ProjectionStatusHeartbeat>>([]));
     }
 
-    private sealed class StubRegistryStore(MvRegistryEntry entry) : IMvRegistryStore
+    private sealed class ThrowingStatusStore(string message) : IProjectionStatusStore
     {
-        private readonly TaskCompletionSource<IReadOnlyList<MvRegistryEntry>> _never =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public int GetEntriesCalls { get; private set; }
-        public bool BlockReads { get; set; }
-        public string? ThrowMessage { get; set; }
-        public Task EnsureInfrastructureAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task RegisterAsync(MvRegistryEntry value, IDbTransaction? transaction = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task UpdatePositionAsync(MvPositionUpdate update, IDbTransaction? transaction = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task MarkStreamReceivedAsync(string serviceId, string viewName, int viewVersion, string sortableUniqueId, DateTimeOffset receivedAt, IDbTransaction? transaction = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task UpdateStatusAsync(string serviceId, string viewName, int viewVersion, MvStatus status, IDbTransaction? transaction = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<IReadOnlyList<MvRegistryEntry>> GetEntriesAsync(string serviceId, string viewName, int viewVersion, CancellationToken cancellationToken = default)
+        public Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
+            ProjectionStatusHeartbeat heartbeat,
+            long expectedSequence,
+            CancellationToken cancellationToken = default) =>
+            Task.FromException<ResultBox<ProjectionStatusWriteResult>>(new InvalidOperationException(message));
+
+        public Task<ResultBox<IReadOnlyList<ProjectionStatusHeartbeat>>> ListAsync(
+            string? projectorName = null,
+            string? projectorVersion = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(ResultBox.FromValue<IReadOnlyList<ProjectionStatusHeartbeat>>([]));
+    }
+
+    private sealed class TargetProviderIoCounter : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
+    {
+        private readonly List<IDisposable> _subscriptions = [];
+        private readonly IDisposable _allListeners;
+
+        public TargetProviderIoCounter() => _allListeners = DiagnosticListener.AllListeners.Subscribe(this);
+
+        public int FactoryResolutions { get; set; }
+        public int OpenCalls { get; private set; }
+        public int QueryCalls { get; private set; }
+        public int ProviderCalls { get; private set; }
+
+        public void OnNext(DiagnosticListener value)
         {
-            GetEntriesCalls++;
-            if (ThrowMessage is not null)
+            if (value.Name.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ||
+                value.Name.Contains("MySql", StringComparison.OrdinalIgnoreCase) ||
+                value.Name.Contains("SqlClient", StringComparison.OrdinalIgnoreCase) ||
+                value.Name.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
             {
-                return Task.FromException<IReadOnlyList<MvRegistryEntry>>(new InvalidOperationException(ThrowMessage));
+                _subscriptions.Add(value.Subscribe(this));
             }
-
-            if (BlockReads)
-            {
-                return _never.Task;
-            }
-
-            return Task.FromResult<IReadOnlyList<MvRegistryEntry>>([entry]);
         }
-        public Task<MvActiveEntry?> GetActiveAsync(string serviceId, string viewName, CancellationToken cancellationToken = default) => Task.FromResult<MvActiveEntry?>(null);
-        public Task SetActiveAsync(string serviceId, string viewName, int activeVersion, IDbTransaction? transaction = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public void OnNext(KeyValuePair<string, object?> value)
+        {
+            ProviderCalls++;
+            if (value.Key.Contains("Open", StringComparison.OrdinalIgnoreCase))
+            {
+                OpenCalls++;
+            }
+
+            if (value.Key.Contains("Command", StringComparison.OrdinalIgnoreCase) ||
+                value.Key.Contains("Execute", StringComparison.OrdinalIgnoreCase))
+            {
+                QueryCalls++;
+            }
+        }
+
+        public void OnCompleted() { }
+        public void OnError(Exception error) { }
+
+        public void Dispose()
+        {
+            foreach (var subscription in _subscriptions)
+            {
+                subscription.Dispose();
+            }
+            _allListeners.Dispose();
+        }
     }
 
     private sealed class FixedServiceIdProvider(string serviceId) : IServiceIdProvider
