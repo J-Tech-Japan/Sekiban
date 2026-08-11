@@ -148,6 +148,15 @@ public sealed record MvActiveEntry(
     ///     Monotonic compare-and-switch generation. Legacy active rows migrate with generation zero.
     /// </summary>
     public long Generation { get; init; }
+
+    /// <summary>Durable audit classification for the transition that produced this pointer.</summary>
+    public MvSwitchKind SwitchKind { get; init; } = MvSwitchKind.Legacy;
+
+    /// <summary>Actor-supplied reason for a break-glass forced reverse; null for ordinary switches.</summary>
+    public string? SwitchReason { get; init; }
+
+    /// <summary>Timestamp persisted atomically with the active-pointer transition.</summary>
+    public DateTimeOffset? SwitchedAtUtc { get; init; }
 }
 
 public sealed record MvPositionUpdate(
@@ -315,6 +324,16 @@ public interface IMvRegistryStore
         IDbTransaction? transaction = null,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("This registry store does not support atomic materialized-view activation.");
+
+    /// <summary>
+    ///     Provider-atomic break-glass reverse. This is a separately named API so ordinary activation can never
+    ///     acquire a truth-waiver flag accidentally.
+    /// </summary>
+    Task<MvActivationResult> TryForceReverseAsync(
+        MvForcedReverseRequest request,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This registry store does not support forced materialized-view reverse switching.");
 
     Task SetActiveAsync(
         string serviceId,

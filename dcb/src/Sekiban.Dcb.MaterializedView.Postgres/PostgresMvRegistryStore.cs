@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace Sekiban.Dcb.MaterializedView.Postgres;
 
-public sealed class PostgresMvRegistryStore : IMvRegistryStore
+public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistryStoreBase<NpgsqlConnection>, IMvRegistryStore
 {
     private readonly string _connectionString;
 
@@ -51,6 +51,9 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
                 active_version INT NOT NULL,
                 active_generation BIGINT NOT NULL DEFAULT 0,
                 activated_at TIMESTAMPTZ NOT NULL,
+                switch_kind TEXT NOT NULL DEFAULT 'legacy',
+                switch_reason TEXT NULL,
+                switched_at_utc TIMESTAMPTZ NULL,
                 PRIMARY KEY (service_id, view_name)
             );
             """;
@@ -67,6 +70,12 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
         const string activeGenerationMigrationSql = """
             ALTER TABLE sekiban_mv_active
                 ADD COLUMN IF NOT EXISTS active_generation BIGINT NOT NULL DEFAULT 0;
+            ALTER TABLE sekiban_mv_active
+                ADD COLUMN IF NOT EXISTS switch_kind TEXT NOT NULL DEFAULT 'legacy';
+            ALTER TABLE sekiban_mv_active
+                ADD COLUMN IF NOT EXISTS switch_reason TEXT NULL;
+            ALTER TABLE sekiban_mv_active
+                ADD COLUMN IF NOT EXISTS switched_at_utc TIMESTAMPTZ NULL;
             """;
         await connection.ExecuteAsync(new CommandDefinition(activeGenerationMigrationSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
@@ -382,7 +391,10 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
                    view_name AS ViewName,
                    active_version AS ActiveVersion,
                    active_generation AS Generation,
-                   activated_at AS ActivatedAt
+                   activated_at AS ActivatedAt,
+                   switch_kind AS SwitchKind,
+                   switch_reason AS SwitchReason,
+                   switched_at_utc AS SwitchedAtUtc
             FROM sekiban_mv_active
             WHERE service_id = @ServiceId
               AND view_name = @ViewName;
@@ -396,25 +408,13 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
         return row is null ? null : MapActiveEntry(ToDictionary(row));
     }
 
-    public async Task SetActiveAsync(
+    public Task SetActiveAsync(
         string serviceId,
         string viewName,
         int activeVersion,
         IDbTransaction? transaction = null,
-        CancellationToken cancellationToken = default)
-    {
-        const string sql = """
-            INSERT INTO sekiban_mv_active (service_id, view_name, active_version, active_generation, activated_at)
-            VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, NOW())
-            ON CONFLICT (service_id, view_name) DO UPDATE SET
-                active_version = EXCLUDED.active_version,
-                active_generation = sekiban_mv_active.active_generation + 1,
-                activated_at = EXCLUDED.activated_at;
-            """;
-
-        var parameters = new { ServiceId = serviceId, ViewName = viewName, ActiveVersion = activeVersion };
-        await ExecuteAsync(sql, parameters, transaction, cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken = default) =>
+        SetLegacyActiveAsync(serviceId, viewName, activeVersion, transaction, cancellationToken);
 
     public async Task<MvActivationResult> TryActivateAsync(
         MvActivationRequest request,
@@ -494,8 +494,7 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
         }
 
         const string insertSql = """
-            INSERT INTO sekiban_mv_active (
-                service_id, view_name, active_version, active_generation, activated_at)
+            INSERT INTO sekiban_mv_active (service_id, view_name, active_version, active_generation, activated_at)
             SELECT @ServiceId, @ViewName, @ViewVersion, 1, NOW()
             WHERE @ExpectedActiveVersion IS NULL
               AND @ExpectedActiveGeneration = 0
@@ -518,6 +517,8 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
         {
             return CandidateSnapshotChanged();
         }
+
+        await PersistOrdinarySwitchAuditAsync(transaction, request, cancellationToken).ConfigureAwait(false);
 
         const string markActiveSql = """
             UPDATE sekiban_mv_registry
@@ -672,15 +673,7 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
         };
     }
 
-    private static MvActiveEntry MapActiveEntry(IReadOnlyDictionary<string, object?> row) =>
-        new(
-            ReadRequiredString(row, "ServiceId"),
-            ReadRequiredString(row, "ViewName"),
-            ReadRequiredInt(row, "ActiveVersion"),
-            ReadRequiredDateTimeOffset(row, "ActivatedAt"))
-        {
-            Generation = ReadRequiredLong(row, "Generation")
-        };
+    private static MvActiveEntry MapActiveEntry(IReadOnlyDictionary<string, object?> row) => ReadActiveEntry(row);
 
     private static IReadOnlyDictionary<string, object?> ToDictionary(object row)
     {

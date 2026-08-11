@@ -32,6 +32,7 @@ public static class SekibanDcbMaterializedViewExtensions
                 sp.GetRequiredService<IEventTypes>(),
                 storageInfoProvider);
         });
+        services.TryAddSingleton<IMvGenerationCoordinator, MvGenerationCoordinator>();
         if (configure is not null)
         {
             services.Configure(configure);

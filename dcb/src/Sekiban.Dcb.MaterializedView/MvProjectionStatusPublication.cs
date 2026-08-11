@@ -46,6 +46,10 @@ public sealed record MvProjectionStatusSnapshot(
     MvStatus Status,
     long AppliedEventCount)
 {
+    public MvSwitchKind? SwitchKind { get; init; }
+    public string? SwitchReason { get; init; }
+    public DateTimeOffset? SwitchedAtUtc { get; init; }
+
     public static MvProjectionStatusSnapshot Unknown(MvStatus status = MvStatus.Initializing) =>
         new(MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.NotObserved), status, 0);
 
@@ -140,6 +144,22 @@ public sealed class MvProjectionStatusPublisher
             await fence.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                if (mapped.SwitchKind is not null)
+                {
+                    fence.SwitchKind = mapped.SwitchKind;
+                    fence.SwitchReason = mapped.SwitchReason;
+                    fence.SwitchedAtUtc = mapped.SwitchedAtUtc;
+                }
+                else if (fence.SwitchKind is not null)
+                {
+                    mapped = mapped with
+                    {
+                        SwitchKind = fence.SwitchKind,
+                        SwitchReason = fence.SwitchReason,
+                        SwitchedAtUtc = fence.SwitchedAtUtc
+                    };
+                }
+
                 await WriteBoundedAsync(
                         key,
                         normalizedServiceId,
@@ -164,6 +184,21 @@ public sealed class MvProjectionStatusPublisher
         {
             LogFailureRateLimited(key, now);
         }
+    }
+
+    public Task PublishSwitchAsync(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        MvProjectionStatusSnapshot snapshot,
+        MvProjectionStatusPublisherKind publisherKind,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedServiceId = ServiceIdValidator.NormalizeAndValidate(serviceId);
+        var identity = MvProjectionStatusIdentity.Create(viewName, viewVersion);
+        var lane = publisherKind == MvProjectionStatusPublisherKind.HostedWorker ? "hosted" : "orleans";
+        _nextDue.TryRemove(string.Join('|', normalizedServiceId, identity.ProjectorName, identity.ProjectorVersion, lane), out _);
+        return PublishIfDueAsync(normalizedServiceId, viewName, viewVersion, snapshot, publisherKind, cancellationToken);
     }
 
     private async Task WriteBoundedAsync(
@@ -193,7 +228,10 @@ public sealed class MvProjectionStatusPublisher
             Phase = mapped.Phase,
             LeaseExpiresAtUtc = now + PositiveOrDefault(_options.FreshnessWindow, TimeSpan.FromMinutes(2)),
             IsFaulted = mapped.IsFaulted,
-            FaultMessage = mapped.IsFaulted ? "materialized view faulted" : null
+            FaultMessage = mapped.IsFaulted ? "materialized view faulted" : null,
+            SwitchKind = mapped.SwitchKind,
+            SwitchReason = mapped.SwitchReason,
+            SwitchedAtUtc = mapped.SwitchedAtUtc
         };
 
         using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -242,12 +280,12 @@ public sealed class MvProjectionStatusPublisher
     {
         if (snapshot.Status == MvStatus.Faulted)
         {
-            return new(ProjectionStatusPhases.Faulted, null, snapshot.AppliedEventCount, true);
+            return MappedStatus.Create(snapshot, ProjectionStatusPhases.Faulted, null, true);
         }
 
         if (!snapshot.CurrentCheckpointTruth.IsKnown)
         {
-            return new(ProjectionStatusPhases.Unknown, null, snapshot.AppliedEventCount, false);
+            return MappedStatus.Create(snapshot, ProjectionStatusPhases.Unknown, null, false);
         }
 
         var phase = snapshot.Status switch
@@ -258,7 +296,7 @@ public sealed class MvProjectionStatusPublisher
             MvStatus.Active => ProjectionStatusPhases.Active,
             _ => ProjectionStatusPhases.Stopped
         };
-        return new(phase, snapshot.CurrentCheckpointTruth.PositionValue, snapshot.AppliedEventCount, false);
+        return MappedStatus.Create(snapshot, phase, snapshot.CurrentCheckpointTruth.PositionValue, false);
     }
 
     private static string BuildClusterId(string clusterId, string lane) =>
@@ -272,7 +310,32 @@ public sealed class MvProjectionStatusPublisher
         public SemaphoreSlim Gate { get; } = new(1, 1);
         public long Sequence { get; set; }
         public DateTimeOffset NextFailureLogAt { get; set; }
+        public string? SwitchKind { get; set; }
+        public string? SwitchReason { get; set; }
+        public DateTimeOffset? SwitchedAtUtc { get; set; }
     }
 
-    private sealed record MappedStatus(string Phase, string? Position, long AppliedEventCount, bool IsFaulted);
+    private sealed record MappedStatus(
+        string Phase,
+        string? Position,
+        long AppliedEventCount,
+        bool IsFaulted,
+        string? SwitchKind,
+        string? SwitchReason,
+        DateTimeOffset? SwitchedAtUtc)
+    {
+        internal static MappedStatus Create(
+            MvProjectionStatusSnapshot snapshot,
+            string phase,
+            string? position,
+            bool faulted) =>
+            new(
+                phase,
+                position,
+                snapshot.AppliedEventCount,
+                faulted,
+                snapshot.SwitchKind?.ToString().ToLowerInvariant(),
+                snapshot.SwitchReason,
+                snapshot.SwitchedAtUtc);
+    }
 }

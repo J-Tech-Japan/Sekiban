@@ -436,6 +436,13 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 .ConfigureAwait(false);
         }
 
+        // Catch-up may authorize the first generation, but a prepared parallel generation never moves the serving
+        // pointer implicitly. Forward and reverse transitions are explicit coordinator operations.
+        if (active is not null)
+        {
+            return MvStatus.Ready;
+        }
+
         var result = await TryActivateAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
         if (!result.Succeeded && !result.IsConflict && result.FailureReason != MvActivationFailureReason.AlreadyActive)
         {

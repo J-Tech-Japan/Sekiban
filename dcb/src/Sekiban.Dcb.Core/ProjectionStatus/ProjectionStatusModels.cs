@@ -43,6 +43,17 @@ public sealed record ProjectionStatusSnapshot(
     /// <summary>Whether this row satisfied the freshness/lease predicate at sampling time.</summary>
     public bool IsFresh { get; init; }
 
+    /// <summary>Optional active-pointer transition classification supplied by an MV publisher.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SwitchKind { get; init; }
+
+    /// <summary>Durable operator reason for a forced reverse. Omitted for ordinary projection heartbeats.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SwitchReason { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? SwitchedAtUtc { get; init; }
+
     /// <summary>Compatibility/readability alias for callers that call the lease boundary a lease.</summary>
     [JsonIgnore]
     public DateTimeOffset? LeaseUntilUtc => LeaseExpiresAtUtc;
@@ -81,6 +92,10 @@ public sealed record ProjectionStatusHeartbeat(
     /// <summary>A secret-free fault summary, when faulted.</summary>
     public string? FaultMessage { get; init; }
 
+    public string? SwitchKind { get; init; }
+    public string? SwitchReason { get; init; }
+    public DateTimeOffset? SwitchedAtUtc { get; init; }
+
     /// <summary>Compatibility/readability alias for callers that call the lease boundary a lease.</summary>
     [JsonIgnore]
     public DateTimeOffset? LeaseUntilUtc => LeaseExpiresAtUtc;
@@ -108,6 +123,9 @@ public sealed record ProjectionStatusRow(
     public DateTimeOffset? LeaseExpiresAtUtc { get; init; }
     public bool IsFaulted { get; init; }
     public string? FaultMessage { get; init; }
+    public string? SwitchKind { get; init; }
+    public string? SwitchReason { get; init; }
+    public DateTimeOffset? SwitchedAtUtc { get; init; }
 
     public ProjectionStatusHeartbeat ToHeartbeat() => new(
         ServiceId,
@@ -124,7 +142,10 @@ public sealed record ProjectionStatusRow(
         Phase = Phase,
         LeaseExpiresAtUtc = LeaseExpiresAtUtc,
         IsFaulted = IsFaulted,
-        FaultMessage = FaultMessage
+        FaultMessage = FaultMessage,
+        SwitchKind = SwitchKind,
+        SwitchReason = SwitchReason,
+        SwitchedAtUtc = SwitchedAtUtc
     };
 
     public static ProjectionStatusRow FromHeartbeat(ProjectionStatusHeartbeat heartbeat) => new(
@@ -142,7 +163,10 @@ public sealed record ProjectionStatusRow(
         Phase = heartbeat.Phase,
         LeaseExpiresAtUtc = heartbeat.LeaseExpiresAtUtc,
         IsFaulted = heartbeat.IsFaulted,
-        FaultMessage = heartbeat.FaultMessage
+        FaultMessage = heartbeat.FaultMessage,
+        SwitchKind = heartbeat.SwitchKind,
+        SwitchReason = heartbeat.SwitchReason,
+        SwitchedAtUtc = heartbeat.SwitchedAtUtc
     };
 }
 

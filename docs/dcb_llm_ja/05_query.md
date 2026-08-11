@@ -118,5 +118,9 @@ var rows = await connection.QueryAsync<WeatherForecastMvRow>(
 - logical table に対応する active な physical table 名
 - status 確認や待機に使える Orleans grain
 
+`GetAsync` は操作ごとに active version を 1 回解決し、projector が宣言する version で通常 read を pin しません。保持した
+特定 generation を operator 診断で読む場合だけ、別名の `GetPinnedAsync(projector)` を呼び、例外的な routing 選択を
+call site で明示してください。
+
 実例は `internalUsages/DcbOrleans.WithoutResult.ApiService/Program.cs` を参照してください。全体像は
 [マテリアライズドビュー基礎](20_materialized_view.md) にまとめています。

@@ -186,6 +186,15 @@ public class CosmosMultiProjectionState
     [JsonProperty("faultMessage")]
     public string? FaultMessage { get; set; }
 
+    [JsonProperty("switchKind")]
+    public string? SwitchKind { get; set; }
+
+    [JsonProperty("switchReason")]
+    public string? SwitchReason { get; set; }
+
+    [JsonProperty("switchedAtUtc")]
+    public DateTimeOffset? SwitchedAtUtc { get; set; }
+
     /// <summary>
     ///     Creates a CosmosMultiProjectionState from a MultiProjectionStateRecord.
     /// </summary>
@@ -253,7 +262,10 @@ public class CosmosMultiProjectionState
             Phase = heartbeat.Phase,
             LeaseExpiresAtUtc = heartbeat.LeaseExpiresAtUtc,
             IsFaulted = heartbeat.IsFaulted,
-            FaultMessage = heartbeat.FaultMessage
+            FaultMessage = heartbeat.FaultMessage,
+            SwitchKind = heartbeat.SwitchKind,
+            SwitchReason = heartbeat.SwitchReason,
+            SwitchedAtUtc = heartbeat.SwitchedAtUtc
         };
     }
 
@@ -272,7 +284,10 @@ public class CosmosMultiProjectionState
         Phase = Phase ?? ProjectionStatusPhases.Unknown,
         LeaseExpiresAtUtc = LeaseExpiresAtUtc,
         IsFaulted = IsFaulted,
-        FaultMessage = FaultMessage
+        FaultMessage = FaultMessage,
+        SwitchKind = SwitchKind,
+        SwitchReason = SwitchReason,
+        SwitchedAtUtc = SwitchedAtUtc
     };
 
     /// <summary>

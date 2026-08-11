@@ -49,7 +49,69 @@ public sealed record MvActivationRequest(
     int CandidateCount,
     MvStatus ExpectedStatus,
     string ExpectedCurrentCheckpointTruth,
-    string ExpectedTargetCheckpointTruth);
+    string ExpectedTargetCheckpointTruth)
+{
+    /// <summary>Audit classification inferred by the eligibility boundary; callers cannot force it.</summary>
+    public MvSwitchKind SwitchKind { get; init; } = MvSwitchKind.Initial;
+}
+
+/// <summary>Durable classification of an active-pointer transition.</summary>
+public enum MvSwitchKind
+{
+    Initial = 0,
+    Forward = 1,
+    Reverse = 2,
+    Forced = 3,
+    Legacy = 4
+}
+
+/// <summary>
+///     Separate break-glass request. It is deliberately reverse-only and contains no ordinary-forward mode flag.
+///     Providers may waive checkpoint truth only; identity, lifecycle, existence, and pointer fencing remain required.
+/// </summary>
+public sealed record MvForcedReverseRequest(
+    string ServiceId,
+    string ViewName,
+    int ViewVersion,
+    int ExpectedActiveVersion,
+    long ExpectedActiveGeneration,
+    int CandidateCount,
+    MvStatus ExpectedStatus,
+    string Reason,
+    DateTimeOffset RequestedAtUtc);
+
+public static class MvForcedReverseValidation
+{
+    public static MvActivationResult? Validate(MvForcedReverseRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.ServiceId) || string.IsNullOrWhiteSpace(request.ViewName))
+        {
+            return MvActivationResult.Rejected(MvActivationFailureReason.IdentityMismatch, "Forced reverse requires an exact service and view identity.");
+        }
+
+        if (request.ViewVersion < 0 || request.ExpectedActiveVersion <= request.ViewVersion)
+        {
+            return MvActivationResult.Rejected(MvActivationFailureReason.IdentityMismatch, "Forced switching is reverse-only.");
+        }
+
+        if (request.ExpectedActiveGeneration < 0)
+        {
+            return MvActivationResult.Rejected(MvActivationFailureReason.ExpectedGenerationConflict, "The expected active generation cannot be negative.");
+        }
+
+        if (request.CandidateCount <= 0 || request.ExpectedStatus != MvStatus.Ready)
+        {
+            return MvActivationResult.Rejected(MvActivationFailureReason.UnsafeLifecycle, "Forced reverse requires a retained Ready candidate.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 1024)
+        {
+            return MvActivationResult.Rejected(MvActivationFailureReason.ProviderFailure, "Forced reverse requires a non-empty reason of at most 1024 characters.");
+        }
+
+        return null;
+    }
+}
 
 /// <summary>Result of the provider-atomic active-pointer operation.</summary>
 public sealed record MvActivationResult(
@@ -119,6 +181,12 @@ public static class MvActivationEligibility
             return (activeRejection, null);
         }
 
+        var switchKind = MvSwitchKind.Initial;
+        if (active is not null)
+        {
+            switchKind = viewVersion > active.ActiveVersion ? MvSwitchKind.Forward : MvSwitchKind.Reverse;
+        }
+
         var request = new MvActivationRequest(
             serviceId,
             viewName,
@@ -128,7 +196,10 @@ public static class MvActivationEligibility
             entries.Count,
             MvStatus.Ready,
             expectedCurrentTruth,
-            expectedTargetTruth);
+            expectedTargetTruth)
+        {
+            SwitchKind = switchKind
+        };
         return (MvActivationEligibilityResult.Eligible(), request);
     }
 

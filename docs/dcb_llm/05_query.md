@@ -122,5 +122,9 @@ This pattern gives you:
 - the active physical table name for each logical table
 - the Orleans grain that can report status or wait for stream delivery
 
+`GetAsync` always resolves the active version once per operation; the projector's declared version does not pin an
+ordinary read. For an operator diagnostic against one retained generation, call the separately named
+`GetPinnedAsync(projector)` and make that exceptional routing choice explicit at the call site.
+
 For the current sample, see `internalUsages/DcbOrleans.WithoutResult.ApiService/Program.cs`. For the full concept and
 setup sequence, see [Materialized View Basics](20_materialized_view.md).

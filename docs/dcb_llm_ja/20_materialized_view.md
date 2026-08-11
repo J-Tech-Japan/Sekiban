@@ -306,6 +306,25 @@ active version と単調増加する generation、さらに candidate の checkp
 された試行は型付き conflict を返し、以前の pointer を保持します。初回 activation も同じ capture、eligibility、
 compare-and-switch 経路を通るため、active 行がないことは許可ではなく、比較対象の一つに過ぎません。
 
+### 並行 generation、切替、rollback（SEK-G29）
+
+`IMvGenerationCoordinator` は、厳密な 1 つの `(service, view)` ごとに generation の準備と切替を調停します。N+1 の
+準備には既存の version 別 apply engine を使い、active な N を clear したり checkpoint を共有したり停止したりしません。
+通常の forward / reverse は `SwitchAsync` だけを使い、SEK-G27 の権威的 eligibility と provider の atomic な
+active-version/generation compare-and-switch を通ります。失敗、stale、競合した要求では active pointer は変わりません。
+以前の generation と物理 table は診断と、eligible な通常 reverse のために保持されます。
+
+通常 read の `MvOrleansQueryAccessor.GetAsync` は操作開始時に active pointer を 1 回解決し、その version の entries と
+Orleans grain を返します。明示的な version 診断だけは別名の `GetPinnedAsync` を使います。`GetAsync` に渡す projector の
+version で通常の active routing を上書きすることはできません。
+
+break-glass rollback は別 API の `ForceReverseAsync` です。reverse 専用で、免除できるのは checkpoint の freshness/truth
+だけです。保持した version は厳密な service/view/version identity で存在し、安全な `Ready` lifecycle である必要があり、
+期待する active version と generation は引き続き atomic に fence されます。forced switch は `switch_kind=forced`、operator
+が指定した reason、timestamp を永続化します。この metadata は lifecycle publication seam から既存の G24 typed / V1
+serialized observation へ push され、read 時に MV target database を open/query しません。通常 API に forced-forward の
+flag や mode はありません。
+
 ## テーブルのクエリ方法
 
 物理テーブル名をアプリ側で決め打ちしないでください。`IMvOrleansQueryAccessor` を使って解決します。

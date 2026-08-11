@@ -153,6 +153,41 @@ public class MvProjectionStatusPublicationTests
             ServiceId, ViewName, ViewVersion, snapshot, MvProjectionStatusPublisherKind.HostedWorker);
     }
 
+    [Fact]
+    public async Task SwitchAudit_RemainsOnSubsequentCadence_AndOrdinarySwitchClearsForcedReason()
+    {
+        var store = new ObservingStatusStore(new FixedServiceIdProvider(ServiceId));
+        var options = StatusOptions();
+        options.HeartbeatInterval = TimeSpan.Zero;
+        var publisher = new MvProjectionStatusPublisher(store, options, NullLogger<MvProjectionStatusPublisher>.Instance);
+        var now = DateTimeOffset.UtcNow;
+        var progress = new MvProjectionStatusSnapshot(MvCheckpointTruth.KnownZero(), MvStatus.Active, 1);
+
+        await publisher.PublishSwitchAsync(
+            ServiceId,
+            ViewName,
+            ViewVersion,
+            progress with { SwitchKind = MvSwitchKind.Forced, SwitchReason = "operator rollback", SwitchedAtUtc = now },
+            MvProjectionStatusPublisherKind.HostedWorker);
+        await publisher.PublishIfDueAsync(
+            ServiceId, ViewName, ViewVersion, progress, MvProjectionStatusPublisherKind.HostedWorker);
+        var afterCadence = Assert.Single((await store.ListAsync()).GetValue());
+        Assert.Equal("forced", afterCadence.SwitchKind);
+        Assert.Equal("operator rollback", afterCadence.SwitchReason);
+
+        await publisher.PublishSwitchAsync(
+            ServiceId,
+            ViewName,
+            ViewVersion,
+            progress with { SwitchKind = MvSwitchKind.Forward, SwitchedAtUtc = now.AddSeconds(1) },
+            MvProjectionStatusPublisherKind.HostedWorker);
+        await publisher.PublishIfDueAsync(
+            ServiceId, ViewName, ViewVersion, progress, MvProjectionStatusPublisherKind.HostedWorker);
+        var afterOrdinary = Assert.Single((await store.ListAsync()).GetValue());
+        Assert.Equal("forward", afterOrdinary.SwitchKind);
+        Assert.Null(afterOrdinary.SwitchReason);
+    }
+
     [Theory]
     [InlineData("postgres")]
     [InlineData("mysql")]

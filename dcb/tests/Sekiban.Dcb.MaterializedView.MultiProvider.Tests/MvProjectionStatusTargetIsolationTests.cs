@@ -104,7 +104,7 @@ public abstract class MvStatusTargetIsolationTests(MultiProviderFixtureBase fixt
         try
         {
             await cluster.DeployAsync().ConfigureAwait(false);
-            var registration = Assert.Single(hostFactory.GetRegistrations());
+            var registration = Assert.Single(hostFactory.GetRegistrations(), item => item.ViewVersion == 1);
             var grain = cluster.Client.GetGrain<IMaterializedViewGrain>(MvGrainKey.Build(
                 MultiProviderFixtureBase.ServiceId,
                 registration.ViewName,
@@ -129,11 +129,92 @@ public abstract class MvStatusTargetIsolationTests(MultiProviderFixtureBase fixt
         }
     }
 
+    [SkippableFact]
+    public async Task OrleansCoordinator_ForcedReverse_IsDurableAndObservationPerformsZeroTargetIo()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Integration fixture is unavailable.");
+        await fixture.ResetAsync().ConfigureAwait(false);
+
+        var targetIo = new TargetProviderIoCounter();
+        var registry = new CountingDelegatingMvRegistryStore(
+            fixture.Services.GetRequiredService<IMvRegistryStore>(),
+            targetIo);
+        var statusStore = new CountingProjectionStatusStore(targetIo);
+        var hostFactory = CreateIsolationHostFactory();
+        OrleansTargetIsolationContext.Current = new(
+            hostFactory,
+            CreateProviderExecutor(registry, fixture.Services.GetRequiredService<IOptions<MvOptions>>()),
+            registry,
+            fixture.Services.GetRequiredService<IMvStorageInfoProvider>(),
+            fixture.Services.GetRequiredService<IOptions<MvOptions>>(),
+            statusStore);
+
+        await registry.EnsureInfrastructureAsync().ConfigureAwait(false);
+        var target = MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AuthoritativeTargetCapture());
+        foreach (var version in new[] { 1, 2 })
+        {
+            await registry.RegisterAsync(new MvRegistryEntry
+            {
+                ServiceId = MultiProviderFixtureBase.ServiceId,
+                ViewName = TargetIsolationProjector.ViewNameConst,
+                ViewVersion = version,
+                LogicalTable = "proof",
+                PhysicalTable = $"mv_target_isolation_v{version}_proof",
+                Status = MvStatus.Ready,
+                CurrentCheckpointTruth = version == 1
+                    ? MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable)
+                    : MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp)),
+                TargetCheckpointTruth = target,
+                LastUpdated = DateTimeOffset.UtcNow
+            }).ConfigureAwait(false);
+        }
+        await registry.SetActiveAsync(
+            MultiProviderFixtureBase.ServiceId,
+            TargetIsolationProjector.ViewNameConst,
+            2).ConfigureAwait(false);
+
+        var builder = new TestClusterBuilder();
+        builder.Options.InitialSilosCount = 1;
+        builder.Options.ClusterId = $"mv-generation-switch-{Guid.NewGuid():N}";
+        builder.Options.ServiceId = $"mv-generation-switch-{Guid.NewGuid():N}";
+        builder.AddSiloBuilderConfigurator<OrleansTargetIsolationSiloConfigurator>();
+        builder.AddClientBuilderConfigurator<OrleansTargetIsolationClientConfigurator>();
+        using var cluster = builder.Build();
+        try
+        {
+            await cluster.DeployAsync().ConfigureAwait(false);
+            var coordinator = cluster.Client.GetGrain<IMvGenerationCoordinatorGrain>(
+                MvGenerationCoordinatorGrainKey.Build(
+                    MultiProviderFixtureBase.ServiceId,
+                    TargetIsolationProjector.ViewNameConst));
+
+            var result = await coordinator.ForceReverseAsync(1, 2, 1, "operator retained-generation rollback")
+                .ConfigureAwait(false);
+            Assert.True(result.Succeeded, result.Message);
+            var active = Assert.IsType<MvActiveGenerationStatus>(await coordinator.GetActiveAsync().ConfigureAwait(false));
+            Assert.Equal(1, active.ActiveVersion);
+            Assert.Equal((int)MvSwitchKind.Forced, active.SwitchKind);
+            Assert.Equal("operator retained-generation rollback", active.SwitchReason);
+
+            targetIo.Reset();
+            await AssertReadableThroughExistingG24SurfacesAsync(statusStore, fixture.EventStore).ConfigureAwait(false);
+            Assert.Equal(0, targetIo.FactoryResolutions);
+            Assert.Equal(0, targetIo.OpenCalls);
+            Assert.Equal(0, targetIo.QueryCalls);
+            Assert.Equal(0, targetIo.ProviderCalls);
+        }
+        finally
+        {
+            await cluster.StopAllSilosAsync().ConfigureAwait(false);
+            OrleansTargetIsolationContext.Current = null;
+        }
+    }
+
     private static MvProjectionStatusPublisher CreatePublisher(IProjectionStatusStore statusStore) =>
         new(statusStore, StatusOptions(), NullLogger<MvProjectionStatusPublisher>.Instance);
 
     private IMvApplyHostFactory CreateIsolationHostFactory() => new NativeMvApplyHostFactory(
-        [new TargetIsolationProjector()],
+        [new TargetIsolationProjector(1), new TargetIsolationProjector(2)],
         fixture.DomainTypes.EventTypes,
         fixture.Services.GetRequiredService<IMvStorageInfoProvider>());
 
@@ -230,11 +311,11 @@ public abstract class MvStatusTargetIsolationTests(MultiProviderFixtureBase fixt
         public string GetCurrentServiceId() => serviceId;
     }
 
-    private sealed class TargetIsolationProjector : IMaterializedViewProjector
+    private sealed class TargetIsolationProjector(int version) : IMaterializedViewProjector
     {
         public const string ViewNameConst = "MvStatusTargetIsolation";
         public string ViewName => ViewNameConst;
-        public int ViewVersion => 1;
+        public int ViewVersion => version;
 
         public async Task InitializeAsync(IMvInitContext context, CancellationToken cancellationToken = default)
         {
@@ -429,6 +510,15 @@ internal sealed class CountingDelegatingMvRegistryStore : IMvRegistryStore
         return _inner.TryActivateAsync(request, transaction, cancellationToken);
     }
 
+    public Task<MvActivationResult> TryForceReverseAsync(
+        MvForcedReverseRequest request,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        Count(query: true);
+        return _inner.TryForceReverseAsync(request, transaction, cancellationToken);
+    }
+
     public Task SetActiveAsync(
         string serviceId,
         string viewName,
@@ -478,6 +568,7 @@ internal sealed class OrleansTargetIsolationSiloConfigurator : ISiloConfigurator
                 services.AddSingleton<IProjectionStatusStore>(context.StatusStore);
                 services.AddSingleton(MvStatusTargetIsolationTests.StatusOptionsForSilo());
                 services.AddSingleton<MvProjectionStatusPublisher>();
+                services.AddSingleton<IMvGenerationCoordinator, MvGenerationCoordinator>();
                 services.AddSingleton<IServiceIdProvider>(new FixedOrleansServiceIdProvider(MultiProviderFixtureBase.ServiceId));
                 services.AddSingleton<IEventSubscriptionResolver>(
                     new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
