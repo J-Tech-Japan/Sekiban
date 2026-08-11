@@ -61,6 +61,33 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         _generalExecutor = new GeneralSekibanExecutor(eventStore, _actorAccessor, domainTypes, eventPublisher, executedUserProvider);
     }
 
+    /// <summary>Creates an Orleans executor using the registered process-wide monotonic id allocator.</summary>
+    public OrleansDcbExecutor(
+        IClusterClient clusterClient,
+        IEventStore eventStore,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher,
+        IServiceIdProvider? serviceIdProvider,
+        IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
+        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator)
+    {
+        _clusterClient = clusterClient ?? throw new ArgumentNullException(nameof(clusterClient));
+        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+        _actorAccessor = new OrleansActorObjectAccessor(clusterClient, eventStore, domainTypes, _serviceIdProvider);
+        _generalExecutor = new GeneralSekibanExecutor(
+            eventStore,
+            _actorAccessor,
+            domainTypes,
+            eventPublisher,
+            executedUserProvider,
+            sortableUniqueIdGenerator,
+            sortableUniqueIdSeedCoordinator,
+            _serviceIdProvider);
+    }
+
     /// <summary>
     ///     Execute a command with its built-in handler
     /// </summary>

@@ -2,6 +2,8 @@ using Dcb.Domain.ClassRoom;
 using Dcb.Domain.Enrollment;
 using Dcb.Domain.Student;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Xunit;
@@ -11,6 +13,50 @@ public class PostgresWithActorsTests : PostgresTestBase
 {
     public PostgresWithActorsTests(PostgresTestFixture fixture) : base(fixture)
     {
+    }
+
+    [Fact]
+    public async Task RestartWithRolledBackClockSeedsRealPostgresHeadBeforeProductionAllocation()
+    {
+        var service = new DefaultServiceIdProvider();
+        var firstTime = new MutableTimeProvider(new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var firstGenerator = new MonotonicSortableUniqueIdGenerator(firstTime);
+        var firstExecutor = new GeneralSekibanExecutor(
+            Fixture.EventStore,
+            Fixture.ActorAccessor,
+            Fixture.DomainTypes,
+            null,
+            null,
+            firstGenerator,
+            new SortableUniqueIdSeedCoordinator(firstGenerator),
+            service);
+        var first = await firstExecutor.ExecuteAsync(new CreateStudent(Guid.NewGuid(), "before rollback"));
+        Assert.True(first.IsSuccess);
+
+        var restartedTime = new MutableTimeProvider(new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var restartedGenerator = new MonotonicSortableUniqueIdGenerator(restartedTime);
+        var restartedExecutor = new GeneralSekibanExecutor(
+            Fixture.EventStore,
+            Fixture.ActorAccessor,
+            Fixture.DomainTypes,
+            null,
+            null,
+            restartedGenerator,
+            new SortableUniqueIdSeedCoordinator(restartedGenerator),
+            service);
+        var afterRestart = await restartedExecutor.ExecuteAsync(new CreateStudent(Guid.NewGuid(), "after rollback"));
+        Assert.True(afterRestart.IsSuccess);
+
+        Assert.True(string.CompareOrdinal(afterRestart.GetValue().SortableUniqueId, first.GetValue().SortableUniqueId) > 0);
+        var catchUp = (await Fixture.EventStore.ReadAllSerializableEventsAsync(
+            new SortableUniqueId(first.GetValue().SortableUniqueId!))).GetValue().ToArray();
+        Assert.Contains(catchUp, item => item.SortableUniqueIdValue == afterRestart.GetValue().SortableUniqueId);
+    }
+
+    private sealed class MutableTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public DateTimeOffset UtcNow { get; set; } = utcNow;
+        public override DateTimeOffset GetUtcNow() => UtcNow;
     }
 
     [Fact]

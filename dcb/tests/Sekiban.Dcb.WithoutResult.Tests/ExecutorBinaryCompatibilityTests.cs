@@ -27,6 +27,19 @@ public class ExecutorBinaryCompatibilityTests
         Assert.True(matching.IsPublic);
     }
 
+    [Theory]
+    [InlineData(typeof(GeneralSekibanExecutor), "Sekiban.Dcb.Storage.IEventStore,Sekiban.Dcb.Actors.IActorObjectAccessor,Sekiban.Dcb.DcbDomainTypes,Sekiban.Dcb.Actors.IEventPublisher,Sekiban.Dcb.IExecutedUserProvider")]
+    [InlineData(typeof(InMemoryDcbExecutor), "Sekiban.Dcb.DcbDomainTypes,Sekiban.Dcb.Storage.IEventStore,Sekiban.Dcb.IExecutedUserProvider")]
+    [InlineData(typeof(InMemoryDcbExecutorForTesting), "Sekiban.Dcb.DcbDomainTypes,Sekiban.Dcb.Storage.IEventStore,Sekiban.Dcb.IExecutedUserProvider")]
+    public void PreSekibanG31_LongestConstructor_IsStillPublic(Type executorType, string expectedParameterTypeNames)
+    {
+        var expected = expectedParameterTypeNames.Split(',');
+        Assert.Contains(
+            executorType.GetConstructors(BindingFlags.Instance | BindingFlags.Public),
+            constructor => constructor.GetParameters().Select(parameter => parameter.ParameterType.FullName)
+                .SequenceEqual(expected));
+    }
+
     [Fact]
     public void PreSekibanG23_Orleans_WithoutResult_Constructor_Overload_Is_Public()
     {
@@ -42,5 +55,18 @@ public class ExecutorBinaryCompatibilityTests
 
         Assert.NotNull(matching);
         Assert.True(matching.IsPublic);
+    }
+
+    [Fact]
+    public void PreSekibanG31_LongestOrleansWithoutResultConstructor_IsStillPublic()
+    {
+        var assembly = Assembly.Load("Sekiban.Dcb.Orleans.WithoutResult");
+        var executorType = assembly.GetType("Sekiban.Dcb.Orleans.OrleansDcbExecutor");
+        Assert.NotNull(executorType);
+        var expected = "Orleans.IClusterClient,Sekiban.Dcb.Storage.IEventStore,Sekiban.Dcb.DcbDomainTypes,Sekiban.Dcb.Actors.IEventPublisher,Sekiban.Dcb.ServiceId.IServiceIdProvider,Sekiban.Dcb.IExecutedUserProvider".Split(',');
+        Assert.Contains(
+            executorType!.GetConstructors(BindingFlags.Instance | BindingFlags.Public),
+            constructor => constructor.GetParameters().Select(parameter => parameter.ParameterType.FullName)
+                .SequenceEqual(expected));
     }
 }

@@ -1,4 +1,5 @@
 using Dcb.Domain;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.CosmosDb.Models;
@@ -86,6 +87,33 @@ public class CosmosConditionalAppendTests
     }
 
     // ── The shared uniform contract ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RealStoreHeadSeedsMonotonicGeneratorAbovePersistedMaximum()
+    {
+        var lineage = NewLineage();
+        var persistedTicks = new DateTime(2040, 1, 1, 0, 0, 0, DateTimeKind.Utc).Ticks;
+        var persisted = new Event(
+                new ConditionalMarkerEvent("seed"),
+                SortableUniqueId.Generate(new DateTime(persistedTicks, DateTimeKind.Utc), Guid.NewGuid()),
+                nameof(ConditionalMarkerEvent),
+                Guid.CreateVersion7(),
+                new EventMetadata("seed", "seed", "test"),
+                ["Marker:seed"])
+            .ToSerializableEvent(_domain.EventTypes);
+        Assert.True((await lineage.Store.WriteSerializableEventsAsync([persisted])).IsSuccess);
+
+        var generator = new MonotonicSortableUniqueIdGenerator(
+            new FixedTimeProvider(new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+        await new SortableUniqueIdSeedCoordinator(generator).EnsureSeededAsync(ServiceId, lineage.Store);
+
+        Assert.True(string.CompareOrdinal(generator.GenerateNew(), persisted.SortableUniqueIdValue) > 0);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
 
     [Fact]
     public void Capability_ReportsSingleEventUniqueKey() =>

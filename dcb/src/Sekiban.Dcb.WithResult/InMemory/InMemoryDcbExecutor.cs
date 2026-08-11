@@ -56,6 +56,30 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
         _inner = new GeneralSekibanExecutor(_eventStore, _accessor, _domainTypes, eventPublisher, executedUserProvider);
     }
 
+    /// <summary>Creates an in-memory executor using the supplied monotonic allocator and ambient service identity.</summary>
+    public InMemoryDcbExecutor(
+        DcbDomainTypes domainTypes,
+        IEventStore eventStore,
+        IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
+        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider)
+    {
+        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+        _accessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
+        var eventPublisher = new InMemoryMultiProjectionEventPublisher(_accessor);
+        _inner = new GeneralSekibanExecutor(
+            _eventStore,
+            _accessor,
+            _domainTypes,
+            eventPublisher,
+            executedUserProvider,
+            sortableUniqueIdGenerator,
+            sortableUniqueIdSeedCoordinator,
+            serviceIdProvider);
+    }
+
     /// <summary>
     ///     Creates the executor with a built-in lightweight in-memory event store (no external dependencies).
     ///     Obsolete because it is silent about the most important thing it does. A downstream production system

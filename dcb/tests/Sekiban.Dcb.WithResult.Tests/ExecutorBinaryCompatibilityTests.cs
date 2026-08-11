@@ -29,6 +29,31 @@ public class ExecutorBinaryCompatibilityTests
     }
 
     [Theory]
+    [InlineData(typeof(CoreGeneralSekibanExecutor), "Sekiban.Dcb.Storage.IEventStore,Sekiban.Dcb.Actors.IActorObjectAccessor,Sekiban.Dcb.DcbDomainTypes,Sekiban.Dcb.Actors.IEventPublisher,Sekiban.Dcb.IExecutedUserProvider")]
+    [InlineData(typeof(GeneralSekibanExecutor), "Sekiban.Dcb.Storage.IEventStore,Sekiban.Dcb.Actors.IActorObjectAccessor,Sekiban.Dcb.DcbDomainTypes,Sekiban.Dcb.Actors.IEventPublisher,Sekiban.Dcb.IExecutedUserProvider")]
+    [InlineData(typeof(InMemoryDcbExecutor), "Sekiban.Dcb.DcbDomainTypes,Sekiban.Dcb.Storage.IEventStore,Sekiban.Dcb.IExecutedUserProvider")]
+    [InlineData(typeof(InMemoryDcbExecutorForTesting), "Sekiban.Dcb.DcbDomainTypes,Sekiban.Dcb.Storage.IEventStore,Sekiban.Dcb.IExecutedUserProvider")]
+    public void PreSekibanG31_LongestConstructor_IsStillPublic(Type executorType, string expectedParameterTypeNames)
+    {
+        var expected = expectedParameterTypeNames.Split(',');
+        Assert.Contains(
+            executorType.GetConstructors(BindingFlags.Instance | BindingFlags.Public),
+            constructor => constructor.GetParameters().Select(parameter => parameter.ParameterType.FullName)
+                .SequenceEqual(expected));
+    }
+
+    [Fact]
+    public void SortableUniqueIdStaticClrSignaturesAreUnchanged()
+    {
+        var type = typeof(Sekiban.Dcb.Common.SortableUniqueId);
+        Assert.NotNull(type.GetMethod("GenerateNew", BindingFlags.Public | BindingFlags.Static, Type.EmptyTypes));
+        Assert.NotNull(type.GetMethod(
+            "Generate",
+            BindingFlags.Public | BindingFlags.Static,
+            [typeof(DateTime), typeof(Guid)]));
+    }
+
+    [Theory]
     [InlineData(typeof(ITagConsistentActorCommon))]
     [InlineData(typeof(GeneralTagConsistentActor))]
     [InlineData(typeof(TagReservationHelper))]

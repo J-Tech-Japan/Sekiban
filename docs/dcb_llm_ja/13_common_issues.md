@@ -445,3 +445,26 @@ builder.Services.AddSingleton<IExecutedUserProvider>(sp =>
 > **ライフタイムの指針。** executor はプロバイダーをキャプチャします。scoped または transient のプロバイダーを使う場合は、executor も scoped または transient で登録してください。アンビエント HTTP コンテキスト方式ではプロバイダーが singleton なので、executor も singleton にできます。
 
 プロバイダーはすべての実行ファサードのコンストラクタで省略可能な引数なので、既存の呼び出し元に変更は不要です。
+
+## ホスト時刻の巻き戻り後にイベントが見えなくなる — 10.13.0 で解決 (SEK-G31)
+
+**症状**。イベントのコミットは成功したのに、`> checkpoint` で増分読み取りする projection がそのイベントを取得できません。
+writer の UTC 時刻が、最後に永続化された `SortableUniqueId` の tick prefix より前へ戻ると発生し得ます。
+
+**修正**。すべての本番 executor 書き込み経路は、DI singleton の単調増加 generator を共有します。正規化済み service id
+ごとの最初のイベント生成操作より前に、その service の永続 head を読み、論理 tick floor を原子的に seed します。
+割り当ては `max(TimeProvider.GetUtcNow().UtcTicks, previous + 1)` を使用し、既存の fresh Guid 由来 suffix と30桁 wire format
+を維持します。head 読み取り失敗は予約・割り当て・書き込みより前に retryable な型付きエラーとなり、wall-clock へ
+fallback しません。
+
+**保証境界**。これは store-aware な Sekiban executor 経由の書き込みを、単一プロセス内および再起動をまたいで保護します。
+分散 sequencer ではありません。異なるホスト間で想定する最大 clock skew に合わせて projection の `SafeWindow` を設定して
+ください。`IEventStore` へ直接書き込み、独自に id を作る呼び出し元は、この順序保証を自身で負います。
+
+**WSL2**。時刻が繰り返し飛ぶ場合は Hyper-V と `systemd-timesyncd` の競合を確認してください。WSL を更新し、Windows 側で
+`wsl --shutdown` を実行して distribution を再起動し、意図した時刻同期方式だけが有効であることを確認します。単調増加
+allocator は同一ホストの巻き戻りによるイベント欠落を防ぎますが、継続的な clock drift の是正は運用上必要です。
+
+**10.13.0 リリースノート**。DCB executor が生成する `SortableUniqueId` はホスト時刻の巻き戻り下でも単調増加し、再起動後は
+service ごとの store head から lazy seed されます。従来の公開 constructor と static signature、30桁 format、random suffix
+semantics は互換のままです。

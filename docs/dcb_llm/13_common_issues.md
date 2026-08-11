@@ -485,3 +485,28 @@ transient executor registration. The ambient HTTP-context pattern keeps the prov
 be singleton.
 
 The provider parameter is optional on all executor facades, so existing call sites require no changes.
+
+## Events disappear after a host clock rollback — CLOSED in 10.13.0 (SEK-G31)
+
+**Symptom.** An event is committed successfully but an incremental projection that reads `> checkpoint` never sees it.
+This can happen when the writer's UTC clock moves behind the tick prefix of the last persisted `SortableUniqueId`.
+
+**Fix.** All production executor write paths use one DI-singleton monotonic generator. Before the first event-producing
+operation for each normalized service id, the executor reads that service's persisted head and atomically seeds the
+logical tick floor. Allocation uses `max(TimeProvider.GetUtcNow().UtcTicks, previous + 1)` and keeps the existing fresh
+Guid-derived suffix and 30-digit wire format. A head-read failure fails before reservations, allocation, or writes and
+is retryable; it never falls back to wall-clock time.
+
+**Guarantee boundary.** This protects writes made through the store-aware Sekiban executor paths within one process and
+across their restarts. It is not a distributed sequencer. Size projection `SafeWindow` for the maximum expected skew
+between different hosts. A caller that writes directly to `IEventStore` and constructs ids itself owns this ordering
+responsibility.
+
+**WSL2.** If the clock repeatedly jumps, check for competing Hyper-V and `systemd-timesyncd` synchronization. Update WSL,
+run `wsl --shutdown` from Windows, restart the distribution, and ensure only the intended time-sync mechanism is active.
+The monotonic allocator prevents same-host rollback from hiding events, but correcting persistent clock drift remains an
+operational requirement.
+
+**10.13.0 release note.** DCB executor-generated `SortableUniqueId` values are now monotonic under host-clock rollback
+and are seeded lazily from the per-service store head after restart. Public legacy constructors and static signatures,
+the 30-digit format, and random-suffix semantics remain compatible.
