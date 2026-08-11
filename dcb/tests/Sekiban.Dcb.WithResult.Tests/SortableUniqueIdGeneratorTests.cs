@@ -52,6 +52,50 @@ public class SortableUniqueIdGeneratorTests
     }
 
     [Fact]
+    public void ConcurrentRollbackAndJitterRemainStrictlyMonotonicThroughProductionGenerator()
+    {
+        var anchor = new DateTimeOffset(2035, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var time = new RollbackJitterTimeProvider(anchor);
+        var generator = new MonotonicSortableUniqueIdGenerator(time);
+        var highWater = generator.GenerateNew();
+        time.BeginRollbackWithJitter();
+        var ids = new string[4_000];
+
+        Parallel.For(0, ids.Length, index => ids[index] = generator.GenerateNew());
+
+        var ticks = ids.Select(ReadTicks).Order().ToArray();
+        Assert.Equal(ids.Length, ids.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(ReadTicks(highWater) + 1, ticks[0]);
+        Assert.Equal(ReadTicks(highWater) + ids.Length, ticks[^1]);
+        Assert.All(ticks.Zip(ticks.Skip(1)), pair => Assert.Equal(pair.First + 1, pair.Second));
+    }
+
+    [Fact]
+    public void GenerateAndGetIdStringHaveStableThirtyByteGolden()
+    {
+        var timestamp = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        Assert.Equal("00000000000", SortableUniqueId.GetIdString(Guid.Empty));
+        var generated = SortableUniqueId.Generate(timestamp, Guid.Empty);
+        Assert.Equal("063082281600000000000000000000", generated);
+        Assert.Equal(30, System.Text.Encoding.UTF8.GetByteCount(generated));
+    }
+
+    [Fact]
+    public void EveryGenerationUsesAFreshGuidSuffix()
+    {
+        var generator = new MonotonicSortableUniqueIdGenerator(
+            new MutableTimeProvider(new DateTimeOffset(2035, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+
+        var suffixes = Enumerable.Range(0, 32)
+            .Select(_ => generator.GenerateNew()[SortableUniqueId.TickNumberOfLength..])
+            .ToArray();
+
+        Assert.Equal(suffixes.Length, suffixes.Distinct(StringComparer.Ordinal).Count());
+        Assert.All(suffixes, suffix => Assert.Equal(SortableUniqueId.IdNumberOfLength, suffix.Length));
+    }
+
+    [Fact]
     public void SeedRaisesFloorAndMaxValueIsTypedExhaustion()
     {
         var generator = new MonotonicSortableUniqueIdGenerator(
@@ -102,20 +146,6 @@ public class SortableUniqueIdGeneratorTests
     }
 
     [Fact]
-    public async Task MalformedHeadFailsWithTypedErrorWithoutAllocation()
-    {
-        var generator = new CountingGenerator();
-        var coordinator = new SortableUniqueIdSeedCoordinator(generator);
-
-        var error = await Assert.ThrowsAsync<SortableUniqueIdSeedException>(
-            () => coordinator.EnsureSeededAsync("service-a", new HeadOnlyEventStore("malformed")));
-
-        Assert.Equal("service-a", error.ServiceId);
-        Assert.Equal(0, generator.GenerateCalls);
-        Assert.Equal(0, generator.SeedCalls);
-    }
-
-    [Fact]
     public async Task EmptyStoreSeedIsNoOp()
     {
         var generator = new CountingGenerator();
@@ -139,6 +169,25 @@ public class SortableUniqueIdGeneratorTests
         public override long GetTimestamp() => Volatile.Read(ref _timestamp);
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
         public void AdvanceTimestamp(TimeSpan elapsed) => Interlocked.Add(ref _timestamp, elapsed.Ticks);
+    }
+
+    private sealed class RollbackJitterTimeProvider(DateTimeOffset anchor) : TimeProvider
+    {
+        private int _jitterIndex;
+        private int _rolledBack;
+
+        public void BeginRollbackWithJitter() => Volatile.Write(ref _rolledBack, 1);
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            if (Volatile.Read(ref _rolledBack) == 0)
+            {
+                return anchor;
+            }
+
+            var jitter = 1 + Math.Abs(Interlocked.Increment(ref _jitterIndex) % 997);
+            return anchor.AddTicks(-jitter);
+        }
     }
 
     private sealed class CountingLogger : ILogger<MonotonicSortableUniqueIdGenerator>

@@ -5,6 +5,14 @@ using Sekiban.Dcb.Common;
 
 namespace Sekiban.Dcb.Actors;
 
+internal static class ProcessSharedSortableUniqueIdServices
+{
+    internal static ISortableUniqueIdGenerator Generator { get; } =
+        SortableUniqueId.GetProcessSharedGenerator();
+
+    internal static SortableUniqueIdSeedCoordinator SeedCoordinator { get; } = new(Generator);
+}
+
 public static class SortableUniqueIdServiceCollectionExtensions
 {
     /// <summary>Registers the process-wide monotonic allocator and service-head seed coordinator.</summary>

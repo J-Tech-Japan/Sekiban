@@ -67,8 +67,8 @@ public class CoreGeneralSekibanExecutor
             domainTypes,
             eventPublisher,
             executedUserProvider,
-            SortableUniqueId.DefaultGenerator,
-            new SortableUniqueIdSeedCoordinator(SortableUniqueId.DefaultGenerator),
+            ProcessSharedSortableUniqueIdServices.Generator,
+            ProcessSharedSortableUniqueIdServices.SeedCoordinator,
             new DefaultServiceIdProvider())
     {
     }

@@ -8,8 +8,10 @@ namespace Sekiban.Dcb.Common;
 /// </summary>
 public record SortableUniqueId(string Value)
 {
-    /// <summary>The process-wide allocator used by the legacy static API.</summary>
-    public static ISortableUniqueIdGenerator DefaultGenerator { get; } = new MonotonicSortableUniqueIdGenerator();
+    private static readonly ISortableUniqueIdGenerator ProcessSharedGenerator =
+        new MonotonicSortableUniqueIdGenerator();
+
+    internal static ISortableUniqueIdGenerator GetProcessSharedGenerator() => ProcessSharedGenerator;
     public const int SafeMilliseconds = 5000;
     public const int TickNumberOfLength = 19;
     public const int IdNumberOfLength = 11;
@@ -65,7 +67,7 @@ public record SortableUniqueId(string Value)
     /// <summary>
     ///     Generate Sortable Unique Id from Current UTC time and new Guid
     /// </summary>
-    public static string GenerateNew() => DefaultGenerator.GenerateNew();
+    public static string GenerateNew() => ProcessSharedGenerator.GenerateNew();
 
     /// <summary>
     ///     Generate Safe Sortable Unique Id from Current UTC.

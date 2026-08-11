@@ -1,5 +1,6 @@
 using System.Reflection;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Testing;
 using Xunit;
@@ -51,6 +52,25 @@ public class ExecutorBinaryCompatibilityTests
             "Generate",
             BindingFlags.Public | BindingFlags.Static,
             [typeof(DateTime), typeof(Guid)]));
+    }
+
+    [Fact]
+    public void SortableUniqueIdExposesNoPublicMutableGlobalGeneratorSeam()
+    {
+        var type = typeof(SortableUniqueId);
+        var publicStaticGeneratorFields = type
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(field => typeof(ISortableUniqueIdGenerator).IsAssignableFrom(field.FieldType));
+        var publicStaticGeneratorProperties = type
+            .GetProperties(BindingFlags.Public | BindingFlags.Static)
+            .Where(property => typeof(ISortableUniqueIdGenerator).IsAssignableFrom(property.PropertyType));
+        var publicStaticGeneratorMethods = type
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(method => typeof(ISortableUniqueIdGenerator).IsAssignableFrom(method.ReturnType));
+
+        Assert.Empty(publicStaticGeneratorFields);
+        Assert.Empty(publicStaticGeneratorProperties);
+        Assert.Empty(publicStaticGeneratorMethods);
     }
 
     [Theory]

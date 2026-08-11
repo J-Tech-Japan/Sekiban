@@ -120,6 +120,54 @@ public class SortableUniqueIdProductionPathTests
     }
 
     [Fact]
+    public async Task MalformedHeadFailsBeforeReservationAllocationOrWriteThenRereadsAndRetries()
+    {
+        var domain = BuildDomain();
+        var service = new FixedServiceIdProvider("service-malformed");
+        var inner = new InMemoryConditionalEventStore(domain.EventTypes, service);
+        var store = new CountingConditionalStore(inner) { HeadOverride = "malformed" };
+        var actors = new CountingActorAccessor();
+        var generator = new RecordingGenerator(new MonotonicSortableUniqueIdGenerator(new FrozenTimeProvider()));
+        var executor = new GeneralSekibanExecutor(
+            store,
+            actors,
+            domain,
+            null,
+            null,
+            generator,
+            new SortableUniqueIdSeedCoordinator(generator),
+            service);
+
+        var failed = await executor.ExecuteAsync(
+            new PathCommand(),
+            (_, _) => Task.FromResult(
+                EventOrNone.Event(new PathEvent("blocked"), new ConsistencyPathTag("blocked"))));
+
+        Assert.False(failed.IsSuccess);
+        Assert.IsType<SortableUniqueIdSeedException>(failed.GetException());
+        Assert.Equal(1, store.HeadReads);
+        Assert.Equal(0, generator.GenerateCalls);
+        Assert.Equal(0, actors.ReservationCalls);
+        Assert.Equal(0, store.WriteCalls);
+
+        var validTicks = new DateTime(2040, 1, 1, 0, 0, 0, DateTimeKind.Utc).Ticks;
+        store.HeadOverride = SortableUniqueId.Generate(
+            new DateTime(validTicks, DateTimeKind.Utc),
+            Guid.NewGuid());
+        var retried = await executor.ExecuteAsync(
+            new PathCommand(),
+            (_, _) => Task.FromResult(
+                EventOrNone.Event(new PathEvent("retry"), new ConsistencyPathTag("retry"))));
+
+        Assert.True(retried.IsSuccess);
+        Assert.Equal(2, store.HeadReads);
+        Assert.Equal(1, generator.GenerateCalls);
+        Assert.Equal(1, actors.ReservationCalls);
+        Assert.Equal(1, store.WriteCalls);
+        Assert.True(ReadTicks(generator.GeneratedIds.Single()) > validTicks);
+    }
+
+    [Fact]
     public async Task AmbientServiceChangeSeedsEachServiceOnceBeforeItsFirstProductionWrite()
     {
         var domain = BuildDomain();
@@ -345,16 +393,39 @@ public class SortableUniqueIdProductionPathTests
     private sealed class CountingActorAccessor : IActorObjectAccessor
     {
         private int _calls;
+        private int _reservationCalls;
         public int Calls => Volatile.Read(ref _calls);
+        public int ReservationCalls => Volatile.Read(ref _reservationCalls);
         public Task<ResultBox<T>> GetActorAsync<T>(string actorId) where T : class
         {
             Interlocked.Increment(ref _calls);
-            return Task.FromResult(ResultBox.Error<T>(new InvalidOperationException("actor access forbidden")));
+            if (typeof(T) == typeof(ITagConsistentActorCommon))
+            {
+                return Task.FromResult(ResultBox.FromValue((T)(object)new CountingTagConsistentActor(this, actorId)));
+            }
+            return Task.FromResult(ResultBox.Error<T>(new InvalidOperationException("unexpected actor type")));
         }
         public Task<bool> ActorExistsAsync(string actorId)
         {
             Interlocked.Increment(ref _calls);
             return Task.FromResult(false);
+        }
+
+        private sealed class CountingTagConsistentActor(CountingActorAccessor owner, string actorId)
+            : ITagConsistentActorCommon
+        {
+            public Task<string> GetTagActorIdAsync() => Task.FromResult(actorId);
+            public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
+                Task.FromResult(ResultBox.FromValue(string.Empty));
+            public Task<ResultBox<TagWriteReservation>> MakeReservationAsync(string? lastSortableUniqueId)
+            {
+                Interlocked.Increment(ref owner._reservationCalls);
+                return Task.FromResult(ResultBox.FromValue(
+                    new TagWriteReservation("reservation", DateTime.MaxValue.ToString("O"), actorId)));
+            }
+            public Task<bool> ConfirmReservationAsync(TagWriteReservation reservation) => Task.FromResult(true);
+            public Task<bool> CancelReservationAsync(TagWriteReservation reservation) => Task.FromResult(true);
+            public Task NotifyEventWrittenAsync() => Task.CompletedTask;
         }
     }
 
@@ -366,6 +437,7 @@ public class SortableUniqueIdProductionPathTests
         private int _headReads;
         private int _writeCalls;
         public bool FailHeadReads { get; set; }
+        public string? HeadOverride { get; set; }
         public int HeadReads => Volatile.Read(ref _headReads);
         public int WriteCalls => Volatile.Read(ref _writeCalls);
         public Dictionary<string, int> HeadReadsByService { get; } = new(StringComparer.Ordinal);
@@ -387,7 +459,9 @@ public class SortableUniqueIdProductionPathTests
             }
             return FailHeadReads
                 ? Task.FromResult(ResultBox.Error<string>(new InvalidOperationException("head unavailable")))
-                : inner.GetLatestSortableUniqueIdAsync();
+                : HeadOverride is not null
+                    ? Task.FromResult(ResultBox.FromValue(HeadOverride))
+                    : inner.GetLatestSortableUniqueIdAsync();
         }
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
