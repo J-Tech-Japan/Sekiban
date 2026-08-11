@@ -273,7 +273,11 @@ public class DynamoMultiProjectionState
             FaultMessage = item.GetValueOrDefault("faultMessage")?.S,
             SwitchKind = item.GetValueOrDefault("switchKind")?.S,
             SwitchReason = item.GetValueOrDefault("switchReason")?.S,
-            SwitchedAtUtc = DateTimeOffset.TryParse(item.GetValueOrDefault("switchedAtUtc")?.S, out var switchedAt)
+            SwitchedAtUtc = DateTimeOffset.TryParse(
+                item.GetValueOrDefault("switchedAtUtc")?.S,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind,
+                out var switchedAt)
                 ? switchedAt
                 : null
         };

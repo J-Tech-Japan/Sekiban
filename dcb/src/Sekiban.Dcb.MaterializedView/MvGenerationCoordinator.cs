@@ -133,133 +133,87 @@ public sealed class MvGenerationCoordinator : IMvGenerationCoordinator
     {
         ArgumentNullException.ThrowIfNull(retainedCandidate);
         var exactServiceId = ValidateServiceId(serviceId);
-        if (string.IsNullOrWhiteSpace(retainedCandidate.ViewName) || retainedCandidate.ViewVersion < 0)
+        var inputRejection = ValidateForcedReverseInput(
+            retainedCandidate,
+            expectedActiveVersion,
+            expectedActiveGeneration,
+            reason,
+            out var normalizedReason);
+        if (inputRejection is not null)
         {
-            return MvActivationResult.Rejected(
-                MvActivationFailureReason.IdentityMismatch,
-                "Forced reverse requires an exact view identity and a non-negative retained version.");
-        }
-        if (expectedActiveVersion <= retainedCandidate.ViewVersion)
-        {
-            return MvActivationResult.Rejected(
-                MvActivationFailureReason.IdentityMismatch,
-                "Forced switching is reverse-only: the retained candidate version must precede the expected active version.");
-        }
-
-        if (expectedActiveGeneration < 0)
-        {
-            return MvActivationResult.Rejected(
-                MvActivationFailureReason.ExpectedGenerationConflict,
-                "The expected active generation cannot be negative.");
-        }
-
-        if (string.IsNullOrWhiteSpace(reason))
-        {
-            throw new ArgumentException("A non-empty operator reason is required for forced reverse.", nameof(reason));
-        }
-
-        var normalizedReason = reason.Trim();
-        if (normalizedReason.Length > 1024)
-        {
-            throw new ArgumentException("The forced-reverse reason cannot exceed 1024 characters.", nameof(reason));
-        }
-        if (normalizedReason.Any(char.IsControl))
-        {
-            throw new ArgumentException("The forced-reverse reason cannot contain control characters.", nameof(reason));
+            return inputRejection;
         }
 
         return await InLaneAsync(
             exactServiceId,
             retainedCandidate.ViewName,
-            async () =>
-            {
-                var entries = await _registry.GetEntriesAsync(
-                        exactServiceId,
-                        retainedCandidate.ViewName,
-                        retainedCandidate.ViewVersion,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                if (entries.Count == 0)
-                {
-                    return MvActivationResult.Rejected(
-                        MvActivationFailureReason.CandidateMissing,
-                        "The forced-reverse candidate generation does not exist.");
-                }
-
-                if (entries.Any(entry =>
-                        !string.Equals(entry.ServiceId, exactServiceId, StringComparison.Ordinal) ||
-                        !string.Equals(entry.ViewName, retainedCandidate.ViewName, StringComparison.Ordinal) ||
-                        entry.ViewVersion != retainedCandidate.ViewVersion))
-                {
-                    return MvActivationResult.Rejected(
-                        MvActivationFailureReason.IdentityMismatch,
-                        "The forced-reverse candidate identity does not match the exact service, view, and version.");
-                }
-
-                if (entries.Any(entry => entry.Status is not (MvStatus.Ready or MvStatus.Active)))
-                {
-                    return MvActivationResult.Rejected(
-                        MvActivationFailureReason.UnsafeLifecycle,
-                        "Forced reverse waives checkpoint truth only; the retained generation must remain Ready or Active.");
-                }
-
-                var active = await _registry.GetActiveAsync(
-                        exactServiceId,
-                        retainedCandidate.ViewName,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                if (active is null ||
-                    active.ActiveVersion != expectedActiveVersion ||
-                    active.Generation != expectedActiveGeneration)
-                {
-                    return MvActivationResult.Rejected(
-                        MvActivationFailureReason.ExpectedActiveConflict,
-                        "The active pointer no longer matches the forced-reverse fence.");
-                }
-
-                var switchedAt = DateTimeOffset.UtcNow;
-                var result = await _registry.TryForceReverseAsync(
-                        new MvForcedReverseRequest(
-                            exactServiceId,
-                            retainedCandidate.ViewName,
-                            retainedCandidate.ViewVersion,
-                            expectedActiveVersion,
-                            expectedActiveGeneration,
-                            entries.Count,
-                            entries[0].Status,
-                            normalizedReason,
-                            switchedAt),
-                        cancellationToken: cancellationToken)
-                    .ConfigureAwait(false);
-                if (result.Succeeded && _statusPublisher is not null)
-                {
-                    var snapshot = MvProjectionStatusSnapshot.FromEntries(entries) with
-                    {
-                        Status = MvStatus.Active,
-                        SwitchKind = MvSwitchKind.Forced,
-                        SwitchReason = normalizedReason,
-                        SwitchedAtUtc = switchedAt
-                    };
-                    try
-                    {
-                        await _statusPublisher.PublishSwitchAsync(
-                                exactServiceId,
-                                retainedCandidate.ViewName,
-                                retainedCandidate.ViewVersion,
-                                snapshot,
-                                publisherKind,
-                                cancellationToken)
-                            .ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        // Switching is durable before observation. A status failure cannot propagate into MV work.
-                    }
-                }
-
-                return result;
-            },
+            () => ForceReverseInLaneAsync(
+                retainedCandidate,
+                expectedActiveVersion,
+                expectedActiveGeneration,
+                normalizedReason,
+                exactServiceId,
+                publisherKind,
+                cancellationToken),
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<MvActivationResult> ForceReverseInLaneAsync(
+        IMvApplyHost retainedCandidate,
+        int expectedActiveVersion,
+        long expectedActiveGeneration,
+        string normalizedReason,
+        string exactServiceId,
+        MvProjectionStatusPublisherKind publisherKind,
+        CancellationToken cancellationToken)
+    {
+        var entries = await _registry.GetEntriesAsync(
+                exactServiceId,
+                retainedCandidate.ViewName,
+                retainedCandidate.ViewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var candidateRejection = ValidateForcedCandidate(entries, retainedCandidate, exactServiceId);
+        if (candidateRejection is not null)
+        {
+            return candidateRejection;
+        }
+
+        var active = await _registry.GetActiveAsync(exactServiceId, retainedCandidate.ViewName, cancellationToken)
+            .ConfigureAwait(false);
+        if (active is null ||
+            active.ActiveVersion != expectedActiveVersion ||
+            active.Generation != expectedActiveGeneration)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.ExpectedActiveConflict,
+                "The active pointer no longer matches the forced-reverse fence.");
+        }
+
+        var switchedAt = PersistenceTimestampNow();
+        var result = await _registry.TryForceReverseAsync(
+                new MvForcedReverseRequest(
+                    exactServiceId,
+                    retainedCandidate.ViewName,
+                    retainedCandidate.ViewVersion,
+                    expectedActiveVersion,
+                    expectedActiveGeneration,
+                    entries.Count,
+                    entries[0].Status,
+                    normalizedReason,
+                    switchedAt),
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        await PublishForcedSwitchAsync(
+            result,
+            entries,
+            retainedCandidate,
+            exactServiceId,
+            normalizedReason,
+            switchedAt,
+            publisherKind,
+            cancellationToken).ConfigureAwait(false);
+        return result;
     }
 
     public Task<MvActiveEntry?> GetActiveAsync(
@@ -274,6 +228,123 @@ public sealed class MvGenerationCoordinator : IMvGenerationCoordinator
 
     private string ValidateServiceId(string? serviceId) =>
         MvServiceIdValidation.Validate(serviceId, _options, _serviceIdProvider, nameof(MvGenerationCoordinator));
+
+    private static DateTimeOffset PersistenceTimestampNow()
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new DateTimeOffset(now.Ticks - (now.Ticks % 10), TimeSpan.Zero);
+    }
+
+    private static MvActivationResult? ValidateForcedReverseInput(
+        IMvApplyHost candidate,
+        int expectedActiveVersion,
+        long expectedActiveGeneration,
+        string reason,
+        out string normalizedReason)
+    {
+        normalizedReason = reason?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(candidate.ViewName) || candidate.ViewVersion < 0)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.IdentityMismatch,
+                "Forced reverse requires an exact view identity and a non-negative retained version.");
+        }
+        if (expectedActiveVersion <= candidate.ViewVersion)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.IdentityMismatch,
+                "Forced switching is reverse-only: the retained candidate version must precede the expected active version.");
+        }
+        if (expectedActiveGeneration < 0)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.ExpectedGenerationConflict,
+                "The expected active generation cannot be negative.");
+        }
+        if (normalizedReason.Length == 0)
+        {
+            throw new ArgumentException("A non-empty operator reason is required for forced reverse.", nameof(reason));
+        }
+        if (normalizedReason.Length > 1024)
+        {
+            throw new ArgumentException("The forced-reverse reason cannot exceed 1024 characters.", nameof(reason));
+        }
+        if (normalizedReason.Any(char.IsControl))
+        {
+            throw new ArgumentException("The forced-reverse reason cannot contain control characters.", nameof(reason));
+        }
+
+        return null;
+    }
+
+    private static MvActivationResult? ValidateForcedCandidate(
+        IReadOnlyList<MvRegistryEntry> entries,
+        IMvApplyHost candidate,
+        string exactServiceId)
+    {
+        if (entries.Count == 0)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.CandidateMissing,
+                "The forced-reverse candidate generation does not exist.");
+        }
+        if (entries.Any(entry =>
+                !string.Equals(entry.ServiceId, exactServiceId, StringComparison.Ordinal) ||
+                !string.Equals(entry.ViewName, candidate.ViewName, StringComparison.Ordinal) ||
+                entry.ViewVersion != candidate.ViewVersion))
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.IdentityMismatch,
+                "The forced-reverse candidate identity does not match the exact service, view, and version.");
+        }
+        if (entries.Any(entry => entry.Status is not (MvStatus.Ready or MvStatus.Active)))
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.UnsafeLifecycle,
+                "Forced reverse waives checkpoint truth only; the retained generation must remain Ready or Active.");
+        }
+
+        return null;
+    }
+
+    private async Task PublishForcedSwitchAsync(
+        MvActivationResult result,
+        IReadOnlyList<MvRegistryEntry> entries,
+        IMvApplyHost candidate,
+        string exactServiceId,
+        string reason,
+        DateTimeOffset switchedAt,
+        MvProjectionStatusPublisherKind publisherKind,
+        CancellationToken cancellationToken)
+    {
+        if (!result.Succeeded || _statusPublisher is null)
+        {
+            return;
+        }
+
+        var snapshot = MvProjectionStatusSnapshot.FromEntries(entries) with
+        {
+            Status = MvStatus.Active,
+            SwitchKind = MvSwitchKind.Forced,
+            SwitchReason = reason,
+            SwitchedAtUtc = switchedAt
+        };
+        try
+        {
+            await _statusPublisher.PublishSwitchAsync(
+                    exactServiceId,
+                    candidate.ViewName,
+                    candidate.ViewVersion,
+                    snapshot,
+                    publisherKind,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            // Switching is durable before observation. A status failure cannot propagate into MV work.
+        }
+    }
 
     private static void ValidateCandidate(IMvApplyHost candidate)
     {

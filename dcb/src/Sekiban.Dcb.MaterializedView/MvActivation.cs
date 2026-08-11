@@ -181,6 +181,12 @@ public static class MvActivationEligibility
             return (activeRejection, null);
         }
 
+        var switchKind = MvSwitchKind.Initial;
+        if (active is not null)
+        {
+            switchKind = viewVersion > active.ActiveVersion ? MvSwitchKind.Forward : MvSwitchKind.Reverse;
+        }
+
         var request = new MvActivationRequest(
             serviceId,
             viewName,
@@ -192,11 +198,7 @@ public static class MvActivationEligibility
             expectedCurrentTruth,
             expectedTargetTruth)
         {
-            SwitchKind = active is null
-                ? MvSwitchKind.Initial
-                : viewVersion > active.ActiveVersion
-                    ? MvSwitchKind.Forward
-                    : MvSwitchKind.Reverse
+            SwitchKind = switchKind
         };
         return (MvActivationEligibilityResult.Eligible(), request);
     }

@@ -63,12 +63,68 @@ public sealed record MvForcedReverseSqlPlan(
             releaseSavepointSql);
 }
 
+/// <summary>Provider SQL for audit metadata written inside an ordinary activation transaction.</summary>
+public sealed record MvOrdinarySwitchAuditSqlPlan(
+    string PersistActiveAuditSql,
+    string MarkPreviousReadySql)
+{
+    public static MvOrdinarySwitchAuditSqlPlan Common { get; } = new(
+        """
+        UPDATE sekiban_mv_active
+        SET switch_kind = @SwitchKind, switch_reason = NULL, switched_at_utc = @SwitchedAtUtc
+        WHERE service_id = @ServiceId AND view_name = @ViewName AND active_version = @ViewVersion
+          AND active_generation = @ActivatedGeneration;
+        """,
+        """
+        UPDATE sekiban_mv_registry SET status = 'ready', last_updated = @SwitchedAtUtc
+        WHERE service_id = @ServiceId AND view_name = @ViewName AND view_version = @ExpectedActiveVersion;
+        """);
+}
+
 /// <summary>
 ///     Shared non-resolution mechanics for forced reverse. Providers still own connections and static SQL; this helper
 ///     only enforces transaction, savepoint, exact-row-count, and rollback behavior.
 /// </summary>
 public static class MvForcedReverseExecution
 {
+    internal static async Task PersistOrdinarySwitchAuditAsync(
+        System.Data.IDbTransaction transaction,
+        MvActivationRequest request,
+        MvOrdinarySwitchAuditSqlPlan sql,
+        object switchedAtValue,
+        CancellationToken cancellationToken)
+    {
+        var dbTransaction = RequireDbTransaction(transaction);
+        var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["ServiceId"] = request.ServiceId,
+            ["ViewName"] = request.ViewName,
+            ["ViewVersion"] = request.ViewVersion,
+            ["ExpectedActiveVersion"] = request.ExpectedActiveVersion,
+            ["ActivatedGeneration"] = request.ExpectedActiveGeneration + 1,
+            ["SwitchKind"] = request.SwitchKind.ToString().ToLowerInvariant(),
+            ["SwitchedAtUtc"] = switchedAtValue
+        };
+        if (await ExecuteNonQueryAsync(
+                dbTransaction,
+                sql.PersistActiveAuditSql,
+                parameters,
+                cancellationToken).ConfigureAwait(false) != 1)
+        {
+            throw new InvalidOperationException("The activated pointer changed before its switch audit was persisted.");
+        }
+
+        if (request.ExpectedActiveVersion is not null)
+        {
+            await ExecuteNonQueryAsync(
+                    dbTransaction,
+                    sql.MarkPreviousReadySql,
+                    parameters,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
     public static async Task<MvActivationResult> ExecuteAsync<TConnection>(
         MvForcedReverseRequest request,
         System.Data.IDbTransaction? callerTransaction,
@@ -305,4 +361,88 @@ public abstract class MvForcedReverseRegistryStoreBase<TConnection>
             ForcedReversePlan,
             FormatForcedReverseTimestamp(request.RequestedAtUtc),
             cancellationToken);
+
+    protected Task PersistOrdinarySwitchAuditAsync(
+        System.Data.IDbTransaction transaction,
+        MvActivationRequest request,
+        CancellationToken cancellationToken) =>
+        MvForcedReverseExecution.PersistOrdinarySwitchAuditAsync(
+            transaction,
+            request,
+            MvOrdinarySwitchAuditSqlPlan.Common,
+            FormatForcedReverseTimestamp(DateTimeOffset.UtcNow),
+            cancellationToken);
+
+    protected static MvActiveEntry ReadActiveEntry(IReadOnlyDictionary<string, object?> row)
+    {
+        var switchKindText = ReadNullableString(row, "SwitchKind");
+        return new MvActiveEntry(
+            ReadRequiredString(row, "ServiceId"),
+            ReadRequiredString(row, "ViewName"),
+            Convert.ToInt32(ReadRequired(row, "ActiveVersion"), System.Globalization.CultureInfo.InvariantCulture),
+            ReadRequiredTimestamp(row, "ActivatedAt"))
+        {
+            Generation = Convert.ToInt64(ReadRequired(row, "Generation"), System.Globalization.CultureInfo.InvariantCulture),
+            SwitchKind = Enum.TryParse<MvSwitchKind>(switchKindText, true, out var kind) ? kind : MvSwitchKind.Legacy,
+            SwitchReason = ReadNullableString(row, "SwitchReason"),
+            SwitchedAtUtc = ReadNullableTimestamp(row, "SwitchedAtUtc")
+        };
+    }
+
+    private static string ReadRequiredString(IReadOnlyDictionary<string, object?> row, string key) =>
+        ReadRequired(row, key).ToString() ??
+        throw new InvalidOperationException($"Registry row value '{key}' cannot be converted to a string.");
+
+    private static string? ReadNullableString(IReadOnlyDictionary<string, object?> row, string key)
+    {
+        var value = Read(row, key);
+        return value is null or DBNull ? null : value.ToString();
+    }
+
+    private static DateTimeOffset ReadRequiredTimestamp(IReadOnlyDictionary<string, object?> row, string key) =>
+        ReadTimestamp(ReadRequired(row, key), key);
+
+    private static DateTimeOffset? ReadNullableTimestamp(IReadOnlyDictionary<string, object?> row, string key)
+    {
+        var value = Read(row, key);
+        return value is null or DBNull ? null : ReadTimestamp(value, key);
+    }
+
+    private static DateTimeOffset ReadTimestamp(object value, string key) => value switch
+    {
+        DateTimeOffset dateTimeOffset => dateTimeOffset,
+        DateTime dateTime => new DateTimeOffset(
+            dateTime.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(dateTime, DateTimeKind.Utc)
+                : dateTime),
+        string text when DateTimeOffset.TryParse(
+            text,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind,
+            out var parsed) => parsed,
+        _ => throw new InvalidOperationException($"Registry row value '{key}' is not a timestamp.")
+    };
+
+    private static object ReadRequired(IReadOnlyDictionary<string, object?> row, string key) =>
+        Read(row, key) is { } value && value is not DBNull
+            ? value
+            : throw new InvalidOperationException($"Registry row is missing required value '{key}'.");
+
+    private static object? Read(IReadOnlyDictionary<string, object?> row, string key)
+    {
+        if (row.TryGetValue(key, out var value))
+        {
+            return value;
+        }
+
+        foreach (var pair in row)
+        {
+            if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
+            {
+                return pair.Value;
+            }
+        }
+
+        return null;
+    }
 }

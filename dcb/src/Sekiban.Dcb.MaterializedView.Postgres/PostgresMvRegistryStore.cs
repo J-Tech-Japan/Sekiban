@@ -496,7 +496,6 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
             request.ExpectedActiveGeneration,
             request.CandidateCount,
             ExpectedStatus = request.ExpectedStatus.ToString().ToLowerInvariant(),
-            SwitchKind = request.SwitchKind.ToString().ToLowerInvariant(),
             request.ExpectedCurrentCheckpointTruth,
             request.ExpectedTargetCheckpointTruth
         };
@@ -512,10 +511,8 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
         }
 
         const string insertSql = """
-            INSERT INTO sekiban_mv_active (
-                service_id, view_name, active_version, active_generation, activated_at,
-                switch_kind, switch_reason, switched_at_utc)
-            SELECT @ServiceId, @ViewName, @ViewVersion, 1, NOW(), @SwitchKind, NULL, NOW()
+            INSERT INTO sekiban_mv_active (service_id, view_name, active_version, active_generation, activated_at)
+            SELECT @ServiceId, @ViewName, @ViewVersion, 1, NOW()
             WHERE @ExpectedActiveVersion IS NULL
               AND @ExpectedActiveGeneration = 0
             ON CONFLICT (service_id, view_name) DO NOTHING;
@@ -524,10 +521,7 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
             UPDATE sekiban_mv_active
             SET active_version = @ViewVersion,
                 active_generation = active_generation + 1,
-                activated_at = NOW(),
-                switch_kind = @SwitchKind,
-                switch_reason = NULL,
-                switched_at_utc = NOW()
+                activated_at = NOW()
             WHERE service_id = @ServiceId
               AND view_name = @ViewName
               AND active_version = @ExpectedActiveVersion
@@ -541,16 +535,7 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
             return CandidateSnapshotChanged();
         }
 
-        const string markPreviousReadySql = """
-            UPDATE sekiban_mv_registry
-            SET status = 'ready', last_updated = NOW()
-            WHERE service_id = @ServiceId
-              AND view_name = @ViewName
-              AND view_version = @ExpectedActiveVersion
-              AND @ExpectedActiveVersion IS NOT NULL;
-            """;
-        await transaction.Connection!.ExecuteAsync(
-            new CommandDefinition(markPreviousReadySql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await PersistOrdinarySwitchAuditAsync(transaction, request, cancellationToken).ConfigureAwait(false);
 
         const string markActiveSql = """
             UPDATE sekiban_mv_registry
@@ -705,23 +690,7 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
         };
     }
 
-    private static MvActiveEntry MapActiveEntry(IReadOnlyDictionary<string, object?> row) =>
-        new(
-            ReadRequiredString(row, "ServiceId"),
-            ReadRequiredString(row, "ViewName"),
-            ReadRequiredInt(row, "ActiveVersion"),
-            ReadRequiredDateTimeOffset(row, "ActivatedAt"))
-        {
-            Generation = ReadRequiredLong(row, "Generation"),
-            SwitchKind = ReadSwitchKind(row),
-            SwitchReason = ReadNullableString(row, "SwitchReason"),
-            SwitchedAtUtc = ReadNullableDateTimeOffset(row, "SwitchedAtUtc")
-        };
-
-    private static MvSwitchKind ReadSwitchKind(IReadOnlyDictionary<string, object?> row) =>
-        Enum.TryParse<MvSwitchKind>(ReadNullableString(row, "SwitchKind"), true, out var kind)
-            ? kind
-            : MvSwitchKind.Legacy;
+    private static MvActiveEntry MapActiveEntry(IReadOnlyDictionary<string, object?> row) => ReadActiveEntry(row);
 
     private static IReadOnlyDictionary<string, object?> ToDictionary(object row)
     {
