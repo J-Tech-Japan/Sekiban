@@ -24,6 +24,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private readonly IMvApplyHostFactory _hostFactory;
     private readonly ILogger<MaterializedViewGrain> _logger;
     private readonly MvOptions _options;
+    private readonly MvProjectionStatusPublisher? _statusPublisher;
     private readonly IMvRegistryStore _registryStore;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
 
@@ -32,12 +33,14 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private StreamSubscriptionHandle<SerializableEvent>? _streamHandle;
     private bool _subscriptionStarting;
     private IDisposable? _catchUpTimer;
+    private IDisposable? _statusTimer;
     private string? _grainKey;
     private string? _serviceId;
     private string? _viewName;
     private int _viewVersion;
     private IMvApplyHost? _host;
     private string? _lastAppliedSortableUniqueId;
+    private MvProjectionStatusSnapshot _publicationSnapshot = MvProjectionStatusSnapshot.Unknown();
     private string? _lastReceivedSortableUniqueId;
     private string? _lastError;
     private DateTimeOffset? _lastCatchUpStartedAt;
@@ -61,6 +64,19 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         IEventSubscriptionResolver subscriptionResolver,
         IOptions<MvOptions> options,
         ILogger<MaterializedViewGrain> logger)
+        : this(hostFactory, executor, registryStore, subscriptionResolver, options, logger, statusPublisher: null)
+    {
+    }
+
+    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
+    public MaterializedViewGrain(
+        IMvApplyHostFactory hostFactory,
+        IMvExecutor executor,
+        IMvRegistryStore registryStore,
+        IEventSubscriptionResolver subscriptionResolver,
+        IOptions<MvOptions> options,
+        ILogger<MaterializedViewGrain> logger,
+        MvProjectionStatusPublisher? statusPublisher)
     {
         _hostFactory = hostFactory;
         _executor = executor;
@@ -68,6 +84,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _subscriptionResolver = subscriptionResolver;
         _logger = logger;
         _options = options.Value;
+        _statusPublisher = statusPublisher;
         ReconfigureCatchUpSemaphore(_options.CatchUpMaxConcurrentBatches);
     }
 
@@ -82,6 +99,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     {
         _catchUpTimer?.Dispose();
         _catchUpTimer = null;
+        _statusTimer?.Dispose();
+        _statusTimer = null;
         if (_streamHandle is not null)
         {
             await _streamHandle.UnsubscribeAsync();
@@ -118,6 +137,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _statusMarkedCatchingUp = false;
         StartCatchUpTimer();
         _started = true;
+        StartStatusTimer();
     }
 
     public async Task RefreshAsync()
@@ -293,6 +313,38 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             _options.PollInterval);
     }
 
+    private void StartStatusTimer()
+    {
+        if (_statusTimer is not null || _statusPublisher is null)
+        {
+            return;
+        }
+
+        _statusTimer = this.RegisterGrainTimer(
+            cancellationToken => PublishStatusAsync(cancellationToken),
+            TimeSpan.Zero,
+            _statusPublisher.PublicationInterval);
+    }
+
+    private async Task PublishStatusAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _statusPublisher!.PublishIfDueAsync(
+                    _serviceId!,
+                    _viewName!,
+                    _viewVersion,
+                    _publicationSnapshot,
+                    MvProjectionStatusPublisherKind.Orleans,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Timer disposal/deactivation cancellation is normal.
+        }
+    }
+
     private void StopCatchUpTimer()
     {
         _catchUpTimer?.Dispose();
@@ -387,9 +439,14 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                     MvStatus.CatchingUp,
                     cancellationToken: cancellationToken);
                 _statusMarkedCatchingUp = true;
+                _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.CatchingUp };
             }
 
             var result = await _executor.CatchUpOnceAsync(_host!, _serviceId, cancellationToken);
+            if (result.ProjectionStatus is { } projectionStatus)
+            {
+                _publicationSnapshot = projectionStatus;
+            }
 
             if (!string.IsNullOrWhiteSpace(result.LastAppliedSortableUniqueId))
             {
@@ -419,6 +476,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         catch (Exception ex)
         {
             _lastError = ex.Message;
+            _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Faulted };
             _logger.LogError(
                 ex,
                 "Materialized view catch-up batch failed for {ViewName}/{ViewVersion}.",
@@ -452,6 +510,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             _host!.ViewName,
             _host.ViewVersion,
             cancellationToken);
+        _publicationSnapshot = MvProjectionStatusSnapshot.FromEntries(entries);
         if (entries.Count == 0 || entries.Any(entry => !entry.CurrentCheckpointTruth.IsKnown))
         {
             _lastError = "Materialized view checkpoint truth is Unknown; readiness remains fail-closed.";
@@ -479,6 +538,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 .ConfigureAwait(false);
             if (active?.ActiveVersion == _host.ViewVersion)
             {
+                _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
                 _isCatchUpActive = false;
                 _needsImmediateCatchUp = false;
                 _consecutiveEmptyBatches = 0;
@@ -500,6 +560,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                     MvStatus.Ready,
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Ready };
 
             var activation = await activationExecutor.TryActivateAsync(
                     _host,
@@ -513,6 +574,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 return;
             }
 
+            _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
             _isCatchUpActive = false;
             _needsImmediateCatchUp = false;
             _consecutiveEmptyBatches = 0;
@@ -526,6 +588,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             _host.ViewVersion,
             MvStatus.Ready,
             cancellationToken: cancellationToken);
+        _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Ready };
         _isCatchUpActive = false;
         _needsImmediateCatchUp = false;
         _consecutiveEmptyBatches = 0;
@@ -700,6 +763,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     {
         ResolveHost();
         var entries = await _registryStore.GetEntriesAsync(_serviceId!, _host!.ViewName, _host.ViewVersion, cancellationToken);
+        _publicationSnapshot = MvProjectionStatusSnapshot.FromEntries(entries);
         var currentPosition = entries
             .Select(entry => entry.CurrentCheckpointTruth.IsKnown ? entry.CurrentCheckpointTruth.PositionValue : null)
             .Where(position => !string.IsNullOrWhiteSpace(position))

@@ -148,6 +148,9 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
                     var faulted = row.IsFaulted ||
                         !string.IsNullOrWhiteSpace(row.FaultMessage) ||
                         string.Equals(row.Phase, ProjectionStatusPhases.Faulted, StringComparison.Ordinal);
+                    var lifecycleEligible =
+                        string.Equals(row.Phase, ProjectionStatusPhases.Active, StringComparison.Ordinal) ||
+                        string.Equals(row.Phase, ProjectionStatusPhases.CaughtUp, StringComparison.Ordinal);
                     return new ProjectionStatusSnapshot(
                         row.ProjectorName,
                         row.ProjectorVersion,
@@ -161,7 +164,7 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
                         remaining,
                         sampledAt,
                         ProjectionStatusSnapshot.BestEffortConsistency,
-                        remaining == 0 && rowFresh && !faulted && !hasConflict,
+                        remaining == 0 && rowFresh && lifecycleEligible && !faulted && !hasConflict,
                         hasConflict,
                         hasConflict ? activationIds : Array.Empty<string>())
                     {

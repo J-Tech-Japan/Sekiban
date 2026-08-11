@@ -386,4 +386,11 @@ public interface IMvActivationExecutor
         CancellationToken cancellationToken = default);
 }
 
-public sealed record MvCatchUpResult(int AppliedEvents, bool ReachedUnsafeWindow, string? LastAppliedSortableUniqueId = null);
+public sealed record MvCatchUpResult(int AppliedEvents, bool ReachedUnsafeWindow, string? LastAppliedSortableUniqueId = null)
+{
+    /// <summary>
+    /// Authoritative progress already known at the completed operation boundary. Null preserves compatibility for
+    /// custom executors that have not opted into G24 status publication.
+    /// </summary>
+    public MvProjectionStatusSnapshot? ProjectionStatus { get; init; }
+}
