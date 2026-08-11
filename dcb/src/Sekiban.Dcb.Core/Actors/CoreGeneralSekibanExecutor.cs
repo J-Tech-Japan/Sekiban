@@ -4,6 +4,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Validation;
@@ -25,6 +26,9 @@ public class CoreGeneralSekibanExecutor
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventPublisher? _eventPublisher;
     private readonly IEventStore _eventStore;
+    private readonly IServiceIdProvider _serviceIdProvider;
+    private readonly ISortableUniqueIdGenerator _sortableUniqueIdGenerator;
+    private readonly SortableUniqueIdSeedCoordinator _sortableUniqueIdSeedCoordinator;
 
     /// <summary>
     ///     Test seam ONLY (never set in production): the EventId / SortableUniqueId generators used by the serialized
@@ -33,7 +37,7 @@ public class CoreGeneralSekibanExecutor
     ///     generators, so production behaviour is unchanged.
     /// </summary>
     internal Func<Guid> ConditionalEventIdFactory { get; set; } = Guid.CreateVersion7;
-    internal Func<string> ConditionalSortableIdFactory { get; set; } = () => SortableUniqueId.GenerateNew();
+    internal Func<string>? ConditionalSortableIdFactory { get; set; }
 
     private const string DefaultExecutedUser = "GeneralSekibanExecutor";
     private const string SerializedExecutedUser = "SerializedSekibanExecutor";
@@ -57,12 +61,45 @@ public class CoreGeneralSekibanExecutor
         DcbDomainTypes domainTypes,
         IEventPublisher? eventPublisher = null,
         IExecutedUserProvider? executedUserProvider = null)
+        : this(
+            eventStore,
+            actorAccessor,
+            domainTypes,
+            eventPublisher,
+            executedUserProvider,
+            ProcessSharedSortableUniqueIdServices.Generator,
+            ProcessSharedSortableUniqueIdServices.SeedCoordinator,
+            new DefaultServiceIdProvider())
+    {
+    }
+
+    /// <summary>Creates an executor with the process-wide allocator and retryable service-head seed coordinator.</summary>
+    public CoreGeneralSekibanExecutor(
+        IEventStore eventStore,
+        IActorObjectAccessor actorAccessor,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher,
+        IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
+        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider)
     {
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _eventPublisher = eventPublisher;
         _executedUserProvider = executedUserProvider;
+        _sortableUniqueIdGenerator = sortableUniqueIdGenerator ??
+                                     throw new ArgumentNullException(nameof(sortableUniqueIdGenerator));
+        _sortableUniqueIdSeedCoordinator = sortableUniqueIdSeedCoordinator ??
+                                           throw new ArgumentNullException(nameof(sortableUniqueIdSeedCoordinator));
+        _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
+    }
+
+    private Task EnsureSortableUniqueIdSeededAsync(CancellationToken cancellationToken)
+    {
+        var serviceId = ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId());
+        return _sortableUniqueIdSeedCoordinator.EnsureSeededAsync(serviceId, _eventStore, cancellationToken);
     }
 
     private string GetExecutedUser()
@@ -137,6 +174,9 @@ public class CoreGeneralSekibanExecutor
             // Step 3.1: Validate all tags
             TagValidator.ValidateTagsAndThrow(allTags);
 
+            // Establish the persisted floor before any reservation, id allocation, or write.
+            await EnsureSortableUniqueIdSeededAsync(cancellationToken);
+
             // Step 4: According to spec:
             //  - If tag.IsConsistencyTag() == false -> DO NOT reserve (skip)
             //  - If tag.IsConsistencyTag() == true AND tag is ConsistencyTag with SortableUniqueId present -> use that SortableUniqueId
@@ -210,7 +250,7 @@ public class CoreGeneralSekibanExecutor
                 foreach (var e in collectedEvents)
                 {
                     var eId = Guid.CreateVersion7();
-                    var sortable = SortableUniqueId.GenerateNew();
+                    var sortable = _sortableUniqueIdGenerator.GenerateNew();
                     var meta = new EventMetadata(eId.ToString(), command.GetType().Name, executedUser);
                     events.Add(
                         new Event(
@@ -447,6 +487,9 @@ public class CoreGeneralSekibanExecutor
 
             TagValidator.ValidateTagsAndThrow(allTags);
 
+            // Establish the persisted floor before any reservation, id allocation, or write.
+            await EnsureSortableUniqueIdSeededAsync(cancellationToken);
+
             // Step 3: Reserve consistency tags
             var reservations = new Dictionary<ITag, TagWriteReservation>();
             var failedReservations = new List<(ITag Tag, Exception Error)>();
@@ -492,7 +535,7 @@ public class CoreGeneralSekibanExecutor
                 foreach (var candidate in request.EventCandidates)
                 {
                     var eventId = ConditionalEventIdFactory();
-                    var sortableId = ConditionalSortableIdFactory();
+                    var sortableId = (ConditionalSortableIdFactory ?? _sortableUniqueIdGenerator.GenerateNew)();
                     var metadata = new EventMetadata(eventId.ToString(), "SerializedCommit", "SerializedSekibanExecutor");
 
                     serializableEvents.Add(new SerializableEvent(
@@ -976,9 +1019,11 @@ public class CoreGeneralSekibanExecutor
             var single = collectedEvents[0];
             TagValidator.ValidateTagsAndThrow(new HashSet<ITag>(single.Tags));
 
+            await EnsureSortableUniqueIdSeededAsync(cancellationToken);
+
             var executedUser = GetExecutedUser();
             var eventId = ConditionalEventIdFactory();
-            var sortable = SortableUniqueId.GenerateNew();
+            var sortable = _sortableUniqueIdGenerator.GenerateNew();
             var metadata = new EventMetadata(eventId.ToString(), command.GetType().Name, executedUser);
             var domainEvent = new Event(
                 single.Event,
@@ -1064,8 +1109,9 @@ public class CoreGeneralSekibanExecutor
             }
 
             var candidate = request.EventCandidate;
+            await EnsureSortableUniqueIdSeededAsync(cancellationToken);
             var eventId = ConditionalEventIdFactory();
-            var sortableId = ConditionalSortableIdFactory();
+            var sortableId = (ConditionalSortableIdFactory ?? _sortableUniqueIdGenerator.GenerateNew)();
             var metadata = new EventMetadata(eventId.ToString(), "SerializedConditionalCommit", "SerializedSekibanExecutor");
             var serializable = new SerializableEvent(
                 candidate.Payload,

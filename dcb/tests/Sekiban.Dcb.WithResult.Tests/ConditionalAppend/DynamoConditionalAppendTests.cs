@@ -3,6 +3,7 @@ using Amazon.DynamoDBv2.Model;
 using Amazon.Runtime;
 using Dcb.Domain;
 using Microsoft.Extensions.Options;
+using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.DynamoDB;
@@ -72,6 +73,33 @@ public class DynamoConditionalAppendTests
             .ToSerializableEvent(_domain.EventTypes);
 
     // ── Shared uniform contract ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RealStoreHeadSeedsMonotonicGeneratorAbovePersistedMaximum()
+    {
+        var (store, _) = NewStore();
+        var persistedTicks = new DateTime(2040, 1, 1, 0, 0, 0, DateTimeKind.Utc).Ticks;
+        var persisted = new Event(
+                new ManyTagMarker("seed"),
+                SortableUniqueId.Generate(new DateTime(persistedTicks, DateTimeKind.Utc), Guid.NewGuid()),
+                nameof(ManyTagMarker),
+                Guid.CreateVersion7(),
+                new EventMetadata("seed", "seed", "test"),
+                ["Many:seed"])
+            .ToSerializableEvent(_domain.EventTypes);
+        Assert.True((await store.WriteSerializableEventsAsync([persisted])).IsSuccess);
+
+        var generator = new MonotonicSortableUniqueIdGenerator(
+            new FixedTimeProvider(new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+        await new SortableUniqueIdSeedCoordinator(generator).EnsureSeededAsync(ServiceId, store);
+
+        Assert.True(string.CompareOrdinal(generator.GenerateNew(), persisted.SortableUniqueIdValue) > 0);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
 
     [Fact]
     public void Capability_ReportsSingleEventUniqueKey() =>
@@ -363,6 +391,25 @@ public class DynamoConditionalAppendTests
                 }
 
                 return Task.FromResult(new GetItemResponse { Item = new Dictionary<string, AttributeValue>() });
+            }
+        }
+
+        public override Task<QueryResponse> QueryAsync(
+            QueryRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            lock (_gate)
+            {
+                var partition = request.ExpressionAttributeValues[":pk"].S;
+                var items = _items
+                    .Where(entry => entry.Key.Table == request.TableName)
+                    .Select(entry => entry.Value)
+                    .Where(item => item.TryGetValue("gsi1pk", out var value) && value.S == partition)
+                    .OrderByDescending(item => item["sortableUniqueId"].S, StringComparer.Ordinal)
+                    .Take(request.Limit ?? int.MaxValue)
+                    .Select(item => new Dictionary<string, AttributeValue>(item))
+                    .ToList();
+                return Task.FromResult(new QueryResponse { Items = items });
             }
         }
     }

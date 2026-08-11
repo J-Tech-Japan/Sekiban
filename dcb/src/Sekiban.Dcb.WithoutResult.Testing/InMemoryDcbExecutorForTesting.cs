@@ -1,7 +1,10 @@
 using Sekiban.Dcb.Capabilities;
+using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.ServiceId;
 namespace Sekiban.Dcb.Testing;
 
 #pragma warning disable CS0618 // the base type is [Obsolete] on purpose, and this is where it points
@@ -41,6 +44,24 @@ public class InMemoryDcbExecutorForTesting : InMemoryDcbExecutor, IExecutorRunti
         IEventStore eventStore,
         IExecutedUserProvider? executedUserProvider = null)
         : base(domainTypes, eventStore, executedUserProvider)
+    {
+    }
+
+    /// <summary>Creates a testing executor using the supplied monotonic allocator.</summary>
+    public InMemoryDcbExecutorForTesting(
+        DcbDomainTypes domainTypes,
+        IEventStore eventStore,
+        IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
+        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider)
+        : base(
+            domainTypes,
+            eventStore,
+            executedUserProvider,
+            sortableUniqueIdGenerator,
+            sortableUniqueIdSeedCoordinator,
+            serviceIdProvider)
     {
     }
 

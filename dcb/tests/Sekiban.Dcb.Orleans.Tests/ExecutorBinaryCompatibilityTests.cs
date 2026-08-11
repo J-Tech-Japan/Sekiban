@@ -26,6 +26,16 @@ public class ExecutorBinaryCompatibilityTests
     }
 
     [Fact]
+    public void PreSekibanG31_LongestOrleansConstructor_IsStillPublic()
+    {
+        var expected = "Orleans.IClusterClient,Sekiban.Dcb.Storage.IEventStore,Sekiban.Dcb.DcbDomainTypes,Sekiban.Dcb.Actors.IEventPublisher,Sekiban.Dcb.ServiceId.IServiceIdProvider,Sekiban.Dcb.IExecutedUserProvider".Split(',');
+        Assert.Contains(
+            typeof(OrleansDcbExecutor).GetConstructors(BindingFlags.Instance | BindingFlags.Public),
+            constructor => constructor.GetParameters().Select(parameter => parameter.ParameterType.FullName)
+                .SequenceEqual(expected));
+    }
+
+    [Fact]
     public void PreSekibanG24_MultiProjectionGrain_Constructor_Is_Still_Public()
     {
         // The registry dependencies were added through an overload. Keep the exact pre-G24 surface available to

@@ -16,6 +16,7 @@ public static class ProjectionStatusServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddSekibanDcbProjectionStatusReader(this IServiceCollection services)
     {
+        services.AddSekibanDcbSortableUniqueIdGenerator();
         services.TryAddSingleton<ProjectionStatusOptions>();
         services.TryAddSingleton<ProjectionStatusReadWindowCache>();
         services.TryAddTransient<IProjectionStatusReader>(serviceProvider =>

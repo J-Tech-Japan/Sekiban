@@ -3,8 +3,10 @@ using Sekiban.Dcb.Boundaries;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Actors;
@@ -42,6 +44,29 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     {
         _actorAccessor = actorAccessor;
         _core = new CoreGeneralSekibanExecutor(eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider);
+    }
+
+    /// <summary>Creates an executor using the registered process-wide monotonic id allocator.</summary>
+    public GeneralSekibanExecutor(
+        IEventStore eventStore,
+        IActorObjectAccessor actorAccessor,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher,
+        IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
+        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider)
+    {
+        _actorAccessor = actorAccessor;
+        _core = new CoreGeneralSekibanExecutor(
+            eventStore,
+            actorAccessor,
+            domainTypes,
+            eventPublisher,
+            executedUserProvider,
+            sortableUniqueIdGenerator,
+            sortableUniqueIdSeedCoordinator,
+            serviceIdProvider);
     }
 
     /// <summary>
