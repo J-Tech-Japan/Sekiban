@@ -297,11 +297,11 @@ public sealed class MvGenerationCoordinator : IMvGenerationCoordinator
                 MvActivationFailureReason.IdentityMismatch,
                 "The forced-reverse candidate identity does not match the exact service, view, and version.");
         }
-        if (entries.Any(entry => entry.Status is not (MvStatus.Ready or MvStatus.Active)))
+        if (entries.Any(entry => entry.Status != MvStatus.Ready))
         {
             return MvActivationResult.Rejected(
                 MvActivationFailureReason.UnsafeLifecycle,
-                "Forced reverse waives checkpoint truth only; the retained generation must remain Ready or Active.");
+                "Forced reverse waives checkpoint truth only; the retained generation must remain Ready.");
         }
 
         return null;

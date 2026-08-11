@@ -40,6 +40,18 @@ public abstract class MvGenerationSwitchTestsBase(MultiProviderFixtureBase fixtu
         MvGenerationSwitchAssertions.AssertForcedReverseFencesAsync(fixture);
 
     [SkippableFact]
+    public Task ForcedReverse_RejectsStaleActiveCandidateWithoutMutation() =>
+        MvGenerationSwitchAssertions.AssertStaleActiveCandidateRejectedAsync(fixture);
+
+    [SkippableFact]
+    public Task ForcedReverse_ProviderBoundaryRejectsActiveLifecycleWithoutMutation() =>
+        MvGenerationSwitchAssertions.AssertProviderBoundaryRejectsActiveLifecycleAsync(fixture);
+
+    [SkippableFact]
+    public Task ForcedReverse_ProviderBoundaryFencesExactServiceViewAndVersion() =>
+        MvGenerationSwitchAssertions.AssertProviderBoundaryExactIdentityAsync(fixture);
+
+    [SkippableFact]
     public Task ConcurrentForcedReverse_ProviderFenceAllowsExactlyOneWinner() =>
         MvGenerationSwitchAssertions.AssertForcedReverseRaceAsync(fixture);
 
@@ -198,6 +210,116 @@ internal static class MvGenerationSwitchAssertions
         Assert.Equal(1, active.Generation);
     }
 
+    public static async Task AssertStaleActiveCandidateRejectedAsync(MultiProviderFixtureBase fixture)
+    {
+        var (store, coordinator) = await PrepareAsync(fixture).ConfigureAwait(false);
+        await RegisterAsync(store, 1, known: false, status: MvStatus.Active).ConfigureAwait(false);
+        await RegisterAsync(store, 2, known: true).ConfigureAwait(false);
+        await store.SetActiveAsync(ServiceId, ViewName, 2).ConfigureAwait(false);
+        var pointerBefore = await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false);
+        var candidateBefore = await store.GetEntriesAsync(ServiceId, ViewName, 1).ConfigureAwait(false);
+        var currentBefore = await store.GetEntriesAsync(ServiceId, ViewName, 2).ConfigureAwait(false);
+
+        var result = await coordinator.ForceReverseAsync(
+            new Host(1),
+            2,
+            1,
+            "stale active candidate must remain rejected",
+            ServiceId).ConfigureAwait(false);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(MvActivationFailureReason.UnsafeLifecycle, result.FailureReason);
+        Assert.Equal(pointerBefore, await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false));
+        Assert.Equal(candidateBefore, await store.GetEntriesAsync(ServiceId, ViewName, 1).ConfigureAwait(false));
+        Assert.Equal(currentBefore, await store.GetEntriesAsync(ServiceId, ViewName, 2).ConfigureAwait(false));
+    }
+
+    public static async Task AssertProviderBoundaryRejectsActiveLifecycleAsync(MultiProviderFixtureBase fixture)
+    {
+        var (store, _) = await PrepareAsync(fixture).ConfigureAwait(false);
+        await RegisterAsync(store, 1, known: false, status: MvStatus.Active).ConfigureAwait(false);
+        await RegisterAsync(store, 2, known: true).ConfigureAwait(false);
+        await store.SetActiveAsync(ServiceId, ViewName, 2).ConfigureAwait(false);
+        var pointerBefore = await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false);
+        var candidateBefore = await store.GetEntriesAsync(ServiceId, ViewName, 1).ConfigureAwait(false);
+        var currentBefore = await store.GetEntriesAsync(ServiceId, ViewName, 2).ConfigureAwait(false);
+        var request = new MvForcedReverseRequest(
+            ServiceId,
+            ViewName,
+            1,
+            2,
+            1,
+            2,
+            MvStatus.Active,
+            "provider boundary must reject active lifecycle",
+            DateTimeOffset.UtcNow);
+
+        var result = await store.TryForceReverseAsync(request).ConfigureAwait(false);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(MvActivationFailureReason.UnsafeLifecycle, result.FailureReason);
+        Assert.Equal(pointerBefore, await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false));
+        Assert.Equal(candidateBefore, await store.GetEntriesAsync(ServiceId, ViewName, 1).ConfigureAwait(false));
+        Assert.Equal(currentBefore, await store.GetEntriesAsync(ServiceId, ViewName, 2).ConfigureAwait(false));
+    }
+
+    public static async Task AssertProviderBoundaryExactIdentityAsync(MultiProviderFixtureBase fixture)
+    {
+        var (store, _) = await PrepareAsync(fixture).ConfigureAwait(false);
+        const string otherService = "multi-provider-service-decoy";
+        const string otherView = "GenerationViewDecoy";
+
+        await RegisterAsync(store, 0, known: false).ConfigureAwait(false);
+        await RegisterAsync(store, 1, known: false).ConfigureAwait(false);
+        await RegisterAsync(store, 2, known: true).ConfigureAwait(false);
+        await store.SetActiveAsync(ServiceId, ViewName, 2).ConfigureAwait(false);
+        await RegisterAsync(store, 1, known: false, serviceId: otherService).ConfigureAwait(false);
+        await RegisterAsync(store, 2, known: true, serviceId: otherService).ConfigureAwait(false);
+        await store.SetActiveAsync(otherService, ViewName, 2).ConfigureAwait(false);
+        await RegisterAsync(store, 1, known: false, viewName: otherView).ConfigureAwait(false);
+        await RegisterAsync(store, 2, known: true, viewName: otherView).ConfigureAwait(false);
+        await store.SetActiveAsync(ServiceId, otherView, 2).ConfigureAwait(false);
+
+        var otherVersionBefore = await store.GetEntriesAsync(ServiceId, ViewName, 0).ConfigureAwait(false);
+        var otherServiceCandidateBefore = await store.GetEntriesAsync(otherService, ViewName, 1).ConfigureAwait(false);
+        var otherServiceCurrentBefore = await store.GetEntriesAsync(otherService, ViewName, 2).ConfigureAwait(false);
+        var otherServicePointerBefore = await store.GetActiveAsync(otherService, ViewName).ConfigureAwait(false);
+        var otherViewCandidateBefore = await store.GetEntriesAsync(ServiceId, otherView, 1).ConfigureAwait(false);
+        var otherViewCurrentBefore = await store.GetEntriesAsync(ServiceId, otherView, 2).ConfigureAwait(false);
+        var otherViewPointerBefore = await store.GetActiveAsync(ServiceId, otherView).ConfigureAwait(false);
+        var request = new MvForcedReverseRequest(
+            ServiceId,
+            ViewName,
+            1,
+            2,
+            1,
+            2,
+            MvStatus.Ready,
+            "exact provider identity predicates",
+            DateTimeOffset.UtcNow);
+
+        var result = await store.TryForceReverseAsync(request).ConfigureAwait(false);
+
+        Assert.True(result.Succeeded, result.Message);
+        var intendedPointer = Assert.IsType<MvActiveEntry>(
+            await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false));
+        Assert.Equal(1, intendedPointer.ActiveVersion);
+        Assert.Equal(2, intendedPointer.Generation);
+        Assert.All(
+            await store.GetEntriesAsync(ServiceId, ViewName, 1).ConfigureAwait(false),
+            entry => Assert.Equal(MvStatus.Active, entry.Status));
+        Assert.All(
+            await store.GetEntriesAsync(ServiceId, ViewName, 2).ConfigureAwait(false),
+            entry => Assert.Equal(MvStatus.Ready, entry.Status));
+        Assert.Equal(otherVersionBefore, await store.GetEntriesAsync(ServiceId, ViewName, 0).ConfigureAwait(false));
+        Assert.Equal(otherServiceCandidateBefore, await store.GetEntriesAsync(otherService, ViewName, 1).ConfigureAwait(false));
+        Assert.Equal(otherServiceCurrentBefore, await store.GetEntriesAsync(otherService, ViewName, 2).ConfigureAwait(false));
+        Assert.Equal(otherServicePointerBefore, await store.GetActiveAsync(otherService, ViewName).ConfigureAwait(false));
+        Assert.Equal(otherViewCandidateBefore, await store.GetEntriesAsync(ServiceId, otherView, 1).ConfigureAwait(false));
+        Assert.Equal(otherViewCurrentBefore, await store.GetEntriesAsync(ServiceId, otherView, 2).ConfigureAwait(false));
+        Assert.Equal(otherViewPointerBefore, await store.GetActiveAsync(ServiceId, otherView).ConfigureAwait(false));
+    }
+
     public static async Task AssertForcedReverseRaceAsync(MultiProviderFixtureBase fixture)
     {
         var (store, _) = await PrepareAsync(fixture).ConfigureAwait(false);
@@ -279,7 +401,13 @@ internal static class MvGenerationSwitchAssertions
             new FixedServiceIdProvider(ServiceId),
             publisher);
 
-    private static async Task RegisterAsync(IMvRegistryStore store, int version, bool known)
+    private static async Task RegisterAsync(
+        IMvRegistryStore store,
+        int version,
+        bool known,
+        MvStatus status = MvStatus.Ready,
+        string serviceId = ServiceId,
+        string viewName = ViewName)
     {
         var target = MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AuthoritativeTargetCapture());
         var current = known
@@ -289,12 +417,12 @@ internal static class MvGenerationSwitchAssertions
         {
             await store.RegisterAsync(new MvRegistryEntry
             {
-                ServiceId = ServiceId,
-                ViewName = ViewName,
+                ServiceId = serviceId,
+                ViewName = viewName,
                 ViewVersion = version,
                 LogicalTable = table,
-                PhysicalTable = $"generation_v{version}_{table}",
-                Status = MvStatus.Ready,
+                PhysicalTable = $"{serviceId}_{viewName}_v{version}_{table}",
+                Status = status,
                 CurrentPosition = current.PositionValue,
                 TargetPosition = target.PositionValue,
                 CurrentCheckpointTruth = current,

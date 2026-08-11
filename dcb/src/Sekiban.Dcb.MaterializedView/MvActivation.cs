@@ -99,9 +99,9 @@ public static class MvForcedReverseValidation
             return MvActivationResult.Rejected(MvActivationFailureReason.ExpectedGenerationConflict, "The expected active generation cannot be negative.");
         }
 
-        if (request.CandidateCount <= 0 || request.ExpectedStatus is not (MvStatus.Ready or MvStatus.Active))
+        if (request.CandidateCount <= 0 || request.ExpectedStatus != MvStatus.Ready)
         {
-            return MvActivationResult.Rejected(MvActivationFailureReason.UnsafeLifecycle, "Forced reverse requires a retained Ready or Active candidate.");
+            return MvActivationResult.Rejected(MvActivationFailureReason.UnsafeLifecycle, "Forced reverse requires a retained Ready candidate.");
         }
 
         if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 1024)
