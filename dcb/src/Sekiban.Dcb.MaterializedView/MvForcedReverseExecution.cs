@@ -373,6 +373,25 @@ public abstract class MvForcedReverseRegistryStoreBase<TConnection>
             FormatForcedReverseTimestamp(DateTimeOffset.UtcNow),
             cancellationToken);
 
+    protected static async Task EnsureMissingActiveColumnsAsync(
+        DbConnection connection,
+        IReadOnlySet<string> existingColumns,
+        CancellationToken cancellationToken,
+        params (string Name, string Sql)[] columns)
+    {
+        foreach (var column in columns)
+        {
+            if (existingColumns.Contains(column.Name))
+            {
+                continue;
+            }
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = column.Sql;
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     protected static MvActiveEntry ReadActiveEntry(IReadOnlyDictionary<string, object?> row)
     {
         var switchKindText = ReadNullableString(row, "SwitchKind");

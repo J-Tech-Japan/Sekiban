@@ -118,26 +118,13 @@ public sealed partial class SqliteMvRegistryStore : MvForcedReverseRegistryStore
                 .ConfigureAwait(false);
         }
 
-        if (!existingColumns.Contains("switch_kind"))
-        {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "ALTER TABLE sekiban_mv_active ADD COLUMN switch_kind TEXT NOT NULL DEFAULT 'legacy';",
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
-
-        if (!existingColumns.Contains("switch_reason"))
-        {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "ALTER TABLE sekiban_mv_active ADD COLUMN switch_reason TEXT NULL;",
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
-
-        if (!existingColumns.Contains("switched_at_utc"))
-        {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "ALTER TABLE sekiban_mv_active ADD COLUMN switched_at_utc TEXT NULL;",
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
+        await EnsureMissingActiveColumnsAsync(
+            connection,
+            existingColumns,
+            cancellationToken,
+            ("switch_kind", "ALTER TABLE sekiban_mv_active ADD COLUMN switch_kind TEXT NOT NULL DEFAULT 'legacy';"),
+            ("switch_reason", "ALTER TABLE sekiban_mv_active ADD COLUMN switch_reason TEXT NULL;"),
+            ("switched_at_utc", "ALTER TABLE sekiban_mv_active ADD COLUMN switched_at_utc TEXT NULL;")).ConfigureAwait(false);
     }
 
     public async Task RegisterAsync(MvRegistryEntry entry, IDbTransaction? transaction = null, CancellationToken cancellationToken = default)

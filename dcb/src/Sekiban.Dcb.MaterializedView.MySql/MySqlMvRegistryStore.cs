@@ -109,26 +109,13 @@ public sealed partial class MySqlMvRegistryStore : MvForcedReverseRegistryStoreB
                 .ConfigureAwait(false);
         }
 
-        if (!activeGenerationColumns.Contains("switch_kind"))
-        {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "ALTER TABLE sekiban_mv_active ADD COLUMN switch_kind VARCHAR(32) NOT NULL DEFAULT 'legacy';",
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
-
-        if (!activeGenerationColumns.Contains("switch_reason"))
-        {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "ALTER TABLE sekiban_mv_active ADD COLUMN switch_reason VARCHAR(1024) NULL;",
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
-
-        if (!activeGenerationColumns.Contains("switched_at_utc"))
-        {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "ALTER TABLE sekiban_mv_active ADD COLUMN switched_at_utc DATETIME(6) NULL;",
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-        }
+        await EnsureMissingActiveColumnsAsync(
+            connection,
+            activeGenerationColumns,
+            cancellationToken,
+            ("switch_kind", "ALTER TABLE sekiban_mv_active ADD COLUMN switch_kind VARCHAR(32) NOT NULL DEFAULT 'legacy';"),
+            ("switch_reason", "ALTER TABLE sekiban_mv_active ADD COLUMN switch_reason VARCHAR(1024) NULL;"),
+            ("switched_at_utc", "ALTER TABLE sekiban_mv_active ADD COLUMN switched_at_utc DATETIME(6) NULL;")).ConfigureAwait(false);
     }
 
     public async Task RegisterAsync(MvRegistryEntry entry, IDbTransaction? transaction = null, CancellationToken cancellationToken = default)
