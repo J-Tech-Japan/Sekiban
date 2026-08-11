@@ -172,7 +172,10 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
                         LeaseExpiresAtUtc = row.LeaseExpiresAtUtc,
                         IsFaulted = faulted,
                         FaultMessage = row.FaultMessage,
-                        IsFresh = rowFresh
+                        IsFresh = rowFresh,
+                        SwitchKind = row.SwitchKind,
+                        SwitchReason = row.SwitchReason,
+                        SwitchedAtUtc = row.SwitchedAtUtc
                     };
                 })
                 .OrderBy(snapshot => snapshot.ProjectorName, StringComparer.Ordinal)

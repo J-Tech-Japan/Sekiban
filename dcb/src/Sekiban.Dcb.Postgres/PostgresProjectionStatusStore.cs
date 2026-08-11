@@ -22,11 +22,17 @@ public partial class PostgresMultiProjectionStateStore
             lease_expires_at_utc timestamp with time zone NULL,
             is_faulted boolean NOT NULL DEFAULT FALSE,
             fault_message varchar(2048) NULL,
+            switch_kind varchar(32) NULL,
+            switch_reason varchar(1024) NULL,
+            switched_at_utc timestamp with time zone NULL,
             CONSTRAINT pk_dcb_projection_statuses PRIMARY KEY
                 (service_id, projector_name, projector_version, cluster_id)
         );
         CREATE INDEX IF NOT EXISTS ix_dcb_projection_statuses_projector
             ON dcb_projection_statuses (service_id, projector_name, projector_version, cluster_id);
+        ALTER TABLE dcb_projection_statuses ADD COLUMN IF NOT EXISTS switch_kind varchar(32) NULL;
+        ALTER TABLE dcb_projection_statuses ADD COLUMN IF NOT EXISTS switch_reason varchar(1024) NULL;
+        ALTER TABLE dcb_projection_statuses ADD COLUMN IF NOT EXISTS switched_at_utc timestamp with time zone NULL;
         """;
 
     public async Task<ResultBox<ProjectionStatusWriteResult>> UpsertAsync(
@@ -63,10 +69,10 @@ public partial class PostgresMultiProjectionStateStore
                 INSERT INTO dcb_projection_statuses
                     (service_id, projector_name, projector_version, cluster_id, activation_id, sequence,
                      applied_event_count, last_applied_sortable_unique_id, last_traversed_sortable_unique_id, recorded_at_utc,
-                     phase, lease_expires_at_utc, is_faulted, fault_message)
+                     phase, lease_expires_at_utc, is_faulted, fault_message, switch_kind, switch_reason, switched_at_utc)
                 SELECT @service_id, @projector_name, @projector_version, @cluster_id, @activation_id, @sequence,
                        @applied_event_count, @last_applied_sortable_unique_id, @last_traversed_sortable_unique_id, @recorded_at_utc,
-                       @phase, @lease_expires_at_utc, @is_faulted, @fault_message
+                       @phase, @lease_expires_at_utc, @is_faulted, @fault_message, @switch_kind, @switch_reason, @switched_at_utc
                 WHERE @expected_sequence = 0
                 ON CONFLICT (service_id, projector_name, projector_version, cluster_id)
                 DO UPDATE SET
@@ -79,12 +85,16 @@ public partial class PostgresMultiProjectionStateStore
                     phase = EXCLUDED.phase,
                     lease_expires_at_utc = EXCLUDED.lease_expires_at_utc,
                     is_faulted = EXCLUDED.is_faulted,
-                    fault_message = EXCLUDED.fault_message
+                    fault_message = EXCLUDED.fault_message,
+                    switch_kind = EXCLUDED.switch_kind,
+                    switch_reason = EXCLUDED.switch_reason,
+                    switched_at_utc = EXCLUDED.switched_at_utc
                 WHERE dcb_projection_statuses.sequence = @expected_sequence
                   AND EXCLUDED.sequence > dcb_projection_statuses.sequence
                 RETURNING service_id, projector_name, projector_version, cluster_id, activation_id, sequence,
                           applied_event_count, last_applied_sortable_unique_id, last_traversed_sortable_unique_id,
-                          recorded_at_utc, phase, lease_expires_at_utc, is_faulted, fault_message;
+                          recorded_at_utc, phase, lease_expires_at_utc, is_faulted, fault_message,
+                          switch_kind, switch_reason, switched_at_utc;
                 """;
             AddParameter(command, "service_id", heartbeat.ServiceId);
             AddParameter(command, "projector_name", heartbeat.ProjectorName);
@@ -100,6 +110,9 @@ public partial class PostgresMultiProjectionStateStore
             AddParameter(command, "lease_expires_at_utc", (object?)heartbeat.LeaseExpiresAtUtc ?? DBNull.Value);
             AddParameter(command, "is_faulted", heartbeat.IsFaulted);
             AddParameter(command, "fault_message", (object?)heartbeat.FaultMessage ?? DBNull.Value);
+            AddParameter(command, "switch_kind", (object?)heartbeat.SwitchKind ?? DBNull.Value);
+            AddParameter(command, "switch_reason", (object?)heartbeat.SwitchReason ?? DBNull.Value);
+            AddParameter(command, "switched_at_utc", (object?)heartbeat.SwitchedAtUtc ?? DBNull.Value);
             AddParameter(command, "expected_sequence", expectedSequence);
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -145,7 +158,8 @@ public partial class PostgresMultiProjectionStateStore
             command.CommandText = """
                 SELECT service_id, projector_name, projector_version, cluster_id, activation_id, sequence,
                        applied_event_count, last_applied_sortable_unique_id, last_traversed_sortable_unique_id,
-                       recorded_at_utc, phase, lease_expires_at_utc, is_faulted, fault_message
+                       recorded_at_utc, phase, lease_expires_at_utc, is_faulted, fault_message,
+                       switch_kind, switch_reason, switched_at_utc
                 FROM dcb_projection_statuses
                 WHERE service_id = @service_id
                   AND (@projector_name IS NULL OR projector_name = @projector_name)
@@ -201,7 +215,10 @@ public partial class PostgresMultiProjectionStateStore
         Phase = reader.IsDBNull(10) ? ProjectionStatusPhases.Unknown : reader.GetString(10),
         LeaseExpiresAtUtc = reader.IsDBNull(11) ? null : reader.GetFieldValue<DateTimeOffset>(11),
         IsFaulted = !reader.IsDBNull(12) && reader.GetBoolean(12),
-        FaultMessage = reader.IsDBNull(13) ? null : reader.GetString(13)
+        FaultMessage = reader.IsDBNull(13) ? null : reader.GetString(13),
+        SwitchKind = reader.IsDBNull(14) ? null : reader.GetString(14),
+        SwitchReason = reader.IsDBNull(15) ? null : reader.GetString(15),
+        SwitchedAtUtc = reader.IsDBNull(16) ? null : reader.GetFieldValue<DateTimeOffset>(16)
     };
 
     private static async Task<ProjectionStatusHeartbeat?> ReadCurrentHeartbeatAsync(
@@ -216,7 +233,8 @@ public partial class PostgresMultiProjectionStateStore
         command.CommandText = """
             SELECT service_id, projector_name, projector_version, cluster_id, activation_id, sequence,
                    applied_event_count, last_applied_sortable_unique_id, last_traversed_sortable_unique_id,
-                   recorded_at_utc, phase, lease_expires_at_utc, is_faulted, fault_message
+                   recorded_at_utc, phase, lease_expires_at_utc, is_faulted, fault_message,
+                   switch_kind, switch_reason, switched_at_utc
             FROM dcb_projection_statuses
             WHERE service_id = @service_id AND projector_name = @projector_name
               AND projector_version = @projector_version AND cluster_id = @cluster_id;

@@ -304,6 +304,26 @@ superseded attempt returns a typed conflict and leaves the former pointer unchan
 capture, eligibility, and compare-and-switch path, so absence of an active row is only an expected input—not an
 authorization.
 
+### Parallel generations, switching, and rollback (SEK-G29)
+
+`IMvGenerationCoordinator` prepares and switches one exact `(service, view)` at a time. Preparing N+1 uses the existing
+per-version apply engine and does not clear, share a checkpoint with, or stop the active N generation. An ordinary
+`SwitchAsync` is the only forward or reverse path: it applies the SEK-G27 authoritative eligibility rules and the
+provider's atomic active-version/generation compare-and-switch. A failed, stale, or concurrent request leaves the active
+pointer unchanged. The previous generation and its physical tables remain available for diagnostics and an eligible
+ordinary reverse switch.
+
+`MvOrleansQueryAccessor.GetAsync` resolves the active pointer once at the start of an ordinary read and returns entries
+and the Orleans grain for that version. Use the separately named `GetPinnedAsync` only for explicit version diagnostics;
+passing a projector version to `GetAsync` does not override ordinary active routing.
+
+Break-glass rollback is deliberately a different API: `ForceReverseAsync`. It is reverse-only and may waive only
+checkpoint freshness/truth. The retained version must exist with the exact service/view/version identity and a safe
+`Ready` lifecycle, and the expected active version plus generation are still fenced atomically. A forced switch durably
+records `switch_kind=forced`, the operator-supplied reason, and timestamp. That metadata is pushed through the existing
+G24 typed and V1 serialized observation surfaces on the lifecycle publication seam; reading it never opens or queries
+the MV target database. There is no forced-forward flag or mode on the ordinary API.
+
 ## Querying the Tables
 
 Applications should not hardcode the physical table name. Use `IMvOrleansQueryAccessor` to resolve it.

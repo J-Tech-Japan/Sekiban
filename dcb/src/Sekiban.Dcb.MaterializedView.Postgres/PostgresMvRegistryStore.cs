@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace Sekiban.Dcb.MaterializedView.Postgres;
 
-public sealed class PostgresMvRegistryStore : IMvRegistryStore
+public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistryStoreBase<NpgsqlConnection>, IMvRegistryStore
 {
     private readonly string _connectionString;
 
@@ -51,6 +51,9 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
                 active_version INT NOT NULL,
                 active_generation BIGINT NOT NULL DEFAULT 0,
                 activated_at TIMESTAMPTZ NOT NULL,
+                switch_kind TEXT NOT NULL DEFAULT 'legacy',
+                switch_reason TEXT NULL,
+                switched_at_utc TIMESTAMPTZ NULL,
                 PRIMARY KEY (service_id, view_name)
             );
             """;
@@ -67,6 +70,12 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
         const string activeGenerationMigrationSql = """
             ALTER TABLE sekiban_mv_active
                 ADD COLUMN IF NOT EXISTS active_generation BIGINT NOT NULL DEFAULT 0;
+            ALTER TABLE sekiban_mv_active
+                ADD COLUMN IF NOT EXISTS switch_kind TEXT NOT NULL DEFAULT 'legacy';
+            ALTER TABLE sekiban_mv_active
+                ADD COLUMN IF NOT EXISTS switch_reason TEXT NULL;
+            ALTER TABLE sekiban_mv_active
+                ADD COLUMN IF NOT EXISTS switched_at_utc TIMESTAMPTZ NULL;
             """;
         await connection.ExecuteAsync(new CommandDefinition(activeGenerationMigrationSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
@@ -382,7 +391,10 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
                    view_name AS ViewName,
                    active_version AS ActiveVersion,
                    active_generation AS Generation,
-                   activated_at AS ActivatedAt
+                   activated_at AS ActivatedAt,
+                   switch_kind AS SwitchKind,
+                   switch_reason AS SwitchReason,
+                   switched_at_utc AS SwitchedAtUtc
             FROM sekiban_mv_active
             WHERE service_id = @ServiceId
               AND view_name = @ViewName;
@@ -404,12 +416,17 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            INSERT INTO sekiban_mv_active (service_id, view_name, active_version, active_generation, activated_at)
-            VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, NOW())
+            INSERT INTO sekiban_mv_active (
+                service_id, view_name, active_version, active_generation, activated_at,
+                switch_kind, switch_reason, switched_at_utc)
+            VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, NOW(), 'legacy', NULL, NOW())
             ON CONFLICT (service_id, view_name) DO UPDATE SET
                 active_version = EXCLUDED.active_version,
                 active_generation = sekiban_mv_active.active_generation + 1,
-                activated_at = EXCLUDED.activated_at;
+                activated_at = EXCLUDED.activated_at,
+                switch_kind = 'legacy',
+                switch_reason = NULL,
+                switched_at_utc = EXCLUDED.switched_at_utc;
             """;
 
         var parameters = new { ServiceId = serviceId, ViewName = viewName, ActiveVersion = activeVersion };
@@ -479,6 +496,7 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
             request.ExpectedActiveGeneration,
             request.CandidateCount,
             ExpectedStatus = request.ExpectedStatus.ToString().ToLowerInvariant(),
+            SwitchKind = request.SwitchKind.ToString().ToLowerInvariant(),
             request.ExpectedCurrentCheckpointTruth,
             request.ExpectedTargetCheckpointTruth
         };
@@ -495,8 +513,9 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
 
         const string insertSql = """
             INSERT INTO sekiban_mv_active (
-                service_id, view_name, active_version, active_generation, activated_at)
-            SELECT @ServiceId, @ViewName, @ViewVersion, 1, NOW()
+                service_id, view_name, active_version, active_generation, activated_at,
+                switch_kind, switch_reason, switched_at_utc)
+            SELECT @ServiceId, @ViewName, @ViewVersion, 1, NOW(), @SwitchKind, NULL, NOW()
             WHERE @ExpectedActiveVersion IS NULL
               AND @ExpectedActiveGeneration = 0
             ON CONFLICT (service_id, view_name) DO NOTHING;
@@ -505,7 +524,10 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
             UPDATE sekiban_mv_active
             SET active_version = @ViewVersion,
                 active_generation = active_generation + 1,
-                activated_at = NOW()
+                activated_at = NOW(),
+                switch_kind = @SwitchKind,
+                switch_reason = NULL,
+                switched_at_utc = NOW()
             WHERE service_id = @ServiceId
               AND view_name = @ViewName
               AND active_version = @ExpectedActiveVersion
@@ -518,6 +540,17 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
         {
             return CandidateSnapshotChanged();
         }
+
+        const string markPreviousReadySql = """
+            UPDATE sekiban_mv_registry
+            SET status = 'ready', last_updated = NOW()
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ExpectedActiveVersion
+              AND @ExpectedActiveVersion IS NOT NULL;
+            """;
+        await transaction.Connection!.ExecuteAsync(
+            new CommandDefinition(markPreviousReadySql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         const string markActiveSql = """
             UPDATE sekiban_mv_registry
@@ -679,8 +712,16 @@ public sealed class PostgresMvRegistryStore : IMvRegistryStore
             ReadRequiredInt(row, "ActiveVersion"),
             ReadRequiredDateTimeOffset(row, "ActivatedAt"))
         {
-            Generation = ReadRequiredLong(row, "Generation")
+            Generation = ReadRequiredLong(row, "Generation"),
+            SwitchKind = ReadSwitchKind(row),
+            SwitchReason = ReadNullableString(row, "SwitchReason"),
+            SwitchedAtUtc = ReadNullableDateTimeOffset(row, "SwitchedAtUtc")
         };
+
+    private static MvSwitchKind ReadSwitchKind(IReadOnlyDictionary<string, object?> row) =>
+        Enum.TryParse<MvSwitchKind>(ReadNullableString(row, "SwitchKind"), true, out var kind)
+            ? kind
+            : MvSwitchKind.Legacy;
 
     private static IReadOnlyDictionary<string, object?> ToDictionary(object row)
     {

@@ -4,7 +4,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Sekiban.Dcb.MaterializedView.Sqlite;
 
-public sealed class SqliteMvRegistryStore : IMvRegistryStore
+public sealed partial class SqliteMvRegistryStore : MvForcedReverseRegistryStoreBase<SqliteConnection>, IMvRegistryStore
 {
     private readonly string _connectionString;
 
@@ -56,6 +56,9 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
                 active_version INTEGER NOT NULL,
                 active_generation INTEGER NOT NULL DEFAULT 0,
                 activated_at TEXT NOT NULL,
+                switch_kind TEXT NOT NULL DEFAULT 'legacy',
+                switch_reason TEXT NULL,
+                switched_at_utc TEXT NULL,
                 PRIMARY KEY (service_id, view_name)
             );
             """;
@@ -113,6 +116,27 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
                         "ALTER TABLE sekiban_mv_active ADD COLUMN active_generation INTEGER NOT NULL DEFAULT 0;",
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+        }
+
+        if (!existingColumns.Contains("switch_kind"))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "ALTER TABLE sekiban_mv_active ADD COLUMN switch_kind TEXT NOT NULL DEFAULT 'legacy';",
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+
+        if (!existingColumns.Contains("switch_reason"))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "ALTER TABLE sekiban_mv_active ADD COLUMN switch_reason TEXT NULL;",
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+
+        if (!existingColumns.Contains("switched_at_utc"))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "ALTER TABLE sekiban_mv_active ADD COLUMN switched_at_utc TEXT NULL;",
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
     }
 
@@ -438,7 +462,10 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
                    view_name AS ViewName,
                    active_version AS ActiveVersion,
                    active_generation AS Generation,
-                   activated_at AS ActivatedAt
+                   activated_at AS ActivatedAt,
+                   switch_kind AS SwitchKind,
+                   switch_reason AS SwitchReason,
+                   switched_at_utc AS SwitchedAtUtc
             FROM sekiban_mv_active
             WHERE service_id = @ServiceId
               AND view_name = @ViewName;
@@ -460,12 +487,17 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            INSERT INTO sekiban_mv_active (service_id, view_name, active_version, active_generation, activated_at)
-            VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, @ActivatedAt)
+            INSERT INTO sekiban_mv_active (
+                service_id, view_name, active_version, active_generation, activated_at,
+                switch_kind, switch_reason, switched_at_utc)
+            VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, @ActivatedAt, 'legacy', NULL, @ActivatedAt)
             ON CONFLICT (service_id, view_name) DO UPDATE SET
                 active_version = excluded.active_version,
                 active_generation = sekiban_mv_active.active_generation + 1,
-                activated_at = excluded.activated_at;
+                activated_at = excluded.activated_at,
+                switch_kind = 'legacy',
+                switch_reason = NULL,
+                switched_at_utc = excluded.switched_at_utc;
             """;
 
         await ExecuteAsync(
@@ -542,6 +574,7 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
             request.ExpectedActiveGeneration,
             request.CandidateCount,
             ExpectedStatus = request.ExpectedStatus.ToString().ToLowerInvariant(),
+            SwitchKind = request.SwitchKind.ToString().ToLowerInvariant(),
             request.ExpectedCurrentCheckpointTruth,
             request.ExpectedTargetCheckpointTruth,
             ActivatedAt = SerializeDate(DateTimeOffset.UtcNow)
@@ -563,12 +596,18 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
                 view_name,
                 active_version,
                 active_generation,
-                activated_at)
+                activated_at,
+                switch_kind,
+                switch_reason,
+                switched_at_utc)
             SELECT
                 @ServiceId,
                 @ViewName,
                 @ViewVersion,
                 1,
+                @ActivatedAt,
+                @SwitchKind,
+                NULL,
                 @ActivatedAt
             WHERE @ExpectedActiveVersion IS NULL
               AND @ExpectedActiveGeneration = 0
@@ -579,7 +618,10 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
             UPDATE sekiban_mv_active
             SET active_version = @ViewVersion,
                 active_generation = active_generation + 1,
-                activated_at = @ActivatedAt
+                activated_at = @ActivatedAt,
+                switch_kind = @SwitchKind,
+                switch_reason = NULL,
+                switched_at_utc = @ActivatedAt
             WHERE service_id = @ServiceId
               AND view_name = @ViewName
               AND active_version = @ExpectedActiveVersion
@@ -596,6 +638,17 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
         {
             return CandidateSnapshotChanged();
         }
+
+        const string markPreviousReadySql = """
+            UPDATE sekiban_mv_registry
+            SET status = 'ready', last_updated = @ActivatedAt
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ExpectedActiveVersion
+              AND @ExpectedActiveVersion IS NOT NULL;
+            """;
+        await transaction.Connection!.ExecuteAsync(
+            new CommandDefinition(markPreviousReadySql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         const string markActiveSql = """
             UPDATE sekiban_mv_registry
@@ -781,8 +834,16 @@ public sealed class SqliteMvRegistryStore : IMvRegistryStore
             ReadRequiredInt(row, "ActiveVersion"),
             ReadRequiredDateTimeOffset(row, "ActivatedAt"))
         {
-            Generation = ReadRequiredLong(row, "Generation")
+            Generation = ReadRequiredLong(row, "Generation"),
+            SwitchKind = ReadSwitchKind(row),
+            SwitchReason = ReadNullableString(row, "SwitchReason"),
+            SwitchedAtUtc = ReadNullableDateTimeOffset(row, "SwitchedAtUtc")
         };
+
+    private static MvSwitchKind ReadSwitchKind(IReadOnlyDictionary<string, object?> row) =>
+        Enum.TryParse<MvSwitchKind>(ReadNullableString(row, "SwitchKind"), true, out var kind)
+            ? kind
+            : MvSwitchKind.Legacy;
 
     private sealed class SqliteColumnInfo
     {

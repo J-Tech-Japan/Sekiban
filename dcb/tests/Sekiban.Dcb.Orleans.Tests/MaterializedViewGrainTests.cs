@@ -147,13 +147,42 @@ public class MaterializedViewGrainTests : IAsyncLifetime
     [Fact]
     public async Task MvOrleansQueryAccessor_Should_Return_Runtime_Context()
     {
+        await SharedRegistry.RegisterAsync(new MvRegistryEntry
+        {
+            ServiceId = DefaultServiceIdProvider.DefaultServiceId,
+            ViewName = TestMaterializedViewProjector.ViewNameConst,
+            ViewVersion = 1,
+            LogicalTable = "main",
+            PhysicalTable = "test_mv_v1_main",
+            Status = MvStatus.Ready,
+            CurrentCheckpointTruth = MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp)),
+            TargetCheckpointTruth = MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AuthoritativeTargetCapture()),
+            LastUpdated = DateTimeOffset.UtcNow
+        });
+        await SharedRegistry.RegisterAsync(new MvRegistryEntry
+        {
+            ServiceId = DefaultServiceIdProvider.DefaultServiceId,
+            ViewName = TestMaterializedViewProjector.ViewNameConst,
+            ViewVersion = 2,
+            LogicalTable = "main",
+            PhysicalTable = "test_mv_v2_main",
+            Status = MvStatus.Ready,
+            CurrentCheckpointTruth = MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp)),
+            TargetCheckpointTruth = MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AuthoritativeTargetCapture()),
+            LastUpdated = DateTimeOffset.UtcNow
+        });
+        await SharedRegistry.SetActiveAsync(
+            DefaultServiceIdProvider.DefaultServiceId,
+            TestMaterializedViewProjector.ViewNameConst,
+            2);
         var accessor = new MvOrleansQueryAccessor(
             _cluster.Client,
             SharedRegistry,
             new DefaultServiceIdProvider(),
             new MvStorageInfoProvider(new MvStorageInfo(MvDbType.Postgres, "Host=test;Database=mv;")));
 
-        var context = await accessor.GetAsync(new TestMaterializedViewProjector());
+        var callerVersionOne = new TestMaterializedViewProjector();
+        var context = await accessor.GetAsync(callerVersionOne);
         var table = context.GetRequiredTable("main");
 
         Assert.Equal(DefaultServiceIdProvider.DefaultServiceId, context.ServiceId);
@@ -161,6 +190,13 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         Assert.Equal("Host=test;Database=mv;", context.ConnectionString);
         Assert.True(context.Entries.Count > 0);
         Assert.Equal("main", table.LogicalTable);
+        Assert.Equal(2, context.ViewVersion);
+        Assert.Equal(2, Assert.IsType<MvActiveEntry>(context.ActivePointer).ActiveVersion);
+        Assert.Equal("test_mv_v2_main", table.PhysicalTable);
+
+        var pinned = await accessor.GetPinnedAsync(callerVersionOne);
+        Assert.Equal(1, pinned.ViewVersion);
+        Assert.Null(pinned.ActivePointer);
     }
 
     [Fact]
@@ -227,6 +263,7 @@ public class MaterializedViewGrainTests : IAsyncLifetime
                         options.CatchUpStallThreshold = TimeSpan.FromMilliseconds(150);
                     });
                     services.AddMaterializedView<TestMaterializedViewProjector>();
+                    services.AddMaterializedView<TestMaterializedViewProjectorV2>();
                     services.AddSekibanDcbMaterializedViewOrleans(activateOnStartup: false);
                     services.AddSingleton<IMvRegistryStore>(SharedRegistry);
                     services.AddSingleton<IMvExecutor>(SharedExecutor);
@@ -306,6 +343,21 @@ public class MaterializedViewGrainTests : IAsyncLifetime
 
         public string ViewName => ViewNameConst;
         public int ViewVersion => 1;
+
+        public Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<MvSqlStatement>> ApplyToViewAsync(
+            Event ev,
+            IMvApplyContext ctx,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<MvSqlStatement>>([]);
+    }
+
+    private sealed class TestMaterializedViewProjectorV2 : IMaterializedViewProjector
+    {
+        public string ViewName => TestMaterializedViewProjector.ViewNameConst;
+        public int ViewVersion => 2;
 
         public Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;

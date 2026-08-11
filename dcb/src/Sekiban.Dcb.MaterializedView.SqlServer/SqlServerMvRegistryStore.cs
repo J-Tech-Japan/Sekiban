@@ -4,7 +4,7 @@ using Microsoft.Data.SqlClient;
 
 namespace Sekiban.Dcb.MaterializedView.SqlServer;
 
-public sealed class SqlServerMvRegistryStore : IMvRegistryStore
+public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistryStoreBase<SqlConnection>, IMvRegistryStore
 {
     private readonly string _connectionString;
 
@@ -54,6 +54,9 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
                     active_version INT NOT NULL,
                     active_generation BIGINT NOT NULL CONSTRAINT DF_sekiban_mv_active_generation DEFAULT 0,
                     activated_at DATETIMEOFFSET NOT NULL,
+                    switch_kind NVARCHAR(32) NOT NULL CONSTRAINT DF_sekiban_mv_active_switch_kind DEFAULT 'legacy',
+                    switch_reason NVARCHAR(1024) NULL,
+                    switched_at_utc DATETIMEOFFSET NULL,
                     CONSTRAINT PK_sekiban_mv_active PRIMARY KEY (service_id, view_name)
                 );
             END;
@@ -70,6 +73,12 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
         const string activeGenerationMigrationSql = """
             IF COL_LENGTH(N'sekiban_mv_active', N'active_generation') IS NULL
                 ALTER TABLE sekiban_mv_active ADD active_generation BIGINT NOT NULL CONSTRAINT DF_sekiban_mv_active_generation DEFAULT 0;
+            IF COL_LENGTH(N'sekiban_mv_active', N'switch_kind') IS NULL
+                ALTER TABLE sekiban_mv_active ADD switch_kind NVARCHAR(32) NOT NULL CONSTRAINT DF_sekiban_mv_active_switch_kind DEFAULT 'legacy';
+            IF COL_LENGTH(N'sekiban_mv_active', N'switch_reason') IS NULL
+                ALTER TABLE sekiban_mv_active ADD switch_reason NVARCHAR(1024) NULL;
+            IF COL_LENGTH(N'sekiban_mv_active', N'switched_at_utc') IS NULL
+                ALTER TABLE sekiban_mv_active ADD switched_at_utc DATETIMEOFFSET NULL;
             """;
         await connection.ExecuteAsync(new CommandDefinition(activeGenerationMigrationSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
@@ -397,7 +406,10 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
                    view_name AS ViewName,
                    active_version AS ActiveVersion,
                    active_generation AS Generation,
-                   activated_at AS ActivatedAt
+                   activated_at AS ActivatedAt,
+                   switch_kind AS SwitchKind,
+                   switch_reason AS SwitchReason,
+                   switched_at_utc AS SwitchedAtUtc
             FROM sekiban_mv_active
             WHERE service_id = @ServiceId
               AND view_name = @ViewName;
@@ -422,14 +434,19 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
             UPDATE sekiban_mv_active WITH (UPDLOCK, HOLDLOCK)
             SET active_version = @ActiveVersion,
                 active_generation = active_generation + 1,
-                activated_at = SYSUTCDATETIME()
+                activated_at = SYSUTCDATETIME(),
+                switch_kind = 'legacy',
+                switch_reason = NULL,
+                switched_at_utc = SYSUTCDATETIME()
             WHERE service_id = @ServiceId
               AND view_name = @ViewName;
 
             IF @@ROWCOUNT = 0
             BEGIN
-                INSERT INTO sekiban_mv_active (service_id, view_name, active_version, active_generation, activated_at)
-                VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, SYSUTCDATETIME());
+                INSERT INTO sekiban_mv_active (
+                    service_id, view_name, active_version, active_generation, activated_at,
+                    switch_kind, switch_reason, switched_at_utc)
+                VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, SYSUTCDATETIME(), 'legacy', NULL, SYSUTCDATETIME());
             END;
             """;
 
@@ -509,6 +526,7 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
             request.ExpectedActiveGeneration,
             request.CandidateCount,
             ExpectedStatus = request.ExpectedStatus.ToString().ToLowerInvariant(),
+            SwitchKind = request.SwitchKind.ToString().ToLowerInvariant(),
             request.ExpectedCurrentCheckpointTruth,
             request.ExpectedTargetCheckpointTruth
         };
@@ -530,7 +548,10 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
             UPDATE sekiban_mv_active WITH (UPDLOCK, HOLDLOCK)
             SET active_version = @ViewVersion,
                 active_generation = active_generation + 1,
-                activated_at = SYSUTCDATETIME()
+                activated_at = SYSUTCDATETIME(),
+                switch_kind = @SwitchKind,
+                switch_reason = NULL,
+                switched_at_utc = SYSUTCDATETIME()
             WHERE service_id = @ServiceId
               AND view_name = @ViewName
               AND active_version = @ExpectedActiveVersion
@@ -549,8 +570,9 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
                )
             BEGIN
                 INSERT INTO sekiban_mv_active (
-                    service_id, view_name, active_version, active_generation, activated_at)
-                VALUES (@ServiceId, @ViewName, @ViewVersion, 1, SYSUTCDATETIME());
+                    service_id, view_name, active_version, active_generation, activated_at,
+                    switch_kind, switch_reason, switched_at_utc)
+                VALUES (@ServiceId, @ViewName, @ViewVersion, 1, SYSUTCDATETIME(), @SwitchKind, NULL, SYSUTCDATETIME());
                 IF @@ROWCOUNT = 1
                     SET @changed = 1;
             END;
@@ -564,6 +586,17 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
         {
             return CandidateSnapshotChanged();
         }
+
+        const string markPreviousReadySql = """
+            UPDATE sekiban_mv_registry
+            SET status = 'ready', last_updated = SYSUTCDATETIME()
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ExpectedActiveVersion
+              AND @ExpectedActiveVersion IS NOT NULL;
+            """;
+        await transaction.Connection!.ExecuteAsync(
+            new CommandDefinition(markPreviousReadySql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         const string markActiveSql = """
             UPDATE sekiban_mv_registry
@@ -720,8 +753,16 @@ public sealed class SqlServerMvRegistryStore : IMvRegistryStore
             ReadRequiredInt(row, "ActiveVersion"),
             ReadRequiredDateTimeOffset(row, "ActivatedAt"))
         {
-            Generation = ReadRequiredLong(row, "Generation")
+            Generation = ReadRequiredLong(row, "Generation"),
+            SwitchKind = ReadSwitchKind(row),
+            SwitchReason = ReadNullableString(row, "SwitchReason"),
+            SwitchedAtUtc = ReadNullableDateTimeOffset(row, "SwitchedAtUtc")
         };
+
+    private static MvSwitchKind ReadSwitchKind(IReadOnlyDictionary<string, object?> row) =>
+        Enum.TryParse<MvSwitchKind>(ReadNullableString(row, "SwitchKind"), true, out var kind)
+            ? kind
+            : MvSwitchKind.Legacy;
 
     private static IReadOnlyDictionary<string, object?> ToDictionary(object row)
     {

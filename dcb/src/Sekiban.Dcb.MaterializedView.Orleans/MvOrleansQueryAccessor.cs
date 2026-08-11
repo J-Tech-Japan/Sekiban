@@ -17,6 +17,7 @@ public sealed class MvOrleansQueryContext
         ConnectionString = connectionString;
         Grain = grain;
         Entries = entries;
+        ViewVersion = entries.FirstOrDefault()?.ViewVersion;
     }
 
     public string ServiceId { get; }
@@ -24,6 +25,8 @@ public sealed class MvOrleansQueryContext
     public string ConnectionString { get; }
     public IMaterializedViewGrain Grain { get; }
     public IReadOnlyList<MvRegistryEntry> Entries { get; }
+    public int? ViewVersion { get; }
+    public MvActiveEntry? ActivePointer { get; init; }
 
     public MvRegistryEntry GetRequiredTable(string logicalTable)
     {
@@ -44,6 +47,13 @@ public interface IMvOrleansQueryAccessor
         IMaterializedViewProjector projector,
         string? serviceId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Explicit version-pinned diagnostics. Ordinary reads must use <see cref="GetAsync"/>.</summary>
+    Task<MvOrleansQueryContext> GetPinnedAsync(
+        IMaterializedViewProjector projector,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This accessor does not support explicit version-pinned diagnostics.");
 }
 
 public sealed class MvOrleansQueryAccessor : IMvOrleansQueryAccessor
@@ -74,16 +84,52 @@ public sealed class MvOrleansQueryAccessor : IMvOrleansQueryAccessor
             ? _serviceIdProvider.GetCurrentServiceId()
             : serviceId;
 
-        var grainKey = MvGrainKey.Build(serviceId, projector.ViewName, projector.ViewVersion);
+        var active = await _registryStore.GetActiveAsync(serviceId, projector.ViewName, cancellationToken).ConfigureAwait(false) ??
+            throw new InvalidOperationException($"Materialized view '{projector.ViewName}' has no active generation.");
+        var entries = await _registryStore.GetEntriesAsync(
+            serviceId,
+            projector.ViewName,
+            active.ActiveVersion,
+            cancellationToken).ConfigureAwait(false);
+        if (entries.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Active materialized view '{projector.ViewName}' version {active.ActiveVersion} does not exist.");
+        }
+
+        var grainKey = MvGrainKey.Build(serviceId, projector.ViewName, active.ActiveVersion);
         var grain = _client.GetGrain<IMaterializedViewGrain>(grainKey);
         await grain.EnsureStartedAsync().ConfigureAwait(false);
 
+        var storageInfo = _storageInfoProvider.GetStorageInfo();
+        return new MvOrleansQueryContext(serviceId, storageInfo.DatabaseType, storageInfo.ConnectionString, grain, entries)
+        {
+            ActivePointer = active
+        };
+    }
+
+    public async Task<MvOrleansQueryContext> GetPinnedAsync(
+        IMaterializedViewProjector projector,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default)
+    {
+        serviceId = string.IsNullOrWhiteSpace(serviceId)
+            ? _serviceIdProvider.GetCurrentServiceId()
+            : serviceId;
         var entries = await _registryStore.GetEntriesAsync(
             serviceId,
             projector.ViewName,
             projector.ViewVersion,
             cancellationToken).ConfigureAwait(false);
+        if (entries.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Pinned materialized view '{projector.ViewName}' version {projector.ViewVersion} does not exist.");
+        }
 
+        var grain = _client.GetGrain<IMaterializedViewGrain>(
+            MvGrainKey.Build(serviceId, projector.ViewName, projector.ViewVersion));
+        await grain.EnsureStartedAsync().ConfigureAwait(false);
         var storageInfo = _storageInfoProvider.GetStorageInfo();
         return new MvOrleansQueryContext(serviceId, storageInfo.DatabaseType, storageInfo.ConnectionString, grain, entries);
     }

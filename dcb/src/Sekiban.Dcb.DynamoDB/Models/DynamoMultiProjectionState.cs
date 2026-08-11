@@ -1,6 +1,5 @@
 using Amazon.DynamoDBv2.Model;
 using System.Globalization;
-using Sekiban.Dcb;
 using Sekiban.Dcb.MultiProjections;
 
 namespace Sekiban.Dcb.DynamoDB.Models;
@@ -152,6 +151,10 @@ public class DynamoMultiProjectionState
     /// <summary>Secret-free status heartbeat fault summary.</summary>
     public string? FaultMessage { get; set; }
 
+    public string? SwitchKind { get; set; }
+    public string? SwitchReason { get; set; }
+    public DateTimeOffset? SwitchedAtUtc { get; set; }
+
     /// <summary>
     ///     Converts to DynamoDB attribute values.
     /// </summary>
@@ -203,6 +206,12 @@ public class DynamoMultiProjectionState
             item["isFaulted"] = new AttributeValue { BOOL = IsFaulted };
             if (!string.IsNullOrWhiteSpace(FaultMessage))
                 item["faultMessage"] = new AttributeValue { S = FaultMessage };
+            if (!string.IsNullOrWhiteSpace(SwitchKind))
+                item["switchKind"] = new AttributeValue { S = SwitchKind };
+            if (!string.IsNullOrWhiteSpace(SwitchReason))
+                item["switchReason"] = new AttributeValue { S = SwitchReason };
+            if (SwitchedAtUtc.HasValue)
+                item["switchedAtUtc"] = new AttributeValue { S = SwitchedAtUtc.Value.ToString("O") };
         }
 
         if (!string.IsNullOrEmpty(StateData))
@@ -261,7 +270,12 @@ public class DynamoMultiProjectionState
                 ? lease
                 : null,
             IsFaulted = item.GetValueOrDefault("isFaulted")?.BOOL ?? false,
-            FaultMessage = item.GetValueOrDefault("faultMessage")?.S
+            FaultMessage = item.GetValueOrDefault("faultMessage")?.S,
+            SwitchKind = item.GetValueOrDefault("switchKind")?.S,
+            SwitchReason = item.GetValueOrDefault("switchReason")?.S,
+            SwitchedAtUtc = DateTimeOffset.TryParse(item.GetValueOrDefault("switchedAtUtc")?.S, out var switchedAt)
+                ? switchedAt
+                : null
         };
     }
 
@@ -326,7 +340,10 @@ public class DynamoMultiProjectionState
             Phase = heartbeat.Phase,
             LeaseExpiresAtUtc = heartbeat.LeaseExpiresAtUtc,
             IsFaulted = heartbeat.IsFaulted,
-            FaultMessage = heartbeat.FaultMessage
+            FaultMessage = heartbeat.FaultMessage,
+            SwitchKind = heartbeat.SwitchKind,
+            SwitchReason = heartbeat.SwitchReason,
+            SwitchedAtUtc = heartbeat.SwitchedAtUtc
         };
     }
 
@@ -343,14 +360,17 @@ public class DynamoMultiProjectionState
             Sequence,
             AppliedEventCount,
             LastAppliedSortableUniqueId,
-        LastTraversedSortableUniqueId,
-        RecordedAtUtc ?? DateTimeOffset.UtcNow)
-    {
-        Phase = Phase ?? ProjectionStatusPhases.Unknown,
-        LeaseExpiresAtUtc = LeaseExpiresAtUtc,
-        IsFaulted = IsFaulted,
-        FaultMessage = FaultMessage
-    };
+            LastTraversedSortableUniqueId,
+            RecordedAtUtc ?? DateTimeOffset.UtcNow)
+        {
+            Phase = Phase ?? ProjectionStatusPhases.Unknown,
+            LeaseExpiresAtUtc = LeaseExpiresAtUtc,
+            IsFaulted = IsFaulted,
+            FaultMessage = FaultMessage,
+            SwitchKind = SwitchKind,
+            SwitchReason = SwitchReason,
+            SwitchedAtUtc = SwitchedAtUtc
+        };
 
     /// <summary>
     ///     Converts to a MultiProjectionStateRecord.

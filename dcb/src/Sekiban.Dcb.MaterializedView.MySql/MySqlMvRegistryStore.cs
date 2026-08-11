@@ -4,7 +4,7 @@ using MySqlConnector;
 
 namespace Sekiban.Dcb.MaterializedView.MySql;
 
-public sealed class MySqlMvRegistryStore : IMvRegistryStore
+public sealed partial class MySqlMvRegistryStore : MvForcedReverseRegistryStoreBase<MySqlConnection>, IMvRegistryStore
 {
     private readonly string _connectionString;
 
@@ -51,6 +51,9 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                 active_version INT NOT NULL,
                 active_generation BIGINT NOT NULL DEFAULT 0,
                 activated_at DATETIME(6) NOT NULL,
+                switch_kind VARCHAR(32) NOT NULL DEFAULT 'legacy',
+                switch_reason VARCHAR(1024) NULL,
+                switched_at_utc DATETIME(6) NULL,
                 PRIMARY KEY (service_id, view_name)
             );
             """;
@@ -93,7 +96,7 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                     FROM information_schema.columns
                     WHERE table_schema = DATABASE()
                       AND table_name = 'sekiban_mv_active'
-                      AND column_name = 'active_generation';
+                      AND column_name IN ('active_generation', 'switch_kind', 'switch_reason', 'switched_at_utc');
                     """,
                     cancellationToken: cancellationToken)))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -104,6 +107,27 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                         "ALTER TABLE sekiban_mv_active ADD COLUMN active_generation BIGINT NOT NULL DEFAULT 0;",
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+        }
+
+        if (!activeGenerationColumns.Contains("switch_kind"))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "ALTER TABLE sekiban_mv_active ADD COLUMN switch_kind VARCHAR(32) NOT NULL DEFAULT 'legacy';",
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+
+        if (!activeGenerationColumns.Contains("switch_reason"))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "ALTER TABLE sekiban_mv_active ADD COLUMN switch_reason VARCHAR(1024) NULL;",
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+
+        if (!activeGenerationColumns.Contains("switched_at_utc"))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "ALTER TABLE sekiban_mv_active ADD COLUMN switched_at_utc DATETIME(6) NULL;",
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
     }
 
@@ -416,7 +440,10 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
                    view_name AS ViewName,
                    active_version AS ActiveVersion,
                    active_generation AS Generation,
-                   activated_at AS ActivatedAt
+                   activated_at AS ActivatedAt,
+                   switch_kind AS SwitchKind,
+                   switch_reason AS SwitchReason,
+                   switched_at_utc AS SwitchedAtUtc
             FROM sekiban_mv_active
             WHERE service_id = @ServiceId
               AND view_name = @ViewName;
@@ -438,12 +465,17 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            INSERT INTO sekiban_mv_active (service_id, view_name, active_version, active_generation, activated_at)
-            VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, UTC_TIMESTAMP(6))
+            INSERT INTO sekiban_mv_active (
+                service_id, view_name, active_version, active_generation, activated_at,
+                switch_kind, switch_reason, switched_at_utc)
+            VALUES (@ServiceId, @ViewName, @ActiveVersion, 1, UTC_TIMESTAMP(6), 'legacy', NULL, UTC_TIMESTAMP(6))
             ON DUPLICATE KEY UPDATE
                 active_version = VALUES(active_version),
                 active_generation = active_generation + 1,
-                activated_at = VALUES(activated_at);
+                activated_at = VALUES(activated_at),
+                switch_kind = 'legacy',
+                switch_reason = NULL,
+                switched_at_utc = VALUES(switched_at_utc);
             """;
 
         await ExecuteAsync(
@@ -516,6 +548,7 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             request.ExpectedActiveGeneration,
             request.CandidateCount,
             ExpectedStatus = request.ExpectedStatus.ToString().ToLowerInvariant(),
+            SwitchKind = request.SwitchKind.ToString().ToLowerInvariant(),
             request.ExpectedCurrentCheckpointTruth,
             request.ExpectedTargetCheckpointTruth
         };
@@ -532,8 +565,9 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
 
         const string insertSql = """
             INSERT INTO sekiban_mv_active (
-                service_id, view_name, active_version, active_generation, activated_at)
-            SELECT @ServiceId, @ViewName, @ViewVersion, 1, UTC_TIMESTAMP(6)
+                service_id, view_name, active_version, active_generation, activated_at,
+                switch_kind, switch_reason, switched_at_utc)
+            SELECT @ServiceId, @ViewName, @ViewVersion, 1, UTC_TIMESTAMP(6), @SwitchKind, NULL, UTC_TIMESTAMP(6)
             WHERE @ExpectedActiveVersion IS NULL
               AND @ExpectedActiveGeneration = 0
             ON DUPLICATE KEY UPDATE active_version = active_version;
@@ -542,7 +576,10 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             UPDATE sekiban_mv_active
             SET active_version = @ViewVersion,
                 active_generation = active_generation + 1,
-                activated_at = UTC_TIMESTAMP(6)
+                activated_at = UTC_TIMESTAMP(6),
+                switch_kind = @SwitchKind,
+                switch_reason = NULL,
+                switched_at_utc = UTC_TIMESTAMP(6)
             WHERE service_id = @ServiceId
               AND view_name = @ViewName
               AND active_version = @ExpectedActiveVersion
@@ -555,6 +592,17 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
         {
             return CandidateSnapshotChanged();
         }
+
+        const string markPreviousReadySql = """
+            UPDATE sekiban_mv_registry
+            SET status = 'ready', last_updated = UTC_TIMESTAMP(6)
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ExpectedActiveVersion
+              AND @ExpectedActiveVersion IS NOT NULL;
+            """;
+        await transaction.Connection!.ExecuteAsync(
+            new CommandDefinition(markPreviousReadySql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         const string markActiveSql = """
             UPDATE sekiban_mv_registry
@@ -716,8 +764,16 @@ public sealed class MySqlMvRegistryStore : IMvRegistryStore
             ReadRequiredInt(row, "ActiveVersion"),
             ReadRequiredDateTimeOffset(row, "ActivatedAt"))
         {
-            Generation = ReadRequiredLong(row, "Generation")
+            Generation = ReadRequiredLong(row, "Generation"),
+            SwitchKind = ReadSwitchKind(row),
+            SwitchReason = ReadNullableString(row, "SwitchReason"),
+            SwitchedAtUtc = ReadNullableDateTimeOffset(row, "SwitchedAtUtc")
         };
+
+    private static MvSwitchKind ReadSwitchKind(IReadOnlyDictionary<string, object?> row) =>
+        Enum.TryParse<MvSwitchKind>(ReadNullableString(row, "SwitchKind"), true, out var kind)
+            ? kind
+            : MvSwitchKind.Legacy;
 
     private static IReadOnlyDictionary<string, object?> ToDictionary(object row)
     {
