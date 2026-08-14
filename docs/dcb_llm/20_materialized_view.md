@@ -268,9 +268,15 @@ refresh, activation, and event-apply paths cannot call a mutating registry API; 
 fallback. The executor and Orleans grain also avoid normal projector initialization, subscriptions, refresh timers, and
 write-oriented registry connections in this mode. The dedicated inspector owns its read-only route: SQLite opens with
 `Mode=ReadOnly`, PostgreSQL uses `default_transaction_read_only=on`, MySQL starts a read-only transaction session, and
-SQL Server requests `ApplicationIntent=ReadOnly`. Registry entries, the active pointer, and catalog metadata are read
-through that inspector only. The provider catalog allowlist is read-only; SQLite metadata uses table-valued PRAGMA
-catalog functions rather than mutating PRAGMA statements.
+SQL Server uses an explicit inspection principal. Registry entries, the active pointer, and catalog metadata are read
+through that inspector only. SQL Server does not use `ApplicationIntent=ReadOnly` as an enforcement mechanism on a
+standalone instance: configure `MvOptions.SqlServerInspectionConnectionString` with a distinct least-privilege
+inspection principal (for example, a database user in `db_datareader` with no DML or DDL permissions plus the
+non-writing catalog metadata visibility needed by the contract, such as database `VIEW DEFINITION`). Verify-only
+fails with a typed `UnsupportedProviderCapability` failure before catalog inspection when that capability is absent or
+cannot be established. The provider catalog allowlist is read-only; SQLite metadata uses table-valued PRAGMA catalog
+functions rather than mutating PRAGMA statements, and derives declared lengths/precision/scale and generated
+expressions where SQLite exposes them.
 
 Projectors that support verify-only initialization describe their target schema with the additive, format-versioned
 `MvSchemaContract`/`IMvSchemaRequirementsProvider` contract (format version `1`):

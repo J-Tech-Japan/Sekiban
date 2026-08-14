@@ -474,7 +474,10 @@ semantics は互換のままです。
 `MvInitializationMode.VerifyOnly` は BYO database 用の明示的な経路です。version 付きの宣言的 schema contract と事前に
 用意した registry binding を read-only provider inspector で検証します。infrastructure ensure、projector 初期化、fallback DDL、
 registry row の自動 seed は行いません。4 provider の inspector は catalog read を使い、SQLite verifier は read-only metadata 経路で
-通常の session PRAGMA を実行しません。
+通常の session PRAGMA を実行しません。SQL Server は `MvOptions.SqlServerInspectionConnectionString` に独立した最小権限の
+inspection principal を要求します。DML/DDL の write permission を持たず、`VIEW DEFINITION` など契約に必要な非書込み
+metadata visibility を確立できない場合は、catalog read 前に `UnsupportedProviderCapability` の型付き failure を返します。
+standalone instance の強制能力として `ApplicationIntent=ReadOnly` は使いません。
 
 `MvSqlStatementPolicyMode.Enforced` は opt-in です。initialization/apply batch の全件を provider 実行前に preflight し、rows・single-row・
 scalar query port も gate します。projector への raw connection / transaction 公開を止めますが、`Legacy` は互換既定値のままです。

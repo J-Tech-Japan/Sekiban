@@ -1,7 +1,9 @@
 using System.Data;
+using System.Data.Common;
 using System.Text.RegularExpressions;
 using Dapper;
 using Dcb.Domain.WithoutResult.Weather;
+using Microsoft.Data.SqlClient;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -1105,6 +1107,10 @@ public sealed class PostgresMvVerifyOnlyTests(PostgresMvFixture fixture)
     [SkippableFact]
     public Task VerifyOnly_UsesTheCommonContractAgainstTheRealStore() =>
         MvVerifyOnlyAssertions.AssertCommonContractAsync(fixture);
+
+    [SkippableFact]
+    public Task SchemaContractMatrix_UsesTheProductionInspector() =>
+        MvSchemaMatrixAssertions.AssertAsync(fixture);
 }
 
 [Collection(nameof(MySqlMvCollection))]
@@ -1113,6 +1119,10 @@ public sealed class MySqlMvVerifyOnlyTests(MySqlMvFixture fixture)
     [SkippableFact]
     public Task VerifyOnly_UsesTheCommonContractAgainstTheRealStore() =>
         MvVerifyOnlyAssertions.AssertCommonContractAsync(fixture);
+
+    [SkippableFact]
+    public Task SchemaContractMatrix_UsesTheProductionInspector() =>
+        MvSchemaMatrixAssertions.AssertAsync(fixture);
 }
 
 [Collection(nameof(SqlServerMvCollection))]
@@ -1121,6 +1131,339 @@ public sealed class SqlServerMvVerifyOnlyTests(SqlServerMvFixture fixture)
     [SkippableFact]
     public Task VerifyOnly_UsesTheCommonContractAgainstTheRealStore() =>
         MvVerifyOnlyAssertions.AssertCommonContractAsync(fixture);
+
+    [SkippableFact]
+    public Task SchemaContractMatrix_UsesTheProductionInspector() =>
+        MvSchemaMatrixAssertions.AssertAsync(fixture);
+
+    [SkippableFact]
+    public async Task VerifyOnlyUsesRestrictedPrincipalAndRejectsRealDml()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "SQL Server fixture is unavailable.");
+        var inspectionConnectionString = fixture.InspectionConnectionStringForTests;
+        Skip.If(string.IsNullOrWhiteSpace(inspectionConnectionString), "SQL Server inspection principal is unavailable.");
+
+        await fixture.ResetAsync().ConfigureAwait(false);
+        var projector = fixture.Services.GetRequiredService<CrossProviderWeatherForecastMvV1>();
+        var host = new NativeMvApplyHost(projector, fixture.DomainTypes.EventTypes, fixture.DatabaseTypeForTests);
+        await fixture.Executor.InitializeAsync(host).ConfigureAwait(false);
+
+        await using var inspectionConnection = new SqlConnection(inspectionConnectionString);
+        await inspectionConnection.OpenAsync().ConfigureAwait(false);
+        var before = await inspectionConnection.ExecuteScalarAsync<int>(
+                $"SELECT COUNT(*) FROM [{projector.Forecasts.PhysicalName}];")
+            .ConfigureAwait(false);
+        var dmlException = await Assert.ThrowsAsync<SqlException>(async () =>
+            await inspectionConnection.ExecuteAsync(
+                    $"INSERT INTO [{projector.Forecasts.PhysicalName}] (forecast_id, location, forecast_date, temperature_c, summary, is_deleted, _last_sortable_unique_id, _last_applied_at) VALUES ('readonly-probe', 'blocked', SYSUTCDATETIME(), 1, NULL, 0, 'readonly-probe', SYSUTCDATETIME());")
+                .ConfigureAwait(false));
+        Assert.Contains(dmlException.Errors.Cast<SqlError>(), error => error.Number == 229);
+        var after = await inspectionConnection.ExecuteScalarAsync<int>(
+                $"SELECT COUNT(*) FROM [{projector.Forecasts.PhysicalName}];")
+            .ConfigureAwait(false);
+        Assert.Equal(before, after);
+
+        var options = new MvOptions();
+        var bindings = new MvTableBindings(projector.ViewName, projector.ViewVersion, options);
+        IReadOnlyList<MvSchemaTableRequirement> requirements =
+        [
+            .. MvSchemaRequirements.RegistryTables(),
+            .. projector.GetSchemaRequirements(MvDbType.SqlServer, bindings)
+        ];
+        var inspector = new SqlServerMvRegistryStore(
+            fixture.ConnectionStringForTests,
+            null,
+            null,
+            inspectionConnectionString);
+        var verification = await inspector.VerifySchemaAsync(requirements).ConfigureAwait(false);
+        Assert.True(verification.IsCompatible, verification.Failure?.Message);
+        var entries = await inspector.ReadRegistryEntriesAsync(
+                MultiProviderFixtureBase.ServiceId,
+                projector.ViewName,
+                projector.ViewVersion)
+            .ConfigureAwait(false);
+        Assert.NotEmpty(entries);
+    }
+}
+
+[Collection(nameof(SqliteMvCollection))]
+public sealed class SqliteMvSchemaMatrixTests(SqliteMvFixture fixture)
+{
+    [SkippableFact]
+    public Task SchemaContractMatrix_UsesTheProductionInspector() =>
+        MvSchemaMatrixAssertions.AssertAsync(fixture);
+}
+
+internal static class MvSchemaMatrixAssertions
+{
+    public static async Task AssertAsync(MultiProviderFixtureBase fixture)
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Provider fixture is unavailable.");
+        await fixture.ResetAsync().ConfigureAwait(false);
+
+        var tableName = $"sekiban_mv_schema_matrix_{Guid.NewGuid():N}";
+        try
+        {
+            await CreateSchemaAsync(fixture, tableName).ConfigureAwait(false);
+            var inspector = fixture.Services.GetRequiredService<IMvRegistryStore>() as IMvReadOnlyMvInspector;
+            Assert.NotNull(inspector);
+            var defaultSql = await ReadDefaultSqlAsync(fixture, tableName).ConfigureAwait(false);
+            var generationExpression = await ReadGenerationExpressionAsync(fixture, tableName).ConfigureAwait(false);
+            var requirement = CreateRequirement(
+                fixture.DatabaseTypeForTests,
+                tableName,
+                defaultSql,
+                generationExpression);
+
+            var compatible = await inspector.VerifySchemaAsync([requirement]).ConfigureAwait(false);
+            Assert.True(compatible.IsCompatible, compatible.Failure?.Message);
+
+            if (fixture.DatabaseTypeForTests == MvDbType.Sqlite)
+            {
+                var unsupported = await inspector.VerifySchemaAsync(
+                        [
+                            new MvSchemaTableRequirement(
+                                "schema_matrix",
+                                tableName,
+                                [
+                                    new("id", MvSchemaTypeFamily.Integer, false),
+                                    new("unbounded_value", MvSchemaTypeFamily.String, false) { MaxLength = 3 }
+                                ],
+                                ["id"])
+                        ])
+                    .ConfigureAwait(false);
+                Assert.False(unsupported.IsCompatible);
+                Assert.Equal(
+                    MvInitializationFailureReason.UnsupportedProviderCapability,
+                    unsupported.Failure?.Reason);
+                Assert.Contains("declared character or binary length", unsupported.Failure?.Message, StringComparison.Ordinal);
+            }
+
+            await AssertSingleMismatchAsync(
+                    inspector,
+                    requirement with
+                    {
+                        Columns = requirement.Columns
+                            .Select(column => column.Name == "base_value" ? column with { DefaultSql = "8" } : column)
+                            .ToList()
+                    },
+                    MvSchemaMismatchCode.DefaultMismatch)
+                .ConfigureAwait(false);
+            await AssertSingleMismatchAsync(
+                    inspector,
+                    requirement with
+                    {
+                        Indexes = [new MvSchemaIndexRequirement("ux_schema_matrix", ["amount_value", "width_value"], true)]
+                    },
+                    MvSchemaMismatchCode.RequiredIndexMissing)
+                .ConfigureAwait(false);
+            await AssertSingleMismatchAsync(
+                    inspector,
+                    requirement with
+                    {
+                        Columns = requirement.Columns
+                            .Select(column => column.Name == "generated_value" ? column with { IsGenerated = false } : column)
+                            .ToList()
+                    },
+                    MvSchemaMismatchCode.GeneratedSemanticsMismatch)
+                .ConfigureAwait(false);
+            await AssertSingleMismatchAsync(
+                    inspector,
+                    requirement with
+                    {
+                        Columns = requirement.Columns
+                            .Select(column => column.Name == "width_value" ? column with { MaxLength = 31 } : column)
+                            .ToList()
+                    },
+                    MvSchemaMismatchCode.SizeMismatch)
+                .ConfigureAwait(false);
+            await AssertSingleMismatchAsync(
+                    inspector,
+                    requirement with
+                    {
+                        Columns = requirement.Columns
+                            .Select(column => column.Name == "amount_value" ? column with { Precision = 9 } : column)
+                            .ToList()
+                    },
+                    MvSchemaMismatchCode.PrecisionMismatch)
+                .ConfigureAwait(false);
+            await AssertSingleMismatchAsync(
+                    inspector,
+                    requirement with
+                    {
+                        Columns = requirement.Columns
+                            .Select(column => column.Name == "amount_value" ? column with { Scale = 1 } : column)
+                            .ToList()
+                    },
+                    MvSchemaMismatchCode.PrecisionMismatch)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            await DropSchemaAsync(fixture, tableName).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task AssertSingleMismatchAsync(
+        IMvReadOnlyMvInspector inspector,
+        MvSchemaTableRequirement requirement,
+        MvSchemaMismatchCode expectedCode)
+    {
+        var result = await inspector.VerifySchemaAsync([requirement]).ConfigureAwait(false);
+        Assert.False(result.IsCompatible);
+        Assert.Equal([expectedCode], result.Mismatches.Select(mismatch => mismatch.Code));
+        Assert.Equal([expectedCode], result.Failure?.Mismatches.Select(mismatch => mismatch.Code));
+    }
+
+    private static MvSchemaTableRequirement CreateRequirement(
+        MvDbType databaseType,
+        string tableName,
+        string defaultSql,
+        string generationExpression) =>
+        new(
+            "schema_matrix",
+            tableName,
+            [
+                new("id", MvSchemaTypeFamily.Integer, false),
+                new("base_value", MvSchemaTypeFamily.Integer, false) { DefaultSql = defaultSql },
+                new("width_value", MvSchemaTypeFamily.String, false) { MaxLength = 32 },
+                new("amount_value", MvSchemaTypeFamily.Decimal, false) { Precision = 10, Scale = 2 },
+                new("generated_value", MvSchemaTypeFamily.Integer, databaseType != MvDbType.SqlServer)
+                {
+                    IsGenerated = true,
+                    GenerationExpression = generationExpression
+                }
+            ],
+            ["id"])
+        {
+            Indexes = [new MvSchemaIndexRequirement("ux_schema_matrix", ["width_value", "amount_value"], true)]
+        };
+
+    private static async Task CreateSchemaAsync(MultiProviderFixtureBase fixture, string tableName)
+    {
+        var table = QuoteIdentifier(fixture.DatabaseTypeForTests, tableName);
+        var index = QuoteIdentifier(fixture.DatabaseTypeForTests, $"ux_{tableName}");
+        var sql = fixture.DatabaseTypeForTests switch
+        {
+            MvDbType.Postgres => $"""
+                CREATE TABLE {table} (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    base_value INTEGER NOT NULL DEFAULT 7,
+                    width_value VARCHAR(32) NOT NULL,
+                    amount_value DECIMAL(10, 2) NOT NULL,
+                    generated_value INTEGER GENERATED ALWAYS AS (7) STORED
+                );
+                CREATE UNIQUE INDEX {index} ON {table} (width_value, amount_value);
+                """,
+            MvDbType.MySql => $"""
+                CREATE TABLE {table} (
+                    id INT NOT NULL PRIMARY KEY,
+                    base_value INT NOT NULL DEFAULT 7,
+                    width_value VARCHAR(32) NOT NULL,
+                    amount_value DECIMAL(10, 2) NOT NULL,
+                    generated_value INT GENERATED ALWAYS AS (7) STORED
+                );
+                CREATE UNIQUE INDEX {index} ON {table} (width_value, amount_value);
+                """,
+            MvDbType.SqlServer => $"""
+                CREATE TABLE {table} (
+                    id INT NOT NULL PRIMARY KEY,
+                    base_value INT NOT NULL CONSTRAINT {QuoteIdentifier(fixture.DatabaseTypeForTests, $"df_{tableName}")} DEFAULT 7,
+                    width_value VARCHAR(32) NOT NULL,
+                    amount_value DECIMAL(10, 2) NOT NULL,
+                    generated_value AS (7) PERSISTED
+                );
+                CREATE UNIQUE INDEX {index} ON {table} (width_value, amount_value);
+                """,
+            MvDbType.Sqlite => $"""
+                CREATE TABLE {table} (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    base_value INTEGER NOT NULL DEFAULT 7,
+                    width_value VARCHAR(32) NOT NULL,
+                    amount_value DECIMAL(10, 2) NOT NULL,
+                    unbounded_value TEXT NOT NULL,
+                    generated_value INTEGER GENERATED ALWAYS AS (7) STORED
+                );
+                CREATE UNIQUE INDEX {index} ON {table} (width_value, amount_value);
+                """,
+            _ => throw new NotSupportedException()
+        };
+        await using var connection = await fixture.OpenConnectionAsync().ConfigureAwait(false);
+        await connection.ExecuteAsync(sql).ConfigureAwait(false);
+    }
+
+    private static async Task<string> ReadDefaultSqlAsync(MultiProviderFixtureBase fixture, string tableName)
+    {
+        var sql = fixture.DatabaseTypeForTests switch
+        {
+            MvDbType.Postgres => "SELECT column_default FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = @TableName AND column_name = 'base_value';",
+            MvDbType.MySql => "SELECT column_default FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = @TableName AND column_name = 'base_value';",
+            MvDbType.SqlServer => "SELECT '7';",
+            MvDbType.Sqlite => "SELECT dflt_value FROM pragma_table_info(@TableName) WHERE name = 'base_value';",
+            _ => throw new NotSupportedException()
+        };
+        await using var connection = await OpenCatalogConnectionAsync(fixture).ConfigureAwait(false);
+        return await connection.ExecuteScalarAsync<string?>(sql, new { TableName = tableName }).ConfigureAwait(false) ??
+            throw new InvalidOperationException($"Schema matrix default metadata was not found for '{tableName}'.");
+    }
+
+    private static async Task<string> ReadGenerationExpressionAsync(
+        MultiProviderFixtureBase fixture,
+        string tableName)
+    {
+        var sql = fixture.DatabaseTypeForTests switch
+        {
+            MvDbType.Postgres => "SELECT generation_expression FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = @TableName AND column_name = 'generated_value';",
+            MvDbType.MySql => "SELECT generation_expression FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = @TableName AND column_name = 'generated_value';",
+            MvDbType.SqlServer => "SELECT '7';",
+            MvDbType.Sqlite => "SELECT '7';",
+            _ => throw new NotSupportedException()
+        };
+        await using var connection = await OpenCatalogConnectionAsync(fixture).ConfigureAwait(false);
+        return await connection.ExecuteScalarAsync<string?>(sql, new { TableName = tableName }).ConfigureAwait(false) ??
+            throw new InvalidOperationException($"Schema matrix generated metadata was not found for '{tableName}'.");
+    }
+
+    private static async Task<DbConnection> OpenCatalogConnectionAsync(MultiProviderFixtureBase fixture)
+    {
+        if (fixture.DatabaseTypeForTests == MvDbType.SqlServer &&
+            !string.IsNullOrWhiteSpace(fixture.InspectionConnectionStringForTests))
+        {
+            var inspectionConnection = new SqlConnection(fixture.InspectionConnectionStringForTests);
+            await inspectionConnection.OpenAsync().ConfigureAwait(false);
+            return inspectionConnection;
+        }
+
+        return await fixture.OpenConnectionAsync().ConfigureAwait(false);
+    }
+
+    private static async Task DropSchemaAsync(MultiProviderFixtureBase fixture, string tableName)
+    {
+        if (!fixture.IsAvailable)
+        {
+            return;
+        }
+
+        var table = QuoteIdentifier(fixture.DatabaseTypeForTests, tableName);
+        var index = QuoteIdentifier(fixture.DatabaseTypeForTests, $"ux_{tableName}");
+        var sql = fixture.DatabaseTypeForTests switch
+        {
+            MvDbType.Postgres => $"DROP INDEX IF EXISTS {index}; DROP TABLE IF EXISTS {table};",
+            MvDbType.MySql => $"DROP TABLE IF EXISTS {table};",
+            MvDbType.SqlServer => $"IF OBJECT_ID(N'{tableName}', N'U') IS NOT NULL DROP TABLE {table};",
+            MvDbType.Sqlite => $"DROP TABLE IF EXISTS {table};",
+            _ => throw new NotSupportedException()
+        };
+        await using var connection = await fixture.OpenConnectionAsync().ConfigureAwait(false);
+        await connection.ExecuteAsync(sql).ConfigureAwait(false);
+    }
+
+    private static string QuoteIdentifier(MvDbType databaseType, string identifier) => databaseType switch
+    {
+        MvDbType.MySql => $"`{identifier}`",
+        MvDbType.SqlServer => $"[{identifier}]",
+        _ => $"\"{identifier}\""
+    };
 }
 
 internal static class MvVerifyOnlyAssertions
@@ -1204,7 +1547,11 @@ internal static class MvVerifyOnlyAssertions
                 connectionString),
             MvDbType.SqlServer => new SqlServerMvExecutor(
                 fixture.EventStoreFactory,
-                new SqlServerMvRegistryStore(connectionString, catalogCommandRecorder, readOnlyConnectionRecorder),
+                new SqlServerMvRegistryStore(
+                    connectionString,
+                    catalogCommandRecorder,
+                    readOnlyConnectionRecorder,
+                    fixture.InspectionConnectionStringForTests),
                 options,
                 NullLogger<SqlServerMvExecutor>.Instance,
                 connectionString),
@@ -1222,7 +1569,7 @@ internal static class MvVerifyOnlyAssertions
     {
         MvDbType.Postgres => "postgres:default_transaction_read_only=on",
         MvDbType.MySql => "mysql:transaction_read_only=on",
-        MvDbType.SqlServer => "sqlserver:ApplicationIntent=ReadOnly",
+        MvDbType.SqlServer => "sqlserver:restricted-inspection-principal",
         MvDbType.Sqlite => "sqlite:Mode=ReadOnly",
         _ => throw new ArgumentOutOfRangeException(nameof(databaseType))
     };

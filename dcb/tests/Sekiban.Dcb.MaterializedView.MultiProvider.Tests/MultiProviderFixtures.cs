@@ -309,6 +309,7 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
     // string (the unsafe-window MV harnesses wire their own initializer /
     // catch-up / promoter rather than going through IMvExecutor).
     public string ConnectionStringForTests => ConnectionString;
+    public virtual string? InspectionConnectionStringForTests => null;
 
     protected abstract MvDbType DatabaseType { get; }
     internal MvDbType DatabaseTypeForTests => DatabaseType;
@@ -602,6 +603,9 @@ public sealed class MySqlMvFixture : MultiProviderFixtureBase
 public sealed class SqlServerMvFixture : MultiProviderFixtureBase
 {
     private MsSqlContainer? _container;
+    private string? _inspectionLogin;
+    private string? _inspectionPassword;
+    private string? _inspectionConnectionString;
 
     protected override MvDbType DatabaseType => MvDbType.SqlServer;
 
@@ -611,8 +615,33 @@ public sealed class SqlServerMvFixture : MultiProviderFixtureBase
             .Build();
 
         await _container.StartAsync().ConfigureAwait(false);
-        return _container.GetConnectionString();
+        var connectionString = _container.GetConnectionString();
+        _inspectionLogin = $"mv_inspector_{Guid.NewGuid():N}";
+        _inspectionPassword = "SekibanInspector_9x!";
+        await using (var connection = new SqlConnection(connectionString))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            await connection.ExecuteAsync($"""
+                CREATE LOGIN [{_inspectionLogin}] WITH PASSWORD = '{_inspectionPassword}';
+                CREATE USER [{_inspectionLogin}] FOR LOGIN [{_inspectionLogin}];
+                ALTER ROLE db_datareader ADD MEMBER [{_inspectionLogin}];
+                GRANT VIEW DEFINITION TO [{_inspectionLogin}];
+                """).ConfigureAwait(false);
+        }
+
+        var builder = new SqlConnectionStringBuilder(connectionString)
+        {
+            UserID = _inspectionLogin,
+            Password = _inspectionPassword,
+            IntegratedSecurity = false,
+            ApplicationIntent = ApplicationIntent.ReadWrite,
+            Pooling = false
+        };
+        _inspectionConnectionString = builder.ConnectionString;
+        return connectionString;
     }
+
+    public override string? InspectionConnectionStringForTests => _inspectionConnectionString;
 
     protected override void RegisterProvider(IServiceCollection services, string connectionString)
     {
@@ -622,6 +651,7 @@ public sealed class SqlServerMvFixture : MultiProviderFixtureBase
             options.BatchSize = 100;
             options.SafeWindowMs = 0;
             options.PollInterval = TimeSpan.FromMilliseconds(10);
+            options.SqlServerInspectionConnectionString = _inspectionConnectionString;
         });
         services.AddSekibanDcbMaterializedViewSqlServer(connectionString, registerHostedWorker: false);
     }
@@ -683,6 +713,16 @@ public sealed class SqlServerMvFixture : MultiProviderFixtureBase
         await base.DisposeAsync().ConfigureAwait(false);
         if (_container is not null)
         {
+            if (_inspectionLogin is not null)
+            {
+                await using var connection = new SqlConnection(_container.GetConnectionString());
+                await connection.OpenAsync().ConfigureAwait(false);
+                await connection.ExecuteAsync($"""
+                    IF USER_ID(N'{_inspectionLogin}') IS NOT NULL DROP USER [{_inspectionLogin}];
+                    IF SUSER_ID(N'{_inspectionLogin}') IS NOT NULL DROP LOGIN [{_inspectionLogin}];
+                    """).ConfigureAwait(false);
+            }
+
             await _container.DisposeAsync().ConfigureAwait(false);
         }
     }

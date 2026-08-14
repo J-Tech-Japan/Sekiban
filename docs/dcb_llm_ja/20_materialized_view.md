@@ -269,9 +269,14 @@ VerifyOnly は schema gate 成功後も隔離されたままです。target chec
 activation、event apply の各経路から registry の mutating API へ到達せず、成功後の fallback write もありません。
 executor と Orleans Grain は、この mode では通常の projector 初期化、subscription、refresh timer、書込み用 registry 接続を開始しません。
 専用 inspector 自身が read-only 経路を選びます。SQLite は `Mode=ReadOnly`、PostgreSQL は
-`default_transaction_read_only=on`、MySQL は read-only transaction session、SQL Server は
-`ApplicationIntent=ReadOnly` を使用します。registry entry、active pointer、catalog metadata は inspector 経由だけで読み取り、
-provider の catalog allowlist は read-only です。SQLite の metadata は書込みを伴う PRAGMA ではなく table-valued PRAGMA catalog function を使います。
+`default_transaction_read_only=on`、MySQL は read-only transaction session を使用します。SQL Server は専用の
+inspection principal を使用し、standalone instance で `ApplicationIntent=ReadOnly` を強制能力として扱いません。
+`MvOptions.SqlServerInspectionConnectionString` に独立した最小権限の inspection principal（例えば DML/DDL 権限を
+持たない `db_datareader` 相当の database user と、`VIEW DEFINITION` など契約に必要な非書込み metadata 権限）を
+設定します。この capability が未設定または確立できない場合、catalog inspection 前に
+`UnsupportedProviderCapability` の型付き failure で停止します。registry entry、active pointer、catalog metadata は inspector
+経由だけで読み取り、provider の catalog allowlist は read-only です。SQLite の metadata は書込みを伴う PRAGMA ではなく
+table-valued PRAGMA catalog function を使い、取得可能な declared length、precision/scale、generated expression を導出します。
 
 verify-only に対応する projector は、format version `1` の追加された `MvSchemaContract` /
 `IMvSchemaRequirementsProvider` 契約で target schema を宣言します。

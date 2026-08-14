@@ -12,8 +12,18 @@ public sealed partial class SqlServerMvRegistryStore
     {
         try
         {
+            var capabilityFailure = await CheckInspectionCapabilityAsync(
+                    requirements
+                        .SelectMany(requirement => new[] { requirement.PhysicalTable, "sekiban_mv_registry", "sekiban_mv_active" }),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (capabilityFailure is not null)
+            {
+                return new MvSchemaVerificationResult(false, capabilityFailure);
+            }
+
             RecordReadOnlyConnection();
-            await using var connection = new SqlConnection(ReadOnlyConnectionString);
+            await using var connection = new SqlConnection(ReadOnlyConnectionString!);
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
             var tableNames = requirements
                 .Select(requirement => requirement.PhysicalTable)

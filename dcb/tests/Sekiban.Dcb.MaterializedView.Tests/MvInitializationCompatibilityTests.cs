@@ -24,6 +24,26 @@ public sealed class MvInitializationCompatibilityTests
     }
 
     [Fact]
+    public async Task SqlServerVerifyOnlyFailsClosedWithoutAnExplicitInspectionPrincipal()
+    {
+        var catalogCommands = new List<string>();
+        var store = new SqlServerMvRegistryStore("Server=unused;Database=unused", catalogCommands.Add);
+        var result = await store.VerifySchemaAsync(
+                [
+                    new MvSchemaTableRequirement(
+                        "orders",
+                        "orders_table",
+                        [new("id", MvSchemaTypeFamily.Integer, false)],
+                        ["id"])
+                ]);
+
+        Assert.False(result.IsCompatible);
+        Assert.Equal(MvInitializationFailureReason.UnsupportedProviderCapability, result.Failure?.Reason);
+        Assert.Contains("explicit least-privilege", result.Failure?.Message, StringComparison.Ordinal);
+        Assert.Empty(catalogCommands);
+    }
+
+    [Fact]
     public void LegacyApplyHostGetsAnEmptyAdditiveSchemaContract()
     {
         var host = new LegacyHost();

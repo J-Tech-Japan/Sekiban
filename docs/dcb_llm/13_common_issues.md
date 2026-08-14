@@ -516,7 +516,12 @@ the 30-digit format, and random-suffix semantics remain compatible.
 `MvInitializationMode.VerifyOnly` is the explicit BYO-database path. It verifies a versioned declarative schema contract
 and pre-provisioned registry bindings through a read-only provider inspector. It never ensures infrastructure, invokes
 projector initialization, executes fallback DDL, or seeds registry rows. The four provider inspectors use catalog reads;
-the SQLite verifier uses a read-only metadata path and does not run the normal session PRAGMAs.
+the SQLite verifier uses a read-only metadata path and does not run the normal session PRAGMAs. SQL Server requires
+`MvOptions.SqlServerInspectionConnectionString` to name a distinct least-privilege inspection principal; it must have
+no database/object write permission and enough non-writing catalog metadata visibility (such as database `VIEW
+DEFINITION`) for the schema contract. Verify-only returns typed `UnsupportedProviderCapability` before catalog reads
+when that principal is absent or cannot establish the capability. `ApplicationIntent=ReadOnly` is not used as a
+standalone-instance enforcement mechanism.
 
 `MvSqlStatementPolicyMode.Enforced` is opt-in. It preflights every initialization/apply batch and gates rows, single-row,
 and scalar query ports before provider execution. It removes raw connection/transaction access from the projector while

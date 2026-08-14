@@ -82,6 +82,16 @@ public sealed class MvOptions
     ///     evaluated before execution through a non-raw policy port.
     /// </summary>
     public MvSqlStatementPolicyMode SqlStatementPolicyMode { get; set; } = MvSqlStatementPolicyMode.Legacy;
+
+    /// <summary>
+    ///     Explicit least-privilege SQL Server connection used by the verify-only catalog inspector. The ordinary
+    ///     provider connection remains the writable connection used by legacy/create-and-ensure execution. SQL Server
+    ///     cannot enforce read-only access with ApplicationIntent on a standalone instance, so the principal must
+    ///     have no database/object DML or DDL permissions and enough catalog metadata visibility (for example,
+    ///     database VIEW DEFINITION) for the declared contract. Verify-only fails closed when this restricted
+    ///     inspection capability is not configured or cannot be established.
+    /// </summary>
+    public string? SqlServerInspectionConnectionString { get; set; }
 }
 
 public static class MvSchemaHelper

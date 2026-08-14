@@ -62,14 +62,26 @@ public sealed partial class PostgresMvRegistryStore
             var indexes = await connection.QueryAsync<PostgresSchemaIndex>(
                     CatalogCommand(
                         """
-                        SELECT tablename AS TableName,
-                               indexname AS Name,
-                               indexdef LIKE '%UNIQUE INDEX%' AS IsUnique,
-                               regexp_replace(indexdef, '^.*\\((.*)\\).*$', '\\1') AS ColumnList
-                        FROM pg_indexes
-                        WHERE schemaname = current_schema()
-                          AND tablename = ANY(@TableNames)
-                          AND indexdef NOT LIKE '%PRIMARY KEY%';
+                        SELECT tables.relname AS TableName,
+                               indexes.relname AS Name,
+                               index_metadata.indisunique AS IsUnique,
+                               string_agg(columns.attname, ',' ORDER BY key_columns.ordinality) AS ColumnList
+                        FROM pg_class AS tables
+                        INNER JOIN pg_namespace AS schemas
+                            ON schemas.oid = tables.relnamespace
+                           AND schemas.nspname = current_schema()
+                        INNER JOIN pg_index AS index_metadata
+                            ON index_metadata.indrelid = tables.oid
+                           AND index_metadata.indisprimary = FALSE
+                        INNER JOIN pg_class AS indexes
+                            ON indexes.oid = index_metadata.indexrelid
+                        CROSS JOIN LATERAL unnest(index_metadata.indkey) WITH ORDINALITY AS key_columns(attnum, ordinality)
+                        INNER JOIN pg_attribute AS columns
+                            ON columns.attrelid = tables.oid
+                           AND columns.attnum = key_columns.attnum
+                        WHERE tables.relkind = 'r'
+                          AND tables.relname = ANY(@TableNames)
+                        GROUP BY tables.relname, indexes.relname, index_metadata.indisunique;
                         """,
                         new { TableNames = tableNames },
                         cancellationToken: cancellationToken))
