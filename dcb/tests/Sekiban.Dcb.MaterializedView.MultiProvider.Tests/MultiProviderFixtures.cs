@@ -27,12 +27,32 @@ using Xunit;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
-public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjector
+public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjector, IMvSchemaRequirementsProvider
 {
     public string ViewName => "WeatherForecastPortable";
     public int ViewVersion => 1;
 
     public MvTable Forecasts { get; private set; } = default!;
+
+    public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
+        MvDbType databaseType,
+        IMvTableBindings tables) =>
+    [
+        new MvSchemaTableRequirement(
+            "forecasts",
+            tables.GetPhysicalName("forecasts"),
+            [
+                new("forecast_id", MvSchemaTypeFamily.String, false),
+                new("location", MvSchemaTypeFamily.String, false),
+                new("forecast_date", MvSchemaTypeFamily.DateTime, false),
+                new("temperature_c", MvSchemaTypeFamily.Integer, false),
+                new("summary", MvSchemaTypeFamily.String, true),
+                new("is_deleted", MvSchemaTypeFamily.Boolean, false),
+                new("_last_sortable_unique_id", MvSchemaTypeFamily.String, false),
+                new("_last_applied_at", MvSchemaTypeFamily.DateTime, false)
+            ],
+            ["forecast_id"])
+    ];
 
     public async Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default)
     {
@@ -77,6 +97,21 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
 
         return new MvSqlStatement(dbType switch
         {
+            MvDbType.Postgres => $"""
+                INSERT INTO {Forecasts.PhysicalName}
+                    (forecast_id, location, forecast_date, temperature_c, summary, is_deleted, _last_sortable_unique_id, _last_applied_at)
+                VALUES
+                    (@ForecastId, @Location, @ForecastDate, @TemperatureC, @Summary, @IsDeleted, @SortableUniqueId, CURRENT_TIMESTAMP)
+                ON CONFLICT (forecast_id) DO UPDATE SET
+                    location = EXCLUDED.location,
+                    forecast_date = EXCLUDED.forecast_date,
+                    temperature_c = EXCLUDED.temperature_c,
+                    summary = EXCLUDED.summary,
+                    is_deleted = EXCLUDED.is_deleted,
+                    _last_sortable_unique_id = EXCLUDED._last_sortable_unique_id,
+                    _last_applied_at = CURRENT_TIMESTAMP
+                WHERE {Forecasts.PhysicalName}._last_sortable_unique_id < EXCLUDED._last_sortable_unique_id;
+                """,
             MvDbType.SqlServer => $"""
                 MERGE {Forecasts.PhysicalName} AS target
                 USING (
@@ -139,6 +174,18 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
     private static string CreateTableSql(MvDbType dbType, string tableName) =>
         dbType switch
         {
+            MvDbType.Postgres => $"""
+                CREATE TABLE IF NOT EXISTS {tableName} (
+                    forecast_id VARCHAR(36) NOT NULL PRIMARY KEY,
+                    location VARCHAR(200) NOT NULL,
+                    forecast_date TIMESTAMPTZ NOT NULL,
+                    temperature_c INTEGER NOT NULL,
+                    summary TEXT NULL,
+                    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+                    _last_sortable_unique_id VARCHAR(64) NOT NULL,
+                    _last_applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                """,
             MvDbType.SqlServer => $"""
                 IF OBJECT_ID(N'{tableName}', N'U') IS NULL
                 BEGIN
@@ -184,6 +231,14 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
     private MvSqlStatement BuildDelete(MvDbType dbType, Guid forecastId, string sortableUniqueId) =>
         new(dbType switch
         {
+            MvDbType.Postgres => $"""
+                UPDATE {Forecasts.PhysicalName}
+                SET is_deleted = TRUE,
+                    _last_sortable_unique_id = @SortableUniqueId,
+                    _last_applied_at = CURRENT_TIMESTAMP
+                WHERE forecast_id = @ForecastId
+                  AND _last_sortable_unique_id < @SortableUniqueId;
+                """,
             MvDbType.SqlServer => $"""
                 UPDATE {Forecasts.PhysicalName}
                 SET is_deleted = 1,
@@ -256,6 +311,7 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
     public string ConnectionStringForTests => ConnectionString;
 
     protected abstract MvDbType DatabaseType { get; }
+    internal MvDbType DatabaseTypeForTests => DatabaseType;
     protected abstract Task<string> CreateConnectionStringAsync();
     protected abstract void RegisterProvider(IServiceCollection services, string connectionString);
     protected abstract DbConnection CreateConnection(string connectionString);

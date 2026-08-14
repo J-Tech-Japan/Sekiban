@@ -224,6 +224,12 @@ public interface IMvApplyHost
         IMvApplyQueryPort queryPort,
         string sortableUniqueId,
         CancellationToken ct);
+
+    /// <summary>
+    ///     Returns the provider-neutral schema contract used by verify-only initialization. Existing custom hosts may
+    ///     omit this additive member; verify-only then fails closed when the host registers tables.
+    /// </summary>
+    IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(IMvTableBindings tables) => [];
 }
 
 public interface IMvApplyHostFactory

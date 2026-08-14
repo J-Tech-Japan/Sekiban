@@ -4,7 +4,7 @@ using MySqlConnector;
 
 namespace Sekiban.Dcb.MaterializedView.MySql;
 
-public sealed partial class MySqlMvRegistryStore : MvForcedReverseRegistryStoreBase<MySqlConnection>, IMvRegistryStore
+public sealed partial class MySqlMvRegistryStore : MvForcedReverseRegistryStoreBase<MySqlConnection>, IMvRegistryStore, IMvSchemaVerifier
 {
     private readonly string _connectionString;
 

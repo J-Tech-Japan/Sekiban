@@ -4,13 +4,44 @@ using Sekiban.Dcb.MaterializedView;
 
 namespace Dcb.Domain.WithoutResult.MaterializedViews;
 
-public sealed class OrderSummaryMvV1 : IMaterializedViewProjector
+public sealed class OrderSummaryMvV1 : IMaterializedViewProjector, IMvSchemaRequirementsProvider
 {
     public string ViewName => "OrderSummary";
     public int ViewVersion => 1;
 
     public MvTable Orders { get; private set; } = default!;
     public MvTable Items { get; private set; } = default!;
+
+    public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
+        MvDbType databaseType,
+        IMvTableBindings tables) =>
+    [
+        new MvSchemaTableRequirement(
+            "orders",
+            tables.GetPhysicalName("orders"),
+            [
+                new("id", MvSchemaTypeFamily.Guid, false),
+                new("status", MvSchemaTypeFamily.String, false),
+                new("total", MvSchemaTypeFamily.Decimal, false),
+                new("created_at", MvSchemaTypeFamily.DateTime, false),
+                new("_last_sortable_unique_id", MvSchemaTypeFamily.String, false),
+                new("_last_applied_at", MvSchemaTypeFamily.DateTime, false)
+            ],
+            ["id"]),
+        new MvSchemaTableRequirement(
+            "items",
+            tables.GetPhysicalName("items"),
+            [
+                new("id", MvSchemaTypeFamily.Guid, false),
+                new("order_id", MvSchemaTypeFamily.Guid, false),
+                new("product_name", MvSchemaTypeFamily.String, false),
+                new("quantity", MvSchemaTypeFamily.Integer, false),
+                new("unit_price", MvSchemaTypeFamily.Decimal, false),
+                new("_last_sortable_unique_id", MvSchemaTypeFamily.String, false),
+                new("_last_applied_at", MvSchemaTypeFamily.DateTime, false)
+            ],
+            ["id"])
+    ];
 
     public async Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default)
     {

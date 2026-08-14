@@ -4,7 +4,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Sekiban.Dcb.MaterializedView.Sqlite;
 
-public sealed partial class SqliteMvRegistryStore : MvForcedReverseRegistryStoreBase<SqliteConnection>, IMvRegistryStore
+public sealed partial class SqliteMvRegistryStore : MvForcedReverseRegistryStoreBase<SqliteConnection>, IMvRegistryStore, IMvSchemaVerifier
 {
     private readonly string _connectionString;
 

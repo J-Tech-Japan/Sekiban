@@ -4,12 +4,32 @@ using Sekiban.Dcb.MaterializedView;
 
 namespace Dcb.Domain.WithoutResult.MaterializedViews;
 
-public sealed class WeatherForecastMvV1 : IMaterializedViewProjector
+public sealed class WeatherForecastMvV1 : IMaterializedViewProjector, IMvSchemaRequirementsProvider
 {
     public string ViewName => "WeatherForecast";
     public int ViewVersion => 1;
 
     public MvTable Forecasts { get; private set; } = default!;
+
+    public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
+        MvDbType databaseType,
+        IMvTableBindings tables) =>
+    [
+        new MvSchemaTableRequirement(
+            "forecasts",
+            tables.GetPhysicalName("forecasts"),
+            [
+                new("forecast_id", MvSchemaTypeFamily.Guid, false),
+                new("location", MvSchemaTypeFamily.String, false),
+                new("forecast_date", MvSchemaTypeFamily.DateTime, false),
+                new("temperature_c", MvSchemaTypeFamily.Integer, false),
+                new("summary", MvSchemaTypeFamily.String, true),
+                new("is_deleted", MvSchemaTypeFamily.Boolean, false),
+                new("_last_sortable_unique_id", MvSchemaTypeFamily.String, false),
+                new("_last_applied_at", MvSchemaTypeFamily.DateTime, false)
+            ],
+            ["forecast_id"])
+    ];
 
     public async Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default)
     {

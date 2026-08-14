@@ -228,12 +228,96 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         string serviceId,
         CancellationToken cancellationToken)
     {
+        var bindings = new MvTableBindings(host.ViewName, host.ViewVersion, _options);
+        var statements = await host.InitializeAsync(bindings, cancellationToken).ConfigureAwait(false);
+        await AuthorizeStatementsAsync(
+                serviceId,
+                host,
+                bindings,
+                statements,
+                MvSqlStatementPhase.Initialization,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (_options.InitializationMode == MvInitializationMode.VerifyOnly)
+        {
+            var requirements = host.GetSchemaRequirements(bindings);
+            var contractResult = MvSchemaRequirements.ValidateContract(bindings.Tables, requirements);
+            ThrowIfInitializationVerificationFailed(contractResult);
+
+            if (_registryStore is not IMvSchemaVerifier schemaVerifier)
+            {
+                throw new MvInitializationException(
+                    new MvInitializationFailure(
+                        MvInitializationFailureReason.UnsupportedProviderCapability,
+                        "The configured materialized-view provider does not support read-only schema verification."));
+            }
+
+            var verificationResult = await schemaVerifier.VerifySchemaAsync(
+                    [.. MvSchemaRequirements.RegistryTables(), .. requirements],
+                    cancellationToken)
+                .ConfigureAwait(false);
+            ThrowIfInitializationVerificationFailed(verificationResult);
+
+            var existingEntries = await _registryStore.GetEntriesAsync(
+                    serviceId,
+                    host.ViewName,
+                    host.ViewVersion,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var expectedTables = bindings.Tables.ToDictionary(table => table.LogicalName, StringComparer.Ordinal);
+            var observedLogicalTables = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in existingEntries)
+            {
+                if (!expectedTables.TryGetValue(entry.LogicalTable, out var expectedTable) ||
+                    !string.Equals(entry.PhysicalTable, expectedTable.PhysicalName, StringComparison.Ordinal) ||
+                    !observedLogicalTables.Add(entry.LogicalTable))
+                {
+                    throw new MvInitializationException(
+                        new MvInitializationFailure(
+                            MvInitializationFailureReason.MissingSchemaContract,
+                            $"The existing materialized-view registry binding for logical table '{entry.LogicalTable}' is incompatible with the projector contract.",
+                            entry.LogicalTable,
+                            entry.PhysicalTable));
+                }
+            }
+
+            if (observedLogicalTables.Count == expectedTables.Count)
+            {
+                return;
+            }
+
+            await using var verifyConnection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var verifyTransaction = await verifyConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var table in bindings.Tables)
+            {
+                await _registryStore.RegisterAsync(
+                        new MvRegistryEntry
+                        {
+                            ServiceId = serviceId,
+                            ViewName = host.ViewName,
+                            ViewVersion = host.ViewVersion,
+                            LogicalTable = table.LogicalName,
+                            PhysicalTable = table.PhysicalName,
+                            Status = MvStatus.CatchingUp,
+                            CurrentCheckpointTruth = MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.NotObserved),
+                            TargetCheckpointTruth = MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.NotObserved),
+                            AppliedEventVersion = 0,
+                            LastUpdated = DateTimeOffset.UtcNow
+                        },
+                        verifyTransaction,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            await verifyTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         await _registryStore.EnsureInfrastructureAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        var bindings = new MvTableBindings(host.ViewName, host.ViewVersion, _options);
-        var statements = await host.InitializeAsync(bindings, cancellationToken).ConfigureAwait(false);
         foreach (var statement in statements)
         {
             await ExecuteSqlAsync(
@@ -267,6 +351,53 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task AuthorizeStatementsAsync(
+        string serviceId,
+        IMvApplyHost host,
+        MvTableBindings bindings,
+        IReadOnlyList<MvSqlStatementDto> statements,
+        MvSqlStatementPhase phase,
+        CancellationToken cancellationToken)
+    {
+        var policy = _options.SqlStatementPolicy ?? MvAllowAllSqlStatementPolicy.Instance;
+        var tables = bindings.Tables.ToList();
+        foreach (var statement in statements)
+        {
+            var decision = await policy.EvaluateAsync(
+                    new MvSqlStatementContext(
+                        serviceId,
+                        host.ViewName,
+                        host.ViewVersion,
+                        phase,
+                        tables,
+                        statement.Sql,
+                        statement.Parameters),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (!decision.IsAllowed)
+            {
+                throw new MvSqlPolicyRejectedException(
+                    new MvSqlPolicyFailure(
+                        decision.Reason ?? "The host SQL statement policy rejected the statement.",
+                        serviceId,
+                        host.ViewName,
+                        host.ViewVersion,
+                        phase));
+            }
+        }
+    }
+
+    private static void ThrowIfInitializationVerificationFailed(MvSchemaVerificationResult result)
+    {
+        if (!result.IsCompatible)
+        {
+            throw new MvInitializationException(
+                result.Failure ?? new MvInitializationFailure(
+                    MvInitializationFailureReason.UnsupportedProviderCapability,
+                    "Materialized-view schema verification failed without a typed reason."));
+        }
     }
 
     protected async Task<MvProjectionStatusSnapshot> GetCurrentStatusAsync(
@@ -672,6 +803,23 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 serializableEvent.SortableUniqueIdValue,
                 cancellationToken)
             .ConfigureAwait(false);
+        try
+        {
+            await AuthorizeStatementsAsync(
+                    serviceId,
+                    host,
+                    bindings,
+                    statements,
+                    MvSqlStatementPhase.Apply,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+
         var affectedRows = 0;
         foreach (var statement in statements)
         {

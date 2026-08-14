@@ -4,7 +4,7 @@ using Microsoft.Data.SqlClient;
 
 namespace Sekiban.Dcb.MaterializedView.SqlServer;
 
-public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistryStoreBase<SqlConnection>, IMvRegistryStore
+public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistryStoreBase<SqlConnection>, IMvRegistryStore, IMvSchemaVerifier
 {
     private readonly string _connectionString;
 

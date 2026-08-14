@@ -245,6 +245,77 @@ public sealed class WeatherForecastMvV1 : IMaterializedViewProjector
 - `ApplyToViewAsync`
   1 イベントを 1 個以上の SQL 文へ変換
 
+## 事前プロビジョニングしたスキーマとホスト所有 SQL ポリシー
+
+初期化の既定値は、従来互換の `CreateOrEnsure` です。deployment migration などで DB オブジェクトを管理する
+ホストは `VerifyOnly` を選択できます。
+
+```csharp
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.InitializationMode = MvInitializationMode.VerifyOnly;
+    options.SqlStatementPolicy = MyHostSqlPolicy.Instance;
+});
+```
+
+verify-only では projector を recording context で実行し、logical / physical table binding と SQL 文を記録します。
+projector の SQL は実行されません。executor は `EnsureInfrastructureAsync` を呼ばず、`CREATE`、`ALTER`、`DROP`、
+migration、registry schema、fallback DDL を実行せず、create mode へ暗黙に切り替えることもありません。provider は
+registry の 2 テーブルと projector の各テーブルについて read-only の metadata 検証を行います。既存の registry
+row は検証後に読み取り、registry row が不足している場合に限り、schema proof 成功後に登録できます。
+
+verify-only に対応する projector は、追加された `IMvSchemaRequirementsProvider` 契約で target schema を宣言します。
+
+```csharp
+public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
+    MvDbType databaseType,
+    IMvTableBindings tables) =>
+[
+    new(
+        "forecasts",
+        tables.GetPhysicalName("forecasts"),
+        [
+            new("forecast_id", MvSchemaTypeFamily.Guid, false),
+            new("location", MvSchemaTypeFamily.String, false),
+            new("forecast_date", MvSchemaTypeFamily.DateTime, false),
+            new("temperature_c", MvSchemaTypeFamily.Integer, false),
+            new("summary", MvSchemaTypeFamily.String, true)
+        ],
+        ["forecast_id"])
+];
+```
+
+provider-neutral な type family と primary key / nullability の検証は、PostgreSQL、MySQL、SQL Server、SQLite の native
+metadata へそれぞれ変換して実行されます。table / column の不足、type・nullability・key の不一致、schema contract
+不足、metadata capability 非対応は、型付き `MvInitializationException` と `MvInitializationFailureReason` になります。
+これらは event read、view write、registry mutation、catch-up、activation より前に発生します。そのため schema contract
+を実装していない host も verify-only では fail-closed になります。
+
+projector が返すすべての initialization / apply SQL 文は、provider 実行前に host 所有の
+`IMvSqlStatementPolicy` へ渡されます。`MvSqlStatementContext` には正確な service id、view name / version、
+`Initialization` または `Apply` phase、logical / physical table binding、SQL text、parameter metadata が含まれます。
+policy は `MvSqlPolicyDecision.Allow()` または `Reject(reason)` を返します。
+
+```csharp
+public sealed class MyHostSqlPolicy : IMvSqlStatementPolicy
+{
+    public static MyHostSqlPolicy Instance { get; } = new();
+
+    public ValueTask<MvSqlPolicyDecision> EvaluateAsync(
+        MvSqlStatementContext context,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(
+            context.Phase == MvSqlStatementPhase.Initialization
+                ? MvSqlPolicyDecision.Reject("Initialization SQL is migration-owned.")
+                : MvSqlPolicyDecision.Allow());
+}
+```
+
+拒否は型付き `MvSqlPolicyRejectedException` になります。safe failure には service / view / version と phase だけが含まれ、
+SQL や parameter value はコピーされません。initialization の拒否は `EnsureInfrastructureAsync` や provider command より
+前に起きます。apply の拒否は projector SQL や registry checkpoint を commit する前に event transaction を rollback します。
+host policy を設定しない場合は `MvAllowAllSqlStatementPolicy` が従来の動作を維持します。
+
 ## 順序保証と冪等性
 
 マテリアライズドビューはリプレイ可能である必要があります。基本パターンは次の通りです。

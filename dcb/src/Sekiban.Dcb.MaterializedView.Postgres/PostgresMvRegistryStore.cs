@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace Sekiban.Dcb.MaterializedView.Postgres;
 
-public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistryStoreBase<NpgsqlConnection>, IMvRegistryStore
+public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistryStoreBase<NpgsqlConnection>, IMvRegistryStore, IMvSchemaVerifier
 {
     private readonly string _connectionString;
 

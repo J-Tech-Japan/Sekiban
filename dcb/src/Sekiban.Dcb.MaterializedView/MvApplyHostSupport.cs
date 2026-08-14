@@ -216,6 +216,11 @@ public sealed class NativeMvApplyHost : IMvApplyHost
     public int ViewVersion => _projector.ViewVersion;
     public IReadOnlyList<string> LogicalTables => _logicalTables;
 
+    public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(IMvTableBindings tables) =>
+        _projector is IMvSchemaRequirementsProvider provider
+            ? provider.GetSchemaRequirements(_databaseType, tables)
+            : [];
+
     public async Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(IMvTableBindings tables, CancellationToken ct)
     {
         var recordingContext = new RecordingMvInitContext(tables, _databaseType);

@@ -49,6 +49,18 @@ public sealed class MvOptions
     ///     Ordinary multi-service registrations must supply a non-default service id.
     /// </summary>
     public bool AllowDefaultServiceId { get; set; }
+
+    /// <summary>
+    ///     Selects whether initialization may create/ensure schema or may only verify a pre-provisioned schema.
+    ///     The compatibility default preserves the historical create/ensure behavior.
+    /// </summary>
+    public MvInitializationMode InitializationMode { get; set; } = MvInitializationMode.CreateOrEnsure;
+
+    /// <summary>
+    ///     Host-owned policy evaluated for every projector-supplied initialization and apply statement before it is
+    ///     sent to the provider.
+    /// </summary>
+    public IMvSqlStatementPolicy SqlStatementPolicy { get; set; } = MvAllowAllSqlStatementPolicy.Instance;
 }
 
 public static class MvSchemaHelper
