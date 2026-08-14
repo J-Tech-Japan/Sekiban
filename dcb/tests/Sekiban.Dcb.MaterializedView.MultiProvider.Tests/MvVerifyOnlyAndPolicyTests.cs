@@ -30,16 +30,14 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
         var projector = fixture.Services.GetRequiredService<CrossProviderWeatherForecastMvV1>();
         await fixture.Executor.InitializeAsync(CreateHost(projector)).ConfigureAwait(false);
         var schemaVersionBefore = await ReadSchemaVersionAsync().ConfigureAwait(false);
-        var readOnlyConnectionString = new SqliteConnectionStringBuilder(fixture.ConnectionStringForTests)
-        {
-            Mode = SqliteOpenMode.ReadOnly
-        }.ToString();
         var policy = new RecordingPolicy(_ => MvSqlPolicyDecision.Allow());
+        var readOnlyConnections = new List<string>();
         var verifyExecutor = CreateExecutor(
-            readOnlyConnectionString,
+            fixture.ConnectionStringForTests,
             MvInitializationMode.VerifyOnly,
             policy,
-            rejectEnsureInfrastructure: true);
+            rejectEnsureInfrastructure: true,
+            readOnlyConnectionRecorder: readOnlyConnections.Add);
 
         var verifyHost = new CountingApplyHost(CreateHost(projector), throwOnInitialize: true);
         await verifyExecutor.InitializeAsync(verifyHost).ConfigureAwait(false);
@@ -48,6 +46,107 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
         Assert.Equal(schemaVersionBefore, schemaVersionAfter);
         Assert.Equal(0, verifyHost.InitializeCalls);
         Assert.Empty(policy.Contexts);
+        Assert.Contains("sqlite:Mode=ReadOnly", readOnlyConnections);
+    }
+
+    [SkippableFact]
+    public async Task VerifyOnly_CompatibleOperationBoundaries_NeverReachRegistryMutation()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "SQLite fixture is unavailable.");
+        await fixture.ResetAsync().ConfigureAwait(false);
+        var projector = fixture.Services.GetRequiredService<CrossProviderWeatherForecastMvV1>();
+        var host = CreateHost(projector);
+        await fixture.Executor.InitializeAsync(host).ConfigureAwait(false);
+
+        var readOnlyConnections = new List<string>();
+        var realStore = new SqliteMvRegistryStore(
+            fixture.ConnectionStringForTests,
+            catalogCommandRecorder: null,
+            readOnlyConnectionRecorder: readOnlyConnections.Add);
+        await realStore.SetTargetCheckpointAsync(
+                MultiProviderFixtureBase.ServiceId,
+                projector.ViewName,
+                projector.ViewVersion,
+                MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AuthoritativeTargetCapture()))
+            .ConfigureAwait(false);
+        await realStore.UpdatePositionAsync(
+                new MvPositionUpdate(
+                    MultiProviderFixtureBase.ServiceId,
+                    projector.ViewName,
+                    projector.ViewVersion,
+                    SortableUniqueId.MinValue.Value,
+                    MvApplySource.CatchUp,
+                    AppliedEventVersionDelta: 0)
+                {
+                    CheckpointTruth = MvCheckpointTruth.KnownZero()
+                })
+            .ConfigureAwait(false);
+        await realStore.UpdateStatusAsync(
+                MultiProviderFixtureBase.ServiceId,
+                projector.ViewName,
+                projector.ViewVersion,
+                MvStatus.Ready)
+            .ConfigureAwait(false);
+        var guardedRegistry = new EnsureRejectingRegistryStore(
+            Assert.IsAssignableFrom<IMvReadOnlyMvInspector>(realStore));
+        var executor = new SqliteMvExecutor(
+            fixture.EventStoreFactory,
+            guardedRegistry,
+            Options.Create(new MvOptions
+            {
+                ServiceId = MultiProviderFixtureBase.ServiceId,
+                InitializationMode = MvInitializationMode.VerifyOnly,
+                SafeWindowMs = 0,
+                BatchSize = 100
+            }),
+            NullLogger<SqliteMvExecutor>.Instance,
+            fixture.ConnectionStringForTests);
+
+        await executor.InitializeAsync(new CountingApplyHost(host, throwOnInitialize: true)).ConfigureAwait(false);
+        _ = await executor.CaptureTargetCheckpointAsync(host).ConfigureAwait(false);
+        _ = await executor.CatchUpOnceAsync(host).ConfigureAwait(false);
+        var activation = await executor.TryActivateAsync(host).ConfigureAwait(false);
+        var applied = await executor.ApplySerializableEventsAsync(host, [CreatePolicyEvent()]).ConfigureAwait(false);
+        var coordinator = new MvGenerationCoordinator(
+            executor,
+            guardedRegistry,
+            Options.Create(new MvOptions
+            {
+                ServiceId = MultiProviderFixtureBase.ServiceId,
+                InitializationMode = MvInitializationMode.VerifyOnly
+            }));
+        var forcedReverse = await coordinator.ForceReverseAsync(
+                host,
+                expectedActiveVersion: projector.ViewVersion + 1,
+                expectedActiveGeneration: 0,
+                reason: "verify-only mutation probe")
+            .ConfigureAwait(false);
+
+        Assert.Equal(MvActivationFailureReason.ProviderFailure, activation.FailureReason);
+        Assert.Equal(MvActivationFailureReason.ProviderFailure, forcedReverse.FailureReason);
+        Assert.Equal(0, applied);
+        Assert.Equal(0, guardedRegistry.EnsureCalls);
+        Assert.Equal(0, guardedRegistry.RegisterCalls);
+        Assert.Equal(0, guardedRegistry.TargetCheckpointCalls);
+        Assert.Equal(0, guardedRegistry.PositionCalls);
+        Assert.Equal(0, guardedRegistry.StatusCalls);
+        Assert.Equal(0, guardedRegistry.ActivationCalls);
+        Assert.Equal(0, guardedRegistry.ActivePointerCalls);
+        Assert.Contains("sqlite:Mode=ReadOnly", readOnlyConnections);
+
+        await realStore.SetTargetCheckpointAsync(
+                MultiProviderFixtureBase.ServiceId,
+                projector.ViewName,
+                projector.ViewVersion,
+                MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable))
+            .ConfigureAwait(false);
+        _ = await executor.CatchUpOnceAsync(host).ConfigureAwait(false);
+        var entriesAfterCatchUp = await realStore.ReadRegistryEntriesAsync(
+                MultiProviderFixtureBase.ServiceId,
+                projector.ViewName,
+                projector.ViewVersion)
+            .ConfigureAwait(false);
+        Assert.All(entriesAfterCatchUp, entry => Assert.True(entry.TargetCheckpointTruth.IsUnknown));
     }
 
     [SkippableFact]
@@ -279,6 +378,8 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
 
         Assert.Equal(MvSqlStatementPhase.Initialization, exception.Failure.Phase);
         Assert.Single(policy.Contexts);
+        Assert.Equal(MvSqlStatementOrigin.ProjectorInitialize, policy.Contexts[0].Origin);
+        Assert.Equal(MvDbType.Sqlite, policy.Contexts[0].DatabaseType);
         await using var connection = await fixture.OpenConnectionAsync().ConfigureAwait(false);
         Assert.Equal(
             0,
@@ -354,7 +455,7 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
         }
         var policy = new RecordingPolicy(context =>
             context.Phase == MvSqlStatementPhase.Apply
-                ? MvSqlPolicyDecision.Reject("Apply is not approved for this host.")
+                ? MvSqlPolicyDecision.Reject("Apply is not approved for this host.", "apply-deny-rule")
                 : MvSqlPolicyDecision.Allow());
         var executor = CreateExecutor(
             fixture.ConnectionStringForTests,
@@ -382,6 +483,9 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
 
         Assert.Equal(MvSqlStatementPhase.Apply, exception.Failure.Phase);
         Assert.Equal(MvSqlPolicyFailureReason.Denied, exception.Failure.FailureReason);
+        Assert.Equal(MvSqlStatementOrigin.ProjectorApply, exception.Failure.Origin);
+        Assert.Equal(MvDbType.Sqlite, exception.Failure.DatabaseType);
+        Assert.Equal("apply-deny-rule", exception.Failure.RuleId);
         Assert.False(string.IsNullOrWhiteSpace(exception.Failure.SqlSha256));
         var applyContext = Assert.Single(policy.Contexts);
         Assert.Equal(MvSqlStatementPhase.Apply, applyContext.Phase);
@@ -442,6 +546,8 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
         Assert.Equal(MvSqlStatementPhase.Apply, exception.Failure.Phase);
         var queryContext = Assert.Single(policy.Contexts, context => context.Phase == MvSqlStatementPhase.Apply);
         Assert.Equal(sql, queryContext.Sql);
+        Assert.Equal(MvSqlStatementOrigin.ProjectorQuery, queryContext.Origin);
+        Assert.Equal(MvDbType.Sqlite, queryContext.DatabaseType);
         await using var connection = await fixture.OpenConnectionAsync().ConfigureAwait(false);
         Assert.Equal(0, await connection.ExecuteScalarAsync<long>($"SELECT COUNT(*) FROM {projector.Records.PhysicalName};"));
         Assert.Equal(
@@ -502,6 +608,8 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
 
         Assert.Equal(MvSqlStatementPhase.Apply, exception.Failure.Phase);
         Assert.Contains("raw connection", exception.Failure.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(MvSqlStatementOrigin.ProjectorQuery, exception.Failure.Origin);
+        Assert.Equal(MvDbType.Sqlite, exception.Failure.DatabaseType);
         await using var connection = await fixture.OpenConnectionAsync().ConfigureAwait(false);
         Assert.Equal(0, await connection.ExecuteScalarAsync<long>($"SELECT COUNT(*) FROM {projector.Records.PhysicalName};"));
     }
@@ -638,15 +746,15 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
         MvInitializationMode initializationMode,
         IMvSqlStatementPolicy? policy,
         bool rejectEnsureInfrastructure = false,
-        MvSqlStatementPolicyMode policyMode = MvSqlStatementPolicyMode.Legacy)
+        MvSqlStatementPolicyMode policyMode = MvSqlStatementPolicyMode.Legacy,
+        Action<string>? readOnlyConnectionRecorder = null)
     {
-        var registry = connectionString == fixture.ConnectionStringForTests
+        var registry = connectionString == fixture.ConnectionStringForTests && readOnlyConnectionRecorder is null
             ? fixture.Services.GetRequiredService<IMvRegistryStore>()
-            : new SqliteMvRegistryStore(connectionString);
+            : new SqliteMvRegistryStore(connectionString, null, readOnlyConnectionRecorder);
         if (rejectEnsureInfrastructure)
         {
             registry = new EnsureRejectingRegistryStore(
-                registry,
                 Assert.IsAssignableFrom<IMvReadOnlyMvInspector>(registry));
         }
 
@@ -718,17 +826,24 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
     }
 
     private sealed class EnsureRejectingRegistryStore(
-        IMvRegistryStore inner,
         IMvReadOnlyMvInspector inspector) : IMvRegistryStore, IMvReadOnlyMvInspector
     {
+        public int EnsureCalls;
+        public int RegisterCalls;
+        public int PositionCalls;
+        public int StatusCalls;
+        public int TargetCheckpointCalls;
+        public int ActivationCalls;
+        public int ActivePointerCalls;
+
         public Task EnsureInfrastructureAsync(CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("Verify-only must not enter EnsureInfrastructureAsync.");
+            FailMutation(ref EnsureCalls, "EnsureInfrastructureAsync");
 
         public Task RegisterAsync(MvRegistryEntry entry, IDbTransaction? transaction = null, CancellationToken cancellationToken = default) =>
-            inner.RegisterAsync(entry, transaction, cancellationToken);
+            FailMutation(ref RegisterCalls, "RegisterAsync");
 
         public Task UpdatePositionAsync(MvPositionUpdate update, IDbTransaction? transaction = null, CancellationToken cancellationToken = default) =>
-            inner.UpdatePositionAsync(update, transaction, cancellationToken);
+            FailMutation(ref PositionCalls, "UpdatePositionAsync");
 
         public Task MarkStreamReceivedAsync(
             string serviceId,
@@ -738,7 +853,7 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
             DateTimeOffset receivedAt,
             IDbTransaction? transaction = null,
             CancellationToken cancellationToken = default) =>
-            inner.MarkStreamReceivedAsync(serviceId, viewName, viewVersion, sortableUniqueId, receivedAt, transaction, cancellationToken);
+            FailMutation(ref PositionCalls, "MarkStreamReceivedAsync");
 
         public Task UpdateStatusAsync(
             string serviceId,
@@ -747,7 +862,7 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
             MvStatus status,
             IDbTransaction? transaction = null,
             CancellationToken cancellationToken = default) =>
-            inner.UpdateStatusAsync(serviceId, viewName, viewVersion, status, transaction, cancellationToken);
+            FailMutation(ref StatusCalls, "UpdateStatusAsync");
 
         public Task<IReadOnlyList<MvRegistryEntry>> GetEntriesAsync(
             string serviceId,
@@ -767,7 +882,13 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
             string serviceId,
             string viewName,
             CancellationToken cancellationToken = default) =>
-            inner.GetActiveAsync(serviceId, viewName, cancellationToken);
+            throw new InvalidOperationException("Verify-only must use the dedicated read-only active-pointer inspector.");
+
+        public Task<MvActiveEntry?> ReadActiveAsync(
+            string serviceId,
+            string viewName,
+            CancellationToken cancellationToken = default) =>
+            inspector.ReadActiveAsync(serviceId, viewName, cancellationToken);
 
         public Task SetTargetCheckpointAsync(
             string serviceId,
@@ -776,19 +897,19 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
             MvCheckpointTruth targetCheckpointTruth,
             IDbTransaction? transaction = null,
             CancellationToken cancellationToken = default) =>
-            inner.SetTargetCheckpointAsync(serviceId, viewName, viewVersion, targetCheckpointTruth, transaction, cancellationToken);
+            FailMutation(ref TargetCheckpointCalls, "SetTargetCheckpointAsync");
 
         public Task<MvActivationResult> TryActivateAsync(
             MvActivationRequest request,
             IDbTransaction? transaction = null,
             CancellationToken cancellationToken = default) =>
-            inner.TryActivateAsync(request, transaction, cancellationToken);
+            FailActivation(ref ActivationCalls, "TryActivateAsync");
 
         public Task<MvActivationResult> TryForceReverseAsync(
             MvForcedReverseRequest request,
             IDbTransaction? transaction = null,
             CancellationToken cancellationToken = default) =>
-            inner.TryForceReverseAsync(request, transaction, cancellationToken);
+            FailActivation(ref ActivationCalls, "TryForceReverseAsync");
 
         public Task SetActiveAsync(
             string serviceId,
@@ -796,12 +917,24 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
             int activeVersion,
             IDbTransaction? transaction = null,
             CancellationToken cancellationToken = default) =>
-            inner.SetActiveAsync(serviceId, viewName, activeVersion, transaction, cancellationToken);
+            FailMutation(ref ActivePointerCalls, "SetActiveAsync");
 
         public Task<MvSchemaVerificationResult> VerifySchemaAsync(
             IReadOnlyList<MvSchemaTableRequirement> requirements,
             CancellationToken cancellationToken = default) =>
             inspector.VerifySchemaAsync(requirements, cancellationToken);
+
+        private static Task FailMutation(ref int counter, string operation)
+        {
+            counter++;
+            throw new InvalidOperationException($"Verify-only registry mutation reached: {operation}.");
+        }
+
+        private static Task<MvActivationResult> FailActivation(ref int counter, string operation)
+        {
+            counter++;
+            throw new InvalidOperationException($"Verify-only registry mutation reached: {operation}.");
+        }
     }
 
     private sealed class NoInspectorRegistryStore(IMvRegistryStore inner) : IMvRegistryStore
@@ -1009,7 +1142,8 @@ internal static class MvVerifyOnlyAssertions
 
         var policy = new RecordingPolicy(_ => MvSqlPolicyDecision.Allow());
         var catalogCommands = new List<string>();
-        var verifyExecutor = CreateVerifyExecutor(fixture, policy, catalogCommands.Add);
+        var readOnlyConnections = new List<string>();
+        var verifyExecutor = CreateVerifyExecutor(fixture, policy, catalogCommands.Add, readOnlyConnections.Add);
         var verifyHost = new CountingApplyHost(
             new NativeMvApplyHost(projector, fixture.DomainTypes.EventTypes, fixture.DatabaseTypeForTests));
         await verifyExecutor.InitializeAsync(
@@ -1019,6 +1153,7 @@ internal static class MvVerifyOnlyAssertions
         Assert.Equal(0, verifyHost.InitializeCalls);
         Assert.Empty(policy.Contexts);
         Assert.NotEmpty(catalogCommands);
+        Assert.Contains(ExpectedReadOnlyMarker(fixture.DatabaseTypeForTests), readOnlyConnections);
         Assert.All(catalogCommands, command =>
         {
             var normalized = command.TrimStart();
@@ -1041,7 +1176,8 @@ internal static class MvVerifyOnlyAssertions
     private static IMvExecutor CreateVerifyExecutor(
         MultiProviderFixtureBase fixture,
         IMvSqlStatementPolicy policy,
-        Action<string>? catalogCommandRecorder)
+        Action<string>? catalogCommandRecorder,
+        Action<string>? readOnlyConnectionRecorder)
     {
         var options = Options.Create(new MvOptions
         {
@@ -1056,31 +1192,40 @@ internal static class MvVerifyOnlyAssertions
         {
             MvDbType.Postgres => new PostgresMvExecutor(
                 fixture.EventStoreFactory,
-                new PostgresMvRegistryStore(connectionString, catalogCommandRecorder),
+                new PostgresMvRegistryStore(connectionString, catalogCommandRecorder, readOnlyConnectionRecorder),
                 options,
                 NullLogger<PostgresMvExecutor>.Instance,
                 connectionString),
             MvDbType.MySql => new MySqlMvExecutor(
                 fixture.EventStoreFactory,
-                new MySqlMvRegistryStore(connectionString, catalogCommandRecorder),
+                new MySqlMvRegistryStore(connectionString, catalogCommandRecorder, readOnlyConnectionRecorder),
                 options,
                 NullLogger<MySqlMvExecutor>.Instance,
                 connectionString),
             MvDbType.SqlServer => new SqlServerMvExecutor(
                 fixture.EventStoreFactory,
-                new SqlServerMvRegistryStore(connectionString, catalogCommandRecorder),
+                new SqlServerMvRegistryStore(connectionString, catalogCommandRecorder, readOnlyConnectionRecorder),
                 options,
                 NullLogger<SqlServerMvExecutor>.Instance,
                 connectionString),
             MvDbType.Sqlite => new SqliteMvExecutor(
                 fixture.EventStoreFactory,
-                new SqliteMvRegistryStore(connectionString, catalogCommandRecorder),
+                new SqliteMvRegistryStore(connectionString, catalogCommandRecorder, readOnlyConnectionRecorder),
                 options,
                 NullLogger<SqliteMvExecutor>.Instance,
                 connectionString),
             _ => throw new NotSupportedException($"Provider '{fixture.DatabaseTypeForTests}' is not supported.")
         };
     }
+
+    private static string ExpectedReadOnlyMarker(MvDbType databaseType) => databaseType switch
+    {
+        MvDbType.Postgres => "postgres:default_transaction_read_only=on",
+        MvDbType.MySql => "mysql:transaction_read_only=on",
+        MvDbType.SqlServer => "sqlserver:ApplicationIntent=ReadOnly",
+        MvDbType.Sqlite => "sqlite:Mode=ReadOnly",
+        _ => throw new ArgumentOutOfRangeException(nameof(databaseType))
+    };
 
     private sealed class RecordingPolicy(
         Func<MvSqlStatementContext, MvSqlPolicyDecision> decision) : IMvSqlStatementPolicy

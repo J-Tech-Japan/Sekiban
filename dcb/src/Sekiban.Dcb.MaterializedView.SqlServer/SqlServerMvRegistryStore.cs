@@ -8,6 +8,7 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
 {
     private readonly string _connectionString;
     private readonly Action<string>? _catalogCommandRecorder;
+    private readonly Action<string>? _readOnlyConnectionRecorder;
 
     public SqlServerMvRegistryStore(string connectionString)
         : this(connectionString, null)
@@ -15,10 +16,33 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
     }
 
     public SqlServerMvRegistryStore(string connectionString, Action<string>? catalogCommandRecorder)
+        : this(connectionString, catalogCommandRecorder, null)
+    {
+    }
+
+    public SqlServerMvRegistryStore(
+        string connectionString,
+        Action<string>? catalogCommandRecorder,
+        Action<string>? readOnlyConnectionRecorder)
     {
         _connectionString = connectionString;
         _catalogCommandRecorder = catalogCommandRecorder;
+        _readOnlyConnectionRecorder = readOnlyConnectionRecorder;
     }
+
+    private string ReadOnlyConnectionString
+    {
+        get
+        {
+            var builder = new SqlConnectionStringBuilder(_connectionString)
+            {
+                ApplicationIntent = ApplicationIntent.ReadOnly
+            };
+            return builder.ConnectionString;
+        }
+    }
+
+    private void RecordReadOnlyConnection() => _readOnlyConnectionRecorder?.Invoke("sqlserver:ApplicationIntent=ReadOnly");
 
     private CommandDefinition CatalogCommand(
         string sql,
@@ -370,11 +394,19 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
             cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<MvRegistryEntry>> GetEntriesAsync(
+    public Task<IReadOnlyList<MvRegistryEntry>> GetEntriesAsync(
         string serviceId,
         string viewName,
         int viewVersion,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ReadEntriesWithConnectionAsync(_connectionString, serviceId, viewName, viewVersion, cancellationToken);
+
+    private async Task<IReadOnlyList<MvRegistryEntry>> ReadEntriesWithConnectionAsync(
+        string connectionString,
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        CancellationToken cancellationToken)
     {
         const string sql = """
             SELECT service_id AS ServiceId,
@@ -404,7 +436,7 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
             ORDER BY logical_table;
             """;
 
-        await using var connection = new SqlConnection(_connectionString);
+        await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync(
             CatalogCommand(sql, new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion }, cancellationToken))
@@ -416,13 +448,23 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
         string serviceId,
         string viewName,
         int viewVersion,
-        CancellationToken cancellationToken = default) =>
-        GetEntriesAsync(serviceId, viewName, viewVersion, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        RecordReadOnlyConnection();
+        return ReadEntriesWithConnectionAsync(ReadOnlyConnectionString, serviceId, viewName, viewVersion, cancellationToken);
+    }
 
-    public async Task<MvActiveEntry?> GetActiveAsync(
+    public Task<MvActiveEntry?> GetActiveAsync(
         string serviceId,
         string viewName,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ReadActiveWithConnectionAsync(_connectionString, serviceId, viewName, cancellationToken);
+
+    private async Task<MvActiveEntry?> ReadActiveWithConnectionAsync(
+        string connectionString,
+        string serviceId,
+        string viewName,
+        CancellationToken cancellationToken)
     {
         const string sql = """
             SELECT service_id AS ServiceId,
@@ -438,12 +480,21 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
               AND view_name = @ViewName;
             """;
 
-        await using var connection = new SqlConnection(_connectionString);
+        await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         var row = await connection.QuerySingleOrDefaultAsync(
             new CommandDefinition(sql, new { ServiceId = serviceId, ViewName = viewName }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         return row is null ? null : MapActiveEntry(ToDictionary(row));
+    }
+
+    public Task<MvActiveEntry?> ReadActiveAsync(
+        string serviceId,
+        string viewName,
+        CancellationToken cancellationToken = default)
+    {
+        RecordReadOnlyConnection();
+        return ReadActiveWithConnectionAsync(ReadOnlyConnectionString, serviceId, viewName, cancellationToken);
     }
 
     public Task SetActiveAsync(

@@ -116,6 +116,71 @@ public sealed class MvInitializationCompatibilityTests
     }
 
     [Fact]
+    public void SchemaVerificationCoversDefaultsIndexesGeneratedSemanticsAndPrecision()
+    {
+        var requirements = new[]
+        {
+            new MvSchemaTableRequirement(
+                "orders",
+                "orders_table",
+                [
+                    new("id", MvSchemaTypeFamily.Decimal, false)
+                    {
+                        DefaultSql = "0",
+                        IsGenerated = false,
+                        MaxLength = 10,
+                        Precision = 10,
+                        Scale = 2
+                    }
+                ],
+                ["id"])
+            {
+                Indexes = [new MvSchemaIndexRequirement("orders_id_unique", ["id"], true)]
+            }
+        };
+        var observed = MvSchemaRequirements.Observe(
+            [
+                new MvObservedSchemaColumn("orders_table", "id", MvSchemaTypeFamily.Decimal, false)
+                {
+                    DefaultSql = "1",
+                    IsGenerated = true,
+                    MaxLength = 9,
+                    Precision = 9,
+                    Scale = 1
+                }
+            ],
+            [new MvObservedSchemaPrimaryKeyColumn("orders_table", "id", 1)]);
+
+        var mismatch = MvSchemaRequirements.Validate(requirements, observed);
+
+        Assert.Equal(
+            [
+                MvSchemaMismatchCode.DefaultMismatch,
+                MvSchemaMismatchCode.RequiredIndexMissing,
+                MvSchemaMismatchCode.GeneratedSemanticsMismatch,
+                MvSchemaMismatchCode.SizeMismatch,
+                MvSchemaMismatchCode.PrecisionMismatch
+            ],
+            mismatch.Mismatches.Select(item => item.Code));
+
+        var compatibleObserved = MvSchemaRequirements.Observe(
+            [
+                new MvObservedSchemaColumn("orders_table", "id", MvSchemaTypeFamily.Decimal, false)
+                {
+                    DefaultSql = "( 0 );",
+                    IsGenerated = false,
+                    MaxLength = 10,
+                    Precision = 10,
+                    Scale = 2
+                }
+            ],
+            [new MvObservedSchemaPrimaryKeyColumn("orders_table", "id", 1)],
+            [new MvObservedSchemaIndex("orders_table", "orders_id_unique_native", ["id"], true)]);
+
+        Assert.True(MvSchemaRequirements.Validate(requirements, compatibleObserved).IsCompatible);
+    }
+
+    [Fact]
     public void PolicyFailureDoesNotCopySqlOrParameterValues()
     {
         var exception = new MvSqlPolicyRejectedException(

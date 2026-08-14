@@ -265,6 +265,14 @@ provider の専用 `IMvReadOnlyMvInspector` で catalog と registry を読む�
 binding row まで用意します。binding の不足や不一致は型付きエラーで停止し、自動 seed は行いません。zero-DDL の保証は
 Sekiban が所有する接続の境界に限られ、任意の user/projector code はこのプロセス境界の外です。
 
+VerifyOnly は schema gate 成功後も隔離されたままです。target checkpoint の capture、空履歴の catch-up、status refresh、
+activation、event apply の各経路から registry の mutating API へ到達せず、成功後の fallback write もありません。
+executor と Orleans Grain は、この mode では通常の projector 初期化、subscription、refresh timer、書込み用 registry 接続を開始しません。
+専用 inspector 自身が read-only 経路を選びます。SQLite は `Mode=ReadOnly`、PostgreSQL は
+`default_transaction_read_only=on`、MySQL は read-only transaction session、SQL Server は
+`ApplicationIntent=ReadOnly` を使用します。registry entry、active pointer、catalog metadata は inspector 経由だけで読み取り、
+provider の catalog allowlist は read-only です。SQLite の metadata は書込みを伴う PRAGMA ではなく table-valued PRAGMA catalog function を使います。
+
 verify-only に対応する projector は、format version `1` の追加された `MvSchemaContract` /
 `IMvSchemaRequirementsProvider` 契約で target schema を宣言します。
 
@@ -287,16 +295,23 @@ public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
 ];
 ```
 
-verifier は mismatch を deterministic な順序で全件報告します。provider-neutral な type family と primary key / nullability の検証は、PostgreSQL、MySQL、SQL Server、SQLite の native
-metadata へそれぞれ変換して実行されます。table / column の不足、type・nullability・key の不一致、schema contract
+verifier は mismatch を deterministic な順序で全件報告します。type、nullability、primary key に加えて、正規化した
+default、必要な index（列順と unique 性）、generated column の意味と式、文字列サイズ、numeric の precision / scale も contract で表現できます。
+provider-neutral な検証は PostgreSQL、MySQL、SQL Server、SQLite の native metadata へそれぞれ変換して実行されます。
+table / column の不足、type・nullability・key・metadata の不一致、schema contract
 不足、metadata capability 非対応は、型付き `MvInitializationException` と `MvInitializationFailureReason` になります。
 これらは event read、view write、registry mutation、catch-up、activation より前に発生します。そのため schema contract
 を実装していない host も verify-only では fail-closed になります。
 
+互換性の proof には公開済み `10.13.0` package を参照して restore / build した binary consumer を含めています。
+branch の assembly を出力先へ差し替えた後、再コンパイルなしで実行します。詳細は
+[`Sekiban.Dcb.MaterializedView.BinaryConsumer`](../../dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/README.md) を参照してください。
+
 projector が返すすべての initialization / apply SQL 文は、provider 実行前に host 所有の
 `IMvSqlStatementPolicy` へ渡されます。`MvSqlStatementContext` には正確な service id、view name / version、
-`Initialization` または `Apply` phase、logical / physical table binding、SQL text、parameter metadata が含まれます。
-policy は `MvSqlPolicyDecision.Allow()` または `Reject(reason)` を返します。
+`Initialization` または `Apply` phase、正確な `ProjectorInitialize` / `ProjectorApply` / `ProjectorQuery` origin、
+provider の `DatabaseType`、logical / physical table binding、SQL text、parameter metadata が含まれます。
+policy は optional な rule id を付けて `MvSqlPolicyDecision.Allow(ruleId)` または `Reject(reason, ruleId)` を返せます。
 
 ```csharp
 public sealed class MyHostSqlPolicy : IMvSqlStatementPolicy
@@ -313,9 +328,10 @@ public sealed class MyHostSqlPolicy : IMvSqlStatementPolicy
 }
 ```
 
-拒否は型付き `MvSqlPolicyRejectedException` になります。safe failure には service / view / version と phase だけが含まれ、
-SQL や parameter value はコピーされません。initialization の拒否は `EnsureInfrastructureAsync` や provider command より
-前に起きます。apply の拒否は projector SQL や registry checkpoint を commit する前に event transaction を rollback します。
+拒否は型付き `MvSqlPolicyRejectedException` になります。safe failure には service / view / version、phase、正確な origin、
+provider、rule id、statement index / batch size、SQL fingerprint が含まれますが、SQL や parameter value はコピーされません。
+initialization の拒否は `EnsureInfrastructureAsync` や provider command より前に起きます。apply の拒否は projector SQL や
+registry checkpoint を commit する前に event transaction を rollback します。
 `Legacy` mode では既存の raw `Connection` / `Transaction` access を source-compatible に維持します。SQL 境界を強制する
 host は `Enforced` mode を選びます。
 

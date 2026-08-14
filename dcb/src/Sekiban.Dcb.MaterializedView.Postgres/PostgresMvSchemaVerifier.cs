@@ -12,7 +12,8 @@ public sealed partial class PostgresMvRegistryStore
     {
         try
         {
-            await using var connection = new NpgsqlConnection(_connectionString);
+            RecordReadOnlyConnection();
+            await using var connection = new NpgsqlConnection(ReadOnlyConnectionString);
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
             var tableNames = requirements
                 .Select(requirement => requirement.PhysicalTable)
@@ -26,7 +27,13 @@ public sealed partial class PostgresMvRegistryStore
                                column_name AS ColumnName,
                                data_type AS DataType,
                                udt_name AS UdtName,
-                               is_nullable AS IsNullable
+                               is_nullable AS IsNullable,
+                               column_default AS DefaultSql,
+                               is_generated AS IsGenerated,
+                               generation_expression AS GenerationExpression,
+                               character_maximum_length AS MaxLength,
+                               numeric_precision AS Precision,
+                               numeric_scale AS Scale
                         FROM information_schema.columns
                         WHERE table_schema = current_schema()
                           AND table_name = ANY(@TableNames);
@@ -52,6 +59,21 @@ public sealed partial class PostgresMvRegistryStore
                         new { TableNames = tableNames },
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
+            var indexes = await connection.QueryAsync<PostgresSchemaIndex>(
+                    CatalogCommand(
+                        """
+                        SELECT tablename AS TableName,
+                               indexname AS Name,
+                               indexdef LIKE '%UNIQUE INDEX%' AS IsUnique,
+                               regexp_replace(indexdef, '^.*\\((.*)\\).*$', '\\1') AS ColumnList
+                        FROM pg_indexes
+                        WHERE schemaname = current_schema()
+                          AND tablename = ANY(@TableNames)
+                          AND indexdef NOT LIKE '%PRIMARY KEY%';
+                        """,
+                        new { TableNames = tableNames },
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
 
             return MvSchemaRequirements.Validate(
                 requirements,
@@ -60,11 +82,27 @@ public sealed partial class PostgresMvRegistryStore
                         column.TableName,
                         column.ColumnName,
                         MapType(column.DataType, column.UdtName),
-                        string.Equals(column.IsNullable, "YES", StringComparison.OrdinalIgnoreCase))),
+                        string.Equals(column.IsNullable, "YES", StringComparison.OrdinalIgnoreCase))
+                    {
+                        DefaultSql = column.DefaultSql,
+                        IsGenerated = string.Equals(column.IsGenerated, "ALWAYS", StringComparison.OrdinalIgnoreCase),
+                        GenerationExpression = column.GenerationExpression,
+                        MaxLength = column.MaxLength,
+                        Precision = column.Precision,
+                        Scale = column.Scale
+                    }),
                     primaryKeys.Select(column => new MvObservedSchemaPrimaryKeyColumn(
                         column.TableName,
                         column.ColumnName,
-                        column.Ordinal))));
+                        column.Ordinal)),
+                    indexes.Select(index => new MvObservedSchemaIndex(
+                        index.TableName,
+                        index.Name,
+                        index.ColumnList
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            .Select(column => column.Trim('"'))
+                            .ToList(),
+                        index.IsUnique))));
         }
         catch (OperationCanceledException)
         {
@@ -106,6 +144,12 @@ public sealed partial class PostgresMvRegistryStore
         public string DataType { get; init; } = string.Empty;
         public string UdtName { get; init; } = string.Empty;
         public string IsNullable { get; init; } = string.Empty;
+        public string? DefaultSql { get; init; }
+        public string? IsGenerated { get; init; }
+        public string? GenerationExpression { get; init; }
+        public int? MaxLength { get; init; }
+        public int? Precision { get; init; }
+        public int? Scale { get; init; }
     }
 
     private sealed class PostgresSchemaPrimaryKeyColumn
@@ -113,5 +157,13 @@ public sealed partial class PostgresMvRegistryStore
         public string TableName { get; init; } = string.Empty;
         public string ColumnName { get; init; } = string.Empty;
         public int Ordinal { get; init; }
+    }
+
+    private sealed class PostgresSchemaIndex
+    {
+        public string TableName { get; init; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
+        public bool IsUnique { get; init; }
+        public string ColumnList { get; init; } = string.Empty;
     }
 }

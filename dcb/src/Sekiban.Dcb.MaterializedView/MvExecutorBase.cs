@@ -44,6 +44,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
 
     protected string ConnectionString => _connectionString;
 
+    /// <summary>Provider executors override this so policy decisions carry the concrete database type.</summary>
+    protected virtual MvDbType DatabaseType => MvDbType.Postgres;
+
+    private bool IsVerifyOnly => _options.InitializationMode == MvInitializationMode.VerifyOnly;
+
     // These helpers validate dependencies and move database-neutral workflow only. They never resolve or cache an
     // event store; each provider executor keeps its own factory field and selects its service-scoped source.
     protected static (IEventStore EventStore, IServiceIdProvider ServiceIdProvider) RequireLegacyCompatibilityDependencies(
@@ -163,13 +168,16 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
 
         var target = await CaptureTargetCheckpointFromStoreAsync(SelectEventStoreForService(exactServiceId))
             .ConfigureAwait(false);
-        await _registryStore.SetTargetCheckpointAsync(
-                exactServiceId,
-                host.ViewName,
-                host.ViewVersion,
-                target,
-                cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        if (!IsVerifyOnly)
+        {
+            await _registryStore.SetTargetCheckpointAsync(
+                    exactServiceId,
+                    host.ViewName,
+                    host.ViewVersion,
+                    target,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
         return target;
     }
 
@@ -185,11 +193,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 cancellationToken,
                 initializeWhenEmpty: false)
             .ConfigureAwait(false);
-        var active = await _registryStore.GetActiveAsync(
-                exactServiceId,
-                host.ViewName,
-                cancellationToken)
-            .ConfigureAwait(false);
+        var active = await ReadActiveAsync(exactServiceId, host.ViewName, cancellationToken).ConfigureAwait(false);
         var (eligibility, request) = MvActivationEligibility.Evaluate(
             exactServiceId,
             host.ViewName,
@@ -199,6 +203,13 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         if (!eligibility.IsEligible || request is null)
         {
             return MvActivationResult.Rejected(eligibility.FailureReason, eligibility.Message);
+        }
+
+        if (IsVerifyOnly)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.ProviderFailure,
+                "Verify-only infrastructure mode never mutates materialized-view registry state.");
         }
 
         try
@@ -248,7 +259,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 bindings,
                 statements,
                 MvSqlStatementPhase.Initialization,
-                cancellationToken)
+                cancellationToken,
+                MvSqlStatementOrigin.ProjectorInitialize)
             .ConfigureAwait(false);
 
         await _registryStore.EnsureInfrastructureAsync(cancellationToken).ConfigureAwait(false);
@@ -383,7 +395,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         MvTableBindings bindings,
         IReadOnlyList<MvSqlStatementDto> statements,
         MvSqlStatementPhase phase,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        MvSqlStatementOrigin? origin = null)
     {
         var policy = _options.SqlStatementPolicyMode == MvSqlStatementPolicyMode.Enforced
             ? _options.SqlStatementPolicy
@@ -404,6 +417,10 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                         statement.Sql,
                         statement.Parameters.Select(parameter => parameter with { ValueJson = null }).ToList())
                     {
+                        DatabaseType = DatabaseType,
+                        Origin = origin ?? (phase == MvSqlStatementPhase.Initialization
+                            ? MvSqlStatementOrigin.ProjectorInitialize
+                            : MvSqlStatementOrigin.ProjectorApply),
                         StatementIndex = statementIndex,
                         BatchSize = batch.Count
                     },
@@ -448,6 +465,27 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         }
 
         return _registryStore.GetEntriesAsync(serviceId, viewName, viewVersion, cancellationToken);
+    }
+
+    private Task<MvActiveEntry?> ReadActiveAsync(
+        string serviceId,
+        string viewName,
+        CancellationToken cancellationToken)
+    {
+        if (IsVerifyOnly)
+        {
+            if (_registryStore is not IMvReadOnlyMvInspector inspector)
+            {
+                throw new MvInitializationException(
+                    new MvInitializationFailure(
+                        MvInitializationFailureReason.UnsupportedProviderCapability,
+                        "The configured materialized-view provider does not expose a dedicated read-only active-pointer inspector."));
+            }
+
+            return inspector.ReadActiveAsync(serviceId, viewName, cancellationToken);
+        }
+
+        return _registryStore.GetActiveAsync(serviceId, viewName, cancellationToken);
     }
 
     /// <summary>
@@ -563,6 +601,12 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             return;
         }
 
+        // Verify-only may inspect an existing target, but it is never allowed to create or refresh registry truth.
+        if (IsVerifyOnly)
+        {
+            return;
+        }
+
         var target = await CaptureTargetCheckpointFromStoreAsync(eventStore).ConfigureAwait(false);
         await _registryStore.SetTargetCheckpointAsync(
                 serviceId,
@@ -589,11 +633,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 host.ViewVersion,
                 cancellationToken)
             .ConfigureAwait(false);
-        var active = await _registryStore.GetActiveAsync(
-                serviceId,
-                host.ViewName,
-                cancellationToken)
-            .ConfigureAwait(false);
+        var active = await ReadActiveAsync(serviceId, host.ViewName, cancellationToken).ConfigureAwait(false);
 
         // Retired and faulted rows are terminal lifecycle states. Only the normal catch-up/ready transition may be
         // promoted by this automatic initial-activation path.
@@ -616,6 +656,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             readyEntries,
             active);
         if (!preflight.IsEligible)
+        {
+            return entries[0].Status;
+        }
+
+        if (IsVerifyOnly)
         {
             return entries[0].Status;
         }
@@ -700,19 +745,22 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
 
         if (batch.Count == 0)
         {
-            await _registryStore.UpdatePositionAsync(
-                    new MvPositionUpdate(
-                        serviceId,
-                        host.ViewName,
-                        host.ViewVersion,
-                        SortableUniqueId.MinValue.Value,
-                        MvApplySource.CatchUp,
-                        AppliedEventVersionDelta: 0)
-                    {
-                        CheckpointTruth = MvCheckpointTruth.KnownZero()
-                    },
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
+            if (!IsVerifyOnly)
+            {
+                await _registryStore.UpdatePositionAsync(
+                        new MvPositionUpdate(
+                            serviceId,
+                            host.ViewName,
+                            host.ViewVersion,
+                            SortableUniqueId.MinValue.Value,
+                            MvApplySource.CatchUp,
+                            AppliedEventVersionDelta: 0)
+                        {
+                            CheckpointTruth = MvCheckpointTruth.KnownZero()
+                        },
+                        cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+            }
             var emptyTruth = currentStatus.CurrentCheckpointTruth.IsKnown &&
                 !currentStatus.CurrentCheckpointTruth.IsKnownZero
                     ? currentStatus.CurrentCheckpointTruth
@@ -788,6 +836,14 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 cancellationToken)
             .ConfigureAwait(false);
 
+        // Verify-only is an inspection lifecycle. Once the declarative gate has succeeded, an event-apply call is
+        // deliberately a no-op so it cannot open the normal target connection, create a transaction, execute
+        // projector SQL, or commit a view/registry mutation.
+        if (IsVerifyOnly)
+        {
+            return 0;
+        }
+
         var currentPosition = entries
             .Select(entry => entry.CurrentCheckpointTruth.IsKnown ? entry.CurrentCheckpointTruth.PositionValue : null)
             .FirstOrDefault(position => !string.IsNullOrWhiteSpace(position));
@@ -852,7 +908,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 serviceId,
                 host.ViewName,
                 host.ViewVersion,
-                bindings.Tables);
+                bindings.Tables,
+                DatabaseType);
         }
         IReadOnlyList<MvSqlStatementDto> statements;
         try
@@ -870,7 +927,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                     bindings,
                     statements,
                     MvSqlStatementPhase.Apply,
-                    cancellationToken)
+                    cancellationToken,
+                    MvSqlStatementOrigin.ProjectorApply)
                 .ConfigureAwait(false);
         }
         catch
@@ -911,16 +969,19 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             return false;
         }
 
-        await _registryStore.UpdatePositionAsync(
-                new MvPositionUpdate(
-                    serviceId,
-                    host.ViewName,
-                    host.ViewVersion,
-                    serializableEvent.SortableUniqueIdValue,
-                    source),
-                transaction,
-                cancellationToken)
-            .ConfigureAwait(false);
+        if (!IsVerifyOnly)
+        {
+            await _registryStore.UpdatePositionAsync(
+                    new MvPositionUpdate(
+                        serviceId,
+                        host.ViewName,
+                        host.ViewVersion,
+                        serializableEvent.SortableUniqueIdValue,
+                        source),
+                    transaction,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }

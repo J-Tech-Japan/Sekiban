@@ -35,7 +35,10 @@ public enum MvSchemaMismatchCode
     PrimaryKeyMismatch = 5,
     BindingMismatch = 6,
     ContractUnavailable = 7,
-    RequiredIndexMissing = 8
+    RequiredIndexMissing = 8,
+    GeneratedSemanticsMismatch = 9,
+    SizeMismatch = 10,
+    PrecisionMismatch = 11
 }
 
 public enum MvSchemaTypeFamily
@@ -77,13 +80,36 @@ public sealed class MvInitializationException : InvalidOperationException
 public sealed record MvSchemaColumnRequirement(
     string Name,
     MvSchemaTypeFamily TypeFamily,
-    bool IsNullable);
+    bool IsNullable)
+{
+    /// <summary>Null means that the contract does not constrain the native default.</summary>
+    public string? DefaultSql { get; init; }
+
+    /// <summary>Null means that the contract does not constrain generated-column semantics.</summary>
+    public bool? IsGenerated { get; init; }
+
+    /// <summary>Optional normalized generation expression required when <see cref="IsGenerated"/> is true.</summary>
+    public string? GenerationExpression { get; init; }
+
+    public int? MaxLength { get; init; }
+    public int? Precision { get; init; }
+    public int? Scale { get; init; }
+}
+
+public sealed record MvSchemaIndexRequirement(
+    string Name,
+    IReadOnlyList<string> Columns,
+    bool IsUnique);
 
 public sealed record MvSchemaTableRequirement(
     string LogicalTable,
     string PhysicalTable,
     IReadOnlyList<MvSchemaColumnRequirement> Columns,
-    IReadOnlyList<string> PrimaryKeyColumns);
+    IReadOnlyList<string> PrimaryKeyColumns)
+{
+    /// <summary>Required indexes are matched by ordered columns and uniqueness, not provider-specific names.</summary>
+    public IReadOnlyList<MvSchemaIndexRequirement> Indexes { get; init; } = [];
+}
 
 /// <summary>
 ///     Versioned, provider-neutral schema contract used by verify-only initialization. The existing table requirement
@@ -116,7 +142,15 @@ public sealed record MvObservedSchemaColumn(
     string TableName,
     string Name,
     MvSchemaTypeFamily TypeFamily,
-    bool IsNullable);
+    bool IsNullable)
+{
+    public string? DefaultSql { get; init; }
+    public bool IsGenerated { get; init; }
+    public string? GenerationExpression { get; init; }
+    public int? MaxLength { get; init; }
+    public int? Precision { get; init; }
+    public int? Scale { get; init; }
+}
 
 public sealed record MvObservedSchemaPrimaryKeyColumn(
     string TableName,
@@ -126,7 +160,16 @@ public sealed record MvObservedSchemaPrimaryKeyColumn(
 public sealed record MvObservedTableSchema(
     string Name,
     IReadOnlyList<MvObservedSchemaColumn> Columns,
-    IReadOnlyList<string> PrimaryKeyColumns);
+    IReadOnlyList<string> PrimaryKeyColumns)
+{
+    public IReadOnlyList<MvObservedSchemaIndex> Indexes { get; init; } = [];
+}
+
+public sealed record MvObservedSchemaIndex(
+    string TableName,
+    string Name,
+    IReadOnlyList<string> Columns,
+    bool IsUnique);
 
 public sealed record MvSchemaMismatch(
     MvSchemaMismatchCode Code,
@@ -200,6 +243,13 @@ public interface IMvReadOnlyMvInspector : IMvSchemaVerifier
         string viewName,
         int viewVersion,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Reads the serving pointer through the same provider-owned read-only connection boundary.</summary>
+    Task<MvActiveEntry?> ReadActiveAsync(
+        string serviceId,
+        string viewName,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This read-only materialized-view inspector does not expose the active pointer.");
 }
 
 /// <summary>
@@ -262,7 +312,8 @@ public static class MvSchemaRequirements
 
     public static IReadOnlyDictionary<string, MvObservedTableSchema> Observe(
         IEnumerable<MvObservedSchemaColumn> columns,
-        IEnumerable<MvObservedSchemaPrimaryKeyColumn> primaryKeyColumns)
+        IEnumerable<MvObservedSchemaPrimaryKeyColumn> primaryKeyColumns,
+        IEnumerable<MvObservedSchemaIndex>? indexes = null)
     {
         var columnGroups = columns
             .GroupBy(column => column.TableName, StringComparer.OrdinalIgnoreCase)
@@ -279,13 +330,24 @@ public static class MvSchemaRequirements
                     .Select(column => column.Name)
                     .ToList(),
                 StringComparer.OrdinalIgnoreCase);
+        var indexGroups = (indexes ?? [])
+            .GroupBy(index => index.TableName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<MvObservedSchemaIndex>)group
+                    .OrderBy(index => index.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                StringComparer.OrdinalIgnoreCase);
 
         return columnGroups.ToDictionary(
             pair => pair.Key,
             pair => new MvObservedTableSchema(
                 pair.Key,
                 pair.Value,
-                keyGroups.TryGetValue(pair.Key, out var keys) ? keys : []),
+                keyGroups.TryGetValue(pair.Key, out var keys) ? keys : [])
+            {
+                Indexes = indexGroups.TryGetValue(pair.Key, out var tableIndexes) ? tableIndexes : []
+            },
             StringComparer.OrdinalIgnoreCase);
     }
 
@@ -344,6 +406,71 @@ public static class MvSchemaRequirements
                             $"Column '{expectedColumn.Name}' on materialized-view table '{requirement.PhysicalTable}' has incompatible nullability.",
                             requirement.LogicalTable,
                             requirement.PhysicalTable,
+                        expectedColumn.Name));
+                }
+
+                if (expectedColumn.DefaultSql is not null &&
+                    !string.Equals(
+                        NormalizeSqlMetadata(expectedColumn.DefaultSql),
+                        NormalizeSqlMetadata(actualColumn.DefaultSql),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    mismatches.Add(
+                        new MvSchemaMismatch(
+                            MvSchemaMismatchCode.DefaultMismatch,
+                            $"Column '{expectedColumn.Name}' on materialized-view table '{requirement.PhysicalTable}' has an incompatible default.",
+                            requirement.LogicalTable,
+                            requirement.PhysicalTable,
+                            expectedColumn.Name));
+                }
+
+                if (expectedColumn.IsGenerated is { } expectedGenerated &&
+                    actualColumn.IsGenerated != expectedGenerated)
+                {
+                    mismatches.Add(
+                        new MvSchemaMismatch(
+                            MvSchemaMismatchCode.GeneratedSemanticsMismatch,
+                            $"Column '{expectedColumn.Name}' on materialized-view table '{requirement.PhysicalTable}' has incompatible generated-column semantics.",
+                            requirement.LogicalTable,
+                            requirement.PhysicalTable,
+                            expectedColumn.Name));
+                }
+
+                if (expectedColumn.GenerationExpression is not null &&
+                    !string.Equals(
+                        NormalizeSqlMetadata(expectedColumn.GenerationExpression),
+                        NormalizeSqlMetadata(actualColumn.GenerationExpression),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    mismatches.Add(
+                        new MvSchemaMismatch(
+                            MvSchemaMismatchCode.GeneratedSemanticsMismatch,
+                            $"Column '{expectedColumn.Name}' on materialized-view table '{requirement.PhysicalTable}' has an incompatible generation expression.",
+                            requirement.LogicalTable,
+                            requirement.PhysicalTable,
+                            expectedColumn.Name));
+                }
+
+                if (expectedColumn.MaxLength is { } maxLength && actualColumn.MaxLength != maxLength)
+                {
+                    mismatches.Add(
+                        new MvSchemaMismatch(
+                            MvSchemaMismatchCode.SizeMismatch,
+                            $"Column '{expectedColumn.Name}' on materialized-view table '{requirement.PhysicalTable}' has an incompatible size.",
+                            requirement.LogicalTable,
+                            requirement.PhysicalTable,
+                            expectedColumn.Name));
+                }
+
+                if ((expectedColumn.Precision is { } precision && actualColumn.Precision != precision) ||
+                    (expectedColumn.Scale is { } scale && actualColumn.Scale != scale))
+                {
+                    mismatches.Add(
+                        new MvSchemaMismatch(
+                            MvSchemaMismatchCode.PrecisionMismatch,
+                            $"Column '{expectedColumn.Name}' on materialized-view table '{requirement.PhysicalTable}' has incompatible precision or scale.",
+                            requirement.LogicalTable,
+                            requirement.PhysicalTable,
                             expectedColumn.Name));
                 }
             }
@@ -357,6 +484,22 @@ public static class MvSchemaRequirements
                         requirement.LogicalTable,
                         requirement.PhysicalTable));
             }
+
+            foreach (var expectedIndex in requirement.Indexes.OrderBy(index => index.Name, StringComparer.Ordinal))
+            {
+                var found = observed.Indexes.Any(actualIndex =>
+                    actualIndex.IsUnique == expectedIndex.IsUnique &&
+                    expectedIndex.Columns.SequenceEqual(actualIndex.Columns, StringComparer.OrdinalIgnoreCase));
+                if (!found)
+                {
+                    mismatches.Add(
+                        new MvSchemaMismatch(
+                            MvSchemaMismatchCode.RequiredIndexMissing,
+                            $"Required {(expectedIndex.IsUnique ? "unique " : string.Empty)}index '{expectedIndex.Name}' is missing from materialized-view table '{requirement.PhysicalTable}'.",
+                            requirement.LogicalTable,
+                            requirement.PhysicalTable));
+                }
+            }
         }
 
         if (mismatches.Count == 0)
@@ -369,6 +512,24 @@ public static class MvSchemaRequirements
             ? MvInitializationFailureReason.MissingSchemaObject
             : MvInitializationFailureReason.IncompatibleSchema;
         return MvSchemaVerificationResult.FailedWithMismatches(reason, mismatches);
+    }
+
+    private static string NormalizeSqlMetadata(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var normalized = string.Join(
+            ' ',
+            value.Trim().TrimEnd(';').Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        while (normalized.Length >= 2 && normalized[0] == '(' && normalized[^1] == ')')
+        {
+            normalized = normalized[1..^1].Trim();
+        }
+
+        return normalized;
     }
 
     public static MvSchemaVerificationResult ValidateContract(

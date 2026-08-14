@@ -133,6 +133,13 @@ public sealed class MvGenerationCoordinator : IMvGenerationCoordinator
     {
         ArgumentNullException.ThrowIfNull(retainedCandidate);
         var exactServiceId = ValidateServiceId(serviceId);
+        if (_options.InitializationMode == MvInitializationMode.VerifyOnly)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.ProviderFailure,
+                "Verify-only infrastructure mode never mutates materialized-view registry state.");
+        }
+
         var inputRejection = ValidateForcedReverseInput(
             retainedCandidate,
             expectedActiveVersion,
@@ -223,6 +230,12 @@ public sealed class MvGenerationCoordinator : IMvGenerationCoordinator
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(viewName);
         var exactServiceId = ValidateServiceId(serviceId);
+        if (_options.InitializationMode == MvInitializationMode.VerifyOnly &&
+            _registry is IMvReadOnlyMvInspector inspector)
+        {
+            return inspector.ReadActiveAsync(exactServiceId, viewName, cancellationToken);
+        }
+
         return _registry.GetActiveAsync(exactServiceId, viewName, cancellationToken);
     }
 

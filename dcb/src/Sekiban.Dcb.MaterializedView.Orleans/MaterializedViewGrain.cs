@@ -28,6 +28,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private readonly IMvRegistryStore _registryStore;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
 
+    private bool IsVerifyOnly => _options.InitializationMode == MvInitializationMode.VerifyOnly;
+
     private readonly List<SerializableEvent> _pendingStreamEvents = [];
     private IAsyncStream<SerializableEvent>? _stream;
     private StreamSubscriptionHandle<SerializableEvent>? _streamHandle;
@@ -119,6 +121,14 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
         ResolveHost();
         await _executor.InitializeAsync(_host!, _serviceId, CancellationToken.None);
+        if (IsVerifyOnly)
+        {
+            // Verify-only is an inspection lifecycle, not a catch-up lifecycle. Do not subscribe, capture a target,
+            // mark status, apply events, or let a timer reach registry mutations after the schema gate succeeds.
+            _started = true;
+            return;
+        }
+
         if (_executor is IMvActivationExecutor activationExecutor)
         {
             // Target capture is an explicit lifecycle step. Initialization creates registry rows only; it never
@@ -143,6 +153,11 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     public async Task RefreshAsync()
     {
         await EnsureStartedAsync();
+
+        if (IsVerifyOnly)
+        {
+            return;
+        }
 
         // Activate catch-up for any callers that explicitly request a refresh.
         if (!_isCatchUpActive)
@@ -389,6 +404,11 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     /// </summary>
     private async Task<bool> RunCatchUpTickAsync(bool ignoreImmediateFlag, CancellationToken cancellationToken)
     {
+        if (IsVerifyOnly)
+        {
+            return false;
+        }
+
         if (!_isCatchUpActive)
         {
             StopCatchUpTimer();
@@ -500,6 +520,11 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
     private async Task CompleteCatchUpAsync(CancellationToken cancellationToken)
     {
+        if (IsVerifyOnly)
+        {
+            return;
+        }
+
         await RefreshPositionFromRegistryAsync(cancellationToken);
 
         // Registry truth is the readiness gate. A legacy row, failed read, or
@@ -703,6 +728,11 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
     internal async Task OnStreamBatchAsync(IEnumerable<SerializableEvent> events)
     {
+        if (IsVerifyOnly)
+        {
+            return;
+        }
+
         var batch = events
             .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
             .ToList();
@@ -762,7 +792,9 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private async Task RefreshPositionFromRegistryAsync(CancellationToken cancellationToken)
     {
         ResolveHost();
-        var entries = await _registryStore.GetEntriesAsync(_serviceId!, _host!.ViewName, _host.ViewVersion, cancellationToken);
+        var entries = IsVerifyOnly && _registryStore is IMvReadOnlyMvInspector inspector
+            ? await inspector.ReadRegistryEntriesAsync(_serviceId!, _host!.ViewName, _host.ViewVersion, cancellationToken)
+            : await _registryStore.GetEntriesAsync(_serviceId!, _host!.ViewName, _host.ViewVersion, cancellationToken);
         _publicationSnapshot = MvProjectionStatusSnapshot.FromEntries(entries);
         var currentPosition = entries
             .Select(entry => entry.CurrentCheckpointTruth.IsKnown ? entry.CurrentCheckpointTruth.PositionValue : null)

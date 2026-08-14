@@ -7,7 +7,7 @@ namespace Sekiban.Dcb.MaterializedView.Sqlite;
 public sealed partial class SqliteMvRegistryStore
 {
     private const string TableInfoSql =
-        "SELECT name AS Name, type AS Type, \"notnull\" AS \"NotNull\", pk AS Pk FROM pragma_table_xinfo(@TableName) WHERE hidden = 0;";
+        "SELECT name AS Name, type AS Type, \"notnull\" AS \"NotNull\", pk AS Pk, dflt_value AS DefaultSql, hidden AS Hidden FROM pragma_table_xinfo(@TableName);";
 
     public async Task<MvSchemaVerificationResult> VerifySchemaAsync(
         IReadOnlyList<MvSchemaTableRequirement> requirements,
@@ -15,10 +15,12 @@ public sealed partial class SqliteMvRegistryStore
     {
         try
         {
-            await using var connection = new SqliteConnection(_connectionString);
+            RecordReadOnlyConnection();
+            await using var connection = new SqliteConnection(ReadOnlyConnectionString);
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
             var columns = new List<MvObservedSchemaColumn>();
             var primaryKeys = new List<MvObservedSchemaPrimaryKeyColumn>();
+            var indexes = new List<MvObservedSchemaIndex>();
             foreach (var tableName in requirements.Select(requirement => requirement.PhysicalTable).Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 ValidateContractIdentifier(tableName);
@@ -45,7 +47,11 @@ public sealed partial class SqliteMvRegistryStore
                         tableName,
                         column.Name,
                         MapType(column.Name, column.Type),
-                        column.NotNull == 0));
+                        column.NotNull == 0)
+                    {
+                        DefaultSql = column.DefaultSql,
+                        IsGenerated = column.Hidden is 2 or 3
+                    });
                     if (column.Pk > 0)
                     {
                         primaryKeys.Add(new MvObservedSchemaPrimaryKeyColumn(
@@ -54,11 +60,34 @@ public sealed partial class SqliteMvRegistryStore
                             column.Pk));
                     }
                 }
+
+                var tableIndexes = await connection.QueryAsync<SqliteSchemaIndex>(
+                        CatalogCommand(
+                            "SELECT name AS Name, \"unique\" AS IsUnique FROM pragma_index_list(@TableName) WHERE origin <> 'pk';",
+                            new { TableName = tableName },
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                foreach (var index in tableIndexes)
+                {
+                    ValidateContractIdentifier(index.Name);
+                    var indexColumns = await connection.QueryAsync<SqliteSchemaIndexColumn>(
+                            CatalogCommand(
+                                "SELECT name AS ColumnName, seqno AS Ordinal FROM pragma_index_info(@IndexName) ORDER BY seqno;",
+                                new { IndexName = index.Name },
+                                cancellationToken: cancellationToken))
+                        .ConfigureAwait(false);
+                    indexes.Add(
+                        new MvObservedSchemaIndex(
+                            tableName,
+                            index.Name,
+                            indexColumns.OrderBy(column => column.Ordinal).Select(column => column.ColumnName).ToList(),
+                            index.IsUnique != 0));
+                }
             }
 
             return MvSchemaRequirements.Validate(
                 requirements,
-                MvSchemaRequirements.Observe(columns, primaryKeys));
+                MvSchemaRequirements.Observe(columns, primaryKeys, indexes));
         }
         catch (OperationCanceledException)
         {
@@ -117,5 +146,19 @@ public sealed partial class SqliteMvRegistryStore
         public string? Type { get; init; }
         public int NotNull { get; init; }
         public int Pk { get; init; }
+        public string? DefaultSql { get; init; }
+        public int Hidden { get; init; }
+    }
+
+    private sealed class SqliteSchemaIndex
+    {
+        public string Name { get; init; } = string.Empty;
+        public int IsUnique { get; init; }
+    }
+
+    private sealed class SqliteSchemaIndexColumn
+    {
+        public string ColumnName { get; init; } = string.Empty;
+        public int Ordinal { get; init; }
     }
 }

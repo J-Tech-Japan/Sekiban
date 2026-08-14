@@ -263,6 +263,15 @@ the projector tables, including the registry binding rows. A missing or incompat
 never seeded automatically. The zero-DDL guarantee covers Sekiban-owned connections; arbitrary user/projector code is
 outside that process boundary.
 
+Verify-only remains isolated after the schema gate succeeds. Target-checkpoint capture, empty-history catch-up, status
+refresh, activation, and event-apply paths cannot call a mutating registry API; registry writes are not a success-path
+fallback. The executor and Orleans grain also avoid normal projector initialization, subscriptions, refresh timers, and
+write-oriented registry connections in this mode. The dedicated inspector owns its read-only route: SQLite opens with
+`Mode=ReadOnly`, PostgreSQL uses `default_transaction_read_only=on`, MySQL starts a read-only transaction session, and
+SQL Server requests `ApplicationIntent=ReadOnly`. Registry entries, the active pointer, and catalog metadata are read
+through that inspector only. The provider catalog allowlist is read-only; SQLite metadata uses table-valued PRAGMA
+catalog functions rather than mutating PRAGMA statements.
+
 Projectors that support verify-only initialization describe their target schema with the additive, format-versioned
 `MvSchemaContract`/`IMvSchemaRequirementsProvider` contract (format version `1`):
 
@@ -285,16 +294,24 @@ public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
 ];
 ```
 
-The verifier reports all mismatches in deterministic order. The provider-neutral type families and primary-key/nullability checks are mapped to native metadata by PostgreSQL,
-MySQL, SQL Server, and SQLite. A missing table/column, incompatible type/nullability/key, missing schema contract, or
+The verifier reports all mismatches in deterministic order. In addition to type, nullability, and primary-key shape, the
+contract can describe normalized defaults, required indexes (ordered columns and uniqueness), generated-column
+semantics and expression, character size, and numeric precision/scale. The provider-neutral checks are mapped to native
+metadata by PostgreSQL, MySQL, SQL Server, and SQLite. A missing table/column, incompatible type/nullability/key or
+metadata, missing schema contract, or
 unsupported metadata capability throws the typed `MvInitializationException` with an
 `MvInitializationFailureReason`. These failures happen before event reads, view writes, registry mutation, catch-up,
 or activation. A host that has not opted into the schema contract therefore fails closed in verify-only mode.
 
+The compatibility proof includes a binary consumer restored against the published `10.13.0` package and then run
+without recompilation against the branch assembly; see
+[`Sekiban.Dcb.MaterializedView.BinaryConsumer`](../../dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/README.md).
+
 Every projector-supplied initialization and apply statement is also presented to the host-owned
 `IMvSqlStatementPolicy` before provider execution. `MvSqlStatementContext` contains the exact service id, view name and
-version, `Initialization` or `Apply` phase, logical/physical table bindings, SQL text, and parameter metadata. A policy
-returns `MvSqlPolicyDecision.Allow()` or `Reject(reason)`:
+version, `Initialization` or `Apply` phase, the exact `ProjectorInitialize`/`ProjectorApply`/`ProjectorQuery` origin,
+provider `DatabaseType`, logical/physical table bindings, SQL text, and parameter metadata. A policy can return an
+optional rule id with `MvSqlPolicyDecision.Allow(ruleId)` or `Reject(reason, ruleId)`:
 
 ```csharp
 public sealed class MyHostSqlPolicy : IMvSqlStatementPolicy
@@ -311,10 +328,11 @@ public sealed class MyHostSqlPolicy : IMvSqlStatementPolicy
 }
 ```
 
-Rejection is typed as `MvSqlPolicyRejectedException`; its safe failure contains the service/view/version and phase, but
-does not copy SQL or parameter values into the failure. Initialization rejection occurs before `EnsureInfrastructureAsync`
-or a provider command. Apply rejection rolls back the event transaction before any projector statement or registry
-checkpoint is committed. In `Legacy` mode, existing raw `Connection`/`Transaction` access remains source-compatible.
+Rejection is typed as `MvSqlPolicyRejectedException`; its safe failure contains the service/view/version, phase, exact
+origin, provider, rule id, statement index/batch size, and SQL fingerprint, but does not copy SQL or parameter values
+into the failure. Initialization rejection occurs before `EnsureInfrastructureAsync` or a provider command. Apply
+rejection rolls back the event transaction before any projector statement or registry checkpoint is committed. In
+`Legacy` mode, existing raw `Connection`/`Transaction` access remains source-compatible.
 Hosts that need a hard SQL boundary opt into `Enforced` mode:
 
 ```csharp

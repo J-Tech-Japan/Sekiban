@@ -18,6 +18,17 @@ public enum MvSqlStatementPhase
     Apply = 1
 }
 
+/// <summary>
+///     Identifies the projector surface that produced a statement. This is additive to the older two-value phase
+///     field, which remains the compatibility grouping used by existing policies.
+/// </summary>
+public enum MvSqlStatementOrigin
+{
+    ProjectorInitialize = 0,
+    ProjectorApply = 1,
+    ProjectorQuery = 2
+}
+
 public enum MvSqlPolicyFailureReason
 {
     Denied = 0,
@@ -36,6 +47,7 @@ public sealed record MvSqlStatementContext(
     IReadOnlyList<MvParam> Parameters)
 {
     public MvDbType? DatabaseType { get; init; }
+    public MvSqlStatementOrigin Origin { get; init; } = MvSqlStatementOrigin.ProjectorApply;
     public int StatementIndex { get; init; }
     public int BatchSize { get; init; } = 1;
     public string SqlSha256 => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Sql)));
@@ -44,10 +56,15 @@ public sealed record MvSqlStatementContext(
 
 public readonly record struct MvSqlPolicyDecision(bool IsAllowed, string? Reason)
 {
-    public static MvSqlPolicyDecision Allow() => new(true, null);
+    public string? RuleId { get; init; }
 
-    public static MvSqlPolicyDecision Reject(string reason) =>
-        new(false, string.IsNullOrWhiteSpace(reason) ? "The host SQL statement policy rejected the statement." : reason);
+    public static MvSqlPolicyDecision Allow(string? ruleId = null) => new(true, null) { RuleId = ruleId };
+
+    public static MvSqlPolicyDecision Reject(string reason, string? ruleId = null) =>
+        new(false, string.IsNullOrWhiteSpace(reason) ? "The host SQL statement policy rejected the statement." : reason)
+        {
+            RuleId = ruleId
+        };
 }
 
 public interface IMvSqlStatementPolicy
@@ -80,6 +97,8 @@ public sealed record MvSqlPolicyFailure(
 {
     public MvSqlPolicyFailureReason FailureReason { get; init; } = MvSqlPolicyFailureReason.Denied;
     public string? RuleId { get; init; }
+    public MvSqlStatementOrigin Origin { get; init; }
+    public MvDbType? DatabaseType { get; init; }
     public int StatementIndex { get; init; }
     public int BatchSize { get; init; } = 1;
     public string? SqlSha256 { get; init; }
@@ -137,7 +156,8 @@ internal static class MvSqlPolicyEvaluator
             throw CreateRejected(
                 context,
                 MvSqlPolicyFailureReason.InvalidDecision,
-                "The materialized-view SQL statement policy returned an invalid allow decision.");
+                "The materialized-view SQL statement policy returned an invalid allow decision.",
+                decision.RuleId);
         }
 
         if (!decision.IsAllowed)
@@ -147,17 +167,19 @@ internal static class MvSqlPolicyEvaluator
                 throw CreateRejected(
                     context,
                     MvSqlPolicyFailureReason.InvalidDecision,
-                    "The materialized-view SQL statement policy returned an invalid deny decision.");
+                    "The materialized-view SQL statement policy returned an invalid deny decision.",
+                    decision.RuleId);
             }
 
-            throw CreateRejected(context, MvSqlPolicyFailureReason.Denied, decision.Reason);
+            throw CreateRejected(context, MvSqlPolicyFailureReason.Denied, decision.Reason, decision.RuleId);
         }
     }
 
     private static MvSqlPolicyRejectedException CreateRejected(
         MvSqlStatementContext context,
         MvSqlPolicyFailureReason reason,
-        string message) =>
+        string message,
+        string? ruleId = null) =>
         new(
             new MvSqlPolicyFailure(
                 message,
@@ -167,6 +189,9 @@ internal static class MvSqlPolicyEvaluator
                 context.Phase)
             {
                 FailureReason = reason,
+                RuleId = ruleId,
+                Origin = context.Origin,
+                DatabaseType = context.DatabaseType,
                 StatementIndex = context.StatementIndex,
                 BatchSize = context.BatchSize,
                 SqlSha256 = context.SqlSha256
@@ -185,6 +210,7 @@ internal sealed class MvPolicyEnforcingQueryPort : IMvApplyQueryPort
     private readonly string _viewName;
     private readonly int _viewVersion;
     private readonly IReadOnlyList<MvTable> _tables;
+    private readonly MvDbType? _databaseType;
 
     public MvPolicyEnforcingQueryPort(
         IMvApplyQueryPort inner,
@@ -192,7 +218,8 @@ internal sealed class MvPolicyEnforcingQueryPort : IMvApplyQueryPort
         string serviceId,
         string viewName,
         int viewVersion,
-        IReadOnlyList<MvTable> tables)
+        IReadOnlyList<MvTable> tables,
+        MvDbType? databaseType = null)
     {
         _inner = inner;
         _policy = policy;
@@ -200,6 +227,7 @@ internal sealed class MvPolicyEnforcingQueryPort : IMvApplyQueryPort
         _viewName = viewName;
         _viewVersion = viewVersion;
         _tables = tables;
+        _databaseType = databaseType;
     }
 
     public async Task<IReadOnlyList<System.Text.Json.JsonElement>> QueryRowsAsync(
@@ -236,7 +264,11 @@ internal sealed class MvPolicyEnforcingQueryPort : IMvApplyQueryPort
                 _serviceId,
                 _viewName,
                 _viewVersion,
-                MvSqlStatementPhase.Apply));
+                MvSqlStatementPhase.Apply)
+            {
+                Origin = MvSqlStatementOrigin.ProjectorQuery,
+                DatabaseType = _databaseType
+            });
 
     private Task AuthorizeAsync(string sql, IReadOnlyList<MvParam> parameters, CancellationToken cancellationToken) =>
         MvSqlPolicyEvaluator.AuthorizeAsync(
@@ -248,7 +280,11 @@ internal sealed class MvPolicyEnforcingQueryPort : IMvApplyQueryPort
                 MvSqlStatementPhase.Apply,
                 _tables,
                 sql,
-                MetadataOnly(parameters)),
+                MetadataOnly(parameters))
+            {
+                DatabaseType = _databaseType,
+                Origin = MvSqlStatementOrigin.ProjectorQuery
+            },
             cancellationToken);
 
     private static IReadOnlyList<MvParam> MetadataOnly(IReadOnlyList<MvParam> parameters) =>
