@@ -6,6 +6,9 @@ namespace Sekiban.Dcb.MaterializedView.Sqlite;
 
 public sealed partial class SqliteMvRegistryStore
 {
+    private const string TableInfoSql =
+        "SELECT name AS Name, type AS Type, \"notnull\" AS \"NotNull\", pk AS Pk FROM pragma_table_info(@TableName);";
+
     public async Task<MvSchemaVerificationResult> VerifySchemaAsync(
         IReadOnlyList<MvSchemaTableRequirement> requirements,
         CancellationToken cancellationToken = default)
@@ -18,6 +21,7 @@ public sealed partial class SqliteMvRegistryStore
             var primaryKeys = new List<MvObservedSchemaPrimaryKeyColumn>();
             foreach (var tableName in requirements.Select(requirement => requirement.PhysicalTable).Distinct(StringComparer.OrdinalIgnoreCase))
             {
+                ValidateContractIdentifier(tableName);
                 var objectType = await connection.ExecuteScalarAsync<string?>(
                         new CommandDefinition(
                             "SELECT type FROM sqlite_master WHERE name = @TableName;",
@@ -31,22 +35,23 @@ public sealed partial class SqliteMvRegistryStore
 
                 var tableInfo = await connection.QueryAsync<SqliteSchemaColumn>(
                         new CommandDefinition(
-                            $"PRAGMA table_info('{EscapeLiteral(tableName)}');",
+                            TableInfoSql,
+                            new { TableName = tableName },
                             cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
                 foreach (var column in tableInfo)
                 {
                     columns.Add(new MvObservedSchemaColumn(
                         tableName,
-                        column.name,
-                        MapType(column.name, column.type),
-                        column.notnull == 0));
-                    if (column.pk > 0)
+                        column.Name,
+                        MapType(column.Name, column.Type),
+                        column.NotNull == 0));
+                    if (column.Pk > 0)
                     {
                         primaryKeys.Add(new MvObservedSchemaPrimaryKeyColumn(
                             tableName,
-                            column.name,
-                            column.pk));
+                            column.Name,
+                            column.Pk));
                     }
                 }
             }
@@ -67,7 +72,21 @@ public sealed partial class SqliteMvRegistryStore
         }
     }
 
-    private static string EscapeLiteral(string value) => value.Replace("'", "''", StringComparison.Ordinal);
+    private static void ValidateContractIdentifier(string identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier) ||
+            !(IsAsciiLetter(identifier[0]) || identifier[0] == '_') ||
+            identifier.Any(character =>
+                !(IsAsciiLetter(character) || char.IsAsciiDigit(character) || character == '_')))
+        {
+            throw new ArgumentException(
+                $"SQLite schema identifier '{identifier}' must contain only ASCII letters, digits, and underscores.",
+                nameof(identifier));
+        }
+    }
+
+    private static bool IsAsciiLetter(char character) =>
+        character is >= 'A' and <= 'Z' or >= 'a' and <= 'z';
 
     private static MvSchemaTypeFamily MapType(string columnName, string? declaredType)
     {
@@ -94,9 +113,9 @@ public sealed partial class SqliteMvRegistryStore
 
     private sealed class SqliteSchemaColumn
     {
-        public string name { get; init; } = string.Empty;
-        public string? type { get; init; }
-        public int notnull { get; init; }
-        public int pk { get; init; }
+        public string Name { get; init; } = string.Empty;
+        public string? Type { get; init; }
+        public int NotNull { get; init; }
+        public int Pk { get; init; }
     }
 }
