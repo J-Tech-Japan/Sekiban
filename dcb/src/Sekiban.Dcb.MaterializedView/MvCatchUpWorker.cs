@@ -88,14 +88,67 @@ public sealed class MvCatchUpWorker : BackgroundService
 
     private async Task InitializeProjectorsAsync(CancellationToken stoppingToken)
     {
-        foreach (var registration in _registrations)
+        while (!stoppingToken.IsCancellationRequested)
         {
-            var host = _hostFactory.Create(registration.ViewName, registration.ViewVersion);
-            await _executor.InitializeAsync(host, _serviceId, stoppingToken).ConfigureAwait(false);
-            _publicationSnapshots[GetProjectorKey(registration)] =
-                MvProjectionStatusSnapshot.Unknown(MvStatus.CatchingUp);
+            try
+            {
+                foreach (var registration in _registrations)
+                {
+                    var host = _hostFactory.Create(registration.ViewName, registration.ViewVersion);
+                    await _executor.InitializeAsync(host, _serviceId, stoppingToken).ConfigureAwait(false);
+                    _publicationSnapshots[GetProjectorKey(registration)] =
+                        MvProjectionStatusSnapshot.Unknown(MvStatus.CatchingUp);
+                }
+
+                return;
+            }
+            catch (MvInitializationException ex) when (
+                _options.InitializationMode == MvInitializationMode.VerifyOnly &&
+                !stoppingToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Verify-only materialized-view startup is gated until the pre-provisioned schema is compatible; retrying after {RetryDelay}.",
+                    GetVerifyOnlyRetryDelay());
+                foreach (var registration in _registrations)
+                {
+                    var snapshot = MvProjectionStatusSnapshot.Unknown(MvStatus.Faulted);
+                    _publicationSnapshots[GetProjectorKey(registration)] = snapshot;
+                    if (_statusPublisher is not null)
+                    {
+                        try
+                        {
+                            await _statusPublisher.PublishIfDueAsync(
+                                    _serviceId,
+                                    registration.ViewName,
+                                    registration.ViewVersion,
+                                    snapshot,
+                                    MvProjectionStatusPublisherKind.HostedWorker,
+                                    stoppingToken)
+                                .ConfigureAwait(false);
+                        }
+                        catch (Exception statusException) when (statusException is not OperationCanceledException)
+                        {
+                            _logger.LogWarning(
+                                statusException,
+                                "Unable to publish verify-only startup health for {ViewName}/{ViewVersion}.",
+                                registration.ViewName,
+                                registration.ViewVersion);
+                        }
+                    }
+                }
+
+                await Task.Delay(GetVerifyOnlyRetryDelay(), stoppingToken).ConfigureAwait(false);
+            }
         }
     }
+
+    private TimeSpan GetVerifyOnlyRetryDelay() =>
+        _options.VerifyOnlyRetryDelay > TimeSpan.Zero
+            ? _options.VerifyOnlyRetryDelay
+            : _options.PollInterval > TimeSpan.Zero
+                ? _options.PollInterval
+                : TimeSpan.FromSeconds(1);
 
     private async Task<CatchUpCycleResult> RunCatchUpCycleAsync(CancellationToken stoppingToken)
     {

@@ -4,13 +4,150 @@ using Microsoft.Data.SqlClient;
 
 namespace Sekiban.Dcb.MaterializedView.SqlServer;
 
-public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistryStoreBase<SqlConnection>, IMvRegistryStore
+public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistryStoreBase<SqlConnection>, IMvRegistryStore, IMvReadOnlyMvInspector
 {
     private readonly string _connectionString;
+    private readonly Action<string>? _catalogCommandRecorder;
+    private readonly Action<string>? _readOnlyConnectionRecorder;
+    private readonly string? _inspectionConnectionString;
 
     public SqlServerMvRegistryStore(string connectionString)
+        : this(connectionString, null, null, null)
+    {
+    }
+
+    public SqlServerMvRegistryStore(string connectionString, Action<string>? catalogCommandRecorder)
+        : this(connectionString, catalogCommandRecorder, null, null)
+    {
+    }
+
+    public SqlServerMvRegistryStore(
+        string connectionString,
+        Action<string>? catalogCommandRecorder,
+        Action<string>? readOnlyConnectionRecorder,
+        string? inspectionConnectionString = null)
     {
         _connectionString = connectionString;
+        _catalogCommandRecorder = catalogCommandRecorder;
+        _readOnlyConnectionRecorder = readOnlyConnectionRecorder;
+        _inspectionConnectionString = inspectionConnectionString;
+    }
+
+    private string? ReadOnlyConnectionString => _inspectionConnectionString;
+
+    private void RecordReadOnlyConnection() => _readOnlyConnectionRecorder?.Invoke("sqlserver:restricted-inspection-principal");
+
+    private const string DatabaseWritePermissionsSql = """
+        SELECT permission_name
+        FROM fn_my_permissions(NULL, 'DATABASE')
+        WHERE permission_name IN (
+            'INSERT', 'UPDATE', 'DELETE', 'ALTER', 'CONTROL', 'TAKE OWNERSHIP', 'IMPERSONATE',
+            'CREATE TABLE', 'CREATE VIEW', 'CREATE PROCEDURE', 'ALTER ANY SCHEMA', 'ALTER ANY USER',
+            'ALTER ANY ROLE');
+        """;
+
+    private const string ObjectWritePermissionsSql = """
+        IF OBJECT_ID(@ObjectName, 'U') IS NOT NULL
+        BEGIN
+            SELECT permission_name
+            FROM fn_my_permissions(@ObjectName, 'OBJECT')
+            WHERE permission_name IN (
+                'INSERT', 'UPDATE', 'DELETE', 'ALTER', 'CONTROL', 'TAKE OWNERSHIP', 'IMPERSONATE');
+        END;
+        """;
+
+    private const string ReadOnlyIdentitySql = """
+        SELECT USER_NAME() AS DatabasePrincipal,
+               SCHEMA_NAME() AS SchemaName,
+               HAS_PERMS_BY_NAME(DB_NAME(), 'DATABASE', 'SELECT') AS CanSelect,
+               HAS_PERMS_BY_NAME(DB_NAME(), 'DATABASE', 'VIEW DEFINITION') AS CanViewDefinition;
+        """;
+
+    private async Task<MvInitializationFailure?> CheckInspectionCapabilityAsync(
+        IEnumerable<string> objectNames,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(ReadOnlyConnectionString))
+        {
+            return new MvInitializationFailure(
+                MvInitializationFailureReason.UnsupportedProviderCapability,
+                "SQL Server verify-only inspection requires an explicit least-privilege inspection connection string.");
+        }
+
+        try
+        {
+            await using var connection = new SqlConnection(ReadOnlyConnectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+            var identity = await connection.QuerySingleAsync<SqlServerInspectionIdentity>(
+                    new CommandDefinition(ReadOnlyIdentitySql, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            if (identity.CanSelect != 1 ||
+                identity.CanViewDefinition != 1 ||
+                string.IsNullOrWhiteSpace(identity.DatabasePrincipal) ||
+                string.IsNullOrWhiteSpace(identity.SchemaName) ||
+                string.Equals(identity.DatabasePrincipal, "dbo", StringComparison.OrdinalIgnoreCase))
+            {
+                return new MvInitializationFailure(
+                    MvInitializationFailureReason.UnsupportedProviderCapability,
+                    "SQL Server inspection principal does not provide distinct catalog-read and metadata-definition capabilities.");
+            }
+
+            var databaseWritePermissions = await connection.QueryAsync<string>(
+                    new CommandDefinition(DatabaseWritePermissionsSql, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            if (databaseWritePermissions.Any())
+            {
+                return new MvInitializationFailure(
+                    MvInitializationFailureReason.UnsupportedProviderCapability,
+                    "SQL Server inspection principal has database write permissions and cannot be used for verify-only inspection.");
+            }
+
+            foreach (var objectName in objectNames.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var objectWritePermissions = await connection.QueryAsync<string>(
+                        new CommandDefinition(
+                            ObjectWritePermissionsSql,
+                            new { ObjectName = $"{identity.SchemaName}.{objectName}" },
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                if (objectWritePermissions.Any())
+                {
+                    return new MvInitializationFailure(
+                        MvInitializationFailureReason.UnsupportedProviderCapability,
+                        $"SQL Server inspection principal has write permissions on catalog target '{objectName}'.");
+                }
+            }
+
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return new MvInitializationFailure(
+                MvInitializationFailureReason.UnsupportedProviderCapability,
+                "SQL Server could not establish the least-privilege inspection capability.");
+        }
+    }
+
+    private sealed class SqlServerInspectionIdentity
+    {
+        public string? DatabasePrincipal { get; init; }
+        public string? SchemaName { get; init; }
+        public int CanSelect { get; init; }
+        public int CanViewDefinition { get; init; }
+    }
+
+    private CommandDefinition CatalogCommand(
+        string sql,
+        object? parameters = null,
+        CancellationToken cancellationToken = default)
+    {
+        _catalogCommandRecorder?.Invoke(sql);
+        return new CommandDefinition(sql, parameters, cancellationToken: cancellationToken);
     }
 
     public async Task EnsureInfrastructureAsync(CancellationToken cancellationToken = default)
@@ -354,11 +491,19 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
             cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<MvRegistryEntry>> GetEntriesAsync(
+    public Task<IReadOnlyList<MvRegistryEntry>> GetEntriesAsync(
         string serviceId,
         string viewName,
         int viewVersion,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ReadEntriesWithConnectionAsync(_connectionString, serviceId, viewName, viewVersion, cancellationToken);
+
+    private async Task<IReadOnlyList<MvRegistryEntry>> ReadEntriesWithConnectionAsync(
+        string connectionString,
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        CancellationToken cancellationToken)
     {
         const string sql = """
             SELECT service_id AS ServiceId,
@@ -388,18 +533,50 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
             ORDER BY logical_table;
             """;
 
-        await using var connection = new SqlConnection(_connectionString);
+        await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync(
-            new CommandDefinition(sql, new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion }, cancellationToken: cancellationToken))
+            CatalogCommand(sql, new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion }, cancellationToken))
             .ConfigureAwait(false);
         return rows.Select(row => (MvRegistryEntry)MapEntry(ToDictionary(row))).ToList();
     }
 
-    public async Task<MvActiveEntry?> GetActiveAsync(
+    public async Task<IReadOnlyList<MvRegistryEntry>> ReadRegistryEntriesAsync(
         string serviceId,
         string viewName,
+        int viewVersion,
         CancellationToken cancellationToken = default)
+    {
+        var capabilityFailure = await CheckInspectionCapabilityAsync(
+                ["sekiban_mv_registry", "sekiban_mv_active"],
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (capabilityFailure is not null)
+        {
+            throw new MvInitializationException(capabilityFailure);
+        }
+
+        RecordReadOnlyConnection();
+        return await ReadEntriesWithConnectionAsync(
+                ReadOnlyConnectionString!,
+                serviceId,
+                viewName,
+                viewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public Task<MvActiveEntry?> GetActiveAsync(
+        string serviceId,
+        string viewName,
+        CancellationToken cancellationToken = default) =>
+        ReadActiveWithConnectionAsync(_connectionString, serviceId, viewName, cancellationToken);
+
+    private async Task<MvActiveEntry?> ReadActiveWithConnectionAsync(
+        string connectionString,
+        string serviceId,
+        string viewName,
+        CancellationToken cancellationToken)
     {
         const string sql = """
             SELECT service_id AS ServiceId,
@@ -415,12 +592,35 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
               AND view_name = @ViewName;
             """;
 
-        await using var connection = new SqlConnection(_connectionString);
+        await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         var row = await connection.QuerySingleOrDefaultAsync(
             new CommandDefinition(sql, new { ServiceId = serviceId, ViewName = viewName }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         return row is null ? null : MapActiveEntry(ToDictionary(row));
+    }
+
+    public async Task<MvActiveEntry?> ReadActiveAsync(
+        string serviceId,
+        string viewName,
+        CancellationToken cancellationToken = default)
+    {
+        var capabilityFailure = await CheckInspectionCapabilityAsync(
+                ["sekiban_mv_registry", "sekiban_mv_active"],
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (capabilityFailure is not null)
+        {
+            throw new MvInitializationException(capabilityFailure);
+        }
+
+        RecordReadOnlyConnection();
+        return await ReadActiveWithConnectionAsync(
+                ReadOnlyConnectionString!,
+                serviceId,
+                viewName,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public Task SetActiveAsync(

@@ -242,6 +242,122 @@ Projector responsibilities:
 - `ApplyToViewAsync`
   Translate one event into one or more SQL statements.
 
+## Pre-Provisioned Schema and Host-Owned SQL Policy
+
+Initialization keeps the historical `CreateOrEnsure` behavior by default. Hosts that provision database objects through
+deployment migrations can select `VerifyOnly`:
+
+```csharp
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.InitializationMode = MvInitializationMode.VerifyOnly;
+    options.SqlStatementPolicy = MyHostSqlPolicy.Instance;
+});
+```
+
+Verify-only derives its bindings and required schema from the declarative contract before it enters the projector
+initialization path. It calls the provider's dedicated `IMvReadOnlyMvInspector` for catalog and registry reads only;
+`IMvApplyHost.InitializeAsync`, `EnsureInfrastructureAsync`, normal write connections, registration, transactions, and
+commits are not fallback paths. A compatible deployment must therefore provision both framework registry tables and
+the projector tables, including the registry binding rows. A missing or incompatible binding is a typed failure and is
+never seeded automatically. The zero-DDL guarantee covers Sekiban-owned connections; arbitrary user/projector code is
+outside that process boundary.
+
+Verify-only remains isolated after the schema gate succeeds. Target-checkpoint capture, empty-history catch-up, status
+refresh, activation, and event-apply paths cannot call a mutating registry API; registry writes are not a success-path
+fallback. The executor and Orleans grain also avoid normal projector initialization, subscriptions, refresh timers, and
+write-oriented registry connections in this mode. The dedicated inspector owns its read-only route: SQLite opens with
+`Mode=ReadOnly`, PostgreSQL uses `default_transaction_read_only=on`, MySQL starts a read-only transaction session, and
+SQL Server uses an explicit inspection principal. Registry entries, the active pointer, and catalog metadata are read
+through that inspector only. SQL Server does not use `ApplicationIntent=ReadOnly` as an enforcement mechanism on a
+standalone instance: configure `MvOptions.SqlServerInspectionConnectionString` with a distinct least-privilege
+inspection principal (for example, a database user in `db_datareader` with no DML or DDL permissions plus the
+non-writing catalog metadata visibility needed by the contract, such as database `VIEW DEFINITION`). Verify-only
+fails with a typed `UnsupportedProviderCapability` failure before catalog inspection when that capability is absent or
+cannot be established. The provider catalog allowlist is read-only; SQLite metadata uses table-valued PRAGMA catalog
+functions rather than mutating PRAGMA statements, and derives declared lengths/precision/scale and generated
+expressions where SQLite exposes them.
+
+Projectors that support verify-only initialization describe their target schema with the additive, format-versioned
+`MvSchemaContract`/`IMvSchemaRequirementsProvider` contract (format version `1`):
+
+```csharp
+public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
+    MvDbType databaseType,
+    IMvTableBindings tables) =>
+[
+    new(
+        "forecasts",
+        tables.GetPhysicalName("forecasts"),
+        [
+            new("forecast_id", MvSchemaTypeFamily.Guid, false),
+            new("location", MvSchemaTypeFamily.String, false),
+            new("forecast_date", MvSchemaTypeFamily.DateTime, false),
+            new("temperature_c", MvSchemaTypeFamily.Integer, false),
+            new("summary", MvSchemaTypeFamily.String, true)
+        ],
+        ["forecast_id"])
+];
+```
+
+The verifier reports all mismatches in deterministic order. In addition to type, nullability, and primary-key shape, the
+contract can describe normalized defaults, required indexes (ordered columns and uniqueness), generated-column
+semantics and expression, character size, and numeric precision/scale. The provider-neutral checks are mapped to native
+metadata by PostgreSQL, MySQL, SQL Server, and SQLite. A missing table/column, incompatible type/nullability/key or
+metadata, missing schema contract, or
+unsupported metadata capability throws the typed `MvInitializationException` with an
+`MvInitializationFailureReason`. These failures happen before event reads, view writes, registry mutation, catch-up,
+or activation. A host that has not opted into the schema contract therefore fails closed in verify-only mode.
+
+The compatibility proof includes a binary consumer restored against the published `10.13.0` package and then run
+without recompilation against the branch assembly; see
+[`Sekiban.Dcb.MaterializedView.BinaryConsumer`](../../dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/README.md).
+
+Every projector-supplied initialization and apply statement is also presented to the host-owned
+`IMvSqlStatementPolicy` before provider execution. `MvSqlStatementContext` contains the exact service id, view name and
+version, `Initialization` or `Apply` phase, the exact `ProjectorInitialize`/`ProjectorApply`/`ProjectorQuery` origin,
+provider `DatabaseType`, logical/physical table bindings, SQL text, and parameter metadata. A policy can return an
+optional rule id with `MvSqlPolicyDecision.Allow(ruleId)` or `Reject(reason, ruleId)`:
+
+```csharp
+public sealed class MyHostSqlPolicy : IMvSqlStatementPolicy
+{
+    public static MyHostSqlPolicy Instance { get; } = new();
+
+    public ValueTask<MvSqlPolicyDecision> EvaluateAsync(
+        MvSqlStatementContext context,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(
+            context.Phase == MvSqlStatementPhase.Initialization
+                ? MvSqlPolicyDecision.Reject("Initialization SQL is migration-owned.")
+                : MvSqlPolicyDecision.Allow());
+}
+```
+
+Rejection is typed as `MvSqlPolicyRejectedException`; its safe failure contains the service/view/version, phase, exact
+origin, provider, rule id, statement index/batch size, and SQL fingerprint, but does not copy SQL or parameter values
+into the failure. Initialization rejection occurs before `EnsureInfrastructureAsync` or a provider command. Apply
+rejection rolls back the event transaction before any projector statement or registry checkpoint is committed. In
+`Legacy` mode, existing raw `Connection`/`Transaction` access remains source-compatible.
+Hosts that need a hard SQL boundary opt into `Enforced` mode:
+
+```csharp
+options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
+```
+
+Enforced mode wraps `QueryRowsAsync`, `QuerySingleOrDefaultAsync`, and `ExecuteScalarJsonAsync` before the provider
+port, removes raw connection/transaction exposure, and preflights every statement in an initialization or apply batch
+before the first statement executes. Missing policy, policy faults, invalid decisions, and denials fail closed with
+typed reasons; cancellation remains `OperationCanceledException`. SQL is treated as opaque text by the runtime, so a
+host allowlist must reject mutating CTEs, comments, or multi-statement text according to its own policy.
+
+The hosted worker uses the same central initialization gate. In verify-only mode it publishes a faulted verification
+status, waits for the configured retry interval, and remains stopped until a later verification succeeds; it never
+falls back to ensure mode.
+
+The package default remains `CreateOrEnsure` plus `Legacy` and `MvAllowAllSqlStatementPolicy`, preserving existing
+callers that do not opt into the new boundary.
+
 ## Idempotency and Ordering
 
 Materialized views must be safe to replay. The usual pattern is:

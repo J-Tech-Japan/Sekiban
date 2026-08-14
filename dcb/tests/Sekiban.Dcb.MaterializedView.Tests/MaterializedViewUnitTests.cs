@@ -164,6 +164,32 @@ public class MaterializedViewUnitTests
     }
 
     [Fact]
+    public async Task CatchUpWorker_VerifyOnlyGatesCatchUpUntilLaterVerificationSucceeds()
+    {
+        var executor = new FakeMvExecutor(initializationFailuresBeforeSuccess: 1);
+        var hostFactory = new FakeApplyHostFactory(new FakeApplyHost("Fake", 1));
+        using var worker = new MvCatchUpWorker(
+            hostFactory,
+            executor,
+            Options.Create(new MvOptions
+            {
+                ServiceId = "worker-test",
+                InitializationMode = MvInitializationMode.VerifyOnly,
+                VerifyOnlyRetryDelay = TimeSpan.FromMilliseconds(5),
+                PollInterval = TimeSpan.FromMilliseconds(5)
+            }),
+            NullLogger<MvCatchUpWorker>.Instance);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        await worker.StartAsync(cts.Token);
+        await SpinWaitAsync(() => executor.CatchUpCalls > 0, cts.Token);
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.Equal(2, executor.InitializeCalls);
+        Assert.True(executor.CatchUpCalls > 0);
+    }
+
+    [Fact]
     public void CatchUpWorker_RejectsMissingOrImplicitDefaultServiceBeforeStarting()
     {
         var hostFactory = new FakeApplyHostFactory(new FakeApplyHost("Fake", 1));
@@ -413,8 +439,9 @@ public class MaterializedViewUnitTests
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
-    private sealed class FakeMvExecutor : IMvExecutor
+    private sealed class FakeMvExecutor(int initializationFailuresBeforeSuccess = 0) : IMvExecutor
     {
+        private int _initializationFailuresRemaining = initializationFailuresBeforeSuccess;
         public int InitializeCalls { get; private set; }
         public int CatchUpCalls { get; private set; }
         public List<string?> ServiceIds { get; } = [];
@@ -426,6 +453,16 @@ public class MaterializedViewUnitTests
         {
             InitializeCalls++;
             ServiceIds.Add(serviceId);
+            if (_initializationFailuresRemaining > 0)
+            {
+                _initializationFailuresRemaining--;
+                return Task.FromException(
+                    new MvInitializationException(
+                        new MvInitializationFailure(
+                            MvInitializationFailureReason.MissingSchemaObject,
+                            "schema is not ready")));
+            }
+
             return Task.CompletedTask;
         }
 
@@ -444,6 +481,14 @@ public class MaterializedViewUnitTests
             IReadOnlyList<SerializableEvent> events,
             string? serviceId = null,
             CancellationToken cancellationToken = default) => Task.FromResult(0);
+    }
+
+    private static async Task SpinWaitAsync(Func<bool> predicate, CancellationToken cancellationToken)
+    {
+        while (!predicate())
+        {
+            await Task.Delay(5, cancellationToken);
+        }
     }
 
     private sealed class FakeApplyHostFactory : IMvApplyHostFactory

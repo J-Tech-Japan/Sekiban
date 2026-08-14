@@ -17,6 +17,8 @@ public sealed class SqlServerMvExecutor : MvExecutorBase<SqlConnection>, IMvExec
     private readonly IEventStore? _legacyEventStore;
     private readonly IServiceIdProvider? _legacyServiceIdProvider;
 
+    protected override MvDbType DatabaseType => MvDbType.SqlServer;
+
     /// <summary>
     /// Creates the legacy single-service compatibility executor over an aggregate event store.
     /// Multi-service hosts should use the <see cref="IEventStoreFactory"/> constructor.

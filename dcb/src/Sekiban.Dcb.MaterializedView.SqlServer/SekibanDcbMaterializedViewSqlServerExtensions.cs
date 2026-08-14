@@ -29,7 +29,12 @@ public static class SekibanDcbMaterializedViewSqlServerExtensions
     {
         services.AddSekibanDcbMaterializedView();
         services.TryAddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
-        services.TryAddSingleton<IMvRegistryStore>(_ => new SqlServerMvRegistryStore(connectionString));
+        services.TryAddSingleton<IMvRegistryStore>(sp =>
+            new SqlServerMvRegistryStore(
+                connectionString,
+                null,
+                null,
+                sp.GetRequiredService<IOptions<MvOptions>>().Value.SqlServerInspectionConnectionString));
         services.TryAddSingleton<IMvStorageInfoProvider>(_ =>
             new MvStorageInfoProvider(new MvStorageInfo(MvDbType.SqlServer, connectionString)));
         services.TryAddSingleton<IMvExecutor>(sp =>

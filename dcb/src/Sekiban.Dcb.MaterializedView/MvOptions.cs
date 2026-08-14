@@ -49,6 +49,49 @@ public sealed class MvOptions
     ///     Ordinary multi-service registrations must supply a non-default service id.
     /// </summary>
     public bool AllowDefaultServiceId { get; set; }
+
+    /// <summary>
+    ///     Selects whether initialization may create/ensure schema or may only verify a pre-provisioned schema.
+    ///     The compatibility default preserves the historical create/ensure behavior.
+    /// </summary>
+    public MvInitializationMode InitializationMode { get; set; } = MvInitializationMode.CreateOrEnsure;
+
+    /// <summary>
+    ///     Delay before a hosted worker retries a failed VerifyOnly contract check. CreateOrEnsure workers do not use
+    ///     this setting. A non-positive value falls back to <see cref="PollInterval"/>.
+    /// </summary>
+    public TimeSpan VerifyOnlyRetryDelay { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    ///     Additive alias for <see cref="InitializationMode"/> using the infrastructure-ownership terminology.
+    /// </summary>
+    public MvInfrastructureMode InfrastructureMode
+    {
+        get => (MvInfrastructureMode)InitializationMode;
+        set => InitializationMode = (MvInitializationMode)value;
+    }
+
+    /// <summary>
+    ///     Host-owned policy evaluated for every projector-supplied initialization and apply statement before it is
+    ///     sent to the provider.
+    /// </summary>
+    public IMvSqlStatementPolicy? SqlStatementPolicy { get; set; } = MvAllowAllSqlStatementPolicy.Instance;
+
+    /// <summary>
+    ///     Selects whether the compatibility raw apply-context surface remains available or every apply query is
+    ///     evaluated before execution through a non-raw policy port.
+    /// </summary>
+    public MvSqlStatementPolicyMode SqlStatementPolicyMode { get; set; } = MvSqlStatementPolicyMode.Legacy;
+
+    /// <summary>
+    ///     Explicit least-privilege SQL Server connection used by the verify-only catalog inspector. The ordinary
+    ///     provider connection remains the writable connection used by legacy/create-and-ensure execution. SQL Server
+    ///     cannot enforce read-only access with ApplicationIntent on a standalone instance, so the principal must
+    ///     have no database/object DML or DDL permissions and enough catalog metadata visibility (for example,
+    ///     database VIEW DEFINITION) for the declared contract. Verify-only fails closed when this restricted
+    ///     inspection capability is not configured or cannot be established.
+    /// </summary>
+    public string? SqlServerInspectionConnectionString { get; set; }
 }
 
 public static class MvSchemaHelper

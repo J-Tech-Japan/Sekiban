@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- This fixture is intentionally compiled against the published v10.13.0 package. -->
+    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="10.13.0" />
+  </ItemGroup>
+</Project>

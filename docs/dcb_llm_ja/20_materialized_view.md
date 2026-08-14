@@ -245,6 +245,117 @@ public sealed class WeatherForecastMvV1 : IMaterializedViewProjector
 - `ApplyToViewAsync`
   1 イベントを 1 個以上の SQL 文へ変換
 
+## 事前プロビジョニングしたスキーマとホスト所有 SQL ポリシー
+
+初期化の既定値は、従来互換の `CreateOrEnsure` です。deployment migration などで DB オブジェクトを管理する
+ホストは `VerifyOnly` を選択できます。
+
+```csharp
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.InitializationMode = MvInitializationMode.VerifyOnly;
+    options.SqlStatementPolicy = MyHostSqlPolicy.Instance;
+});
+```
+
+verify-only は projector の初期化経路へ入る前に、宣言的な contract から binding と必要 schema を導出します。
+provider の専用 `IMvReadOnlyMvInspector` で catalog と registry を読むだけであり、
+`IMvApplyHost.InitializeAsync`、`EnsureInfrastructureAsync`、通常の書込み接続、registration、transaction、commit
+は fallback になりません。したがって deployment 側で framework の registry 2 テーブル、projector table、registry
+binding row まで用意します。binding の不足や不一致は型付きエラーで停止し、自動 seed は行いません。zero-DDL の保証は
+Sekiban が所有する接続の境界に限られ、任意の user/projector code はこのプロセス境界の外です。
+
+VerifyOnly は schema gate 成功後も隔離されたままです。target checkpoint の capture、空履歴の catch-up、status refresh、
+activation、event apply の各経路から registry の mutating API へ到達せず、成功後の fallback write もありません。
+executor と Orleans Grain は、この mode では通常の projector 初期化、subscription、refresh timer、書込み用 registry 接続を開始しません。
+専用 inspector 自身が read-only 経路を選びます。SQLite は `Mode=ReadOnly`、PostgreSQL は
+`default_transaction_read_only=on`、MySQL は read-only transaction session を使用します。SQL Server は専用の
+inspection principal を使用し、standalone instance で `ApplicationIntent=ReadOnly` を強制能力として扱いません。
+`MvOptions.SqlServerInspectionConnectionString` に独立した最小権限の inspection principal（例えば DML/DDL 権限を
+持たない `db_datareader` 相当の database user と、`VIEW DEFINITION` など契約に必要な非書込み metadata 権限）を
+設定します。この capability が未設定または確立できない場合、catalog inspection 前に
+`UnsupportedProviderCapability` の型付き failure で停止します。registry entry、active pointer、catalog metadata は inspector
+経由だけで読み取り、provider の catalog allowlist は read-only です。SQLite の metadata は書込みを伴う PRAGMA ではなく
+table-valued PRAGMA catalog function を使い、取得可能な declared length、precision/scale、generated expression を導出します。
+
+verify-only に対応する projector は、format version `1` の追加された `MvSchemaContract` /
+`IMvSchemaRequirementsProvider` 契約で target schema を宣言します。
+
+```csharp
+public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
+    MvDbType databaseType,
+    IMvTableBindings tables) =>
+[
+    new(
+        "forecasts",
+        tables.GetPhysicalName("forecasts"),
+        [
+            new("forecast_id", MvSchemaTypeFamily.Guid, false),
+            new("location", MvSchemaTypeFamily.String, false),
+            new("forecast_date", MvSchemaTypeFamily.DateTime, false),
+            new("temperature_c", MvSchemaTypeFamily.Integer, false),
+            new("summary", MvSchemaTypeFamily.String, true)
+        ],
+        ["forecast_id"])
+];
+```
+
+verifier は mismatch を deterministic な順序で全件報告します。type、nullability、primary key に加えて、正規化した
+default、必要な index（列順と unique 性）、generated column の意味と式、文字列サイズ、numeric の precision / scale も contract で表現できます。
+provider-neutral な検証は PostgreSQL、MySQL、SQL Server、SQLite の native metadata へそれぞれ変換して実行されます。
+table / column の不足、type・nullability・key・metadata の不一致、schema contract
+不足、metadata capability 非対応は、型付き `MvInitializationException` と `MvInitializationFailureReason` になります。
+これらは event read、view write、registry mutation、catch-up、activation より前に発生します。そのため schema contract
+を実装していない host も verify-only では fail-closed になります。
+
+互換性の proof には公開済み `10.13.0` package を参照して restore / build した binary consumer を含めています。
+branch の assembly を出力先へ差し替えた後、再コンパイルなしで実行します。詳細は
+[`Sekiban.Dcb.MaterializedView.BinaryConsumer`](../../dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/README.md) を参照してください。
+
+projector が返すすべての initialization / apply SQL 文は、provider 実行前に host 所有の
+`IMvSqlStatementPolicy` へ渡されます。`MvSqlStatementContext` には正確な service id、view name / version、
+`Initialization` または `Apply` phase、正確な `ProjectorInitialize` / `ProjectorApply` / `ProjectorQuery` origin、
+provider の `DatabaseType`、logical / physical table binding、SQL text、parameter metadata が含まれます。
+policy は optional な rule id を付けて `MvSqlPolicyDecision.Allow(ruleId)` または `Reject(reason, ruleId)` を返せます。
+
+```csharp
+public sealed class MyHostSqlPolicy : IMvSqlStatementPolicy
+{
+    public static MyHostSqlPolicy Instance { get; } = new();
+
+    public ValueTask<MvSqlPolicyDecision> EvaluateAsync(
+        MvSqlStatementContext context,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(
+            context.Phase == MvSqlStatementPhase.Initialization
+                ? MvSqlPolicyDecision.Reject("Initialization SQL is migration-owned.")
+                : MvSqlPolicyDecision.Allow());
+}
+```
+
+拒否は型付き `MvSqlPolicyRejectedException` になります。safe failure には service / view / version、phase、正確な origin、
+provider、rule id、statement index / batch size、SQL fingerprint が含まれますが、SQL や parameter value はコピーされません。
+initialization の拒否は `EnsureInfrastructureAsync` や provider command より前に起きます。apply の拒否は projector SQL や
+registry checkpoint を commit する前に event transaction を rollback します。
+`Legacy` mode では既存の raw `Connection` / `Transaction` access を source-compatible に維持します。SQL 境界を強制する
+host は `Enforced` mode を選びます。
+
+```csharp
+options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
+```
+
+Enforced mode は `QueryRowsAsync`、`QuerySingleOrDefaultAsync`、`ExecuteScalarJsonAsync` の provider port の前で policy を
+評価し、raw connection / transaction を projector に公開しません。initialization / apply batch は最初の SQL を実行する前に
+全 statement を preflight します。policy の未登録、fault、invalid decision、deny は typed reason 付きで fail-closed し、
+cancellation は `OperationCanceledException` のままです。runtime は SQL の先頭 keyword で判断しないため、mutating CTE、comment、
+multi-statement text の許可可否は host の allowlist が決めます。
+
+hosted worker も同じ中央 initialization gate を使います。verify-only では verification failure を faulted status として公開し、
+retry interval 後に再試行します。成功するまで worker は停止し、ensure mode へ fallback しません。
+
+package の既定値は `CreateOrEnsure`、`Legacy`、`MvAllowAllSqlStatementPolicy` のままであり、新しい境界を選ばない既存 caller の
+動作を維持します。
+
 ## 順序保証と冪等性
 
 マテリアライズドビューはリプレイ可能である必要があります。基本パターンは次の通りです。

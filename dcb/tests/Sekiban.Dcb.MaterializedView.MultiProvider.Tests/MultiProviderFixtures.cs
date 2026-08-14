@@ -27,12 +27,32 @@ using Xunit;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
-public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjector
+public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjector, IMvSchemaRequirementsProvider
 {
     public string ViewName => "WeatherForecastPortable";
     public int ViewVersion => 1;
 
     public MvTable Forecasts { get; private set; } = default!;
+
+    public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
+        MvDbType databaseType,
+        IMvTableBindings tables) =>
+    [
+        new MvSchemaTableRequirement(
+            "forecasts",
+            tables.GetPhysicalName("forecasts"),
+            [
+                new("forecast_id", MvSchemaTypeFamily.String, false),
+                new("location", MvSchemaTypeFamily.String, false),
+                new("forecast_date", MvSchemaTypeFamily.DateTime, false),
+                new("temperature_c", MvSchemaTypeFamily.Integer, false),
+                new("summary", MvSchemaTypeFamily.String, true),
+                new("is_deleted", MvSchemaTypeFamily.Boolean, false),
+                new("_last_sortable_unique_id", MvSchemaTypeFamily.String, false),
+                new("_last_applied_at", MvSchemaTypeFamily.DateTime, false)
+            ],
+            ["forecast_id"])
+    ];
 
     public async Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default)
     {
@@ -77,6 +97,21 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
 
         return new MvSqlStatement(dbType switch
         {
+            MvDbType.Postgres => $"""
+                INSERT INTO {Forecasts.PhysicalName}
+                    (forecast_id, location, forecast_date, temperature_c, summary, is_deleted, _last_sortable_unique_id, _last_applied_at)
+                VALUES
+                    (@ForecastId, @Location, @ForecastDate, @TemperatureC, @Summary, @IsDeleted, @SortableUniqueId, CURRENT_TIMESTAMP)
+                ON CONFLICT (forecast_id) DO UPDATE SET
+                    location = EXCLUDED.location,
+                    forecast_date = EXCLUDED.forecast_date,
+                    temperature_c = EXCLUDED.temperature_c,
+                    summary = EXCLUDED.summary,
+                    is_deleted = EXCLUDED.is_deleted,
+                    _last_sortable_unique_id = EXCLUDED._last_sortable_unique_id,
+                    _last_applied_at = CURRENT_TIMESTAMP
+                WHERE {Forecasts.PhysicalName}._last_sortable_unique_id < EXCLUDED._last_sortable_unique_id;
+                """,
             MvDbType.SqlServer => $"""
                 MERGE {Forecasts.PhysicalName} AS target
                 USING (
@@ -139,6 +174,18 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
     private static string CreateTableSql(MvDbType dbType, string tableName) =>
         dbType switch
         {
+            MvDbType.Postgres => $"""
+                CREATE TABLE IF NOT EXISTS {tableName} (
+                    forecast_id VARCHAR(36) NOT NULL PRIMARY KEY,
+                    location VARCHAR(200) NOT NULL,
+                    forecast_date TIMESTAMPTZ NOT NULL,
+                    temperature_c INTEGER NOT NULL,
+                    summary TEXT NULL,
+                    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+                    _last_sortable_unique_id VARCHAR(64) NOT NULL,
+                    _last_applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                """,
             MvDbType.SqlServer => $"""
                 IF OBJECT_ID(N'{tableName}', N'U') IS NULL
                 BEGIN
@@ -184,6 +231,14 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
     private MvSqlStatement BuildDelete(MvDbType dbType, Guid forecastId, string sortableUniqueId) =>
         new(dbType switch
         {
+            MvDbType.Postgres => $"""
+                UPDATE {Forecasts.PhysicalName}
+                SET is_deleted = TRUE,
+                    _last_sortable_unique_id = @SortableUniqueId,
+                    _last_applied_at = CURRENT_TIMESTAMP
+                WHERE forecast_id = @ForecastId
+                  AND _last_sortable_unique_id < @SortableUniqueId;
+                """,
             MvDbType.SqlServer => $"""
                 UPDATE {Forecasts.PhysicalName}
                 SET is_deleted = 1,
@@ -254,8 +309,10 @@ public abstract class MultiProviderFixtureBase : IAsyncLifetime
     // string (the unsafe-window MV harnesses wire their own initializer /
     // catch-up / promoter rather than going through IMvExecutor).
     public string ConnectionStringForTests => ConnectionString;
+    public virtual string? InspectionConnectionStringForTests => null;
 
     protected abstract MvDbType DatabaseType { get; }
+    internal MvDbType DatabaseTypeForTests => DatabaseType;
     protected abstract Task<string> CreateConnectionStringAsync();
     protected abstract void RegisterProvider(IServiceCollection services, string connectionString);
     protected abstract DbConnection CreateConnection(string connectionString);
@@ -546,6 +603,9 @@ public sealed class MySqlMvFixture : MultiProviderFixtureBase
 public sealed class SqlServerMvFixture : MultiProviderFixtureBase
 {
     private MsSqlContainer? _container;
+    private string? _inspectionLogin;
+    private string? _inspectionPassword;
+    private string? _inspectionConnectionString;
 
     protected override MvDbType DatabaseType => MvDbType.SqlServer;
 
@@ -555,8 +615,33 @@ public sealed class SqlServerMvFixture : MultiProviderFixtureBase
             .Build();
 
         await _container.StartAsync().ConfigureAwait(false);
-        return _container.GetConnectionString();
+        var connectionString = _container.GetConnectionString();
+        _inspectionLogin = $"mv_inspector_{Guid.NewGuid():N}";
+        _inspectionPassword = "SekibanInspector_9x!";
+        await using (var connection = new SqlConnection(connectionString))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            await connection.ExecuteAsync($"""
+                CREATE LOGIN [{_inspectionLogin}] WITH PASSWORD = '{_inspectionPassword}';
+                CREATE USER [{_inspectionLogin}] FOR LOGIN [{_inspectionLogin}];
+                ALTER ROLE db_datareader ADD MEMBER [{_inspectionLogin}];
+                GRANT VIEW DEFINITION TO [{_inspectionLogin}];
+                """).ConfigureAwait(false);
+        }
+
+        var builder = new SqlConnectionStringBuilder(connectionString)
+        {
+            UserID = _inspectionLogin,
+            Password = _inspectionPassword,
+            IntegratedSecurity = false,
+            ApplicationIntent = ApplicationIntent.ReadWrite,
+            Pooling = false
+        };
+        _inspectionConnectionString = builder.ConnectionString;
+        return connectionString;
     }
+
+    public override string? InspectionConnectionStringForTests => _inspectionConnectionString;
 
     protected override void RegisterProvider(IServiceCollection services, string connectionString)
     {
@@ -566,6 +651,7 @@ public sealed class SqlServerMvFixture : MultiProviderFixtureBase
             options.BatchSize = 100;
             options.SafeWindowMs = 0;
             options.PollInterval = TimeSpan.FromMilliseconds(10);
+            options.SqlServerInspectionConnectionString = _inspectionConnectionString;
         });
         services.AddSekibanDcbMaterializedViewSqlServer(connectionString, registerHostedWorker: false);
     }
@@ -627,6 +713,16 @@ public sealed class SqlServerMvFixture : MultiProviderFixtureBase
         await base.DisposeAsync().ConfigureAwait(false);
         if (_container is not null)
         {
+            if (_inspectionLogin is not null)
+            {
+                await using var connection = new SqlConnection(_container.GetConnectionString());
+                await connection.OpenAsync().ConfigureAwait(false);
+                await connection.ExecuteAsync($"""
+                    IF USER_ID(N'{_inspectionLogin}') IS NOT NULL DROP USER [{_inspectionLogin}];
+                    IF SUSER_ID(N'{_inspectionLogin}') IS NOT NULL DROP LOGIN [{_inspectionLogin}];
+                    """).ConfigureAwait(false);
+            }
+
             await _container.DisposeAsync().ConfigureAwait(false);
         }
     }
@@ -660,6 +756,7 @@ public sealed class SqliteMvFixture : MultiProviderFixtureBase
 
     protected override string ResetSql => """
         DROP TABLE IF EXISTS sekiban_mv_weatherforecastportable_v1_forecasts;
+        DROP TABLE IF EXISTS sekiban_mv_policysurface_v1_records;
         DROP TABLE IF EXISTS sekiban_mv_active;
         DROP TABLE IF EXISTS sekiban_mv_registry;
         """;

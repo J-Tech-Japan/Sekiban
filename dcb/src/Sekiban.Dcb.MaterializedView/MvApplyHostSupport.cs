@@ -216,6 +216,19 @@ public sealed class NativeMvApplyHost : IMvApplyHost
     public int ViewVersion => _projector.ViewVersion;
     public IReadOnlyList<string> LogicalTables => _logicalTables;
 
+    public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(IMvTableBindings tables) =>
+        GetSchemaContract(tables)?.Tables ??
+        (_projector is IMvSchemaRequirementsProvider provider
+            ? provider.GetSchemaRequirements(_databaseType, tables)
+            : []);
+
+    public MvSchemaContract? GetSchemaContract(IMvTableBindings tables) =>
+        _projector is IMvSchemaContractProvider contractProvider
+            ? contractProvider.GetSchemaContract(_databaseType, tables)
+            : _projector is IMvSchemaRequirementsProvider requirementsProvider
+                ? new MvSchemaContract(MvSchemaContract.CurrentFormatVersion, requirementsProvider.GetSchemaRequirements(_databaseType, tables))
+                : null;
+
     public async Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(IMvTableBindings tables, CancellationToken ct)
     {
         var recordingContext = new RecordingMvInitContext(tables, _databaseType);
@@ -294,11 +307,11 @@ public sealed class NativeMvApplyHost : IMvApplyHost
         public System.Data.IDbConnection Connection =>
             _queryPort is IMvApplyDbConnectionPort dbConnectionPort
                 ? dbConnectionPort.Connection
-                : throw new NotSupportedException("Native MV apply host does not expose raw connections.");
+                : throw RawAccessRejected("connection");
         public System.Data.IDbTransaction Transaction =>
             _queryPort is IMvApplyDbConnectionPort dbConnectionPort
                 ? dbConnectionPort.Transaction
-                : throw new NotSupportedException("Native MV apply host does not expose raw transactions.");
+                : throw RawAccessRejected("transaction");
         public Event CurrentEvent { get; }
         public string CurrentSortableUniqueId { get; }
 
@@ -333,6 +346,11 @@ public sealed class NativeMvApplyHost : IMvApplyHost
 
         public MvTable GetDependencyViewTable<TView>(string logicalTable) where TView : IMaterializedViewProjector =>
             throw new NotSupportedException("Cross-view reads are not supported by the native MV apply host adapter.");
+
+        private Exception RawAccessRejected(string surface) =>
+            _queryPort is MvPolicyEnforcingQueryPort enforcingPort
+                ? enforcingPort.RejectRawAccess($"raw {surface}")
+                : new NotSupportedException($"Native MV apply host does not expose raw {surface}s.");
     }
 
     private sealed class JsonElementMvRow : IMvRow
