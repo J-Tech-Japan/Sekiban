@@ -15,7 +15,7 @@ namespace Sekiban.Dcb.MaterializedView;
 /// Provider executors retain their own event-store factory and perform service validation/source selection
 /// at each public operation boundary before delegating database work here.
 /// </summary>
-public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationExecutor
+public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationExecutor, IMvInitializationVerifier
     where TConnection : DbConnection
 {
     private readonly IMvRegistryStore _registryStore;
@@ -108,6 +108,16 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         CancellationToken cancellationToken = default) =>
         InitializeAtBoundaryAsync(host, serviceId, cancellationToken);
 
+    public async Task<MvSchemaVerificationResult> VerifyInitializationAsync(
+        IMvApplyHost host,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var exactServiceId = ValidateServiceIdAtBoundary(serviceId);
+        var bindings = new MvTableBindings(host.ViewName, host.ViewVersion, _options);
+        return await VerifyOnlyCoreAsync(host, exactServiceId, bindings, cancellationToken).ConfigureAwait(false);
+    }
+
     public Task<int> ApplySerializableEventsAsync(
         IMvApplyHost host,
         IReadOnlyList<SerializableEvent> events,
@@ -145,16 +155,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         CancellationToken cancellationToken = default)
     {
         var exactServiceId = ValidateServiceIdAtBoundary(serviceId);
-        var entries = await _registryStore.GetEntriesAsync(
+        await ReadRegistryEntriesAtOperationBoundaryAsync(
+                host,
                 exactServiceId,
-                host.ViewName,
-                host.ViewVersion,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (entries.Count == 0)
-        {
-            await InitializeCoreAsync(host, exactServiceId, cancellationToken).ConfigureAwait(false);
-        }
 
         var target = await CaptureTargetCheckpointFromStoreAsync(SelectEventStoreForService(exactServiceId))
             .ConfigureAwait(false);
@@ -174,11 +179,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         CancellationToken cancellationToken = default)
     {
         var exactServiceId = ValidateServiceIdAtBoundary(serviceId);
-        var entries = await _registryStore.GetEntriesAsync(
+        var entries = await ReadRegistryEntriesAtOperationBoundaryAsync(
+                host,
                 exactServiceId,
-                host.ViewName,
-                host.ViewVersion,
-                cancellationToken)
+                cancellationToken,
+                initializeWhenEmpty: false)
             .ConfigureAwait(false);
         var active = await _registryStore.GetActiveAsync(
                 exactServiceId,
@@ -229,6 +234,13 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         CancellationToken cancellationToken)
     {
         var bindings = new MvTableBindings(host.ViewName, host.ViewVersion, _options);
+        if (_options.InitializationMode == MvInitializationMode.VerifyOnly)
+        {
+            var verification = await VerifyOnlyCoreAsync(host, serviceId, bindings, cancellationToken).ConfigureAwait(false);
+            ThrowIfInitializationVerificationFailed(verification);
+            return;
+        }
+
         var statements = await host.InitializeAsync(bindings, cancellationToken).ConfigureAwait(false);
         await AuthorizeStatementsAsync(
                 serviceId,
@@ -238,81 +250,6 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 MvSqlStatementPhase.Initialization,
                 cancellationToken)
             .ConfigureAwait(false);
-
-        if (_options.InitializationMode == MvInitializationMode.VerifyOnly)
-        {
-            var requirements = host.GetSchemaRequirements(bindings);
-            var contractResult = MvSchemaRequirements.ValidateContract(bindings.Tables, requirements);
-            ThrowIfInitializationVerificationFailed(contractResult);
-
-            if (_registryStore is not IMvSchemaVerifier schemaVerifier)
-            {
-                throw new MvInitializationException(
-                    new MvInitializationFailure(
-                        MvInitializationFailureReason.UnsupportedProviderCapability,
-                        "The configured materialized-view provider does not support read-only schema verification."));
-            }
-
-            var verificationResult = await schemaVerifier.VerifySchemaAsync(
-                    [.. MvSchemaRequirements.RegistryTables(), .. requirements],
-                    cancellationToken)
-                .ConfigureAwait(false);
-            ThrowIfInitializationVerificationFailed(verificationResult);
-
-            var existingEntries = await _registryStore.GetEntriesAsync(
-                    serviceId,
-                    host.ViewName,
-                    host.ViewVersion,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            var expectedTables = bindings.Tables.ToDictionary(table => table.LogicalName, StringComparer.Ordinal);
-            var observedLogicalTables = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var entry in existingEntries)
-            {
-                if (!expectedTables.TryGetValue(entry.LogicalTable, out var expectedTable) ||
-                    !string.Equals(entry.PhysicalTable, expectedTable.PhysicalName, StringComparison.Ordinal) ||
-                    !observedLogicalTables.Add(entry.LogicalTable))
-                {
-                    throw new MvInitializationException(
-                        new MvInitializationFailure(
-                            MvInitializationFailureReason.MissingSchemaContract,
-                            $"The existing materialized-view registry binding for logical table '{entry.LogicalTable}' is incompatible with the projector contract.",
-                            entry.LogicalTable,
-                            entry.PhysicalTable));
-                }
-            }
-
-            if (observedLogicalTables.Count == expectedTables.Count)
-            {
-                return;
-            }
-
-            await using var verifyConnection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-            await using var verifyTransaction = await verifyConnection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            foreach (var table in bindings.Tables)
-            {
-                await _registryStore.RegisterAsync(
-                        new MvRegistryEntry
-                        {
-                            ServiceId = serviceId,
-                            ViewName = host.ViewName,
-                            ViewVersion = host.ViewVersion,
-                            LogicalTable = table.LogicalName,
-                            PhysicalTable = table.PhysicalName,
-                            Status = MvStatus.CatchingUp,
-                            CurrentCheckpointTruth = MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.NotObserved),
-                            TargetCheckpointTruth = MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.NotObserved),
-                            AppliedEventVersion = 0,
-                            LastUpdated = DateTimeOffset.UtcNow
-                        },
-                        verifyTransaction,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            await verifyTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return;
-        }
 
         await _registryStore.EnsureInfrastructureAsync(cancellationToken).ConfigureAwait(false);
 
@@ -353,6 +290,93 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task<MvSchemaVerificationResult> VerifyOnlyCoreAsync(
+        IMvApplyHost host,
+        string serviceId,
+        MvTableBindings bindings,
+        CancellationToken cancellationToken)
+    {
+        if (_registryStore is not IMvReadOnlyMvInspector inspector)
+        {
+            return MvSchemaVerificationResult.Failed(
+                MvInitializationFailureReason.UnsupportedProviderCapability,
+                "The configured materialized-view provider does not expose a dedicated read-only inspector.");
+        }
+
+        // The declarative schema provider is the only binding source in VerifyOnly. Calling projector initialization
+        // here would execute arbitrary projector code and would reintroduce the DDL/host side-effect boundary.
+        var contract = host.GetSchemaContract(bindings);
+        if (contract is not null && contract.FormatVersion != MvSchemaContract.CurrentFormatVersion)
+        {
+            return MvSchemaVerificationResult.Failed(
+                MvInitializationFailureReason.SchemaContractUnavailable,
+                $"Materialized-view schema contract format version '{contract.FormatVersion}' is not supported.");
+        }
+
+        var requirements = contract?.Tables ?? host.GetSchemaRequirements(bindings);
+        if (contract is null && bindings.Tables.Count > 0 && requirements.Count == 0)
+        {
+            return MvSchemaVerificationResult.Failed(
+                MvInitializationFailureReason.SchemaContractUnavailable,
+                "Verify-only initialization requires a declarative materialized-view schema contract.");
+        }
+
+        var contractResult = MvSchemaRequirements.ValidateContract(bindings.Tables, requirements);
+        if (!contractResult.IsCompatible)
+        {
+            return contractResult;
+        }
+
+        var verificationResult = await inspector.VerifySchemaAsync(
+                [.. MvSchemaRequirements.RegistryTables(), .. requirements],
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!verificationResult.IsCompatible)
+        {
+            return verificationResult;
+        }
+
+        var existingEntries = await inspector.ReadRegistryEntriesAsync(
+                serviceId,
+                host.ViewName,
+                host.ViewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var expectedTables = bindings.Tables.ToDictionary(table => table.LogicalName, StringComparer.Ordinal);
+        var observedLogicalTables = new HashSet<string>(StringComparer.Ordinal);
+        var registryMismatches = new List<MvSchemaMismatch>();
+        foreach (var entry in existingEntries)
+        {
+            if (!expectedTables.TryGetValue(entry.LogicalTable, out var expectedTable) ||
+                !string.Equals(entry.PhysicalTable, expectedTable.PhysicalName, StringComparison.Ordinal) ||
+                !observedLogicalTables.Add(entry.LogicalTable))
+            {
+                registryMismatches.Add(
+                    new MvSchemaMismatch(
+                        MvSchemaMismatchCode.BindingMismatch,
+                        $"The existing materialized-view registry binding for logical table '{entry.LogicalTable}' is incompatible with the projector contract.",
+                        entry.LogicalTable,
+                        entry.PhysicalTable));
+            }
+        }
+
+        foreach (var table in bindings.Tables.Where(table => !observedLogicalTables.Contains(table.LogicalName)))
+        {
+            registryMismatches.Add(
+                new MvSchemaMismatch(
+                    MvSchemaMismatchCode.BindingMismatch,
+                    $"The materialized-view registry has no binding for logical table '{table.LogicalName}'.",
+                    table.LogicalName,
+                    table.PhysicalName));
+        }
+
+        return registryMismatches.Count == 0
+            ? MvSchemaVerificationResult.Compatible()
+            : MvSchemaVerificationResult.FailedWithMismatches(
+                MvInitializationFailureReason.MissingSchemaContract,
+                registryMismatches);
+    }
+
     private async Task AuthorizeStatementsAsync(
         string serviceId,
         IMvApplyHost host,
@@ -361,11 +385,16 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         MvSqlStatementPhase phase,
         CancellationToken cancellationToken)
     {
-        var policy = _options.SqlStatementPolicy ?? MvAllowAllSqlStatementPolicy.Instance;
+        var policy = _options.SqlStatementPolicyMode == MvSqlStatementPolicyMode.Enforced
+            ? _options.SqlStatementPolicy
+            : _options.SqlStatementPolicy ?? MvAllowAllSqlStatementPolicy.Instance;
         var tables = bindings.Tables.ToList();
-        foreach (var statement in statements)
+        var batch = statements.ToList();
+        for (var statementIndex = 0; statementIndex < batch.Count; statementIndex++)
         {
-            var decision = await policy.EvaluateAsync(
+            var statement = batch[statementIndex];
+            await MvSqlPolicyEvaluator.AuthorizeAsync(
+                    policy,
                     new MvSqlStatementContext(
                         serviceId,
                         host.ViewName,
@@ -373,19 +402,13 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                         phase,
                         tables,
                         statement.Sql,
-                        statement.Parameters),
+                        statement.Parameters.Select(parameter => parameter with { ValueJson = null }).ToList())
+                    {
+                        StatementIndex = statementIndex,
+                        BatchSize = batch.Count
+                    },
                     cancellationToken)
                 .ConfigureAwait(false);
-            if (!decision.IsAllowed)
-            {
-                throw new MvSqlPolicyRejectedException(
-                    new MvSqlPolicyFailure(
-                        decision.Reason ?? "The host SQL statement policy rejected the statement.",
-                        serviceId,
-                        host.ViewName,
-                        host.ViewVersion,
-                        phase));
-            }
         }
     }
 
@@ -393,11 +416,74 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
     {
         if (!result.IsCompatible)
         {
+            var failure = result.Failure ?? new MvInitializationFailure(
+                MvInitializationFailureReason.UnsupportedProviderCapability,
+                "Materialized-view schema verification failed without a typed reason.");
+            if (result.Mismatches.Count > 0)
+            {
+                failure = failure with { Mismatches = result.Mismatches };
+            }
             throw new MvInitializationException(
-                result.Failure ?? new MvInitializationFailure(
-                    MvInitializationFailureReason.UnsupportedProviderCapability,
-                    "Materialized-view schema verification failed without a typed reason."));
+                failure);
         }
+    }
+
+    private Task<IReadOnlyList<MvRegistryEntry>> ReadRegistryEntriesAsync(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        CancellationToken cancellationToken)
+    {
+        if (_options.InitializationMode == MvInitializationMode.VerifyOnly)
+        {
+            if (_registryStore is not IMvReadOnlyMvInspector inspector)
+            {
+                throw new MvInitializationException(
+                    new MvInitializationFailure(
+                        MvInitializationFailureReason.UnsupportedProviderCapability,
+                        "The configured materialized-view provider does not expose a dedicated read-only inspector."));
+            }
+
+            return inspector.ReadRegistryEntriesAsync(serviceId, viewName, viewVersion, cancellationToken);
+        }
+
+        return _registryStore.GetEntriesAsync(serviceId, viewName, viewVersion, cancellationToken);
+    }
+
+    /// <summary>
+    ///     All operation paths that may discover an empty registry converge here. VerifyOnly runs the dedicated
+    ///     read-only schema/contract gate before the first registry-row query, so a missing framework table produces a
+    ///     typed failure instead of a provider write/read fallback. Legacy mode retains its lazy initialize behavior.
+    /// </summary>
+    private async Task<IReadOnlyList<MvRegistryEntry>> ReadRegistryEntriesAtOperationBoundaryAsync(
+        IMvApplyHost host,
+        string serviceId,
+        CancellationToken cancellationToken,
+        bool initializeWhenEmpty = true)
+    {
+        if (_options.InitializationMode == MvInitializationMode.VerifyOnly)
+        {
+            await InitializeCoreAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+        }
+
+        var entries = await ReadRegistryEntriesAsync(
+                serviceId,
+                host.ViewName,
+                host.ViewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (entries.Count == 0 && initializeWhenEmpty && _options.InitializationMode != MvInitializationMode.VerifyOnly)
+        {
+            await InitializeCoreAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+            entries = await ReadRegistryEntriesAsync(
+                    serviceId,
+                    host.ViewName,
+                    host.ViewVersion,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return entries;
     }
 
     protected async Task<MvProjectionStatusSnapshot> GetCurrentStatusAsync(
@@ -405,22 +491,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         string serviceId,
         CancellationToken cancellationToken)
     {
-        var entries = await _registryStore.GetEntriesAsync(
+        var entries = await ReadRegistryEntriesAtOperationBoundaryAsync(
+                host,
                 serviceId,
-                host.ViewName,
-                host.ViewVersion,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (entries.Count == 0)
-        {
-            await InitializeCoreAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
-            entries = await _registryStore.GetEntriesAsync(
-                    serviceId,
-                    host.ViewName,
-                    host.ViewVersion,
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
 
         return MvProjectionStatusSnapshot.FromEntries(entries);
     }
@@ -475,22 +550,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         IEventStore eventStore,
         CancellationToken cancellationToken)
     {
-        var entries = await _registryStore.GetEntriesAsync(
+        var entries = await ReadRegistryEntriesAtOperationBoundaryAsync(
+                host,
                 serviceId,
-                host.ViewName,
-                host.ViewVersion,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (entries.Count == 0)
-        {
-            await InitializeCoreAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
-            entries = await _registryStore.GetEntriesAsync(
-                    serviceId,
-                    host.ViewName,
-                    host.ViewVersion,
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
 
         if (entries.Count == 0 || entries.All(entry =>
                 entry.TargetCheckpointTruth.IsKnown &&
@@ -519,7 +583,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         string serviceId,
         CancellationToken cancellationToken)
     {
-        var entries = await _registryStore.GetEntriesAsync(
+        var entries = await ReadRegistryEntriesAsync(
                 serviceId,
                 host.ViewName,
                 host.ViewVersion,
@@ -596,11 +660,6 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         string exactServiceId,
         CancellationToken cancellationToken)
     {
-        if (events.Count == 0)
-        {
-            return Task.FromResult(0);
-        }
-
         return ApplySerializableEventsCoreAsync(
             host,
             events,
@@ -723,22 +782,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         MvApplySource source,
         CancellationToken cancellationToken)
     {
-        var entries = await _registryStore.GetEntriesAsync(
+        var entries = await ReadRegistryEntriesAtOperationBoundaryAsync(
+                host,
                 serviceId,
-                host.ViewName,
-                host.ViewVersion,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (entries.Count == 0)
-        {
-            await InitializeCoreAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
-            entries = await _registryStore.GetEntriesAsync(
-                    serviceId,
-                    host.ViewName,
-                    host.ViewVersion,
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
 
         var currentPosition = entries
             .Select(entry => entry.CurrentCheckpointTruth.IsKnown ? entry.CurrentCheckpointTruth.PositionValue : null)
@@ -796,15 +844,26 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
     {
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var queryPort = CreateQueryPort(connection, transaction);
-        var statements = await host.ApplyEventAsync(
-                serializableEvent,
-                bindings,
+        if (_options.SqlStatementPolicyMode == MvSqlStatementPolicyMode.Enforced)
+        {
+            queryPort = new MvPolicyEnforcingQueryPort(
                 queryPort,
-                serializableEvent.SortableUniqueIdValue,
-                cancellationToken)
-            .ConfigureAwait(false);
+                _options.SqlStatementPolicy,
+                serviceId,
+                host.ViewName,
+                host.ViewVersion,
+                bindings.Tables);
+        }
+        IReadOnlyList<MvSqlStatementDto> statements;
         try
         {
+            statements = await host.ApplyEventAsync(
+                    serializableEvent,
+                    bindings,
+                    queryPort,
+                    serializableEvent.SortableUniqueIdValue,
+                    cancellationToken)
+                .ConfigureAwait(false);
             await AuthorizeStatementsAsync(
                     serviceId,
                     host,
@@ -816,7 +875,14 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         }
         catch
         {
-            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Preserve the policy/fault/cancellation outcome. Disposal below still closes the transaction.
+            }
             throw;
         }
 

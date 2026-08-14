@@ -716,6 +716,7 @@ public sealed class SqliteMvFixture : MultiProviderFixtureBase
 
     protected override string ResetSql => """
         DROP TABLE IF EXISTS sekiban_mv_weatherforecastportable_v1_forecasts;
+        DROP TABLE IF EXISTS sekiban_mv_policysurface_v1_records;
         DROP TABLE IF EXISTS sekiban_mv_active;
         DROP TABLE IF EXISTS sekiban_mv_registry;
         """;

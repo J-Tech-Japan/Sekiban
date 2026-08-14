@@ -19,7 +19,7 @@ public sealed partial class MySqlMvRegistryStore
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             var columns = await connection.QueryAsync<MySqlSchemaColumn>(
-                    new CommandDefinition(
+                    CatalogCommand(
                         """
                         SELECT table_name AS TableName,
                                column_name AS ColumnName,
@@ -34,7 +34,7 @@ public sealed partial class MySqlMvRegistryStore
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
             var primaryKeys = await connection.QueryAsync<MySqlSchemaPrimaryKeyColumn>(
-                    new CommandDefinition(
+                    CatalogCommand(
                         """
                         SELECT table_name AS TableName,
                                column_name AS ColumnName,

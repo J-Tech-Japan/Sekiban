@@ -258,13 +258,15 @@ builder.Services.AddSekibanDcbMaterializedView(options =>
 });
 ```
 
-verify-only では projector を recording context で実行し、logical / physical table binding と SQL 文を記録します。
-projector の SQL は実行されません。executor は `EnsureInfrastructureAsync` を呼ばず、`CREATE`、`ALTER`、`DROP`、
-migration、registry schema、fallback DDL を実行せず、create mode へ暗黙に切り替えることもありません。provider は
-registry の 2 テーブルと projector の各テーブルについて read-only の metadata 検証を行います。既存の registry
-row は検証後に読み取り、registry row が不足している場合に限り、schema proof 成功後に登録できます。
+verify-only は projector の初期化経路へ入る前に、宣言的な contract から binding と必要 schema を導出します。
+provider の専用 `IMvReadOnlyMvInspector` で catalog と registry を読むだけであり、
+`IMvApplyHost.InitializeAsync`、`EnsureInfrastructureAsync`、通常の書込み接続、registration、transaction、commit
+は fallback になりません。したがって deployment 側で framework の registry 2 テーブル、projector table、registry
+binding row まで用意します。binding の不足や不一致は型付きエラーで停止し、自動 seed は行いません。zero-DDL の保証は
+Sekiban が所有する接続の境界に限られ、任意の user/projector code はこのプロセス境界の外です。
 
-verify-only に対応する projector は、追加された `IMvSchemaRequirementsProvider` 契約で target schema を宣言します。
+verify-only に対応する projector は、format version `1` の追加された `MvSchemaContract` /
+`IMvSchemaRequirementsProvider` 契約で target schema を宣言します。
 
 ```csharp
 public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
@@ -285,7 +287,7 @@ public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
 ];
 ```
 
-provider-neutral な type family と primary key / nullability の検証は、PostgreSQL、MySQL、SQL Server、SQLite の native
+verifier は mismatch を deterministic な順序で全件報告します。provider-neutral な type family と primary key / nullability の検証は、PostgreSQL、MySQL、SQL Server、SQLite の native
 metadata へそれぞれ変換して実行されます。table / column の不足、type・nullability・key の不一致、schema contract
 不足、metadata capability 非対応は、型付き `MvInitializationException` と `MvInitializationFailureReason` になります。
 これらは event read、view write、registry mutation、catch-up、activation より前に発生します。そのため schema contract
@@ -314,7 +316,24 @@ public sealed class MyHostSqlPolicy : IMvSqlStatementPolicy
 拒否は型付き `MvSqlPolicyRejectedException` になります。safe failure には service / view / version と phase だけが含まれ、
 SQL や parameter value はコピーされません。initialization の拒否は `EnsureInfrastructureAsync` や provider command より
 前に起きます。apply の拒否は projector SQL や registry checkpoint を commit する前に event transaction を rollback します。
-host policy を設定しない場合は `MvAllowAllSqlStatementPolicy` が従来の動作を維持します。
+`Legacy` mode では既存の raw `Connection` / `Transaction` access を source-compatible に維持します。SQL 境界を強制する
+host は `Enforced` mode を選びます。
+
+```csharp
+options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
+```
+
+Enforced mode は `QueryRowsAsync`、`QuerySingleOrDefaultAsync`、`ExecuteScalarJsonAsync` の provider port の前で policy を
+評価し、raw connection / transaction を projector に公開しません。initialization / apply batch は最初の SQL を実行する前に
+全 statement を preflight します。policy の未登録、fault、invalid decision、deny は typed reason 付きで fail-closed し、
+cancellation は `OperationCanceledException` のままです。runtime は SQL の先頭 keyword で判断しないため、mutating CTE、comment、
+multi-statement text の許可可否は host の allowlist が決めます。
+
+hosted worker も同じ中央 initialization gate を使います。verify-only では verification failure を faulted status として公開し、
+retry interval 後に再試行します。成功するまで worker は停止し、ensure mode へ fallback しません。
+
+package の既定値は `CreateOrEnsure`、`Legacy`、`MvAllowAllSqlStatementPolicy` のままであり、新しい境界を選ばない既存 caller の
+動作を維持します。
 
 ## 順序保証と冪等性
 

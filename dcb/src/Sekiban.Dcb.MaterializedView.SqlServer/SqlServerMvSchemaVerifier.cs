@@ -19,7 +19,7 @@ public sealed partial class SqlServerMvRegistryStore
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             var columns = await connection.QueryAsync<SqlServerSchemaColumn>(
-                    new CommandDefinition(
+                    CatalogCommand(
                         """
                         SELECT TABLE_NAME AS TableName,
                                COLUMN_NAME AS ColumnName,
@@ -33,7 +33,7 @@ public sealed partial class SqlServerMvRegistryStore
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
             var primaryKeys = await connection.QueryAsync<SqlServerSchemaPrimaryKeyColumn>(
-                    new CommandDefinition(
+                    CatalogCommand(
                         """
                         SELECT tables.name AS TableName,
                                columns.name AS ColumnName,

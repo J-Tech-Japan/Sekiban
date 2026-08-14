@@ -4,13 +4,29 @@ using Microsoft.Data.SqlClient;
 
 namespace Sekiban.Dcb.MaterializedView.SqlServer;
 
-public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistryStoreBase<SqlConnection>, IMvRegistryStore, IMvSchemaVerifier
+public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistryStoreBase<SqlConnection>, IMvRegistryStore, IMvReadOnlyMvInspector
 {
     private readonly string _connectionString;
+    private readonly Action<string>? _catalogCommandRecorder;
 
     public SqlServerMvRegistryStore(string connectionString)
+        : this(connectionString, null)
+    {
+    }
+
+    public SqlServerMvRegistryStore(string connectionString, Action<string>? catalogCommandRecorder)
     {
         _connectionString = connectionString;
+        _catalogCommandRecorder = catalogCommandRecorder;
+    }
+
+    private CommandDefinition CatalogCommand(
+        string sql,
+        object? parameters = null,
+        CancellationToken cancellationToken = default)
+    {
+        _catalogCommandRecorder?.Invoke(sql);
+        return new CommandDefinition(sql, parameters, cancellationToken: cancellationToken);
     }
 
     public async Task EnsureInfrastructureAsync(CancellationToken cancellationToken = default)
@@ -391,10 +407,17 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync(
-            new CommandDefinition(sql, new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion }, cancellationToken: cancellationToken))
+            CatalogCommand(sql, new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion }, cancellationToken))
             .ConfigureAwait(false);
         return rows.Select(row => (MvRegistryEntry)MapEntry(ToDictionary(row))).ToList();
     }
+
+    public Task<IReadOnlyList<MvRegistryEntry>> ReadRegistryEntriesAsync(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        CancellationToken cancellationToken = default) =>
+        GetEntriesAsync(serviceId, viewName, viewVersion, cancellationToken);
 
     public async Task<MvActiveEntry?> GetActiveAsync(
         string serviceId,

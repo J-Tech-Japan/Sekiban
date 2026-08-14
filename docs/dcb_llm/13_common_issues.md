@@ -510,3 +510,15 @@ operational requirement.
 **10.13.0 release note.** DCB executor-generated `SortableUniqueId` values are now monotonic under host-clock rollback
 and are seeded lazily from the per-service store head after restart. Public legacy constructors and static signatures,
 the 30-digit format, and random-suffix semantics remain compatible.
+
+## Verify-only materialized-view startup and SQL policy — dcb-v10.14.0 (SEK-G32)
+
+`MvInitializationMode.VerifyOnly` is the explicit BYO-database path. It verifies a versioned declarative schema contract
+and pre-provisioned registry bindings through a read-only provider inspector. It never ensures infrastructure, invokes
+projector initialization, executes fallback DDL, or seeds registry rows. The four provider inspectors use catalog reads;
+the SQLite verifier uses a read-only metadata path and does not run the normal session PRAGMAs.
+
+`MvSqlStatementPolicyMode.Enforced` is opt-in. It preflights every initialization/apply batch and gates rows, single-row,
+and scalar query ports before provider execution. It removes raw connection/transaction access from the projector while
+`Legacy` remains the compatibility default. Missing, throwing, invalid, or denying policies fail closed with typed safe
+reasons, and cancellation remains cancellation. Hosted workers retry verification and do not fall back to schema ensure.

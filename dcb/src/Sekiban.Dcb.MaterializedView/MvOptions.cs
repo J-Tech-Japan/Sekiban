@@ -57,10 +57,31 @@ public sealed class MvOptions
     public MvInitializationMode InitializationMode { get; set; } = MvInitializationMode.CreateOrEnsure;
 
     /// <summary>
+    ///     Delay before a hosted worker retries a failed VerifyOnly contract check. CreateOrEnsure workers do not use
+    ///     this setting. A non-positive value falls back to <see cref="PollInterval"/>.
+    /// </summary>
+    public TimeSpan VerifyOnlyRetryDelay { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    ///     Additive alias for <see cref="InitializationMode"/> using the infrastructure-ownership terminology.
+    /// </summary>
+    public MvInfrastructureMode InfrastructureMode
+    {
+        get => (MvInfrastructureMode)InitializationMode;
+        set => InitializationMode = (MvInitializationMode)value;
+    }
+
+    /// <summary>
     ///     Host-owned policy evaluated for every projector-supplied initialization and apply statement before it is
     ///     sent to the provider.
     /// </summary>
-    public IMvSqlStatementPolicy SqlStatementPolicy { get; set; } = MvAllowAllSqlStatementPolicy.Instance;
+    public IMvSqlStatementPolicy? SqlStatementPolicy { get; set; } = MvAllowAllSqlStatementPolicy.Instance;
+
+    /// <summary>
+    ///     Selects whether the compatibility raw apply-context surface remains available or every apply query is
+    ///     evaluated before execution through a non-raw policy port.
+    /// </summary>
+    public MvSqlStatementPolicyMode SqlStatementPolicyMode { get; set; } = MvSqlStatementPolicyMode.Legacy;
 }
 
 public static class MvSchemaHelper

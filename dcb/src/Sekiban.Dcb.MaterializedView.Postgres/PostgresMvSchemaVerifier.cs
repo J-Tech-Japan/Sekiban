@@ -20,7 +20,7 @@ public sealed partial class PostgresMvRegistryStore
                 .ToArray();
 
             var columns = await connection.QueryAsync<PostgresSchemaColumn>(
-                    new CommandDefinition(
+                    CatalogCommand(
                         """
                         SELECT table_name AS TableName,
                                column_name AS ColumnName,
@@ -35,7 +35,7 @@ public sealed partial class PostgresMvRegistryStore
                         cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
             var primaryKeys = await connection.QueryAsync<PostgresSchemaPrimaryKeyColumn>(
-                    new CommandDefinition(
+                    CatalogCommand(
                         """
                         SELECT tc.table_name AS TableName,
                                kcu.column_name AS ColumnName,

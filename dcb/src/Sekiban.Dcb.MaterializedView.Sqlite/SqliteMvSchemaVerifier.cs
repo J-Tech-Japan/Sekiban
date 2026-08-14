@@ -7,7 +7,7 @@ namespace Sekiban.Dcb.MaterializedView.Sqlite;
 public sealed partial class SqliteMvRegistryStore
 {
     private const string TableInfoSql =
-        "SELECT name AS Name, type AS Type, \"notnull\" AS \"NotNull\", pk AS Pk FROM pragma_table_info(@TableName);";
+        "SELECT name AS Name, type AS Type, \"notnull\" AS \"NotNull\", pk AS Pk FROM pragma_table_xinfo(@TableName) WHERE hidden = 0;";
 
     public async Task<MvSchemaVerificationResult> VerifySchemaAsync(
         IReadOnlyList<MvSchemaTableRequirement> requirements,
@@ -23,7 +23,7 @@ public sealed partial class SqliteMvRegistryStore
             {
                 ValidateContractIdentifier(tableName);
                 var objectType = await connection.ExecuteScalarAsync<string?>(
-                        new CommandDefinition(
+                        CatalogCommand(
                             "SELECT type FROM sqlite_master WHERE name = @TableName;",
                             new { TableName = tableName },
                             cancellationToken: cancellationToken))
@@ -34,7 +34,7 @@ public sealed partial class SqliteMvRegistryStore
                 }
 
                 var tableInfo = await connection.QueryAsync<SqliteSchemaColumn>(
-                        new CommandDefinition(
+                        CatalogCommand(
                             TableInfoSql,
                             new { TableName = tableName },
                             cancellationToken: cancellationToken))

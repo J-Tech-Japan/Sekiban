@@ -255,14 +255,16 @@ builder.Services.AddSekibanDcbMaterializedView(options =>
 });
 ```
 
-In verify-only mode, the projector is run in a recording context so its logical/physical table bindings and statements
-can be inspected without executing projector SQL. The executor never calls `EnsureInfrastructureAsync`, executes
-`CREATE`, `ALTER`, `DROP`, migration, registry-schema, or fallback DDL, or silently switches to create mode. The
-provider performs read-only metadata checks for the two registry tables and every projector table. Existing registry
-rows are read after verification; a missing registry row may be registered only after the schema proof succeeds.
+Verify-only derives its bindings and required schema from the declarative contract before it enters the projector
+initialization path. It calls the provider's dedicated `IMvReadOnlyMvInspector` for catalog and registry reads only;
+`IMvApplyHost.InitializeAsync`, `EnsureInfrastructureAsync`, normal write connections, registration, transactions, and
+commits are not fallback paths. A compatible deployment must therefore provision both framework registry tables and
+the projector tables, including the registry binding rows. A missing or incompatible binding is a typed failure and is
+never seeded automatically. The zero-DDL guarantee covers Sekiban-owned connections; arbitrary user/projector code is
+outside that process boundary.
 
-Projectors that support verify-only initialization describe their target schema with the additive
-`IMvSchemaRequirementsProvider` contract:
+Projectors that support verify-only initialization describe their target schema with the additive, format-versioned
+`MvSchemaContract`/`IMvSchemaRequirementsProvider` contract (format version `1`):
 
 ```csharp
 public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
@@ -283,7 +285,7 @@ public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
 ];
 ```
 
-The provider-neutral type families and primary-key/nullability checks are mapped to native metadata by PostgreSQL,
+The verifier reports all mismatches in deterministic order. The provider-neutral type families and primary-key/nullability checks are mapped to native metadata by PostgreSQL,
 MySQL, SQL Server, and SQLite. A missing table/column, incompatible type/nullability/key, missing schema contract, or
 unsupported metadata capability throws the typed `MvInitializationException` with an
 `MvInitializationFailureReason`. These failures happen before event reads, view writes, registry mutation, catch-up,
@@ -312,8 +314,25 @@ public sealed class MyHostSqlPolicy : IMvSqlStatementPolicy
 Rejection is typed as `MvSqlPolicyRejectedException`; its safe failure contains the service/view/version and phase, but
 does not copy SQL or parameter values into the failure. Initialization rejection occurs before `EnsureInfrastructureAsync`
 or a provider command. Apply rejection rolls back the event transaction before any projector statement or registry
-checkpoint is committed. The default `MvAllowAllSqlStatementPolicy` preserves existing behavior when no host policy is
-configured.
+checkpoint is committed. In `Legacy` mode, existing raw `Connection`/`Transaction` access remains source-compatible.
+Hosts that need a hard SQL boundary opt into `Enforced` mode:
+
+```csharp
+options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
+```
+
+Enforced mode wraps `QueryRowsAsync`, `QuerySingleOrDefaultAsync`, and `ExecuteScalarJsonAsync` before the provider
+port, removes raw connection/transaction exposure, and preflights every statement in an initialization or apply batch
+before the first statement executes. Missing policy, policy faults, invalid decisions, and denials fail closed with
+typed reasons; cancellation remains `OperationCanceledException`. SQL is treated as opaque text by the runtime, so a
+host allowlist must reject mutating CTEs, comments, or multi-statement text according to its own policy.
+
+The hosted worker uses the same central initialization gate. In verify-only mode it publishes a faulted verification
+status, waits for the configured retry interval, and remains stopped until a later verification succeeds; it never
+falls back to ensure mode.
+
+The package default remains `CreateOrEnsure` plus `Legacy` and `MvAllowAllSqlStatementPolicy`, preserving existing
+callers that do not opt into the new boundary.
 
 ## Idempotency and Ordering
 

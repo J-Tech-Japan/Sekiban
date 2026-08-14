@@ -468,3 +468,15 @@ allocator は同一ホストの巻き戻りによるイベント欠落を防ぎ�
 **10.13.0 リリースノート**。DCB executor が生成する `SortableUniqueId` はホスト時刻の巻き戻り下でも単調増加し、再起動後は
 service ごとの store head から lazy seed されます。従来の公開 constructor と static signature、30桁 format、random suffix
 semantics は互換のままです。
+
+## verify-only の materialized-view 起動と SQL policy — dcb-v10.14.0 (SEK-G32)
+
+`MvInitializationMode.VerifyOnly` は BYO database 用の明示的な経路です。version 付きの宣言的 schema contract と事前に
+用意した registry binding を read-only provider inspector で検証します。infrastructure ensure、projector 初期化、fallback DDL、
+registry row の自動 seed は行いません。4 provider の inspector は catalog read を使い、SQLite verifier は read-only metadata 経路で
+通常の session PRAGMA を実行しません。
+
+`MvSqlStatementPolicyMode.Enforced` は opt-in です。initialization/apply batch の全件を provider 実行前に preflight し、rows・single-row・
+scalar query port も gate します。projector への raw connection / transaction 公開を止めますが、`Legacy` は互換既定値のままです。
+policy の未登録・throw・invalid・deny は typed safe reason 付きで fail-closed し、cancellation は cancellation のままです。hosted worker
+は verification を retry し、schema ensure へ fallback しません。

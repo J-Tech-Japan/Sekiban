@@ -230,6 +230,12 @@ public interface IMvApplyHost
     ///     omit this additive member; verify-only then fails closed when the host registers tables.
     /// </summary>
     IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(IMvTableBindings tables) => [];
+
+    /// <summary>
+    ///     Optional versioned form of the declarative verify-only contract. Existing hosts may continue to implement
+    ///     <see cref="GetSchemaRequirements"/>; the executor treats that representation as format version one.
+    /// </summary>
+    MvSchemaContract? GetSchemaContract(IMvTableBindings tables) => null;
 }
 
 public interface IMvApplyHostFactory

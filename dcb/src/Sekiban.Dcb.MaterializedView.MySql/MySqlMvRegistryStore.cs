@@ -4,13 +4,29 @@ using MySqlConnector;
 
 namespace Sekiban.Dcb.MaterializedView.MySql;
 
-public sealed partial class MySqlMvRegistryStore : MvForcedReverseRegistryStoreBase<MySqlConnection>, IMvRegistryStore, IMvSchemaVerifier
+public sealed partial class MySqlMvRegistryStore : MvForcedReverseRegistryStoreBase<MySqlConnection>, IMvRegistryStore, IMvReadOnlyMvInspector
 {
     private readonly string _connectionString;
+    private readonly Action<string>? _catalogCommandRecorder;
 
     public MySqlMvRegistryStore(string connectionString)
+        : this(connectionString, null)
+    {
+    }
+
+    public MySqlMvRegistryStore(string connectionString, Action<string>? catalogCommandRecorder)
     {
         _connectionString = connectionString;
+        _catalogCommandRecorder = catalogCommandRecorder;
+    }
+
+    private CommandDefinition CatalogCommand(
+        string sql,
+        object? parameters = null,
+        CancellationToken cancellationToken = default)
+    {
+        _catalogCommandRecorder?.Invoke(sql);
+        return new CommandDefinition(sql, parameters, cancellationToken: cancellationToken);
     }
 
     public async Task EnsureInfrastructureAsync(CancellationToken cancellationToken = default)
@@ -412,10 +428,17 @@ public sealed partial class MySqlMvRegistryStore : MvForcedReverseRegistryStoreB
         await using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync(
-            new CommandDefinition(sql, new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion }, cancellationToken: cancellationToken))
+            CatalogCommand(sql, new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion }, cancellationToken))
             .ConfigureAwait(false);
         return rows.Select(row => (MvRegistryEntry)MapEntry(ToDictionary(row))).ToList();
     }
+
+    public Task<IReadOnlyList<MvRegistryEntry>> ReadRegistryEntriesAsync(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        CancellationToken cancellationToken = default) =>
+        GetEntriesAsync(serviceId, viewName, viewVersion, cancellationToken);
 
     public async Task<MvActiveEntry?> GetActiveAsync(
         string serviceId,
