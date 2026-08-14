@@ -1261,8 +1261,28 @@ internal static class MvSchemaMatrixAssertions
                     inspector,
                     requirement with
                     {
+                        Indexes = [new MvSchemaIndexRequirement("ix_schema_matrix_nonunique", ["base_value"], true)]
+                    },
+                    MvSchemaMismatchCode.RequiredIndexMissing)
+                .ConfigureAwait(false);
+            await AssertSingleMismatchAsync(
+                    inspector,
+                    requirement with
+                    {
                         Columns = requirement.Columns
                             .Select(column => column.Name == "generated_value" ? column with { IsGenerated = false } : column)
+                            .ToList()
+                    },
+                    MvSchemaMismatchCode.GeneratedSemanticsMismatch)
+                .ConfigureAwait(false);
+            await AssertSingleMismatchAsync(
+                    inspector,
+                    requirement with
+                    {
+                        Columns = requirement.Columns
+                            .Select(column => column.Name == "generated_value"
+                                ? column with { GenerationExpression = "base_value + 2" }
+                                : column)
                             .ToList()
                     },
                     MvSchemaMismatchCode.GeneratedSemanticsMismatch)
@@ -1336,7 +1356,11 @@ internal static class MvSchemaMatrixAssertions
             ],
             ["id"])
         {
-            Indexes = [new MvSchemaIndexRequirement("ux_schema_matrix", ["width_value", "amount_value"], true)]
+            Indexes =
+            [
+                new MvSchemaIndexRequirement("ux_schema_matrix", ["width_value", "amount_value"], true),
+                new MvSchemaIndexRequirement("ix_schema_matrix_nonunique", ["base_value"], false)
+            ]
         };
 
     private static async Task CreateSchemaAsync(MultiProviderFixtureBase fixture, string tableName)
@@ -1351,9 +1375,10 @@ internal static class MvSchemaMatrixAssertions
                     base_value INTEGER NOT NULL DEFAULT 7,
                     width_value VARCHAR(32) NOT NULL,
                     amount_value DECIMAL(10, 2) NOT NULL,
-                    generated_value INTEGER GENERATED ALWAYS AS (7) STORED
+                    generated_value INTEGER GENERATED ALWAYS AS (base_value + 1) STORED
                 );
                 CREATE UNIQUE INDEX {index} ON {table} (width_value, amount_value);
+                CREATE INDEX ix_{tableName} ON {table} (base_value);
                 """,
             MvDbType.MySql => $"""
                 CREATE TABLE {table} (
@@ -1361,9 +1386,10 @@ internal static class MvSchemaMatrixAssertions
                     base_value INT NOT NULL DEFAULT 7,
                     width_value VARCHAR(32) NOT NULL,
                     amount_value DECIMAL(10, 2) NOT NULL,
-                    generated_value INT GENERATED ALWAYS AS (7) STORED
+                    generated_value INT GENERATED ALWAYS AS (base_value + 1) STORED
                 );
                 CREATE UNIQUE INDEX {index} ON {table} (width_value, amount_value);
+                CREATE INDEX ix_{tableName} ON {table} (base_value);
                 """,
             MvDbType.SqlServer => $"""
                 CREATE TABLE {table} (
@@ -1371,9 +1397,10 @@ internal static class MvSchemaMatrixAssertions
                     base_value INT NOT NULL CONSTRAINT {QuoteIdentifier(fixture.DatabaseTypeForTests, $"df_{tableName}")} DEFAULT 7,
                     width_value VARCHAR(32) NOT NULL,
                     amount_value DECIMAL(10, 2) NOT NULL,
-                    generated_value AS (7) PERSISTED
+                    generated_value AS (ISNULL(base_value + 1, 0)) PERSISTED
                 );
                 CREATE UNIQUE INDEX {index} ON {table} (width_value, amount_value);
+                CREATE INDEX ix_{tableName} ON {table} (base_value);
                 """,
             MvDbType.Sqlite => $"""
                 CREATE TABLE {table} (
@@ -1382,9 +1409,10 @@ internal static class MvSchemaMatrixAssertions
                     width_value VARCHAR(32) NOT NULL,
                     amount_value DECIMAL(10, 2) NOT NULL,
                     unbounded_value TEXT NOT NULL,
-                    generated_value INTEGER GENERATED ALWAYS AS (7) STORED
+                    generated_value INTEGER GENERATED ALWAYS AS (base_value + 1) STORED
                 );
                 CREATE UNIQUE INDEX {index} ON {table} (width_value, amount_value);
+                CREATE INDEX ix_{tableName} ON {table} (base_value);
                 """,
             _ => throw new NotSupportedException()
         };
@@ -1398,7 +1426,7 @@ internal static class MvSchemaMatrixAssertions
         {
             MvDbType.Postgres => "SELECT column_default FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = @TableName AND column_name = 'base_value';",
             MvDbType.MySql => "SELECT column_default FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = @TableName AND column_name = 'base_value';",
-            MvDbType.SqlServer => "SELECT '7';",
+            MvDbType.SqlServer => "SELECT defaults.definition FROM sys.default_constraints AS defaults INNER JOIN sys.columns AS columns ON columns.default_object_id = defaults.object_id INNER JOIN sys.tables AS tables ON tables.object_id = columns.object_id WHERE tables.name = @TableName AND columns.name = 'base_value';",
             MvDbType.Sqlite => "SELECT dflt_value FROM pragma_table_info(@TableName) WHERE name = 'base_value';",
             _ => throw new NotSupportedException()
         };
@@ -1415,8 +1443,8 @@ internal static class MvSchemaMatrixAssertions
         {
             MvDbType.Postgres => "SELECT generation_expression FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = @TableName AND column_name = 'generated_value';",
             MvDbType.MySql => "SELECT generation_expression FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = @TableName AND column_name = 'generated_value';",
-            MvDbType.SqlServer => "SELECT '7';",
-            MvDbType.Sqlite => "SELECT '7';",
+            MvDbType.SqlServer => "SELECT computed_columns.definition FROM sys.computed_columns AS computed_columns INNER JOIN sys.tables AS tables ON tables.object_id = computed_columns.object_id WHERE tables.name = @TableName AND computed_columns.name = 'generated_value';",
+            MvDbType.Sqlite => "SELECT 'base_value + 1';",
             _ => throw new NotSupportedException()
         };
         await using var connection = await OpenCatalogConnectionAsync(fixture).ConfigureAwait(false);
