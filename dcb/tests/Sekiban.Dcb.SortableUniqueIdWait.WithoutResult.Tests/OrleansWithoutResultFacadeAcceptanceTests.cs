@@ -18,6 +18,7 @@ using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
+using Sekiban.Dcb.SortableUniqueIdWait.Tests;
 
 namespace Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests;
 
@@ -30,12 +31,31 @@ public sealed class OrleansWithoutResultFacadeAcceptanceTests
     [Fact]
     public void Architecture_AllWithoutResultEntrypointsBindTheSharedPolicy()
     {
-        Assert.Contains(
-            typeof(CoreGeneralSekibanExecutor).GetFields(BindingFlags.Instance | BindingFlags.NonPublic),
-            field => field.FieldType == typeof(SortableUniqueIdWaitPolicy));
-        Assert.Contains(
-            typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor).GetFields(BindingFlags.Instance | BindingFlags.NonPublic),
-            field => field.FieldType == typeof(SortableUniqueIdWaitPolicy));
+        WaitArchitectureAssertions.AssertAll(
+            new WaitArchitectureRoute(
+                "orleans-without-result-single",
+                typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor),
+                typeof(IQueryCommon<>),
+                "WaitForSortableUniqueIdIfNeeded",
+                SortableUniqueIdWaitSurface.OrleansWithoutResultSingle),
+            new WaitArchitectureRoute(
+                "orleans-without-result-list",
+                typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor),
+                typeof(IListQueryCommon<>),
+                "WaitForSortableUniqueIdIfNeeded",
+                SortableUniqueIdWaitSurface.OrleansWithoutResultList),
+            new WaitArchitectureRoute(
+                "in-memory-strict-single",
+                typeof(CoreGeneralSekibanExecutor),
+                typeof(IQueryCommon<>),
+                "WaitForStrictSortableUniqueIdIfNeededAsync",
+                SortableUniqueIdWaitSurface.InMemorySingle),
+            new WaitArchitectureRoute(
+                "in-memory-strict-list",
+                typeof(CoreGeneralSekibanExecutor),
+                typeof(IListQueryCommon<>),
+                "WaitForStrictSortableUniqueIdIfNeededAsync",
+                SortableUniqueIdWaitSurface.InMemoryList));
     }
 
     [Fact]

@@ -29,4 +29,8 @@
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans.WithoutResult\Sekiban.Dcb.Orleans.WithoutResult.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <Compile Include="..\Sekiban.Dcb.SortableUniqueIdWait.Tests\WaitArchitectureAssertions.cs" Link="WaitArchitectureAssertions.cs" />
+    </ItemGroup>
+
 </Project>

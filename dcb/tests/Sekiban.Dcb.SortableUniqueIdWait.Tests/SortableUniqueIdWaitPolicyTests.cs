@@ -11,12 +11,31 @@ public sealed class SortableUniqueIdWaitPolicyTests
     [Fact]
     public void Architecture_AllWithResultEntrypointsBindTheSharedPolicy()
     {
-        Assert.Contains(
-            typeof(CoreGeneralSekibanExecutor).GetFields(BindingFlags.Instance | BindingFlags.NonPublic),
-            field => field.FieldType == typeof(SortableUniqueIdWaitPolicy));
-        Assert.Contains(
-            typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor).GetFields(BindingFlags.Instance | BindingFlags.NonPublic),
-            field => field.FieldType == typeof(SortableUniqueIdWaitPolicy));
+        WaitArchitectureAssertions.AssertAll(
+            new WaitArchitectureRoute(
+                "orleans-with-result-single",
+                typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor),
+                typeof(IQueryCommon<>),
+                "WaitForSortableUniqueIdIfNeeded",
+                SortableUniqueIdWaitSurface.OrleansWithResultSingle),
+            new WaitArchitectureRoute(
+                "orleans-with-result-list",
+                typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor),
+                typeof(IListQueryCommon<>),
+                "WaitForSortableUniqueIdIfNeeded",
+                SortableUniqueIdWaitSurface.OrleansWithResultList),
+            new WaitArchitectureRoute(
+                "in-memory-strict-single",
+                typeof(CoreGeneralSekibanExecutor),
+                typeof(IQueryCommon<>),
+                "WaitForStrictSortableUniqueIdIfNeededAsync",
+                SortableUniqueIdWaitSurface.InMemorySingle),
+            new WaitArchitectureRoute(
+                "in-memory-strict-list",
+                typeof(CoreGeneralSekibanExecutor),
+                typeof(IListQueryCommon<>),
+                "WaitForStrictSortableUniqueIdIfNeededAsync",
+                SortableUniqueIdWaitSurface.InMemoryList));
     }
 
     [Fact]
