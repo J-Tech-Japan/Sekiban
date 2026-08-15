@@ -59,6 +59,8 @@
     <Project Path="tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj" />
+    <Project Path="tests/Sekiban.Dcb.SortableUniqueIdWait.Tests/Sekiban.Dcb.SortableUniqueIdWait.Tests.csproj" />
+    <Project Path="tests/Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests/Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.TestSupport/Sekiban.Dcb.TestSupport.csproj" />
     <Project Path="tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj" />
     <Project Path="tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj" />

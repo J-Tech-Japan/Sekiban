@@ -9,6 +9,6 @@
 
   <ItemGroup>
     <!-- This fixture is intentionally compiled against the published v10.14.0 package. -->
-    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="10.14.0" />
+    <PackageReference Include="Sekiban.Dcb.WithResult" Version="10.14.0" />
   </ItemGroup>
 </Project>

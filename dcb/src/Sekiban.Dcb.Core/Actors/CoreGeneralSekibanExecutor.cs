@@ -29,6 +29,7 @@ public class CoreGeneralSekibanExecutor
     private readonly IServiceIdProvider _serviceIdProvider;
     private readonly ISortableUniqueIdGenerator _sortableUniqueIdGenerator;
     private readonly SortableUniqueIdSeedCoordinator _sortableUniqueIdSeedCoordinator;
+    private readonly SortableUniqueIdWaitPolicy _sortableUniqueIdWaitPolicy;
 
     /// <summary>
     ///     Test seam ONLY (never set in production): the EventId / SortableUniqueId generators used by the serialized
@@ -69,7 +70,8 @@ public class CoreGeneralSekibanExecutor
             executedUserProvider,
             ProcessSharedSortableUniqueIdServices.Generator,
             ProcessSharedSortableUniqueIdServices.SeedCoordinator,
-            new DefaultServiceIdProvider())
+            new DefaultServiceIdProvider(),
+            SortableUniqueIdWaitPolicy.System)
     {
     }
 
@@ -83,6 +85,29 @@ public class CoreGeneralSekibanExecutor
         ISortableUniqueIdGenerator sortableUniqueIdGenerator,
         SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
         IServiceIdProvider serviceIdProvider)
+        : this(
+            eventStore,
+            actorAccessor,
+            domainTypes,
+            eventPublisher,
+            executedUserProvider,
+            sortableUniqueIdGenerator,
+            sortableUniqueIdSeedCoordinator,
+            serviceIdProvider,
+            SortableUniqueIdWaitPolicy.System)
+    {
+    }
+
+    internal CoreGeneralSekibanExecutor(
+        IEventStore eventStore,
+        IActorObjectAccessor actorAccessor,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher,
+        IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
+        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider,
+        SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy)
     {
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
@@ -94,6 +119,8 @@ public class CoreGeneralSekibanExecutor
         _sortableUniqueIdSeedCoordinator = sortableUniqueIdSeedCoordinator ??
                                            throw new ArgumentNullException(nameof(sortableUniqueIdSeedCoordinator));
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
+        _sortableUniqueIdWaitPolicy = sortableUniqueIdWaitPolicy ??
+                                      throw new ArgumentNullException(nameof(sortableUniqueIdWaitPolicy));
     }
 
     private Task EnsureSortableUniqueIdSeededAsync(CancellationToken cancellationToken)
@@ -653,6 +680,11 @@ public class CoreGeneralSekibanExecutor
 
             var actor = actorResult.GetValue();
 
+            await WaitForStrictSortableUniqueIdIfNeededAsync(
+                actor,
+                queryCommon,
+                SortableUniqueIdWaitSurface.InMemorySingle);
+
             // Get the current state
             var stateResult = await actor.GetStateAsync();
             if (!stateResult.IsSuccess)
@@ -767,6 +799,11 @@ public class CoreGeneralSekibanExecutor
             }
 
             var actor = actorResult.GetValue();
+
+            await WaitForStrictSortableUniqueIdIfNeededAsync(
+                actor,
+                queryCommon,
+                SortableUniqueIdWaitSurface.InMemoryList);
 
             // Get the current state
             var stateResult = await actor.GetStateAsync();
@@ -885,6 +922,42 @@ public class CoreGeneralSekibanExecutor
         {
             return ResultBox.Error<ProjectionHeadStatus>(ex);
         }
+    }
+
+    private async Task WaitForStrictSortableUniqueIdIfNeededAsync(
+        GeneralMultiProjectionActor actor,
+        object query,
+        SortableUniqueIdWaitSurface surface)
+    {
+        if (query is not IStrictWaitForSortableUniqueId strictQuery ||
+            string.IsNullOrEmpty(strictQuery.WaitForSortableUniqueId))
+        {
+            // Legacy InMemory queries intentionally keep their historical no-wait behavior.
+            return;
+        }
+
+        var target = strictQuery.WaitForSortableUniqueId;
+        var wait = await _sortableUniqueIdWaitPolicy.WaitAsync(
+            target,
+            surface,
+            SortableUniqueIdWaitMode.Strict,
+            _ => actor.IsSortableUniqueIdReceived(target),
+            _ => ReadCurrentSortableUniqueIdAsync(actor));
+
+        if (wait.TimedOut)
+        {
+            throw new SortableUniqueIdWaitTimeoutException(
+                target,
+                wait.Timeout,
+                wait.Elapsed,
+                wait.LastObservedSortableUniqueId);
+        }
+    }
+
+    private static async Task<string?> ReadCurrentSortableUniqueIdAsync(GeneralMultiProjectionActor actor)
+    {
+        var status = await actor.GetProjectionHeadStatusAsync().ConfigureAwait(false);
+        return status.Current.LastSortableUniqueId;
     }
 
     public async Task<ResultBox<EventStoreHeadStatus>> GetEventStoreHeadStatusAsync(bool includeTotalEventCount = false)

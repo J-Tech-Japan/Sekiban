@@ -187,17 +187,24 @@ public class ConditionalAppendSeamArchitectureTests
     [Fact]
     public void InternalsVisibleTo_Allowlist_IsExactlyTheIntendedAssemblies()
     {
-        // The provider assemblies grant internals only to the intended test assembly; Core grants the four provider
+        // The provider assemblies grant internals only to the intended test assembly. Core grants the four provider
         // assemblies (for the internal post-commit-response-loss signal), Sekiban.Dcb.Orleans.Core (SEK-G18: the Orleans
         // host reads the internal projection rebuild-required signal), and the two Orleans facades (SEK-G31: retained
-        // constructors share the process generator/coordinator without adding public API) — never a test assembly.
-        // Postgres's own IVT is asserted in Sekiban.Dcb.Postgres.Tests (where the Postgres seam is reachable).
+        // constructors share the process generator/coordinator without adding public API). SEK-G33 also grants the
+        // WithResult/WithoutResult facades and their dedicated acceptance-test assemblies access to the internal wait
+        // policy constructor: production facades must inject one shared policy, while tests must inject deterministic
+        // TimeProvider/delay seams through the real facades. Keeping these grants explicit preserves the internal-only
+        // timing seam and prevents a public test hook. Postgres's own IVT is asserted in Sekiban.Dcb.Postgres.Tests
+        // (where the Postgres seam is reachable).
         AssertIvtAllowlist(typeof(SqliteEventStore).Assembly, "Sekiban.Dcb.WithResult.Tests");
         AssertIvtAllowlist(typeof(CosmosDbEventStore).Assembly, "Sekiban.Dcb.WithResult.Tests");
         AssertIvtAllowlist(
             typeof(IConditionalEventStore).Assembly,
             "Sekiban.Dcb.Postgres", "Sekiban.Dcb.Sqlite", "Sekiban.Dcb.CosmosDb", "Sekiban.Dcb.DynamoDB",
-            "Sekiban.Dcb.Orleans.Core", "Sekiban.Dcb.Orleans.WithResult", "Sekiban.Dcb.Orleans.WithoutResult");
+            "Sekiban.Dcb.Orleans.Core", "Sekiban.Dcb.Orleans.WithResult", "Sekiban.Dcb.Orleans.WithoutResult",
+            "Sekiban.Dcb.WithResult", "Sekiban.Dcb.WithoutResult",
+            "Sekiban.Dcb.SortableUniqueIdWait.Tests",
+            "Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests");
     }
 
     [Theory]

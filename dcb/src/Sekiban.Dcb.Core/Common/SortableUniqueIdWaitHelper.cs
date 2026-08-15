@@ -27,12 +27,20 @@ public static class SortableUniqueIdWaitHelper
     ///     Calculate adaptive timeout based on how old the sortable unique ID is
     /// </summary>
     public static int CalculateAdaptiveTimeout(string sortableUniqueId)
+        => CalculateAdaptiveTimeout(sortableUniqueId, TimeProvider.System);
+
+    /// <summary>
+    ///     Calculate the legacy adaptive timeout using an injected clock. The threshold and boundary are intentionally
+    ///     unchanged: IDs more than five seconds old use five seconds; IDs exactly five seconds old, future IDs, and
+    ///     unparsable IDs use the thirty-second default.
+    /// </summary>
+    internal static int CalculateAdaptiveTimeout(string sortableUniqueId, TimeProvider timeProvider)
     {
         try
         {
             var id = new SortableUniqueId(sortableUniqueId);
             var eventTime = id.GetDateTime();
-            var age = DateTime.UtcNow - eventTime;
+            var age = timeProvider.GetUtcNow().UtcDateTime - eventTime;
 
             // If the event is more than 5 seconds old, use a shorter timeout
             if (age.TotalSeconds > 5)
