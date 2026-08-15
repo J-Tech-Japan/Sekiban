@@ -527,3 +527,30 @@ standalone-instance enforcement mechanism.
 and scalar query ports before provider execution. It removes raw connection/transaction access from the projector while
 `Legacy` remains the compatibility default. Missing, throwing, invalid, or denying policies fail closed with typed safe
 reasons, and cancellation remains cancellation. Hosted workers retry verification and do not fall back to schema ensure.
+
+## Strict sortable-unique-id waits — dcb-v10.15.0 (SEK-G33)
+
+`IWaitForSortableUniqueId` remains the legacy, fail-open contract. Orleans WithResult and WithoutResult single-query and
+list-query facades still wait with the adaptive policy and execute the query after a timeout. InMemory keeps its historical
+legacy no-wait behavior. Cancellation is never converted to a timeout or a query result.
+
+Opt in to fail-closed freshness with the memberless marker:
+
+```csharp
+public sealed record FreshStudentQuery(string? WaitForSortableUniqueId, string StudentId)
+    : IStrictWaitForSortableUniqueId;
+```
+
+Strict waits use the same policy on all four Orleans surfaces and on strict InMemory queries. A timeout is reported as
+`SortableUniqueIdWaitTimeoutException` before query serialization or execution, with the target, selected timeout,
+monotonic elapsed time, and best-effort last observed projection position. A diagnostic head read may be unavailable;
+that does not mask the timeout. Probe failures and `OperationCanceledException` pass through unchanged.
+
+Adaptive timing preserves the legacy boundaries: a target more than five seconds old uses a five-second timeout; a target
+exactly five seconds old, in the future, or not parseable uses thirty seconds. Probes are separated by a maximum 200 ms
+interval. The strict marker has no members, so it adds no JSON/Orleans wire property (G17 negative wire shape).
+
+Wait metrics use bounded `surface`, `mode`, and `outcome` labels only; target IDs are never metric dimensions. The
+acceptance tests inject a `TimeProvider` and delay seam, so 5-second, 30-second, and 200-ms behavior is deterministic
+and uses no real sleeps. Existing consumers compiled against the published 10.14.0 packages are also executed against
+the current binaries without recompilation to guard the public constructor and wire compatibility boundary.

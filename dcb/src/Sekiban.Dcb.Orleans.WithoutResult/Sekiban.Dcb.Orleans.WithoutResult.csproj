@@ -42,4 +42,13 @@
         <ProjectReference Include="..\Sekiban.Dcb.WithoutResult.Model\Sekiban.Dcb.WithoutResult.Model.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>Sekiban.Dcb.SortableUniqueIdWait.Tests</_Parameter1>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
 </Project>

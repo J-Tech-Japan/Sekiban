@@ -56,6 +56,29 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         ISortableUniqueIdGenerator sortableUniqueIdGenerator,
         SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
         IServiceIdProvider serviceIdProvider)
+        : this(
+            eventStore,
+            actorAccessor,
+            domainTypes,
+            eventPublisher,
+            executedUserProvider,
+            sortableUniqueIdGenerator,
+            sortableUniqueIdSeedCoordinator,
+            serviceIdProvider,
+            SortableUniqueIdWaitPolicy.System)
+    {
+    }
+
+    internal GeneralSekibanExecutor(
+        IEventStore eventStore,
+        IActorObjectAccessor actorAccessor,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher,
+        IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
+        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider,
+        SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy)
     {
         _actorAccessor = actorAccessor;
         _core = new CoreGeneralSekibanExecutor(
@@ -66,7 +89,8 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
             executedUserProvider,
             sortableUniqueIdGenerator,
             sortableUniqueIdSeedCoordinator,
-            serviceIdProvider);
+            serviceIdProvider,
+            sortableUniqueIdWaitPolicy);
     }
 
     /// <summary>

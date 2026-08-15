@@ -483,3 +483,30 @@ standalone instance の強制能力として `ApplicationIntent=ReadOnly` は使
 scalar query port も gate します。projector への raw connection / transaction 公開を止めますが、`Legacy` は互換既定値のままです。
 policy の未登録・throw・invalid・deny は typed safe reason 付きで fail-closed し、cancellation は cancellation のままです。hosted worker
 は verification を retry し、schema ensure へ fallback しません。
+
+## strict な SortableUniqueId 待機 — dcb-v10.15.0 (SEK-G33)
+
+`IWaitForSortableUniqueId` は従来どおり fail-open の契約です。Orleans の WithResult / WithoutResult の single-query と
+list-query は adaptive policy で待機し、timeout 後も query を実行します。InMemory は従来の no-wait 挙動を維持します。
+cancellation は timeout や query result に変換されません。
+
+fail-closed の freshness が必要な query は、memberless marker を実装します。
+
+```csharp
+public sealed record FreshStudentQuery(string? WaitForSortableUniqueId, string StudentId)
+    : IStrictWaitForSortableUniqueId;
+```
+
+strict wait は Orleans の4経路と strict な InMemory query で同じ policy を使います。timeout は query の serialization / execution
+より前に `SortableUniqueIdWaitTimeoutException` として返り、target、選択された timeout、monotonic elapsed time、best-effort の
+projection 最終位置を含みます。diagnostic の head 読み取りが利用できなくても timeout は隠されません。probe の failure と
+`OperationCanceledException` はそのまま伝播します。
+
+adaptive timing の境界は従来仕様を維持します。target が5秒より古ければ timeout は5秒、ちょうど5秒、未来、または parse 不能なら
+30秒です。probe 間隔は最大200msです。strict marker は member を持たないため、JSON / Orleans wire に新しい property を追加しません
+（G17 negative wire shape）。
+
+wait metric の label は bounded な `surface`、`mode`、`outcome` だけで、target ID は dimension に出しません。受入テストは
+`TimeProvider` と delay seam を注入するため、5秒・30秒・200ms の timing を real sleep なしで決定的に検証できます。さらに、公開された
+10.14.0 package に対してコンパイル済みの2つの consumer を current binary に差し替えて再コンパイルなしで実行し、公開 constructor と
+wire compatibility の境界を確認します。

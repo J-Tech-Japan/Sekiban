@@ -1,6 +1,6 @@
 # Materialized-view binary consumer
 
-This fixture is restored and compiled against the published `Sekiban.Dcb.MaterializedView` **10.13.0** package. The
+This fixture is restored and compiled against the published `Sekiban.Dcb.MaterializedView` **10.14.0** package. The
 compatibility proof then runs the already-built consumer without recompiling it after the current branch's
 `Sekiban.Dcb.MaterializedView.dll` is copied into the output directory:
 

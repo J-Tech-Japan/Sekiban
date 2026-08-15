@@ -11,7 +11,6 @@ using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
-using System.Diagnostics;
 using Sekiban.Dcb.Orleans.Serialization;
 namespace Sekiban.Dcb.Orleans;
 
@@ -31,6 +30,7 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     private readonly IEventStore _eventStore;
     private readonly GeneralSekibanExecutor _generalExecutor;
     private readonly IServiceIdProvider _serviceIdProvider;
+    private readonly SortableUniqueIdWaitPolicy _sortableUniqueIdWaitPolicy;
 
     /// <summary>
     ///     Binary-compatible overload preserved for callers compiled against the pre-SEK-G23 constructor.
@@ -60,7 +60,8 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
             serviceIdProvider,
             executedUserProvider,
             ProcessSharedSortableUniqueIdServices.Generator,
-            ProcessSharedSortableUniqueIdServices.SeedCoordinator)
+            ProcessSharedSortableUniqueIdServices.SeedCoordinator,
+            SortableUniqueIdWaitPolicy.System)
     {
     }
 
@@ -74,11 +75,36 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         IExecutedUserProvider? executedUserProvider,
         ISortableUniqueIdGenerator sortableUniqueIdGenerator,
         SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator)
+        : this(
+            clusterClient,
+            eventStore,
+            domainTypes,
+            eventPublisher,
+            serviceIdProvider,
+            executedUserProvider,
+            sortableUniqueIdGenerator,
+            sortableUniqueIdSeedCoordinator,
+            SortableUniqueIdWaitPolicy.System)
+    {
+    }
+
+    internal OrleansDcbExecutor(
+        IClusterClient clusterClient,
+        IEventStore eventStore,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher,
+        IServiceIdProvider? serviceIdProvider,
+        IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
+        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy)
     {
         _clusterClient = clusterClient ?? throw new ArgumentNullException(nameof(clusterClient));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
         _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
+        _sortableUniqueIdWaitPolicy = sortableUniqueIdWaitPolicy ??
+                                      throw new ArgumentNullException(nameof(sortableUniqueIdWaitPolicy));
         _actorAccessor = new OrleansActorObjectAccessor(clusterClient, eventStore, domainTypes, _serviceIdProvider);
         _generalExecutor = new GeneralSekibanExecutor(
             eventStore,
@@ -88,7 +114,8 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
             executedUserProvider,
             sortableUniqueIdGenerator,
             sortableUniqueIdSeedCoordinator,
-            _serviceIdProvider);
+            _serviceIdProvider,
+            _sortableUniqueIdWaitPolicy);
     }
 
     /// <summary>
@@ -140,7 +167,10 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
             var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(grainId);
 
             // Wait for sortable unique ID if needed
-            await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
+            await WaitForSortableUniqueIdIfNeeded(
+                grain,
+                queryCommon,
+                SortableUniqueIdWaitSurface.OrleansWithResultSingle);
 
             var serializableQuery = await SerializableQueryParameter.CreateFromAsync(
                 queryCommon,
@@ -175,7 +205,10 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
             var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(grainId);
 
             // Wait for sortable unique ID if needed
-            await WaitForSortableUniqueIdIfNeeded(grain, queryCommon);
+            await WaitForSortableUniqueIdIfNeeded(
+                grain,
+                queryCommon,
+                SortableUniqueIdWaitSurface.OrleansWithResultList);
 
             var serializableQuery = await SerializableQueryParameter.CreateFromAsync(
                 queryCommon,
@@ -192,35 +225,57 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     }
 
     /// <summary>
-    ///     Wait for a sortable unique ID to be processed if the query implements IWaitForSortableUniqueId
+    ///     Wait for a sortable unique ID to be processed if the query implements IWaitForSortableUniqueId.
+    ///     Strict marker queries fail before serialization when the wait times out; legacy queries keep fail-open.
     /// </summary>
-    private async Task WaitForSortableUniqueIdIfNeeded(IMultiProjectionGrain grain, object query)
+    private async Task WaitForSortableUniqueIdIfNeeded(
+        IMultiProjectionGrain grain,
+        object query,
+        SortableUniqueIdWaitSurface surface)
     {
-        if (query is IWaitForSortableUniqueId waitForQuery &&
-            !string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
+        if (query is not IWaitForSortableUniqueId waitForQuery ||
+            string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
         {
-            var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
-
-            // Calculate adaptive timeout based on the age of the sortable unique ID
-            var timeoutMs = SortableUniqueIdWaitHelper.CalculateAdaptiveTimeout(sortableUniqueId);
-            var pollingIntervalMs = SortableUniqueIdWaitHelper.DefaultPollingIntervalMs;
-
-            var stopwatch = Stopwatch.StartNew();
-
-            while (stopwatch.ElapsedMilliseconds < timeoutMs)
-            {
-                var isReceived = await grain.IsSortableUniqueIdReceived(sortableUniqueId);
-                if (isReceived)
-                {
-                    return;
-                }
-
-                await Task.Delay(pollingIntervalMs);
-            }
-
-            // Timeout reached - we proceed with the query anyway
-            // The query might return stale data, but that's better than failing completely
+            return;
         }
+
+        var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
+        var strict = query is IStrictWaitForSortableUniqueId;
+        var wait = await _sortableUniqueIdWaitPolicy.WaitAsync(
+            sortableUniqueId,
+            surface,
+            strict ? SortableUniqueIdWaitMode.Strict : SortableUniqueIdWaitMode.Legacy,
+            cancellationToken => ProbeSortableUniqueIdAsync(grain, sortableUniqueId, cancellationToken),
+            strict
+                ? cancellationToken => ReadCurrentSortableUniqueIdAsync(grain, cancellationToken)
+                : null);
+
+        if (strict && wait.TimedOut)
+        {
+            throw new SortableUniqueIdWaitTimeoutException(
+                sortableUniqueId,
+                wait.Timeout,
+                wait.Elapsed,
+                wait.LastObservedSortableUniqueId);
+        }
+    }
+
+    private static async Task<bool> ProbeSortableUniqueIdAsync(
+        IMultiProjectionGrain grain,
+        string sortableUniqueId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return await grain.IsSortableUniqueIdReceived(sortableUniqueId).ConfigureAwait(false);
+    }
+
+    private static async Task<string?> ReadCurrentSortableUniqueIdAsync(
+        IMultiProjectionGrain grain,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var status = await grain.GetProjectionHeadStatusAsync().ConfigureAwait(false);
+        return status.CurrentLastSortableUniqueId;
     }
 
     private async Task<ResultBox<TResult>> DeserializeQueryResultAsync<TResult>(
