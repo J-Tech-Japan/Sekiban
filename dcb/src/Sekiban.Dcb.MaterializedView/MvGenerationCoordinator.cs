@@ -70,6 +70,15 @@ public sealed class MvGenerationCoordinator : IMvGenerationCoordinator
         ArgumentNullException.ThrowIfNull(candidate);
         ValidateCandidate(candidate);
         var exactServiceId = ValidateServiceId(serviceId);
+        var identity = new MvTransitionIdentity(exactServiceId, candidate.ViewName, candidate.ViewVersion);
+        var capabilities = MvModeCapabilities.ResolveAndValidate(_options, MvTransition.CaptureTargetCheckpoint, identity);
+        if (!capabilities.AllowsLifecycleDml)
+        {
+            throw MvModeCapabilities.CreateRefusal(
+                _options.InitializationMode,
+                MvTransition.CaptureTargetCheckpoint,
+                identity);
+        }
         await InLaneAsync(
             exactServiceId,
             candidate.ViewName,
@@ -91,6 +100,13 @@ public sealed class MvGenerationCoordinator : IMvGenerationCoordinator
         ArgumentNullException.ThrowIfNull(candidate);
         ValidateCandidate(candidate);
         var exactServiceId = ValidateServiceId(serviceId);
+        var identity = new MvTransitionIdentity(exactServiceId, candidate.ViewName, candidate.ViewVersion);
+        var capabilities = MvModeCapabilities.ResolveAndValidate(_options, MvTransition.Activate, identity);
+        if (!capabilities.AllowsLifecycleDml)
+        {
+            var refusal = MvModeCapabilities.CreateRefusal(_options.InitializationMode, MvTransition.Activate, identity);
+            return MvActivationResult.Rejected(MvActivationFailureReason.TransitionNotAllowed, refusal.Message);
+        }
         return await InLaneAsync(
             exactServiceId,
             candidate.ViewName,
@@ -133,11 +149,15 @@ public sealed class MvGenerationCoordinator : IMvGenerationCoordinator
     {
         ArgumentNullException.ThrowIfNull(retainedCandidate);
         var exactServiceId = ValidateServiceId(serviceId);
-        if (_options.InitializationMode == MvInitializationMode.VerifyOnly)
+        var identity = new MvTransitionIdentity(
+            exactServiceId,
+            retainedCandidate.ViewName,
+            retainedCandidate.ViewVersion);
+        var capabilities = MvModeCapabilities.ResolveAndValidate(_options, MvTransition.ForceReverse, identity);
+        if (!capabilities.AllowsLifecycleDml)
         {
-            return MvActivationResult.Rejected(
-                MvActivationFailureReason.ProviderFailure,
-                "Verify-only infrastructure mode never mutates materialized-view registry state.");
+            var refusal = MvModeCapabilities.CreateRefusal(_options.InitializationMode, MvTransition.ForceReverse, identity);
+            return MvActivationResult.Rejected(MvActivationFailureReason.TransitionNotAllowed, refusal.Message);
         }
 
         var inputRejection = ValidateForcedReverseInput(
@@ -230,8 +250,11 @@ public sealed class MvGenerationCoordinator : IMvGenerationCoordinator
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(viewName);
         var exactServiceId = ValidateServiceId(serviceId);
-        if (_options.InitializationMode == MvInitializationMode.VerifyOnly &&
-            _registry is IMvReadOnlyMvInspector inspector)
+        var capabilities = MvModeCapabilities.ResolveAndValidate(
+            _options,
+            MvTransition.VerifyInitialization,
+            new MvTransitionIdentity(exactServiceId, viewName, -1));
+        if (capabilities.UsesReadOnlyInspection && _registry is IMvReadOnlyMvInspector inspector)
         {
             return inspector.ReadActiveAsync(exactServiceId, viewName, cancellationToken);
         }

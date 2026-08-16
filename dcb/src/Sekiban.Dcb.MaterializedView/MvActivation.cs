@@ -17,7 +17,8 @@ public enum MvActivationFailureReason
     ExpectedActiveConflict = 11,
     ExpectedGenerationConflict = 12,
     ConcurrentSuperseded = 13,
-    ProviderFailure = 14
+    ProviderFailure = 14,
+    TransitionNotAllowed = 15
 }
 
 /// <summary>Provider-neutral result of evaluating a candidate before any active-pointer mutation.</summary>

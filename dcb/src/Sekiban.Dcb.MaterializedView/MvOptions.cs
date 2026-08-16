@@ -51,14 +51,17 @@ public sealed class MvOptions
     public bool AllowDefaultServiceId { get; set; }
 
     /// <summary>
-    ///     Selects whether initialization may create/ensure schema or may only verify a pre-provisioned schema.
-    ///     The compatibility default preserves the historical create/ensure behavior.
+    ///     Selects infrastructure ownership and execution capability. <see cref="MvInitializationMode.VerifyOnly"/>
+    ///     verifies a pre-provisioned schema and refuses mutating commands; <see cref="MvInitializationMode.VerifyAndExecute"/>
+    ///     verifies first and then permits DML only with an explicit enforced policy. The compatibility default
+    ///     preserves historical create/ensure behavior.
     /// </summary>
     public MvInitializationMode InitializationMode { get; set; } = MvInitializationMode.CreateOrEnsure;
 
     /// <summary>
-    ///     Delay before a hosted worker retries a failed VerifyOnly contract check. CreateOrEnsure workers do not use
-    ///     this setting. A non-positive value falls back to <see cref="PollInterval"/>.
+    ///     Delay before a hosted worker retries a failed pre-provisioned-schema contract check in either verification
+    ///     mode (<see cref="MvInitializationMode.VerifyOnly"/> or <see cref="MvInitializationMode.VerifyAndExecute"/>).
+    ///     CreateOrEnsure workers do not use this setting. A non-positive value falls back to <see cref="PollInterval"/>.
     /// </summary>
     public TimeSpan VerifyOnlyRetryDelay { get; set; } = TimeSpan.FromSeconds(1);
 

@@ -71,6 +71,16 @@ public sealed class MvCatchUpWorker : BackgroundService
     {
         await InitializeProjectorsAsync(stoppingToken).ConfigureAwait(false);
 
+        var capabilities = MvModeCapabilities.ResolveAndValidate(
+            _options,
+            MvTransition.CatchUp,
+            MvTransitionIdentity.Unknown);
+        if (!capabilities.AllowsProjectorApply || !capabilities.AllowsLifecycleDml)
+        {
+            _logger.LogInformation("Materialized-view worker verified the pre-provisioned contract and will not run a mutating catch-up lifecycle.");
+            return;
+        }
+
         while (!stoppingToken.IsCancellationRequested)
         {
             var cycle = await RunCatchUpCycleAsync(stoppingToken).ConfigureAwait(false);
@@ -103,13 +113,17 @@ public sealed class MvCatchUpWorker : BackgroundService
                 return;
             }
             catch (MvInitializationException ex) when (
-                _options.InitializationMode == MvInitializationMode.VerifyOnly &&
+                MvModeCapabilities.ResolveAndValidate(
+                        _options,
+                        MvTransition.Initialize,
+                        MvTransitionIdentity.Unknown)
+                    .RequiresVerification &&
                 !stoppingToken.IsCancellationRequested)
             {
                 _logger.LogWarning(
                     ex,
-                    "Verify-only materialized-view startup is gated until the pre-provisioned schema is compatible; retrying after {RetryDelay}.",
-                    GetVerifyOnlyRetryDelay());
+                    "Verification-mode materialized-view startup is gated until the pre-provisioned schema is compatible; retrying after {RetryDelay}.",
+                    GetVerificationRetryDelay());
                 foreach (var registration in _registrations)
                 {
                     var snapshot = MvProjectionStatusSnapshot.Unknown(MvStatus.Faulted);
@@ -138,12 +152,12 @@ public sealed class MvCatchUpWorker : BackgroundService
                     }
                 }
 
-                await Task.Delay(GetVerifyOnlyRetryDelay(), stoppingToken).ConfigureAwait(false);
+                await Task.Delay(GetVerificationRetryDelay(), stoppingToken).ConfigureAwait(false);
             }
         }
     }
 
-    private TimeSpan GetVerifyOnlyRetryDelay() =>
+    private TimeSpan GetVerificationRetryDelay() =>
         _options.VerifyOnlyRetryDelay > TimeSpan.Zero
             ? _options.VerifyOnlyRetryDelay
             : _options.PollInterval > TimeSpan.Zero

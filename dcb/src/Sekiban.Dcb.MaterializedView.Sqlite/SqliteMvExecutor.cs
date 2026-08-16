@@ -52,6 +52,7 @@ public sealed class SqliteMvExecutor : MvExecutorBase<SqliteConnection>, IMvExec
         CancellationToken cancellationToken = default)
     {
         var exactServiceId = ValidateServiceIdAtBoundary(serviceId);
+        EnsureCatchUpIsAllowedAtBoundary(host, exactServiceId);
         return await CatchUpFromStoreAsync(
                 host,
                 exactServiceId,

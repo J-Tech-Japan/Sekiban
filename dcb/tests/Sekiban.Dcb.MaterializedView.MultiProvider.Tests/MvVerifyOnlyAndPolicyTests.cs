@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Dapper;
 using Dcb.Domain.WithoutResult.Weather;
@@ -8,10 +9,12 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.MaterializedView.MySql;
+using Sekiban.Dcb.MaterializedView.Orleans;
 using Sekiban.Dcb.MaterializedView.Postgres;
 using Sekiban.Dcb.MaterializedView.Sqlite;
 using Sekiban.Dcb.MaterializedView.SqlServer;
@@ -105,10 +108,13 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
             fixture.ConnectionStringForTests);
 
         await executor.InitializeAsync(new CountingApplyHost(host, throwOnInitialize: true)).ConfigureAwait(false);
-        _ = await executor.CaptureTargetCheckpointAsync(host).ConfigureAwait(false);
-        _ = await executor.CatchUpOnceAsync(host).ConfigureAwait(false);
+        var capture = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
+            () => executor.CaptureTargetCheckpointAsync(host)).ConfigureAwait(false);
+        var catchUp = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
+            () => executor.CatchUpOnceAsync(host)).ConfigureAwait(false);
         var activation = await executor.TryActivateAsync(host).ConfigureAwait(false);
-        var applied = await executor.ApplySerializableEventsAsync(host, [CreatePolicyEvent()]).ConfigureAwait(false);
+        var apply = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
+            () => executor.ApplySerializableEventsAsync(host, [CreatePolicyEvent()])).ConfigureAwait(false);
         var coordinator = new MvGenerationCoordinator(
             executor,
             guardedRegistry,
@@ -117,6 +123,9 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
                 ServiceId = MultiProviderFixtureBase.ServiceId,
                 InitializationMode = MvInitializationMode.VerifyOnly
             }));
+        var prepare = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
+            () => coordinator.PrepareGenerationAsync(host));
+        var switchResult = await coordinator.SwitchAsync(host).ConfigureAwait(false);
         var forcedReverse = await coordinator.ForceReverseAsync(
                 host,
                 expectedActiveVersion: projector.ViewVersion + 1,
@@ -124,9 +133,13 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
                 reason: "verify-only mutation probe")
             .ConfigureAwait(false);
 
-        Assert.Equal(MvActivationFailureReason.ProviderFailure, activation.FailureReason);
-        Assert.Equal(MvActivationFailureReason.ProviderFailure, forcedReverse.FailureReason);
-        Assert.Equal(0, applied);
+        Assert.Equal(MvTransition.CaptureTargetCheckpoint, capture.Transition);
+        Assert.Equal(MvTransition.CatchUp, catchUp.Transition);
+        Assert.Equal(MvTransition.Apply, apply.Transition);
+        Assert.Equal(MvTransition.CaptureTargetCheckpoint, prepare.Transition);
+        Assert.Equal(MvActivationFailureReason.TransitionNotAllowed, activation.FailureReason);
+        Assert.Equal(MvActivationFailureReason.TransitionNotAllowed, switchResult.FailureReason);
+        Assert.Equal(MvActivationFailureReason.TransitionNotAllowed, forcedReverse.FailureReason);
         Assert.Equal(0, guardedRegistry.EnsureCalls);
         Assert.Equal(0, guardedRegistry.RegisterCalls);
         Assert.Equal(0, guardedRegistry.TargetCheckpointCalls);
@@ -136,19 +149,6 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
         Assert.Equal(0, guardedRegistry.ActivePointerCalls);
         Assert.Contains("sqlite:Mode=ReadOnly", readOnlyConnections);
 
-        await realStore.SetTargetCheckpointAsync(
-                MultiProviderFixtureBase.ServiceId,
-                projector.ViewName,
-                projector.ViewVersion,
-                MvCheckpointTruth.Unknown(MvCheckpointUnknownReason.ReadUnavailable))
-            .ConfigureAwait(false);
-        _ = await executor.CatchUpOnceAsync(host).ConfigureAwait(false);
-        var entriesAfterCatchUp = await realStore.ReadRegistryEntriesAsync(
-                MultiProviderFixtureBase.ServiceId,
-                projector.ViewName,
-                projector.ViewVersion)
-            .ConfigureAwait(false);
-        Assert.All(entriesAfterCatchUp, entry => Assert.True(entry.TargetCheckpointTruth.IsUnknown));
     }
 
     [SkippableFact]
@@ -286,7 +286,7 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
     }
 
     [SkippableFact]
-    public async Task VerifyOnly_ImplicitEmptyRegistryPathsUseTheSameFailClosedGate()
+    public async Task VerifyOnly_MutatingBoundariesRefuseBeforeSchemaOrRegistryAccess()
     {
         Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "SQLite fixture is unavailable.");
         var pathNames = new[] { "target-capture", "catch-up", "apply" };
@@ -311,15 +311,15 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
 
             var exception = pathName switch
             {
-                "target-capture" => await Assert.ThrowsAsync<MvInitializationException>(
+                "target-capture" => await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
                     () => verifyExecutor.CaptureTargetCheckpointAsync(host)).ConfigureAwait(false),
-                "catch-up" => await Assert.ThrowsAsync<MvInitializationException>(
+                "catch-up" => await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
                     async () => await verifyExecutor.CatchUpOnceAsync(host).ConfigureAwait(false)).ConfigureAwait(false),
-                _ => await Assert.ThrowsAsync<MvInitializationException>(
+                _ => await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
                     () => verifyExecutor.ApplySerializableEventsAsync(host, [])).ConfigureAwait(false)
             };
 
-            Assert.Equal(MvInitializationFailureReason.MissingSchemaContract, exception.Failure.Reason);
+            Assert.Equal(MvTransitionNotAllowedReason.VerifyOnly, exception.Reason);
             Assert.Equal(0, host.InitializeCalls);
             await using var checkConnection = await fixture.OpenConnectionAsync().ConfigureAwait(false);
             Assert.Equal(0, await checkConnection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM sekiban_mv_registry;"));
@@ -327,7 +327,7 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
     }
 
     [SkippableFact]
-    public async Task VerifyOnly_ImplicitPathsReportMissingFrameworkSchemaBeforeRegistryRead()
+    public async Task VerifyOnly_MutatingBoundariesRefuseEvenWhenFrameworkSchemaIsMissing()
     {
         Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "SQLite fixture is unavailable.");
         var pathNames = new[] { "target-capture", "catch-up", "apply" };
@@ -344,15 +344,15 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
 
             var exception = pathName switch
             {
-                "target-capture" => await Assert.ThrowsAsync<MvInitializationException>(
+                "target-capture" => await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
                     () => verifyExecutor.CaptureTargetCheckpointAsync(host)).ConfigureAwait(false),
-                "catch-up" => await Assert.ThrowsAsync<MvInitializationException>(
+                "catch-up" => await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
                     async () => await verifyExecutor.CatchUpOnceAsync(host).ConfigureAwait(false)).ConfigureAwait(false),
-                _ => await Assert.ThrowsAsync<MvInitializationException>(
+                _ => await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
                     () => verifyExecutor.ApplySerializableEventsAsync(host, [])).ConfigureAwait(false)
             };
 
-            Assert.Equal(MvInitializationFailureReason.MissingSchemaObject, exception.Failure.Reason);
+            Assert.Equal(MvTransitionNotAllowedReason.VerifyOnly, exception.Reason);
             Assert.Equal(0, host.InitializeCalls);
             await using var checkConnection = await fixture.OpenConnectionAsync().ConfigureAwait(false);
             Assert.Equal(
@@ -360,6 +360,32 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
                 await checkConnection.ExecuteScalarAsync<long>(
                     "SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'sekiban_mv_%';"));
         }
+    }
+
+    [Fact]
+    public async Task VerifyOnly_PublicRefreshRefusesBeforeItCanReachGrainDependencies()
+    {
+        var grain = new MaterializedViewGrain(
+            hostFactory: null!,
+            executor: null!,
+            registryStore: null!,
+            subscriptionResolver: null!,
+            options: Options.Create(new MvOptions
+            {
+                ServiceId = "g34-refresh",
+                InitializationMode = MvInitializationMode.VerifyOnly
+            }),
+            logger: NullLogger<MaterializedViewGrain>.Instance);
+        SetPrivateField(grain, "_grainKey", "g34-refresh|RefreshView|1");
+        SetPrivateField(grain, "_serviceId", "g34-refresh");
+        SetPrivateField(grain, "_viewName", "RefreshView");
+        SetPrivateField(grain, "_viewVersion", 1);
+
+        var refusal = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
+            () => grain.RefreshAsync());
+
+        Assert.Equal(MvTransition.Refresh, refusal.Transition);
+        Assert.Equal(MvTransitionNotAllowedReason.VerifyOnly, refusal.Reason);
     }
 
     [SkippableFact]
@@ -740,6 +766,13 @@ public sealed class SqliteMvVerifyOnlyAndPolicyTests(SqliteMvFixture fixture)
         return eventValue.ToSerializableEvent(fixture.DomainTypes.EventTypes);
     }
 
+    private static void SetPrivateField<T>(MaterializedViewGrain grain, string fieldName, T value)
+    {
+        var field = typeof(MaterializedViewGrain).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        field!.SetValue(grain, value);
+    }
+
     private NativeMvApplyHost CreateHost(CrossProviderWeatherForecastMvV1 projector) =>
         new(projector, fixture.DomainTypes.EventTypes, MvDbType.Sqlite);
 
@@ -1111,6 +1144,269 @@ public sealed class PostgresMvVerifyOnlyTests(PostgresMvFixture fixture)
     [SkippableFact]
     public Task SchemaContractMatrix_UsesTheProductionInspector() =>
         MvSchemaMatrixAssertions.AssertAsync(fixture);
+
+    [SkippableFact]
+    public async Task VerifyAndExecute_UsesDdlDeniedRoleForProductionDmlAndFailsAtomicallyOnPolicyReject()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "PostgreSQL fixture is unavailable.");
+        await fixture.ResetAsync().ConfigureAwait(false);
+
+        var projector = fixture.Services.GetRequiredService<CrossProviderWeatherForecastMvV1>();
+        var host = new NativeMvApplyHost(projector, fixture.DomainTypes.EventTypes, MvDbType.Postgres);
+        await fixture.Executor.InitializeAsync(host).ConfigureAwait(false);
+
+        var roleName = $"g34_exec_{Guid.NewGuid():N}";
+        var rolePassword = Guid.NewGuid().ToString("N");
+        try
+        {
+            await using var ownerConnection = new NpgsqlConnection(fixture.ConnectionStringForTests);
+            await ownerConnection.OpenAsync().ConfigureAwait(false);
+            var ownerRole = await ownerConnection.ExecuteScalarAsync<string>("SELECT current_user;").ConfigureAwait(false);
+            await ownerConnection.ExecuteAsync($"""
+                REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+                GRANT CREATE ON SCHEMA public TO {ownerRole};
+                CREATE ROLE {roleName} LOGIN PASSWORD '{rolePassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+                GRANT CONNECT ON DATABASE sekiban_mv_test TO {roleName};
+                GRANT USAGE ON SCHEMA public TO {roleName};
+                GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {roleName};
+                GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {roleName};
+                REVOKE CREATE ON SCHEMA public FROM {roleName};
+                """).ConfigureAwait(false);
+
+            var restrictedBuilder = new NpgsqlConnectionStringBuilder(fixture.ConnectionStringForTests)
+            {
+                Username = roleName,
+                Password = rolePassword,
+                Pooling = false
+            };
+            var restrictedConnectionString = restrictedBuilder.ConnectionString;
+            await using (var restrictedConnection = new NpgsqlConnection(restrictedConnectionString))
+            {
+                await restrictedConnection.OpenAsync().ConfigureAwait(false);
+                var create = await Assert.ThrowsAsync<PostgresException>(
+                    () => restrictedConnection.ExecuteAsync($"CREATE TABLE g34_create_probe_{Guid.NewGuid():N} (id INT);")).ConfigureAwait(false);
+                var alter = await Assert.ThrowsAsync<PostgresException>(
+                    () => restrictedConnection.ExecuteAsync($"ALTER TABLE {projector.Forecasts.PhysicalName} ADD COLUMN g34_alter_probe INT;")).ConfigureAwait(false);
+                var drop = await Assert.ThrowsAsync<PostgresException>(
+                    () => restrictedConnection.ExecuteAsync($"DROP TABLE {projector.Forecasts.PhysicalName};")).ConfigureAwait(false);
+                Assert.Equal("42501", create.SqlState);
+                Assert.Equal("42501", alter.SqlState);
+                Assert.Equal("42501", drop.SqlState);
+            }
+
+            var readRows = () => ownerConnection.ExecuteScalar<long>($"SELECT COUNT(*) FROM {projector.Forecasts.PhysicalName};");
+            var ownerRegistry = fixture.Services.GetRequiredService<IMvRegistryStore>();
+            async Task<string[]> SnapshotRegistryAsync()
+            {
+                var rows = await ownerConnection.QueryAsync<string>(
+                        """
+                        SELECT row_to_json(snapshot)::text
+                        FROM (
+                            SELECT *
+                            FROM sekiban_mv_registry
+                            WHERE service_id = @ServiceId
+                              AND view_name = @ViewName
+                              AND view_version = @ViewVersion
+                            ORDER BY logical_table
+                        ) AS snapshot;
+                        """,
+                        new
+                        {
+                            ServiceId = MultiProviderFixtureBase.ServiceId,
+                            projector.ViewName,
+                            projector.ViewVersion
+                        })
+                    .ConfigureAwait(false);
+                return rows.ToArray();
+            }
+
+            async Task<string[]> SnapshotActiveAsync()
+            {
+                var rows = await ownerConnection.QueryAsync<string>(
+                        """
+                        SELECT row_to_json(snapshot)::text
+                        FROM (
+                            SELECT *
+                            FROM sekiban_mv_active
+                            WHERE service_id = @ServiceId
+                              AND view_name = @ViewName
+                        ) AS snapshot;
+                        """,
+                        new
+                        {
+                            ServiceId = MultiProviderFixtureBase.ServiceId,
+                            projector.ViewName
+                        })
+                    .ConfigureAwait(false);
+                return rows.ToArray();
+            }
+
+            async Task<string[]> SnapshotProjectionRowsAsync()
+            {
+                var rows = await ownerConnection.QueryAsync<string>(
+                        $"""
+                        SELECT row_to_json(snapshot)::text
+                        FROM (
+                            SELECT *
+                            FROM {projector.Forecasts.PhysicalName}
+                            ORDER BY forecast_id
+                        ) AS snapshot;
+                        """)
+                    .ConfigureAwait(false);
+                return rows.ToArray();
+            }
+
+            var allowPolicy = new ObservingPolicy(readRows, _ => MvSqlPolicyDecision.Allow());
+            var allowExecutor = CreateVerifyAndExecuteExecutor(restrictedConnectionString, allowPolicy);
+            await allowExecutor.InitializeAsync(host).ConfigureAwait(false);
+
+            var emptyApply = await allowExecutor.ApplySerializableEventsAsync(host, []).ConfigureAwait(false);
+            Assert.Equal(0, emptyApply);
+
+            var applied = await allowExecutor.ApplySerializableEventsAsync(
+                    host,
+                    [CreateEvent(fixture, DateTime.UtcNow.AddMinutes(-2))])
+                .ConfigureAwait(false);
+            Assert.Equal(1, applied);
+            Assert.Single(allowPolicy.ApplyContexts);
+            Assert.Equal(MvSqlStatementPhase.Apply, allowPolicy.ApplyContexts[0].Phase);
+            Assert.All(allowPolicy.ObservedRowsBeforeApply, count => Assert.Equal(0, count));
+            Assert.DoesNotContain(
+                allowPolicy.ApplyContexts,
+                context => Regex.IsMatch(context.Sql, @"^\s*(CREATE|ALTER|DROP)\b", RegexOptions.IgnoreCase));
+            Assert.Equal(1, readRows());
+
+            var beforeLifecycle = await ownerRegistry.GetEntriesAsync(
+                    MultiProviderFixtureBase.ServiceId,
+                    projector.ViewName,
+                    projector.ViewVersion)
+                .ConfigureAwait(false);
+            var sourceEvent = CreateEvent(fixture, DateTime.UtcNow.AddSeconds(-30));
+            var writeSource = await fixture.EventStore.WriteSerializableEventsAsync([sourceEvent]).ConfigureAwait(false);
+            Assert.True(writeSource.IsSuccess);
+            var target = await allowExecutor.CaptureTargetCheckpointAsync(host).ConfigureAwait(false);
+            Assert.True(target.IsKnown);
+            var firstCatchUp = await allowExecutor.CatchUpOnceAsync(host).ConfigureAwait(false);
+            Assert.Equal(1, firstCatchUp.AppliedEvents);
+            var afterFirstCatchUp = await ownerRegistry.GetEntriesAsync(
+                    MultiProviderFixtureBase.ServiceId,
+                    projector.ViewName,
+                    projector.ViewVersion)
+                .ConfigureAwait(false);
+            Assert.Equal(
+                beforeLifecycle.Single().AppliedEventVersion + 1,
+                afterFirstCatchUp.Single().AppliedEventVersion);
+            _ = await allowExecutor.CatchUpOnceAsync(host).ConfigureAwait(false);
+            var activeAfterFirstCas = await ownerRegistry.GetActiveAsync(
+                    MultiProviderFixtureBase.ServiceId,
+                    projector.ViewName)
+                .ConfigureAwait(false);
+            Assert.NotNull(activeAfterFirstCas);
+            Assert.Equal(projector.ViewVersion, activeAfterFirstCas.ActiveVersion);
+            var registryBeforeReplay = await SnapshotRegistryAsync().ConfigureAwait(false);
+            var activeBeforeReplay = await SnapshotActiveAsync().ConfigureAwait(false);
+            var replay = await allowExecutor.CatchUpOnceAsync(host).ConfigureAwait(false);
+            Assert.Equal(0, replay.AppliedEvents);
+            Assert.Equal(registryBeforeReplay, await SnapshotRegistryAsync().ConfigureAwait(false));
+            Assert.Equal(activeBeforeReplay, await SnapshotActiveAsync().ConfigureAwait(false));
+            Assert.Equal(2, readRows());
+
+            var registryBeforeReject = await SnapshotRegistryAsync().ConfigureAwait(false);
+            var activeBeforeReject = await SnapshotActiveAsync().ConfigureAwait(false);
+            var projectionRowsBeforeReject = await SnapshotProjectionRowsAsync().ConfigureAwait(false);
+            var rowsBeforeReject = projectionRowsBeforeReject.LongLength;
+            var denySecondPolicy = new ObservingPolicy(
+                readRows,
+                context => context.StatementIndex == 1
+                    ? MvSqlPolicyDecision.Reject("second statement is intentionally denied", "g34-deny-second")
+                    : MvSqlPolicyDecision.Allow());
+            var rejectExecutor = CreateVerifyAndExecuteExecutor(restrictedConnectionString, denySecondPolicy);
+            await rejectExecutor.InitializeAsync(host).ConfigureAwait(false);
+
+            var rejection = await Assert.ThrowsAsync<MvSqlPolicyRejectedException>(
+                () => rejectExecutor.ApplySerializableEventsAsync(
+                    host,
+                    [
+                        CreateEvent(fixture, DateTime.UtcNow.AddMinutes(-1)),
+                        CreateEvent(fixture, DateTime.UtcNow)
+                    ])).ConfigureAwait(false);
+
+            Assert.Equal(MvSqlPolicyFailureReason.Denied, rejection.Failure.FailureReason);
+            Assert.Equal(rowsBeforeReject, readRows());
+            Assert.All(denySecondPolicy.ObservedRowsBeforeApply, count => Assert.Equal(rowsBeforeReject, count));
+            Assert.Equal(2, denySecondPolicy.ApplyContexts.Count);
+            Assert.Equal([0, 1], denySecondPolicy.ApplyContexts.Select(context => context.StatementIndex));
+            Assert.Equal(projectionRowsBeforeReject, await SnapshotProjectionRowsAsync().ConfigureAwait(false));
+            Assert.Equal(registryBeforeReject, await SnapshotRegistryAsync().ConfigureAwait(false));
+            Assert.Equal(activeBeforeReject, await SnapshotActiveAsync().ConfigureAwait(false));
+        }
+        finally
+        {
+            NpgsqlConnection.ClearAllPools();
+            await using var cleanupConnection = new NpgsqlConnection(fixture.ConnectionStringForTests);
+            await cleanupConnection.OpenAsync().ConfigureAwait(false);
+            await cleanupConnection.ExecuteAsync($"DROP OWNED BY {roleName};").ConfigureAwait(false);
+            await cleanupConnection.ExecuteAsync($"DROP ROLE IF EXISTS {roleName};").ConfigureAwait(false);
+            await cleanupConnection.ExecuteAsync("GRANT CREATE ON SCHEMA public TO PUBLIC;").ConfigureAwait(false);
+        }
+    }
+
+    private PostgresMvExecutor CreateVerifyAndExecuteExecutor(
+        string connectionString,
+        IMvSqlStatementPolicy policy) =>
+        new(
+            fixture.EventStoreFactory,
+            new PostgresMvRegistryStore(connectionString),
+            Options.Create(new MvOptions
+            {
+                ServiceId = MultiProviderFixtureBase.ServiceId,
+                InitializationMode = MvInitializationMode.VerifyAndExecute,
+                SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced,
+                SqlStatementPolicy = policy,
+                SafeWindowMs = 0,
+                BatchSize = 100
+            }),
+            NullLogger<PostgresMvExecutor>.Instance,
+            connectionString);
+
+    private static SerializableEvent CreateEvent(PostgresMvFixture fixture, DateTime timestamp)
+    {
+        var eventId = Guid.CreateVersion7();
+        var value = new Event(
+            new WeatherForecastCreated(
+                Guid.CreateVersion7(),
+                "Tokyo",
+                DateOnly.FromDateTime(timestamp),
+                20,
+                "Sunny"),
+            SortableUniqueId.Generate(timestamp, eventId),
+            nameof(WeatherForecastCreated),
+            eventId,
+            new EventMetadata("g34", "g34", "test"),
+            []);
+        return value.ToSerializableEvent(fixture.DomainTypes.EventTypes);
+    }
+
+    private sealed class ObservingPolicy(
+        Func<long> readRows,
+        Func<MvSqlStatementContext, MvSqlPolicyDecision> decision) : IMvSqlStatementPolicy
+    {
+        public List<MvSqlStatementContext> ApplyContexts { get; } = [];
+        public List<long> ObservedRowsBeforeApply { get; } = [];
+
+        public ValueTask<MvSqlPolicyDecision> EvaluateAsync(
+            MvSqlStatementContext context,
+            CancellationToken cancellationToken = default)
+        {
+            if (context.Phase == MvSqlStatementPhase.Apply)
+            {
+                ApplyContexts.Add(context);
+                ObservedRowsBeforeApply.Add(readRows());
+            }
+
+            return ValueTask.FromResult(decision(context));
+        }
+    }
 }
 
 [Collection(nameof(MySqlMvCollection))]

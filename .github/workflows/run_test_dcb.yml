@@ -25,6 +25,10 @@ on:
       - 'dcb/src/Sekiban.Dcb.Postgres.MigrationHost/**'
       - 'dcb/tests/Sekiban.Dcb.Orleans.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.Postgres.Tests/**'
+      - 'dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/**'
+      - 'dcb/tests/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier/**'
+      - 'dcb/tests/Sekiban.Dcb.MaterializedView.NewVersionConsumer/**'
+      - 'dcb/tests/Sekiban.Dcb.MaterializedView.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.WithResult.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.WithoutResult.Tests/**'
@@ -69,8 +73,20 @@ jobs:
           dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.Tests/Sekiban.Dcb.MaterializedView.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+
+      - name: Verify 10.14.1 materialized-view binary consumer without rebuild
+        run: |
+          dotnet build dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/Sekiban.Dcb.MaterializedView.BinaryConsumer.csproj -c Release --no-restore -f net9.0
+          dotnet dcb/tests/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier.dll dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.dll dcb/src/Sekiban.Dcb.MaterializedView/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.dll
+          cp dcb/src/Sekiban.Dcb.MaterializedView/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.dll dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/bin/Release/net9.0/
+          dotnet dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.BinaryConsumer.dll
+
+      - name: Verify current materialized-view consumer
+        run: |
+          dotnet dcb/tests/Sekiban.Dcb.MaterializedView.NewVersionConsumer/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.NewVersionConsumer.dll
 
   dcbTestsNet10:
     runs-on: ubuntu-latest
@@ -106,5 +122,6 @@ jobs:
           dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.Tests/Sekiban.Dcb.MaterializedView.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1

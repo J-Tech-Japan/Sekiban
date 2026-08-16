@@ -3,7 +3,8 @@ namespace Sekiban.Dcb.MaterializedView;
 public enum MvInitializationMode
 {
     CreateOrEnsure = 0,
-    VerifyOnly = 1
+    VerifyOnly = 1,
+    VerifyAndExecute = 2
 }
 
 /// <summary>
@@ -13,7 +14,8 @@ public enum MvInitializationMode
 public enum MvInfrastructureMode
 {
     EnsureAndInitialize = 0,
-    VerifyOnly = 1
+    VerifyOnly = 1,
+    VerifyAndExecute = 2
 }
 
 public enum MvInitializationFailureReason

@@ -52,6 +52,7 @@ public sealed class MySqlMvExecutor : MvExecutorBase<MySqlConnection>, IMvExecut
         CancellationToken cancellationToken = default)
     {
         var exactServiceId = ValidateServiceIdAtBoundary(serviceId);
+        EnsureCatchUpIsAllowedAtBoundary(host, exactServiceId);
         return await CatchUpFromStoreAsync(
                 host,
                 exactServiceId,

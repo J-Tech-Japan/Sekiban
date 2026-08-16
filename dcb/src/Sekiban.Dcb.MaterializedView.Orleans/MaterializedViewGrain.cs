@@ -28,8 +28,6 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private readonly IMvRegistryStore _registryStore;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
 
-    private bool IsVerifyOnly => _options.InitializationMode == MvInitializationMode.VerifyOnly;
-
     private readonly List<SerializableEvent> _pendingStreamEvents = [];
     private IAsyncStream<SerializableEvent>? _stream;
     private StreamSubscriptionHandle<SerializableEvent>? _streamHandle;
@@ -58,6 +56,15 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private string? _lastProgressSortableUniqueId;
     private long _catchUpBatchSkipCount;
     private bool _statusMarkedCatchingUp;
+
+    private MvModeCapabilities ResolveCapabilities(MvTransition transition)
+    {
+        ResolveIdentity();
+        return MvModeCapabilities.ResolveAndValidate(
+            _options,
+            transition,
+            new MvTransitionIdentity(_serviceId!, _viewName!, _viewVersion));
+    }
 
     public MaterializedViewGrain(
         IMvApplyHostFactory hostFactory,
@@ -93,6 +100,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         ResolveIdentity();
+        _ = ResolveCapabilities(MvTransition.Initialize);
         await PrepareStreamAsync();
         await base.OnActivateAsync(cancellationToken);
     }
@@ -119,12 +127,13 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             return;
         }
 
+        var capabilities = ResolveCapabilities(MvTransition.Initialize);
         ResolveHost();
         await _executor.InitializeAsync(_host!, _serviceId, CancellationToken.None);
-        if (IsVerifyOnly)
+        if (!capabilities.AllowsLifecycleDml)
         {
-            // Verify-only is an inspection lifecycle, not a catch-up lifecycle. Do not subscribe, capture a target,
-            // mark status, apply events, or let a timer reach registry mutations after the schema gate succeeds.
+            // A verification-only lifecycle does not subscribe, capture a target, mark status, apply events, or let
+            // a timer reach registry mutations after the schema gate succeeds.
             _started = true;
             return;
         }
@@ -152,12 +161,15 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
     public async Task RefreshAsync()
     {
-        await EnsureStartedAsync();
-
-        if (IsVerifyOnly)
+        var capabilities = ResolveCapabilities(MvTransition.Refresh);
+        if (!capabilities.AllowsLifecycleDml)
         {
-            return;
+            throw MvModeCapabilities.CreateRefusal(
+                _options.InitializationMode,
+                MvTransition.Refresh,
+                new MvTransitionIdentity(_serviceId!, _viewName!, _viewVersion));
         }
+        await EnsureStartedAsync();
 
         // Activate catch-up for any callers that explicitly request a refresh.
         if (!_isCatchUpActive)
@@ -404,7 +416,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     /// </summary>
     private async Task<bool> RunCatchUpTickAsync(bool ignoreImmediateFlag, CancellationToken cancellationToken)
     {
-        if (IsVerifyOnly)
+        var capabilities = ResolveCapabilities(MvTransition.CatchUp);
+        if (!capabilities.AllowsProjectorApply || !capabilities.AllowsLifecycleDml)
         {
             return false;
         }
@@ -520,7 +533,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
     private async Task CompleteCatchUpAsync(CancellationToken cancellationToken)
     {
-        if (IsVerifyOnly)
+        var capabilities = ResolveCapabilities(MvTransition.CatchUp);
+        if (!capabilities.AllowsLifecycleDml)
         {
             return;
         }
@@ -728,7 +742,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
     internal async Task OnStreamBatchAsync(IEnumerable<SerializableEvent> events)
     {
-        if (IsVerifyOnly)
+        var capabilities = ResolveCapabilities(MvTransition.Apply);
+        if (!capabilities.AllowsProjectorApply)
         {
             return;
         }
@@ -792,7 +807,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private async Task RefreshPositionFromRegistryAsync(CancellationToken cancellationToken)
     {
         ResolveHost();
-        var entries = IsVerifyOnly && _registryStore is IMvReadOnlyMvInspector inspector
+        var capabilities = ResolveCapabilities(MvTransition.VerifyInitialization);
+        var entries = capabilities.UsesReadOnlyInspection && _registryStore is IMvReadOnlyMvInspector inspector
             ? await inspector.ReadRegistryEntriesAsync(_serviceId!, _host!.ViewName, _host.ViewVersion, cancellationToken)
             : await _registryStore.GetEntriesAsync(_serviceId!, _host!.ViewName, _host.ViewVersion, cancellationToken);
         _publicationSnapshot = MvProjectionStatusSnapshot.FromEntries(entries);

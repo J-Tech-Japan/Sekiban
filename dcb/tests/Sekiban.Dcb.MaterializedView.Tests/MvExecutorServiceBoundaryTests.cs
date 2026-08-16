@@ -148,6 +148,98 @@ public sealed class MvExecutorServiceBoundaryTests
                            constructor.GetParameters()[0].ParameterType == typeof(IEventStoreFactory));
     }
 
+    [Fact]
+    public async Task VerifyAndExecuteRequiresAnExplicitEnforcedPolicyBeforeAnyHostOrStoreWork()
+    {
+        var invalidOptions = new[]
+        {
+            new MvOptions
+            {
+                ServiceId = "mode-two",
+                InitializationMode = MvInitializationMode.VerifyAndExecute
+            },
+            new MvOptions
+            {
+                ServiceId = "mode-two",
+                InitializationMode = MvInitializationMode.VerifyAndExecute,
+                SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced,
+                SqlStatementPolicy = null
+            },
+            new MvOptions
+            {
+                ServiceId = "mode-two",
+                InitializationMode = MvInitializationMode.VerifyAndExecute,
+                SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced,
+                SqlStatementPolicy = MvAllowAllSqlStatementPolicy.Instance
+            },
+            new MvOptions
+            {
+                ServiceId = "mode-two",
+                InitializationMode = MvInitializationMode.VerifyAndExecute,
+                SqlStatementPolicyMode = MvSqlStatementPolicyMode.Legacy,
+                SqlStatementPolicy = new ExplicitAllowPolicy()
+            }
+        };
+
+        foreach (var options in invalidOptions)
+        {
+            var sourceFactory = new ThrowingEventStoreFactory();
+            var registry = new CountingRegistryStore();
+            var host = new BoundaryHost();
+            var executor = new SqliteMvExecutor(
+                sourceFactory,
+                registry,
+                Options.Create(options),
+                NullLogger<SqliteMvExecutor>.Instance,
+                "Data Source=unused");
+
+            var configuration = await Assert.ThrowsAsync<MvVerifiedExecutionConfigurationException>(
+                () => executor.InitializeAsync(host));
+
+            Assert.Equal(MvTransition.Initialize, configuration.Transition);
+            Assert.Equal(MvTransitionNotAllowedReason.VerifiedExecutionPolicyRequired, configuration.Reason);
+            Assert.Equal(0, host.InitializeCalls);
+            Assert.Equal(0, registry.EnsureCalls);
+            Assert.Equal(0, sourceFactory.CreateCalls);
+        }
+    }
+
+    [Fact]
+    public async Task UnknownModeFailsClosedBeforeAnyHostOrStoreWork()
+    {
+        var sourceFactory = new ThrowingEventStoreFactory();
+        var registry = new CountingRegistryStore();
+        var host = new BoundaryHost();
+        var executor = new SqliteMvExecutor(
+            sourceFactory,
+            registry,
+            Options.Create(new MvOptions
+            {
+                ServiceId = "unknown-mode",
+                InitializationMode = (MvInitializationMode)99
+            }),
+            NullLogger<SqliteMvExecutor>.Instance,
+            "Data Source=unused");
+
+        var refusal = await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
+            () => executor.InitializeAsync(host));
+
+        await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
+            () => executor.ApplySerializableEventsAsync(host, []));
+        await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
+            () => executor.CatchUpOnceAsync(host));
+        var activationExecutor = Assert.IsAssignableFrom<IMvActivationExecutor>(executor);
+        await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
+            () => activationExecutor.CaptureTargetCheckpointAsync(host));
+        await Assert.ThrowsAsync<MvTransitionNotAllowedException>(
+            () => activationExecutor.TryActivateAsync(host));
+
+        Assert.Equal(MvTransitionNotAllowedReason.UnknownMode, refusal.Reason);
+        Assert.Equal(0, host.InitializeCalls);
+        Assert.Equal(0, registry.EnsureCalls);
+        Assert.Equal(0, sourceFactory.CreateCalls);
+    }
+
     private sealed class ThrowingEventStoreFactory : IEventStoreFactory
     {
         public int CreateCalls { get; private set; }
@@ -193,12 +285,16 @@ public sealed class MvExecutorServiceBoundaryTests
 
     private sealed class BoundaryHost : IMvApplyHost
     {
+        public int InitializeCalls { get; private set; }
         public string ViewName => "Boundary";
         public int ViewVersion => 1;
         public IReadOnlyList<string> LogicalTables => ["main"];
 
-        public Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(IMvTableBindings tables, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<MvSqlStatementDto>>([]);
+        public Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(IMvTableBindings tables, CancellationToken ct)
+        {
+            InitializeCalls++;
+            return Task.FromResult<IReadOnlyList<MvSqlStatementDto>>([]);
+        }
 
         public Task<IReadOnlyList<MvSqlStatementDto>> ApplyEventAsync(
             SerializableEvent ev,
@@ -207,5 +303,13 @@ public sealed class MvExecutorServiceBoundaryTests
             string sortableUniqueId,
             CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<MvSqlStatementDto>>([]);
+    }
+
+    private sealed class ExplicitAllowPolicy : IMvSqlStatementPolicy
+    {
+        public ValueTask<MvSqlPolicyDecision> EvaluateAsync(
+            MvSqlStatementContext context,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(MvSqlPolicyDecision.Allow());
     }
 }
