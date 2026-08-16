@@ -24,6 +24,63 @@ public sealed class MvInitializationCompatibilityTests
     }
 
     [Fact]
+    public void VerifyAndExecuteIsAnAdditivePublicModeWithTypedRefusalSurface()
+    {
+        var options = new MvOptions
+        {
+            InitializationMode = MvInitializationMode.VerifyAndExecute
+        };
+
+        Assert.Equal(2, (int)options.InitializationMode);
+        Assert.Equal(MvInfrastructureMode.VerifyAndExecute, options.InfrastructureMode);
+        Assert.Equal(2, (int)options.InfrastructureMode);
+
+        var exception = new MvTransitionNotAllowedException(
+            MvInitializationMode.VerifyOnly,
+            MvTransition.Apply,
+            MvTransitionNotAllowedReason.VerifyOnly,
+            new MvTransitionIdentity("orders", "OrderView", 2));
+        Assert.Equal(MvTransition.Apply, exception.Transition);
+        Assert.Equal("orders", exception.ServiceId);
+        Assert.DoesNotContain("connection", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ModeDependentBranchesAreCentralizedInTheCapabilityMapping()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var sourceRoot = Path.Combine(repositoryRoot, "dcb", "src");
+        var mappingPath = Path.Combine(sourceRoot, "Sekiban.Dcb.MaterializedView", "MvModeCapabilities.cs");
+        var mapping = File.ReadAllText(mappingPath);
+
+        Assert.Contains("mode switch", mapping, StringComparison.Ordinal);
+        Assert.Contains("MvInitializationMode.CreateOrEnsure", mapping, StringComparison.Ordinal);
+        Assert.Contains("MvInitializationMode.VerifyOnly", mapping, StringComparison.Ordinal);
+        Assert.Contains("MvInitializationMode.VerifyAndExecute", mapping, StringComparison.Ordinal);
+
+        var boundaryFiles = new[]
+        {
+            Path.Combine(sourceRoot, "Sekiban.Dcb.MaterializedView", "MvExecutorBase.cs"),
+            Path.Combine(sourceRoot, "Sekiban.Dcb.MaterializedView", "MvGenerationCoordinator.cs"),
+            Path.Combine(sourceRoot, "Sekiban.Dcb.MaterializedView", "MvCatchUpWorker.cs"),
+            Path.Combine(sourceRoot, "Sekiban.Dcb.MaterializedView.Orleans", "MaterializedViewGrain.cs")
+        };
+        Assert.All(boundaryFiles, path => Assert.Contains("MvModeCapabilities", File.ReadAllText(path), StringComparison.Ordinal));
+
+        var modeSources = Directory.EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(path => Path.GetFileName(path) != "MvModeCapabilities.cs")
+            .Where(path => Path.GetDirectoryName(path)!.Contains("Sekiban.Dcb.MaterializedView", StringComparison.Ordinal))
+            .ToList();
+        Assert.All(modeSources, path =>
+        {
+            var source = File.ReadAllText(path);
+            Assert.DoesNotContain("IsVerifyOnly", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("InitializationMode == MvInitializationMode", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("InitializationMode != MvInitializationMode", source, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task SqlServerVerifyOnlyFailsClosedWithoutAnExplicitInspectionPrincipal()
     {
         var catalogCommands = new List<string>();
@@ -234,5 +291,21 @@ public sealed class MvInitializationCompatibilityTests
             string sortableUniqueId,
             CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<MvSqlStatementDto>>([]);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+        {
+            for (var candidate = new DirectoryInfo(start); candidate is not null; candidate = candidate.Parent)
+            {
+                if (File.Exists(Path.Combine(candidate.FullName, "Sekiban.slnx")))
+                {
+                    return candidate.FullName;
+                }
+            }
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the Sekiban repository root for the capability architecture assertion.");
     }
 }

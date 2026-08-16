@@ -554,3 +554,21 @@ Wait metrics use bounded `surface`, `mode`, and `outcome` labels only; target ID
 acceptance tests inject a `TimeProvider` and delay seam, so 5-second, 30-second, and 200-ms behavior is deterministic
 and uses no real sleeps. Existing consumers compiled against the published 10.14.0 packages are also executed against
 the current binaries without recompilation to guard the public constructor and wire compatibility boundary.
+
+## Materialized-view verified execution and honest refusals — dcb-v10.15.0 (SEK-G34)
+
+`VerifyOnly` is now an observation-only mode with honest command results: event apply, catch-up (including an empty
+batch), checkpoint capture, lifecycle promotion, and public refresh fail with the secret-free typed
+`MvTransitionNotAllowedException`; activation and forced reverse return
+`MvActivationFailureReason.TransitionNotAllowed`. A zero result in this mode is no longer a plausible success value.
+
+Hosts that provision schema separately and need a worker to execute use the additive
+`MvInitializationMode.VerifyAndExecute = 2`. It verifies the existing schema and registry bindings, never performs
+DDL/ensure/seed work, and permits projector and lifecycle DML only with an explicit non-allow-all
+`MvSqlStatementPolicyMode.Enforced` policy. The full event batch is authorized before its first DML or registry
+command. A real PostgreSQL DDL-denied-role proof covers allow, reject, checkpoint/active-pointer atomicity, and the
+no-post-authorization-execution boundary.
+
+**Migration note.** Existing `CreateOrEnsure`, public CLR signatures, and enum values 0/1 remain compatible. Move only
+deliberate pre-provisioned execution hosts to `VerifyAndExecute`, provide an enforced policy, and grant their runtime
+role DML rather than DDL. A 10.14.1-built binary consumer and an additions-only public API comparison run in CI.

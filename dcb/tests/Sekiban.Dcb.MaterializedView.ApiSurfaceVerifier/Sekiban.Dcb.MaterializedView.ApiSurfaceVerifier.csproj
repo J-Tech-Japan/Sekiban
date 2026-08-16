@@ -8,7 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- This fixture is intentionally compiled against the published v10.14.1 package. -->
-    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="10.14.1" />
+    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="10.0.3" />
   </ItemGroup>
 </Project>

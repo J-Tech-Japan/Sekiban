@@ -265,8 +265,11 @@ provider の専用 `IMvReadOnlyMvInspector` で catalog と registry を読む�
 binding row まで用意します。binding の不足や不一致は型付きエラーで停止し、自動 seed は行いません。zero-DDL の保証は
 Sekiban が所有する接続の境界に限られ、任意の user/projector code はこのプロセス境界の外です。
 
-VerifyOnly は schema gate 成功後も隔離されたままです。target checkpoint の capture、空履歴の catch-up、status refresh、
-activation、event apply の各経路から registry の mutating API へ到達せず、成功後の fallback write もありません。
+VerifyOnly は schema gate 成功後も隔離されたままです。target checkpoint の capture、空履歴の catch-up、public refresh、
+event apply は mutating command なので、public boundary で secret-free な型付き
+`MvTransitionNotAllowedException` として拒否されます。activation と forced reverse は
+`MvActivationFailureReason.TransitionNotAllowed` を返します。observation は正当な read のままです。registry の mutating API
+へ到達せず、成功後の fallback write もありません。
 executor と Orleans Grain は、この mode では通常の projector 初期化、subscription、refresh timer、書込み用 registry 接続を開始しません。
 専用 inspector 自身が read-only 経路を選びます。SQLite は `Mode=ReadOnly`、PostgreSQL は
 `default_transaction_read_only=on`、MySQL は read-only transaction session を使用します。SQL Server は専用の
@@ -277,6 +280,41 @@ inspection principal を使用し、standalone instance で `ApplicationIntent=R
 `UnsupportedProviderCapability` の型付き failure で停止します。registry entry、active pointer、catalog metadata は inspector
 経由だけで読み取り、provider の catalog allowlist は read-only です。SQLite の metadata は書込みを伴う PRAGMA ではなく
 table-valued PRAGMA catalog function を使い、取得可能な declared length、precision/scale、generated expression を導出します。
+
+### VerifyAndExecute（事前プロビジョニング済み実行）
+
+`VerifyAndExecute = 2` は、schema deployment を host が所有しつつ、事前に用意した database に対して通常の
+materialized-view lifecycle を実行する mode です。`VerifyOnly` と同じ declarative schema verification を行いますが、
+infrastructure の ensure、DDL、registry binding の seed は行いません。projector DML、checkpoint/status 更新、
+active-pointer CAS は明示的な Enforced policy がある場合だけ許可されます。
+
+```csharp
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.InitializationMode = MvInitializationMode.VerifyAndExecute;
+    options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
+    options.SqlStatementPolicy = MyHostSqlPolicy.Instance;
+});
+```
+
+policy の未設定、`Legacy` policy mode、互換 allow-all policy は、store/source/connection/projector より前に型付き
+`MvVerifiedExecutionConfigurationException` になります。未知の numeric mode も作業前に fail-closed です。
+
+| Mode | schema verify | ensure / DDL / registry seed | projector DML | lifecycle DML |
+| --- | --- | --- | --- | --- |
+| `CreateOrEnsure` (0) | なし | 可 | 可 | 可 |
+| `VerifyOnly` (1) | あり | 不可 | 型付き拒否 | 型付き拒否 |
+| `VerifyAndExecute` (2) | あり | 不可 | `Enforced` + 明示 policy 時のみ可 | `Enforced` + 明示 policy 時のみ可 |
+
+PostgreSQL では object を owner/migration role で provision し、runtime role には必要な DML と catalog visibility
+だけを grant します。schema の CREATE と object ownership は grant しません。通常は schema の `USAGE` と、MV および
+framework registry table への `SELECT` / `INSERT` / `UPDATE` / `DELETE`（必要なら sequence usage）だけを付与し、
+`CREATE` / `ALTER` / `DROP` は拒否します。integration proof は実際にこの DDL-denied role を使い、3 つの DDL verb の
+negative control も確認します。evidence には connection string、password、SQL value などの secret を出力しません。
+
+mode 2 は最初の projector DML / registry command より前に apply batch 全体を collect して authorize します。policy deny の
+場合は view row、registry checkpoint/status、active pointer が変わりません。将来の実装が authorization より先に実行すると、
+この deny test は red になります。
 
 verify-only に対応する projector は、format version `1` の追加された `MvSchemaContract` /
 `IMvSchemaRequirementsProvider` 契約で target schema を宣言します。
@@ -308,7 +346,7 @@ table / column の不足、type・nullability・key・metadata の不一致、sc
 これらは event read、view write、registry mutation、catch-up、activation より前に発生します。そのため schema contract
 を実装していない host も verify-only では fail-closed になります。
 
-互換性の proof には公開済み `10.13.0` package を参照して restore / build した binary consumer を含めています。
+互換性の proof には公開済み `10.14.1` package を参照して restore / build した binary consumer を含めています。
 branch の assembly を出力先へ差し替えた後、再コンパイルなしで実行します。詳細は
 [`Sekiban.Dcb.MaterializedView.BinaryConsumer`](../../dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/README.md) を参照してください。
 
@@ -346,12 +384,18 @@ options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
 
 Enforced mode は `QueryRowsAsync`、`QuerySingleOrDefaultAsync`、`ExecuteScalarJsonAsync` の provider port の前で policy を
 評価し、raw connection / transaction を projector に公開しません。initialization / apply batch は最初の SQL を実行する前に
-全 statement を preflight します。policy の未登録、fault、invalid decision、deny は typed reason 付きで fail-closed し、
+全 statement を preflight します。`VerifyAndExecute` では event batch 全体の all-or-nothing boundary も追加されます。policy の未登録、fault、invalid decision、deny は typed reason 付きで fail-closed し、
 cancellation は `OperationCanceledException` のままです。runtime は SQL の先頭 keyword で判断しないため、mutating CTE、comment、
 multi-statement text の許可可否は host の allowlist が決めます。
 
 hosted worker も同じ中央 initialization gate を使います。verify-only では verification failure を faulted status として公開し、
-retry interval 後に再試行します。成功するまで worker は停止し、ensure mode へ fallback しません。
+retry interval 後に再試行します。verification 成功後は mutating catch-up lifecycle に入らず停止します。ensure mode へ fallback しません。
+
+### dcb-v10.15.0 migration note
+
+以前に zero work で成功したように見えた `VerifyOnly` の command call は、型付き failure になります。事前プロビジョニング済み
+worker を実行したい host は、意図的に `VerifyAndExecute` へ移行し、Enforced の non-allow-all policy と DML 限定の
+database role を設定してください。既存の `CreateOrEnsure`、CLR method signature、enum value 0/1 は変更しません。
 
 package の既定値は `CreateOrEnsure`、`Legacy`、`MvAllowAllSqlStatementPolicy` のままであり、新しい境界を選ばない既存 caller の
 動作を維持します。

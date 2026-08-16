@@ -164,7 +164,7 @@ public class MaterializedViewUnitTests
     }
 
     [Fact]
-    public async Task CatchUpWorker_VerifyOnlyGatesCatchUpUntilLaterVerificationSucceeds()
+    public async Task CatchUpWorker_VerifyOnlyRetriesVerificationThenStopsBeforeCatchUp()
     {
         var executor = new FakeMvExecutor(initializationFailuresBeforeSuccess: 1);
         var hostFactory = new FakeApplyHostFactory(new FakeApplyHost("Fake", 1));
@@ -182,11 +182,11 @@ public class MaterializedViewUnitTests
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         await worker.StartAsync(cts.Token);
-        await SpinWaitAsync(() => executor.CatchUpCalls > 0, cts.Token);
+        await SpinWaitAsync(() => executor.InitializeCalls >= 2, cts.Token);
         await worker.StopAsync(CancellationToken.None);
 
         Assert.Equal(2, executor.InitializeCalls);
-        Assert.True(executor.CatchUpCalls > 0);
+        Assert.Equal(0, executor.CatchUpCalls);
     }
 
     [Fact]

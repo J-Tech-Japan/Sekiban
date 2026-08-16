@@ -263,10 +263,12 @@ the projector tables, including the registry binding rows. A missing or incompat
 never seeded automatically. The zero-DDL guarantee covers Sekiban-owned connections; arbitrary user/projector code is
 outside that process boundary.
 
-Verify-only remains isolated after the schema gate succeeds. Target-checkpoint capture, empty-history catch-up, status
-refresh, activation, and event-apply paths cannot call a mutating registry API; registry writes are not a success-path
-fallback. The executor and Orleans grain also avoid normal projector initialization, subscriptions, refresh timers, and
-write-oriented registry connections in this mode. The dedicated inspector owns its read-only route: SQLite opens with
+Verify-only remains isolated after the schema gate succeeds. Target-checkpoint capture, empty-history catch-up, public
+refresh, and event-apply are mutating commands and fail at their public boundary with the secret-free typed
+`MvTransitionNotAllowedException`; activation and forced reverse return
+`MvActivationFailureReason.TransitionNotAllowed`. Observations remain legal reads. Registry writes are not a
+success-path fallback. The executor and Orleans grain also avoid normal projector initialization, subscriptions,
+refresh timers, and write-oriented registry connections in this mode. The dedicated inspector owns its read-only route: SQLite opens with
 `Mode=ReadOnly`, PostgreSQL uses `default_transaction_read_only=on`, MySQL starts a read-only transaction session, and
 SQL Server uses an explicit inspection principal. Registry entries, the active pointer, and catalog metadata are read
 through that inspector only. SQL Server does not use `ApplicationIntent=ReadOnly` as an enforcement mechanism on a
@@ -277,6 +279,43 @@ fails with a typed `UnsupportedProviderCapability` failure before catalog inspec
 cannot be established. The provider catalog allowlist is read-only; SQLite metadata uses table-valued PRAGMA catalog
 functions rather than mutating PRAGMA statements, and derives declared lengths/precision/scale and generated
 expressions where SQLite exposes them.
+
+### VerifyAndExecute (pre-provisioned execution)
+
+`VerifyAndExecute = 2` is the mode for a host that owns schema deployment but wants the normal materialized-view
+lifecycle to execute against that already-provisioned database. It performs the same declarative schema verification as
+`VerifyOnly`, but it never creates/ensures infrastructure or seeds registry bindings. It then permits projector DML,
+checkpoint/status updates, and the active-pointer CAS only through an explicit enforced policy:
+
+```csharp
+builder.Services.AddSekibanDcbMaterializedView(options =>
+{
+    options.InitializationMode = MvInitializationMode.VerifyAndExecute;
+    options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
+    options.SqlStatementPolicy = MyHostSqlPolicy.Instance;
+});
+```
+
+An absent policy, `Legacy` policy mode, or the compatibility allow-all policy produces the typed
+`MvVerifiedExecutionConfigurationException` before a store, source, connection, or projector is touched. Unknown
+numeric mode values also fail closed before work starts. The mode matrix is intentionally small:
+
+| Mode | Verify schema | Ensure / DDL / registry seed | Projector DML | Lifecycle DML |
+| --- | --- | --- | --- | --- |
+| `CreateOrEnsure` (0) | no | yes | yes | yes |
+| `VerifyOnly` (1) | yes | no | typed refusal | typed refusal |
+| `VerifyAndExecute` (2) | yes | no | yes, `Enforced` + explicit policy | yes, `Enforced` + explicit policy |
+
+For PostgreSQL, provision objects with an owner/migration role and grant the runtime role only the required DML and
+catalog visibility; do not grant schema creation or object ownership. A typical deployment grants `USAGE` on the
+schema plus `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on the named MV and framework-registry tables (and sequence
+usage where applicable), while `CREATE`, `ALTER`, and `DROP` remain denied. The integration proof uses such a real
+PostgreSQL role and negative controls for all three DDL verbs. No connection strings, passwords, SQL values, or other
+secrets are emitted as evidence.
+
+In mode 2, the executor collects and authorizes the whole apply batch before its first projector DML or registry
+command. A policy rejection therefore leaves view rows, registry checkpoint/status, and the active pointer unchanged;
+a deny test is expected to become red if a future implementation executes before authorization.
 
 Projectors that support verify-only initialization describe their target schema with the additive, format-versioned
 `MvSchemaContract`/`IMvSchemaRequirementsProvider` contract (format version `1`):
@@ -309,7 +348,7 @@ unsupported metadata capability throws the typed `MvInitializationException` wit
 `MvInitializationFailureReason`. These failures happen before event reads, view writes, registry mutation, catch-up,
 or activation. A host that has not opted into the schema contract therefore fails closed in verify-only mode.
 
-The compatibility proof includes a binary consumer restored against the published `10.13.0` package and then run
+The compatibility proof includes a binary consumer restored against the published `10.14.1` package and then run
 without recompilation against the branch assembly; see
 [`Sekiban.Dcb.MaterializedView.BinaryConsumer`](../../dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/README.md).
 
@@ -347,13 +386,21 @@ options.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
 
 Enforced mode wraps `QueryRowsAsync`, `QuerySingleOrDefaultAsync`, and `ExecuteScalarJsonAsync` before the provider
 port, removes raw connection/transaction exposure, and preflights every statement in an initialization or apply batch
-before the first statement executes. Missing policy, policy faults, invalid decisions, and denials fail closed with
+before the first statement executes. `VerifyAndExecute` additionally makes this an all-or-nothing whole-event-batch
+boundary. Missing policy, policy faults, invalid decisions, and denials fail closed with
 typed reasons; cancellation remains `OperationCanceledException`. SQL is treated as opaque text by the runtime, so a
 host allowlist must reject mutating CTEs, comments, or multi-statement text according to its own policy.
 
 The hosted worker uses the same central initialization gate. In verify-only mode it publishes a faulted verification
-status, waits for the configured retry interval, and remains stopped until a later verification succeeds; it never
-falls back to ensure mode.
+status and waits for the configured retry interval until verification succeeds; after success it stops instead of
+silently entering a mutating catch-up lifecycle. It never falls back to ensure mode.
+
+### dcb-v10.15.0 migration note
+
+`VerifyOnly` command calls that previously appeared to succeed with zero work now fail typed. Hosts that need a
+pre-provisioned worker to execute must deliberately move to `VerifyAndExecute`, supply an enforced non-allow-all
+policy, and grant only DML to its database role. Existing `CreateOrEnsure`, existing CLR method signatures, and enum
+values 0/1 remain unchanged.
 
 The package default remains `CreateOrEnsure` plus `Legacy` and `MvAllowAllSqlStatementPolicy`, preserving existing
 callers that do not opt into the new boundary.

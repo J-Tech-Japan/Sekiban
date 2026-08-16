@@ -510,3 +510,20 @@ wait metric の label は bounded な `surface`、`mode`、`outcome` だけで�
 `TimeProvider` と delay seam を注入するため、5秒・30秒・200ms の timing を real sleep なしで決定的に検証できます。さらに、公開された
 10.14.0 package に対してコンパイル済みの2つの consumer を current binary に差し替えて再コンパイルなしで実行し、公開 constructor と
 wire compatibility の境界を確認します。
+
+## materialized-view の verified execution と正直な拒否 — dcb-v10.15.0 (SEK-G34)
+
+`VerifyOnly` は observation-only mode になり、command の結果も正直になります。event apply、catch-up（empty batch を含む）、
+checkpoint capture、lifecycle promotion、public refresh は secret-free な型付き
+`MvTransitionNotAllowedException` で拒否されます。activation と forced reverse は
+`MvActivationFailureReason.TransitionNotAllowed` を返します。この mode の zero result は、もっともらしい成功値ではありません。
+
+schema を別に provision し worker を実行したい host は、追加された
+`MvInitializationMode.VerifyAndExecute = 2` を使用します。既存の schema と registry binding を verify し、DDL / ensure / seed は
+行いません。明示的な non-allow-all の `MvSqlStatementPolicyMode.Enforced` policy がある場合だけ projector と lifecycle の DML を
+許可します。最初の DML / registry command より前に event batch 全体を authorize します。実 PostgreSQL の DDL-denied-role proof は
+allow、reject、checkpoint/active-pointer の atomicity、および authorization 後の実行がないことを確認します。
+
+**移行メモ。** 既存の `CreateOrEnsure`、公開 CLR signature、enum value 0/1 は互換のままです。意図的に事前プロビジョニング済みの
+execution host だけを `VerifyAndExecute` へ移し、Enforced policy と DDL ではなく DML を付与した runtime role を設定してください。
+10.14.1 で build した binary consumer と additions-only の public API 比較も CI で実行します。
