@@ -95,6 +95,9 @@ public sealed class MvOptions
     ///     inspection capability is not configured or cannot be established.
     /// </summary>
     public string? SqlServerInspectionConnectionString { get; set; }
+
+    /// <summary>Internal test-only observation of projector execution and successful transaction commits.</summary>
+    internal IMvExecutionObserver? ExecutionObserver { get; set; }
 }
 
 public static class MvSchemaHelper

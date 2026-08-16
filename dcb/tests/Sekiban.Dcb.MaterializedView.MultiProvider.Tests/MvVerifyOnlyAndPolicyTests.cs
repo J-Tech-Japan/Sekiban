@@ -1059,6 +1059,39 @@ internal sealed class CountingApplyHost(IMvApplyHost inner, bool throwOnInitiali
         inner.GetSchemaContract(tables);
 }
 
+/// <summary>
+///     Adds a projector-emitted DDL statement after the real projector INSERT. Mode 2 must authorize the complete
+///     batch before either statement reaches the provider, so the second statement is a direct wrong-ordering probe.
+/// </summary>
+internal sealed class DdlAppendingApplyHost(IMvApplyHost inner, string deniedDdl) : IMvApplyHost
+{
+    public string ViewName => inner.ViewName;
+    public int ViewVersion => inner.ViewVersion;
+    public IReadOnlyList<string> LogicalTables => inner.LogicalTables;
+
+    public Task<IReadOnlyList<MvSqlStatementDto>> InitializeAsync(
+        IMvTableBindings tables,
+        CancellationToken ct) =>
+        inner.InitializeAsync(tables, ct);
+
+    public async Task<IReadOnlyList<MvSqlStatementDto>> ApplyEventAsync(
+        SerializableEvent ev,
+        IMvTableBindings tables,
+        IMvApplyQueryPort queryPort,
+        string sortableUniqueId,
+        CancellationToken ct)
+    {
+        var statements = await inner.ApplyEventAsync(ev, tables, queryPort, sortableUniqueId, ct).ConfigureAwait(false);
+        return [.. statements, new MvSqlStatementDto(deniedDdl, [])];
+    }
+
+    public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(IMvTableBindings tables) =>
+        inner.GetSchemaRequirements(tables);
+
+    public MvSchemaContract? GetSchemaContract(IMvTableBindings tables) =>
+        inner.GetSchemaContract(tables);
+}
+
 public enum PolicySurfaceKind
 {
     Rows,
@@ -1256,9 +1289,94 @@ public sealed class PostgresMvVerifyOnlyTests(PostgresMvFixture fixture)
                 return rows.ToArray();
             }
 
+            async Task<string[]> SnapshotSchemaFingerprintAsync()
+            {
+                var rows = await ownerConnection.QueryAsync<string>(
+                        """
+                        WITH schema_objects AS (
+                            SELECT
+                                'relation' AS object_kind,
+                                schema_namespace.nspname AS schema_name,
+                                relation.relname AS object_name,
+                                json_build_object(
+                                    'kind', relation.relkind,
+                                    'persistence', relation.relpersistence,
+                                    'view_definition', CASE
+                                        WHEN relation.relkind IN ('v', 'm') THEN pg_get_viewdef(relation.oid, true)
+                                        ELSE NULL
+                                    END)::text AS definition
+                            FROM pg_class AS relation
+                            INNER JOIN pg_namespace AS schema_namespace ON schema_namespace.oid = relation.relnamespace
+                            WHERE schema_namespace.nspname = current_schema()
+                              AND relation.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+
+                            UNION ALL
+
+                            SELECT
+                                'column',
+                                schema_namespace.nspname,
+                                relation.relname || '.' || attribute.attname,
+                                json_build_object(
+                                    'position', attribute.attnum,
+                                    'type', format_type(attribute.atttypid, attribute.atttypmod),
+                                    'not_null', attribute.attnotnull,
+                                    'default', pg_get_expr(default_value.adbin, default_value.adrelid),
+                                    'identity', attribute.attidentity,
+                                    'generated', attribute.attgenerated)::text
+                            FROM pg_attribute AS attribute
+                            INNER JOIN pg_class AS relation ON relation.oid = attribute.attrelid
+                            INNER JOIN pg_namespace AS schema_namespace ON schema_namespace.oid = relation.relnamespace
+                            LEFT JOIN pg_attrdef AS default_value
+                                ON default_value.adrelid = attribute.attrelid
+                               AND default_value.adnum = attribute.attnum
+                            WHERE schema_namespace.nspname = current_schema()
+                              AND relation.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+                              AND attribute.attnum > 0
+                              AND NOT attribute.attisdropped
+
+                            UNION ALL
+
+                            SELECT
+                                'constraint',
+                                schema_namespace.nspname,
+                                relation.relname || '.' || constraint_item.conname,
+                                pg_get_constraintdef(constraint_item.oid, true)
+                            FROM pg_constraint AS constraint_item
+                            INNER JOIN pg_class AS relation ON relation.oid = constraint_item.conrelid
+                            INNER JOIN pg_namespace AS schema_namespace ON schema_namespace.oid = relation.relnamespace
+                            WHERE schema_namespace.nspname = current_schema()
+
+                            UNION ALL
+
+                            SELECT
+                                'index',
+                                schema_namespace.nspname,
+                                relation.relname || '.' || index_relation.relname,
+                                pg_get_indexdef(index_relation.oid)
+                            FROM pg_index AS index_item
+                            INNER JOIN pg_class AS relation ON relation.oid = index_item.indrelid
+                            INNER JOIN pg_class AS index_relation ON index_relation.oid = index_item.indexrelid
+                            INNER JOIN pg_namespace AS schema_namespace ON schema_namespace.oid = relation.relnamespace
+                            WHERE schema_namespace.nspname = current_schema()
+                        )
+                        SELECT row_to_json(fingerprint)::text
+                        FROM (
+                            SELECT object_kind, schema_name, object_name, definition
+                            FROM schema_objects
+                            ORDER BY object_kind, schema_name, object_name, definition
+                        ) AS fingerprint;
+                        """)
+                    .ConfigureAwait(false);
+                return rows.ToArray();
+            }
+
             var allowPolicy = new ObservingPolicy(readRows, _ => MvSqlPolicyDecision.Allow());
-            var allowExecutor = CreateVerifyAndExecuteExecutor(restrictedConnectionString, allowPolicy);
+            var allowExecutionAudit = new ExecutionAudit();
+            var allowExecutor = CreateVerifyAndExecuteExecutor(restrictedConnectionString, allowPolicy, allowExecutionAudit);
             await allowExecutor.InitializeAsync(host).ConfigureAwait(false);
+            allowExecutionAudit.Reset();
+            var schemaBeforeAllow = await SnapshotSchemaFingerprintAsync().ConfigureAwait(false);
+            Assert.NotEmpty(schemaBeforeAllow);
 
             var emptyApply = await allowExecutor.ApplySerializableEventsAsync(host, []).ConfigureAwait(false);
             Assert.Equal(0, emptyApply);
@@ -1273,7 +1391,7 @@ public sealed class PostgresMvVerifyOnlyTests(PostgresMvFixture fixture)
             Assert.All(allowPolicy.ObservedRowsBeforeApply, count => Assert.Equal(0, count));
             Assert.DoesNotContain(
                 allowPolicy.ApplyContexts,
-                context => Regex.IsMatch(context.Sql, @"^\s*(CREATE|ALTER|DROP)\b", RegexOptions.IgnoreCase));
+                context => IsDdlStatement(context.Sql));
             Assert.Equal(1, readRows());
 
             var beforeLifecycle = await ownerRegistry.GetEntriesAsync(
@@ -1310,18 +1428,29 @@ public sealed class PostgresMvVerifyOnlyTests(PostgresMvFixture fixture)
             Assert.Equal(registryBeforeReplay, await SnapshotRegistryAsync().ConfigureAwait(false));
             Assert.Equal(activeBeforeReplay, await SnapshotActiveAsync().ConfigureAwait(false));
             Assert.Equal(2, readRows());
+            Assert.Equal(schemaBeforeAllow, await SnapshotSchemaFingerprintAsync().ConfigureAwait(false));
+            Assert.Equal(0, allowPolicy.ApplyContexts.Count(context => IsDdlStatement(context.Sql)));
+            Assert.Equal(0, allowExecutionAudit.ProjectorCommandExecutionAttempts.Count(IsDdlStatement));
+            Assert.Equal(2, allowExecutionAudit.ProjectorCommandExecutionAttempts.Count);
+            Assert.Equal(2, allowExecutionAudit.TransactionCommitCount);
 
             var registryBeforeReject = await SnapshotRegistryAsync().ConfigureAwait(false);
             var activeBeforeReject = await SnapshotActiveAsync().ConfigureAwait(false);
             var projectionRowsBeforeReject = await SnapshotProjectionRowsAsync().ConfigureAwait(false);
+            var schemaBeforeReject = await SnapshotSchemaFingerprintAsync().ConfigureAwait(false);
             var rowsBeforeReject = projectionRowsBeforeReject.LongLength;
             var denySecondPolicy = new ObservingPolicy(
                 readRows,
                 context => context.StatementIndex == 1
                     ? MvSqlPolicyDecision.Reject("second statement is intentionally denied", "g34-deny-second")
                     : MvSqlPolicyDecision.Allow());
-            var rejectExecutor = CreateVerifyAndExecuteExecutor(restrictedConnectionString, denySecondPolicy);
+            var denySecondExecutionAudit = new ExecutionAudit();
+            var rejectExecutor = CreateVerifyAndExecuteExecutor(
+                restrictedConnectionString,
+                denySecondPolicy,
+                denySecondExecutionAudit);
             await rejectExecutor.InitializeAsync(host).ConfigureAwait(false);
+            denySecondExecutionAudit.Reset();
 
             var rejection = await Assert.ThrowsAsync<MvSqlPolicyRejectedException>(
                 () => rejectExecutor.ApplySerializableEventsAsync(
@@ -1339,6 +1468,78 @@ public sealed class PostgresMvVerifyOnlyTests(PostgresMvFixture fixture)
             Assert.Equal(projectionRowsBeforeReject, await SnapshotProjectionRowsAsync().ConfigureAwait(false));
             Assert.Equal(registryBeforeReject, await SnapshotRegistryAsync().ConfigureAwait(false));
             Assert.Equal(activeBeforeReject, await SnapshotActiveAsync().ConfigureAwait(false));
+            Assert.Equal(schemaBeforeReject, await SnapshotSchemaFingerprintAsync().ConfigureAwait(false));
+            Assert.Empty(denySecondExecutionAudit.ProjectorCommandExecutionAttempts);
+            Assert.Equal(0, denySecondExecutionAudit.TransactionCommitCount);
+
+            var registryBeforeDenyAll = await SnapshotRegistryAsync().ConfigureAwait(false);
+            var activeBeforeDenyAll = await SnapshotActiveAsync().ConfigureAwait(false);
+            var projectionRowsBeforeDenyAll = await SnapshotProjectionRowsAsync().ConfigureAwait(false);
+            var schemaBeforeDenyAll = await SnapshotSchemaFingerprintAsync().ConfigureAwait(false);
+            var denyAllPolicy = new ObservingPolicy(
+                readRows,
+                _ => MvSqlPolicyDecision.Reject("all mode-2 projector commands are intentionally denied", "g34-deny-all"));
+            var denyAllExecutionAudit = new ExecutionAudit();
+            var denyAllExecutor = CreateVerifyAndExecuteExecutor(
+                restrictedConnectionString,
+                denyAllPolicy,
+                denyAllExecutionAudit);
+            await denyAllExecutor.InitializeAsync(host).ConfigureAwait(false);
+            denyAllExecutionAudit.Reset();
+
+            var denyAllRejection = await Assert.ThrowsAsync<MvSqlPolicyRejectedException>(
+                () => denyAllExecutor.ApplySerializableEventsAsync(
+                    host,
+                    [CreateEvent(fixture, DateTime.UtcNow.AddMinutes(1))])).ConfigureAwait(false);
+
+            Assert.Equal(MvSqlPolicyFailureReason.Denied, denyAllRejection.Failure.FailureReason);
+            Assert.Single(denyAllPolicy.ApplyContexts);
+            Assert.Equal(0, denyAllPolicy.ApplyContexts[0].StatementIndex);
+            Assert.Equal(1, denyAllPolicy.ApplyContexts[0].BatchSize);
+            Assert.All(denyAllPolicy.ObservedRowsBeforeApply, count => Assert.Equal(rowsBeforeReject, count));
+            Assert.Empty(denyAllExecutionAudit.ProjectorCommandExecutionAttempts);
+            Assert.Equal(0, denyAllExecutionAudit.TransactionCommitCount);
+            Assert.Equal(projectionRowsBeforeDenyAll, await SnapshotProjectionRowsAsync().ConfigureAwait(false));
+            Assert.Equal(registryBeforeDenyAll, await SnapshotRegistryAsync().ConfigureAwait(false));
+            Assert.Equal(activeBeforeDenyAll, await SnapshotActiveAsync().ConfigureAwait(false));
+            Assert.Equal(schemaBeforeDenyAll, await SnapshotSchemaFingerprintAsync().ConfigureAwait(false));
+
+            var registryBeforeDdlDeny = await SnapshotRegistryAsync().ConfigureAwait(false);
+            var activeBeforeDdlDeny = await SnapshotActiveAsync().ConfigureAwait(false);
+            var projectionRowsBeforeDdlDeny = await SnapshotProjectionRowsAsync().ConfigureAwait(false);
+            var schemaBeforeDdlDeny = await SnapshotSchemaFingerprintAsync().ConfigureAwait(false);
+            var deniedDdlTable = $"g34_policy_denied_{Guid.NewGuid():N}";
+            var ddlDenyHost = new DdlAppendingApplyHost(host, $"CREATE TABLE {deniedDdlTable} (id INT);");
+            var ddlDenyPolicy = new ObservingPolicy(
+                readRows,
+                context => IsDdlStatement(context.Sql)
+                    ? MvSqlPolicyDecision.Reject("DDL is intentionally denied before provider execution", "g34-deny-ddl")
+                    : MvSqlPolicyDecision.Allow());
+            var ddlDenyExecutionAudit = new ExecutionAudit();
+            var ddlDenyExecutor = CreateVerifyAndExecuteExecutor(
+                restrictedConnectionString,
+                ddlDenyPolicy,
+                ddlDenyExecutionAudit);
+            await ddlDenyExecutor.InitializeAsync(ddlDenyHost).ConfigureAwait(false);
+            ddlDenyExecutionAudit.Reset();
+
+            var ddlDenyRejection = await Assert.ThrowsAsync<MvSqlPolicyRejectedException>(
+                () => ddlDenyExecutor.ApplySerializableEventsAsync(
+                    ddlDenyHost,
+                    [CreateEvent(fixture, DateTime.UtcNow.AddMinutes(2))])).ConfigureAwait(false);
+
+            Assert.Equal(MvSqlPolicyFailureReason.Denied, ddlDenyRejection.Failure.FailureReason);
+            Assert.Equal(2, ddlDenyPolicy.ApplyContexts.Count);
+            Assert.Equal([0, 1], ddlDenyPolicy.ApplyContexts.Select(context => context.StatementIndex));
+            Assert.False(IsDdlStatement(ddlDenyPolicy.ApplyContexts[0].Sql));
+            Assert.True(IsDdlStatement(ddlDenyPolicy.ApplyContexts[1].Sql));
+            Assert.All(ddlDenyPolicy.ObservedRowsBeforeApply, count => Assert.Equal(rowsBeforeReject, count));
+            Assert.Empty(ddlDenyExecutionAudit.ProjectorCommandExecutionAttempts);
+            Assert.Equal(0, ddlDenyExecutionAudit.TransactionCommitCount);
+            Assert.Equal(projectionRowsBeforeDdlDeny, await SnapshotProjectionRowsAsync().ConfigureAwait(false));
+            Assert.Equal(registryBeforeDdlDeny, await SnapshotRegistryAsync().ConfigureAwait(false));
+            Assert.Equal(activeBeforeDdlDeny, await SnapshotActiveAsync().ConfigureAwait(false));
+            Assert.Equal(schemaBeforeDdlDeny, await SnapshotSchemaFingerprintAsync().ConfigureAwait(false));
         }
         finally
         {
@@ -1353,21 +1554,27 @@ public sealed class PostgresMvVerifyOnlyTests(PostgresMvFixture fixture)
 
     private PostgresMvExecutor CreateVerifyAndExecuteExecutor(
         string connectionString,
-        IMvSqlStatementPolicy policy) =>
-        new(
+        IMvSqlStatementPolicy policy,
+        IMvExecutionObserver? executionObserver = null)
+    {
+        var registryStore = new PostgresMvRegistryStore(connectionString);
+        var options = Options.Create(new MvOptions
+        {
+            ServiceId = MultiProviderFixtureBase.ServiceId,
+            InitializationMode = MvInitializationMode.VerifyAndExecute,
+            SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced,
+            SqlStatementPolicy = policy,
+            SafeWindowMs = 0,
+            BatchSize = 100,
+            ExecutionObserver = executionObserver
+        });
+        return new PostgresMvExecutor(
             fixture.EventStoreFactory,
-            new PostgresMvRegistryStore(connectionString),
-            Options.Create(new MvOptions
-            {
-                ServiceId = MultiProviderFixtureBase.ServiceId,
-                InitializationMode = MvInitializationMode.VerifyAndExecute,
-                SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced,
-                SqlStatementPolicy = policy,
-                SafeWindowMs = 0,
-                BatchSize = 100
-            }),
+            registryStore,
+            options,
             NullLogger<PostgresMvExecutor>.Instance,
             connectionString);
+    }
 
     private static SerializableEvent CreateEvent(PostgresMvFixture fixture, DateTime timestamp)
     {
@@ -1405,6 +1612,26 @@ public sealed class PostgresMvVerifyOnlyTests(PostgresMvFixture fixture)
             }
 
             return ValueTask.FromResult(decision(context));
+        }
+    }
+
+    private static bool IsDdlStatement(string sql) =>
+        Regex.IsMatch(sql, @"^\s*(CREATE|ALTER|DROP)\b", RegexOptions.IgnoreCase);
+
+    private sealed class ExecutionAudit : IMvExecutionObserver
+    {
+        public List<string> ProjectorCommandExecutionAttempts { get; } = [];
+        public int TransactionCommitCount { get; private set; }
+
+        public void OnProjectorCommandExecutionAttempt(string sql) =>
+            ProjectorCommandExecutionAttempts.Add(sql);
+
+        public void OnTransactionCommitted() => TransactionCommitCount++;
+
+        public void Reset()
+        {
+            ProjectorCommandExecutionAttempts.Clear();
+            TransactionCommitCount = 0;
         }
     }
 }

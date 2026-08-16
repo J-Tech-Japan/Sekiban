@@ -23,6 +23,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
     private readonly MvOptions _options;
     private readonly string _connectionString;
     private readonly IServiceIdProvider? _legacyServiceIdProvider;
+    private readonly IMvExecutionObserver? _executionObserver;
 
     protected MvExecutorBase(
         IMvRegistryStore registryStore,
@@ -36,6 +37,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         _options = options.Value;
         _connectionString = connectionString;
         _legacyServiceIdProvider = legacyServiceIdProvider;
+        _executionObserver = _options.ExecutionObserver;
     }
 
     protected IMvRegistryStore RegistryStore => _registryStore;
@@ -46,6 +48,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
 
     /// <summary>Provider executors override this so policy decisions carry the concrete database type.</summary>
     protected virtual MvDbType DatabaseType => MvDbType.Postgres;
+
+    private void RecordProjectorCommandExecutionAttempt(string sql) =>
+        _executionObserver?.OnProjectorCommandExecutionAttempt(sql);
+
+    private void RecordTransactionCommitted() => _executionObserver?.OnTransactionCommitted();
 
     private MvModeCapabilities ResolveCapabilities(
         IMvApplyHost host,
@@ -326,6 +333,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         foreach (var statement in statements)
         {
+            RecordProjectorCommandExecutionAttempt(statement.Sql);
             await ExecuteSqlAsync(
                     connection,
                     statement.Sql,
@@ -357,6 +365,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        RecordTransactionCommitted();
     }
 
     private async Task<MvSchemaVerificationResult> VerifyOnlyCoreAsync(
@@ -1040,6 +1049,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             var affectedRows = 0;
             foreach (var statement in item.Statements)
             {
+                RecordProjectorCommandExecutionAttempt(statement.Sql);
                 affectedRows += await ExecuteSqlAsync(
                         connection,
                         statement.Sql,
@@ -1074,6 +1084,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        RecordTransactionCommitted();
         return appliedEvents;
     }
 
@@ -1130,6 +1141,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         var affectedRows = 0;
         foreach (var statement in statements)
         {
+            RecordProjectorCommandExecutionAttempt(statement.Sql);
             affectedRows += await ExecuteSqlAsync(
                     connection,
                     statement.Sql,
@@ -1168,6 +1180,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 cancellationToken)
             .ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        RecordTransactionCommitted();
         return true;
     }
 
