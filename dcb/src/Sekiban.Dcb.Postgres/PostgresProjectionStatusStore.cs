@@ -74,6 +74,13 @@ public partial class PostgresMultiProjectionStateStore
                        @applied_event_count, @last_applied_sortable_unique_id, @last_traversed_sortable_unique_id, @recorded_at_utc,
                        @phase, @lease_expires_at_utc, @is_faulted, @fault_message, @switch_kind, @switch_reason, @switched_at_utc
                 WHERE @expected_sequence = 0
+                   OR EXISTS (
+                       SELECT 1
+                       FROM dcb_projection_statuses
+                       WHERE service_id = @service_id
+                         AND projector_name = @projector_name
+                         AND projector_version = @projector_version
+                         AND cluster_id = @cluster_id)
                 ON CONFLICT (service_id, projector_name, projector_version, cluster_id)
                 DO UPDATE SET
                     activation_id = EXCLUDED.activation_id,
@@ -130,8 +137,12 @@ public partial class PostgresMultiProjectionStateStore
                 heartbeat.ClusterId,
                 cancellationToken).ConfigureAwait(false);
             return ResultBox.FromValue(ProjectionStatusWriteResult.Rejected(
+                heartbeat,
+                expectedSequence,
                 current,
-                $"Heartbeat CAS rejected: expected sequence {expectedSequence}."));
+                current is null && expectedSequence > 0
+                    ? ProjectionStatusConflictReason.RowAbsent
+                    : null));
         }
         catch (Exception ex)
         {
@@ -162,8 +173,10 @@ public partial class PostgresMultiProjectionStateStore
                        switch_kind, switch_reason, switched_at_utc
                 FROM dcb_projection_statuses
                 WHERE service_id = @service_id
-                  AND (@projector_name IS NULL OR projector_name = @projector_name)
-                  AND (@projector_version IS NULL OR projector_version = @projector_version)
+                  AND (CAST(@projector_name AS varchar) IS NULL
+                       OR projector_name = CAST(@projector_name AS varchar))
+                  AND (CAST(@projector_version AS varchar) IS NULL
+                       OR projector_version = CAST(@projector_version AS varchar))
                 ORDER BY projector_name, projector_version, cluster_id, activation_id;
                 """;
             AddParameter(command, "service_id", CurrentServiceId);

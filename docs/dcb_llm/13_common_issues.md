@@ -572,3 +572,22 @@ no-post-authorization-execution boundary.
 **Migration note.** Existing `CreateOrEnsure`, public CLR signatures, and enum values 0/1 remain compatible. Move only
 deliberate pre-provisioned execution hosts to `VerifyAndExecute`, provide an enforced policy, and grant their runtime
 role DML rather than DDL. A 10.14.1-built binary consumer and an additions-only public API comparison run in CI.
+
+## Projection-status heartbeats stay live across row loss and rolling versions — dcb-v10.16.0 (SEK-G35)
+
+Projection-status heartbeat writes now keep an activation-pinned writer identity. Recreating an actor host during a
+rolling deployment does not move an existing activation from its original projector version to the newly registered
+one. The next activation is the intentional boundary at which the new version begins to write.
+
+All providers retain a fail-closed expected-sequence CAS. Since dcb-v10.10.0, PostgreSQL and SQLite had an unreachable
+update path; it is now a reachable guarded update, so a missing row with `expectedSequence > 0` is rejected rather
+than becoming an unconditional insert. The producer rebases its local fence after that conflict and lets a later
+scheduled operation use the ordinary sequence-zero create path. Before this release, Cosmos DB could derive a different
+document identity after snapshot-derived committed-version metadata changed within a live activation, leaving every
+expected-sequence update pointed at an absent row and freezing the heartbeat. Its activation-pinned physical identity
+and conditional replacement behavior now prevent that failure. Rows from older versions or other clusters are
+diagnostics, not garbage collection candidates: no automatic deletion is performed.
+
+The serialized V1 status envelope and public CLR constructors remain compatible. The additive V2 status protocol is
+the opt-in path for expected-versus-observed projector-version diagnostics and reports `Current`, `VersionMismatch`,
+or `StaleOrOrphan` without changing V1 golden payloads.

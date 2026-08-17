@@ -55,8 +55,9 @@ public partial class CosmosMultiProjectionStateStore
                 {
                     var current = await ReadStatusAsync(container, partitionValue, id, cancellationToken).ConfigureAwait(false);
                     return ResultBox.FromValue(ProjectionStatusWriteResult.Rejected(
-                        current,
-                        "Heartbeat CAS rejected: activation row already exists."));
+                        heartbeat,
+                        expectedSequence,
+                        current));
                 }
             }
 
@@ -64,16 +65,19 @@ public partial class CosmosMultiProjectionStateStore
             if (currentDoc is null)
             {
                 return ResultBox.FromValue(ProjectionStatusWriteResult.Rejected(
+                    heartbeat,
+                    expectedSequence,
                     null,
-                    $"Heartbeat CAS rejected: expected sequence {expectedSequence}, row is absent."));
+                    ProjectionStatusConflictReason.RowAbsent));
             }
 
             if (!string.Equals(currentDoc.DocumentType, ProjectionStatusDocumentType, StringComparison.Ordinal) ||
                 currentDoc.Sequence != expectedSequence || heartbeat.Sequence <= currentDoc.Sequence)
             {
                 return ResultBox.FromValue(ProjectionStatusWriteResult.Rejected(
-                    currentDoc.ToStatusHeartbeat(),
-                    $"Heartbeat CAS rejected: expected sequence {expectedSequence}, current sequence {currentDoc.Sequence}."));
+                    heartbeat,
+                    expectedSequence,
+                    currentDoc.ToStatusHeartbeat()));
             }
 
             doc.ETag = currentDoc.ETag;
@@ -91,8 +95,10 @@ public partial class CosmosMultiProjectionStateStore
             {
                 var current = await ReadStatusAsync(container, partitionValue, id, cancellationToken).ConfigureAwait(false);
                 return ResultBox.FromValue(ProjectionStatusWriteResult.Rejected(
+                    heartbeat,
+                    expectedSequence,
                     current,
-                    "Heartbeat CAS rejected by provider ETag."));
+                    providerCondition: "conditional-replace"));
             }
         }
         catch (Exception ex)

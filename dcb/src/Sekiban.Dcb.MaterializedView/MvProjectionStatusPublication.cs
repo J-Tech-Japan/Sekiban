@@ -253,9 +253,15 @@ public sealed class MvProjectionStatusPublisher
             return;
         }
 
-        // Rebase from the provider-observed token. The next dedicated tick can replace an older process activation,
-        // while that older writer is fenced because its expected sequence is then stale.
-        if (write.Current is { } current && current.Sequence > fence.Sequence)
+        // A missing row after an update attempt is a rebase, not an implicit same-operation create. Keep the physical
+        // identity and reset only this local fence; the next publication remains provider-conditional expected=0.
+        if (write.ConflictDetails?.Reason == ProjectionStatusConflictReason.RowAbsent && expected > 0)
+        {
+            fence.Sequence = 0;
+        }
+        // Otherwise adopt the provider-observed fence exactly. This covers an existing-row create race, a stale writer,
+        // and provider precondition failures without turning any path into a last-write-wins overwrite.
+        else if (write.Current is { } current)
         {
             fence.Sequence = current.Sequence;
         }

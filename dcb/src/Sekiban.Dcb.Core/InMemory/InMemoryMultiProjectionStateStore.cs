@@ -112,8 +112,12 @@ public class InMemoryMultiProjectionStateStore :
             {
                 return Task.FromResult(ResultBox.FromValue(
                     ProjectionStatusWriteResult.Rejected(
+                        heartbeat,
+                        expectedSequence,
                         current,
-                        $"Heartbeat CAS rejected: expected sequence {expectedSequence}, current sequence {currentSequence}.")));
+                        current is null && expectedSequence > 0
+                            ? ProjectionStatusConflictReason.RowAbsent
+                            : null)));
             }
 
             _statusRows[key] = heartbeat;

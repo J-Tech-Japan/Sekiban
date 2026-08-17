@@ -94,8 +94,10 @@ public partial class DynamoMultiProjectionStateStore
                     heartbeat,
                     cancellationToken).ConfigureAwait(false);
                 return ResultBox.FromValue(ProjectionStatusWriteResult.Rejected(
+                    heartbeat,
+                    expectedSequence,
                     current?.ToStatusHeartbeat(),
-                    "The projection status heartbeat sequence was stale or the activation already exists."));
+                    providerCondition: "conditional-put"));
             }
         }
         catch (Exception ex)

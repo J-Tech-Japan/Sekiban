@@ -62,9 +62,12 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
                     new UnauthorizedAccessException("Projection status ServiceId is owned by the server."));
             }
 
+            var expectedProjectorVersion = string.IsNullOrWhiteSpace(request?.ExpectedProjectorVersion)
+                ? null
+                : request!.ExpectedProjectorVersion;
             var rowsResult = await _statusStore.ListAsync(
                 request?.ProjectorName,
-                request?.ProjectorVersion,
+                expectedProjectorVersion is null ? request?.ProjectorVersion : null,
                 cancellationToken).ConfigureAwait(false);
             if (!rowsResult.IsSuccess)
             {
@@ -173,6 +176,11 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
                         IsFaulted = faulted,
                         FaultMessage = row.FaultMessage,
                         IsFresh = rowFresh,
+                        ExpectedProjectorVersion = expectedProjectorVersion,
+                        VersionDisposition = ResolveVersionDisposition(
+                            expectedProjectorVersion,
+                            row.ProjectorVersion,
+                            rowFresh),
                         SwitchKind = row.SwitchKind,
                         SwitchReason = row.SwitchReason,
                         SwitchedAtUtc = row.SwitchedAtUtc
@@ -194,6 +202,22 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
         {
             return ResultBox.Error<IReadOnlyList<ProjectionStatusSnapshot>>(ex);
         }
+    }
+
+    private static ProjectionStatusVersionDisposition ResolveVersionDisposition(
+        string? expectedProjectorVersion,
+        string observedProjectorVersion,
+        bool rowFresh)
+    {
+        if (!rowFresh)
+        {
+            return ProjectionStatusVersionDisposition.StaleOrOrphan;
+        }
+
+        return expectedProjectorVersion is not null &&
+               !string.Equals(expectedProjectorVersion, observedProjectorVersion, StringComparison.Ordinal)
+            ? ProjectionStatusVersionDisposition.VersionMismatch
+            : ProjectionStatusVersionDisposition.Current;
     }
 }
 
@@ -241,7 +265,8 @@ public sealed class SerializedProjectionStatusReader : ISerializedProjectionStat
         }
 
         var version = discriminator.GetValue();
-        if (version != SerializedProjectionStatusRequestEnvelopeV1.CurrentVersion)
+        if (version != SerializedProjectionStatusRequestEnvelopeV1.CurrentVersion &&
+            version != SerializedProjectionStatusRequestEnvelopeV2.CurrentVersion)
         {
             return ResultBox.Error<byte[]>(
                 new UnsupportedSerializedProjectionStatusVersionException(version));
@@ -249,18 +274,32 @@ public sealed class SerializedProjectionStatusReader : ISerializedProjectionStat
 
         try
         {
-            // Phase 2: bind only the already-discriminated V1 shape. Unknown fields, wrong-typed filters, and null
-            // roots are shape errors, never version errors.
-            var envelope = JsonSerializer.Deserialize<SerializedProjectionStatusRequestEnvelopeV1>(
+            if (version == SerializedProjectionStatusRequestEnvelopeV1.CurrentVersion)
+            {
+                // Phase 2: bind only the already-discriminated V1 shape. Unknown fields, wrong-typed filters, and null
+                // roots are shape errors, never version errors. This branch intentionally retains the frozen V1 path.
+                var envelope = JsonSerializer.Deserialize<SerializedProjectionStatusRequestEnvelopeV1>(
+                    utf8Json.Span,
+                    RequestJsonOptions);
+                if (envelope is null)
+                {
+                    return ResultBox.Error<byte[]>(
+                        new SerializedProjectionStatusShapeException("Projection status request envelope is null."));
+                }
+
+                return await ReadSerializedAsync(envelope.ToRequest(), cancellationToken).ConfigureAwait(false);
+            }
+
+            var v2Envelope = JsonSerializer.Deserialize<SerializedProjectionStatusRequestEnvelopeV2>(
                 utf8Json.Span,
                 RequestJsonOptions);
-            if (envelope is null)
+            if (v2Envelope is null)
             {
                 return ResultBox.Error<byte[]>(
                     new SerializedProjectionStatusShapeException("Projection status request envelope is null."));
             }
 
-            return await ReadSerializedAsync(envelope.ToRequest(), cancellationToken).ConfigureAwait(false);
+            return await ReadSerializedV2Async(v2Envelope.ToRequest(), cancellationToken).ConfigureAwait(false);
         }
         catch (JsonException ex)
         {
@@ -290,10 +329,36 @@ public sealed class SerializedProjectionStatusReader : ISerializedProjectionStat
         return ResultBox.FromValue(JsonSerializer.SerializeToUtf8Bytes(envelope, JsonOptions));
     }
 
+    /// <summary>
+    ///     Serializes V2 status observations. V1 remains frozen; V2 is the opt-in surface that includes expected versus
+    ///     observed projector versions and the stale/orphan classification for every row.
+    /// </summary>
+    public async Task<ResultBox<byte[]>> ReadSerializedV2Async(
+        ProjectionStatusReadRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _reader.ReadAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            return ResultBox.Error<byte[]>(result.GetException());
+        }
+
+        var envelope = SerializedProjectionStatusEnvelopeV2.Create(
+            _serviceIdProvider.GetCurrentServiceId(),
+            result.GetValue());
+        return ResultBox.FromValue(JsonSerializer.SerializeToUtf8Bytes(envelope, JsonOptions));
+    }
+
     /// <summary>Serializes the canonical V1 request vector used by endpoints and wire-contract tests.</summary>
     public static byte[] SerializeRequest(ProjectionStatusReadRequest? request = null) =>
         JsonSerializer.SerializeToUtf8Bytes(
             SerializedProjectionStatusRequestEnvelopeV1.Create(request),
+            RequestJsonOptions);
+
+    /// <summary>Serializes a V2 request with its optional expected-version observation.</summary>
+    public static byte[] SerializeRequestV2(ProjectionStatusReadRequest? request = null) =>
+        JsonSerializer.SerializeToUtf8Bytes(
+            SerializedProjectionStatusRequestEnvelopeV2.Create(request),
             RequestJsonOptions);
 
     public static ResultBox<SerializedProjectionStatusEnvelopeV1> Deserialize(ReadOnlySpan<byte> payload)
@@ -348,6 +413,64 @@ public sealed class SerializedProjectionStatusReader : ISerializedProjectionStat
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or OverflowException)
         {
             return ResultBox.Error<SerializedProjectionStatusEnvelopeV1>(
+                new SerializedProjectionStatusShapeException(ex.Message));
+        }
+    }
+
+    /// <summary>Strictly deserializes a V2 status envelope without changing the frozen V1 parser.</summary>
+    public static ResultBox<SerializedProjectionStatusEnvelopeV2> DeserializeV2(ReadOnlySpan<byte> payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload.ToArray());
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return ResultBox.Error<SerializedProjectionStatusEnvelopeV2>(
+                    new SerializedProjectionStatusShapeException("Projection status envelope root must be an object."));
+            }
+
+            var versionResult = ReadVersion(document.RootElement);
+            if (!versionResult.IsSuccess)
+            {
+                return ResultBox.Error<SerializedProjectionStatusEnvelopeV2>(versionResult.GetException());
+            }
+
+            var version = versionResult.GetValue();
+            if (version != SerializedProjectionStatusEnvelopeV2.CurrentVersion)
+            {
+                return ResultBox.Error<SerializedProjectionStatusEnvelopeV2>(
+                    new UnsupportedSerializedProjectionStatusVersionException(version));
+            }
+
+            var envelope = JsonSerializer.Deserialize<SerializedProjectionStatusEnvelopeV2>(payload, JsonOptions);
+            if (envelope is null || string.IsNullOrWhiteSpace(envelope.ServiceId) || envelope.Snapshots is null ||
+                envelope.Snapshots.Any(snapshot => snapshot is null || snapshot.Snapshot is null ||
+                    string.IsNullOrWhiteSpace(snapshot.Snapshot.ProjectorName) ||
+                    string.IsNullOrWhiteSpace(snapshot.Snapshot.ProjectorVersion) ||
+                    string.IsNullOrWhiteSpace(snapshot.Snapshot.ClusterId) ||
+                    string.IsNullOrWhiteSpace(snapshot.Snapshot.ActivationId) ||
+                    string.IsNullOrWhiteSpace(snapshot.Snapshot.Consistency) ||
+                    string.IsNullOrWhiteSpace(snapshot.ObservedProjectorVersion) ||
+                    !Enum.IsDefined(typeof(ProjectionStatusVersionDisposition), snapshot.VersionDisposition)))
+            {
+                return ResultBox.Error<SerializedProjectionStatusEnvelopeV2>(
+                    new SerializedProjectionStatusShapeException("Projection status envelope has an invalid V2 shape."));
+            }
+
+            return ResultBox.FromValue(envelope);
+        }
+        catch (UnsupportedSerializedProjectionStatusVersionException ex)
+        {
+            return ResultBox.Error<SerializedProjectionStatusEnvelopeV2>(ex);
+        }
+        catch (JsonException ex)
+        {
+            return ResultBox.Error<SerializedProjectionStatusEnvelopeV2>(
+                new SerializedProjectionStatusShapeException(ex.Message));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or OverflowException)
+        {
+            return ResultBox.Error<SerializedProjectionStatusEnvelopeV2>(
                 new SerializedProjectionStatusShapeException(ex.Message));
         }
     }

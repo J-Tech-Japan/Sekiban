@@ -527,3 +527,21 @@ allow、reject、checkpoint/active-pointer の atomicity、および authorizati
 **移行メモ。** 既存の `CreateOrEnsure`、公開 CLR signature、enum value 0/1 は互換のままです。意図的に事前プロビジョニング済みの
 execution host だけを `VerifyAndExecute` へ移し、Enforced policy と DDL ではなく DML を付与した runtime role を設定してください。
 10.14.1 で build した binary consumer と additions-only の public API 比較も CI で実行します。
+
+## projection-status heartbeat は行消失と rolling version をまたいで継続する — dcb-v10.16.0 (SEK-G35)
+
+projection-status heartbeat の書き込みは activation に固定した writer identity を保持します。rolling deployment 中に
+actor host を再作成しても、既存 activation が元の projector version から新しく登録された version へ移ることはありません。
+新しい version が書き始める意図的な境界は次の activation です。
+
+すべての provider は fail-closed な expected-sequence CAS を維持します。dcb-v10.10.0 以降の PostgreSQL と SQLite では
+update 経路が到達不能でしたが、現在は到達可能な guarded update 経路を使うため、`expectedSequence > 0` で行がない場合は、
+無条件 insert にはならず拒否されます。producer はその conflict の後に local fence を rebase し、後続の scheduled operation で
+通常の sequence-zero create 経路を使います。この release より前の Cosmos DB は、live activation の内部で snapshot 由来の
+committed-version metadata が変化すると別の document identity を導出することがあり、expected-sequence update が常に absent 行を
+指して heartbeat が凍結していました。activation に固定した physical document identity と conditional replacement がこの失敗を
+防ぎます。旧 version や別 cluster の行は診断情報であり、garbage collection の対象ではありません。自動削除は行いません。
+
+serialized V1 status envelope と公開 CLR constructor の互換性は維持されます。追加された V2 status protocol は
+expected と observed projector version の診断に opt-in する経路で、V1 golden payload を変更せずに `Current`、
+`VersionMismatch`、`StaleOrOrphan` を返します。

@@ -234,6 +234,81 @@ public sealed class ProjectionStatusRegistryTests
     }
 
     [Fact]
+    public async Task Reader_ExposesRollingVersionsInV2WhileLeavingV1VectorsFrozen()
+    {
+        var provider = new MutableServiceIdProvider("alpha");
+        var statusStore = new CoreInMemoryMultiProjectionStateStore(provider);
+        var eventStore = new CoreInMemoryEventStore(DomainType.GetDomainTypes().EventTypes, provider);
+        var now = DateTimeOffset.UtcNow;
+
+        await statusStore.UpsertAsync(CreateHeartbeat("fresh-v1", 1, now) with
+        {
+            ProjectorVersion = "v1",
+            Phase = ProjectionStatusPhases.Active,
+            LeaseExpiresAtUtc = now.AddMinutes(1)
+        }, 0);
+        await statusStore.UpsertAsync(CreateHeartbeat("fresh-v2", 1, now) with
+        {
+            ProjectorVersion = "v2",
+            Phase = ProjectionStatusPhases.Active,
+            LeaseExpiresAtUtc = now.AddMinutes(1)
+        }, 0);
+        await statusStore.UpsertAsync(CreateHeartbeat("expired-v0", 1, now.AddMinutes(-10)) with
+        {
+            ProjectorVersion = "v0",
+            Phase = ProjectionStatusPhases.Active,
+            LeaseExpiresAtUtc = now.AddMinutes(-1)
+        }, 0);
+
+        var request = new ProjectionStatusReadRequest(ProjectorName: "students")
+        {
+            ExpectedProjectorVersion = "v2"
+        };
+        var reader = new ProjectionStatusReader(
+            statusStore,
+            eventStore,
+            provider,
+            new ProjectionStatusOptions { FreshnessWindow = TimeSpan.FromMinutes(2), SamplingWindow = TimeSpan.Zero });
+        var snapshots = (await reader.ReadAsync(request)).GetValue();
+
+        var current = Assert.Single(snapshots, snapshot => snapshot.ProjectorVersion == "v2");
+        Assert.Equal("v2", current.ExpectedProjectorVersion);
+        Assert.Equal("v2", current.ObservedProjectorVersion);
+        Assert.Equal(ProjectionStatusVersionDisposition.Current, current.VersionDisposition);
+
+        var freshDifferentVersion = Assert.Single(snapshots, snapshot => snapshot.ProjectorVersion == "v1");
+        Assert.Equal(ProjectionStatusVersionDisposition.VersionMismatch, freshDifferentVersion.VersionDisposition);
+        Assert.False(freshDifferentVersion.IsStaleOrOrphan);
+
+        var expiredOrphan = Assert.Single(snapshots, snapshot => snapshot.ProjectorVersion == "v0");
+        Assert.Equal(ProjectionStatusVersionDisposition.StaleOrOrphan, expiredOrphan.VersionDisposition);
+        Assert.True(expiredOrphan.IsStaleOrOrphan);
+        Assert.False(expiredOrphan.IsCaughtUp);
+
+        var serialized = new SerializedProjectionStatusReader(reader, provider);
+        var v2 = await serialized.AcceptAsync(SerializedProjectionStatusReader.SerializeRequestV2(request));
+        Assert.True(v2.IsSuccess);
+        var envelope = SerializedProjectionStatusReader.DeserializeV2(v2.GetValue());
+        Assert.True(envelope.IsSuccess);
+        Assert.Equal(2, envelope.GetValue().Version);
+        Assert.Contains(envelope.GetValue().Snapshots, snapshot =>
+            snapshot.ObservedProjectorVersion == "v0" &&
+            snapshot.VersionDisposition == ProjectionStatusVersionDisposition.StaleOrOrphan &&
+            snapshot.IsStaleOrOrphan);
+    }
+
+    [Fact]
+    public void ProjectionStatusPublicApi_RetainsLegacyClrConstructors()
+    {
+        Assert.NotNull(typeof(ProjectionStatusWriteResult).GetConstructor(
+            [typeof(ProjectionStatusWriteOutcome), typeof(ProjectionStatusHeartbeat), typeof(string)]));
+        Assert.NotNull(typeof(ProjectionStatusReadRequest).GetConstructor(
+            [typeof(string), typeof(string), typeof(string)]));
+        Assert.NotNull(typeof(SerializedProjectionStatusEnvelopeV1).GetConstructor(
+            [typeof(int), typeof(string), typeof(IReadOnlyList<ProjectionStatusSnapshot>)]));
+    }
+
+    [Fact]
     public async Task Reader_ReusesOneDenominatorPerServiceWindow_AndAggregatesDistinctCursors()
     {
         var provider = new MutableServiceIdProvider("alpha");
@@ -318,25 +393,14 @@ public sealed class ProjectionStatusRegistryTests
     }
 
     [Fact]
-    public async Task SqliteStatusStore_AutoCreatesTable_AndRejectsStaleSequence()
+    public async Task SqliteStatusStore_UsesReachableUpdateRouteAndFailsClosedForAbsentExpectedSequence()
     {
         var path = Path.Combine(Path.GetTempPath(), $"sekiban-projection-status-{Guid.NewGuid():N}.db");
         try
         {
             var provider = new MutableServiceIdProvider("alpha");
             var store = new SqliteMultiProjectionStateStore(path, serviceIdProvider: provider);
-            var heartbeat = CreateHeartbeat("activation-a", 1, DateTimeOffset.UtcNow);
-
-            var committed = await store.UpsertAsync(heartbeat, 0);
-            var stale = await store.UpsertAsync(heartbeat with { Sequence = 2 }, 0);
-            var rows = await store.ListAsync("students", "v1");
-
-            Assert.True(committed.IsSuccess);
-            Assert.True(committed.GetValue().Committed);
-            Assert.True(stale.IsSuccess);
-            Assert.True(stale.GetValue().Conflict);
-            Assert.True(rows.IsSuccess);
-            Assert.Single(rows.GetValue());
+            await AssertProjectionStatusCasContractAsync(store);
         }
         finally
         {
@@ -345,6 +409,46 @@ public sealed class ProjectionStatusRegistryTests
                 File.Delete(path);
             }
         }
+    }
+
+    [Fact]
+    public async Task InMemoryStatusStore_UsesTheSharedFailClosedCasContract()
+    {
+        await AssertProjectionStatusCasContractAsync(
+            new CoreInMemoryMultiProjectionStateStore(new MutableServiceIdProvider("alpha")));
+    }
+
+    [Fact]
+    public async Task CosmosStatusStore_UsesTheSharedFailClosedCasContract()
+    {
+        var client = new InMemoryCosmosClient();
+        var options = new CosmosDbEventStoreOptions
+        {
+            MultiProjectionStatesContainerName = "multiProjectionStates"
+        };
+        var store = new CosmosMultiProjectionStateStore(
+            new CosmosDbContext(client, "test-db", options: options),
+            new MutableServiceIdProvider("alpha"),
+            new DefaultCosmosContainerResolver(options));
+
+        await AssertProjectionStatusCasContractAsync(store);
+    }
+
+    [Fact]
+    public async Task DynamoStatusStore_UsesTheSharedFailClosedCasContract()
+    {
+        var client = DispatchProxy.Create<IAmazonDynamoDB, MixedDynamoDb>();
+        var store = new DynamoMultiProjectionStateStore(
+            new DynamoDbContext(
+                client,
+                Options.Create(new DynamoDbEventStoreOptions
+                {
+                    AutoCreateTables = false,
+                    ProjectionStatesTableName = "states"
+                })),
+            new MutableServiceIdProvider("alpha"));
+
+        await AssertProjectionStatusCasContractAsync(store);
     }
 
     [Fact]
@@ -536,6 +640,85 @@ public sealed class ProjectionStatusRegistryTests
             null,
             null,
             recordedAtUtc);
+
+    /// <summary>
+    ///     Shared provider matrix for the public status-store contract. Each invocation drives the production store,
+    ///     including its native conditional create/update operation; it is deliberately not a mocked write result.
+    /// </summary>
+    private static async Task AssertProjectionStatusCasContractAsync(IProjectionStatusStore store)
+    {
+        var first = CreateHeartbeat("activation-a", 1, DateTimeOffset.UtcNow);
+        var created = await store.UpsertAsync(first, 0);
+        Assert.True(created.IsSuccess, created.IsSuccess ? string.Empty : created.GetException().ToString());
+        Assert.True(created.GetValue().Committed);
+
+        var updatedHeartbeat = first with { Sequence = 2, AppliedEventCount = 2 };
+        var updated = await store.UpsertAsync(updatedHeartbeat, 1);
+        Assert.True(updated.IsSuccess, updated.IsSuccess ? string.Empty : updated.GetException().ToString());
+        Assert.True(updated.GetValue().Committed);
+        Assert.Equal(2, updated.GetValue().Current!.Sequence);
+        Assert.Equal(2, updated.GetValue().Current!.AppliedEventCount);
+        var rowsAfterUpdate = await store.ListAsync("students", "v1");
+        Assert.True(rowsAfterUpdate.IsSuccess, rowsAfterUpdate.IsSuccess ? string.Empty : rowsAfterUpdate.GetException().ToString());
+        var rowAfterUpdate = Assert.Single(rowsAfterUpdate.GetValue());
+        Assert.Equal(2, rowAfterUpdate.Sequence);
+        Assert.Equal(2, rowAfterUpdate.AppliedEventCount);
+
+        var createRace = await store.UpsertAsync(first with { Sequence = 3 }, 0);
+        Assert.True(createRace.IsSuccess, createRace.IsSuccess ? string.Empty : createRace.GetException().ToString());
+        var createRaceConflict = Assert.IsType<ProjectionStatusWriteConflict>(createRace.GetValue().ConflictDetails);
+        Assert.Equal(ProjectionStatusConflictReason.RowAlreadyExists, createRaceConflict.Reason);
+        Assert.Equal(0, createRaceConflict.ExpectedSequence);
+        Assert.Equal(2, createRaceConflict.ObservedSequence);
+        Assert.Equal(first.ProjectorVersion, createRaceConflict.ExpectedProjectorVersion);
+        Assert.Equal(first.ProjectorVersion, createRaceConflict.ObservedProjectorVersion);
+        Assert.Equal(createRaceConflict.ToCompatibilityReason(), createRace.GetValue().ConflictReason);
+        Assert.DoesNotContain("activation row already exists", createRace.GetValue().ConflictReason!, StringComparison.OrdinalIgnoreCase);
+
+        var staleUpdate = await store.UpsertAsync(first with { Sequence = 3 }, 1);
+        Assert.True(staleUpdate.IsSuccess, staleUpdate.IsSuccess ? string.Empty : staleUpdate.GetException().ToString());
+        Assert.True(staleUpdate.GetValue().Conflict, staleUpdate.GetValue().ToString());
+        var staleUpdateConflict = Assert.IsType<ProjectionStatusWriteConflict>(staleUpdate.GetValue().ConflictDetails);
+        Assert.Equal(ProjectionStatusConflictReason.SequenceMismatch, staleUpdateConflict.Reason);
+        Assert.Equal(1, staleUpdateConflict.ExpectedSequence);
+        Assert.Equal(2, staleUpdateConflict.ObservedSequence);
+
+        var missing = first with { ClusterId = "missing-cluster", Sequence = 2 };
+        var absent = await store.UpsertAsync(missing, 1);
+        Assert.True(absent.IsSuccess, absent.IsSuccess ? string.Empty : absent.GetException().ToString());
+        var absentConflict = Assert.IsType<ProjectionStatusWriteConflict>(absent.GetValue().ConflictDetails);
+        Assert.Equal(ProjectionStatusConflictReason.RowAbsent, absentConflict.Reason);
+        Assert.Equal(1, absentConflict.ExpectedSequence);
+        Assert.Null(absentConflict.ObservedSequence);
+        Assert.Equal(missing.ProjectorVersion, absentConflict.ExpectedProjectorVersion);
+        Assert.Null(absentConflict.ObservedProjectorVersion);
+
+        var afterAbsent = await store.ListAsync("students", "v1");
+        Assert.True(afterAbsent.IsSuccess, afterAbsent.IsSuccess ? string.Empty : afterAbsent.GetException().ToString());
+        Assert.DoesNotContain(afterAbsent.GetValue(), row => row.ClusterId == "missing-cluster");
+
+        // A later, still-conditional create can lose a race. It must report the winner rather than overwrite it.
+        var competingCreate = missing with { ActivationId = "competing", Sequence = 1 };
+        var competitor = await store.UpsertAsync(competingCreate, 0);
+        Assert.True(competitor.IsSuccess, competitor.IsSuccess ? string.Empty : competitor.GetException().ToString());
+        Assert.True(competitor.GetValue().Committed);
+
+        var losingCreate = await store.UpsertAsync(
+            missing with { ActivationId = "retrying", Sequence = 1 },
+            0);
+        Assert.True(losingCreate.IsSuccess, losingCreate.IsSuccess ? string.Empty : losingCreate.GetException().ToString());
+        var losingConflict = Assert.IsType<ProjectionStatusWriteConflict>(losingCreate.GetValue().ConflictDetails);
+        Assert.Equal(ProjectionStatusConflictReason.RowAlreadyExists, losingConflict.Reason);
+        Assert.Equal(1, losingConflict.ObservedSequence);
+        Assert.Equal("competing", losingConflict.ObservedActivationId);
+
+        var rebasedUpdate = await store.UpsertAsync(
+            missing with { ActivationId = "retrying", Sequence = 2 },
+            1);
+        Assert.True(rebasedUpdate.IsSuccess, rebasedUpdate.IsSuccess ? string.Empty : rebasedUpdate.GetException().ToString());
+        Assert.True(rebasedUpdate.GetValue().Committed);
+        Assert.Equal(2, rebasedUpdate.GetValue().Current!.Sequence);
+    }
 
     private static MultiProjectionStateWriteRequest CreateProjectionWriteRequest() => new(
         "students",
@@ -839,8 +1022,9 @@ public sealed class ProjectionStatusRegistryTests
                 var expectedNumber = long.TryParse(expected.N, out var expectedN) ? expectedN : 0;
                 var matches = comparison[1] switch
                 {
-                    "=" => string.Equals(actual.N, expected.N, StringComparison.Ordinal) ||
-                        string.Equals(actual.S, expected.S, StringComparison.Ordinal),
+                    "=" => actual.N is not null || expected.N is not null
+                        ? string.Equals(actual.N, expected.N, StringComparison.Ordinal)
+                        : string.Equals(actual.S, expected.S, StringComparison.Ordinal),
                     "<" => actualNumber < expectedNumber,
                     _ => false
                 };

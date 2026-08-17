@@ -74,6 +74,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private readonly IProjectionStatusStore? _projectionStatusStore;
     private readonly ProjectionStatusOptions _projectionStatusOptions;
     private readonly string _activationId = Guid.CreateVersion7().ToString("N");
+    private ProjectionStatusWriterIdentity? _projectionStatusWriterIdentity;
     private long _projectionStatusSequence;
     private int _projectionStatusDirty = 1;
     private int _projectionStatusWriteInProgress;
@@ -2193,7 +2194,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 mergedOptions,
                 _logger);
 
-            var projectorVersion = _host.GetProjectorVersion();
+            CaptureProjectionStatusWriterIdentity(projectorName);
+            var projectorVersion = _projectionStatusWriterIdentity!.ProjectorVersion;
             bool restoredFromExternalStore = false;
 
             // SEK-G18 #6: a durable RebuildRequired marker means the persisted/external checkpoint may be the stale
@@ -2724,7 +2726,54 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _catchUpProgress = new CatchUpProgress { IsActive = false };
 
         _host = _actorHostFactory.Create(GetProjectorName(), _mergedActorOptions ?? DefaultActorOptions, _logger);
+        VerifyPinnedProjectionStatusWriterIdentityAfterHostRecreation();
         _firstQueryGate.Arm();
+    }
+
+    private void CaptureProjectionStatusWriterIdentity(string projectorName)
+    {
+        var host = _host ?? throw new InvalidOperationException("Projection status identity requires an actor host.");
+        var identity = new ProjectionStatusWriterIdentity(
+            _serviceId,
+            projectorName,
+            host.GetProjectorVersion(),
+            string.IsNullOrWhiteSpace(_projectionStatusOptions.ClusterId)
+                ? ProjectionStatusOptions.DefaultClusterId
+                : _projectionStatusOptions.ClusterId);
+
+        if (_projectionStatusWriterIdentity is null)
+        {
+            _projectionStatusWriterIdentity = identity;
+            return;
+        }
+
+        if (!Equals(_projectionStatusWriterIdentity, identity))
+        {
+            _logger.LogWarning(
+                "Projection status writer identity was already pinned; retaining {PinnedProjectorVersion} instead of {ObservedProjectorVersion}: {ProjectorName}",
+                _projectionStatusWriterIdentity.ProjectorVersion,
+                identity.ProjectorVersion,
+                projectorName);
+        }
+    }
+
+    private void VerifyPinnedProjectionStatusWriterIdentityAfterHostRecreation()
+    {
+        if (_projectionStatusWriterIdentity is not { } pinned || _host is null)
+        {
+            _logger.LogWarning("Projection host was recreated before a projection status writer identity was pinned: {ProjectorName}", GetProjectorName());
+            return;
+        }
+
+        var recreatedVersion = _host.GetProjectorVersion();
+        if (!string.Equals(pinned.ProjectorVersion, recreatedVersion, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "Projection host recreation reported version {ObservedProjectorVersion}; retaining activation-pinned status version {PinnedProjectorVersion}: {ProjectorName}",
+                recreatedVersion,
+                pinned.ProjectorVersion,
+                pinned.ProjectorName);
+        }
     }
 
     // Clears the persisted fault descriptor AND the derived projection checkpoint on the candidate, so catch-up rebuilds
@@ -2786,7 +2835,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 return;
             }
 
-            var projectorName = GetProjectorName();
+            var writerIdentity = _projectionStatusWriterIdentity;
+            if (writerIdentity is null)
+            {
+                _logger.LogDebug("Projection status writer identity has not been captured: {ProjectorName}", GetProjectorName());
+                return;
+            }
+
+            var projectorName = writerIdentity.ProjectorName;
             var sequence = Volatile.Read(ref _projectionStatusSequence) + 1;
             string? lastAppliedPosition;
             string? lastTraversedPosition;
@@ -2797,12 +2853,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             var heartbeat = new ProjectionStatusHeartbeat(
-                _serviceId,
-                projectorName,
-                _stateStore.Committed.ProjectorVersion ?? _host?.GetProjectorVersion() ?? string.Empty,
-                string.IsNullOrWhiteSpace(_projectionStatusOptions.ClusterId)
-                    ? ProjectionStatusOptions.DefaultClusterId
-                    : _projectionStatusOptions.ClusterId,
+                writerIdentity.ServiceId,
+                writerIdentity.ProjectorName,
+                writerIdentity.ProjectorVersion,
+                writerIdentity.ClusterId,
                 _activationId,
                 sequence,
                 _eventsProcessed,
@@ -2820,9 +2874,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 ? _projectionStatusOptions.HeartbeatWriteTimeout
                 : TimeSpan.FromSeconds(5);
             using var writeTimeoutCts = new CancellationTokenSource(writeTimeout);
+            var expectedSequence = Volatile.Read(ref _projectionStatusSequence);
             var writeResult = await _projectionStatusStore.UpsertAsync(
                 heartbeat,
-                Volatile.Read(ref _projectionStatusSequence),
+                expectedSequence,
                 writeTimeoutCts.Token).ConfigureAwait(false);
             if (!writeResult.IsSuccess)
             {
@@ -2840,16 +2895,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var outcome = writeResult.GetValue();
             if (outcome.Committed)
             {
-                Volatile.Write(ref _projectionStatusSequence, sequence);
+                Volatile.Write(ref _projectionStatusSequence, outcome.Current?.Sequence ?? sequence);
                 Interlocked.Exchange(ref _projectionStatusDirty, 0);
                 _projectionStatusFailureAttempt = 0;
                 _projectionStatusNextAttemptUtc = DateTimeOffset.MinValue;
             }
             else
             {
-                // Another writer for this activation owns the newer sequence.  Re-base without replacing its row;
-                // the next timer tick will attempt the next sequence using the provider's observed token.
-                if (outcome.Current is { Sequence: var currentSequence } && currentSequence > sequence - 1)
+                // A missing row after an update attempt is a rebase, not an implicit create. Reset only the local fence;
+                // the scheduled next operation will still use the provider-conditional expected=0 create path.
+                if (outcome.ConflictDetails?.Reason == ProjectionStatusConflictReason.RowAbsent && expectedSequence > 0)
+                {
+                    Volatile.Write(ref _projectionStatusSequence, 0);
+                }
+                // Every other observed row is a normal CAS rebase. Adopt its exact sequence even when it moved backward
+                // relative to this activation's stale local fence; the physical identity remains activation-pinned.
+                else if (outcome.Current is { Sequence: var currentSequence })
                 {
                     Volatile.Write(ref _projectionStatusSequence, currentSequence);
                 }

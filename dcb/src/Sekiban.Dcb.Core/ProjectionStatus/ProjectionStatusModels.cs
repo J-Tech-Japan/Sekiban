@@ -61,6 +61,25 @@ public sealed record ProjectionStatusSnapshot(
     [JsonIgnore]
     public IReadOnlyList<string> ConflictActivations =>
         ConflictingActivationIds ?? Array.Empty<string>();
+
+    /// <summary>
+    ///     The projector version the caller expected to observe. It is intentionally excluded from V1 serialization;
+    ///     the V2 envelope carries it together with <see cref="VersionDisposition"/>.
+    /// </summary>
+    [JsonIgnore]
+    public string? ExpectedProjectorVersion { get; init; }
+
+    /// <summary>The version physically observed on this row. <see cref="ProjectorVersion"/> remains the V1 name.</summary>
+    [JsonIgnore]
+    public string ObservedProjectorVersion => ProjectorVersion;
+
+    /// <summary>Whether this row is current, a fresh different-version row, or stale/orphaned.</summary>
+    [JsonIgnore]
+    public ProjectionStatusVersionDisposition VersionDisposition { get; init; } = ProjectionStatusVersionDisposition.Current;
+
+    /// <summary>True when the row is no longer fresh and cannot be presented as the sole current row.</summary>
+    [JsonIgnore]
+    public bool IsStaleOrOrphan => VersionDisposition == ProjectionStatusVersionDisposition.StaleOrOrphan;
 }
 
 /// <summary>
@@ -188,6 +207,55 @@ public enum ProjectionStatusWriteOutcome
     Conflict = 1
 }
 
+/// <summary>Provider-neutral classification for a rejected projection-status compare-and-set write.</summary>
+public enum ProjectionStatusConflictReason
+{
+    RowAbsent = 0,
+    RowAlreadyExists = 1,
+    SequenceMismatch = 2,
+    ProviderPreconditionFailed = 3
+}
+
+/// <summary>
+///     Typed, secret-free diagnostics for a rejected projection-status write. The physical row identity is the
+///     service/projector/version/cluster tuple; ActivationId remains row data and is included only as observed data.
+/// </summary>
+public sealed record ProjectionStatusWriteConflict(
+    ProjectionStatusConflictReason Reason,
+    long ExpectedSequence,
+    long? ObservedSequence,
+    string ExpectedProjectorVersion,
+    string? ObservedProjectorVersion,
+    string ExpectedActivationId,
+    string? ObservedActivationId,
+    string? ProviderCondition = null)
+{
+    /// <summary>Compatibility text derived solely from the typed payload.</summary>
+    public string ToCompatibilityReason() => Reason switch
+    {
+        ProjectionStatusConflictReason.RowAbsent =>
+            $"Heartbeat CAS rejected: expected sequence {ExpectedSequence}, row is absent.",
+        ProjectionStatusConflictReason.RowAlreadyExists =>
+            $"Heartbeat CAS rejected: expected sequence {ExpectedSequence}, row already exists.",
+        ProjectionStatusConflictReason.SequenceMismatch => ObservedSequence.HasValue
+            ? $"Heartbeat CAS rejected: expected sequence {ExpectedSequence}, current sequence {ObservedSequence.Value}."
+            : $"Heartbeat CAS rejected: expected sequence {ExpectedSequence}, current sequence is unavailable.",
+        ProjectionStatusConflictReason.ProviderPreconditionFailed =>
+            "Heartbeat CAS rejected by provider precondition.",
+        _ => "Heartbeat CAS rejected."
+    };
+}
+
+/// <summary>
+///     The physical heartbeat identity pinned for one projection activation. It is captured from registered projector
+///     metadata and must never be rebuilt from mutable persisted projection state.
+/// </summary>
+public sealed record ProjectionStatusWriterIdentity(
+    string ServiceId,
+    string ProjectorName,
+    string ProjectorVersion,
+    string ClusterId);
+
 /// <summary>
 ///     Result of a heartbeat CAS.  A conflict is a normal stale-writer result and must be surfaced to the reader or
 ///     caller; it is never converted into an unconditional last-write-wins update.
@@ -200,11 +268,83 @@ public sealed record ProjectionStatusWriteResult(
     public bool Committed => Outcome == ProjectionStatusWriteOutcome.Committed;
     public bool Conflict => Outcome == ProjectionStatusWriteOutcome.Conflict;
 
+    /// <summary>
+    ///     Structured diagnostics for a rejected write. The legacy <see cref="ConflictReason"/> text remains for
+    ///     source and binary compatibility and is derived from this payload for new provider paths.
+    /// </summary>
+    public ProjectionStatusWriteConflict? ConflictDetails { get; init; }
+
+    /// <summary>Alias for callers that describe <see cref="ConflictDetails"/> as a payload.</summary>
+    [JsonIgnore]
+    public ProjectionStatusWriteConflict? ConflictPayload => ConflictDetails;
+
     public static ProjectionStatusWriteResult Success(ProjectionStatusHeartbeat row) =>
         new(ProjectionStatusWriteOutcome.Committed, row);
 
     public static ProjectionStatusWriteResult Rejected(ProjectionStatusHeartbeat? current, string reason) =>
         new(ProjectionStatusWriteOutcome.Conflict, current, reason);
+
+    /// <summary>
+    ///     Creates a provider-neutral rejection while retaining the established three-argument record constructor and
+    ///     string compatibility surface. Providers may force <paramref name="reason"/> when a native precondition
+    ///     failure is observed after a reread.
+    /// </summary>
+    public static ProjectionStatusWriteResult Rejected(
+        ProjectionStatusHeartbeat expected,
+        long expectedSequence,
+        ProjectionStatusHeartbeat? current,
+        ProjectionStatusConflictReason? reason = null,
+        string? providerCondition = null)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        var resolvedReason = reason ?? Classify(expected, expectedSequence, current);
+        var details = new ProjectionStatusWriteConflict(
+            resolvedReason,
+            expectedSequence,
+            current?.Sequence,
+            expected.ProjectorVersion,
+            current?.ProjectorVersion,
+            expected.ActivationId,
+            current?.ActivationId,
+            providerCondition);
+        return new ProjectionStatusWriteResult(
+            ProjectionStatusWriteOutcome.Conflict,
+            current,
+            details.ToCompatibilityReason())
+        {
+            ConflictDetails = details
+        };
+    }
+
+    private static ProjectionStatusConflictReason Classify(
+        ProjectionStatusHeartbeat expected,
+        long expectedSequence,
+        ProjectionStatusHeartbeat? current)
+    {
+        if (current is null)
+        {
+            return expectedSequence > 0
+                ? ProjectionStatusConflictReason.RowAbsent
+                : ProjectionStatusConflictReason.ProviderPreconditionFailed;
+        }
+
+        if (expectedSequence == 0)
+        {
+            return ProjectionStatusConflictReason.RowAlreadyExists;
+        }
+
+        return current.Sequence != expectedSequence || expected.Sequence <= current.Sequence
+            ? ProjectionStatusConflictReason.SequenceMismatch
+            : ProjectionStatusConflictReason.ProviderPreconditionFailed;
+    }
+}
+
+/// <summary>How a passive reader classified a row relative to its expected version and freshness boundary.</summary>
+public enum ProjectionStatusVersionDisposition
+{
+    Current = 0,
+    VersionMismatch = 1,
+    StaleOrOrphan = 2
 }
 
 /// <summary>Configuration for the passive projection status registry and read-side sampling.</summary>
@@ -255,7 +395,15 @@ public class ProjectionStatusRegistryOptions : ProjectionStatusOptions
 public sealed record ProjectionStatusReadRequest(
     string? ServiceId = null,
     string? ProjectorName = null,
-    string? ProjectorVersion = null);
+    string? ProjectorVersion = null)
+{
+    /// <summary>
+    ///     Expected active version used for classification, not filtering. When supplied, the reader keeps rows from
+    ///     other versions visible so rolling deployments and expired orphans can be diagnosed rather than rejected.
+    /// </summary>
+    [JsonIgnore]
+    public string? ExpectedProjectorVersion { get; init; }
+}
 
 /// <summary>Version-one request envelope for the serialized passive status boundary.</summary>
 public sealed record SerializedProjectionStatusRequestEnvelopeV1(
@@ -289,6 +437,62 @@ public sealed record SerializedProjectionStatusEnvelopeV1(
         string serviceId,
         IReadOnlyList<ProjectionStatusSnapshot> snapshots) =>
         new(CurrentVersion, serviceId, snapshots);
+}
+
+/// <summary>Version-two request envelope that adds an expected-version observation without changing V1 vectors.</summary>
+public sealed record SerializedProjectionStatusRequestEnvelopeV2(
+    int Version,
+    string? ServiceId,
+    string? ProjectorName,
+    string? ProjectorVersion,
+    string? ExpectedProjectorVersion)
+{
+    public const int CurrentVersion = 2;
+
+    public static SerializedProjectionStatusRequestEnvelopeV2 Create(ProjectionStatusReadRequest? request) =>
+        new(
+            CurrentVersion,
+            request?.ServiceId,
+            request?.ProjectorName,
+            request?.ProjectorVersion,
+            request?.ExpectedProjectorVersion);
+
+    public ProjectionStatusReadRequest ToRequest() =>
+        new(ServiceId, ProjectorName, ProjectorVersion)
+        {
+            ExpectedProjectorVersion = ExpectedProjectorVersion
+        };
+}
+
+/// <summary>V2 wrapper for a V1-shaped snapshot plus explicit version-observation diagnostics.</summary>
+public sealed record SerializedProjectionStatusSnapshotV2(
+    ProjectionStatusSnapshot Snapshot,
+    string? ExpectedProjectorVersion,
+    string ObservedProjectorVersion,
+    ProjectionStatusVersionDisposition VersionDisposition,
+    bool IsStaleOrOrphan)
+{
+    public static SerializedProjectionStatusSnapshotV2 Create(ProjectionStatusSnapshot snapshot) =>
+        new(
+            snapshot,
+            snapshot.ExpectedProjectorVersion,
+            snapshot.ObservedProjectorVersion,
+            snapshot.VersionDisposition,
+            snapshot.IsStaleOrOrphan);
+}
+
+/// <summary>Version-two serialized passive status envelope with version-disposition diagnostics.</summary>
+public sealed record SerializedProjectionStatusEnvelopeV2(
+    int Version,
+    string ServiceId,
+    IReadOnlyList<SerializedProjectionStatusSnapshotV2> Snapshots)
+{
+    public const int CurrentVersion = 2;
+
+    public static SerializedProjectionStatusEnvelopeV2 Create(
+        string serviceId,
+        IReadOnlyList<ProjectionStatusSnapshot> snapshots) =>
+        new(CurrentVersion, serviceId, snapshots.Select(SerializedProjectionStatusSnapshotV2.Create).ToArray());
 }
 
 /// <summary>Typed errors used by the serialized status boundary before any store read is attempted.</summary>

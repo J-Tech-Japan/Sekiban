@@ -106,6 +106,13 @@ public partial class SqliteMultiProjectionStateStore
                        @appliedEventCount, @lastAppliedSortableUniqueId, @lastTraversedSortableUniqueId, @recordedAtUtc,
                        @phase, @leaseExpiresAtUtc, @isFaulted, @faultMessage, @switchKind, @switchReason, @switchedAtUtc
                 WHERE @expectedSequence = 0
+                   OR EXISTS (
+                       SELECT 1
+                       FROM dcb_projection_statuses
+                       WHERE ServiceId = @serviceId
+                         AND ProjectorName = @projectorName
+                         AND ProjectorVersion = @projectorVersion
+                         AND ClusterId = @clusterId)
                 ON CONFLICT(ServiceId, ProjectorName, ProjectorVersion, ClusterId)
                 DO UPDATE SET
                     ActivationId = excluded.ActivationId,
@@ -152,13 +159,18 @@ public partial class SqliteMultiProjectionStateStore
                 return ResultBox.FromValue(ProjectionStatusWriteResult.Success(ReadHeartbeat(reader)));
             }
 
+            await reader.DisposeAsync().ConfigureAwait(false);
             var current = await ReadCurrentHeartbeatAsync(
                 connection,
                 heartbeat,
                 cancellationToken).ConfigureAwait(false);
             return ResultBox.FromValue(ProjectionStatusWriteResult.Rejected(
+                heartbeat,
+                expectedSequence,
                 current,
-                $"Heartbeat CAS rejected: expected sequence {expectedSequence}."));
+                current is null && expectedSequence > 0
+                    ? ProjectionStatusConflictReason.RowAbsent
+                    : null));
         }
         catch (Exception ex)
         {
