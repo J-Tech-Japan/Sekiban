@@ -36,6 +36,17 @@ public interface ISerializedProjectionStatusReader
         ProjectionStatusReadRequest? request = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    ///     Optional V2 serialized observation surface. Existing implementers remain binary compatible; implementations
+    ///     that do not support V2 report a typed unsupported-version error rather than changing V1 behavior.
+    /// </summary>
+    Task<ResultBox<byte[]>> ReadSerializedV2Async(
+        ProjectionStatusReadRequest? request = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(ResultBox.Error<byte[]>(
+            new UnsupportedSerializedProjectionStatusVersionException(
+                SerializedProjectionStatusEnvelopeV2.CurrentVersion)));
+
     Task<ResultBox<byte[]>> GetSerializedSnapshotsAsync(
         ProjectionStatusReadRequest? request = null,
         CancellationToken cancellationToken = default) =>

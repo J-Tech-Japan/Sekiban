@@ -176,6 +176,25 @@ app.MapGet("/ops/projection-status", async (ISerializedProjectionStatusReader re
 Never use `AllowAnonymous` for this surface. `ISerializedSekibanDcbExecutor` remains untouched. This is the
 dcb-v10.10.0 release-note entry for SEK-G24.
 
+### Projection-status heartbeat recovery (SEK-G35 / dcb-v10.16.0)
+
+Projection-status heartbeats now pin the full writer identity at activation: service, projector name, projector
+version, and cluster. A host rebuild during a rolling deployment continues to write the version captured by that
+activation instead of silently moving the row to the newly registered host version. A new activation naturally uses
+the new version.
+
+The expected-sequence CAS remains fail-closed on every provider. In particular, PostgreSQL and SQLite no longer have
+an unreachable update path after the initial insert: an update is attempted only when the physical row exists, and a
+missing row with a nonzero expected sequence is rejected. The next scheduled heartbeat rebases its local fence and
+may perform the normal sequence-zero create; it never inserts unconditionally in the same failed operation. Cosmos
+DB continues to use its pinned document identity and provider preconditions for the same contract.
+
+The original serialized V1 envelope is frozen. Operators that need rolling-deployment diagnostics can request the
+additive V2 reader envelope, which reports the expected and observed projector versions and whether a row is current,
+version-mismatched, or stale/orphaned. These diagnostics are observational: no provider automatically deletes rows
+from older versions or other clusters. Apply an explicit retention policy only after confirming that the rows are no
+longer useful for rollout or incident analysis.
+
 ## Consistency Contract
 
 This section documents the actual atomicity guarantees of `IEventStore.WriteSerializableEventsAsync` / `WriteEventsAsync` per provider. The two-phase Cosmos write design itself is unchanged; what has changed is how a failure of that write is handled.

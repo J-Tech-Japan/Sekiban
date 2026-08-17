@@ -135,6 +135,76 @@ public class MvProjectionStatusPublicationTests
     }
 
     [Fact]
+    public async Task Publisher_RebasesExternalRowLossAndCompetingCreate_UsingTheRealStoreContract()
+    {
+        // Exercise the production publisher against the actual in-memory status store. This proves both that an absent
+        // expected>0 update does not create in the same operation and that the later expected=0 create remains conditional
+        // when another writer wins the race.
+        var serviceIdProvider = new FixedServiceIdProvider(ServiceId);
+        var store = new InMemoryMultiProjectionStateStore(serviceIdProvider);
+        var publisher = new MvProjectionStatusPublisher(
+            store,
+            StatusOptions(),
+            NullLogger<MvProjectionStatusPublisher>.Instance);
+        var snapshot = new MvProjectionStatusSnapshot(MvCheckpointTruth.KnownZero(), MvStatus.Active, 1);
+
+        await publisher.PublishSwitchAsync(
+            ServiceId,
+            ViewName,
+            ViewVersion,
+            snapshot,
+            MvProjectionStatusPublisherKind.HostedWorker);
+        Assert.Equal(1, Assert.Single((await store.ListAsync()).GetValue()).Sequence);
+
+        // The second production write has expected=1. Removing the row must leave the store empty after that write.
+        store.Clear();
+        await publisher.PublishSwitchAsync(
+            ServiceId,
+            ViewName,
+            ViewVersion,
+            snapshot,
+            MvProjectionStatusPublisherKind.HostedWorker);
+        Assert.Empty((await store.ListAsync()).GetValue());
+
+        var identity = MvProjectionStatusIdentity.Create(ViewName, ViewVersion);
+        var competingCreate = new ProjectionStatusHeartbeat(
+            ServiceId,
+            identity.ProjectorName,
+            identity.ProjectorVersion,
+            "test-cluster:mv:hosted",
+            "competing-activation",
+            1,
+            1,
+            null,
+            null,
+            DateTimeOffset.UtcNow)
+        {
+            Phase = ProjectionStatusPhases.Active
+        };
+        Assert.True((await store.UpsertAsync(competingCreate, 0)).GetValue().Committed);
+
+        // The publisher's conditional create loses, observes RowAlreadyExists, and only rebases its fence.
+        await publisher.PublishSwitchAsync(
+            ServiceId,
+            ViewName,
+            ViewVersion,
+            snapshot,
+            MvProjectionStatusPublisherKind.HostedWorker);
+        var afterConflict = Assert.Single((await store.ListAsync()).GetValue());
+        Assert.Equal("competing-activation", afterConflict.ActivationId);
+        Assert.Equal(1, afterConflict.Sequence);
+
+        // A later operation uses the rebased expected=1 update route and advances normally.
+        await publisher.PublishSwitchAsync(
+            ServiceId,
+            ViewName,
+            ViewVersion,
+            snapshot,
+            MvProjectionStatusPublisherKind.HostedWorker);
+        Assert.Equal(2, Assert.Single((await store.ListAsync()).GetValue()).Sequence);
+    }
+
+    [Fact]
     public async Task Publication_ValidatesExactServiceBeforeAnyIo_AndDoesNoStatusIoWhenDisabled()
     {
         var invalidStore = new ObservingStatusStore(new FixedServiceIdProvider(ServiceId));

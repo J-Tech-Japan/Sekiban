@@ -174,12 +174,93 @@ public class MultiProjectionGrainPersistPolicyTests
                 ["v1", "safe-001", 11])));
     }
 
+    [Fact]
+    public async Task ProjectionStatusHeartbeat_PinsHostVersionAndRebasesMissingRowsWithoutUnconditionalCreate()
+    {
+        // This deliberately invokes the production grain writer against the real in-memory status store. A fake result
+        // cannot prove the two regression boundaries: persisted state changing inside an activation must not change the
+        // physical key, and an expected>0 write to a removed row must not create in the same operation.
+        var host = new MutableProjectionActorHost("registered-v1");
+        var hostFactory = new MutableProjectionActorHostFactory(host);
+        var serviceIdProvider = new FixedServiceIdProvider("svc");
+        var statusStore = new Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore(serviceIdProvider);
+        var grain = CreateGrain(
+            state: new MultiProjectionGrainState { ProjectorVersion = "mutable-v1" },
+            actorHostFactory: hostFactory,
+            projectionStatusStore: statusStore,
+            projectionStatusOptions: new ProjectionStatusOptions
+            {
+                ClusterId = "test-cluster",
+                HeartbeatWriteTimeout = TimeSpan.FromSeconds(1)
+            });
+
+        SetPrivateField(grain, "_serviceId", "svc");
+        SetPrivateField(grain, "_grainKey", "projection");
+        SetPrivateField(grain, "_projectorName", "projection");
+        SetPrivateField(grain, "_host", host);
+        InvokePrivate(grain, "CaptureProjectionStatusWriterIdentity", ["projection"]);
+
+        await InvokePrivateTaskAsync(grain, "WriteProjectionStatusHeartbeatAsync");
+        var first = Assert.Single((await statusStore.ListAsync("projection", "registered-v1")).GetValue());
+        Assert.Equal(1, first.Sequence);
+        Assert.Equal("registered-v1", first.ProjectorVersion);
+
+        var coordinated = Assert.IsType<CoordinatedGrainStateStore>(GetPrivateField(grain, "_stateStore"));
+        await coordinated.ExecuteWriteAsync(
+            GrainStateWriteKind.MetadataMaintenance,
+            state => state.ProjectorVersion = "mutable-v2");
+
+        // Recreating the host with different registered metadata verifies/logs disagreement but must retain the pin.
+        host.ProjectorVersion = "registered-v2";
+        InvokePrivate(grain, "RecreateHostForFullRebuild");
+        var pinned = Assert.IsType<ProjectionStatusWriterIdentity>(
+            GetPrivateField(grain, "_projectionStatusWriterIdentity"));
+        Assert.Equal("registered-v1", pinned.ProjectorVersion);
+
+        await InvokePrivateTaskAsync(grain, "WriteProjectionStatusHeartbeatAsync");
+        var advanced = Assert.Single((await statusStore.ListAsync("projection", "registered-v1")).GetValue());
+        Assert.Equal(2, advanced.Sequence);
+        Assert.Empty((await statusStore.ListAsync("projection", "mutable-v2")).GetValue());
+
+        // Simulate external row loss. The expected=2 write must report RowAbsent and only reset the local fence; no
+        // unconditional insert is allowed in this operation.
+        statusStore.Clear();
+        await InvokePrivateTaskAsync(grain, "WriteProjectionStatusHeartbeatAsync");
+        Assert.Empty((await statusStore.ListAsync("projection", "registered-v1")).GetValue());
+        Assert.Equal(0L, GetPrivateField<long>(grain, "_projectionStatusSequence"));
+
+        // A competing writer can win the later conditional create. The grain must adopt that fence, then use the
+        // reachable expected=1 update path, while still writing the activation-pinned v1 identity.
+        var competing = first with
+        {
+            ActivationId = "competing-activation",
+            Sequence = 1,
+            RecordedAtUtc = DateTimeOffset.UtcNow
+        };
+        Assert.True((await statusStore.UpsertAsync(competing, 0)).GetValue().Committed);
+        SetPrivateField(grain, "_projectionStatusNextAttemptUtc", DateTimeOffset.MinValue);
+        await InvokePrivateTaskAsync(grain, "WriteProjectionStatusHeartbeatAsync");
+        var afterCreateRace = Assert.Single((await statusStore.ListAsync("projection", "registered-v1")).GetValue());
+        Assert.Equal("competing-activation", afterCreateRace.ActivationId);
+        Assert.Equal(1, afterCreateRace.Sequence);
+        Assert.Equal(1L, GetPrivateField<long>(grain, "_projectionStatusSequence"));
+
+        SetPrivateField(grain, "_projectionStatusNextAttemptUtc", DateTimeOffset.MinValue);
+        await InvokePrivateTaskAsync(grain, "WriteProjectionStatusHeartbeatAsync");
+        var recovered = Assert.Single((await statusStore.ListAsync("projection", "registered-v1")).GetValue());
+        Assert.Equal(2, recovered.Sequence);
+        Assert.Empty((await statusStore.ListAsync("projection", "mutable-v2")).GetValue());
+    }
+
     private static MultiProjectionGrain CreateGrain(
         GeneralMultiProjectionActorOptions? options = null,
-        MultiProjectionGrainState? state = null) =>
+        MultiProjectionGrainState? state = null,
+        IProjectionActorHostFactory? actorHostFactory = null,
+        IProjectionStatusStore? projectionStatusStore = null,
+        ProjectionStatusOptions? projectionStatusOptions = null) =>
         new(
             new TestPersistentState<MultiProjectionGrainState>(state ?? new MultiProjectionGrainState()),
-            new StubProjectionActorHostFactory(),
+            actorHostFactory ?? new StubProjectionActorHostFactory(),
             new StubEventStore(),
             new DefaultOrleansEventSubscriptionResolver(),
             multiProjectionStateStore: null,
@@ -188,7 +269,9 @@ public class MultiProjectionGrainPersistPolicyTests
             tempFileSnapshotManager: null,
             logger: NullLogger<MultiProjectionGrain>.Instance,
             eventStoreFactory: null,
-            serviceIdProvider: new DefaultServiceIdProvider());
+            serviceIdProvider: new DefaultServiceIdProvider(),
+            projectionStatusStore: projectionStatusStore,
+            projectionStatusOptions: projectionStatusOptions);
 
     private static object? InvokePrivate(object target, string methodName, object?[]? args = null)
     {
@@ -202,6 +285,31 @@ public class MultiProjectionGrainPersistPolicyTests
         var property = target.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
         Assert.NotNull(property);
         return Assert.IsType<T>(property!.GetValue(target));
+    }
+
+    private static object? GetPrivateField(object target, string fieldName)
+    {
+        var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return field!.GetValue(target);
+    }
+
+    private static T GetPrivateField<T>(object target, string fieldName) =>
+        Assert.IsType<T>(GetPrivateField(target, fieldName));
+
+    private static void SetPrivateField(object target, string fieldName, object? value)
+    {
+        var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        field!.SetValue(target, value);
+    }
+
+    private static async Task InvokePrivateTaskAsync(object target, string methodName)
+    {
+        var method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var task = Assert.IsAssignableFrom<Task>(method!.Invoke(target, null));
+        await task;
     }
 
     private sealed class TestPersistentState<T> : IPersistentState<T> where T : new()
@@ -230,7 +338,15 @@ public class MultiProjectionGrainPersistPolicyTests
             Microsoft.Extensions.Logging.ILogger? logger = null) => new StubProjectionActorHost();
     }
 
-    private sealed class StubProjectionActorHost : IProjectionActorHost
+    private sealed class MutableProjectionActorHostFactory(MutableProjectionActorHost host) : IProjectionActorHostFactory
+    {
+        public IProjectionActorHost Create(
+            string projectorName,
+            GeneralMultiProjectionActorOptions? options = null,
+            Microsoft.Extensions.Logging.ILogger? logger = null) => host;
+    }
+
+    private class StubProjectionActorHost : IProjectionActorHost
     {
         public Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true) =>
             throw new NotSupportedException();
@@ -278,13 +394,25 @@ public class MultiProjectionGrainPersistPolicyTests
         public Task<bool> IsSortableUniqueIdReceivedAsync(string sortableUniqueId) => throw new NotSupportedException();
         public long EstimateStateSizeBytes(bool includeUnsafeDetails) => throw new NotSupportedException();
         public string PeekCurrentSafeWindowThreshold() => throw new NotSupportedException();
-        public string GetProjectorVersion() => throw new NotSupportedException();
+        public virtual string GetProjectorVersion() => "registered-v1";
 
         public Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
             Stream source,
             Stream target,
             string newVersion,
             CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class MutableProjectionActorHost(string projectorVersion) : StubProjectionActorHost
+    {
+        public string ProjectorVersion { get; set; } = projectorVersion;
+
+        public override string GetProjectorVersion() => ProjectorVersion;
+    }
+
+    private sealed class FixedServiceIdProvider(string serviceId) : IServiceIdProvider
+    {
+        public string GetCurrentServiceId() => serviceId;
     }
 
     private sealed class StubEventStore : IEventStore

@@ -172,6 +172,24 @@ provider から決まり、ホストの endpoint は既定で deny としてく�
 例えば `RequireAuthorization("ProjectionStatusOperator")` を指定します。`AllowAnonymous` は使わず、既存の
 `ISerializedSekibanDcbExecutor` は変更しません。これは dcb-v10.10.0 の SEK-G24 release note です。
 
+### projection-status heartbeat の回復 (SEK-G35 / dcb-v10.16.0)
+
+projection-status heartbeat は activation 時点で writer identity 全体（service、projector 名、projector version、cluster）を
+固定します。rolling deployment 中に host を再作成しても、その activation は新しく登録された host version へ行を暗黙に移さず、
+固定された version に書き続けます。新しい activation は自然に新しい version を使用します。
+
+expected-sequence CAS はすべての provider で fail-closed のままです。特に PostgreSQL と SQLite は初回 insert 後に update
+経路が到達不能になることがなくなり、physical row が存在するときだけ update を試みます。expected sequence が非ゼロなのに
+行がない場合は拒否されます。次の scheduled heartbeat が local fence を rebase した後、通常の sequence-zero create を
+試みることはありますが、失敗した同じ operation で無条件 insert を行うことはありません。Cosmos DB も固定された document
+identity と provider precondition により同じ契約を守ります。
+
+既存の serialized V1 envelope は凍結されたままです。rolling deployment の診断が必要な operator は、追加された V2 reader
+envelope を使用できます。V2 は expected/observed projector version と、行が current、version mismatch、または
+stale/orphan のどれかを返します。これらは observation のための情報であり、provider が旧 version や他 cluster の行を
+自動削除することはありません。rollout や incident analysis に不要になったことを確認してから、明示的な retention policy を
+適用してください。
+
 ---
 
 ## 設定のポイント
