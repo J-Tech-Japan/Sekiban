@@ -205,22 +205,29 @@ are surfaced by the additive V2 wrapper, whose nested `Snapshot` remains V1-shap
 
 Use this five-step consumer rule:
 
-1. Supply `ExpectedProjectorVersion` only when the caller has an expected version to compare. Until the V2
-   `ProjectorVersion` versus `ExpectedProjectorVersion` request-precedence rule is specified, do not set both
-   request properties together.
-2. Inspect `VersionMatch` independently of freshness: null, empty, or whitespace expected values are `Unknown`;
+1. Use `VersionMatch` to identify expected-version candidates, independently of freshness: null, empty, or
+   whitespace expected values are `Unknown`;
    equality is ordinal and case-sensitive; all other values are `Mismatch`.
-3. Inspect `IsFresh` separately. It is true only when both the committed `RecordedAtUtc` is inside the freshness
+2. Use `IsFresh` to report liveness separately. It is true only when both the committed `RecordedAtUtc` is inside the freshness
    window and the optional lease has not expired.
-4. Retain every observation and existing conflict signal while applying the caller's own authority rule. A fresh
-   mismatch is still a fresh observation, and two fresh matched rows are still a conflict.
-5. Escalate, select, retain, or clean up only through explicit consumer policy. A stale mismatch is an orphan
-   *candidate*, never a deletion authorization; dcb does not fold, filter, declare `IsOrphan`, or delete rows.
+3. When the expected version is `Unknown`, preserve all candidates: do not infer an expectation, fold rows, or
+   select one candidate.
+4. Preserve same-version observations across clusters and honor the existing conflict signal; do not select one by
+   timestamp. A fresh mismatch is still a fresh observation, and two fresh matched rows are still a conflict.
+5. Use `RecordedAtUtc` for age display and diagnosis, never as a replacement for expected-version selection. It is
+   not a cross-row tie breaker.
+
+Request-property caution: supply `ExpectedProjectorVersion` only when the caller has an expected version to compare.
+The V2 `ProjectorVersion` versus `ExpectedProjectorVersion` request-precedence rule is intentionally pending, so do
+not set both request properties together.
+
+Escalate, select, retain, or clean up only through explicit consumer policy. A stale mismatch is an orphan
+*candidate*, never a deletion authorization; dcb does not fold, filter, declare `IsOrphan`, or delete rows.
 
 Three tempting shortcuts are not authority rules: do not take the ordinal maximum `ProjectorVersion` (`1.0.9` sorts
-above `1.0.10`); do not take the maximum `Sequence` (it is a per-row CAS fence and can be higher on an orphan); and
-do not take the largest `LastAppliedSortableUniqueId` (a current new version can still be catching up). Use the two
-independent axes and the caller's explicit policy instead.
+above `1.0.10`); do not take the maximum `Sequence` (it is a per-row CAS fence, not comparable across rows: observed
+in aic dev, orphan `5884` > current `1583`); and do not take the largest `LastAppliedSortableUniqueId` (a current new
+version can still be catching up). Use the two independent axes and the caller's explicit policy instead.
 
 ## Consistency Contract
 

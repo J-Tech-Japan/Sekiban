@@ -199,22 +199,30 @@ V1 の byte は凍結されたままです。新しい事実は加法的な V2 w
 
 consumer は次の 5 ステップに従ってください。
 
-1. caller が比較すべき expected version を持つときだけ `ExpectedProjectorVersion` を指定します。V2 の
-   `ProjectorVersion` と `ExpectedProjectorVersion` の request precedence は未決定なので、両方の request property を同時に
-   設定しないでください。
-2. freshness とは独立に `VersionMatch` を確認します。expected が null、空文字、または whitespace なら `Unknown` です。
+1. freshness とは独立に `VersionMatch` で expected-version の候補を確認します。expected が null、空文字、または
+   whitespace なら `Unknown` です。
    equality は ordinal かつ case-sensitive で、それ以外は `Mismatch` です。
-3. `IsFresh` は別の軸として確認します。commit された `RecordedAtUtc` が freshness window 内にあり、かつ optional lease が
+2. `IsFresh` で生存性を別立てに報告します。commit された `RecordedAtUtc` が freshness window 内にあり、かつ optional lease が
    expire していない場合にだけ true になります。
-4. caller 自身の authority rule を適用するときも、すべての observation と既存の conflict signal を保持します。fresh mismatch
-   は依然として fresh な observation であり、fresh matched row が 2 行なら依然として conflict です。
-5. escalation、selection、retention、cleanup は明示的な consumer policy でのみ行います。stale mismatch は orphan
-   *candidate* にすぎず、削除の authorization ではありません。dcb は行を fold、filter、`IsOrphan` 判定、削除しません。
+3. expected version が `Unknown` のときは、すべての候補を保持します。期待値を推測したり、行を fold したり、1 件を
+   selection したりしないでください。
+4. 同一 version の cluster をまたぐ observation を保持し、既存の conflict signal を尊重します。timestamp で 1 件を選びません。
+   fresh mismatch は依然として fresh な observation であり、fresh matched row が 2 行なら依然として conflict です。
+5. `RecordedAtUtc` は経過時間の表示と診断に使い、expected-version による selection の代替にしません。行どうしの
+   tie breaker でもありません。
+
+request property に関する注意: caller が比較すべき expected version を持つときだけ `ExpectedProjectorVersion` を指定します。
+V2 の `ProjectorVersion` と `ExpectedProjectorVersion` の request precedence は意図的に保留されているため、両方の request
+property を同時に設定しないでください。
+
+escalation、selection、retention、cleanup は明示的な consumer policy でのみ行います。stale mismatch は orphan
+*candidate* にすぎず、削除の authorization ではありません。dcb は行を fold、filter、`IsOrphan` 判定、削除しません。
 
 次の 3 つの近道は authority rule ではありません。ordinal の最大 `ProjectorVersion` を選ばないでください
-(`1.0.9` は `1.0.10` より大きく並びます)。最大 `Sequence` も選ばないでください（これは行ごとの CAS fence であり、orphan の
-値の方が大きいことがあります）。最大の `LastAppliedSortableUniqueId` も選ばないでください（新しい current version はまだ
-catch-up 中であることがあります）。2 つの独立した軸と caller の明示的な policy を使ってください。
+(`1.0.9` は `1.0.10` より大きく並びます)。最大 `Sequence` も選ばないでください（これは行ごとの CAS fence で、行どうしでは
+比較できません。aic dev で観測された実例は orphan `5884` > current `1583` です）。最大の
+`LastAppliedSortableUniqueId` も選ばないでください（新しい current version はまだ catch-up 中であることがあります）。2 つの
+独立した軸と caller の明示的な policy を使ってください。
 
 ---
 
