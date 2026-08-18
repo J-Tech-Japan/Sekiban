@@ -176,7 +176,9 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
                         IsFaulted = faulted,
                         FaultMessage = row.FaultMessage,
                         IsFresh = rowFresh,
+                        RecordedAtUtc = row.RecordedAtUtc,
                         ExpectedProjectorVersion = expectedProjectorVersion,
+                        VersionMatch = ResolveVersionMatch(expectedProjectorVersion, row.ProjectorVersion),
                         VersionDisposition = ResolveVersionDisposition(
                             expectedProjectorVersion,
                             row.ProjectorVersion,
@@ -219,6 +221,15 @@ public sealed class ProjectionStatusReader : IProjectionStatusReader
             ? ProjectionStatusVersionDisposition.VersionMismatch
             : ProjectionStatusVersionDisposition.Current;
     }
+
+    private static ProjectionStatusVersionMatch ResolveVersionMatch(
+        string? expectedProjectorVersion,
+        string observedProjectorVersion) =>
+        string.IsNullOrWhiteSpace(expectedProjectorVersion)
+            ? ProjectionStatusVersionMatch.Unknown
+            : string.Equals(expectedProjectorVersion, observedProjectorVersion, StringComparison.Ordinal)
+                ? ProjectionStatusVersionMatch.Match
+                : ProjectionStatusVersionMatch.Mismatch;
 }
 
 /// <summary>
@@ -451,7 +462,8 @@ public sealed class SerializedProjectionStatusReader : ISerializedProjectionStat
                     string.IsNullOrWhiteSpace(snapshot.Snapshot.ActivationId) ||
                     string.IsNullOrWhiteSpace(snapshot.Snapshot.Consistency) ||
                     string.IsNullOrWhiteSpace(snapshot.ObservedProjectorVersion) ||
-                    !Enum.IsDefined(typeof(ProjectionStatusVersionDisposition), snapshot.VersionDisposition)))
+                    !Enum.IsDefined(typeof(ProjectionStatusVersionDisposition), snapshot.VersionDisposition) ||
+                    !Enum.IsDefined(typeof(ProjectionStatusVersionMatch), snapshot.VersionMatch)))
             {
                 return ResultBox.Error<SerializedProjectionStatusEnvelopeV2>(
                     new SerializedProjectionStatusShapeException("Projection status envelope has an invalid V2 shape."));

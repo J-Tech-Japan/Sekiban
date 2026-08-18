@@ -195,6 +195,33 @@ version-mismatched, or stale/orphaned. These diagnostics are observational: no p
 from older versions or other clusters. Apply an explicit retention policy only after confirming that the rows are no
 longer useful for rollout or incident analysis.
 
+### Row timestamp and independent version match (SEK-G36 / dcb-v10.17.0)
+
+`ProjectionStatusSnapshot.RecordedAtUtc` is the exact timestamp committed with the heartbeat row. It is not derived
+from `SampledAtUtc`, which remains only the reader's best-effort observation time, and it is not a cross-row tie
+breaker. The in-process snapshot exposes both `RecordedAtUtc` and the independent
+`ProjectionStatusVersionMatch` (`Unknown = 0`, `Match = 1`, `Mismatch = 2`). V1 bytes remain frozen: the new facts
+are surfaced by the additive V2 wrapper, whose nested `Snapshot` remains V1-shaped.
+
+Use this five-step consumer rule:
+
+1. Supply `ExpectedProjectorVersion` only when the caller has an expected version to compare. Until the V2
+   `ProjectorVersion` versus `ExpectedProjectorVersion` request-precedence rule is specified, do not set both
+   request properties together.
+2. Inspect `VersionMatch` independently of freshness: null, empty, or whitespace expected values are `Unknown`;
+   equality is ordinal and case-sensitive; all other values are `Mismatch`.
+3. Inspect `IsFresh` separately. It is true only when both the committed `RecordedAtUtc` is inside the freshness
+   window and the optional lease has not expired.
+4. Retain every observation and existing conflict signal while applying the caller's own authority rule. A fresh
+   mismatch is still a fresh observation, and two fresh matched rows are still a conflict.
+5. Escalate, select, retain, or clean up only through explicit consumer policy. A stale mismatch is an orphan
+   *candidate*, never a deletion authorization; dcb does not fold, filter, declare `IsOrphan`, or delete rows.
+
+Three tempting shortcuts are not authority rules: do not take the ordinal maximum `ProjectorVersion` (`1.0.9` sorts
+above `1.0.10`); do not take the maximum `Sequence` (it is a per-row CAS fence and can be higher on an orphan); and
+do not take the largest `LastAppliedSortableUniqueId` (a current new version can still be catching up). Use the two
+independent axes and the caller's explicit policy instead.
+
 ## Consistency Contract
 
 This section documents the actual atomicity guarantees of `IEventStore.WriteSerializableEventsAsync` / `WriteEventsAsync` per provider. The two-phase Cosmos write design itself is unchanged; what has changed is how a failure of that write is handled.

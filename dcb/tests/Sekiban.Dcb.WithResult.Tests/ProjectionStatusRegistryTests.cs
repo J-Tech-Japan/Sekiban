@@ -2,6 +2,7 @@ using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Reflection;
 using Microsoft.Extensions.Options;
 using Dcb.Domain;
@@ -115,7 +116,10 @@ public sealed class ProjectionStatusRegistryTests
             eventStore,
             provider,
             new ProjectionStatusOptions { FreshnessWindow = TimeSpan.FromMinutes(5) });
-        var result = await reader.ReadAsync();
+        var result = await reader.ReadAsync(new ProjectionStatusReadRequest
+        {
+            ExpectedProjectorVersion = "v1"
+        });
 
         Assert.True(result.IsSuccess);
         var snapshots = result.GetValue();
@@ -123,6 +127,8 @@ public sealed class ProjectionStatusRegistryTests
         Assert.All(snapshots, snapshot =>
         {
             Assert.True(snapshot.HasConflict);
+            Assert.True(snapshot.IsFresh);
+            Assert.Equal(ProjectionStatusVersionMatch.Match, snapshot.VersionMatch);
             Assert.Equal(new[] { "activation-b", "activation-c" }, snapshot.ConflictActivations);
         });
     }
@@ -222,7 +228,9 @@ public sealed class ProjectionStatusRegistryTests
             LeaseExpiresAtUtc = DateTimeOffset.Parse("2026-01-01T00:01:00+00:00"),
             IsFaulted = false,
             FaultMessage = null,
-            IsFresh = true
+            IsFresh = true,
+            RecordedAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:30+00:00"),
+            VersionMatch = ProjectionStatusVersionMatch.Match
         };
         var adapter = new SerializedProjectionStatusReader(new FixedStatusReader(snapshot), new MutableServiceIdProvider("server-service"));
         var response = await adapter.ReadSerializedAsync();
@@ -274,13 +282,19 @@ public sealed class ProjectionStatusRegistryTests
         var current = Assert.Single(snapshots, snapshot => snapshot.ProjectorVersion == "v2");
         Assert.Equal("v2", current.ExpectedProjectorVersion);
         Assert.Equal("v2", current.ObservedProjectorVersion);
+        Assert.Equal(now, current.RecordedAtUtc);
+        Assert.Equal(ProjectionStatusVersionMatch.Match, current.VersionMatch);
         Assert.Equal(ProjectionStatusVersionDisposition.Current, current.VersionDisposition);
 
         var freshDifferentVersion = Assert.Single(snapshots, snapshot => snapshot.ProjectorVersion == "v1");
+        Assert.True(freshDifferentVersion.IsFresh);
+        Assert.Equal(ProjectionStatusVersionMatch.Mismatch, freshDifferentVersion.VersionMatch);
         Assert.Equal(ProjectionStatusVersionDisposition.VersionMismatch, freshDifferentVersion.VersionDisposition);
         Assert.False(freshDifferentVersion.IsStaleOrOrphan);
 
         var expiredOrphan = Assert.Single(snapshots, snapshot => snapshot.ProjectorVersion == "v0");
+        Assert.False(expiredOrphan.IsFresh);
+        Assert.Equal(ProjectionStatusVersionMatch.Mismatch, expiredOrphan.VersionMatch);
         Assert.Equal(ProjectionStatusVersionDisposition.StaleOrOrphan, expiredOrphan.VersionDisposition);
         Assert.True(expiredOrphan.IsStaleOrOrphan);
         Assert.False(expiredOrphan.IsCaughtUp);
@@ -291,21 +305,206 @@ public sealed class ProjectionStatusRegistryTests
         var envelope = SerializedProjectionStatusReader.DeserializeV2(v2.GetValue());
         Assert.True(envelope.IsSuccess);
         Assert.Equal(2, envelope.GetValue().Version);
+        var serializedCurrent = Assert.Single(
+            envelope.GetValue().Snapshots,
+            snapshot => snapshot.ObservedProjectorVersion == "v2");
+        Assert.Equal(now, serializedCurrent.RecordedAtUtc);
+        Assert.Equal(ProjectionStatusVersionMatch.Match, serializedCurrent.VersionMatch);
+
+        using var v2Document = JsonDocument.Parse(v2.GetValue());
+        var v2CurrentJson = v2Document.RootElement.GetProperty("snapshots")
+            .EnumerateArray()
+            .Single(snapshot => snapshot.GetProperty("observedProjectorVersion").GetString() == "v2");
+        Assert.Equal(now, v2CurrentJson.GetProperty("recordedAtUtc").GetDateTimeOffset());
+        Assert.Equal((int)ProjectionStatusVersionMatch.Match, v2CurrentJson.GetProperty("versionMatch").GetInt32());
+        Assert.False(v2CurrentJson.GetProperty("snapshot").TryGetProperty("recordedAtUtc", out _));
+        Assert.False(v2CurrentJson.GetProperty("snapshot").TryGetProperty("versionMatch", out _));
         Assert.Contains(envelope.GetValue().Snapshots, snapshot =>
             snapshot.ObservedProjectorVersion == "v0" &&
             snapshot.VersionDisposition == ProjectionStatusVersionDisposition.StaleOrOrphan &&
             snapshot.IsStaleOrOrphan);
     }
 
+    public static IEnumerable<object?[]> VersionMatchFreshnessMatrix()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var freshLease = now.AddMinutes(5);
+        var oldRecordedAt = now.AddMinutes(-5);
+        var expiredLease = now.AddMinutes(-5);
+
+        yield return [
+            "fresh-unknown", null, now, freshLease, true,
+            ProjectionStatusVersionMatch.Unknown, ProjectionStatusVersionDisposition.Current
+        ];
+        yield return [
+            "fresh-equal", "v1", now, freshLease, true,
+            ProjectionStatusVersionMatch.Match, ProjectionStatusVersionDisposition.Current
+        ];
+        yield return [
+            "fresh-unequal", "v2", now, freshLease, true,
+            ProjectionStatusVersionMatch.Mismatch, ProjectionStatusVersionDisposition.VersionMismatch
+        ];
+
+        // Stale because its committed row timestamp is outside the freshness window, even though its lease is live.
+        yield return [
+            "stale-recorded-at-unknown", null, oldRecordedAt, freshLease, false,
+            ProjectionStatusVersionMatch.Unknown, ProjectionStatusVersionDisposition.StaleOrOrphan
+        ];
+        // This stale+equal cell kills a resolver that returns StaleOrOrphan before comparing versions.
+        yield return [
+            "stale-recorded-at-equal", "v1", oldRecordedAt, freshLease, false,
+            ProjectionStatusVersionMatch.Match, ProjectionStatusVersionDisposition.StaleOrOrphan
+        ];
+        // This stale+unequal cell is stale through the independent lease predicate, not through RecordedAtUtc.
+        yield return [
+            "stale-expired-lease-unequal", "v2", now, expiredLease, false,
+            ProjectionStatusVersionMatch.Mismatch, ProjectionStatusVersionDisposition.StaleOrOrphan
+        ];
+    }
+
+    [Theory]
+    [MemberData(nameof(VersionMatchFreshnessMatrix))]
+    public async Task Reader_ResolvesVersionMatchIndependentlyAcrossTheSixCellFreshnessMatrix(
+        string cellName,
+        string? expectedProjectorVersion,
+        DateTimeOffset recordedAtUtc,
+        DateTimeOffset? leaseExpiresAtUtc,
+        bool isFresh,
+        ProjectionStatusVersionMatch versionMatch,
+        ProjectionStatusVersionDisposition versionDisposition)
+    {
+        await AssertVersionMatchCellAsync(
+            expectedProjectorVersion,
+            recordedAtUtc,
+            leaseExpiresAtUtc,
+            isFresh,
+            versionMatch,
+            versionDisposition,
+            cellName);
+    }
+
+    [Fact]
+    public async Task Reader_UsesUnknownForBlankExpectedVersionsAndOrdinalVersionMatching()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var freshLease = now.AddMinutes(5);
+
+        await AssertVersionMatchCellAsync(
+            expectedProjectorVersion: string.Empty,
+            recordedAtUtc: now,
+            leaseExpiresAtUtc: freshLease,
+            isFresh: true,
+            versionMatch: ProjectionStatusVersionMatch.Unknown,
+            versionDisposition: ProjectionStatusVersionDisposition.Current);
+        await AssertVersionMatchCellAsync(
+            expectedProjectorVersion: " \t ",
+            recordedAtUtc: now,
+            leaseExpiresAtUtc: freshLease,
+            isFresh: true,
+            versionMatch: ProjectionStatusVersionMatch.Unknown,
+            versionDisposition: ProjectionStatusVersionDisposition.Current);
+        await AssertVersionMatchCellAsync(
+            expectedProjectorVersion: "v1",
+            recordedAtUtc: now,
+            leaseExpiresAtUtc: freshLease,
+            isFresh: true,
+            versionMatch: ProjectionStatusVersionMatch.Match,
+            versionDisposition: ProjectionStatusVersionDisposition.Current);
+        await AssertVersionMatchCellAsync(
+            expectedProjectorVersion: "V1",
+            recordedAtUtc: now,
+            leaseExpiresAtUtc: freshLease,
+            isFresh: true,
+            versionMatch: ProjectionStatusVersionMatch.Mismatch,
+            versionDisposition: ProjectionStatusVersionDisposition.VersionMismatch);
+        await AssertVersionMatchCellAsync(
+            expectedProjectorVersion: "v2",
+            recordedAtUtc: now,
+            leaseExpiresAtUtc: freshLease,
+            isFresh: true,
+            versionMatch: ProjectionStatusVersionMatch.Mismatch,
+            versionDisposition: ProjectionStatusVersionDisposition.VersionMismatch);
+    }
+
+    [Fact]
+    public async Task SerializedV2_UsesAdditiveVersionMatchAndReadsPreG36PayloadDefaults()
+    {
+        var recordedAtUtc = DateTimeOffset.Parse("2026-01-01T00:00:30+00:00");
+        var snapshot = new ProjectionStatusSnapshot(
+            "students",
+            "v1",
+            "cluster-a",
+            "activation-a",
+            7,
+            3,
+            "0001",
+            "0002",
+            4,
+            0,
+            DateTimeOffset.Parse("2026-01-01T00:00:00+00:00"),
+            ProjectionStatusSnapshot.BestEffortConsistency,
+            true)
+        {
+            IsFresh = true,
+            RecordedAtUtc = recordedAtUtc,
+            ExpectedProjectorVersion = "v1",
+            VersionMatch = ProjectionStatusVersionMatch.Match
+        };
+        var adapter = new SerializedProjectionStatusReader(
+            new FixedStatusReader(snapshot),
+            new MutableServiceIdProvider("server-service"));
+
+        var serialized = await adapter.ReadSerializedV2Async();
+        Assert.True(serialized.IsSuccess);
+        var json = Encoding.UTF8.GetString(serialized.GetValue());
+        Assert.Contains("\"recordedAtUtc\":\"2026-01-01T00:00:30+00:00\"", json);
+        Assert.Contains("\"versionMatch\":1", json);
+
+        var preG36Json = JsonNode.Parse(serialized.GetValue())!.AsObject();
+        var preG36Wrapper = preG36Json["snapshots"]!.AsArray()[0]!.AsObject();
+        preG36Wrapper.Remove("recordedAtUtc");
+        preG36Wrapper.Remove("versionMatch");
+        var preG36 = SerializedProjectionStatusReader.DeserializeV2(
+            Encoding.UTF8.GetBytes(preG36Json.ToJsonString()));
+
+        Assert.True(preG36.IsSuccess);
+        var restored = Assert.Single(preG36.GetValue().Snapshots);
+        Assert.Null(restored.RecordedAtUtc);
+        Assert.Equal(ProjectionStatusVersionMatch.Unknown, restored.VersionMatch);
+        Assert.Null(restored.Snapshot.RecordedAtUtc);
+        Assert.Equal(ProjectionStatusVersionMatch.Unknown, restored.Snapshot.VersionMatch);
+
+        var undefinedVersionMatch = SerializedProjectionStatusReader.DeserializeV2(
+            Encoding.UTF8.GetBytes(json.Replace("\"versionMatch\":1", "\"versionMatch\":99", StringComparison.Ordinal)));
+        Assert.False(undefinedVersionMatch.IsSuccess);
+        Assert.IsType<SerializedProjectionStatusShapeException>(undefinedVersionMatch.GetException());
+    }
+
     [Fact]
     public void ProjectionStatusPublicApi_RetainsLegacyClrConstructors()
     {
+        Assert.Equal(0, (int)ProjectionStatusVersionDisposition.Current);
+        Assert.Equal(1, (int)ProjectionStatusVersionDisposition.VersionMismatch);
+        Assert.Equal(2, (int)ProjectionStatusVersionDisposition.StaleOrOrphan);
         Assert.NotNull(typeof(ProjectionStatusWriteResult).GetConstructor(
             [typeof(ProjectionStatusWriteOutcome), typeof(ProjectionStatusHeartbeat), typeof(string)]));
         Assert.NotNull(typeof(ProjectionStatusReadRequest).GetConstructor(
             [typeof(string), typeof(string), typeof(string)]));
         Assert.NotNull(typeof(SerializedProjectionStatusEnvelopeV1).GetConstructor(
             [typeof(int), typeof(string), typeof(IReadOnlyList<ProjectionStatusSnapshot>)]));
+        AssertRecordConstructorAndDeconstruct(
+            typeof(ProjectionStatusSnapshot),
+            [
+                typeof(string), typeof(string), typeof(string), typeof(string), typeof(long), typeof(long),
+                typeof(string), typeof(string), typeof(long), typeof(long), typeof(DateTimeOffset), typeof(string),
+                typeof(bool), typeof(bool), typeof(IReadOnlyList<string>)
+            ]);
+        AssertRecordConstructorAndDeconstruct(
+            typeof(SerializedProjectionStatusSnapshotV2),
+            [
+                typeof(ProjectionStatusSnapshot), typeof(string), typeof(string),
+                typeof(ProjectionStatusVersionDisposition), typeof(bool)
+            ]);
     }
 
     [Fact]
@@ -401,6 +600,69 @@ public sealed class ProjectionStatusRegistryTests
             var provider = new MutableServiceIdProvider("alpha");
             var store = new SqliteMultiProjectionStateStore(path, serviceIdProvider: provider);
             await AssertProjectionStatusCasContractAsync(store);
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SqliteStatusStore_StateBearingDoItTwicePersistsExactRecordedTimestampsAndSequences()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"sekiban-projection-status-timestamps-{Guid.NewGuid():N}.db");
+        try
+        {
+            var provider = new MutableServiceIdProvider("alpha");
+            var store = new SqliteMultiProjectionStateStore(path, serviceIdProvider: provider);
+            var eventStore = new CoreInMemoryEventStore(DomainType.GetDomainTypes().EventTypes, provider);
+            var reader = new ProjectionStatusReader(
+                store,
+                eventStore,
+                provider,
+                new ProjectionStatusOptions
+                {
+                    FreshnessWindow = TimeSpan.FromMinutes(30),
+                    SamplingWindow = TimeSpan.Zero
+                });
+            var t1 = DateTimeOffset.UtcNow.AddMinutes(-10);
+            var t2 = t1.AddMinutes(1);
+            var firstHeartbeat = CreateHeartbeat("writer-a", 1, t1) with
+            {
+                Phase = ProjectionStatusPhases.Active,
+                LeaseExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(5)
+            };
+
+            var firstWrite = await store.UpsertAsync(firstHeartbeat, 0);
+            Assert.True(firstWrite.IsSuccess, firstWrite.IsSuccess ? string.Empty : firstWrite.GetException().ToString());
+            Assert.True(firstWrite.GetValue().Committed);
+            var persistedFirst = Assert.Single((await store.ListAsync("students", "v1")).GetValue());
+            Assert.Equal(1, persistedFirst.Sequence);
+            Assert.Equal(t1, persistedFirst.RecordedAtUtc);
+            var firstSnapshot = Assert.Single((await reader.ReadAsync()).GetValue());
+            Assert.Equal(1, firstSnapshot.Sequence);
+            Assert.Equal(t1, firstSnapshot.RecordedAtUtc);
+            Assert.NotEqual(t1, firstSnapshot.SampledAtUtc);
+
+            var secondHeartbeat = firstHeartbeat with
+            {
+                Sequence = 2,
+                AppliedEventCount = 2,
+                RecordedAtUtc = t2
+            };
+            var secondWrite = await store.UpsertAsync(secondHeartbeat, 1);
+            Assert.True(secondWrite.IsSuccess, secondWrite.IsSuccess ? string.Empty : secondWrite.GetException().ToString());
+            Assert.True(secondWrite.GetValue().Committed);
+            var persistedSecond = Assert.Single((await store.ListAsync("students", "v1")).GetValue());
+            Assert.Equal(2, persistedSecond.Sequence);
+            Assert.Equal(t2, persistedSecond.RecordedAtUtc);
+            var secondSnapshot = Assert.Single((await reader.ReadAsync()).GetValue());
+            Assert.Equal(2, secondSnapshot.Sequence);
+            Assert.Equal(t2, secondSnapshot.RecordedAtUtc);
+            Assert.NotEqual(t2, secondSnapshot.SampledAtUtc);
         }
         finally
         {
@@ -640,6 +902,69 @@ public sealed class ProjectionStatusRegistryTests
             null,
             null,
             recordedAtUtc);
+
+    private static async Task AssertVersionMatchCellAsync(
+        string? expectedProjectorVersion,
+        DateTimeOffset recordedAtUtc,
+        DateTimeOffset? leaseExpiresAtUtc,
+        bool isFresh,
+        ProjectionStatusVersionMatch versionMatch,
+        ProjectionStatusVersionDisposition versionDisposition,
+        string? cellName = null)
+    {
+        var provider = new MutableServiceIdProvider("alpha");
+        var statusStore = new CoreInMemoryMultiProjectionStateStore(provider);
+        var eventStore = new CoreInMemoryEventStore(DomainType.GetDomainTypes().EventTypes, provider);
+        var heartbeat = CreateHeartbeat("activation-a", 1, recordedAtUtc) with
+        {
+            Phase = ProjectionStatusPhases.Active,
+            LeaseExpiresAtUtc = leaseExpiresAtUtc
+        };
+        var write = await statusStore.UpsertAsync(heartbeat, 0);
+        Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
+        Assert.True(write.GetValue().Committed);
+
+        var reader = new ProjectionStatusReader(
+            statusStore,
+            eventStore,
+            provider,
+            new ProjectionStatusOptions
+            {
+                FreshnessWindow = TimeSpan.FromMinutes(2),
+                SamplingWindow = TimeSpan.Zero
+            });
+        var request = new ProjectionStatusReadRequest(ProjectorName: "students")
+        {
+            ExpectedProjectorVersion = expectedProjectorVersion
+        };
+        var result = await reader.ReadAsync(request);
+
+        Assert.True(
+            result.IsSuccess,
+            result.IsSuccess
+                ? string.Empty
+                : $"{cellName ?? "version-match cell"}: {result.GetException()}");
+        var snapshot = Assert.Single(result.GetValue());
+        Assert.Equal(recordedAtUtc, snapshot.RecordedAtUtc);
+        Assert.Equal(isFresh, snapshot.IsFresh);
+        Assert.Equal(versionMatch, snapshot.VersionMatch);
+        Assert.Equal(versionDisposition, snapshot.VersionDisposition);
+        Assert.Equal(
+            versionDisposition == ProjectionStatusVersionDisposition.StaleOrOrphan,
+            snapshot.IsStaleOrOrphan);
+    }
+
+    private static void AssertRecordConstructorAndDeconstruct(Type recordType, Type[] parameterTypes)
+    {
+        var constructor = recordType.GetConstructor(parameterTypes);
+        Assert.NotNull(constructor);
+        Assert.Equal(parameterTypes.Length, constructor.GetParameters().Length);
+
+        var deconstruct = recordType.GetMethod(
+            "Deconstruct",
+            parameterTypes.Select(parameterType => parameterType.MakeByRefType()).ToArray());
+        Assert.NotNull(deconstruct);
+    }
 
     /// <summary>
     ///     Shared provider matrix for the public status-store contract. Each invocation drives the production store,

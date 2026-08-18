@@ -190,6 +190,32 @@ stale/orphan のどれかを返します。これらは observation のための
 自動削除することはありません。rollout や incident analysis に不要になったことを確認してから、明示的な retention policy を
 適用してください。
 
+### 行タイムスタンプと独立した version match (SEK-G36 / dcb-v10.17.0)
+
+`ProjectionStatusSnapshot.RecordedAtUtc` は heartbeat 行とともに commit された正確なタイムスタンプです。reader の
+best-effort な観測時刻である `SampledAtUtc` から導出されるものではなく、行どうしの tie breaker にも使いません。in-process
+snapshot は `RecordedAtUtc` と独立した `ProjectionStatusVersionMatch` (`Unknown = 0`、`Match = 1`、`Mismatch = 2`) を公開します。
+V1 の byte は凍結されたままです。新しい事実は加法的な V2 wrapper から公開され、入れ子の `Snapshot` は V1 形状のままです。
+
+consumer は次の 5 ステップに従ってください。
+
+1. caller が比較すべき expected version を持つときだけ `ExpectedProjectorVersion` を指定します。V2 の
+   `ProjectorVersion` と `ExpectedProjectorVersion` の request precedence は未決定なので、両方の request property を同時に
+   設定しないでください。
+2. freshness とは独立に `VersionMatch` を確認します。expected が null、空文字、または whitespace なら `Unknown` です。
+   equality は ordinal かつ case-sensitive で、それ以外は `Mismatch` です。
+3. `IsFresh` は別の軸として確認します。commit された `RecordedAtUtc` が freshness window 内にあり、かつ optional lease が
+   expire していない場合にだけ true になります。
+4. caller 自身の authority rule を適用するときも、すべての observation と既存の conflict signal を保持します。fresh mismatch
+   は依然として fresh な observation であり、fresh matched row が 2 行なら依然として conflict です。
+5. escalation、selection、retention、cleanup は明示的な consumer policy でのみ行います。stale mismatch は orphan
+   *candidate* にすぎず、削除の authorization ではありません。dcb は行を fold、filter、`IsOrphan` 判定、削除しません。
+
+次の 3 つの近道は authority rule ではありません。ordinal の最大 `ProjectorVersion` を選ばないでください
+(`1.0.9` は `1.0.10` より大きく並びます)。最大 `Sequence` も選ばないでください（これは行ごとの CAS fence であり、orphan の
+値の方が大きいことがあります）。最大の `LastAppliedSortableUniqueId` も選ばないでください（新しい current version はまだ
+catch-up 中であることがあります）。2 つの独立した軸と caller の明示的な policy を使ってください。
+
 ---
 
 ## 設定のポイント
