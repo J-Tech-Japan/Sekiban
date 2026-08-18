@@ -591,3 +591,16 @@ diagnostics, not garbage collection candidates: no automatic deletion is perform
 The serialized V1 status envelope and public CLR constructors remain compatible. The additive V2 status protocol is
 the opt-in path for expected-versus-observed projector-version diagnostics and reports `Current`, `VersionMismatch`,
 or `StaleOrOrphan` without changing V1 golden payloads.
+
+## Projection-status rows expose their committed timestamp and version-match axis — dcb-v10.17.0 (SEK-G36)
+
+The passive reader now returns the exact row `RecordedAtUtc` and an independent `VersionMatch` observation. V1 JSON,
+the 15-parameter `ProjectionStatusSnapshot` constructor and deconstructor, and the 5-parameter V2 wrapper constructor
+and deconstructor remain compatible. The V2 wrapper carries the new timestamp and `Unknown` / `Match` / `Mismatch`
+axis while its nested snapshot stays V1-shaped.
+
+`VersionDisposition` deliberately keeps its legacy freshness-first behavior: a stale row is still
+`StaleOrOrphan`. `VersionMatch` reports equality independently, so stale equal and stale unequal rows are no longer
+indistinguishable to the consumer. `IsFresh` still requires both a recent committed timestamp and a live optional
+lease. A stale mismatch remains an orphan candidate, not a deletion authorization, and dcb still performs no
+selection, folding, retention, or cleanup policy.

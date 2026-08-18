@@ -545,3 +545,14 @@ committed-version metadata が変化すると別の document identity を導出�
 serialized V1 status envelope と公開 CLR constructor の互換性は維持されます。追加された V2 status protocol は
 expected と observed projector version の診断に opt-in する経路で、V1 golden payload を変更せずに `Current`、
 `VersionMismatch`、`StaleOrOrphan` を返します。
+
+## projection-status 行が commit 済みタイムスタンプと version-match 軸を公開する — dcb-v10.17.0 (SEK-G36)
+
+受動 reader は正確な行の `RecordedAtUtc` と独立した `VersionMatch` observation を返すようになりました。V1 JSON、15 parameter
+の `ProjectionStatusSnapshot` constructor / deconstructor、5 parameter の V2 wrapper constructor / deconstructor は互換性を
+維持します。V2 wrapper が新しい timestamp と `Unknown` / `Match` / `Mismatch` 軸を保持し、入れ子の snapshot は V1 形状のままです。
+
+`VersionDisposition` は意図的に既存の freshness-first 挙動を維持します。stale な行は引き続き `StaleOrOrphan` です。
+`VersionMatch` は equality を独立して返すため、stale equal 行と stale unequal 行を consumer が区別できます。`IsFresh` は
+recent な commit 済み timestamp と live な optional lease の両方を引き続き必要とします。stale mismatch は orphan candidate であって
+削除の authorization ではありません。dcb は selection、folding、retention、cleanup policy を実行しません。

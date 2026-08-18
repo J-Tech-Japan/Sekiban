@@ -43,6 +43,20 @@ public sealed record ProjectionStatusSnapshot(
     /// <summary>Whether this row satisfied the freshness/lease predicate at sampling time.</summary>
     public bool IsFresh { get; init; }
 
+    /// <summary>
+    ///     Timestamp committed with this row's heartbeat. This is intentionally distinct from
+    ///     <see cref="SampledAtUtc"/>, which identifies when the reader sampled its best-effort observation.
+    /// </summary>
+    [JsonIgnore]
+    public DateTimeOffset? RecordedAtUtc { get; init; }
+
+    /// <summary>
+    ///     Independent comparison of the caller's expected projector version and the version observed on this row.
+    ///     This does not fold freshness into the result; use <see cref="IsFresh"/> separately.
+    /// </summary>
+    [JsonIgnore]
+    public ProjectionStatusVersionMatch VersionMatch { get; init; } = ProjectionStatusVersionMatch.Unknown;
+
     /// <summary>Optional active-pointer transition classification supplied by an MV publisher.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SwitchKind { get; init; }
@@ -347,6 +361,17 @@ public enum ProjectionStatusVersionDisposition
     StaleOrOrphan = 2
 }
 
+/// <summary>
+///     Independent comparison of an expected projector version and the version physically observed on a status row.
+///     Freshness remains a separate axis.
+/// </summary>
+public enum ProjectionStatusVersionMatch
+{
+    Unknown = 0,
+    Match = 1,
+    Mismatch = 2
+}
+
 /// <summary>Configuration for the passive projection status registry and read-side sampling.</summary>
 public class ProjectionStatusOptions
 {
@@ -472,13 +497,26 @@ public sealed record SerializedProjectionStatusSnapshotV2(
     ProjectionStatusVersionDisposition VersionDisposition,
     bool IsStaleOrOrphan)
 {
+    /// <summary>
+    ///     Timestamp committed with the row, surfaced outside the V1-shaped nested snapshot so V1 payloads remain
+    ///     frozen. It is not synthesized from <see cref="ProjectionStatusSnapshot.SampledAtUtc"/>.
+    /// </summary>
+    public DateTimeOffset? RecordedAtUtc { get; init; }
+
+    /// <summary>Expected-versus-observed version comparison, independent of freshness.</summary>
+    public ProjectionStatusVersionMatch VersionMatch { get; init; } = ProjectionStatusVersionMatch.Unknown;
+
     public static SerializedProjectionStatusSnapshotV2 Create(ProjectionStatusSnapshot snapshot) =>
         new(
             snapshot,
             snapshot.ExpectedProjectorVersion,
             snapshot.ObservedProjectorVersion,
             snapshot.VersionDisposition,
-            snapshot.IsStaleOrOrphan);
+            snapshot.IsStaleOrOrphan)
+        {
+            RecordedAtUtc = snapshot.RecordedAtUtc,
+            VersionMatch = snapshot.VersionMatch
+        };
 }
 
 /// <summary>Version-two serialized passive status envelope with version-disposition diagnostics.</summary>
