@@ -155,6 +155,22 @@ Sekiban 内部だけで完結する読み取りならマルチプロジェクシ
 - **`EventsProcessed` は永続的な safe チェックポイント数**で、整合性シグナルとして使用します。復元は
   これをベースラインとし、新規イベントゼロの再起動では同一の payload/position/threshold/count を復元します。
 
+### Catch-up の永続化 cadence と telemetry (SEK-G37 / #1142)
+
+Catch-up の完了判定は `FetchedCount == 0` のみです。読み取ったイベントがすべて
+filter されて `AppliedCount == 0` になった場合も、traversal cursor を進め、適用済み
+batch と同じ progress・persist decision・telemetry の共通 seam を通ります。これにより
+filter 済み tail が checkpoint fallback より前に catch-up を終了させません。
+
+既存の hot-only `event_count_checkpoint` trigger が最初に評価されます。追加 fallback は
+5,000 fetched events 到達時の `PersistReason=fetched_count_checkpoint` と、5 分経過時の
+`PersistReason=time_checkpoint` です。cold read は既存の設定された segment・applied-count・
+interval trigger を維持し、fetched-count fallback も使います。cold/hot の選択は read metadata
+の `UsedCold` だけで決まり、`UsedCold=false` の hybrid store は hot-only の定数を使います。
+summary では `PersistTriggered` (decision) と `PersistOutcome` (`durable_write`,
+`no_durable_write`, `not_attempted`) を分けて報告します。trigger されたこと自体は、
+durable checkpoint が commit された証明ではありません。
+
 ### 初回クエリ catch-up の位置契約 (SEK-G21 / 10.8.1)
 
 Orleans の fresh activation は、最初の state・snapshot・scalar・list クエリの前に fail-closed

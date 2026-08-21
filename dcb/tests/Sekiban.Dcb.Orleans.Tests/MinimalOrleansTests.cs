@@ -43,6 +43,10 @@ public class MinimalOrleansTests : IAsyncLifetime
         builder.Options.ClusterId = $"TestCluster-{uniqueId}";
         builder.Options.ServiceId = $"TestService-{uniqueId}";
         // Use real networking with explicit fixed ports to avoid client assuming 30000 while silo chooses dynamic port.
+        var portBase = 20_000 + (Environment.ProcessId % 5_000) * 4;
+        builder.PortAllocator = new FixedPortAllocator(portBase, portBase + 100);
+        builder.Options.BaseSiloPort = portBase;
+        builder.Options.BaseGatewayPort = portBase + 1;
         builder.AddSiloBuilderConfigurator<TestSiloConfigurator>();
 
         _cluster = builder.Build();
@@ -417,6 +421,63 @@ public class MinimalOrleansTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Hot_fetched_checkpoint_is_committed_and_consumed_by_fresh_activation()
+    {
+        var grain = _client.GetGrain<IMultiProjectionGrain>(PersistenceTestMulti.MultiProjectorName);
+        var baseTick = DateTime.UtcNow.AddMinutes(-2).Ticks;
+        var firstEvents = Enumerable.Range(0, 123)
+            .Select(index => CreatePersistenceEvent(baseTick + index, index))
+            .ToList();
+
+        await grain.SeedEventsAsync(ToSerializableEvents(firstEvents));
+        await WaitUntilCatchUpIdleAsync(grain);
+        await grain.RefreshAsync();
+        var initialPersistResult = await grain.PersistStateAsync();
+        Assert.True(initialPersistResult.IsSuccess);
+
+        var c0Result = await SharedStateStore.GetLatestForVersionAsync(
+            PersistenceTestMulti.MultiProjectorName,
+            PersistenceTestMulti.MultiProjectorVersion);
+        Assert.True(c0Result.IsSuccess);
+        Assert.True(c0Result.GetValue().HasValue);
+        var c0 = c0Result.GetValue().GetValue();
+        Assert.Equal(123, c0.EventsProcessed);
+
+        // Start at an arbitrary residue so the legacy exact modulo trigger cannot fire on the tenth 500-event batch.
+        var secondEvents = Enumerable.Range(0, 5_000)
+            .Select(index => CreatePersistenceEvent(baseTick + 123 + index, 123 + index))
+            .ToList();
+        await WaitUntilCatchUpIdleAsync(grain);
+        await grain.SeedEventsAsync(ToSerializableEvents(secondEvents));
+        await grain.RefreshAsync();
+
+        var c1Result = await SharedStateStore.GetLatestForVersionAsync(
+            PersistenceTestMulti.MultiProjectorName,
+            PersistenceTestMulti.MultiProjectorVersion);
+        Assert.True(c1Result.IsSuccess);
+        Assert.True(c1Result.GetValue().HasValue);
+        var c1 = c1Result.GetValue().GetValue();
+        Assert.Equal(5_123, c1.EventsProcessed);
+        Assert.True(
+            string.Compare(c1.LastSortableUniqueId, c0.LastSortableUniqueId, StringComparison.Ordinal) > 0,
+            $"Expected C1 {c1.LastSortableUniqueId} to be after C0 {c0.LastSortableUniqueId}.");
+
+        // The next activation must consume the committed restart cursor as its authoritative exclusive read position.
+        await grain.RequestDeactivationAsync();
+        SharedEventStore.ClearReadAllEventsTracking();
+        var freshGrain = _client.GetGrain<IMultiProjectionGrain>(PersistenceTestMulti.MultiProjectorName);
+        await freshGrain.GetStatusAsync();
+        await WaitUntilAsync(
+            () => SharedEventStore.ReadAllSerializableEventSinceValues.Count > 0,
+            TimeSpan.FromSeconds(10));
+
+        var firstFreshRead = SharedEventStore.ReadAllSerializableEventSinceValues[0];
+        Assert.Equal(c1.LastSortableUniqueId, firstFreshRead);
+        var freshStatus = await freshGrain.GetStatusAsync();
+        Assert.True(freshStatus.EventsProcessed >= c1.EventsProcessed);
+    }
+
+    [Fact]
     public async Task Orleans_Should_Isolate_TagConsistentGrain_By_ServiceId()
     {
         var tagId = "order:123";
@@ -529,6 +590,13 @@ public class MinimalOrleansTests : IAsyncLifetime
         }
     }
 
+    private sealed class FixedPortAllocator(int baseSiloPort, int baseGatewayPort) : ITestClusterPortAllocator
+    {
+        public (int, int) AllocateConsecutivePortPairs(int numPorts) => (baseSiloPort, baseGatewayPort);
+
+        public void Dispose() { }
+    }
+
 
     private record EmptyTestMultiProjector : IMultiProjector<EmptyTestMultiProjector>
     {
@@ -603,6 +671,15 @@ public class MinimalOrleansTests : IAsyncLifetime
 
     private record TestProjectionEvent(int Value) : IEventPayload;
 
+    private static Event CreatePersistenceEvent(long tick, int value) => new(
+        new TestProjectionEvent(value),
+        new SortableUniqueId(
+            SortableUniqueId.GetTickString(tick) + SortableUniqueId.GetIdString(Guid.Empty)),
+        nameof(TestProjectionEvent),
+        Guid.CreateVersion7(),
+        new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "persistence-test"),
+        new List<string>());
+
     private static CountingInMemoryEventStore CreateSharedEventStore()
     {
         var eventTypes = new SimpleEventTypes();
@@ -616,6 +693,7 @@ public class MinimalOrleansTests : IAsyncLifetime
         private readonly object _lock = new();
         private readonly List<int?> _readAllEventsMaxCounts = new();
         private readonly List<int?> _readAllSerializableEventsMaxCounts = new();
+        private readonly List<string?> _readAllSerializableEventSinceValues = new();
 
         public CountingInMemoryEventStore(IEventTypes eventTypes)
         {
@@ -647,6 +725,17 @@ public class MinimalOrleansTests : IAsyncLifetime
             }
         }
 
+        public IReadOnlyList<string?> ReadAllSerializableEventSinceValues
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _readAllSerializableEventSinceValues.ToList();
+                }
+            }
+        }
+
         public void Clear() => _inner.Clear();
 
         public void ClearReadAllEventsTracking()
@@ -657,6 +746,7 @@ public class MinimalOrleansTests : IAsyncLifetime
                 _readAllEventsMaxCounts.Clear();
                 ReadAllSerializableEventsCallCount = 0;
                 _readAllSerializableEventsMaxCounts.Clear();
+                _readAllSerializableEventSinceValues.Clear();
             }
         }
 
@@ -682,6 +772,7 @@ public class MinimalOrleansTests : IAsyncLifetime
             {
                 ReadAllSerializableEventsCallCount++;
                 _readAllSerializableEventsMaxCounts.Add(maxCount);
+                _readAllSerializableEventSinceValues.Add(since?.Value);
             }
 
             return _inner.ReadAllSerializableEventsAsync(since, maxCount);
@@ -807,6 +898,22 @@ public class MinimalOrleansTests : IAsyncLifetime
         }
 
         Assert.True(predicate(), $"Condition was not met within {timeout}.");
+    }
+
+    private static async Task WaitUntilCatchUpIdleAsync(IMultiProjectionGrain grain)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!(await grain.GetCatchUpStatusAsync()).IsActive)
+            {
+                return;
+            }
+
+            await Task.Delay(20);
+        }
+
+        Assert.False((await grain.GetCatchUpStatusAsync()).IsActive, "Catch-up did not become idle in time.");
     }
 
     private static void ResetStatusOptions()
