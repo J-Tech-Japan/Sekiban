@@ -66,6 +66,67 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
     }
 
     [Fact]
+    public async Task Synthetic_id_tracking_only_does_not_advance_c0_and_fresh_activation_reapplies_the_range()
+    {
+        var c0 = SortableUniqueId.GetTickString(9_000) + SortableUniqueId.GetIdString(Guid.Empty);
+        var c0State = new MultiProjectionGrainState
+        {
+            ProjectorName = "production-catch-up",
+            ProjectorVersion = "v1",
+            LastSortableUniqueId = c0,
+            EventsProcessed = 123,
+            LastGoodSafeVersion = 1,
+            LastGoodEventsProcessed = 123
+        };
+
+        // Synthetic case: the activation-local ID cache says the range was seen, but the host safe checkpoint stays at
+        // C0 and no durable snapshot contains those effects.
+        var syntheticStore = new ProductionCatchUpEventStore();
+        var syntheticHost = new ProductionCatchUpProjectionHost
+        {
+            SafeVersion = 1,
+            SafePosition = c0
+        };
+        var syntheticGrain = CreateGrain(syntheticStore, syntheticHost, c0State);
+
+        Assert.Equal(syntheticStore.Events.Count, GetPrivateField<HashSet<Guid>>(syntheticGrain, "_processedEventIds").Count);
+        await syntheticGrain.RefreshAsync();
+
+        Assert.Equal(c0, syntheticStore.ReadSinceValues[0]);
+        Assert.Equal(2, syntheticHost.StateMetadataCalls); // one start-position inference plus the fetched checkpoint attempt
+        Assert.Equal(1, syntheticHost.SafeCheckpointCalls); // the persist checkpoint was captured exactly once
+        Assert.Equal(0, syntheticHost.SnapshotWriteCalls);
+        Assert.Equal(0, syntheticStore.PersistentState.WriteCalls);
+        Assert.Equal("no_durable_write", GetPrivateField<string>(syntheticGrain, "_lastPersistOutcome"));
+        Assert.Equal(c0, syntheticStore.PersistentState.State.LastSortableUniqueId);
+        Assert.Equal(c0, c0State.LastSortableUniqueId); // traversal never became the committed restart cursor
+
+        // Fresh activation: the ephemeral ID cache is gone, so the authoritative read from C0 must apply every event.
+        var freshStore = new ProductionCatchUpEventStore();
+        var freshHost = new ProductionCatchUpProjectionHost
+        {
+            AllowApply = true,
+            SafeVersion = 1,
+            SafePosition = c0
+        };
+        var freshState = c0State.Clone();
+        var freshGrain = CreateGrain(
+            freshStore,
+            freshHost,
+            freshState,
+            processedEvents: Array.Empty<SerializableEvent>());
+        Assert.Empty(GetPrivateField<HashSet<Guid>>(freshGrain, "_processedEventIds"));
+
+        await freshGrain.RefreshAsync();
+
+        Assert.Equal(syntheticStore.Events.Count, freshHost.AppliedEventCount);
+        Assert.Equal(syntheticStore.Events[^1].SortableUniqueIdValue, freshHost.LastAppliedPosition);
+        Assert.Equal(c0, freshStore.ReadSinceValues[0]);
+        Assert.Equal(0, freshStore.PersistentState.WriteCalls);
+        Assert.Equal(c0, freshStore.PersistentState.State.LastSortableUniqueId);
+    }
+
+    [Fact]
     public async Task Enumerable_partial_filter_uses_last_fetched_for_the_next_read()
     {
         var store = new ProductionCatchUpEventStore([3]);
@@ -614,7 +675,9 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         public bool FailSnapshotWrite { get; init; }
         public bool AllowApply { get; init; }
         public int SafeVersion { get; init; }
+        public string? SafePosition { get; init; }
         public int StateMetadataCalls { get; private set; }
+        public int SafeCheckpointCalls { get; private set; }
         public int SnapshotWriteCalls { get; private set; }
         public int AppliedEventCount { get; private set; }
         public string? LastAppliedPosition { get; private set; }
@@ -642,7 +705,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
                     UnsafeLastSortableUniqueId: null,
                     UnsafeLastEventId: null,
                     SafeVersion: SafeVersion,
-                    SafeLastSortableUniqueId: null)));
+                    SafeLastSortableUniqueId: SafePosition)));
         }
 
         public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true) =>
@@ -694,7 +757,11 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         public void ForcePromoteBufferedEvents() { }
         public void CompactSafeHistory() { }
         public void ForcePromoteAllBufferedEvents() { }
-        public Task<string> GetSafeLastSortableUniqueIdAsync() => Task.FromResult(string.Empty);
+        public Task<string> GetSafeLastSortableUniqueIdAsync()
+        {
+            SafeCheckpointCalls++;
+            return Task.FromResult(SafePosition ?? string.Empty);
+        }
         public Task<bool> IsSortableUniqueIdReceivedAsync(string sortableUniqueId) => Task.FromResult(false);
         public long EstimateStateSizeBytes(bool includeUnsafeDetails) => 1;
         public string PeekCurrentSafeWindowThreshold() => SortableUniqueId.Generate(DateTime.UtcNow, Guid.Empty);
