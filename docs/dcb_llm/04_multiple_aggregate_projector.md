@@ -163,6 +163,23 @@ in global `SortableUniqueId` order) and a **served/unsafe** state (what queries 
   restore takes it as the baseline; a restart that writes zero new events restores exactly the
   same payload/position/threshold/count.
 
+### Catch-up persist cadence and telemetry (SEK-G37 / #1142)
+
+Catch-up completion is defined by `FetchedCount == 0`. A non-empty read whose events are
+all filtered (`AppliedCount == 0`) still advances the traversal cursor and reaches the
+same progress, persist-decision, and telemetry seam as an applied batch. This prevents a
+filtered tail from ending catch-up before its checkpoint fallback can run.
+
+The existing `event_count_checkpoint` trigger remains first on the hot-only path. The
+additive fallbacks report `PersistReason=fetched_count_checkpoint` after 5,000 fetched
+events or `PersistReason=time_checkpoint` after five minutes. Cold reads retain their
+configured segment, applied-count, and interval triggers, plus the fetched-count fallback;
+the cold/hot choice is taken from the read metadata's `UsedCold` value. A hybrid store
+with `UsedCold=false` therefore uses the hot-only constants. The summary reports
+`PersistTriggered` (the decision) separately from `PersistOutcome` (`durable_write`,
+`no_durable_write`, or `not_attempted`); a trigger is not evidence that a durable
+checkpoint was committed.
+
 ### First-query catch-up position contract (SEK-G21 / 10.8.1)
 
 A fresh Orleans activation places a fail-closed barrier in front of its first state, snapshot,

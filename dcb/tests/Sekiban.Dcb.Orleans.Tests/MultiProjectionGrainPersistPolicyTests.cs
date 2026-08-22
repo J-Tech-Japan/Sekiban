@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
@@ -252,6 +254,188 @@ public class MultiProjectionGrainPersistPolicyTests
         Assert.Empty((await statusStore.ListAsync("projection", "mutable-v2")).GetValue());
     }
 
+    [Fact]
+    public void Hot_thresholds_are_inclusive_and_preserve_legacy_modulo_precedence()
+    {
+        var grain = CreateGrain();
+
+        SetPrivateField(grain, "_eventsProcessed", 4_999L);
+        SetPrivateField(grain, "_eventsProcessedSinceLastCatchUpPersist", 0L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 4_999L);
+        AssertDecision(grain, null, null, shouldPersist: false, reason: "none");
+
+        SetPrivateField(grain, "_eventsProcessed", 5_000L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 1L);
+        AssertDecision(grain, null, null, shouldPersist: true, reason: "event_count_checkpoint");
+
+        InvokePrivate(grain, "ResetCatchUpPersistWindow", [false]);
+        SetPrivateField(grain, "_eventsProcessed", 5_001L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 4_999L);
+        AssertDecision(grain, null, null, shouldPersist: false, reason: "none");
+
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 5_000L);
+        AssertDecision(grain, null, null, shouldPersist: true, reason: "fetched_count_checkpoint");
+
+        InvokePrivate(grain, "ResetCatchUpPersistWindow", [false]);
+        SetPrivateField(grain, "_eventsProcessed", 123L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 5_001L);
+        AssertDecision(grain, null, null, shouldPersist: true, reason: "fetched_count_checkpoint");
+
+        InvokePrivate(grain, "ResetCatchUpPersistWindow", [false]);
+        SetPrivateField(grain, "_eventsProcessed", 123L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 5_000L);
+        AssertDecision(grain, null, null, shouldPersist: true, reason: "fetched_count_checkpoint");
+    }
+
+    [Fact]
+    public void Routing_uses_UsedCold_and_not_hybrid_store_presence()
+    {
+        var grain = CreateGrain();
+        var hybrid = CreateHybrid(maxEvents: 100);
+
+        SetPrivateField(grain, "_eventsProcessed", 123L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 5_000L);
+        AssertDecision(
+            grain,
+            hybrid,
+            new HybridReadBatchMetadata("hot-only", UsedCold: false, UsedHot: true, false, 0, 500, 0),
+            shouldPersist: true,
+            reason: "fetched_count_checkpoint");
+
+        InvokePrivate(grain, "ResetCatchUpPersistWindow", [false]);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 100L);
+        AssertDecision(
+            grain,
+            hybrid,
+            new HybridReadBatchMetadata("cold", UsedCold: true, UsedHot: false, false, 100, 0, 1),
+            shouldPersist: true,
+            reason: "fetched_count_checkpoint");
+
+        InvokePrivate(grain, "ResetCatchUpPersistWindow", [false]);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 5_000L);
+        AssertDecision(
+            grain,
+            hybrid,
+            metadata: null,
+            shouldPersist: true,
+            reason: "fetched_count_checkpoint");
+
+        InvokePrivate(grain, "ResetCatchUpPersistWindow", [false]);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 5_000L);
+        AssertDecision(
+            grain,
+            hybridCatchUpStore: null,
+            new HybridReadBatchMetadata("cold-without-store", UsedCold: true, UsedHot: false, false, 100, 0, 1),
+            shouldPersist: false,
+            reason: "none");
+    }
+
+    [Fact]
+    public void Cold_legacy_precedence_and_fetched_only_boundary_are_preserved()
+    {
+        var grain = CreateGrain();
+        var hybrid = CreateHybrid(maxEvents: 100, interval: TimeSpan.FromHours(1));
+        var cold = new HybridReadBatchMetadata("cold", UsedCold: true, UsedHot: false, false, 100, 0, 1);
+
+        SetPrivateField(grain, "_eventsProcessedSinceLastCatchUpPersist", 99L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 100L);
+        AssertDecision(grain, hybrid, cold, shouldPersist: true, reason: "fetched_count_checkpoint");
+
+        InvokePrivate(grain, "ResetCatchUpPersistWindow", [false]);
+        SetPrivateField(grain, "_eventsProcessedSinceLastCatchUpPersist", 100L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 1L);
+        AssertDecision(grain, hybrid, cold, shouldPersist: true, reason: "max_events_since_last_persist");
+
+        InvokePrivate(grain, "ResetCatchUpPersistWindow", [false]);
+        AssertDecision(
+            grain,
+            hybrid,
+            cold with { ReachedColdSegmentBoundary = true },
+            shouldPersist: true,
+            reason: "cold_segment_boundary");
+    }
+
+    [Fact]
+    public void Counter_and_time_windows_reset_only_after_a_discriminating_non_fire()
+    {
+        var grain = CreateGrain();
+
+        SetPrivateField(grain, "_eventsProcessed", 123L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 5_000L);
+        AssertDecision(grain, null, null, shouldPersist: true, reason: "fetched_count_checkpoint");
+        InvokePrivate(grain, "ResetCatchUpPersistWindow", [false]);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 4_999L);
+        AssertDecision(grain, null, null, shouldPersist: false, reason: "none");
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 5_000L);
+        AssertDecision(grain, null, null, shouldPersist: true, reason: "fetched_count_checkpoint");
+
+        InvokePrivate(grain, "ResetCatchUpPersistWindow", [false]);
+        SetPrivateField(grain, "_lastCatchUpPersistUtc", DateTime.UtcNow - TimeSpan.FromMinutes(6));
+        AssertDecision(grain, null, null, shouldPersist: true, reason: "time_checkpoint");
+        InvokePrivate(grain, "ResetCatchUpPersistWindow", [false]);
+        SetPrivateField(grain, "_lastCatchUpPersistUtc", DateTime.UtcNow);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 1L);
+        AssertDecision(grain, null, null, shouldPersist: false, reason: "none");
+        SetPrivateField(grain, "_lastCatchUpPersistUtc", DateTime.UtcNow - TimeSpan.FromMinutes(6));
+        AssertDecision(grain, null, null, shouldPersist: true, reason: "time_checkpoint");
+    }
+
+    [Fact]
+    public void Read_path_transition_resets_the_three_window_fields_but_same_path_does_not_mutate_them()
+    {
+        var grain = CreateGrain();
+        var hot = new HybridReadBatchMetadata("hot", UsedCold: false, UsedHot: true, false, 0, 1, 0);
+        var cold = new HybridReadBatchMetadata("cold", UsedCold: true, UsedHot: false, false, 1, 0, 1);
+
+        InvokePrivate(grain, "ObserveCatchUpReadPath", [hot]);
+        SetPrivateField(grain, "_eventsProcessedSinceLastCatchUpPersist", 7L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 8L);
+        var before = DateTime.UtcNow - TimeSpan.FromMinutes(1);
+        SetPrivateField(grain, "_lastCatchUpPersistUtc", before);
+
+        InvokePrivate(grain, "ObserveCatchUpReadPath", [hot]);
+        Assert.Equal(7L, GetPrivateField<long>(grain, "_eventsProcessedSinceLastCatchUpPersist"));
+        Assert.Equal(8L, GetPrivateField<long>(grain, "_eventsFetchedSinceLastCatchUpPersist"));
+        Assert.Equal(before, GetPrivateField<DateTime>(grain, "_lastCatchUpPersistUtc"));
+
+        InvokePrivate(grain, "ObserveCatchUpReadPath", [cold]);
+        Assert.Equal(0L, GetPrivateField<long>(grain, "_eventsProcessedSinceLastCatchUpPersist"));
+        Assert.Equal(0L, GetPrivateField<long>(grain, "_eventsFetchedSinceLastCatchUpPersist"));
+        Assert.True(GetPrivateField<DateTime>(grain, "_lastCatchUpPersistUtc") > before);
+        Assert.True(GetPrivateField<bool>(grain, "_lastCatchUpUsedCold"));
+    }
+
+    private static void AssertDecision(
+        MultiProjectionGrain grain,
+        HybridEventStore? hybridCatchUpStore,
+        HybridReadBatchMetadata? metadata,
+        bool shouldPersist,
+        string reason)
+    {
+        var decision = InvokePrivate(grain, "GetCatchUpPersistDecision", [hybridCatchUpStore, metadata]);
+        Assert.NotNull(decision);
+        Assert.Equal(shouldPersist, GetProperty<bool>(decision!, "ShouldPersist"));
+        Assert.Equal(reason, GetProperty<string>(decision!, "Reason"));
+    }
+
+    private static HybridEventStore CreateHybrid(
+        int maxEvents,
+        TimeSpan? interval = null,
+        bool persistOnBoundary = true) =>
+        new(
+            new StubEventStore(),
+            new EmptyColdObjectStorage(),
+            new JsonlColdSegmentFormatHandler(),
+            new DefaultServiceIdProvider(),
+            Options.Create(new ColdEventStoreOptions
+            {
+                Enabled = true,
+                CatchUpPersistMaxEventsWithoutSnapshot = maxEvents,
+                CatchUpPersistMaxInterval = interval ?? TimeSpan.FromMinutes(5),
+                PersistSnapshotOnColdSegmentBoundary = persistOnBoundary
+            }),
+            NullLogger<HybridEventStore>.Instance);
+
     private static MultiProjectionGrain CreateGrain(
         GeneralMultiProjectionActorOptions? options = null,
         MultiProjectionGrainState? state = null,
@@ -432,5 +616,23 @@ public class MultiProjectionGrainPersistPolicyTests
             throw new NotSupportedException();
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class EmptyColdObjectStorage : IColdObjectStorage
+    {
+        public Task<ResultBox<ColdStorageObject>> GetAsync(string path, CancellationToken ct) =>
+            Task.FromResult(ResultBox.Error<ColdStorageObject>(new FileNotFoundException(path)));
+
+        public Task<ResultBox<bool>> PutAsync(string path, Stream data, string? expectedETag, CancellationToken ct) =>
+            Task.FromResult(ResultBox.FromValue(true));
+
+        public Task<ResultBox<bool>> PutAsync(string path, byte[] data, string? expectedETag, CancellationToken ct) =>
+            Task.FromResult(ResultBox.FromValue(true));
+
+        public Task<ResultBox<IReadOnlyList<string>>> ListAsync(string prefix, CancellationToken ct) =>
+            Task.FromResult(ResultBox.FromValue<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        public Task<ResultBox<bool>> DeleteAsync(string path, CancellationToken ct) =>
+            Task.FromResult(ResultBox.FromValue(true));
     }
 }

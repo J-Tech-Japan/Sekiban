@@ -82,8 +82,10 @@ internal sealed record CatchUpInvocationResult(
     SortableUniqueId? AuthoritativeReachedPosition);
 
 internal readonly record struct CatchUpBatchResult(
-    int ProcessedCount,
-    SortableUniqueId? AuthoritativeReadCursor);
+    int FetchedCount,
+    int AppliedCount,
+    SortableUniqueId? LastFetchedPosition,
+    SortableUniqueId? LastAppliedPosition);
 
 internal enum CatchUpProductionHookPoint
 {
