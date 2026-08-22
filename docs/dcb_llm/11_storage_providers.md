@@ -581,7 +581,7 @@ The base `IEventStore.WriteSerializableEventsAsync` is unconditional: EventIds a
 
 ### Capability discovery (runtime-resolved, fail-closed)
 
-Support is a **runtime capability descriptor**, reused from the G10 pattern — never a type-name check. `WriteConditionKind` distinguishes kinds (`SingleEventUniqueKey` now; `BatchUniqueKey` / `ExpectedPosition` are reserved future kinds). The descriptor is resolved from the **live** store the container built, and decorators propagate it: a `HybridEventStore` reports exactly what its hot store can enforce (writes land there — it never upgrades on its own authority), and a composite supports a kind only if **every** underlying store does. A store that says nothing supports nothing.
+Support is a **runtime capability descriptor**, reused from the G10 pattern — never a type-name check. `WriteConditionKind` distinguishes kinds (`SingleEventUniqueKey` and PostgreSQL-only `ExpectedTagPosition`; `BatchUniqueKey` remains reserved). The descriptor is resolved from the **live** store the container built, and decorators propagate it: a `HybridEventStore` reports exactly what its hot store can enforce (writes land there — it never upgrades on its own authority), and a composite supports a kind only if **every** underlying store does. A store that says nothing supports nothing.
 
 Requesting a conditional append against a store that does not support the kind **fails closed**: `ConditionNotSupportedException` is raised **before** the command handler runs, before any EventId is allocated, before serialization, and before any store call. There is no silent degradation to an unconditional write.
 
@@ -605,7 +605,7 @@ The store guarantees **at most one durable claim per key**. That is a storage gu
 
 ### Reference implementation and provider status
 
-A deterministic in-memory reference lives in the testing package (`Sekiban.Dcb.Testing.InMemoryConditionalEventStore`, never referenced from a runtime project) and implements the full outcome machine. **All four production providers implement it (SEK-G16)** — PostgreSQL, SQLite, Cosmos DB, and DynamoDB — with identical observable semantics. Expected-position / CAS semantics remain a later slice.
+A deterministic in-memory reference lives in the testing package (`Sekiban.Dcb.Testing.InMemoryConditionalEventStore`, never referenced from a runtime project) and implements the full outcome machine. **All four production providers implement it (SEK-G16)** — PostgreSQL, SQLite, Cosmos DB, and DynamoDB — with identical observable semantics. The distinct multi-tag expected-position CAS is PostgreSQL-only (SEK-G40) and is documented below.
 
 ### Provider mechanics (SEK-G16)
 
@@ -638,6 +638,94 @@ The canonical use: N replicas boot and each tries to perform the same one-time m
 4. If a host builds a *different* operation under the same key (different payload/tags), it gets `KeyReuseConflict` — a programming error surfaced loudly, not silently merged.
 
 **One durable claim is the boundary.** The contract guarantees at most one durable claim per key; it does **not** make the migration's side effects exactly-once. If the migration itself performs external effects (writes to another system, sends notifications), gate those behind the winning claim through an outbox / idempotency layer — the claim tells you *who won*, not that the effect ran exactly once.
+
+## PostgreSQL durable multi-tag expected-position CAS — SEK-G40
+
+**Version: 10.19.0 (minor).** PostgreSQL now offers the optional `WriteConditionKind.ExpectedTagPosition`
+capability. It is a durable DCB fence beneath Orleans reservations: it prevents a command that read stale consistency-tag
+heads from appending after a partitioned/retired writer has bypassed the in-memory reservation layer. It is **not** a
+replacement for reservations, and it does not make arbitrary external effects exactly-once.
+
+### Additive contract and the three explicit states
+
+`IEventStore` and every existing write/result shape remain unchanged. The opt-in `CommandExecutionOptions` has an
+`ExpectedTagPositions` value, and the WASM boundary has a new V2
+`VersionedExpectedTagPositionSerializedCommitRequest` plus optional
+`ISerializedExpectedTagPositionSekibanDcbExecutor`. V1 and unversioned serialized payloads keep their old omission =
+no-enforcement semantics byte-for-byte. WithResult returns typed errors in `ResultBox`; WithoutResult rethrows the same
+typed exception through its guarded boundary.
+
+Every *derived consistency tag* must have exactly one `TagHeadExpectationEntry(ServiceId, Tag, Expectation)`. The
+expectation is an explicit discriminator — never a nullable-position convention:
+
+```csharp
+var noFence = TagHeadExpectation.NoEnforcement(); // still creates, locks, reconciles, and advances the durable head
+var firstWrite = TagHeadExpectation.AssertEmpty(); // requires a transactionally proven-empty head
+var continuation = TagHeadExpectation.Exact("01J...previous-position");
+```
+
+Missing, duplicate, unknown, malformed, or service-mismatched entries fail before reservation/store mutation.
+`NoEnforcement` skips **only** comparison; it is useful when adopting the protocol while retaining unconditional command
+semantics. An unsupported provider (InMemory, SQLite, Cosmos DB, DynamoDB) fails closed with
+`ConditionNotSupportedException` before its handler/write method. `ConditionalAppend` and expected-tag positions are
+separate protocols and cannot be combined in one options object; the ambiguous combination is rejected before a write.
+
+### PostgreSQL all-writer protocol
+
+The ordinary typed batch, serialized batch, and unique conditional-claim writer all reach one internal PostgreSQL
+transaction seam. Thus even legacy/unconditional tagged writes participate in durable head maintenance while doing **no**
+expected-head comparison. For the complete deduplicated `(ServiceId, Tag)` set the seam:
+
+1. sorts ServiceId then Tag with ordinal comparison, lazy-inserts `dcb_tag_heads` in that order, and acquires
+   `FOR UPDATE` in the same order;
+2. bootstraps a newly inserted row from the service-scoped `MAX(dcb_tags.SortableUniqueId)` (a persisted null head is a
+   *proven-empty* row, not an absent-row shortcut);
+3. reconciles authoritative rows newer than the head, writing an append-only `dcb_tag_head_violations` record and
+   repairing the head before any command DML;
+4. compares **all** requested expectations and returns one `ExpectedTagPositionConflictException` containing the complete
+   expected/observed pair set when any is stale; and
+5. on success writes event/tag rows and advances each head to `max(reconciled head, the maximum position for *that tag*
+   in the batch)`, so an unconditional older writer cannot regress a newer durable head.
+
+Positions must strictly increase in an expected-position batch and each event must exceed every carried tag's reconciled
+head. They are rejected rather than regenerated. If reconciliation found bypass evidence and comparison then fails, only
+the repair and idempotent violation record commit; command event/tag rows and unrelated lazily-created head rows do not.
+An ordinary mismatch with no repair rolls everything back, including lazy rows.
+
+Violation records are service-scoped, indexed, append-only, and never auto-cleaned. Operators can read them with the
+provisioning principal, for example:
+
+```sql
+SELECT "ServiceId", "Tag", "PreviousHeadPosition", "ObservedPosition", "DetectedAtUtc", "DetectingWriter"
+FROM dcb_tag_head_violations
+WHERE "ServiceId" = :service_id
+ORDER BY "DetectedAtUtc" DESC;
+```
+
+The runtime does DML only — all three tables (`dcb_tag_heads`, `dcb_tag_head_violations`,
+`dcb_tag_head_enablement_epochs`) are created by the PostgreSQL EF migration/provisioning plane. A runtime schema-missing
+failure (for example SQLSTATE `42P01`) must be fixed by provisioning; it never triggers `CREATE`, `ALTER`, migrations, or
+a catch-and-create fallback.
+
+### Enablement epoch: an operational hard gate
+
+The fence is only meaningful after every old PostgreSQL writer participates. Do this in this exact order:
+
+1. provision the 10.19 schema/migration;
+2. drain or quiesce **all** pre-10.19 PostgreSQL writers;
+3. set one `dcb_tag_head_enablement_epochs` marker for the ServiceId with the provisioning principal;
+4. enable `AssertEmpty` / `Exact` requests and begin monitoring violation records immediately.
+
+Before the marker exists, an enforcement request fails with `TagHeadEnforcementNotEnabledException` before any store write
+or head advance. The guarantee begins at the epoch; pre-epoch history is absorbed only by the authoritative bootstrap
+maximum. Never set the marker merely because a quiet period had no violations: quiet tags have no reconciliation run.
+
+### Honest reconciliation boundary
+
+Reconciliation detects a bypass already visible when its `MAX` query runs. An old writer that inserts **after** that query
+can escape this particular audit if a newer head later overtakes it. This is deliberately best-effort detection, not a
+claim that premature mixed-version enablement is safe. The drain-before-epoch step is the correctness boundary; a zero
+violation count is monitoring evidence, never clean-cutover proof.
 
 ## SEK-G20 generation-aware checkpoint CAS
 

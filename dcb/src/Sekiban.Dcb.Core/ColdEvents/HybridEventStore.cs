@@ -11,7 +11,7 @@ using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventStore, IStorageDurabilityDescriptorProvider,
-    IWriteConditionCapabilityProvider, IConditionalEventStore
+    IWriteConditionCapabilityProvider, IConditionalEventStore, IExpectedTagPositionEventStore
 {
     private const string ReadAllSerializableEventsCall = nameof(ReadAllSerializableEventsAsync);
 
@@ -35,16 +35,15 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     {
         var hot = SekibanDcbCapabilityResolver.DescribeWriteConditions(_hotStore, "hot event store");
 
-        // Advertise a write condition only when the hot store BOTH declares it AND can actually be forwarded to (i.e.
-        // implements IConditionalEventStore). A "deceptive" hot store that declares the capability but is not an
-        // IConditionalEventStore is not honoured — otherwise the executor would pass its descriptor-only preflight and
-        // then fail on the forward. This keeps advertise, forward, and the executor preflight consistent.
-        if (_hotStore is not IConditionalEventStore)
+        // Advertise every kind only when the hot store BOTH declares it AND this decorator can forward the corresponding
+        // optional interface. A descriptor-only/deceptive hot store must never make the executor's preflight succeed.
+        var forwardable = hot.SupportedKinds.Where(kind => kind switch
         {
-            return WriteConditionCapabilityDescriptor.None($"HybridEventStore({hot.ProviderName})");
-        }
-
-        return new WriteConditionCapabilityDescriptor(hot.SupportedKinds, $"HybridEventStore({hot.ProviderName})");
+            WriteConditionKind.SingleEventUniqueKey => _hotStore is IConditionalEventStore,
+            WriteConditionKind.ExpectedTagPosition => _hotStore is IExpectedTagPositionEventStore,
+            _ => false
+        }).ToHashSet();
+        return new WriteConditionCapabilityDescriptor(forwardable, $"HybridEventStore({hot.ProviderName})");
     }
 
     /// <summary>
@@ -67,6 +66,38 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                 new ConditionNotSupportedException(
                     WriteConditionKind.SingleEventUniqueKey,
                     $"HybridEventStore({descriptor.ProviderName})")));
+    }
+
+    /// <inheritdoc />
+    public Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (_hotStore is IExpectedTagPositionEventStore expectedHot)
+        {
+            return expectedHot.EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken);
+        }
+
+        var descriptor = SekibanDcbCapabilityResolver.DescribeWriteConditions(_hotStore, "hot event store");
+        return Task.FromResult(ResultBox.Error<bool>(new ConditionNotSupportedException(
+            WriteConditionKind.ExpectedTagPosition,
+            $"HybridEventStore({descriptor.ProviderName})")));
+    }
+
+    /// <inheritdoc />
+    public Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
+        IReadOnlyList<SerializableEvent> events,
+        ExpectedTagPositionSpecification specification,
+        CancellationToken cancellationToken = default)
+    {
+        if (_hotStore is IExpectedTagPositionEventStore expectedHot)
+        {
+            return expectedHot.WriteSerializableEventsWithExpectedTagPositionsAsync(events, specification, cancellationToken);
+        }
+
+        var descriptor = SekibanDcbCapabilityResolver.DescribeWriteConditions(_hotStore, "hot event store");
+        return Task.FromResult(ResultBox.Error<ExpectedTagPositionWriteResult>(new ConditionNotSupportedException(
+            WriteConditionKind.ExpectedTagPosition,
+            $"HybridEventStore({descriptor.ProviderName})")));
     }
     private readonly IEventStore _hotStore;
     private readonly IColdObjectStorage _coldStorage;

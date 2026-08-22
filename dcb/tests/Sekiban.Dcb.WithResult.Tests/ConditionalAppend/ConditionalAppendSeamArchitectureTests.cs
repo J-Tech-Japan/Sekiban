@@ -67,6 +67,7 @@ public class ConditionalAppendSeamArchitectureTests
             "Sekiban.Dcb.Core|Sekiban.Dcb.Storage.ConditionalAppendCoordinator|VerificationBudgetOverride",
             "Sekiban.Dcb.CosmosDb|Sekiban.Dcb.CosmosDb.CosmosDbEventStore|AfterConditionalCommitHook",
             "Sekiban.Dcb.Postgres|Sekiban.Dcb.Postgres.PostgresEventStore|AfterConditionalCommitHook",
+            "Sekiban.Dcb.Postgres|Sekiban.Dcb.Postgres.PostgresEventStore|TagHeadProtocolHook",
             "Sekiban.Dcb.Sqlite|Sekiban.Dcb.Sqlite.SqliteEventStore|AfterConditionalCommitHook"
         }.OrderBy(s => s, StringComparer.Ordinal).ToArray();
         Assert.Equal(expected, actual);

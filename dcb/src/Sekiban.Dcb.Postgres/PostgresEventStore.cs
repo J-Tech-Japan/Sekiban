@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
+using NpgsqlTypes;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
@@ -17,7 +19,7 @@ using System.Text.Json;
 namespace Sekiban.Dcb.Postgres;
 
 public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader, IStorageDurabilityDescriptorProvider,
-    IConditionalEventStore, IWriteConditionCapabilityProvider
+    IConditionalEventStore, IExpectedTagPositionEventStore, IWriteConditionCapabilityProvider
 {
     private const string ConditionalProviderName = "Postgres";
 
@@ -41,6 +43,13 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     internal Func<Task>? AfterConditionalCommitHook { get; set; }
 
     /// <summary>
+    ///     Test-only fault / overlap seam invoked at each fixed real PostgreSQL protocol milestone (before lazy insertion;
+    ///     after locking; after reconciliation; after event DML; after tag DML; after head advancement). It deliberately
+    ///     surrounds the production SQL and transaction rather than replacing it with a test-owned lock or collection.
+    /// </summary>
+    internal Func<Task>? TagHeadProtocolHook { get; set; }
+
+    /// <summary>
     ///     SEK-G16 conditional (unique-key) append. The claim event is inserted under the deterministic id, so the
     ///     existing <c>(ServiceId, Id)</c> primary key is the uniqueness primitive — no schema change. A duplicate raises
     ///     SQLSTATE 23505 (unique_violation), which is classified by fingerprint against the stored winner (the real
@@ -54,43 +63,32 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         _conditionalAppend.AppendIfUniqueAsync(request, cancellationToken);
 
     /// <inheritdoc />
-    public WriteConditionCapabilityDescriptor DescribeWriteConditions() => _conditionalAppend.Descriptor;
+    public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
+        WriteConditionCapabilityDescriptor.Supporting(
+            ConditionalProviderName,
+            WriteConditionKind.SingleEventUniqueKey,
+            WriteConditionKind.ExpectedTagPosition);
 
     private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
         Guid deterministicId,
         SerializableEvent claimEvent,
         CancellationToken cancellationToken)
     {
-        var serviceId = CurrentServiceId;
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-
-        var dbEvent = new DbEvent
-        {
-            ServiceId = serviceId,
-            Id = deterministicId,
-            SortableUniqueId = claimEvent.SortableUniqueIdValue,
-            EventType = claimEvent.EventPayloadName,
-            Payload = Encoding.UTF8.GetString(claimEvent.Payload),
-            Tags = JsonSerializer.Serialize(claimEvent.Tags),
-            Timestamp = DateTime.UtcNow,
-            CausationId = claimEvent.EventMetadata.CausationId,
-            CorrelationId = claimEvent.EventMetadata.CorrelationId,
-            ExecutedUser = claimEvent.EventMetadata.ExecutedUser
-        };
-        context.Events.Add(dbEvent);
-        foreach (var tagString in claimEvent.Tags)
-        {
-            var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
-            context.Tags.Add(
-                DbTag.FromEventTag(tagString, tagGroup, claimEvent.SortableUniqueIdValue, deterministicId,
-                    claimEvent.EventPayloadName, serviceId));
-        }
-
         try
         {
-            await context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            // This is intentionally the same private seam used by both ordinary batch writers. A successful conditional
+            // claim can therefore never be a tagged event invisible to the durable head protocol.
+            var result = await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
+                [claimEvent],
+                specification: null,
+                writer: TagHeadWriter.ConditionalClaim,
+                useExecutionStrategy: false,
+                cancellationToken);
+            if (!result.IsSuccess)
+            {
+                throw result.GetException();
+            }
+
             // The claim is now durably committed. A failure past this point is a LOST RESPONSE, not a failed write: signal
             // it as the post-commit ambiguity marker so the shared orchestrator resolves it authoritatively rather than
             // surfacing a raw transport error. (The seam is test-only; production has no hook.)
@@ -113,7 +111,6 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             ConstraintName: EventsPrimaryKeyConstraint
         })
         {
-            await transaction.RollbackAsync(cancellationToken);
             return ConditionalWriteOutcome.Conflict(ex);
         }
     }
@@ -285,64 +282,25 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     {
         try
         {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            // Use the execution strategy for retry logic
-            var strategy = context.Database.CreateExecutionStrategy();
-
-            return await strategy.ExecuteAsync(async () =>
+            var typedEvents = events.ToList();
+            var serializableEvents = typedEvents
+                .Select(ev => ev.ToSerializableEvent(_eventTypes))
+                .ToList();
+            var write = await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
+                serializableEvents,
+                specification: null,
+                writer: TagHeadWriter.TypedBatch,
+                useExecutionStrategy: true,
+                CancellationToken.None);
+            if (!write.IsSuccess)
             {
-                // Begin transaction inside the execution strategy
-                await using var transaction = await context.Database.BeginTransactionAsync();
+                return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
+                    write.GetException());
+            }
 
-                var eventsList = events.ToList();
-                var writtenEvents = new List<Event>();
-                var tagWriteResults = new List<TagWriteResult>();
-
-                // Process each event
-                foreach (var ev in eventsList)
-                {
-                    // Serialize the event payload
-                    var serializedPayload = SerializeEventPayload(ev.Payload);
-
-                    // Create and add the database event
-                    var dbEvent = DbEvent.FromEvent(ev, serializedPayload, serviceId);
-                    context.Events.Add(dbEvent);
-                    writtenEvents.Add(ev);
-
-                    // Process tags associated with this event
-                    foreach (var tagString in ev.Tags)
-                    {
-                        // Extract tag group from tag string (format: "group:content")
-                        var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
-
-                        // Create a tag entry for this event
-                        var dbTag = DbTag.FromEventTag(
-                            tagString,
-                            tagGroup,
-                            ev.SortableUniqueIdValue,
-                            ev.Id,
-                            ev.EventType,
-                            serviceId);
-                        context.Tags.Add(dbTag);
-
-                        tagWriteResults.Add(
-                            new TagWriteResult(
-                                tagString,
-                                1, // Version placeholder
-                                DateTimeOffset.UtcNow));
-                    }
-                }
-
-                // Save changes
-                await context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return ResultBox.FromValue(
-                    (Events: (IReadOnlyList<Event>)writtenEvents,
-                        TagWrites: (IReadOnlyList<TagWriteResult>)tagWriteResults));
-            });
+            return ResultBox.FromValue(
+                (Events: (IReadOnlyList<Event>)typedEvents,
+                    TagWrites: write.GetValue().TagWrites));
         }
         catch (Exception ex)
         {
@@ -693,76 +651,16 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     {
         try
         {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var serviceId = CurrentServiceId;
-
-            // Use the execution strategy for retry logic
-            var strategy = context.Database.CreateExecutionStrategy();
-
-            return await strategy.ExecuteAsync(async () =>
-            {
-                // Begin transaction inside the execution strategy
-                await using var transaction = await context.Database.BeginTransactionAsync();
-
-                var eventsList = events.ToList();
-                var writtenEvents = new List<SerializableEvent>();
-                var tagWriteResults = new List<TagWriteResult>();
-
-                // Process each event
-                foreach (var se in eventsList)
-                {
-                    // Convert byte[] payload to string
-                    var serializedPayload = Encoding.UTF8.GetString(se.Payload);
-
-                    // Create and add the database event
-                    var dbEvent = new DbEvent
-                    {
-                        ServiceId = serviceId,
-                        Id = se.Id,
-                        SortableUniqueId = se.SortableUniqueIdValue,
-                        EventType = se.EventPayloadName,
-                        Payload = serializedPayload,
-                        Tags = JsonSerializer.Serialize(se.Tags),
-                        Timestamp = DateTime.UtcNow,
-                        CausationId = se.EventMetadata.CausationId,
-                        CorrelationId = se.EventMetadata.CorrelationId,
-                        ExecutedUser = se.EventMetadata.ExecutedUser
-                    };
-                    context.Events.Add(dbEvent);
-                    writtenEvents.Add(se);
-
-                    // Process tags associated with this event
-                    foreach (var tagString in se.Tags)
-                    {
-                        // Extract tag group from tag string (format: "group:content")
-                        var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
-
-                        // Create a tag entry for this event
-                        var dbTag = DbTag.FromEventTag(
-                            tagString,
-                            tagGroup,
-                            se.SortableUniqueIdValue,
-                            se.Id,
-                            se.EventPayloadName,
-                            serviceId);
-                        context.Tags.Add(dbTag);
-
-                        tagWriteResults.Add(
-                            new TagWriteResult(
-                                tagString,
-                                1, // Version placeholder
-                                DateTimeOffset.UtcNow));
-                    }
-                }
-
-                // Save changes
-                await context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return ResultBox.FromValue(
-                    (Events: (IReadOnlyList<SerializableEvent>)writtenEvents,
-                        TagWrites: (IReadOnlyList<TagWriteResult>)tagWriteResults));
-            });
+            var write = await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
+                events.ToList(),
+                specification: null,
+                writer: TagHeadWriter.SerializedBatch,
+                useExecutionStrategy: true,
+                CancellationToken.None);
+            return !write.IsSuccess
+                ? ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(
+                    write.GetException())
+                : ResultBox.FromValue((write.GetValue().Events, write.GetValue().TagWrites));
         }
         catch (Exception ex)
         {
@@ -771,12 +669,511 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         }
     }
 
+    /// <inheritdoc />
+    public async Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var serviceId = CurrentServiceId;
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var enabled = await context.TagHeadEnablementEpochs.AsNoTracking()
+                .AnyAsync(epoch => epoch.ServiceId == serviceId, cancellationToken);
+            return enabled
+                ? ResultBox.FromValue(true)
+                : ResultBox.Error<bool>(new TagHeadEnforcementNotEnabledException(serviceId));
+        }
+        catch (Exception ex)
+        {
+            // Deliberately no fallback DDL or schema creation: an unprovisioned runtime must fail closed (normally 42P01).
+            return ResultBox.Error<bool>(ex);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
+        IReadOnlyList<SerializableEvent> events,
+        ExpectedTagPositionSpecification specification,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            ArgumentNullException.ThrowIfNull(specification);
+            specification.ValidateEntryShapes(CurrentServiceId);
+            if (specification.RequiresEnforcement)
+            {
+                var enabled = await EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken);
+                if (!enabled.IsSuccess)
+                {
+                    return ResultBox.Error<ExpectedTagPositionWriteResult>(enabled.GetException());
+                }
+            }
+
+            return await WriteSerializableBatchThroughCanonicalHeadSeamAsync(
+                events,
+                specification,
+                TagHeadWriter.ExpectedPositionBatch,
+                useExecutionStrategy: true,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "WriteSerializableEventsWithExpectedTagPositionsAsync failed");
+            return ResultBox.Error<ExpectedTagPositionWriteResult>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     The one authoritative PostgreSQL tagged-write seam. Typed, serialized, conditional-claim, and expected-position
+    ///     writers all call this method. The transaction deliberately owns lazy creation, canonical locking,
+    ///     reconciliation, command rows, tag-index rows, and per-tag head advancement together.
+    /// </summary>
+    private async Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableBatchThroughCanonicalHeadSeamAsync(
+        IReadOnlyList<SerializableEvent> events,
+        ExpectedTagPositionSpecification? specification,
+        TagHeadWriter writer,
+        bool useExecutionStrategy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+        if (specification is not null)
+        {
+            // Batch ordering is fully known before a transaction or a lazy head row exists.
+            ValidateStrictBatchOrder(events);
+        }
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        if (!useExecutionStrategy)
+        {
+            return await PersistThroughCanonicalHeadSeamAsync(context, events, specification, writer, cancellationToken);
+        }
+
+        var strategy = context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(
+            () => PersistThroughCanonicalHeadSeamAsync(context, events, specification, writer, cancellationToken));
+    }
+
+    private async Task<ResultBox<ExpectedTagPositionWriteResult>> PersistThroughCanonicalHeadSeamAsync(
+        SekibanDcbDbContext context,
+        IReadOnlyList<SerializableEvent> events,
+        ExpectedTagPositionSpecification? specification,
+        TagHeadWriter writer,
+        CancellationToken cancellationToken)
+    {
+        var serviceId = CurrentServiceId;
+        var keys = events
+            .SelectMany(@event => @event.Tags)
+            .Distinct(StringComparer.Ordinal)
+            .Select(tag => new TagHeadKey(serviceId, tag))
+            .OrderBy(key => key.ServiceId, StringComparer.Ordinal)
+            .ThenBy(key => key.Tag, StringComparer.Ordinal)
+            .ToArray();
+
+        if (specification is not null)
+        {
+            specification.ValidateEntryShapes(serviceId);
+            var presentTags = keys.Select(key => key.Tag).ToHashSet(StringComparer.Ordinal);
+            var unknown = specification.Entries.Select(entry => entry.Tag)
+                .Where(tag => !presentTags.Contains(tag))
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            if (unknown.Length > 0)
+            {
+                return ResultBox.Error<ExpectedTagPositionWriteResult>(
+                    new TagHeadExpectationValidationException(
+                        $"Expected tag-head entries are not present in this batch: {string.Join(", ", unknown)}."));
+            }
+        }
+
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var created = new HashSet<TagHeadKey>();
+        var heads = new Dictionary<TagHeadKey, string?>();
+        var repairs = new List<TagHeadRepair>();
+        try
+        {
+            // Phase 1: lazy rows are inserted in the exact same ordinal ordering as later FOR UPDATE acquisition. Never
+            // let caller/event order reach the unique index first: reversed batches otherwise form a real 40P01 cycle.
+            await InvokeTagHeadProtocolHookAsync();
+            foreach (var key in keys)
+            {
+                var inserted = await ExecuteNonQueryAsync(
+                    context,
+                    transaction,
+                    "INSERT INTO dcb_tag_heads (\"ServiceId\", \"Tag\", \"HeadPosition\") " +
+                    "VALUES (@serviceId, @tag, NULL) ON CONFLICT (\"ServiceId\", \"Tag\") DO NOTHING",
+                    cancellationToken,
+                    Parameter("serviceId", key.ServiceId),
+                    Parameter("tag", key.Tag));
+                if (inserted == 1)
+                {
+                    created.Add(key);
+                }
+            }
+
+            // Phase 2: acquire every row in exactly the same canonical order. A newly inserted row is bootstraped from
+            // dcb_tags while this transaction owns its key; absence is only proven empty after the authoritative MAX.
+            foreach (var key in keys)
+            {
+                var head = await QueryNullableStringAsync(
+                    context,
+                    transaction,
+                    "SELECT \"HeadPosition\" FROM dcb_tag_heads " +
+                    "WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag FOR UPDATE",
+                    cancellationToken,
+                    Parameter("serviceId", key.ServiceId),
+                    Parameter("tag", key.Tag));
+
+                if (created.Contains(key))
+                {
+                    var authoritativeMaximum = await QueryNullableStringAsync(
+                        context,
+                        transaction,
+                        "SELECT MAX(\"SortableUniqueId\") FROM dcb_tags " +
+                        "WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag",
+                        cancellationToken,
+                        Parameter("serviceId", key.ServiceId),
+                        Parameter("tag", key.Tag));
+                    if (authoritativeMaximum is not null)
+                    {
+                        await UpdateHeadAsync(context, transaction, key, authoritativeMaximum, cancellationToken);
+                        head = authoritativeMaximum;
+                    }
+                    // A persisted null head is the explicit, transactionally proven-empty representation.
+                }
+
+                heads[key] = head;
+            }
+            await InvokeTagHeadProtocolHookAsync();
+
+            // Phase 3: reconciliation is always service-scoped. It observes only rows newer than this durable head and
+            // records / repairs them before expected-head comparison or command DML.
+            foreach (var key in keys)
+            {
+                var priorHead = heads[key];
+                var observedMaximum = await QueryNullableStringAsync(
+                    context,
+                    transaction,
+                    "SELECT MAX(\"SortableUniqueId\") FROM dcb_tags " +
+                    "WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag " +
+                    "AND (@headPosition IS NULL OR \"SortableUniqueId\" > @headPosition)",
+                    cancellationToken,
+                    Parameter("serviceId", key.ServiceId),
+                    Parameter("tag", key.Tag),
+                    NullableTextParameter("headPosition", priorHead));
+                if (observedMaximum is null)
+                {
+                    continue;
+                }
+
+                await InsertViolationIdempotentlyAsync(
+                    context, transaction, key, priorHead, observedMaximum, writer, cancellationToken);
+                await UpdateHeadAsync(context, transaction, key, observedMaximum, cancellationToken);
+                heads[key] = observedMaximum;
+                repairs.Add(new TagHeadRepair(key, priorHead, observedMaximum));
+            }
+            await InvokeTagHeadProtocolHookAsync();
+
+            // Phase 4: ALL expectations compare after EVERY key has reconciled. A combined multi-tag conflict contains a
+            // complete pair set, never a first-failure subset.
+            if (specification is not null)
+            {
+                var pairs = specification.Entries
+                    .OrderBy(entry => entry.ServiceId, StringComparer.Ordinal)
+                    .ThenBy(entry => entry.Tag, StringComparer.Ordinal)
+                    .Select(entry => new TagHeadExpectedObserved(
+                        entry.ServiceId,
+                        entry.Tag,
+                        entry.Expectation,
+                        heads[new TagHeadKey(entry.ServiceId, entry.Tag)]))
+                    .ToArray();
+                var mismatched = pairs.Any(pair => !ExpectationMatches(pair.Expected, pair.ObservedPosition));
+                if (mismatched)
+                {
+                    var conflict = new ExpectedTagPositionConflictException(pairs);
+                    if (repairs.Count == 0)
+                    {
+                        // Ordinary stale/mismatch: no repair evidence exists, so all lazy rows and all mutation roll back.
+                        await transaction.RollbackAsync(cancellationToken);
+                        return ResultBox.Error<ExpectedTagPositionWriteResult>(conflict);
+                    }
+
+                    // Repair-only conflict: preserve ONLY repaired heads and their idempotent audit rows. In particular a
+                    // third unrelated lazy tag C cannot leak out of this transaction merely because tags A/B conflicted.
+                    foreach (var key in created.Where(key => repairs.All(repair => repair.Key != key)))
+                    {
+                        await ExecuteNonQueryAsync(
+                            context,
+                            transaction,
+                            "DELETE FROM dcb_tag_heads WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag",
+                            cancellationToken,
+                            Parameter("serviceId", key.ServiceId),
+                            Parameter("tag", key.Tag));
+                    }
+                    await transaction.CommitAsync(cancellationToken);
+                    LogCommittedRepairs(repairs, writer);
+                    return ResultBox.Error<ExpectedTagPositionWriteResult>(conflict);
+                }
+
+                // The second half of the position rule depends on the locked/reconciled prior heads. It remains before
+                // event/tag DML and an invalid batch rolls every lazy/repair mutation back.
+                ValidatePositionsAgainstHeads(events, heads, serviceId);
+            }
+
+            // Phase 5: command DML is deliberately split so fault-injection tests can prove transaction atomicity from a
+            // fresh connection after event insertion, tag-index insertion, and head update respectively.
+            foreach (var @event in events)
+            {
+                context.Events.Add(ToDbEvent(@event, serviceId));
+            }
+            await context.SaveChangesAsync(cancellationToken);
+            await InvokeTagHeadProtocolHookAsync();
+
+            var tagWriteResults = new List<TagWriteResult>();
+            foreach (var @event in events)
+            {
+                foreach (var tagString in @event.Tags)
+                {
+                    var tagGroup = tagString.Contains(':') ? tagString.Split(':')[0] : tagString;
+                    context.Tags.Add(DbTag.FromEventTag(
+                        tagString,
+                        tagGroup,
+                        @event.SortableUniqueIdValue,
+                        @event.Id,
+                        @event.EventPayloadName,
+                        serviceId));
+                    tagWriteResults.Add(new TagWriteResult(tagString, 1, DateTimeOffset.UtcNow));
+                }
+            }
+            await context.SaveChangesAsync(cancellationToken);
+            await InvokeTagHeadProtocolHookAsync();
+
+            foreach (var (key, batchMaximum) in GetPerTagBatchMaximums(events, serviceId))
+            {
+                // Legacy writers deliberately perform no expectation comparison, but they still must never regress a
+                // durable head that an earlier canonical writer (or reconciliation) has already advanced. The protocol's
+                // success rule is max(reconciled head, this tag's batch maximum), not "last writer wins".
+                var reconciledHead = heads[key];
+                if (reconciledHead is null ||
+                    StringComparer.Ordinal.Compare(batchMaximum, reconciledHead) > 0)
+                {
+                    await UpdateHeadAsync(context, transaction, key, batchMaximum, cancellationToken);
+                    heads[key] = batchMaximum;
+                }
+            }
+            await InvokeTagHeadProtocolHookAsync();
+
+            await transaction.CommitAsync(cancellationToken);
+            LogCommittedRepairs(repairs, writer);
+            return ResultBox.FromValue(new ExpectedTagPositionWriteResult(events, tagWriteResults));
+        }
+        catch
+        {
+            // A disposed uncommitted Npgsql transaction rolls back too, but make the all-or-nothing boundary explicit for
+            // the injected partial-state tests and for a failure before the using scope unwinds.
+            if (transaction.GetDbTransaction().Connection is not null)
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+            }
+            throw;
+        }
+    }
+
+    private static DbEvent ToDbEvent(SerializableEvent @event, string serviceId) => new()
+    {
+        ServiceId = serviceId,
+        Id = @event.Id,
+        SortableUniqueId = @event.SortableUniqueIdValue,
+        EventType = @event.EventPayloadName,
+        Payload = Encoding.UTF8.GetString(@event.Payload),
+        Tags = JsonSerializer.Serialize(@event.Tags),
+        Timestamp = DateTime.UtcNow,
+        CausationId = @event.EventMetadata.CausationId,
+        CorrelationId = @event.EventMetadata.CorrelationId,
+        ExecutedUser = @event.EventMetadata.ExecutedUser
+    };
+
+    private static void ValidateStrictBatchOrder(IReadOnlyList<SerializableEvent> events)
+    {
+        for (var index = 1; index < events.Count; index++)
+        {
+            if (StringComparer.Ordinal.Compare(events[index - 1].SortableUniqueIdValue, events[index].SortableUniqueIdValue) >= 0)
+            {
+                throw new TagHeadPositionValidationException(
+                    "Expected-position batches must carry strictly increasing SortableUniqueId values in batch order.");
+            }
+        }
+    }
+
+    private static void ValidatePositionsAgainstHeads(
+        IReadOnlyList<SerializableEvent> events,
+        IReadOnlyDictionary<TagHeadKey, string?> heads,
+        string serviceId)
+    {
+        foreach (var @event in events)
+        {
+            foreach (var tag in @event.Tags)
+            {
+                var priorHead = heads[new TagHeadKey(serviceId, tag)];
+                if (priorHead is not null &&
+                    StringComparer.Ordinal.Compare(@event.SortableUniqueIdValue, priorHead) <= 0)
+                {
+                    throw new TagHeadPositionValidationException(
+                        $"Event position '{@event.SortableUniqueIdValue}' must exceed the reconciled head '{priorHead}' for tag '{tag}'.");
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<KeyValuePair<TagHeadKey, string>> GetPerTagBatchMaximums(
+        IReadOnlyList<SerializableEvent> events,
+        string serviceId)
+    {
+        var maxima = new Dictionary<TagHeadKey, string>();
+        foreach (var @event in events)
+        {
+            foreach (var tag in @event.Tags)
+            {
+                var key = new TagHeadKey(serviceId, tag);
+                if (!maxima.TryGetValue(key, out var existing) ||
+                    StringComparer.Ordinal.Compare(@event.SortableUniqueIdValue, existing) > 0)
+                {
+                    maxima[key] = @event.SortableUniqueIdValue;
+                }
+            }
+        }
+        return maxima.OrderBy(pair => pair.Key.ServiceId, StringComparer.Ordinal)
+            .ThenBy(pair => pair.Key.Tag, StringComparer.Ordinal);
+    }
+
+    private static bool ExpectationMatches(TagHeadExpectation expected, string? observedPosition) => expected.Kind switch
+    {
+        TagHeadExpectationKind.NoEnforcement => true,
+        TagHeadExpectationKind.AssertEmpty => observedPosition is null,
+        TagHeadExpectationKind.Exact => StringComparer.Ordinal.Equals(expected.Position, observedPosition),
+        _ => false
+    };
+
+    private async Task InsertViolationIdempotentlyAsync(
+        SekibanDcbDbContext context,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        TagHeadKey key,
+        string? previousHead,
+        string observedPosition,
+        TagHeadWriter writer,
+        CancellationToken cancellationToken) =>
+        await ExecuteNonQueryAsync(
+            context,
+            transaction,
+            "INSERT INTO dcb_tag_head_violations (\"ServiceId\", \"Tag\", \"PreviousHeadWasEmpty\", " +
+            "\"PreviousHeadPosition\", \"ObservedPosition\", \"DetectedAtUtc\", \"DetectingWriter\") " +
+            "VALUES (@serviceId, @tag, @wasEmpty, @previous, @observed, @detectedAtUtc, @writer) " +
+            "ON CONFLICT (\"ServiceId\", \"Tag\", \"PreviousHeadWasEmpty\", \"PreviousHeadPosition\", \"ObservedPosition\") DO NOTHING",
+            cancellationToken,
+            Parameter("serviceId", key.ServiceId),
+            Parameter("tag", key.Tag),
+            Parameter("wasEmpty", previousHead is null),
+            Parameter("previous", previousHead ?? string.Empty),
+            Parameter("observed", observedPosition),
+            Parameter("detectedAtUtc", DateTime.UtcNow),
+            Parameter("writer", writer.ToString()));
+
+    private static Task UpdateHeadAsync(
+        SekibanDcbDbContext context,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        TagHeadKey key,
+        string? position,
+        CancellationToken cancellationToken) =>
+        ExecuteNonQueryAsync(
+            context,
+            transaction,
+            "UPDATE dcb_tag_heads SET \"HeadPosition\" = @position " +
+            "WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag",
+            cancellationToken,
+            Parameter("position", position),
+            Parameter("serviceId", key.ServiceId),
+            Parameter("tag", key.Tag));
+
+    private static async Task<int> ExecuteNonQueryAsync(
+        SekibanDcbDbContext context,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        string commandText,
+        CancellationToken cancellationToken,
+        params NpgsqlParameter[] parameters)
+    {
+        await using var command = CreateCommand(context, transaction, commandText, parameters);
+        return await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<string?> QueryNullableStringAsync(
+        SekibanDcbDbContext context,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        string commandText,
+        CancellationToken cancellationToken,
+        params NpgsqlParameter[] parameters)
+    {
+        await using var command = CreateCommand(context, transaction, commandText, parameters);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is null or DBNull ? null : (string)value;
+    }
+
+    private static NpgsqlCommand CreateCommand(
+        SekibanDcbDbContext context,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        string commandText,
+        IReadOnlyCollection<NpgsqlParameter> parameters)
+    {
+        var connection = context.Database.GetDbConnection() as NpgsqlConnection
+            ?? throw new InvalidOperationException("PostgresEventStore requires an Npgsql connection.");
+        var npgsqlTransaction = transaction.GetDbTransaction() as NpgsqlTransaction
+            ?? throw new InvalidOperationException("PostgresEventStore requires an Npgsql transaction.");
+        var command = new NpgsqlCommand(commandText, connection, npgsqlTransaction);
+        foreach (var parameter in parameters)
+        {
+            command.Parameters.Add(parameter);
+        }
+        return command;
+    }
+
+    private static NpgsqlParameter Parameter(string name, object? value) => new(name, value ?? DBNull.Value);
+
+    // PostgreSQL cannot infer a parameter type when a null is used both in an IS NULL predicate and a comparison. The
+    // head is always text, so make the DML-only runtime query explicit rather than adding any catch-and-create fallback.
+    private static NpgsqlParameter NullableTextParameter(string name, string? value) =>
+        new(name, NpgsqlDbType.Text) { Value = value is null ? DBNull.Value : value };
+
+    private Task InvokeTagHeadProtocolHookAsync() =>
+        TagHeadProtocolHook?.Invoke() ?? Task.CompletedTask;
+
+    private void LogCommittedRepairs(IEnumerable<TagHeadRepair> repairs, TagHeadWriter writer)
+    {
+        foreach (var repair in repairs)
+        {
+            // Intentionally after CommitAsync only: a log entry means the append-only violation record and repair are
+            // durable together, never a false alarm from an aborted transaction.
+            _logger.LogWarning(
+                "Postgres tag-head reconciliation violation committed for {ServiceId}/{Tag}: {PreviousHead} -> {ObservedHead} by {Writer}",
+                repair.Key.ServiceId,
+                repair.Key.Tag,
+                repair.PreviousHead ?? "<proven-empty>",
+                repair.ObservedHead,
+                writer.ToString());
+        }
+    }
+
+    private enum TagHeadWriter
+    {
+        TypedBatch,
+        SerializedBatch,
+        ConditionalClaim,
+        ExpectedPositionBatch
+    }
+
+    private readonly record struct TagHeadKey(string ServiceId, string Tag);
+    private readonly record struct TagHeadRepair(TagHeadKey Key, string? PreviousHead, string ObservedHead);
+
     // Note: Tag state is not stored in the database
     // Tags table only tracks tag-to-event relationships
     // Tag state should be computed by projectors when needed
-
-    private string SerializeEventPayload(IEventPayload payload) =>
-        _eventTypes.SerializeEventPayload(payload);
 
     private ResultBox<IEventPayload> DeserializeEventPayload(string eventType, string json)
     {

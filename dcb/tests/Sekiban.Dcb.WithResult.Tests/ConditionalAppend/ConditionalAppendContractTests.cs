@@ -5,8 +5,11 @@ using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Commands;
 using Sekiban.Dcb.Common;
+using Sekiban.Dcb.CosmosDb;
+using Sekiban.Dcb.DynamoDB;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
@@ -282,6 +285,24 @@ public class ConditionalAppendContractTests
     }
 
     [Fact]
+    public void ExpectedTagPositionCapability_IsStructurallyPostgresOnly_ForEveryOtherProductionProvider()
+    {
+        // These are the actual provider store types, not a name-based convention. The executor's shared capability gate
+        // therefore rejects before any write method for every listed provider; a future accidental implementation makes
+        // this inventory fail and requires an explicit protocol decision.
+        var providers = new[]
+        {
+            typeof(CoreInMemoryEventStore),
+            typeof(SqliteEventStore),
+            typeof(CosmosDbEventStore),
+            typeof(DynamoDbEventStore)
+        };
+        Assert.All(providers, provider =>
+            Assert.False(typeof(IExpectedTagPositionEventStore).IsAssignableFrom(provider),
+                $"{provider.FullName} must fail closed for PostgreSQL expected-tag-position enforcement."));
+    }
+
+    [Fact]
     public void Capability_Composite_IsIntersectionOfUnderlying()
     {
         var supports = WriteConditionCapabilityDescriptor.Supporting("A", WriteConditionKind.SingleEventUniqueKey);
@@ -335,6 +356,106 @@ public class ConditionalAppendContractTests
         Assert.IsType<ConditionNotSupportedException>(result.GetException());
         Assert.False(handlerInvoked); // fail-closed BEFORE the handler runs
         Assert.Empty((await plain.ReadAllSerializableEventsAsync()).GetValue()); // nothing allocated or written
+    }
+
+    [Fact]
+    public async Task Executor_ExpectedTagPositionOnUnsupportedStore_FailsClosed_BeforeHandlerOrWrite()
+    {
+        var domain = BuildDomainTypes();
+        var plain = new CoreInMemoryEventStore(domain.EventTypes); // deliberately not PostgreSQL expected-position capable
+        var accessor = new InMemoryObjectAccessor(plain, domain);
+        var executor = new GeneralSekibanExecutor(plain, accessor, domain);
+        var handlerInvoked = false;
+        var options = new CommandExecutionOptions
+        {
+            ExpectedTagPositions = new ExpectedTagPositionSpecification(
+                [new TagHeadExpectationEntry("default", "Marker:m", TagHeadExpectation.NoEnforcement())])
+        };
+
+        var result = await executor.ExecuteAsync(
+            new MarkerCommand(),
+            (MarkerCommand _, ICommandContext ctx) =>
+            {
+                handlerInvoked = true;
+                return ctx.AppendEvent(new UniqueMarkerEvent("v"), new MarkerTag("m"));
+            },
+            options);
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<ConditionNotSupportedException>(result.GetException());
+        Assert.False(handlerInvoked);
+        Assert.Empty((await plain.ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    [Fact]
+    public async Task Executor_ExpectedTagPositionOnActualSqliteStore_FailsClosed_BeforeHandlerOrWrite()
+    {
+        var domain = BuildDomainTypes();
+        var sqlite = new SqliteEventStore(
+            ":memory:",
+            domain.EventTypes,
+            new SqliteEventStoreOptions { AutoCreateDatabase = false });
+        var executor = new GeneralSekibanExecutor(sqlite, new InMemoryObjectAccessor(sqlite, domain), domain);
+        var handlerInvoked = false;
+
+        var result = await executor.ExecuteAsync(
+            new MarkerCommand(),
+            (MarkerCommand _, ICommandContext ctx) =>
+            {
+                handlerInvoked = true;
+                return ctx.AppendEvent(new UniqueMarkerEvent("v"), new MarkerTag("m"));
+            },
+            new CommandExecutionOptions
+            {
+                ExpectedTagPositions = new ExpectedTagPositionSpecification(
+                    [new TagHeadExpectationEntry("default", "Marker:m", TagHeadExpectation.NoEnforcement())])
+            });
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<ConditionNotSupportedException>(result.GetException());
+        Assert.False(handlerInvoked);
+    }
+
+    [Fact]
+    public async Task SerializedV2_UnsupportedInMemoryProvider_FailsClosedBeforeAnyProviderWrite()
+    {
+        var domain = BuildDomainTypes();
+        var plain = new CoreInMemoryEventStore(domain.EventTypes);
+        var executor = new GeneralSekibanExecutor(plain, new InMemoryObjectAccessor(plain, domain), domain);
+        var acceptor = new SerializedCommitAcceptor(executor);
+        var json = Encoding.UTF8.GetBytes(
+            """{"version":2,"eventCandidates":[{"payload":"AQID","eventPayloadName":"UniqueMarkerEvent","tags":["Marker:m"]}],"consistencyTags":[{"tag":"Marker:m","lastSortableUniqueId":""}],"expectedTagPositions":[{"serviceId":"default","tag":"Marker:m","expectation":{"kind":2,"position":null}}]}""");
+
+        var result = await acceptor.AcceptAsync(json);
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<ConditionNotSupportedException>(result.GetException());
+        Assert.Empty((await plain.ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    [Fact]
+    public async Task Executor_ConditionalAndExpectedPositionCombination_IsRejectedBeforeHandler()
+    {
+        var (executor, store, _) = NewConditional();
+        var handlerInvoked = false;
+        var result = await executor.ExecuteAsync(
+            new MarkerCommand(),
+            (MarkerCommand _, ICommandContext ctx) =>
+            {
+                handlerInvoked = true;
+                return ctx.AppendEvent(new UniqueMarkerEvent("v"), new MarkerTag("m"));
+            },
+            new CommandExecutionOptions
+            {
+                ConditionalAppend = new ConditionalAppendSpecification("op"),
+                ExpectedTagPositions = new ExpectedTagPositionSpecification(
+                    [new TagHeadExpectationEntry("default", "Marker:m", TagHeadExpectation.NoEnforcement())])
+            });
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<TagHeadExpectationValidationException>(result.GetException());
+        Assert.False(handlerInvoked);
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
     }
 
     // ---------------- Single-event contract (zero and multi both fail closed, before any store call) ----------------

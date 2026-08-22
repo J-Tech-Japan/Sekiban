@@ -18,7 +18,8 @@ namespace Sekiban.Dcb.Orleans;
 ///     Orleans-specific implementation of ISekibanExecutor
 ///     Uses Orleans grains for distributed command execution and queries
 /// </summary>
-public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider
+public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor,
+    ISerializedExpectedTagPositionSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider
 {
     /// <summary>Commands are executed by Orleans grains across the cluster.</summary>
     public ExecutorRuntimeDescriptor DescribeRuntime() =>
@@ -373,6 +374,12 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         SerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
         _generalExecutor.CommitSerializableEventsAsync(request, cancellationToken);
+
+    /// <summary>Forwards the additive V2 serialized expected-head contract to the common executor/store path.</summary>
+    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsWithExpectedTagPositionsAsync(
+        VersionedExpectedTagPositionSerializedCommitRequest request,
+        CancellationToken cancellationToken = default) =>
+        _generalExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken);
 
     private ResultBox<string> ResolveProjectorName(IQueryCommon queryCommon)
     {

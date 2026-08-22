@@ -17,10 +17,12 @@ public sealed class PostgresEventStoreFactory : IEventStoreFactory, IStorageDura
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Durable, "Postgres (per-service factory)");
 
-    /// <summary>Every store this factory builds is a conditional (single-event unique-key) store.</summary>
+    /// <summary>Every store this factory builds supports the PostgreSQL conditional and durable expected-head protocols.</summary>
     public WriteConditionCapabilityDescriptor DescribeWriteConditions() =>
         WriteConditionCapabilityDescriptor.Supporting(
-            "Postgres (per-service factory)", WriteConditionKind.SingleEventUniqueKey);
+            "Postgres (per-service factory)",
+            WriteConditionKind.SingleEventUniqueKey,
+            WriteConditionKind.ExpectedTagPosition);
 
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IEventTypes _eventTypes;

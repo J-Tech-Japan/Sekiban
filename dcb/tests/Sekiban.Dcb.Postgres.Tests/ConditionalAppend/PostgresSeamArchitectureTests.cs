@@ -17,6 +17,7 @@ public class PostgresSeamArchitectureTests
     private static readonly Type StoreType = typeof(PostgresEventStore);
     private static readonly Assembly PostgresAssembly = StoreType.Assembly;
     private const string HookName = "AfterConditionalCommitHook";
+    private const string TagHeadHookName = "TagHeadProtocolHook";
 
     // Authoritative assemblies resolved to the ones this project owns for scanning; only Postgres is owned here.
     private static Assembly? ResolveOwnedAssembly(string name) =>
@@ -43,27 +44,33 @@ public class PostgresSeamArchitectureTests
     }
 
     [Fact]
-    public void SeamInventory_ListsThePostgresHook_ResolvingToARealSettableProperty()
+    public void SeamInventory_ListsThePostgresHooks_ResolvingToRealSettableProperties()
     {
-        var entry = Assert.Single(SeamInventory.Entries.Where(e => e.AssemblyName == SeamInventory.PostgresAssembly));
-        Assert.Equal("Sekiban.Dcb.Postgres.PostgresEventStore", entry.DeclaringTypeFullName);
-        Assert.Equal(HookName, entry.PropertyName);
-
-        var type = PostgresAssembly.GetType(entry.DeclaringTypeFullName);
-        Assert.NotNull(type);
-        var prop = type!.GetProperty(entry.PropertyName,
-            BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-        Assert.NotNull(prop);
-        Assert.True(prop!.CanWrite, "The Postgres seam must be settable.");
-        Assert.NotNull(SeamWriteScanner.ResolveBackingField(prop)); // positive: the exact backing field is resolvable
+        var entries = SeamInventory.Entries.Where(e => e.AssemblyName == SeamInventory.PostgresAssembly)
+            .OrderBy(e => e.PropertyName, StringComparer.Ordinal).ToArray();
+        Assert.Equal(new[] { HookName, TagHeadHookName }, entries.Select(e => e.PropertyName).ToArray());
+        foreach (var entry in entries)
+        {
+            Assert.Equal("Sekiban.Dcb.Postgres.PostgresEventStore", entry.DeclaringTypeFullName);
+            var type = PostgresAssembly.GetType(entry.DeclaringTypeFullName);
+            Assert.NotNull(type);
+            var prop = type!.GetProperty(entry.PropertyName,
+                BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            Assert.NotNull(prop);
+            Assert.True(prop!.CanWrite, "The Postgres seam must be settable.");
+            Assert.NotNull(SeamWriteScanner.ResolveBackingField(prop)); // positive: exact backing field is resolvable
+        }
     }
 
     [Fact]
     public void Hook_IsNonPublic_Instance_NotStatic()
     {
         Assert.NotNull(StoreType.GetProperty(HookName, BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.NotNull(StoreType.GetProperty(TagHeadHookName, BindingFlags.Instance | BindingFlags.NonPublic));
         Assert.Null(StoreType.GetProperty(HookName, BindingFlags.Instance | BindingFlags.Public));
+        Assert.Null(StoreType.GetProperty(TagHeadHookName, BindingFlags.Instance | BindingFlags.Public));
         Assert.Null(StoreType.GetProperty(HookName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic));
+        Assert.Null(StoreType.GetProperty(TagHeadHookName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic));
     }
 
     [Fact]
@@ -72,6 +79,7 @@ public class PostgresSeamArchitectureTests
         foreach (var contract in new[] { typeof(IEventStore), typeof(IConditionalEventStore), typeof(IHotEventStore) })
         {
             Assert.Null(contract.GetProperty(HookName));
+            Assert.Null(contract.GetProperty(TagHeadHookName));
         }
     }
 

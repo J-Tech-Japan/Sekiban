@@ -7,6 +7,9 @@ public class SekibanDcbDbContext : DbContext
     public DbSet<DbEvent> Events { get; set; } = default!;
     public DbSet<DbTag> Tags { get; set; } = default!;
     public DbSet<DbMultiProjectionState> MultiProjectionStates { get; set; } = default!;
+    public DbSet<DbTagHead> TagHeads { get; set; } = default!;
+    public DbSet<DbTagHeadViolation> TagHeadViolations { get; set; } = default!;
+    public DbSet<DbTagHeadEnablementEpoch> TagHeadEnablementEpochs { get; set; } = default!;
 
     public SekibanDcbDbContext(DbContextOptions<SekibanDcbDbContext> options) : base(options)
     {
@@ -87,6 +90,52 @@ public class SekibanDcbDbContext : DbContext
                 "(\"IsOffloaded\" = false AND \"StateData\" IS NOT NULL) OR (\"IsOffloaded\" = true AND \"OffloadKey\" IS NOT NULL)"));
 
             entity.Property(s => s.ServiceId).IsRequired().HasMaxLength(64);
+        });
+
+        // SEK-G40 durable tag-head fence tables. Runtime paths only issue DML against these provisioned tables; migration
+        // is the sole DDL owner.
+        modelBuilder.Entity<DbTagHead>(entity =>
+        {
+            entity.ToTable("dcb_tag_heads", table => table.HasCheckConstraint(
+                "CK_TagHeads_Position_NotEmpty",
+                "\"HeadPosition\" IS NULL OR length(\"HeadPosition\") > 0"));
+            entity.HasKey(head => new { head.ServiceId, head.Tag });
+            entity.Property(head => head.ServiceId).IsRequired().HasMaxLength(64);
+            entity.Property(head => head.Tag).IsRequired();
+            entity.Property(head => head.HeadPosition).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<DbTagHeadViolation>(entity =>
+        {
+            entity.ToTable("dcb_tag_head_violations", table => table.HasCheckConstraint(
+                "CK_TagHeadViolations_Observed_NotEmpty",
+                "length(\"ObservedPosition\") > 0"));
+            entity.HasKey(violation => violation.Id);
+            entity.Property(violation => violation.ServiceId).IsRequired().HasMaxLength(64);
+            entity.Property(violation => violation.PreviousHeadPosition).IsRequired().HasMaxLength(100);
+            entity.Property(violation => violation.ObservedPosition).IsRequired().HasMaxLength(100);
+            entity.Property(violation => violation.DetectingWriter).IsRequired().HasMaxLength(128);
+            entity.HasIndex(violation => new { violation.ServiceId, violation.Tag, violation.DetectedAtUtc })
+                .HasDatabaseName("IX_TagHeadViolations_Service_Tag_Detected");
+            // The prior-empty boolean gives Postgres a non-null durable identity component, so retries cannot create
+            // duplicate audit records merely because a nullable unique-index component compares distinct.
+            entity.HasIndex(violation => new
+                {
+                    violation.ServiceId,
+                    violation.Tag,
+                    violation.PreviousHeadWasEmpty,
+                    violation.PreviousHeadPosition,
+                    violation.ObservedPosition
+                })
+                .IsUnique()
+                .HasDatabaseName("UX_TagHeadViolations_IdempotentRepair");
+        });
+
+        modelBuilder.Entity<DbTagHeadEnablementEpoch>(entity =>
+        {
+            entity.ToTable("dcb_tag_head_enablement_epochs");
+            entity.HasKey(epoch => epoch.ServiceId);
+            entity.Property(epoch => epoch.ServiceId).IsRequired().HasMaxLength(64);
         });
     }
 }

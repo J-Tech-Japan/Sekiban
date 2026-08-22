@@ -14,10 +14,16 @@ public enum WriteConditionKind
     ///     Single-event conditional append keyed by a caller-supplied idempotency key (the SEK-G15 contract): at most one
     ///     durable claim per key, with same-operation retries recognised and different-operation reuse rejected.
     /// </summary>
-    SingleEventUniqueKey = 1
+    SingleEventUniqueKey = 1,
 
-    // Future kinds (NOT part of this contract): BatchUniqueKey, ExpectedPosition. They are separate capability kinds so
-    // a store can support one without implying the others; add them here and have supporting stores list them.
+    /// <summary>
+    ///     Durable, service-scoped expected-position compare-and-set over every consistency tag in a batch. PostgreSQL
+    ///     is currently the only supporting provider; silence remains fail-closed.
+    /// </summary>
+    ExpectedTagPosition = 2
+
+    // Future kinds (NOT part of this contract): BatchUniqueKey. They are separate capability kinds so a store can
+    // support one without implying the others.
 }
 
 /// <summary>

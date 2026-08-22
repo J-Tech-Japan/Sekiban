@@ -17,6 +17,9 @@ namespace Sekiban.Dcb.Commands;
     DefaultIgnoreCondition = JsonIgnoreCondition.Never)]
 [JsonSerializable(typeof(SerializedCommitRequest))]
 [JsonSerializable(typeof(VersionedSerializedCommitRequest))]
+[JsonSerializable(typeof(VersionedExpectedTagPositionSerializedCommitRequest))]
 [JsonSerializable(typeof(SerializableEventCandidate))]
 [JsonSerializable(typeof(ConsistencyTagEntry))]
+[JsonSerializable(typeof(Sekiban.Dcb.Storage.TagHeadExpectationEntry))]
+[JsonSerializable(typeof(Sekiban.Dcb.Storage.TagHeadExpectation))]
 public partial class SerializedCommitWireJsonContext : JsonSerializerContext;

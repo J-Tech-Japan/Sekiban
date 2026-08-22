@@ -19,6 +19,7 @@ public static class SeamInventory
     public static readonly IReadOnlyList<SeamEntry> Entries = new[]
     {
         new SeamEntry(PostgresAssembly, "Sekiban.Dcb.Postgres.PostgresEventStore", "AfterConditionalCommitHook"),
+        new SeamEntry(PostgresAssembly, "Sekiban.Dcb.Postgres.PostgresEventStore", "TagHeadProtocolHook"),
         new SeamEntry(SqliteAssembly, "Sekiban.Dcb.Sqlite.SqliteEventStore", "AfterConditionalCommitHook"),
         new SeamEntry(CosmosAssembly, "Sekiban.Dcb.CosmosDb.CosmosDbEventStore", "AfterConditionalCommitHook"),
         new SeamEntry(CoreAssembly, "Sekiban.Dcb.Actors.CoreGeneralSekibanExecutor", "ConditionalEventIdFactory"),

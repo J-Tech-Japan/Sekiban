@@ -2,6 +2,7 @@ using System.Text.Json;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Storage;
 namespace Sekiban.Dcb.Commands;
 
 /// <summary>
@@ -14,9 +15,11 @@ namespace Sekiban.Dcb.Commands;
 ///     </para>
 ///     <para>
 ///         Phase 2 binds only the resolved shape: a missing version is the legacy official shape (lifted losslessly to V1
-///         via <see cref="LegacyUnversionedSerializedCommitAdapter" />); a known version binds
-///         <see cref="VersionedSerializedCommitRequest" />. Either way the same event candidates + consistency tags are
-///         handed to <see cref="ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync" /> with identical semantics
+///         via <see cref="LegacyUnversionedSerializedCommitAdapter" />); V1 binds
+///         <see cref="VersionedSerializedCommitRequest" />, while V2 binds
+///         <see cref="VersionedExpectedTagPositionSerializedCommitRequest" /> and requires its separate optional executor
+///         capability. Legacy/V1 event candidates + consistency tags are handed to
+///         <see cref="ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync" /> with identical semantics
 ///         (heterogeneous per-event tags preserved). A binding failure becomes a SANITIZED typed shape error — the raw
 ///         System.Text.Json exception is discarded, never attached — so hostile request content cannot leak through the
 ///         error surface, and a null-reference is never surfaced.
@@ -43,13 +46,15 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
                 return Task.FromResult(
                     ResultBox.Error<SerializedCommitResult>(
                         new UnsupportedSerializedCommitEnvelopeVersionException(
-                            discrimination.Version!.Value, VersionedSerializedCommitRequest.CurrentVersion)));
+                            discrimination.Version!.Value, VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion)));
 
             case SerializedCommitVersionKind.LegacyUnversioned:
                 return BindLegacyThenExecuteAsync(utf8Json, cancellationToken);
 
             case SerializedCommitVersionKind.KnownVersion:
-                return BindVersionedThenExecuteAsync(utf8Json, cancellationToken);
+                return discrimination.Version == VersionedSerializedCommitRequest.CurrentVersion
+                    ? BindVersionedThenExecuteAsync(utf8Json, cancellationToken)
+                    : BindExpectedTagPositionThenExecuteAsync(utf8Json, cancellationToken);
 
             default:
                 return Malformed(SerializedCommitShapeError.UnreadableJson);
@@ -110,6 +115,39 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
         }
 
         return ExecuteAsync(envelope, cancellationToken);
+    }
+
+    private Task<ResultBox<SerializedCommitResult>> BindExpectedTagPositionThenExecuteAsync(
+        ReadOnlyMemory<byte> utf8Json,
+        CancellationToken cancellationToken)
+    {
+        VersionedExpectedTagPositionSerializedCommitRequest? envelope;
+        try
+        {
+            envelope = JsonSerializer.Deserialize<VersionedExpectedTagPositionSerializedCommitRequest>(
+                utf8Json.Span, SerializedCommitWireContract.Options);
+        }
+        catch (JsonException)
+        {
+            return Malformed(SerializedCommitShapeError.VersionedPayloadInvalid);
+        }
+
+        if (envelope is null || envelope.Version != VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion ||
+            envelope.ConsistencyTags?.Any(entry => entry.LastSortableUniqueId is null) == true ||
+            envelope.ExpectedTagPositions is null)
+        {
+            return Malformed(SerializedCommitShapeError.VersionedPayloadInvalid);
+        }
+
+        // Feature detection occurs before forwarding to the older serialized interface, so an unsupported provider never
+        // gets an opportunity to interpret V2 as an unconditional V1 write.
+        if (_executor is not ISerializedExpectedTagPositionSekibanDcbExecutor expectedPositionExecutor)
+        {
+            return Task.FromResult(ResultBox.Error<SerializedCommitResult>(
+                new ConditionNotSupportedException(Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition, "resolved serialized executor")));
+        }
+
+        return expectedPositionExecutor.CommitSerializableEventsWithExpectedTagPositionsAsync(envelope, cancellationToken);
     }
 
     private Task<ResultBox<SerializedCommitResult>> ExecuteAsync(

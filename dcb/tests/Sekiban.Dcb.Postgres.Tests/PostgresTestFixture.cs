@@ -11,6 +11,10 @@ public class PostgresTestFixture : IAsyncLifetime
 {
     private PostgreSqlContainer? _postgresContainer;
     private ServiceProvider? _serviceProvider;
+    private string? _connectionString;
+
+    /// <summary>Test-only connection string for independent-principal / unprovisioned-schema integration proofs.</summary>
+    public string ConnectionString => _connectionString ?? throw new InvalidOperationException("Test fixture not initialized");
 
     public IEventStore EventStore => _serviceProvider?.GetRequiredService<IEventStore>() ??
         throw new InvalidOperationException("Test fixture not initialized");
@@ -38,6 +42,7 @@ public class PostgresTestFixture : IAsyncLifetime
         await _postgresContainer.StartAsync();
 
         var connectionString = _postgresContainer.GetConnectionString();
+        _connectionString = connectionString;
 
         // Setup service provider
         var services = new ServiceCollection();
@@ -79,7 +84,8 @@ public class PostgresTestFixture : IAsyncLifetime
         await using var context = await DbContextFactory.CreateDbContextAsync();
 
         // Clear all data but keep schema
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE dcb_events, dcb_tags RESTART IDENTITY CASCADE");
+        await context.Database.ExecuteSqlRawAsync(
+            "TRUNCATE TABLE dcb_events, dcb_tags, dcb_tag_heads, dcb_tag_head_violations, dcb_tag_head_enablement_epochs RESTART IDENTITY CASCADE");
     }
 
     public async Task<SekibanDcbDbContext> GetDbContextAsync() => await DbContextFactory.CreateDbContextAsync();

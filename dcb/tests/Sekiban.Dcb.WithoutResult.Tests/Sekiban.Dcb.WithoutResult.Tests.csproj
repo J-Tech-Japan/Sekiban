@@ -33,6 +33,9 @@
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans.WithoutResult\Sekiban.Dcb.Orleans.WithoutResult.csproj"/>
         <ProjectReference Include="..\Sekiban.Dcb.TestSupport\Sekiban.Dcb.TestSupport.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.CosmosDb\Sekiban.Dcb.CosmosDb.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.DynamoDB\Sekiban.Dcb.DynamoDB.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Sqlite\Sekiban.Dcb.Sqlite.csproj"/>
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain.WithoutResult\Dcb.Domain.WithoutResult.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core.Testing\Sekiban.Dcb.Core.Testing.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult.Testing\Sekiban.Dcb.WithoutResult.Testing.csproj" />

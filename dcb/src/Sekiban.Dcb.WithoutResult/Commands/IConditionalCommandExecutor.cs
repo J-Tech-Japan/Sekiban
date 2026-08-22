@@ -3,7 +3,8 @@ namespace Sekiban.Dcb.Commands;
 
 /// <summary>
 ///     OPTIONAL, additive executor capability (exception-throwing facade) for command execution with
-///     <see cref="CommandExecutionOptions" /> — currently, conditional (unique-key) single-event append. Separate from
+///     <see cref="CommandExecutionOptions" /> — conditional (unique-key) single-event append and/or the additive
+///     PostgreSQL expected-tag-position protocol. Separate from
 ///     <see cref="ICommandExecutor" />/<c>ISekibanExecutor</c> so existing implementors compile untouched; feature-detect
 ///     with <c>is IConditionalCommandExecutor</c>. A typed failure (KeyReuseConflict / ConditionNotSupported) is thrown
 ///     through the guarded boundary, preserving the original exception.
