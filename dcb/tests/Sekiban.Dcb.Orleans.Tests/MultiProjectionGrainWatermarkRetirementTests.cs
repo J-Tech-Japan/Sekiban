@@ -18,6 +18,7 @@ using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Runtime;
+using Sekiban.Dcb.Runtime.Native;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
@@ -86,8 +87,6 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.Equal(intermediate.LastSortableUniqueId, _harness.StateStore.LatestRecord!.LastSortableUniqueId);
 
         var firstCheckpointHost = _harness.Hosts.First(host => host.AppliedEventIds.Count > 0);
-        Assert.True(firstCheckpointHost.CompactionCalls > 0);
-        Assert.Empty(firstCheckpointHost.NonIncrementalRetention);
         Assert.True(firstCheckpointHost.AppliedEventIds.Count > 0);
 
         // Force a genuine activation replacement. The replacement must restore the durable intermediate record and
@@ -110,6 +109,42 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.NotEqual(seed.OldSafeVersion, intermediate.EventsProcessed);
         Assert.True(_harness.ProviderStorage.WriteCalls > 0);
         Assert.True((await fresh.GetHealthStatusAsync()).IsHealthy);
+    }
+
+    [Fact]
+    public async Task Known_present_restore_failure_convergence_compacts_the_real_dual_state_safe_event_history_after_durable_checkpoint()
+    {
+        var projectorName = G38Projector.MultiProjectorName;
+        var events = BuildEvents(5_000);
+        var seed = await _harness.SeedKnownPresentCheckpointAsync(projectorName, oldSafeVersion: 10_000, events);
+        _harness.UseNativeHost = true;
+        _harness.RestoreBehavior = RestoreBehavior.ResultBoxFailure;
+
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(projectorName);
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(
+            () => _harness.NativeHosts
+                .SelectMany(host => host.CompactionObservations)
+                .Any(observation => observation.RealAllSafeEventsCountBeforeCompaction > 0),
+            TimeSpan.FromSeconds(15),
+            () => $"nativeHosts={_harness.NativeHosts.Count}, writes={_harness.ProviderStorage.WriteCalls}, records={_harness.StateStore.Records.Count}, logs={string.Join(" | ", _harness.LoggerProvider.Messages.TakeLast(12))}");
+
+        var observation = Assert.Single(
+            _harness.NativeHosts
+                .SelectMany(host => host.CompactionObservations),
+            observation => observation.RealAllSafeEventsCountBeforeCompaction > 0);
+        Assert.Equal(
+            typeof(Dictionary<,>),
+            observation.RealAllSafeEventsCollection.GetType().GetGenericTypeDefinition());
+        Assert.True(observation.DurableIntermediateCheckpointWasCommittedBeforeCompaction);
+        Assert.True(observation.RealAllSafeEventsCountBeforeCompaction > 0);
+        Assert.Equal(0, observation.RealAllSafeEventsCountAfterCompaction);
+
+        var intermediate = Assert.Single(
+            _harness.StateStore.Records,
+            record => record.EventsProcessed > 0);
+        Assert.InRange(intermediate.EventsProcessed, 1, seed.OldSafeVersion - 1);
+        Assert.Equal(intermediate.LastSortableUniqueId, _harness.StateStore.LatestRecord!.LastSortableUniqueId);
     }
 
     [Fact]
@@ -209,6 +244,40 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
     }
 
     [Fact]
+    public async Task Pre_record_query_resultbox_error_does_not_retire_the_existing_watermark()
+    {
+        const string projectorName = "g38-pre-record-resultbox-error";
+        await _harness.SeedKnownPresentCheckpointAsync(projectorName, oldSafeVersion: 700, BuildEvents(0));
+        _harness.GetLatestBehavior = GetLatestBehavior.ResultBoxFailure;
+
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(projectorName);
+        await grain.GetStatusAsync();
+        await Task.Delay(300);
+
+        var committed = Assert.Single(
+            _harness.ProviderStorage.CommittedStates,
+            state => string.Equals(state.ProjectorName, projectorName, StringComparison.Ordinal));
+        Assert.Equal(700, committed.LastGoodSafeVersion);
+        Assert.Equal(701, committed.LastGoodPayloadBytes);
+        Assert.Equal(702, committed.LastGoodOriginalSizeBytes);
+        Assert.Equal(703, committed.LastGoodEventsProcessed);
+
+        var provider = _harness.ProviderStorage.Get(projectorName);
+        Assert.NotNull(provider);
+        Assert.Equal(700, provider!.LastGoodSafeVersion);
+        Assert.Equal(701, provider.LastGoodPayloadBytes);
+        Assert.Equal(702, provider.LastGoodOriginalSizeBytes);
+        Assert.Equal(703, provider.LastGoodEventsProcessed);
+        Assert.Equal(0, _harness.ProviderStorage.RetirementMetadataMaintenanceCommitCount);
+        Assert.Equal(0, _harness.ProviderStorage.WriteAttempts);
+        Assert.Equal(0, _harness.ProviderStorage.WriteCalls);
+        Assert.DoesNotContain(
+            _harness.LoggerProvider.Messages,
+            message => message.Contains("Integrity watermark retired", StringComparison.Ordinal));
+        Assert.False((await grain.GetHealthStatusAsync()).IsHealthy);
+    }
+
+    [Fact]
     public async Task Retirement_write_failure_rolls_back_and_does_not_start_rebuild_or_claim_checkpoint()
     {
         const string projectorName = "g38-retirement-write-failure";
@@ -241,7 +310,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
     }
 
     [Fact]
-    public async Task Retirement_write_then_deactivation_persists_zero_and_fresh_activation_consumes_it()
+    public async Task Retirement_write_then_replacement_reads_zero_and_durably_checkpoints_fresh_events_below_old_w()
     {
         const string projectorName = "g38-crash-window";
         await _harness.SeedKnownPresentCheckpointAsync(projectorName, oldSafeVersion: 700, BuildEvents(20));
@@ -278,20 +347,71 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.Empty(_harness.Hosts.First(host => host.ProjectorName == projectorName).AppliedEventIds);
 
         var hostsBeforeFreshActivation = _harness.Hosts.ToHashSet();
+        var externalRecordsBeforeReplacement = _harness.StateStore.Records.Count;
+        var committedStatesBeforeReplacement = _harness.ProviderStorage.CommittedStates.Count;
+        var providerWritesBeforeReplacement = _harness.ProviderStorage.WriteCalls;
+        var providerReadsBeforeReplacement = _harness.ProviderStorage.ReadStates.Count;
         _harness.RestoreBehavior = RestoreBehavior.None;
         _harness.EventStore.BlockReads = false;
+        _harness.EventStore.SetEvents([]);
         var fresh = _cluster.Client.GetGrain<IMultiProjectionGrain>(projectorName);
         await fresh.GetStatusAsync();
         await WaitUntilAsync(
             () => _harness.Hosts.Any(host => !hostsBeforeFreshActivation.Contains(host) && host.RestoreCalls > 0),
             TimeSpan.FromSeconds(10));
 
-        var freshRestore = _harness.StateStore.OpenedRecords.Last(record => record.EventsProcessed == 0);
-        Assert.Equal(zeroCheckpoint.EventsProcessed, freshRestore.EventsProcessed);
-        Assert.Equal(zeroCheckpoint.LastSortableUniqueId, freshRestore.LastSortableUniqueId);
+        await WaitUntilAsync(
+            () => _harness.ProviderStorage.ReadStates
+                .Skip(providerReadsBeforeReplacement)
+                .Any(IsRetiredState),
+            TimeSpan.FromSeconds(10),
+            () => string.Join(
+                "; ",
+                _harness.ProviderStorage.ReadStates
+                    .Skip(providerReadsBeforeReplacement)
+                    .Select(state => $"{state.LastGoodSafeVersion}/{state.LastGoodPayloadBytes}/{state.LastGoodOriginalSizeBytes}/{state.LastGoodEventsProcessed}")));
+        var replacementRead = _harness.ProviderStorage.ReadStates
+            .Skip(providerReadsBeforeReplacement)
+            .Last(IsRetiredState);
+        Assert.Equal(0, replacementRead.LastGoodSafeVersion);
+        Assert.Equal(0, replacementRead.LastGoodPayloadBytes);
+        Assert.Equal(0, replacementRead.LastGoodOriginalSizeBytes);
+        Assert.Equal(0, replacementRead.LastGoodEventsProcessed);
+
+        var replacementHost = _harness.Hosts.Single(
+            host => !hostsBeforeFreshActivation.Contains(host) && host.RestoreCalls > 0);
+        var freshEvents = BuildEvents(3);
+        await fresh.AddEventsAsync(freshEvents);
+        var persistResult = await fresh.PersistStateAsync();
+        Assert.True(persistResult.IsSuccess);
+        Assert.True(persistResult.GetValue());
+
+        await WaitUntilAsync(
+            () => _harness.StateStore.Records
+                .Skip(externalRecordsBeforeReplacement)
+                .Any(record => record.EventsProcessed > 0),
+            TimeSpan.FromSeconds(10));
+        var replacementCheckpoint = _harness.StateStore.Records
+            .Skip(externalRecordsBeforeReplacement)
+            .Last(record => record.EventsProcessed > 0);
+        Assert.InRange(replacementCheckpoint.EventsProcessed, 1, 699);
+        Assert.Equal(freshEvents[^1].SortableUniqueIdValue, replacementCheckpoint.LastSortableUniqueId);
+        Assert.Equal(
+            freshEvents.Select(item => item.Id),
+            replacementHost.AppliedEventIds);
+
+        var provider = _harness.ProviderStorage.Get(projectorName);
+        Assert.NotNull(provider);
+        Assert.InRange(provider!.LastGoodSafeVersion, 1, 699);
+        Assert.InRange(provider.LastGoodEventsProcessed, 1, 699);
+        Assert.True(provider.LastGoodPayloadBytes > 0);
+        Assert.True(provider.LastGoodOriginalSizeBytes > 0);
+        Assert.True(_harness.ProviderStorage.WriteCalls > providerWritesBeforeReplacement);
         Assert.Contains(
-            _harness.EventStore.ReadSinceValues,
-            since => since is null || string.IsNullOrEmpty(since));
+            _harness.ProviderStorage.CommittedStates.Skip(committedStatesBeforeReplacement),
+            state => state.EventsProcessed == replacementCheckpoint.EventsProcessed &&
+                     state.LastGoodSafeVersion == provider.LastGoodSafeVersion &&
+                     state.LastGoodEventsProcessed == provider.LastGoodEventsProcessed);
     }
 
     [Fact]
@@ -445,7 +565,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
     {
         return Enumerable.Range(0, count)
             .Select(index => new SerializableEvent(
-                [1],
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new G38Event(index.ToString())),
                 SortableUniqueId.GetTickString(1_000 + index) + SortableUniqueId.GetIdString(Guid.NewGuid()),
                 Guid.NewGuid(),
                 new EventMetadata("g38", "test", "watermark"),
@@ -495,9 +615,9 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
                         SkipPersistWhenSafeCheckpointUnchanged = true
                     });
                     services.AddSekibanDcbNativeRuntime();
-                    // The test factory must be registered after the native runtime's default factory so the real grain
-                    // activation path uses the deterministic host below.
-                    services.AddSingleton<IProjectionActorHostFactory>(ActiveHarness.HostFactory);
+                    // The test factory must be registered after the native runtime's default factory so each test can
+                    // select either the deterministic host or an observing wrapper around the real native host.
+                    services.AddSingleton<IProjectionActorHostFactory>(sp => ActiveHarness!.CreateHostFactory(sp));
                     services.AddGrainStorage("OrleansStorage", (_, _) => ActiveHarness!.ProviderStorage);
                 })
                 .AddMemoryGrainStorageAsDefault()
@@ -537,6 +657,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
     {
         Success,
         Absent,
+        ResultBoxFailure,
         Throw
     }
 
@@ -547,10 +668,11 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         public WatermarkEventStore EventStore { get; } = new();
         public WatermarkStateStore StateStore { get; } = new();
         public WatermarkGrainStorage ProviderStorage { get; } = new();
-        public WatermarkHostFactory HostFactory { get; }
         public ConcurrentBag<WatermarkProjectionHost> Hosts { get; } = new();
+        public ConcurrentBag<ObservingNativeProjectionHost> NativeHosts { get; } = new();
         public RecordingLoggerProvider LoggerProvider { get; } = new();
         public RestoreBehavior RestoreBehavior { get; set; }
+        public bool UseNativeHost { get; set; }
         public StateStreamBehavior StreamBehavior
         {
             get => StateStore.StreamBehavior;
@@ -563,22 +685,26 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             set => StateStore.GetLatestBehavior = value;
         }
 
-        public WatermarkHarness()
-        {
-            HostFactory = new WatermarkHostFactory(this);
-        }
-
         public void Reset()
         {
             EventStore.Reset();
             StateStore.Reset();
             ProviderStorage.Reset();
             while (Hosts.TryTake(out _)) { }
+            while (NativeHosts.TryTake(out _)) { }
             LoggerProvider.Clear();
             RestoreBehavior = RestoreBehavior.None;
+            UseNativeHost = false;
             StreamBehavior = StateStreamBehavior.Success;
             GetLatestBehavior = GetLatestBehavior.Success;
         }
+
+        public IProjectionActorHostFactory CreateHostFactory(IServiceProvider serviceProvider) =>
+            new WatermarkHostFactory(
+                this,
+                serviceProvider.GetRequiredService<DcbDomainTypes>(),
+                serviceProvider,
+                serviceProvider.GetRequiredService<NativeMultiProjectionProjectionPrimitive>());
 
         public async Task<SeededCheckpoint> SeedKnownPresentCheckpointAsync(
             string projectorName,
@@ -621,18 +747,193 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         }
     }
 
-    private sealed class WatermarkHostFactory(WatermarkHarness harness) : IProjectionActorHostFactory
+    private sealed class WatermarkHostFactory(
+        WatermarkHarness harness,
+        DcbDomainTypes domainTypes,
+        IServiceProvider serviceProvider,
+        NativeMultiProjectionProjectionPrimitive primitive) : IProjectionActorHostFactory
     {
         public IProjectionActorHost Create(
             string projectorName,
             GeneralMultiProjectionActorOptions? options = null,
             ILogger? logger = null)
         {
+            if (harness.UseNativeHost)
+            {
+                var nativeHost = new ObservingNativeProjectionHost(
+                    harness,
+                    projectorName,
+                    new NativeProjectionActorHost(
+                        domainTypes,
+                        serviceProvider,
+                        primitive,
+                        projectorName,
+                        options,
+                        logger));
+                harness.NativeHosts.Add(nativeHost);
+                return nativeHost;
+            }
+
             var host = new WatermarkProjectionHost(harness, projectorName);
             harness.Hosts.Add(host);
             return host;
         }
     }
+
+    private sealed class ObservingNativeProjectionHost(
+        WatermarkHarness harness,
+        string projectorName,
+        NativeProjectionActorHost inner) : IProjectionActorHost
+    {
+        public ConcurrentQueue<NativeCompactionObservation> CompactionObservations { get; } = new();
+
+        public Sekiban.Dcb.Actors.ProjectionFaultDescriptor? CurrentFault => inner.CurrentFault;
+
+        public Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true) =>
+            inner.AddSerializableEventsAsync(events, finishedCatchUp);
+
+        public Task<ResultBox<ProjectionStateMetadata>> GetStateMetadataAsync(bool includeUnsafe = true) =>
+            inner.GetStateMetadataAsync(includeUnsafe);
+
+        public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true) =>
+            inner.GetStateAsync(canGetUnsafeState);
+
+        public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync() => inner.GetProjectionHeadStatusAsync();
+
+        public Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
+            Stream target,
+            bool canGetUnsafeState,
+            CancellationToken cancellationToken) =>
+            inner.WriteSnapshotToStreamAsync(target, canGetUnsafeState, cancellationToken);
+
+        public Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+            Stream target,
+            bool canGetUnsafeState,
+            int offloadThresholdBytes,
+            CancellationToken cancellationToken) =>
+            inner.WriteSnapshotForPersistenceToStreamAsync(
+                target,
+                canGetUnsafeState,
+                offloadThresholdBytes,
+                cancellationToken);
+
+        public Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken)
+        {
+            if (harness.RestoreBehavior == RestoreBehavior.ResultBoxFailure)
+            {
+                return Task.FromResult(ResultBox.Error<bool>(
+                    new InvalidOperationException("injected native host restore ResultBox failure")));
+            }
+
+            if (harness.RestoreBehavior == RestoreBehavior.Throw)
+            {
+                throw new InvalidOperationException("injected native host restore throw");
+            }
+
+            return inner.RestoreSnapshotFromStreamAsync(source, cancellationToken);
+        }
+
+        public Task<ResultBox<SerializableQueryResult>> ExecuteQueryAsync(
+            SerializableQueryParameter query,
+            int? safeVersion,
+            string? safeThreshold,
+            DateTime? safeThresholdTime,
+            int? unsafeVersion) =>
+            inner.ExecuteQueryAsync(query, safeVersion, safeThreshold, safeThresholdTime, unsafeVersion);
+
+        public Task<ResultBox<SerializableListQueryResult>> ExecuteListQueryAsync(
+            SerializableQueryParameter query,
+            int? safeVersion,
+            string? safeThreshold,
+            DateTime? safeThresholdTime,
+            int? unsafeVersion) =>
+            inner.ExecuteListQueryAsync(query, safeVersion, safeThreshold, safeThresholdTime, unsafeVersion);
+
+        public void ForcePromoteBufferedEvents() => inner.ForcePromoteBufferedEvents();
+
+        public void CompactSafeHistory()
+        {
+            var realAllSafeEvents = GetRealAllSafeEventsCollection();
+            var before = GetCollectionCount(realAllSafeEvents);
+            var durableIntermediateCheckpointWasCommitted =
+                harness.StateStore.Records.Any(record =>
+                    string.Equals(record.ProjectorName, projectorName, StringComparison.Ordinal) &&
+                    record.EventsProcessed > 0) &&
+                harness.ProviderStorage.Get(projectorName) is { } provider &&
+                provider.LastGoodSafeVersion > 0 &&
+                provider.LastGoodEventsProcessed > 0;
+
+            inner.CompactSafeHistory();
+
+            CompactionObservations.Enqueue(new NativeCompactionObservation(
+                realAllSafeEvents,
+                before,
+                GetCollectionCount(realAllSafeEvents),
+                durableIntermediateCheckpointWasCommitted));
+        }
+
+        public void ForcePromoteAllBufferedEvents() => inner.ForcePromoteAllBufferedEvents();
+
+        public Task<string> GetSafeLastSortableUniqueIdAsync() => inner.GetSafeLastSortableUniqueIdAsync();
+
+        public Task<bool> IsSortableUniqueIdReceivedAsync(string sortableUniqueId) =>
+            inner.IsSortableUniqueIdReceivedAsync(sortableUniqueId);
+
+        public long EstimateStateSizeBytes(bool includeUnsafeDetails) => inner.EstimateStateSizeBytes(includeUnsafeDetails);
+
+        public string PeekCurrentSafeWindowThreshold() => inner.PeekCurrentSafeWindowThreshold();
+
+        public string GetProjectorVersion() => inner.GetProjectorVersion();
+
+        public Task<ResultBox<bool>> RewriteSnapshotVersionAsync(
+            Stream source,
+            Stream target,
+            string newVersion,
+            CancellationToken cancellationToken) =>
+            inner.RewriteSnapshotVersionAsync(source, target, newVersion, cancellationToken);
+
+        public void RestoreFault(Sekiban.Dcb.Actors.ProjectionFaultDescriptor fault) => inner.RestoreFault(fault);
+
+        public void ClearFaultForRebuild() => inner.ClearFaultForRebuild();
+
+        private object GetRealAllSafeEventsCollection()
+        {
+            var actorField = typeof(NativeProjectionActorHost).GetField(
+                "_actor",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            var actor = actorField?.GetValue(inner) ?? throw new InvalidOperationException("Native actor was not found.");
+            var accessorField = actor.GetType().GetField(
+                "_singleStateAccessor",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            var wrapper = accessorField?.GetValue(actor) ??
+                throw new InvalidOperationException("Native dual-state wrapper was not found.");
+            if (!wrapper.GetType().IsGenericType ||
+                wrapper.GetType().GetGenericTypeDefinition() != typeof(DualStateProjectionWrapper<>))
+            {
+                throw new InvalidOperationException("Native host did not create a DualStateProjectionWrapper.");
+            }
+
+            var allSafeEventsField = wrapper.GetType().GetField(
+                "_allSafeEvents",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            return allSafeEventsField?.GetValue(wrapper) ??
+                throw new InvalidOperationException("Native wrapper _allSafeEvents collection was not found.");
+        }
+
+        private static int GetCollectionCount(object collection)
+        {
+            var countProperty = collection.GetType().GetProperty("Count");
+            return countProperty?.GetValue(collection) is int count
+                ? count
+                : throw new InvalidOperationException("Native wrapper _allSafeEvents collection has no count.");
+        }
+    }
+
+    private sealed record NativeCompactionObservation(
+        object RealAllSafeEventsCollection,
+        int RealAllSafeEventsCountBeforeCompaction,
+        int RealAllSafeEventsCountAfterCompaction,
+        bool DurableIntermediateCheckpointWasCommittedBeforeCompaction);
 
     private sealed class WatermarkProjectionHost(WatermarkHarness harness, string projectorName) : IProjectionActorHost
     {
@@ -642,20 +943,13 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
 
         public string ProjectorName { get; } = projectorName;
         public int RestoreCalls { get; private set; }
-        public int CompactionCalls { get; private set; }
         public List<Guid> AppliedEventIds => _appliedEventIds;
-        public HashSet<Guid> NonIncrementalRetention { get; } = [];
 
         public void ForceSafeVersion(int version) => _forcedSafeVersion = version;
 
         public Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
         {
             _appliedEventIds.AddRange(events.Select(item => item.Id));
-            foreach (var item in events)
-            {
-                NonIncrementalRetention.Add(item.Id);
-            }
-
             if (events.Count > 0)
             {
                 _safePosition = events[^1].SortableUniqueIdValue;
@@ -734,11 +1028,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
 
         public void ForcePromoteBufferedEvents() { }
 
-        public void CompactSafeHistory()
-        {
-            CompactionCalls++;
-            NonIncrementalRetention.Clear();
-        }
+        public void CompactSafeHistory() { }
 
         public void ForcePromoteAllBufferedEvents() { }
 
@@ -896,6 +1186,12 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             string projectorVersion,
             CancellationToken cancellationToken = default)
         {
+            if (GetLatestBehavior == GetLatestBehavior.ResultBoxFailure)
+            {
+                return Task.FromResult(ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
+                    new InvalidOperationException("injected GetLatestForVersionAsync ResultBox failure")));
+            }
+
             if (GetLatestBehavior == GetLatestBehavior.Throw)
             {
                 throw new InvalidOperationException("injected GetLatestForVersionAsync throw");
@@ -1066,10 +1362,13 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         private readonly Dictionary<string, MultiProjectionGrainState> _states = new(StringComparer.Ordinal);
         private int _writeCalls;
         private int _writeAttempts;
+        private int _retirementMetadataMaintenanceCommitCount;
         public bool FailWrites { get; set; }
         public int WriteCalls => Volatile.Read(ref _writeCalls);
         public int WriteAttempts => Volatile.Read(ref _writeAttempts);
+        public int RetirementMetadataMaintenanceCommitCount => Volatile.Read(ref _retirementMetadataMaintenanceCommitCount);
         public List<MultiProjectionGrainState> CommittedStates { get; } = [];
+        public List<MultiProjectionGrainState> ReadStates { get; } = [];
 
         public void Reset()
         {
@@ -1077,8 +1376,10 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             {
                 _states.Clear();
                 CommittedStates.Clear();
+                ReadStates.Clear();
                 Volatile.Write(ref _writeCalls, 0);
                 Volatile.Write(ref _writeAttempts, 0);
+                Volatile.Write(ref _retirementMetadataMaintenanceCommitCount, 0);
             }
             FailWrites = false;
         }
@@ -1088,6 +1389,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             lock (_gate)
             {
                 _states[grainKey] = state.Clone();
+                CommittedStates.Add(state.Clone());
             }
         }
 
@@ -1111,14 +1413,18 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             lock (_gate)
             {
                 var key = grainId.ToString();
-                var pair = _states.FirstOrDefault(item =>
-                    string.Equals(item.Key, key, StringComparison.Ordinal) ||
-                    key.EndsWith("/" + item.Key, StringComparison.Ordinal) ||
-                    key.EndsWith("@" + item.Key, StringComparison.Ordinal));
+                var pair = _states
+                    .Where(item =>
+                        string.Equals(item.Key, key, StringComparison.Ordinal) ||
+                        key.EndsWith("/" + item.Key, StringComparison.Ordinal) ||
+                        key.EndsWith("@" + item.Key, StringComparison.Ordinal))
+                    .OrderByDescending(item => item.Key.Length)
+                    .FirstOrDefault();
                 if (pair.Value is { } state && grainState.State is MultiProjectionGrainState)
                 {
                     grainState.State = (T)(object)state.Clone();
                     grainState.RecordExists = true;
+                    ReadStates.Add(state.Clone());
                 }
                 else
                 {
@@ -1143,6 +1449,10 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
                 {
                     _states[grainId.ToString()] = state.Clone();
                     CommittedStates.Add(state.Clone());
+                    if (IsRetiredState(state))
+                    {
+                        Interlocked.Increment(ref _retirementMetadataMaintenanceCommitCount);
+                    }
                     Interlocked.Increment(ref _writeCalls);
                 }
             }

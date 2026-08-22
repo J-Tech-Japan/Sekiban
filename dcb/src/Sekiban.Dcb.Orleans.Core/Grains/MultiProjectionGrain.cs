@@ -111,6 +111,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private string? _activationFailureReason;
     private bool _restoreRetirementFailed;
 
+    // A known-record restore failure durably clears the four-field integrity watermark before replay begins. A
+    // zero-progress deactivation in that same activation must not repopulate only the payload-size portions of that
+    // watermark; keep the retired all-zero bundle until a fresh safe checkpoint is durably established.
+    private bool _retiredWatermarkAwaitingFreshSafeCheckpoint;
+
     // Orleans infrastructure
     private IAsyncStream<SerializableEvent>? _orleansStream;
     private StreamSubscriptionHandle<SerializableEvent>? _orleansStreamHandle;
@@ -924,6 +929,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 // derived record before the ordered rebuild so the existing external-store ordering check remains
                 // unchanged and no recovery bypass is needed. The authoritative event stream remains untouched.
                 await InvalidateExternalDerivedSnapshotAsync();
+                _retiredWatermarkAwaitingFreshSafeCheckpoint = true;
                 _logger.LogWarning(
                     "[{ProjectorName}] Integrity watermark retired after known-present snapshot restore failure. "
                     + "Failure={FailureReason}",
@@ -1577,25 +1583,29 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 // Update LastGood fields only when the external store save succeeded.
                 if (externalStoreSaved)
                 {
-                    if (safeVersion.HasValue && safeVersion.Value > 0)
+                    if (safeVersion is > 0)
                     {
                         s.LastGoodSafeVersion = safeVersion.Value;
                     }
-                    if (envelopeSize > 0)
-                    {
-                        s.LastGoodPayloadBytes = envelopeSize;
-                    }
-                    if (originalSizeBytes > 0)
-                    {
-                        s.LastGoodOriginalSizeBytes = originalSizeBytes;
-                    }
-                    s.LastGoodEventsProcessed = _eventsProcessed;
 
-                    // SEK-G18 #6: the rebuilt checkpoint is now durably committed to the external store, so the durable
-                    // rebuild marker can be cleared — a subsequent activation may safely restore this fresh checkpoint.
-                    s.RebuildRequired = false;
-                    s.RebuildOffendingEventId = null;
-                    s.RebuildOffendingPosition = null;
+                    if (!_retiredWatermarkAwaitingFreshSafeCheckpoint || safeVersion is > 0)
+                    {
+                        if (envelopeSize > 0)
+                        {
+                            s.LastGoodPayloadBytes = envelopeSize;
+                        }
+                        if (originalSizeBytes > 0)
+                        {
+                            s.LastGoodOriginalSizeBytes = originalSizeBytes;
+                        }
+                        s.LastGoodEventsProcessed = _eventsProcessed;
+
+                        // SEK-G18 #6: the rebuilt checkpoint is now durably committed to the external store, so the durable
+                        // rebuild marker can be cleared — a subsequent activation may safely restore this fresh checkpoint.
+                        s.RebuildRequired = false;
+                        s.RebuildOffendingEventId = null;
+                        s.RebuildOffendingPosition = null;
+                    }
                 }
 
                 // Clear legacy fields
@@ -1606,6 +1616,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             await WriteOrleansStateWithRetryAsync(projectorName, ApplyPersistFields);
+            if (externalStoreSaved && safeVersion is > 0)
+            {
+                _retiredWatermarkAwaitingFreshSafeCheckpoint = false;
+            }
             _host.CompactSafeHistory();
             CompactRetainedCollections();
             _lastError = null;
@@ -1698,13 +1712,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                     if (externalStoreSaved)
                     {
-                        if (safeVersion.HasValue && safeVersion.Value > 0)
-                            s.LastGoodSafeVersion = safeVersion.Value;
+                    if (safeVersion is > 0)
+                    {
+                        s.LastGoodSafeVersion = safeVersion.Value;
+                    }
+                    if (!_retiredWatermarkAwaitingFreshSafeCheckpoint || safeVersion is > 0)
+                    {
                         if (tempFileSize > 0)
                             s.LastGoodPayloadBytes = tempFileSize;
                         if (tempFileSize > 0)
                             s.LastGoodOriginalSizeBytes = tempFileSize;
                         s.LastGoodEventsProcessed = _eventsProcessed;
+                    }
                     }
 
                     s.SerializedState = null;
@@ -1714,6 +1733,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
 
                 await WriteOrleansStateWithRetryAsync(projectorName, ApplyPersistFields);
+                if (externalStoreSaved && safeVersion is > 0)
+                {
+                    _retiredWatermarkAwaitingFreshSafeCheckpoint = false;
+                }
                 _host.CompactSafeHistory();
                 CompactRetainedCollections();
 
