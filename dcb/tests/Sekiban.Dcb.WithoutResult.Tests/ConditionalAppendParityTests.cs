@@ -29,6 +29,15 @@ public class ConditionalAppendParityTests
         (_, ctx) => ctx.AppendEvent(new UniqueMarkerEvent(value), new MarkerTag("m"));
 
     [Fact]
+    public void ExpectedPositionSerializedV2_IsAnAdditiveCapabilityOnBothWithoutResultFacades()
+    {
+        Assert.True(typeof(ISerializedExpectedTagPositionSekibanDcbExecutor)
+            .IsAssignableFrom(typeof(GeneralSekibanExecutor)));
+        Assert.True(typeof(ISerializedExpectedTagPositionSekibanDcbExecutor)
+            .IsAssignableFrom(typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor)));
+    }
+
+    [Fact]
     public async Task Conditional_AppendedThenAlreadyCommitted_DoNotThrow()
     {
         var domain = BuildDomain();
@@ -54,6 +63,32 @@ public class ConditionalAppendParityTests
 
         await Assert.ThrowsAsync<ConditionNotSupportedException>(
             () => executor.ExecuteAsync(new MarkerCommand(), AppendMarker("v"), options));
+    }
+
+    [Fact]
+    public async Task ExpectedTagPosition_OnUnsupportedStore_ThrowsBeforeHandlerOrWrite()
+    {
+        var domain = BuildDomain();
+        var plain = new CoreInMemoryEventStore(domain.EventTypes);
+        var executor = new GeneralSekibanExecutor(plain, new InMemoryObjectAccessor(plain, domain), domain);
+        var invoked = false;
+        var options = new CommandExecutionOptions
+        {
+            ExpectedTagPositions = new ExpectedTagPositionSpecification(
+                [new TagHeadExpectationEntry("default", "Marker:m", TagHeadExpectation.NoEnforcement())])
+        };
+
+        await Assert.ThrowsAsync<ConditionNotSupportedException>(
+            () => executor.ExecuteAsync(
+                new MarkerCommand(),
+                (MarkerCommand _, ICommandContext context) =>
+                {
+                    invoked = true;
+                    return context.AppendEvent(new UniqueMarkerEvent("v"), new MarkerTag("m"));
+                },
+                options));
+        Assert.False(invoked);
+        Assert.Empty((await plain.ReadAllSerializableEventsAsync()).GetValue());
     }
 
     [Fact]

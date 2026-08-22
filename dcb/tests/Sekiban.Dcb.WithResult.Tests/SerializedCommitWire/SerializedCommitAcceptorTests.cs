@@ -2,6 +2,7 @@ using System.Text;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Xunit;
 namespace Sekiban.Dcb.Tests.SerializedCommitWire;
@@ -79,7 +80,7 @@ public class SerializedCommitAcceptorTests
         Assert.False(result.IsSuccess);
         var ex = Assert.IsType<UnsupportedSerializedCommitEnvelopeVersionException>(result.GetException());
         Assert.Equal(999, ex.RequestedVersion);
-        Assert.Equal(VersionedSerializedCommitRequest.CurrentVersion, ex.SupportedVersion);
+        Assert.Equal(VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion, ex.SupportedVersion);
         Assert.Equal(0, exec.CommitCalls); // before executor/store
     }
 
@@ -203,8 +204,9 @@ public class SerializedCommitAcceptorTests
     }
 
     [Theory]
-    [InlineData(SerializedCommitVersionKind.KnownVersion, null, """{"version":1,"eventCandidates":[]}""")]           // exact known
-    [InlineData(SerializedCommitVersionKind.UnsupportedVersion, null, """{"version":2,"eventCandidates":[]}""")]     // exact unknown
+    [InlineData(SerializedCommitVersionKind.KnownVersion, null, """{"version":1,"eventCandidates":[]}""")]           // V1 known
+    [InlineData(SerializedCommitVersionKind.KnownVersion, null, """{"version":2,"eventCandidates":[]}""")]           // V2 known (shape binds later)
+    [InlineData(SerializedCommitVersionKind.UnsupportedVersion, null, """{"version":999,"eventCandidates":[]}""")]   // exact unknown
     [InlineData(SerializedCommitVersionKind.LegacyUnversioned, null, """{"eventCandidates":[],"consistencyTags":[]}""")] // missing → legacy
     [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.VersionNotInteger, """{"version":"1"}""")]   // wrong type (string)
     [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.VersionNotInteger, """{"version":1.5}""")]   // wrong type (float)
@@ -230,5 +232,67 @@ public class SerializedCommitAcceptorTests
         // A PascalCase 'Version' must NOT bind to the camelCase contract property (ambient web-defaults case-insensitivity
         // is deliberately not inherited by the contract-owned options).
         Assert.False(SerializedCommitWireContract.Options.PropertyNameCaseInsensitive);
+    }
+
+    [Fact]
+    public async Task V2ExpectedTagPositions_RoutesOnlyToTheAdditiveExecutorCapability()
+    {
+        var exec = new ExpectedRecordingExecutor();
+        var json = """
+                   {"version":2,"eventCandidates":[{"payload":"AQID","eventPayloadName":"E","tags":["G:1"]}],"consistencyTags":[{"tag":"G:1","lastSortableUniqueId":""}],"expectedTagPositions":[{"serviceId":"default","tag":"G:1","expectation":{"kind":3,"position":"p-1"}}]}
+                   """;
+
+        var result = await new SerializedCommitAcceptor(exec).AcceptAsync(Utf8(json));
+
+        Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
+        Assert.Equal(0, exec.LegacyCalls);
+        var request = Assert.IsType<VersionedExpectedTagPositionSerializedCommitRequest>(exec.Request);
+        Assert.Equal(VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion, request.Version);
+        var entry = Assert.Single(request.ExpectedTagPositions);
+        Assert.Equal(TagHeadExpectationKind.Exact, entry.Expectation.Kind);
+        Assert.Equal("p-1", entry.Expectation.Position);
+    }
+
+    [Fact]
+    public async Task V2ExpectedTagPositions_UnsupportedExecutorFailsBeforeLegacyExecutorInvocation()
+    {
+        var exec = new RecordingExecutor();
+        var json = """
+                   {"version":2,"eventCandidates":[],"consistencyTags":[],"expectedTagPositions":[]}
+                   """;
+
+        var result = await new SerializedCommitAcceptor(exec).AcceptAsync(Utf8(json));
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<ConditionNotSupportedException>(result.GetException());
+        Assert.Equal(0, exec.CommitCalls);
+    }
+
+    private sealed class ExpectedRecordingExecutor : ISerializedSekibanDcbExecutor,
+        ISerializedExpectedTagPositionSekibanDcbExecutor
+    {
+        public int LegacyCalls { get; private set; }
+        public VersionedExpectedTagPositionSerializedCommitRequest? Request { get; private set; }
+
+        public Task<ResultBox<SerializableTagState>> GetSerializableTagStateAsync(TagStateId tagStateId) =>
+            throw new NotSupportedException();
+
+        public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsAsync(
+            SerializedCommitRequest request, CancellationToken cancellationToken = default)
+        {
+            LegacyCalls++;
+            throw new InvalidOperationException("V2 must not fall through to the legacy serialized executor.");
+        }
+
+        public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsWithExpectedTagPositionsAsync(
+            VersionedExpectedTagPositionSerializedCommitRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Request = request;
+            return Task.FromResult(ResultBox.FromValue(new SerializedCommitResult(
+                Array.Empty<Sekiban.Dcb.Events.SerializableEvent>(),
+                Array.Empty<TagWriteResult>(),
+                TimeSpan.Zero)));
+        }
     }
 }

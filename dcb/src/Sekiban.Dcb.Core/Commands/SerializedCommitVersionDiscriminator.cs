@@ -121,7 +121,8 @@ public static class SerializedCommitVersionDiscriminator
             {
                 return Malformed(SerializedCommitShapeError.VersionNotInteger);
             }
-            return versionValue == VersionedSerializedCommitRequest.CurrentVersion
+            return versionValue is VersionedSerializedCommitRequest.CurrentVersion or
+                VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion
                 ? new SerializedCommitVersionResult(SerializedCommitVersionKind.KnownVersion, versionValue, null)
                 : new SerializedCommitVersionResult(SerializedCommitVersionKind.UnsupportedVersion, versionValue, null);
         }

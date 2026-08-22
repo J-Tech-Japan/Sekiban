@@ -588,7 +588,7 @@ var executor = new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore());
 
 ### ケーパビリティの解決（実行時解決・フェイルクローズ）
 
-サポート可否は**実行時ケーパビリティディスクリプタ**で、G10 パターンを再利用します — 型名判定は決して行いません。`WriteConditionKind` は種別を区別します（現在は `SingleEventUniqueKey`。`BatchUniqueKey` / `ExpectedPosition` は将来の予約種別）。ディスクリプタはコンテナが実際に構築した**ライブ**インスタンスから解決され、デコレータは伝播します。`HybridEventStore` はホットストアが強制できる内容をそのまま報告し（書き込みはそこに着地する — 自らの権限で昇格しない）、コンポジットは**すべての**下位ストアが対応する種別のみをサポートします。何も言わないストアは何もサポートしません。
+サポート可否は**実行時ケーパビリティディスクリプタ**で、G10 パターンを再利用します — 型名判定は決して行いません。`WriteConditionKind` は種別を区別します（`SingleEventUniqueKey` と PostgreSQL 専用の `ExpectedTagPosition`、`BatchUniqueKey` は将来の予約種別）。ディスクリプタはコンテナが実際に構築した**ライブ**インスタンスから解決され、デコレータは伝播します。`HybridEventStore` はホットストアが強制できる内容をそのまま報告し（書き込みはそこに着地する — 自らの権限で昇格しない）、コンポジットは**すべての**下位ストアが対応する種別のみをサポートします。何も言わないストアは何もサポートしません。
 
 対応しない種別への条件付き追記要求は**フェイルクローズ**します。`ConditionNotSupportedException` は、コマンドハンドラの実行前・EventId の採番前・シリアライズ前・いかなるストア呼び出しの前に送出されます。無条件書き込みへの暗黙のデグレードはありません。
 
@@ -612,7 +612,7 @@ var executor = new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore());
 
 ### リファレンス実装とプロバイダの状況
 
-決定論的なインメモリのリファレンスがテスト用パッケージにあり（`Sekiban.Dcb.Testing.InMemoryConditionalEventStore`、ランタイムプロジェクトからは参照しない）、アウトカムマシン全体を実装します。**4つの本番プロバイダすべてが SEK-G16 で実装済み**です — PostgreSQL・SQLite・Cosmos DB・DynamoDB — で、観測可能なセマンティクスは同一です。expected-position / CAS セマンティクスはさらに後のスライスのままです。
+決定論的なインメモリのリファレンスがテスト用パッケージにあり（`Sekiban.Dcb.Testing.InMemoryConditionalEventStore`、ランタイムプロジェクトからは参照しない）、アウトカムマシン全体を実装します。**4つの本番プロバイダすべてが SEK-G16 で実装済み**です — PostgreSQL・SQLite・Cosmos DB・DynamoDB — で、観測可能なセマンティクスは同一です。別契約の multi-tag expected-position CAS は PostgreSQL 専用（SEK-G40）であり、以下で説明します。
 
 ### プロバイダの仕組み（SEK-G16）
 
@@ -645,6 +645,96 @@ var executor = new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore());
 4. あるホストが同一キー下で*異なる*操作（異なるペイロード／タグ）を組み立てた場合は `KeyReuseConflict` を得ます — 静かにマージされるのではなく、プログラミングエラーとして大きく表出されます。
 
 **境界は耐久クレーム1つ。** 本コントラクトはキーごとに高々1つの耐久クレームを保証しますが、マイグレーションの副作用をちょうど1回にはしません。マイグレーション自体が外部副作用（他システムへの書き込み、通知送信）を行う場合は、それらを勝者クレームの背後にアウトボックス／冪等層で置いてください — クレームが伝えるのは*誰が勝ったか*であって、副作用がちょうど1回実行されたことではありません。
+
+## PostgreSQL の耐久 multi-tag expected-position CAS — SEK-G40
+
+**バージョン: 10.19.0（minor）。** PostgreSQL は任意の
+`WriteConditionKind.ExpectedTagPosition` capability を提供します。これは Orleans reservation の下にある耐久
+DCB fence であり、パーティション／retire 後の writer が in-memory reservation を迂回しても、古い
+consistency-tag head を読んだ command の追記を防ぎます。reservation の置換ではなく、任意の外部副作用を
+exactly-once にするものでもありません。
+
+### 追加契約と3つの明示状態
+
+`IEventStore` と既存の write/result shape は不変です。opt-in の `CommandExecutionOptions` に
+`ExpectedTagPositions` を追加し、WASM 境界には新しい V2
+`VersionedExpectedTagPositionSerializedCommitRequest` と任意の
+`ISerializedExpectedTagPositionSekibanDcbExecutor` があります。V1 と unversioned serialized payload は従来の
+「省略 = no enforcement」セマンティクスを byte-for-byte で維持します。WithResult は `ResultBox` の型付き失敗、
+WithoutResult は同じ型付き例外を guarded boundary から再送出します。
+
+executor が導出した各 *consistency tag* には、ちょうど1つの
+`TagHeadExpectationEntry(ServiceId, Tag, Expectation)` が必要です。期待値は nullable position の慣習ではなく
+明示 discriminator です:
+
+```csharp
+var noFence = TagHeadExpectation.NoEnforcement(); // durable head の作成・lock・reconcile・advance は行う
+var firstWrite = TagHeadExpectation.AssertEmpty(); // transaction で proven-empty の head を要求
+var continuation = TagHeadExpectation.Exact("01J...previous-position");
+```
+
+欠落・重複・未知・不正形・ServiceId 不一致は reservation/store mutation の前に失敗します。
+`NoEnforcement` が skip するのは比較だけで、unconditional command のまま protocol を導入する用途です。
+InMemory／SQLite／Cosmos／DynamoDB は `ConditionNotSupportedException` で handler/write の前に fail-closed
+します。`ConditionalAppend` と expected-tag position は別 protocol のため、1つの options object での併用は
+write 前に拒否されます。
+
+### PostgreSQL の全 writer protocol
+
+通常 typed batch、serialized batch、unique conditional-claim writer はすべて1つの PostgreSQL transaction seam
+に到達します。そのため legacy/unconditional tagged write も expected-head 比較はせずに durable head maintenance
+には参加します。完全に重複排除した `(ServiceId, Tag)` 集合に対して seam は次を行います:
+
+1. ServiceId → Tag を ordinal で sort し、同じ順序で `dcb_tag_heads` を lazy insert、同じ順序で `FOR UPDATE` lock;
+2. 新規行を service-scoped `MAX(dcb_tags.SortableUniqueId)` から bootstrap（永続 null head は *proven-empty* 行で、
+   absent row を empty と見なす shortcut ではない）;
+3. head より新しい authoritative row を reconcile し、append-only の `dcb_tag_head_violations` と head repair を
+   command DML より前に行う;
+4. すべての expectation を比較し、1つでも stale なら完全な expected/observed pair 集合を持つ
+   `ExpectedTagPositionConflictException` を返す; そして
+5. 成功時に event/tag row を書き、各 head を `max(reconciled head, batch 内の*その tag* の最大 position)`
+   へ進めるため、古い position の unconditional writer が新しい durable head を後退させることはない。
+
+expected-position batch の position は厳密増加し、各 event は carry するすべての tag の reconciled head を超え
+なければなりません。再生成せず拒否します。reconcile で bypass evidence を見つけた後に比較が失敗した場合は、
+repair と idempotent violation record だけを commit し、command event/tag row と無関係な lazy head row は残しません。
+repair のない通常 mismatch は lazy row を含む全変更を rollback します。
+
+violation record は service-scoped・index 済み・append-only で auto-cleanup されません。operator は provisioning
+principal で例えば次のように読めます:
+
+```sql
+SELECT "ServiceId", "Tag", "PreviousHeadPosition", "ObservedPosition", "DetectedAtUtc", "DetectingWriter"
+FROM dcb_tag_head_violations
+WHERE "ServiceId" = :service_id
+ORDER BY "DetectedAtUtc" DESC;
+```
+
+runtime は DML のみです。3 table（`dcb_tag_heads`、`dcb_tag_head_violations`、
+`dcb_tag_head_enablement_epochs`）は PostgreSQL EF migration/provisioning plane が作成します。runtime の
+schema-missing（例: SQLSTATE `42P01`）は provisioning で直し、`CREATE`／`ALTER`／migration／catch-and-create
+fallback は決して実行しません。
+
+### enablement epoch: 運用上の hard gate
+
+fence が意味を持つのは、すべての旧 PostgreSQL writer が protocol に参加した後だけです。必ずこの順で実施します:
+
+1. 10.19 schema/migration を provision;
+2. **すべての** pre-10.19 PostgreSQL writer を drain / quiesce;
+3. provisioning principal で ServiceId ごとに `dcb_tag_head_enablement_epochs` marker を設定;
+4. `AssertEmpty` / `Exact` request を有効化し、直ちに violation record の監視を開始。
+
+marker がない間は enforcement request が `TagHeadEnforcementNotEnabledException` で store write/head advance の前に
+失敗します。保証開始点は epoch であり、epoch 前の履歴は authoritative bootstrap maximum でのみ吸収されます。
+quiet period に violation が無かったからといって marker を設定してはいけません。quiet tag では reconciliation 自体が
+実行されません。
+
+### 正直な reconciliation 境界
+
+reconciliation が検出できるのは `MAX` query 実行時に既に可視な bypass です。その query **後**に旧 writer が insert
+すると、後続の新しい head がそれを追い越す場合、この audit から恒久的に逃げられます。これは意図的に
+best-effort detection であり、premature mixed-version enablement が安全という主張ではありません。正しさの境界は
+drain-before-epoch です。violation 0 件は monitoring evidence であって clean cutover の証明ではありません。
 
 ## SEK-G20 generation-aware checkpoint CAS
 

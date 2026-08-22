@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Events;
+using Sekiban.Dcb.Storage;
 using Xunit;
 using V = Sekiban.Dcb.Tests.SerializedCommitWire.SerializedCommitWireVectors;
 namespace Sekiban.Dcb.Tests.SerializedCommitWire;
@@ -59,6 +61,30 @@ public class SerializedCommitWireGoldenTests
         Assert.NotNull(request);
         var reserialized = SerializedCommitWireContract.SerializeToUtf8Bytes(request!);
         Assert.Equal(V.OfficialCamel, reserialized);
+    }
+
+    [Fact]
+    public void AdditiveV2ExpectedPositionEnvelope_RoundTripsWithoutChangingTheFrozenV1Shapes()
+    {
+        var request = new VersionedExpectedTagPositionSerializedCommitRequest(
+            VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion,
+            [new SerializableEventCandidate("payload"u8.ToArray(), "Event", ["Marker:m"])],
+            [new ConsistencyTagEntry("Marker:m", "previous")],
+            [new TagHeadExpectationEntry("default", "Marker:m", TagHeadExpectation.Exact("previous"))]);
+
+        var bytes = SerializedCommitWireContract.SerializeToUtf8Bytes(request);
+        var roundTrip = JsonSerializer.Deserialize<VersionedExpectedTagPositionSerializedCommitRequest>(
+            bytes,
+            SerializedCommitWireContract.Options);
+
+        Assert.NotNull(roundTrip);
+        Assert.Equal(VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion, roundTrip.Version);
+        Assert.Equal("Event", Assert.Single(roundTrip.EventCandidates).EventPayloadName);
+        Assert.Equal("previous", Assert.Single(roundTrip.ConsistencyTags).LastSortableUniqueId);
+        var expectation = Assert.Single(roundTrip.ExpectedTagPositions);
+        Assert.Equal(TagHeadExpectationKind.Exact, expectation.Expectation.Kind);
+        Assert.Equal("previous", expectation.Expectation.Position);
+        Assert.Equal(bytes, SerializedCommitWireContract.SerializeToUtf8Bytes(roundTrip));
     }
 
     [Fact]

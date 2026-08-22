@@ -1,3 +1,5 @@
+using Sekiban.Dcb.Storage;
+
 namespace Sekiban.Dcb.Commands;
 
 /// <summary>
@@ -14,6 +16,12 @@ public sealed record CommandExecutionOptions
     ///     <c>ConditionNotSupportedException</c> before the handler runs.
     /// </summary>
     public ConditionalAppendSpecification? ConditionalAppend { get; init; }
+
+    /// <summary>
+    ///     Opts into PostgreSQL's durable expected-tag-position protocol. Every derived consistency tag must have exactly
+    ///     one explicitly discriminated entry. Unsupported stores fail closed before their write path is invoked.
+    /// </summary>
+    public ExpectedTagPositionSpecification? ExpectedTagPositions { get; init; }
 }
 
 /// <summary>

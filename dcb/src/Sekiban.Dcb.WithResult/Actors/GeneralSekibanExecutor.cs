@@ -16,7 +16,7 @@ namespace Sekiban.Dcb.Actors;
 ///     This implementation uses ResultBox for all error handling
 /// </summary>
 public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider,
-    IConditionalCommandExecutor, ISerializedConditionalSekibanDcbExecutor
+    IConditionalCommandExecutor, ISerializedConditionalSekibanDcbExecutor, ISerializedExpectedTagPositionSekibanDcbExecutor
 {
     private readonly CoreGeneralSekibanExecutor _core;
     private readonly IActorObjectAccessor _actorAccessor;
@@ -188,6 +188,12 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         SerializedCommitRequest request,
         CancellationToken cancellationToken = default) =>
         _core.CommitSerializableEventsAsync(request, cancellationToken);
+
+    /// <summary>Opt-in V2 serialized commit with PostgreSQL's durable expected-tag-position protocol.</summary>
+    public Task<ResultBox<SerializedCommitResult>> CommitSerializableEventsWithExpectedTagPositionsAsync(
+        VersionedExpectedTagPositionSerializedCommitRequest request,
+        CancellationToken cancellationToken = default) =>
+        _core.CommitSerializableEventsWithExpectedTagPositionsAsync(request, cancellationToken);
 
     /// <summary>Opt-in: execute a self-handling command with conditional (unique-key) append options.</summary>
     public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
