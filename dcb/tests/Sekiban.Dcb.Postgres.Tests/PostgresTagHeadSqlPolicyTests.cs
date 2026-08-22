@@ -46,36 +46,30 @@ public sealed class PostgresTagHeadSqlPolicyTests : PostgresTestBase
     }
 
     [Fact]
-    public async Task DdlDeniedRuntimePrincipal_CanStillRunProvisionedHeadDml()
+    public async Task DmlOnlyRuntimePrincipal_IsDeniedRuntimeDdlWithSqlState42501()
     {
-        var role = $"g40_runtime_dml_{Guid.NewGuid():N}";
-        const string password = "g40_runtime_dml_password";
-        var adminConnection = Fixture.ConnectionString;
-        var runtimeConnection = new NpgsqlConnectionStringBuilder(Fixture.ConnectionString)
-        {
-            Username = role,
-            Password = password
-        }.ConnectionString;
-
-        await using var admin = new NpgsqlConnection(adminConnection);
-        await admin.OpenAsync();
+        var runtime = await CreateDmlOnlyRuntimePrincipalAsync();
         try
         {
-            await ExecuteAsync(admin, $"CREATE ROLE {role} LOGIN PASSWORD '{password}'");
-            await ExecuteAsync(admin, $"GRANT USAGE ON SCHEMA public TO {role}");
-            await ExecuteAsync(admin,
-                $"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE dcb_events, dcb_tags, dcb_tag_heads, dcb_tag_head_violations, dcb_tag_head_enablement_epochs TO {role}");
-            await ExecuteAsync(admin, $"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {role}");
+            await using var connection = new NpgsqlConnection(runtime.ConnectionString);
+            await connection.OpenAsync();
+            var ddl = await Assert.ThrowsAsync<PostgresException>(() =>
+                ExecuteAsync(connection, "CREATE TABLE g40_runtime_must_not_create (id integer)"));
+            Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, ddl.SqlState); // SQLSTATE 42501
+        }
+        finally
+        {
+            await DropRuntimePrincipalAsync(runtime.Role);
+        }
+    }
 
-            await using (var runtime = new NpgsqlConnection(runtimeConnection))
-            {
-                await runtime.OpenAsync();
-                var ddl = await Assert.ThrowsAsync<PostgresException>(() =>
-                    ExecuteAsync(runtime, "CREATE TABLE g40_runtime_must_not_create (id integer)"));
-                Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, ddl.SqlState); // SQLSTATE 42501
-            }
-
-            var factory = new OneContextFactory(runtimeConnection);
+    [Fact]
+    public async Task DmlOnlyRuntimePrincipal_CanRunProvisionedHeadDml()
+    {
+        var runtime = await CreateDmlOnlyRuntimePrincipalAsync();
+        try
+        {
+            var factory = new OneContextFactory(runtime.ConnectionString);
             var store = new PostgresEventStore(
                 factory,
                 Fixture.DomainTypes.EventTypes,
@@ -90,9 +84,7 @@ public sealed class PostgresTagHeadSqlPolicyTests : PostgresTestBase
         }
         finally
         {
-            NpgsqlConnection.ClearAllPools();
-            await ExecuteAsync(admin, $"DROP OWNED BY {role}");
-            await ExecuteAsync(admin, $"DROP ROLE IF EXISTS {role}");
+            await DropRuntimePrincipalAsync(runtime.Role);
         }
     }
 
@@ -138,6 +130,36 @@ public sealed class PostgresTagHeadSqlPolicyTests : PostgresTestBase
         await using var command = new NpgsqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync();
     }
+
+    private async Task<RuntimePrincipal> CreateDmlOnlyRuntimePrincipalAsync()
+    {
+        var role = $"g40_runtime_dml_{Guid.NewGuid():N}";
+        const string password = "g40_runtime_dml_password";
+        await using var admin = new NpgsqlConnection(Fixture.ConnectionString);
+        await admin.OpenAsync();
+        await ExecuteAsync(admin, $"CREATE ROLE {role} LOGIN PASSWORD '{password}'");
+        await ExecuteAsync(admin, $"GRANT USAGE ON SCHEMA public TO {role}");
+        await ExecuteAsync(admin,
+            $"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE dcb_events, dcb_tags, dcb_tag_heads, dcb_tag_head_violations, dcb_tag_head_enablement_epochs TO {role}");
+        await ExecuteAsync(admin, $"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {role}");
+        var connectionString = new NpgsqlConnectionStringBuilder(Fixture.ConnectionString)
+        {
+            Username = role,
+            Password = password
+        }.ConnectionString;
+        return new RuntimePrincipal(role, connectionString);
+    }
+
+    private async Task DropRuntimePrincipalAsync(string role)
+    {
+        NpgsqlConnection.ClearAllPools();
+        await using var admin = new NpgsqlConnection(Fixture.ConnectionString);
+        await admin.OpenAsync();
+        await ExecuteAsync(admin, $"DROP OWNED BY {role}");
+        await ExecuteAsync(admin, $"DROP ROLE IF EXISTS {role}");
+    }
+
+    private sealed record RuntimePrincipal(string Role, string ConnectionString);
 
     private sealed class OneContextFactory : IDbContextFactory<SekibanDcbDbContext>
     {
