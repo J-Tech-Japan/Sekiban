@@ -41,24 +41,70 @@ public sealed record ProjectionFaultDescriptor(
     /// <summary>The <see cref="System.Exception.Data" /> key carrying the faulted position.</summary>
     public const string PositionDataKey = "Sekiban.Projection.FaultPosition";
 
+    /// <summary>
+    ///     The machine-readable marker on a reconstructed fault. It is deliberately absent from the original exception
+    ///     thrown at the fold boundary: only <see cref="SekibanProjectionFaultException" /> instances are re-raises.
+    /// </summary>
+    public const string ReRaiseDataKey = "Sekiban.Projection.IsReRaise";
+
     /// <summary>A one-line, secret-free summary for a log line or an exception message.</summary>
     public string Describe() =>
         $"projector '{ProjectorName}' is faulted at event {EventId} ({EventType}), position {Position}: {Message}";
 
-    /// <summary>Writes the fault's identifiers onto an exception's <see cref="System.Exception.Data" />, first-writer-wins.</summary>
-    public void Annotate(Exception exception)
+    /// <summary>Formats the distinct message carried by a fault reconstructed from a persisted descriptor.</summary>
+    public string DescribeReRaise() =>
+        $"projector '{ProjectorName}' was previously faulted at event {EventId} ({EventType}), position {Position} "
+        + $"(first observed {new DateTime(FaultedAtUtc, DateTimeKind.Utc):O}): {Message}";
+
+    /// <summary>
+    ///     Writes the four original fault identifiers onto an exception's <see cref="System.Exception.Data" />. This is
+    ///     intentionally safe to repeat: a partially annotated exception is completed, while caller-owned values are
+    ///     not overwritten.
+    /// </summary>
+    public void Annotate(Exception exception) => AnnotateCore(exception, isReRaise: false);
+
+    /// <summary>
+    ///     Writes the four original identifiers plus the re-raise marker. Constructors and Orleans surrogate
+    ///     reconstruction both call this method; its idempotence is what keeps the client-side exception complete even
+    ///     when those paths overlap.
+    /// </summary>
+    public void AnnotateReRaise(Exception exception) => AnnotateCore(exception, isReRaise: true);
+
+    private void AnnotateCore(Exception exception, bool isReRaise)
     {
         try
         {
-            if (exception.Data.IsReadOnly || exception.Data.Contains(OperationDataKey))
+            if (exception.Data.IsReadOnly)
             {
                 return;
             }
 
-            exception.Data[OperationDataKey] = $"MultiProjection.Fold ({ProjectorName})";
-            exception.Data[TargetDataKey] = EventType;
-            exception.Data[EventIdDataKey] = EventId.ToString();
-            exception.Data[PositionDataKey] = Position;
+            if (!exception.Data.Contains(OperationDataKey))
+            {
+                exception.Data[OperationDataKey] = $"MultiProjection.Fold ({ProjectorName})";
+            }
+
+            if (!exception.Data.Contains(TargetDataKey))
+            {
+                exception.Data[TargetDataKey] = EventType;
+            }
+
+            if (!exception.Data.Contains(EventIdDataKey))
+            {
+                exception.Data[EventIdDataKey] = EventId.ToString();
+            }
+
+            if (!exception.Data.Contains(PositionDataKey))
+            {
+                exception.Data[PositionDataKey] = Position;
+            }
+
+            if (isReRaise)
+            {
+                // The marker is the type's contract, not caller-provided context. Repeating this assignment is
+                // idempotent and prevents a malformed pre-existing false value from masquerading as an original fault.
+                exception.Data[ReRaiseDataKey] = true;
+            }
         }
         catch (Exception)
         {

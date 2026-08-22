@@ -14,4 +14,13 @@ public struct ResultBoxSurrogate<T> where T : notnull
 
     [Id(3)]
     public string? ExceptionType { get; set; }
+
+    // Most ResultBox errors retain their existing compact string form. Projection faults are the deliberate exception:
+    // operators need the typed reconstructed descriptor (including its annotations) on the CLIENT, so its dedicated
+    // Orleans surrogate travels alongside the legacy error fields. Additive ids keep existing response payloads valid.
+    [Id(4)]
+    public bool IsProjectionFault { get; set; }
+
+    [Id(5)]
+    public Sekiban.Dcb.Orleans.Serialization.ProjectionFaultExceptionSurrogate ProjectionFault { get; set; }
 }

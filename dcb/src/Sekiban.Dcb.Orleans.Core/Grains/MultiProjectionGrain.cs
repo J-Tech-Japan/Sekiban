@@ -2671,7 +2671,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Queries will return partial/stale data with IsCatchUpInProgress=true until catch-up completes.
         // Re-establish any persisted fault BEFORE the (fire-and-forget) catch-up starts, so the first query fails
         // closed instead of answering empty/partial success in the window before catch-up re-reaches the poison.
-        RestoreProjectionFaultIfPersisted();
+        await RestoreProjectionFaultIfPersistedAsync();
 
         // If nothing was restored, we cannot be sure a fault is not waiting in the un-caught-up tail (its descriptor
         // may have been lost to a process crash while persistence was failing). The first query must therefore
@@ -2822,6 +2822,53 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _projectionStatusTimer?.Dispose();
 
         await base.OnDeactivateAsync(reason, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<ResultBox<ProjectionFaultReadResult>> TryGetProjectionFaultAsync()
+    {
+        try
+        {
+            await EnsureInitializedAsync();
+
+            // This is intentionally the immutable committed snapshot, never _projectionFault or the host. During a
+            // fault-persistence outage the live actor still fails closed while this returns empty: handing out a live
+            // token that ResetProjectionFaultAsync is guaranteed to reject would be worse than reporting no COMMITTED
+            // descriptor. Conversely, only a null FaultEventId is "none"; any partial/corrupt committed descriptor is
+            // a read failure, not a healthy answer.
+            var committed = _stateStore.Committed;
+            if (committed.FaultEventId is null)
+            {
+                return ResultBox.FromValue(ProjectionFaultReadResult.NoCommittedFault);
+            }
+
+            if (string.IsNullOrWhiteSpace(committed.ProjectorName) ||
+                string.IsNullOrWhiteSpace(committed.FaultEventId) ||
+                string.IsNullOrWhiteSpace(committed.FaultEventType) ||
+                string.IsNullOrWhiteSpace(committed.FaultPosition) ||
+                committed.FaultMessage is null ||
+                committed.FaultedAtUtcTicks <= 0 ||
+                !Guid.TryParse(committed.FaultEventId, out var faultEventId))
+            {
+                throw new InvalidOperationException(
+                    "The committed projection-fault descriptor is incomplete or malformed and cannot be used as a reset token.");
+            }
+
+            var firstObservedUtc = new DateTime(committed.FaultedAtUtcTicks, DateTimeKind.Utc);
+            return ResultBox.FromValue(new ProjectionFaultReadResult(
+                HasFault: true,
+                Fault: new ProjectionFaultInfo(
+                    committed.ProjectorName,
+                    faultEventId,
+                    committed.FaultEventType,
+                    committed.FaultPosition,
+                    committed.FaultMessage,
+                    firstObservedUtc)));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<ProjectionFaultReadResult>(ex);
+        }
     }
 
     /// <inheritdoc />
@@ -3586,7 +3633,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     // Mutates the passed persisted payload only; the caller runs this inside the store's gate so the assignment and the
     // write commit together.
-    private static void WriteFaultIntoState(MultiProjectionGrainState? state, ProjectionFaultDescriptor fault)
+    private void WriteFaultIntoState(MultiProjectionGrainState? state, ProjectionFaultDescriptor fault)
     {
         if (state is null)
         {
@@ -3599,6 +3646,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (!string.IsNullOrEmpty(fault.ProjectorName))
         {
             state.ProjectorName = fault.ProjectorName;
+        }
+
+        // A version-scoped restore can only distinguish A from B if the first-ever fault write carries the running
+        // version too. Fault persistence is often the first metadata write for a projection, so relying on a later
+        // checkpoint to populate this field would silently turn every fresh fault into an unversioned mismatch.
+        var projectorVersion = _host?.GetProjectorVersion();
+        if (!string.IsNullOrWhiteSpace(projectorVersion))
+        {
+            state.ProjectorVersion = projectorVersion;
         }
 
         state.FaultEventId = fault.EventId.ToString();
@@ -3644,12 +3700,56 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         Interlocked.Exchange(ref _projectionStatusDirty, 1);
     }
 
-    /// <summary>Re-establishes a persisted fault into the freshly-activated host so the first query fails closed.</summary>
-    private void RestoreProjectionFaultIfPersisted()
+    /// <summary>
+    ///     Re-establishes a persisted fault into the freshly-activated host so the first query fails closed. A fault is
+    ///     scoped to the projector version that produced it: if the persisted and running versions differ, clear ONLY
+    ///     the descriptor through one awaited metadata commit before catch-up, query/reset, or the admin read can run.
+    ///     A failed write deliberately escapes activation; an in-memory-only clear would expose a false healthy state.
+    /// </summary>
+    private async Task RestoreProjectionFaultIfPersistedAsync()
     {
         var state = _stateStore.Committed;
         if (state?.FaultEventId is null || _host is null)
         {
+            return;
+        }
+
+        var persistedProjectorVersion = state.ProjectorVersion;
+        var runningProjectorVersion = _host.GetProjectorVersion();
+        if (!string.Equals(persistedProjectorVersion, runningProjectorVersion, StringComparison.Ordinal))
+        {
+            try
+            {
+                var outcome = await _stateStore.ExecuteWriteAsync(
+                    GrainStateWriteKind.MetadataMaintenance,
+                    ClearFaultFieldsOnCandidate);
+                if (outcome != GrainStateWriteOutcome.Committed)
+                {
+                    throw new InvalidOperationException(
+                        $"Projection-fault version transition did not commit (outcome: {outcome}).");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    MultiProjectionLogEvents.ProjectionFaultVersionClearFailed,
+                    ex,
+                    "Projection-fault version transition failed before activation could serve: {ProjectorName}, PersistedProjectorVersion: {PersistedProjectorVersion}, RunningProjectorVersion: {RunningProjectorVersion}",
+                    GetProjectorName(),
+                    persistedProjectorVersion,
+                    runningProjectorVersion);
+                throw new InvalidOperationException(
+                    $"Projection-fault version transition failed for projector '{GetProjectorName()}' from persisted version "
+                    + $"'{persistedProjectorVersion ?? "(none)"}' to running version '{runningProjectorVersion}'.",
+                    ex);
+            }
+
+            _logger.LogInformation(
+                MultiProjectionLogEvents.ProjectionFaultVersionCleared,
+                "Projection-fault version transition durably cleared the persisted fault: {ProjectorName}, PersistedProjectorVersion: {PersistedProjectorVersion}, RunningProjectorVersion: {RunningProjectorVersion}",
+                GetProjectorName(),
+                persistedProjectorVersion,
+                runningProjectorVersion);
             return;
         }
 

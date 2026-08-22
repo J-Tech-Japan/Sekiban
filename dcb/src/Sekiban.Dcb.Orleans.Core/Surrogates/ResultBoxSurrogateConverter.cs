@@ -1,4 +1,6 @@
 using ResultBoxes;
+using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Orleans.Serialization;
 namespace Sekiban.Dcb.Orleans.Surrogates;
 
 [RegisterConverter]
@@ -9,6 +11,12 @@ public sealed class ResultBoxSurrogateConverter<T> : IConverter<ResultBox<T>, Re
         if (surrogate.IsSuccess && surrogate.Value != null)
         {
             return ResultBox.FromValue(surrogate.Value);
+        }
+
+        if (surrogate.IsProjectionFault)
+        {
+            var projectionFault = new ProjectionFaultExceptionConverter().ConvertFromSurrogate(surrogate.ProjectionFault);
+            return ResultBox.FromException<T>(projectionFault);
         }
 
         if (!string.IsNullOrEmpty(surrogate.ExceptionType) && !string.IsNullOrEmpty(surrogate.ErrorMessage))
@@ -35,6 +43,12 @@ public sealed class ResultBoxSurrogateConverter<T> : IConverter<ResultBox<T>, Re
         else
         {
             var exception = value.GetException();
+            if (exception is SekibanProjectionFaultException projectionFault)
+            {
+                surrogate.IsProjectionFault = true;
+                surrogate.ProjectionFault = new ProjectionFaultExceptionConverter().ConvertToSurrogate(projectionFault);
+            }
+
             surrogate.ErrorMessage = exception.Message;
             surrogate.ExceptionType = exception.GetType().Name;
         }
