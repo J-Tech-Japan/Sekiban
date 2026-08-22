@@ -1446,12 +1446,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 projectorName,
                 startUtc);
 
-            // Phase1: force promotion of buffered events before snapshot
+            // Phase1: force promotion of buffered events before snapshot. Deferred safe-history repair is fail-closed:
+            // publishing an old snapshot after a repair failure would permit compaction/switch to lose the retained
+            // ordering input, so do not continue to checkpoint capture or any durable write.
             try
             {
                 _host.ForcePromoteBufferedEvents();
             }
-            catch { }
+            catch (Exception exception)
+            {
+                _lastError = $"Deferred safe-history repair failed: {exception.Message}";
+                _logger.LogWarning(exception, "[{ProjectorName}] {LastError}", projectorName, _lastError);
+                _lastPersistOutcome = PersistOutcomeNoDurableWrite;
+                return ResultBox.Error<bool>(exception);
+            }
 
             var checkpoint = await CapturePersistCheckpointAsync(projectorName);
             var shortCircuit = TryShortCircuitPersist(projectorName, checkpoint);

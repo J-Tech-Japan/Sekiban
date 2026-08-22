@@ -210,14 +210,9 @@ public class GeneralMultiProjectionActor
 
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)
         {
-            try
-            {
-                dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain);
-            }
-            catch (Exception)
-            {
-                // Head-status reads are observational; ignore best-effort safe-window promotion failures here.
-            }
+            // A deferred safe-history repair is a consumption boundary. Returning an old head after its repair failed
+            // would falsely advertise a stale payload/position as current, so propagate the failure to the caller.
+            dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain);
 
             var current = new ProjectionPosition(
                 dualAccessor.UnsafeVersion,
@@ -627,14 +622,15 @@ public class GeneralMultiProjectionActor
         int offloadThresholdBytes = int.MaxValue,
         CancellationToken cancellationToken = default)
     {
-        // Promote buffered events before building a safe snapshot
+        // Promote buffered events before building a safe snapshot. A deferred-repair failure must fail closed: emitting a
+        // snapshot from the old payload would allow persistence and later compaction to discard the retained repair input.
         try
         {
             ForcePromoteBufferedEvents();
         }
-        catch
+        catch (Exception exception)
         {
-            // Ignore promotion errors to avoid blocking persistence
+            return ResultBox.Error<SnapshotPersistenceData>(exception);
         }
         var envelopeRb = await BuildSnapshotEnvelopeAsync(
             canGetUnsafeState,
@@ -992,7 +988,14 @@ public class GeneralMultiProjectionActor
             if (canGetUnsafeState)
             {
                 // Promote buffered events before reading unsafe state
-                try { dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain); } catch { }
+                try
+                {
+                    dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain);
+                }
+                catch (Exception exception)
+                {
+                    return Task.FromResult(ResultBox.Error<MultiProjectionState>(exception));
+                }
 
                 statePayload = (IMultiProjectionPayload)dualAccessor.GetUnsafeProjectorPayload();
                 lastSortableId = dualAccessor.UnsafeLastSortableUniqueId;

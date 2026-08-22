@@ -177,6 +177,30 @@ public class MultiProjectionGrainPersistPolicyTests
     }
 
     [Fact]
+    public async Task PersistStateAsync_WhenDeferredRepairFails_DoesNotWriteOrCompactAndReturnsTheOriginalFailure()
+    {
+        // The real wrapper-level tests establish the deferred-repair failure and its retained cause. This is the
+        // production persistence boundary: a host reporting that repair failure must stop before snapshot capture,
+        // the grain-state provider write, or the irreversible compaction call.
+        var persistentState = new TestPersistentState<MultiProjectionGrainState>(new MultiProjectionGrainState());
+        var repairFailure = new InvalidOperationException("deferred repair failed");
+        var host = new DeferredRepairFailingHost(repairFailure);
+        var grain = CreateGrain(persistentState: persistentState);
+        SetPrivateField(grain, "_grainKey", "projection");
+        SetPrivateField(grain, "_projectorName", "projection");
+        SetPrivateField(grain, "_host", host);
+
+        var result = await grain.PersistStateAsync();
+
+        Assert.False(result.IsSuccess);
+        Assert.Same(repairFailure, result.GetException());
+        Assert.Equal(1, host.ForcePromoteCalls);
+        Assert.Equal(0, host.SnapshotWriteCalls);
+        Assert.Equal(0, host.CompactCalls);
+        Assert.Equal(0, persistentState.WriteCalls);
+    }
+
+    [Fact]
     public async Task ProjectionStatusHeartbeat_PinsHostVersionAndRebasesMissingRowsWithoutUnconditionalCreate()
     {
         // This deliberately invokes the production grain writer against the real in-memory status store. A fake result
@@ -441,9 +465,10 @@ public class MultiProjectionGrainPersistPolicyTests
         MultiProjectionGrainState? state = null,
         IProjectionActorHostFactory? actorHostFactory = null,
         IProjectionStatusStore? projectionStatusStore = null,
-        ProjectionStatusOptions? projectionStatusOptions = null) =>
+        ProjectionStatusOptions? projectionStatusOptions = null,
+        TestPersistentState<MultiProjectionGrainState>? persistentState = null) =>
         new(
-            new TestPersistentState<MultiProjectionGrainState>(state ?? new MultiProjectionGrainState()),
+            persistentState ?? new TestPersistentState<MultiProjectionGrainState>(state ?? new MultiProjectionGrainState()),
             actorHostFactory ?? new StubProjectionActorHostFactory(),
             new StubEventStore(),
             new DefaultOrleansEventSubscriptionResolver(),
@@ -501,6 +526,7 @@ public class MultiProjectionGrainPersistPolicyTests
         public TestPersistentState(T state) => State = state;
 
         public T State { get; set; }
+        public int WriteCalls { get; private set; }
         public string Etag => "test-etag";
         public bool RecordExists => true;
 
@@ -511,7 +537,11 @@ public class MultiProjectionGrainPersistPolicyTests
         }
 
         public Task ReadStateAsync() => Task.CompletedTask;
-        public Task WriteStateAsync() => Task.CompletedTask;
+        public Task WriteStateAsync()
+        {
+            WriteCalls++;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StubProjectionActorHostFactory : IProjectionActorHostFactory
@@ -547,7 +577,7 @@ public class MultiProjectionGrainPersistPolicyTests
         public Task<ResultBox<bool>> WriteSnapshotToStreamAsync(Stream target, bool canGetUnsafeState, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+        public virtual Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
             Stream target,
             bool canGetUnsafeState,
             int offloadThresholdBytes,
@@ -571,8 +601,8 @@ public class MultiProjectionGrainPersistPolicyTests
             DateTime? safeThresholdTime,
             int? unsafeVersion) => throw new NotSupportedException();
 
-        public void ForcePromoteBufferedEvents() => throw new NotSupportedException();
-        public void CompactSafeHistory() => throw new NotSupportedException();
+        public virtual void ForcePromoteBufferedEvents() => throw new NotSupportedException();
+        public virtual void CompactSafeHistory() => throw new NotSupportedException();
         public void ForcePromoteAllBufferedEvents() => throw new NotSupportedException();
         public Task<string> GetSafeLastSortableUniqueIdAsync() => throw new NotSupportedException();
         public Task<bool> IsSortableUniqueIdReceivedAsync(string sortableUniqueId) => throw new NotSupportedException();
@@ -592,6 +622,31 @@ public class MultiProjectionGrainPersistPolicyTests
         public string ProjectorVersion { get; set; } = projectorVersion;
 
         public override string GetProjectorVersion() => ProjectorVersion;
+    }
+
+    private sealed class DeferredRepairFailingHost(Exception repairFailure) : StubProjectionActorHost
+    {
+        public int ForcePromoteCalls { get; private set; }
+        public int SnapshotWriteCalls { get; private set; }
+        public int CompactCalls { get; private set; }
+
+        public override void ForcePromoteBufferedEvents()
+        {
+            ForcePromoteCalls++;
+            throw repairFailure;
+        }
+
+        public override void CompactSafeHistory() => CompactCalls++;
+
+        public override Task<ResultBox<bool>> WriteSnapshotForPersistenceToStreamAsync(
+            Stream target,
+            bool canGetUnsafeState,
+            int offloadThresholdBytes,
+            CancellationToken cancellationToken)
+        {
+            SnapshotWriteCalls++;
+            return Task.FromResult(ResultBox.FromValue(true));
+        }
     }
 
     private sealed class FixedServiceIdProvider(string serviceId) : IServiceIdProvider
