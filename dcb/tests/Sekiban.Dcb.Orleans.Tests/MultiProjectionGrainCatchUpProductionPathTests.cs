@@ -81,15 +81,20 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
 
         // Synthetic case: the activation-local ID cache says the range was seen, but the host safe checkpoint stays at
         // C0 and no durable snapshot contains those effects.
-        var syntheticStore = new ProductionCatchUpEventStore();
+        var unchangedC0Record = new RecordingPersistentState<MultiProjectionGrainState> { State = c0State };
+        var syntheticStore = new ProductionCatchUpEventStore(persistentState: unchangedC0Record);
         var syntheticHost = new ProductionCatchUpProjectionHost
         {
+            ProjectionStartPosition = c0,
             SafeVersion = 1,
             SafePosition = c0
         };
-        var syntheticGrain = CreateGrain(syntheticStore, syntheticHost, c0State);
+        var syntheticGrain = CreateGrain(syntheticStore, syntheticHost, persistentState: unchangedC0Record);
+        var authoritativeEventIds = syntheticStore.Events.Select(ev => ev.Id).ToArray();
+        var expectedFreshProjection = DeterministicMaterializedProjection.From(c0, authoritativeEventIds);
 
-        Assert.Equal(syntheticStore.Events.Count, GetPrivateField<HashSet<Guid>>(syntheticGrain, "_processedEventIds").Count);
+        Assert.Equal(authoritativeEventIds.Length, GetPrivateField<HashSet<Guid>>(syntheticGrain, "_processedEventIds").Count);
+        Assert.Equal(authoritativeEventIds.Length, authoritativeEventIds.Distinct().Count());
         await syntheticGrain.RefreshAsync();
 
         Assert.Equal(c0, syntheticStore.ReadSinceValues[0]);
@@ -100,27 +105,42 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         Assert.Equal("no_durable_write", GetPrivateField<string>(syntheticGrain, "_lastPersistOutcome"));
         Assert.Equal(c0, syntheticStore.PersistentState.State.LastSortableUniqueId);
         Assert.Equal(c0, c0State.LastSortableUniqueId); // traversal never became the committed restart cursor
+        Assert.Empty(syntheticHost.AppliedEventIds);
+        Assert.Equal(
+            DeterministicMaterializedProjection.From(c0, Array.Empty<Guid>()),
+            syntheticHost.MaterializedProjection);
 
-        // Fresh activation: the ephemeral ID cache is gone, so the authoritative read from C0 must apply every event.
-        var freshStore = new ProductionCatchUpEventStore();
+        // Fresh activation: it must reuse the same unchanged durable C0 record and authoritative event sequence. The
+        // ephemeral ID cache is gone, so the authoritative read from C0 must apply every event exactly once.
+        var freshStore = new ProductionCatchUpEventStore(
+            events: syntheticStore.Events,
+            persistentState: unchangedC0Record);
         var freshHost = new ProductionCatchUpProjectionHost
         {
             AllowApply = true,
+            ProjectionStartPosition = c0,
             SafeVersion = 1,
             SafePosition = c0
         };
-        var freshState = c0State.Clone();
         var freshGrain = CreateGrain(
             freshStore,
             freshHost,
-            freshState,
-            processedEvents: Array.Empty<SerializableEvent>());
+            processedEvents: Array.Empty<SerializableEvent>(),
+            persistentState: unchangedC0Record);
         Assert.Empty(GetPrivateField<HashSet<Guid>>(freshGrain, "_processedEventIds"));
+        Assert.Same(syntheticStore.Events, freshStore.Events);
+        Assert.Same(syntheticStore.PersistentState, freshStore.PersistentState);
+        Assert.Same(c0State, freshStore.PersistentState.State);
 
         await freshGrain.RefreshAsync();
 
-        Assert.Equal(syntheticStore.Events.Count, freshHost.AppliedEventCount);
+        Assert.Equal(authoritativeEventIds, freshHost.AppliedEventIds.ToArray());
+        Assert.Equal(authoritativeEventIds.Length, freshHost.AppliedEventCount);
         Assert.Equal(syntheticStore.Events[^1].SortableUniqueIdValue, freshHost.LastAppliedPosition);
+        Assert.Equal(expectedFreshProjection, freshHost.MaterializedProjection);
+        Assert.NotEqual(
+            DeterministicMaterializedProjection.From(c0, Array.Empty<Guid>()),
+            freshHost.MaterializedProjection);
         Assert.Equal(c0, freshStore.ReadSinceValues[0]);
         Assert.Equal(0, freshStore.PersistentState.WriteCalls);
         Assert.Equal(c0, freshStore.PersistentState.State.LastSortableUniqueId);
@@ -499,10 +519,11 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         ProductionCatchUpProjectionHost? host = null,
         MultiProjectionGrainState? state = null,
         GeneralMultiProjectionActorOptions? actorOptions = null,
-        IEnumerable<SerializableEvent>? processedEvents = null)
+        IEnumerable<SerializableEvent>? processedEvents = null,
+        RecordingPersistentState<MultiProjectionGrainState>? persistentState = null)
     {
         host ??= new ProductionCatchUpProjectionHost();
-        var persistentState = new RecordingPersistentState<MultiProjectionGrainState>
+        persistentState ??= new RecordingPersistentState<MultiProjectionGrainState>
         {
             State = state ?? new MultiProjectionGrainState()
         };
@@ -670,17 +691,41 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
             Microsoft.Extensions.Logging.ILogger? logger = null) => host;
     }
 
+    private sealed record DeterministicMaterializedProjection(
+        string StartPosition,
+        int EventCount,
+        string OrderedEventIdDigest)
+    {
+        public static DeterministicMaterializedProjection From(string startPosition, IEnumerable<Guid> eventIds)
+        {
+            var ids = eventIds.ToArray();
+            var digestInput = string.Join(
+                "|",
+                new[] { startPosition }.Concat(ids.Select(id => id.ToString("D"))));
+            var digest = Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(digestInput)));
+            return new DeterministicMaterializedProjection(startPosition, ids.Length, digest);
+        }
+    }
+
     private sealed class ProductionCatchUpProjectionHost : IProjectionActorHost
     {
         public bool FailSnapshotWrite { get; init; }
         public bool AllowApply { get; init; }
+        public string? ProjectionStartPosition { get; init; }
         public int SafeVersion { get; init; }
         public string? SafePosition { get; init; }
         public int StateMetadataCalls { get; private set; }
         public int SafeCheckpointCalls { get; private set; }
         public int SnapshotWriteCalls { get; private set; }
-        public int AppliedEventCount { get; private set; }
+        public IReadOnlyList<Guid> AppliedEventIds => _appliedEventIds;
+        public int AppliedEventCount => _appliedEventIds.Count;
         public string? LastAppliedPosition { get; private set; }
+        public DeterministicMaterializedProjection MaterializedProjection =>
+            DeterministicMaterializedProjection.From(ProjectionStartPosition ?? string.Empty, _appliedEventIds);
+
+        private readonly List<Guid> _appliedEventIds = [];
 
         public Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
         {
@@ -689,7 +734,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
                 throw new Xunit.Sdk.XunitException("The zero-applied production test unexpectedly applied an event.");
             }
 
-            AppliedEventCount += events.Count;
+            _appliedEventIds.AddRange(events.Select(ev => ev.Id));
             LastAppliedPosition = events[^1].SortableUniqueIdValue;
             return Task.CompletedTask;
         }
@@ -787,13 +832,15 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         public ProductionCatchUpEventStore(
             IReadOnlyList<int>? batchSizes = null,
             TaskCompletionSource? firstReadStarted = null,
-            TaskCompletionSource? releaseFirstRead = null)
+            TaskCompletionSource? releaseFirstRead = null,
+            IReadOnlyList<SerializableEvent>? events = null,
+            RecordingPersistentState<MultiProjectionGrainState>? persistentState = null)
         {
             _batchSizes = batchSizes ?? Enumerable.Repeat(500, 10).ToArray();
             _firstReadStarted = firstReadStarted;
             _releaseFirstRead = releaseFirstRead;
             var totalEventCount = _batchSizes.Sum();
-            Events = Enumerable.Range(0, totalEventCount)
+            Events = events ?? Enumerable.Range(0, totalEventCount)
                 .Select(index => new SerializableEvent(
                     new byte[] { 1 },
                     SortableUniqueId.GetTickString(10_000 + index) + SortableUniqueId.GetIdString(Guid.Empty),
@@ -802,12 +849,13 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
                     new List<string>(),
                     "ProductionCatchUpEvent"))
                 .ToArray();
+            PersistentState = persistentState ?? new RecordingPersistentState<MultiProjectionGrainState>();
         }
 
         public IReadOnlyList<SerializableEvent> Events { get; }
         public int ReadCalls => Volatile.Read(ref _readCalls);
         public IReadOnlyList<string?> ReadSinceValues => ReadSinceValuesStorage;
-        public RecordingPersistentState<MultiProjectionGrainState> PersistentState { get; set; } = new();
+        public RecordingPersistentState<MultiProjectionGrainState> PersistentState { get; set; }
 
         protected IReadOnlyList<SerializableEvent> NextBatch()
         {
