@@ -85,4 +85,10 @@ public static class MultiProjectionLogEvents
 
     /// <summary>Catch-up batch skipped due to concurrency gating.</summary>
     public static readonly EventId CatchUpBatchSkipped = new(1026, "CatchUpBatchSkipped");
+
+    /// <summary>A persisted fault was durably cleared because its stored projector version differs from the running version.</summary>
+    public static readonly EventId ProjectionFaultVersionCleared = new(1027, "ProjectionFaultVersionCleared");
+
+    /// <summary>The durable version-mismatch fault clear failed; activation must not begin catch-up or serve requests.</summary>
+    public static readonly EventId ProjectionFaultVersionClearFailed = new(1028, "ProjectionFaultVersionClearFailed");
 }

@@ -23,17 +23,28 @@ public struct ProjectionFaultExceptionSurrogate
 public sealed class ProjectionFaultExceptionConverter
     : IConverter<SekibanProjectionFaultException, ProjectionFaultExceptionSurrogate>
 {
-    public SekibanProjectionFaultException ConvertFromSurrogate(in ProjectionFaultExceptionSurrogate surrogate) =>
-        new(new ProjectionFaultDescriptor(
+    public SekibanProjectionFaultException ConvertFromSurrogate(in ProjectionFaultExceptionSurrogate surrogate)
+    {
+        var fault = new ProjectionFaultDescriptor(
             surrogate.EventId,
             surrogate.EventType ?? string.Empty,
             surrogate.ProjectorName ?? string.Empty,
             surrogate.Position ?? string.Empty,
             surrogate.Message ?? string.Empty,
-            surrogate.FaultedAtUtc));
+            surrogate.FaultedAtUtc);
+        var exception = new SekibanProjectionFaultException(fault);
 
-    public ProjectionFaultExceptionSurrogate ConvertToSurrogate(in SekibanProjectionFaultException value) =>
-        new()
+        // The constructor has already annotated this exception. Re-apply at the transport reconstruction boundary on
+        // purpose: it is idempotent, and it prevents future constructor/converter drift from dropping client-visible
+        // fault context after Orleans deserialization.
+        fault.AnnotateReRaise(exception);
+        return exception;
+    }
+
+    public ProjectionFaultExceptionSurrogate ConvertToSurrogate(in SekibanProjectionFaultException value)
+    {
+        value.Fault.AnnotateReRaise(value);
+        return new()
         {
             EventId = value.Fault.EventId,
             EventType = value.Fault.EventType,
@@ -42,4 +53,5 @@ public sealed class ProjectionFaultExceptionConverter
             Message = value.Fault.Message,
             FaultedAtUtc = value.Fault.FaultedAtUtc
         };
+    }
 }

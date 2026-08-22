@@ -1,5 +1,6 @@
 using Dcb.Domain;
 using Dcb.Domain.Student;
+using Microsoft.Extensions.Logging;
 using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
@@ -68,6 +69,11 @@ public class ProjectionFaultIntegrityTests
 
         // the fault's identifiers rode out on the exception's Data, under the SEK-G9 boundary keys
         Assert.Equal(fault.EventId.ToString(), thrown.Data[ProjectionFaultDescriptor.EventIdDataKey]);
+        Assert.Equal($"MultiProjection.Fold ({StudentSummaries.MultiProjectorName})", thrown.Data[ProjectionFaultDescriptor.OperationDataKey]);
+        Assert.Equal(MalformedEventPayloadFixture.EventTypeName, thrown.Data[ProjectionFaultDescriptor.TargetDataKey]);
+        Assert.Equal(fault.Position, thrown.Data[ProjectionFaultDescriptor.PositionDataKey]);
+        Assert.False(thrown.Data.Contains(ProjectionFaultDescriptor.ReRaiseDataKey));
+        Assert.False(string.IsNullOrEmpty(thrown.StackTrace));
     }
 
     [Fact]
@@ -82,6 +88,49 @@ public class ProjectionFaultIntegrityTests
         Assert.False(state.IsSuccess);
         var ex = Assert.IsType<SekibanProjectionFaultException>(state.GetException());
         Assert.Equal(MalformedEventPayloadFixture.EventTypeName, ex.Fault.EventType);
+        Assert.True(ex.IsReRaise);
+        Assert.Equal(true, ex.Data[ProjectionFaultDescriptor.ReRaiseDataKey]);
+        Assert.Contains("previously faulted at event", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("first observed", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FirstFault_LogsTheOriginalOnce_AndReRaisesUseADistinctEventId()
+    {
+        var logger = new RecordingLogger();
+        var actor = new GeneralMultiProjectionActor(Domain(), StudentSummaries.MultiProjectorName, logger: logger);
+
+        var original = await Assert.ThrowsAnyAsync<Exception>(() => actor.AddSerializableEventsAsync([Poison()]));
+        _ = await actor.GetStateAsync();
+        _ = await actor.GetStateAsync();
+
+        var first = Assert.Single(logger.Entries, entry => entry.EventId.Name == "ProjectionFaultFirstObserved");
+        Assert.Equal(1401, first.EventId.Id);
+        Assert.Same(original, first.Exception);
+        Assert.False(string.IsNullOrEmpty(first.Exception!.StackTrace));
+
+        var reRaises = logger.Entries.Where(entry => entry.EventId.Name == "ProjectionFaultReRaised").ToArray();
+        Assert.Equal(2, reRaises.Length);
+        Assert.All(reRaises, entry =>
+        {
+            Assert.Equal(1402, entry.EventId.Id);
+            Assert.Null(entry.Exception);
+            Assert.Contains("IsReRaise", entry.Message, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void ProjectionFaultPublicShape_IsAdditive_AndDescriptorKeepsSixPositionalFields()
+    {
+        var descriptor = typeof(ProjectionFaultDescriptor);
+        var deconstruct = Assert.Single(descriptor.GetMethods(), method => method.Name == "Deconstruct");
+        Assert.Equal(6, deconstruct.GetParameters().Length);
+        Assert.Equal(6, Assert.Single(descriptor.GetConstructors()).GetParameters().Length);
+
+        var reRaise = typeof(SekibanProjectionFaultException).GetProperty(nameof(SekibanProjectionFaultException.IsReRaise));
+        Assert.NotNull(reRaise);
+        Assert.True(reRaise!.CanRead);
+        Assert.False(reRaise.CanWrite);
     }
 
     [Fact]
@@ -212,5 +261,31 @@ public class ProjectionFaultIntegrityTests
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
         public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingLogger : ILogger
+    {
+        public List<LogEntry> Entries { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NoopDisposable.Instance;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add(new LogEntry(eventId, exception, formatter(state, exception)));
+        }
+    }
+
+    private sealed record LogEntry(EventId EventId, Exception? Exception, string Message);
+
+    private sealed class NoopDisposable : IDisposable
+    {
+        public static readonly NoopDisposable Instance = new();
+        public void Dispose() { }
     }
 }

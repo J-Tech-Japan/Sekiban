@@ -147,6 +147,19 @@ public interface IMultiProjectionGrain : IGrainWithStringKey
     Task<bool> DeleteExternalStateAsync();
 
     /// <summary>
+    ///     Reads the committed projection-fault reset token for an upgraded serving silo. A successful empty value means
+    ///     only that no committed descriptor exists; an error means either this legacy implementation does not support
+    ///     the read surface or the committed descriptor could not be read. The default body is deliberately explicit
+    ///     unsupported rather than a false healthy/no-fault answer, while generated Orleans proxies invoke the grain's
+    ///     real implementation.
+    /// </summary>
+    Task<ResultBox<ProjectionFaultReadResult>> TryGetProjectionFaultAsync() =>
+        Task.FromResult(ResultBox.Error<ProjectionFaultReadResult>(
+            new NotSupportedException(
+                "TryGetProjectionFaultAsync is not supported by this IMultiProjectionGrain implementation. "
+                + "Use an upgraded serving silo that implements the committed projection-fault read surface.")));
+
+    /// <summary>
     ///     Operator-only admin surface: clear a persisted projection fault and rebuild. The request carries the exact
     ///     current fault identity (projector name, fault event id, fault stream position) as a concurrency token,
     ///     validated inside the single-writer gate against the CURRENT persisted descriptor. A mismatch, stale token,

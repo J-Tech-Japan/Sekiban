@@ -20,6 +20,11 @@ namespace Sekiban.Dcb.Actors;
 public class GeneralMultiProjectionActor
 {
 
+    // These are intentionally actor-local rather than grain log events: the actor owns the first observed exception
+    // (and its original stack), while the grain may later persist or restore only the descriptor.
+    private static readonly EventId ProjectionFaultFirstObserved = new(1401, "ProjectionFaultFirstObserved");
+    private static readonly EventId ProjectionFaultReRaised = new(1402, "ProjectionFaultReRaised");
+
     private readonly DcbDomainTypes _domain;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly GeneralMultiProjectionActorOptions _options;
@@ -169,10 +174,16 @@ public class GeneralMultiProjectionActor
         return GetStateFromSingleAccessorAsync(canGetUnsafeState);
     }
 
-    private static SekibanProjectionFaultException CreateFaultException(ProjectionFaultDescriptor fault)
+    private SekibanProjectionFaultException CreateFaultException(ProjectionFaultDescriptor fault)
     {
         var exception = new SekibanProjectionFaultException(fault);
-        fault.Annotate(exception);
+        _logger.LogWarning(
+            ProjectionFaultReRaised,
+            "Projection fault re-raised from its persisted descriptor: {ProjectorName}, EventId: {EventId}, Position: {Position}, IsReRaise: {IsReRaise}",
+            fault.ProjectorName,
+            fault.EventId,
+            fault.Position,
+            exception.IsReRaise);
         return exception;
     }
 
@@ -789,13 +800,25 @@ public class GeneralMultiProjectionActor
     {
         var original = ex.InnerException ?? ex;
 
-        _fault ??= new ProjectionFaultDescriptor(
-            ev.Id,
-            ev.EventType,
-            _projectorName,
-            ev.SortableUniqueIdValue,
-            original.Message,
-            DateTime.UtcNow.Ticks);
+        if (_fault is null)
+        {
+            _fault = new ProjectionFaultDescriptor(
+                ev.Id,
+                ev.EventType,
+                _projectorName,
+                ev.SortableUniqueIdValue,
+                original.Message,
+                DateTime.UtcNow.Ticks);
+            // The original exception is available only at this boundary. Emit it exactly once, with its real stack;
+            // later calls have only the descriptor and use the distinct re-raise event id.
+            _logger.LogError(
+                ProjectionFaultFirstObserved,
+                original,
+                "Projection fault first observed: {ProjectorName}, EventId: {EventId}, Position: {Position}",
+                _fault.ProjectorName,
+                _fault.EventId,
+                _fault.Position);
+        }
 
         _fault.Annotate(original);
         ExceptionDispatchInfo.Capture(original).Throw();
@@ -806,13 +829,23 @@ public class GeneralMultiProjectionActor
     {
         var original = ex.InnerException ?? ex;
 
-        _fault ??= new ProjectionFaultDescriptor(
-            se.Id,
-            se.EventPayloadName,
-            _projectorName,
-            se.SortableUniqueIdValue,
-            original.Message,
-            DateTime.UtcNow.Ticks);
+        if (_fault is null)
+        {
+            _fault = new ProjectionFaultDescriptor(
+                se.Id,
+                se.EventPayloadName,
+                _projectorName,
+                se.SortableUniqueIdValue,
+                original.Message,
+                DateTime.UtcNow.Ticks);
+            _logger.LogError(
+                ProjectionFaultFirstObserved,
+                original,
+                "Projection fault first observed: {ProjectorName}, EventId: {EventId}, Position: {Position}",
+                _fault.ProjectorName,
+                _fault.EventId,
+                _fault.Position);
+        }
 
         _fault.Annotate(original);
         ExceptionDispatchInfo.Capture(original).Throw();

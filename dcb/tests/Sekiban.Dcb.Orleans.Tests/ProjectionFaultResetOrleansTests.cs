@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Orleans.Runtime;
 using Orleans.Runtime.Hosting;
 using Orleans.Storage;
@@ -17,6 +18,7 @@ using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -31,11 +33,13 @@ namespace Sekiban.Dcb.Orleans.Tests;
 ///     fields are validated as one atomic precondition against the persisted descriptor inside the single-writer gate;
 ///     a correct reset also invalidates the derived external snapshot so a rebuild starts from the beginning.
 /// </summary>
+[Collection("projection-fault-reset")]
 public class ProjectionFaultResetOrleansTests : IAsyncLifetime
 {
     private static readonly InMemoryEventStore SharedEventStore = new();
     private static readonly InMemoryMultiProjectionStateStore SharedStateStore = new();
     private static readonly FailableStateStore StateStore = new(SharedStateStore);
+    private static readonly FaultLifecycleLogProvider FaultLogs = new();
     internal static volatile bool PoisonActive = true;
     private TestCluster _cluster = null!;
     private ISekibanExecutor _executor = null!;
@@ -66,12 +70,20 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         PoisonActive = true;
         await SharedStateStore.DeleteAllAsync(ResettableProjector.MultiProjectorName);
         TogglableGrainStorage.Reset();
-        StateStore.FailNextDelete = false;
+        StateStore.ResetForTest();
+        ResettableProjector.ResetApplicationObservation();
+        FaultLogs.Reset();
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
         var id = Guid.NewGuid().ToString("N")[..8];
         builder.Options.ClusterId = $"ResetCluster-{id}";
         builder.Options.ServiceId = $"ResetService-{id}";
+        // Avoid TestCluster's dynamic port scanner, which is unreliable on macOS hosts with a large listener table.
+        // The collection below makes this per-process pair exclusive across the class's real-cluster tests.
+        var portBase = 46_000 + (Environment.ProcessId % 3_000) * 2;
+        builder.PortAllocator = new FixedPortAllocator(portBase, portBase + 1);
+        builder.Options.BaseSiloPort = portBase;
+        builder.Options.BaseGatewayPort = portBase + 1;
         builder.AddSiloBuilderConfigurator<SiloConfigurator>();
         _cluster = builder.Build();
         await _cluster.DeployAsync();
@@ -140,6 +152,26 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         return reactivated;
     }
 
+    private async Task<(IMultiProjectionGrain Replacement, MultiProjectionGrainState PersistedFault, int WritesBeforeActivation, int HistoryBeforeActivation)>
+        DeactivateWithPersistedFaultVersionAsync(
+            IMultiProjectionGrain grain,
+            string persistedVersion,
+            bool poisonActiveOnReplacement)
+    {
+        var writesBeforeDeactivate = TogglableGrainStorage.WriteCount;
+        await grain.RequestDeactivationAsync();
+        await PollUntilAsync(() => Task.FromResult(TogglableGrainStorage.WriteCount > writesBeforeDeactivate));
+        Assert.True(TogglableGrainStorage.TryMutatePersistedState(state => state.ProjectorVersion = persistedVersion));
+        var persistedFault = Assert.IsType<MultiProjectionGrainState>(TogglableGrainStorage.GetPersistedState());
+        Assert.False(string.IsNullOrWhiteSpace(persistedFault.FaultEventId));
+        PoisonActive = poisonActiveOnReplacement;
+        return (
+            Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName),
+            persistedFault,
+            TogglableGrainStorage.WriteCount,
+            TogglableGrainStorage.GetWriteHistory().Count);
+    }
+
     private async Task<(IMultiProjectionGrain Grain, ResetProjectionFaultRequest Token, SerializableEvent Poison)> FaultAndTokenAsync(long tick)
     {
         var id = Guid.CreateVersion7();
@@ -150,6 +182,42 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess); // faulted
         var token = new ResetProjectionFaultRequest(ResettableProjector.MultiProjectorName, id.ToString(), ev.SortableUniqueIdValue);
         return (grain, token, ev);
+    }
+
+    private static ResetProjectionFaultRequest TokenFrom(ProjectionFaultInfo info) =>
+        new(info.ProjectorName, info.FaultEventId.ToString(), info.Position);
+
+    private static void AssertFaultFieldsOnlyCleared(MultiProjectionGrainState before, MultiProjectionGrainState after)
+    {
+        Assert.Null(after.FaultEventId);
+        Assert.Null(after.FaultEventType);
+        Assert.Null(after.FaultPosition);
+        Assert.Null(after.FaultMessage);
+        Assert.Equal(0, after.FaultedAtUtcTicks);
+
+        // MetadataMaintenance must be a surgical descriptor clear, not a disguised checkpoint/version rewrite.
+        Assert.Equal(before.ProjectorName, after.ProjectorName);
+        Assert.Equal(before.ProjectorVersion, after.ProjectorVersion);
+        Assert.Equal(before.LastSortableUniqueId, after.LastSortableUniqueId);
+        Assert.Equal(before.EventsProcessed, after.EventsProcessed);
+        Assert.Equal(before.LastPersistTime, after.LastPersistTime);
+        Assert.Equal(before.SerializedState, after.SerializedState);
+        Assert.Equal(before.StateSize, after.StateSize);
+        Assert.Equal(before.SafeLastPosition, after.SafeLastPosition);
+        Assert.Equal(before.LastPosition, after.LastPosition);
+        Assert.Equal(before.LastGoodSafeVersion, after.LastGoodSafeVersion);
+        Assert.Equal(before.LastGoodPayloadBytes, after.LastGoodPayloadBytes);
+        Assert.Equal(before.LastGoodOriginalSizeBytes, after.LastGoodOriginalSizeBytes);
+        Assert.Equal(before.LastGoodEventsProcessed, after.LastGoodEventsProcessed);
+    }
+
+    private static void AssertFaultFieldsEqual(MultiProjectionGrainState expected, MultiProjectionGrainState actual)
+    {
+        Assert.Equal(expected.FaultEventId, actual.FaultEventId);
+        Assert.Equal(expected.FaultEventType, actual.FaultEventType);
+        Assert.Equal(expected.FaultPosition, actual.FaultPosition);
+        Assert.Equal(expected.FaultMessage, actual.FaultMessage);
+        Assert.Equal(expected.FaultedAtUtcTicks, actual.FaultedAtUtcTicks);
     }
 
     // ---- token validation: each field is part of one atomic precondition; any mismatch rejects with zero effect ----
@@ -204,6 +272,209 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         var results = await Task.WhenAll(a, b);
 
         Assert.Equal(1, results.Count(r => r.IsSuccess));
+    }
+
+    // ---- SEK-G39 admin-read tokens: one committed descriptor is the sole authority for reset identity ----
+
+    [Fact]
+    public async Task AdminReadToken_RoundTripsToReset_AndTheLegacyExceptionDataTokenStillWorks()
+    {
+        var (grain, _, _) = await FaultAndTokenAsync(1_500);
+
+        var read = await grain.TryGetProjectionFaultAsync();
+        Assert.True(read.IsSuccess);
+        Assert.True(read.GetValue().HasFault);
+        var info = Assert.IsType<ProjectionFaultInfo>(read.GetValue().Fault);
+        var canonicalToken = TokenFrom(info);
+
+        // The operator can use the admin-read identity verbatim. Once the underlying poison is fixed, it clears and
+        // rebuilds successfully.
+        PoisonActive = false;
+        Assert.True((await grain.ResetProjectionFaultAsync(canonicalToken)).IsSuccess);
+        Assert.True((await grain.GetSnapshotJsonAsync()).IsSuccess); // fold A before enabling the distinct B poison
+
+        // Keep the simpler read-clear-resubmit case separate from the A-to-B race below: the old token is now stale and
+        // must not turn a healthy state into a second reset/write.
+        var writesBeforeResubmit = TogglableGrainStorage.WriteCount;
+        var deletesBeforeResubmit = StateStore.DeleteCount;
+        Assert.False((await grain.ResetProjectionFaultAsync(canonicalToken)).IsSuccess);
+        Assert.Equal(writesBeforeResubmit, TogglableGrainStorage.WriteCount);
+        Assert.Equal(deletesBeforeResubmit, StateStore.DeleteCount);
+
+        // The historical exception-data extraction remains compatible. Establish a new fault so the descriptor is
+        // durable, ask again to receive its reconstructed exception, and use the four legacy annotations as the token.
+        PoisonActive = true;
+        var next = Event(poison: true, tick: 1_501, Guid.CreateVersion7());
+        await grain.SeedEventsAsync(new List<SerializableEvent> { next });
+        await Assert.ThrowsAnyAsync<Exception>(() => grain.RefreshAsync());
+        var reRaised = (await grain.GetSnapshotJsonAsync()).GetException();
+        var legacyOperation = Assert.IsType<string>(reRaised.Data[ProjectionFaultDescriptor.OperationDataKey]);
+        var legacyEventId = Assert.IsType<string>(reRaised.Data[ProjectionFaultDescriptor.EventIdDataKey]);
+        var legacyPosition = Assert.IsType<string>(reRaised.Data[ProjectionFaultDescriptor.PositionDataKey]);
+        var legacyToken = new ResetProjectionFaultRequest(
+            legacyOperation.Replace("MultiProjection.Fold (", string.Empty, StringComparison.Ordinal)
+                .TrimEnd(')'),
+            legacyEventId,
+            legacyPosition);
+
+        PoisonActive = false;
+        Assert.True((await grain.ResetProjectionFaultAsync(legacyToken)).IsSuccess);
+    }
+
+    [Fact]
+    public async Task AdminReadTokenA_DoesNotClearDurablyPersistedFaultB_ThenTokenBResets()
+    {
+        var (grain, _, _) = await FaultAndTokenAsync(1_600);
+        var readA = await grain.TryGetProjectionFaultAsync();
+        Assert.True(readA.IsSuccess);
+        var tokenA = TokenFrom(Assert.IsType<ProjectionFaultInfo>(readA.GetValue().Fault));
+
+        // Step 2: reset A after the projector is fixed.
+        PoisonActive = false;
+        Assert.True((await grain.ResetProjectionFaultAsync(tokenA)).IsSuccess);
+        Assert.True((await grain.GetSnapshotJsonAsync()).IsSuccess); // A is durably rebuilt before B is introduced
+
+        // Step 3: establish and durably persist B under the same projection.
+        PoisonActive = true;
+        var eventB = Event(poison: true, tick: 1_601, Guid.CreateVersion7());
+        await grain.SeedEventsAsync(new List<SerializableEvent> { eventB });
+        await Assert.ThrowsAnyAsync<Exception>(() => grain.RefreshAsync());
+        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        var readB = await grain.TryGetProjectionFaultAsync();
+        Assert.True(readB.IsSuccess);
+        var infoB = Assert.IsType<ProjectionFaultInfo>(readB.GetValue().Fault);
+        Assert.Equal(eventB.Id, infoB.FaultEventId);
+
+        // Step 4: stale A is rejected before either state mutation or external invalidation. Step 5: B remains exactly
+        // the committed descriptor an operator would read now.
+        var writesBeforeStaleA = TogglableGrainStorage.WriteCount;
+        var deletesBeforeStaleA = StateStore.DeleteCount;
+        Assert.False((await grain.ResetProjectionFaultAsync(tokenA)).IsSuccess);
+        Assert.Equal(writesBeforeStaleA, TogglableGrainStorage.WriteCount);
+        Assert.Equal(deletesBeforeStaleA, StateStore.DeleteCount);
+        var afterStaleA = await grain.TryGetProjectionFaultAsync();
+        Assert.True(afterStaleA.IsSuccess);
+        var retainedB = Assert.IsType<ProjectionFaultInfo>(afterStaleA.GetValue().Fault);
+        Assert.Equal(infoB, retainedB);
+
+        // Step 6: the fresh B token is the only one accepted.
+        PoisonActive = false;
+        Assert.True((await grain.ResetProjectionFaultAsync(TokenFrom(retainedB))).IsSuccess);
+    }
+
+    [Fact]
+    public async Task MalformedCommittedFault_AdminReadReturnsReadFailure_NotUnsupportedOrNoFault()
+    {
+        var (grain, _, _) = await FaultAndTokenAsync(1_700);
+        var reactivated = await CorruptPersistedDescriptorAndReactivateAsync(
+            grain,
+            state => state.FaultedAtUtcTicks = long.MaxValue,
+            poisonActiveOnRestore: false);
+
+        var read = await reactivated.TryGetProjectionFaultAsync();
+
+        Assert.False(read.IsSuccess);
+        Assert.NotNull(read.GetException());
+        Assert.IsNotType<NotSupportedException>(read.GetException());
+        Assert.Contains("ArgumentOutOfRangeException", read.GetException().Message, StringComparison.Ordinal);
+    }
+
+    // ---- SEK-G39 version scoping: a stale-version descriptor is one durable clear before any replacement work ----
+
+    [Theory]
+    [InlineData("0.9")] // bump: persisted A -> running B (1.0)
+    [InlineData("2.0")] // revert: persisted A -> running B (1.0)
+    public async Task VersionMismatch_ClearsExactlyTheDurableFaultBeforeReplacementApplies_AndNeverReturns(string persistedVersion)
+    {
+        var (faulted, _, _) = await FaultAndTokenAsync(persistedVersion == "0.9" ? 1_800 : 1_801);
+        var transition = await DeactivateWithPersistedFaultVersionAsync(
+            faulted,
+            persistedVersion,
+            poisonActiveOnReplacement: false);
+        ResettableProjector.StartApplicationObservation();
+
+        // Activating through the admin RPC is intentional: it proves the committed no-fault result is not observable
+        // until the mismatch clear has committed. Orleans turn scheduling keeps catch-up behind this request.
+        var admin = await transition.Replacement.TryGetProjectionFaultAsync();
+        Assert.True(admin.IsSuccess);
+        Assert.False(admin.GetValue().HasFault);
+        Assert.Null(admin.GetValue().Fault);
+        Assert.Equal(transition.WritesBeforeActivation + 1, TogglableGrainStorage.WriteCount);
+
+        var writesAfterAdmin = TogglableGrainStorage.GetWriteHistory();
+        Assert.Equal(transition.HistoryBeforeActivation + 1, writesAfterAdmin.Count);
+        var durableClear = writesAfterAdmin[^1];
+        AssertFaultFieldsOnlyCleared(transition.PersistedFault, durableClear);
+
+        var audit = Assert.Single(FaultLogs.Entries, entry => entry.EventId.Name == "ProjectionFaultVersionCleared");
+        Assert.Equal(1027, audit.EventId.Id);
+        Assert.Contains(persistedVersion, audit.Message, StringComparison.Ordinal);
+        Assert.Contains(ResettableProjector.MultiProjectorVersion, audit.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(FaultLogs.Entries, entry => entry.EventId.Name == "ProjectionFaultVersionClearFailed");
+
+        // B can now fold the formerly poisoned event. The observation runs inside the REAL projector and reads the
+        // test provider's committed record: at B's first apply, precisely the one transition write had landed and the
+        // same durable collection held the five cleared fields.
+        Assert.True((await transition.Replacement.GetSnapshotJsonAsync()).IsSuccess);
+        await PollUntilAsync(() => Task.FromResult(ResettableProjector.FirstApplicationObserved));
+        Assert.Equal(transition.WritesBeforeActivation + 1, ResettableProjector.WriteCountAtFirstApplication);
+        Assert.True(ResettableProjector.FirstApplicationSawFaultFieldsCleared);
+
+        // A second B activation reads the provider state afresh. If the first clear were in-memory only, the old fault
+        // would reappear here; instead the real proxy still observes supported+no-fault.
+        var writesBeforeSecondB = TogglableGrainStorage.WriteCount;
+        var clearsBeforeSecondB = FaultLogs.Entries.Count(entry => entry.EventId.Name == "ProjectionFaultVersionCleared");
+        await transition.Replacement.RequestDeactivationAsync();
+        await PollUntilAsync(() => Task.FromResult(TogglableGrainStorage.WriteCount > writesBeforeSecondB));
+        var secondB = Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
+        var secondRead = await secondB.TryGetProjectionFaultAsync();
+        Assert.True(secondRead.IsSuccess);
+        Assert.False(secondRead.GetValue().HasFault);
+        Assert.Null(secondRead.GetValue().Fault);
+        Assert.Equal(clearsBeforeSecondB, FaultLogs.Entries.Count(entry => entry.EventId.Name == "ProjectionFaultVersionCleared"));
+    }
+
+    [Fact]
+    public async Task SameVersion_ReactivationRestoresTheFaultAndContinuesFailingClosed()
+    {
+        var (faulted, _, _) = await FaultAndTokenAsync(1_900);
+        var transition = await DeactivateWithPersistedFaultVersionAsync(
+            faulted,
+            ResettableProjector.MultiProjectorVersion,
+            poisonActiveOnReplacement: true);
+
+        var admin = await transition.Replacement.TryGetProjectionFaultAsync();
+
+        Assert.True(admin.IsSuccess);
+        Assert.True(admin.GetValue().HasFault);
+        Assert.Equal(transition.PersistedFault.FaultEventId, Assert.IsType<ProjectionFaultInfo>(admin.GetValue().Fault).FaultEventId.ToString());
+        Assert.Equal(transition.WritesBeforeActivation, TogglableGrainStorage.WriteCount);
+        Assert.DoesNotContain(FaultLogs.Entries, entry => entry.EventId.Name == "ProjectionFaultVersionCleared");
+        Assert.False((await transition.Replacement.GetSnapshotJsonAsync()).IsSuccess);
+    }
+
+    [Fact]
+    public async Task VersionMismatch_ClearWriteFailureFailsActivationBeforeApplyOrSuccessfulAdminRead()
+    {
+        var (faulted, _, _) = await FaultAndTokenAsync(2_000);
+        var transition = await DeactivateWithPersistedFaultVersionAsync(
+            faulted,
+            "0.9",
+            poisonActiveOnReplacement: false);
+        ResettableProjector.StartApplicationObservation();
+        TogglableGrainStorage.FailNextWrite = true;
+
+        await Assert.ThrowsAnyAsync<Exception>(() => transition.Replacement.TryGetProjectionFaultAsync());
+
+        Assert.Equal(transition.WritesBeforeActivation, TogglableGrainStorage.WriteCount);
+        Assert.Equal(transition.HistoryBeforeActivation, TogglableGrainStorage.GetWriteHistory().Count);
+        var retained = Assert.IsType<MultiProjectionGrainState>(TogglableGrainStorage.GetPersistedState());
+        AssertFaultFieldsEqual(transition.PersistedFault, retained);
+        Assert.False(ResettableProjector.FirstApplicationObserved);
+        var failed = Assert.Single(FaultLogs.Entries, entry => entry.EventId.Name == "ProjectionFaultVersionClearFailed");
+        Assert.Equal(1028, failed.EventId.Id);
+        Assert.NotNull(failed.Exception);
+        Assert.DoesNotContain(FaultLogs.Entries, entry => entry.EventId.Name == "ProjectionFaultVersionCleared");
     }
 
     // ---- reset semantics: the reset ALONE closes the early-healthy window (no manual deactivation) ----
@@ -649,6 +920,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             siloBuilder
                 .ConfigureServices(services =>
                 {
+                    services.AddLogging(logging => logging.AddProvider(FaultLogs));
                     services.AddSingleton(_ => CreateDomain());
                     services.AddSingleton<IEventStore>(SharedEventStore);
                     services.AddSingleton<IMultiProjectionStateStore>(StateStore);
@@ -676,9 +948,18 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         // Counts real upsert-delegate invocations. A fault-gated persist must NEVER reach the store, so an unchanged
         // count across a persist proves rejection at the coordinator — stronger than merely "no v2 snapshot exists".
         private int _upsertCount;
+        private int _deleteCount;
         public int UpsertCount => Volatile.Read(ref _upsertCount);
+        public int DeleteCount => Volatile.Read(ref _deleteCount);
 
         public FailableStateStore(IMultiProjectionStateStore inner) => _inner = inner;
+
+        public void ResetForTest()
+        {
+            FailNextDelete = false;
+            Interlocked.Exchange(ref _upsertCount, 0);
+            Interlocked.Exchange(ref _deleteCount, 0);
+        }
 
         public Task<ResultBox<bool>> DeleteAsync(string projectorName, string projectorVersion, CancellationToken cancellationToken = default)
         {
@@ -688,6 +969,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
                 return Task.FromResult(ResultBox.Error<bool>(new InvalidOperationException("injected: external snapshot delete failure")));
             }
 
+            Interlocked.Increment(ref _deleteCount);
             return _inner.DeleteAsync(projectorName, projectorVersion, cancellationToken);
         }
 
@@ -699,7 +981,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             _inner.UpsertAsync(record, offloadThresholdBytes, cancellationToken);
         public Task<ResultBox<IReadOnlyList<ProjectorStateInfo>>> ListAllAsync(CancellationToken cancellationToken = default) =>
             _inner.ListAllAsync(cancellationToken);
-        public Task<ResultBox<int>> DeleteAllAsync(string projectorName, CancellationToken cancellationToken = default) =>
+        public Task<ResultBox<int>> DeleteAllAsync(string? projectorName = null, CancellationToken cancellationToken = default) =>
             _inner.DeleteAllAsync(projectorName, cancellationToken);
         public Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord record, CancellationToken cancellationToken = default) =>
             _inner.OpenStateDataReadStreamAsync(record, cancellationToken);
@@ -710,11 +992,54 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    ///     Records the production grain's structured event ids without replacing its logger. The version-transition
+    ///     assertions need to distinguish successful audit telemetry from the fail-before-serving telemetry.
+    /// </summary>
+    private sealed class FaultLifecycleLogProvider : ILoggerProvider
+    {
+        private readonly ConcurrentQueue<RecordedLog> _entries = new();
+        public IReadOnlyCollection<RecordedLog> Entries => _entries.ToArray();
+
+        public void Reset()
+        {
+            while (_entries.TryDequeue(out _))
+            {
+            }
+        }
+
+        public ILogger CreateLogger(string categoryName) => new FaultLifecycleLogger(_entries);
+        public void Dispose() { }
+
+        private sealed class FaultLifecycleLogger(ConcurrentQueue<RecordedLog> entries) : ILogger
+        {
+            public IDisposable BeginScope<TState>(TState state) where TState : notnull => NoopScope.Instance;
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter) =>
+                entries.Enqueue(new RecordedLog(eventId, exception, formatter(state, exception)));
+        }
+
+        private sealed class NoopScope : IDisposable
+        {
+            public static readonly NoopScope Instance = new();
+            public void Dispose() { }
+        }
+    }
+
+    private sealed record RecordedLog(EventId EventId, Exception? Exception, string Message);
+
     /// <summary>An in-memory grain storage that really persists (so reactivation restores) and can fail the next write.</summary>
     private sealed class TogglableGrainStorage : IGrainStorage
     {
         private static readonly object Sync = new();
         private static readonly Dictionary<string, object?> Store = new();
+        private static readonly List<MultiProjectionGrainState> WriteHistory = new();
         public static int WriteCount;
         public static bool FailNextWrite;
 
@@ -723,8 +1048,27 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             lock (Sync)
             {
                 Store.Clear();
+                WriteHistory.Clear();
                 WriteCount = 0;
                 FailNextWrite = false;
+            }
+        }
+
+        /// <summary>Immutable snapshots of actual provider writes, used to prove the transition's write provenance.</summary>
+        public static IReadOnlyList<MultiProjectionGrainState> GetWriteHistory()
+        {
+            lock (Sync)
+            {
+                return WriteHistory.Select(state => state.Clone()).ToArray();
+            }
+        }
+
+        /// <summary>Returns the committed provider record rather than an actor-local state reference.</summary>
+        public static MultiProjectionGrainState? GetPersistedState()
+        {
+            lock (Sync)
+            {
+                return Store.Values.OfType<MultiProjectionGrainState>().SingleOrDefault()?.Clone();
             }
         }
 
@@ -757,6 +1101,10 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
                 }
 
                 Store[grainId.ToString()] = grainState.State;
+                if (grainState.State is MultiProjectionGrainState projectionState)
+                {
+                    WriteHistory.Add(projectionState.Clone());
+                }
                 WriteCount++;
             }
 
@@ -792,6 +1140,12 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
                 return false;
             }
         }
+    }
+
+    private sealed class FixedPortAllocator(int baseSiloPort, int baseGatewayPort) : ITestClusterPortAllocator
+    {
+        public (int, int) AllocateConsecutivePortPairs(int numPorts) => (baseSiloPort, baseGatewayPort);
+        public void Dispose() { }
     }
 
     internal record ResetTriggerEvent(bool Poison) : IEventPayload;
@@ -832,6 +1186,36 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         public int Count { get; init; }
         public static string MultiProjectorVersion => "1.0";
         public static string MultiProjectorName => "resettable-fault-projector";
+        private static int _observeApplications;
+        private static int _firstApplicationRecorded;
+        private static int _firstApplicationObserved;
+        private static int _firstApplicationSawFaultFieldsCleared;
+        private static int _writeCountAtFirstApplication;
+
+        /// <summary>
+        ///     Test-only observation of the actual production apply boundary. It reads the same provider record that
+        ///     activation restored, so a mutation that clears merely an actor-local fault or moves the write after
+        ///     catch-up cannot satisfy the version-transition proof.
+        /// </summary>
+        public static bool FirstApplicationObserved => Volatile.Read(ref _firstApplicationObserved) != 0;
+        public static bool FirstApplicationSawFaultFieldsCleared => Volatile.Read(ref _firstApplicationSawFaultFieldsCleared) != 0;
+        public static int WriteCountAtFirstApplication => Volatile.Read(ref _writeCountAtFirstApplication);
+
+        public static void ResetApplicationObservation()
+        {
+            Interlocked.Exchange(ref _observeApplications, 0);
+            Interlocked.Exchange(ref _firstApplicationRecorded, 0);
+            Interlocked.Exchange(ref _firstApplicationObserved, 0);
+            Interlocked.Exchange(ref _firstApplicationSawFaultFieldsCleared, 0);
+            Interlocked.Exchange(ref _writeCountAtFirstApplication, 0);
+        }
+
+        public static void StartApplicationObservation()
+        {
+            ResetApplicationObservation();
+            Volatile.Write(ref _observeApplications, 1);
+        }
+
         public static ResettableProjector GenerateInitialPayload() => new();
 
         public static ResultBox<ResettableProjector> Project(
@@ -841,6 +1225,23 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             DcbDomainTypes domainTypes,
             SortableUniqueId safeWindowThreshold)
         {
+            if (Volatile.Read(ref _observeApplications) != 0 && Interlocked.Exchange(ref _firstApplicationRecorded, 1) == 0)
+            {
+                var committed = TogglableGrainStorage.GetPersistedState();
+                Volatile.Write(ref _writeCountAtFirstApplication, TogglableGrainStorage.WriteCount);
+                Volatile.Write(
+                    ref _firstApplicationSawFaultFieldsCleared,
+                    committed is not null &&
+                    committed.FaultEventId is null &&
+                    committed.FaultEventType is null &&
+                    committed.FaultPosition is null &&
+                    committed.FaultMessage is null &&
+                    committed.FaultedAtUtcTicks == 0
+                        ? 1
+                        : 0);
+                Volatile.Write(ref _firstApplicationObserved, 1);
+            }
+
             if (ev.Payload is ResetTriggerEvent { Poison: true } && PoisonActive)
             {
                 throw new InvalidOperationException("poison event: refuses to fold while poison is active");
@@ -850,3 +1251,6 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         }
     }
 }
+
+[CollectionDefinition("projection-fault-reset", DisableParallelization = true)]
+public sealed class ProjectionFaultResetCollection { }

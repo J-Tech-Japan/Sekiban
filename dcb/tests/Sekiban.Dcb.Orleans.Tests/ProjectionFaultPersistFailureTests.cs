@@ -26,6 +26,7 @@ namespace Sekiban.Dcb.Orleans.Tests;
 ///     state/scalar/list queries all fail. While the descriptor is not yet durable the faulted activation stays
 ///     pinned, so no window opens where a fresh activation answers success.
 /// </summary>
+[Collection("projection-fault-persist-failure")]
 public class ProjectionFaultPersistFailureTests : IAsyncLifetime
 {
     private static readonly InMemoryEventStore SharedEventStore = new();
@@ -42,6 +43,10 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
         var id = Guid.NewGuid().ToString("N")[..8];
         builder.Options.ClusterId = $"PersistFailCluster-{id}";
         builder.Options.ServiceId = $"PersistFailService-{id}";
+        var portBase = 59_000 + (Environment.ProcessId % 3_000) * 2;
+        builder.PortAllocator = new FixedPortAllocator(portBase, portBase + 1);
+        builder.Options.BaseSiloPort = portBase;
+        builder.Options.BaseGatewayPort = portBase + 1;
         builder.AddSiloBuilderConfigurator<SiloConfigurator>();
         _cluster = builder.Build();
         await _cluster.DeployAsync();
@@ -53,6 +58,7 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
         if (_cluster is not null)
         {
             await _cluster.StopAllSilosAsync();
+            _cluster.Dispose();
         }
     }
 
@@ -92,6 +98,27 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
         Assert.False((await _executor.QueryAsync(new DomainTypes.FaultRowListQuery())).IsSuccess);
     }
 
+    [Fact]
+    public async Task LiveButUncommittedFault_AdminReadReportsOnlyNoCommittedDescriptor()
+    {
+        var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
+        await grain.SeedEventsAsync(
+            new List<SerializableEvent> { DomainTypes.Event(poison: true, tick: 7_100) });
+
+        // The first fault-descriptor persistence attempt is rejected by the test provider. The actor is still faulted
+        // in memory, but the read token must be derived only from CoordinatedGrainStateStore.Committed: returning the
+        // live descriptor would hand the operator a token that the reset guard correctly refuses.
+        await grain.RefreshAsync();
+        Assert.True(FaultWriteInjectingStorage.RejectedWrites >= 1);
+        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+
+        var read = await grain.TryGetProjectionFaultAsync();
+
+        Assert.True(read.IsSuccess);
+        Assert.False(read.GetValue().HasFault); // empty means no COMMITTED descriptor, not a healthy live projection
+        Assert.Null(read.GetValue().Fault);
+    }
+
     private sealed class SiloConfigurator : ISiloConfigurator
     {
         public void Configure(ISiloBuilder siloBuilder)
@@ -117,6 +144,12 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
                 .AddMemoryStreams("EventStreamProvider")
                 .AddMemoryGrainStorage("EventStreamProvider");
         }
+    }
+
+    private sealed class FixedPortAllocator(int baseSiloPort, int baseGatewayPort) : ITestClusterPortAllocator
+    {
+        public (int, int) AllocateConsecutivePortPairs(int numPorts) => (baseSiloPort, baseGatewayPort);
+        public void Dispose() { }
     }
 
     /// <summary>
@@ -191,3 +224,6 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
         }
     }
 }
+
+[CollectionDefinition("projection-fault-persist-failure", DisableParallelization = true)]
+public sealed class ProjectionFaultPersistFailureCollection { }
