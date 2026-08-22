@@ -109,6 +109,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private StateRestoreSource _stateRestoreSource = StateRestoreSource.None;
     private bool _activationHealthy = true;  // Default to healthy for backward compatibility
     private string? _activationFailureReason;
+    private bool _restoreRetirementFailed;
+
+    // A known-record restore failure durably clears the four-field integrity watermark before replay begins. A
+    // zero-progress deactivation in that same activation must not repopulate only the payload-size portions of that
+    // watermark; keep the retired all-zero bundle until a fresh safe checkpoint is durably established.
+    private bool _retiredWatermarkAwaitingFreshSafeCheckpoint;
 
     // Orleans infrastructure
     private IAsyncStream<SerializableEvent>? _orleansStream;
@@ -600,6 +606,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         await EnsureInitializedAsync();
 
+        if (_restoreRetirementFailed)
+        {
+            return ResultBox.Error<MultiProjectionState>(CreateRestoreRetirementFailure());
+        }
+
         if (_host == null)
         {
             return ResultBox.Error<MultiProjectionState>(
@@ -898,6 +909,62 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return true;
     }
 
+    private async Task<bool> RetireIntegrityWatermarkAsync(string projectorName, string failureReason)
+    {
+        try
+        {
+            var outcome = await _stateStore.ExecuteWriteAsync(
+                GrainStateWriteKind.MetadataMaintenance,
+                s =>
+                {
+                    s.LastGoodSafeVersion = 0;
+                    s.LastGoodPayloadBytes = 0;
+                    s.LastGoodOriginalSizeBytes = 0;
+                    s.LastGoodEventsProcessed = 0;
+                });
+
+            if (outcome == GrainStateWriteOutcome.Committed)
+            {
+                // The external record was positively obtained but could not become a host snapshot. Invalidate that
+                // derived record before the ordered rebuild so the existing external-store ordering check remains
+                // unchanged and no recovery bypass is needed. The authoritative event stream remains untouched.
+                await InvalidateExternalDerivedSnapshotAsync();
+                _retiredWatermarkAwaitingFreshSafeCheckpoint = true;
+                _logger.LogWarning(
+                    "[{ProjectorName}] Integrity watermark retired after known-present snapshot restore failure. "
+                    + "Failure={FailureReason}",
+                    projectorName,
+                    failureReason);
+                return true;
+            }
+
+            _lastPersistOutcome = PersistOutcomeNoDurableWrite;
+            _lastError = $"Integrity watermark retirement was not committed: {outcome}";
+            _logger.LogError(
+                "[{ProjectorName}] Integrity watermark retirement failed; no durable checkpoint was committed. "
+                + "Outcome={Outcome}, Failure={FailureReason}",
+                projectorName,
+                outcome,
+                failureReason);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _lastPersistOutcome = PersistOutcomeNoDurableWrite;
+            _lastError = $"Integrity watermark retirement failed: {ex.Message}";
+            _logger.LogError(
+                ex,
+                "[{ProjectorName}] Integrity watermark retirement failed; no durable checkpoint was committed. "
+                + "Failure={FailureReason}",
+                projectorName,
+                failureReason);
+            return false;
+        }
+    }
+
+    private InvalidOperationException CreateRestoreRetirementFailure() =>
+        new($"Projection activation halted because integrity watermark retirement did not commit: {_activationFailureReason}");
+
     private async Task<StreamingExternalStorePersistResult> SaveStreamingSnapshotToExternalStoreAsync(
         string projectorName,
         PersistCheckpoint checkpoint,
@@ -1072,6 +1139,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         await EnsureInitializedAsync();
 
+        if (_restoreRetirementFailed)
+        {
+            return ResultBox.Error<string>(CreateRestoreRetirementFailure());
+        }
+
         if (_host == null)
         {
             return ResultBox.Error<string>(
@@ -1110,6 +1182,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public async Task AddEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
     {
         await EnsureInitializedAsync();
+
+        if (_restoreRetirementFailed)
+        {
+            throw CreateRestoreRetirementFailure();
+        }
 
         if (_host == null)
         {
@@ -1337,6 +1414,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     public async Task<ResultBox<bool>> PersistStateAsync()
     {
         _lastPersistOutcome = PersistOutcomeNotAttempted;
+        if (_restoreRetirementFailed)
+        {
+            _lastPersistOutcome = PersistOutcomeNoDurableWrite;
+            return ResultBox.Error<bool>(CreateRestoreRetirementFailure());
+        }
+
         try
         {
             var startUtc = DateTime.UtcNow;
@@ -1500,25 +1583,29 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 // Update LastGood fields only when the external store save succeeded.
                 if (externalStoreSaved)
                 {
-                    if (safeVersion.HasValue && safeVersion.Value > 0)
+                    if (safeVersion is > 0)
                     {
                         s.LastGoodSafeVersion = safeVersion.Value;
                     }
-                    if (envelopeSize > 0)
-                    {
-                        s.LastGoodPayloadBytes = envelopeSize;
-                    }
-                    if (originalSizeBytes > 0)
-                    {
-                        s.LastGoodOriginalSizeBytes = originalSizeBytes;
-                    }
-                    s.LastGoodEventsProcessed = _eventsProcessed;
 
-                    // SEK-G18 #6: the rebuilt checkpoint is now durably committed to the external store, so the durable
-                    // rebuild marker can be cleared — a subsequent activation may safely restore this fresh checkpoint.
-                    s.RebuildRequired = false;
-                    s.RebuildOffendingEventId = null;
-                    s.RebuildOffendingPosition = null;
+                    if (!_retiredWatermarkAwaitingFreshSafeCheckpoint || safeVersion is > 0)
+                    {
+                        if (envelopeSize > 0)
+                        {
+                            s.LastGoodPayloadBytes = envelopeSize;
+                        }
+                        if (originalSizeBytes > 0)
+                        {
+                            s.LastGoodOriginalSizeBytes = originalSizeBytes;
+                        }
+                        s.LastGoodEventsProcessed = _eventsProcessed;
+
+                        // SEK-G18 #6: the rebuilt checkpoint is now durably committed to the external store, so the durable
+                        // rebuild marker can be cleared — a subsequent activation may safely restore this fresh checkpoint.
+                        s.RebuildRequired = false;
+                        s.RebuildOffendingEventId = null;
+                        s.RebuildOffendingPosition = null;
+                    }
                 }
 
                 // Clear legacy fields
@@ -1529,6 +1616,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             await WriteOrleansStateWithRetryAsync(projectorName, ApplyPersistFields);
+            if (externalStoreSaved && safeVersion is > 0)
+            {
+                _retiredWatermarkAwaitingFreshSafeCheckpoint = false;
+            }
             _host.CompactSafeHistory();
             CompactRetainedCollections();
             _lastError = null;
@@ -1621,13 +1712,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                     if (externalStoreSaved)
                     {
-                        if (safeVersion.HasValue && safeVersion.Value > 0)
-                            s.LastGoodSafeVersion = safeVersion.Value;
+                    if (safeVersion is > 0)
+                    {
+                        s.LastGoodSafeVersion = safeVersion.Value;
+                    }
+                    if (!_retiredWatermarkAwaitingFreshSafeCheckpoint || safeVersion is > 0)
+                    {
                         if (tempFileSize > 0)
                             s.LastGoodPayloadBytes = tempFileSize;
                         if (tempFileSize > 0)
                             s.LastGoodOriginalSizeBytes = tempFileSize;
                         s.LastGoodEventsProcessed = _eventsProcessed;
+                    }
                     }
 
                     s.SerializedState = null;
@@ -1637,6 +1733,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
 
                 await WriteOrleansStateWithRetryAsync(projectorName, ApplyPersistFields);
+                if (externalStoreSaved && safeVersion is > 0)
+                {
+                    _retiredWatermarkAwaitingFreshSafeCheckpoint = false;
+                }
                 _host.CompactSafeHistory();
                 CompactRetainedCollections();
 
@@ -1757,6 +1857,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         await EnsureInitializedAsync();
 
+        if (_restoreRetirementFailed)
+        {
+            return;
+        }
+
         // Defensive: ensure stream is prepared even if lifecycle hook hasn't run yet
         if (_orleansStream == null)
         {
@@ -1862,6 +1967,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private async Task<SerializableQueryResult> ExecuteQueryInternalAsync(
         SerializableQueryParameter queryParameter, bool waitForCatchUp)
     {
+        if (_restoreRetirementFailed)
+        {
+            throw CreateRestoreRetirementFailure();
+        }
+
         // Check health if FailOnUnhealthyActivation is enabled
         if (_injectedActorOptions?.FailOnUnhealthyActivation == true && !_activationHealthy)
         {
@@ -1922,6 +2032,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private async Task<SerializableListQueryResult> ExecuteListQueryInternalAsync(
         SerializableQueryParameter queryParameter, bool waitForCatchUp)
     {
+        if (_restoreRetirementFailed)
+        {
+            throw CreateRestoreRetirementFailure();
+        }
+
         // Check health if FailOnUnhealthyActivation is enabled
         if (_injectedActorOptions?.FailOnUnhealthyActivation == true && !_activationHealthy)
         {
@@ -2057,6 +2172,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _logger.LogDebug("[{ProjectorName}] Refreshing: Re-reading events from event store", projectorName);
 
         await EnsureInitializedAsync();
+        if (_restoreRetirementFailed)
+        {
+            return new CatchUpInvocationResult(
+                new CatchUpStartPositionLease(null, CatchUpStartPositionSource.InferredCheckpoint),
+                null);
+        }
+
         if (_host == null)
         {
             return new CatchUpInvocationResult(
@@ -2197,6 +2319,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         // Create projection host via factory
         bool forceFullCatchUp = false;
+        var knownRecordObtained = false;
+        var knownRecordFailureHandled = false;
         if (_host == null)
         {
             _logger.LogDebug("Creating new projection host: {ProjectorName}", projectorName);
@@ -2328,6 +2452,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     else if (stateStoreResult.GetValue().HasValue)
                     {
                         var record = stateStoreResult.GetValue().GetValue();
+                        knownRecordObtained = true;
                         var stateStreamResult = await _multiProjectionStateStore.OpenStateDataReadStreamAsync(
                             record,
                             cancellationToken);
@@ -2346,7 +2471,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                                 record.OffloadKey);
                             _stateRestoreSource = StateRestoreSource.Failed;
                             _activationFailureReason = errorMsg;
-                            forceFullCatchUp = true;
+                            knownRecordFailureHandled = true;
+                            if (await RetireIntegrityWatermarkAsync(projectorName, errorMsg))
+                            {
+                                forceFullCatchUp = true;
+                            }
+                            else
+                            {
+                                _restoreRetirementFailed = true;
+                            }
                         }
                         else
                         {
@@ -2366,9 +2499,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                                     restoreResult.GetException(),
                                     "Snapshot restore failed: {ProjectorName}",
                                     projectorName);
+                                var errorMsg = restoreResult.GetException().Message;
                                 _stateRestoreSource = StateRestoreSource.Failed;
-                                _activationFailureReason = restoreResult.GetException().Message;
-                                forceFullCatchUp = true;
+                                _activationFailureReason = errorMsg;
+                                knownRecordFailureHandled = true;
+                                if (await RetireIntegrityWatermarkAsync(projectorName, errorMsg))
+                                {
+                                    forceFullCatchUp = true;
+                                }
+                                else
+                                {
+                                    _restoreRetirementFailed = true;
+                                }
                             }
                             else
                             {
@@ -2466,9 +2608,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         ex,
                         "State restoration exception: {ProjectorName}",
                         projectorName);
-                    _stateRestoreSource = StateRestoreSource.Failed;
-                    _activationFailureReason = ex.Message;
-                    forceFullCatchUp = true;
+                    if (knownRecordObtained && !knownRecordFailureHandled)
+                    {
+                        knownRecordFailureHandled = true;
+                        _stateRestoreSource = StateRestoreSource.Failed;
+                        _activationFailureReason = ex.Message;
+                        if (await RetireIntegrityWatermarkAsync(projectorName, ex.Message))
+                        {
+                            forceFullCatchUp = true;
+                        }
+                        else
+                        {
+                            _restoreRetirementFailed = true;
+                        }
+                    }
+                    else if (!knownRecordObtained)
+                    {
+                        _stateRestoreSource = StateRestoreSource.Failed;
+                        _activationFailureReason = ex.Message;
+                        forceFullCatchUp = true;
+                    }
                 }
             }
             else if (_multiProjectionStateStore == null)
@@ -2479,7 +2638,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     projectorName);
             }
 
-            if (!restoredFromExternalStore)
+            // A known record that failed at any point after record acquisition is not a valid restore baseline. This is
+            // especially important when the host restore returned success but stream disposal then threw: discard any
+            // partially-restored host only after the watermark retirement has committed, then begin the ordered replay
+            // against a fresh host. The retirement-write failure path is deliberately excluded by the flag above.
+            if (knownRecordObtained &&
+                _stateRestoreSource == StateRestoreSource.Failed &&
+                !_restoreRetirementFailed)
+            {
+                RecreateHostForFullRebuild();
+                restoredFromExternalStore = false;
+                forceFullCatchUp = true;
+            }
+
+            if (!restoredFromExternalStore && !_restoreRetirementFailed)
             {
                 _logger.LogInformation("No persisted state, will perform full catch-up: {ProjectorName}", projectorName);
                 forceFullCatchUp = true;
@@ -2504,28 +2676,43 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // If nothing was restored, we cannot be sure a fault is not waiting in the un-caught-up tail (its descriptor
         // may have been lost to a process crash while persistence was failing). The first query must therefore
         // synchronously catch up before it can answer — no fresh-activation empty-success window.
-        if (_projectionFault is null)
+        if (_projectionFault is null && !_restoreRetirementFailed)
         {
             _firstQueryGate.Arm();
         }
 
-        _ = CatchUpFromEventStoreAsync(forceFullCatchUp);
+        if (!_restoreRetirementFailed)
+        {
+            _ = CatchUpFromEventStoreAsync(forceFullCatchUp);
+        }
 
         // Auto-start subscription so stream-only projections resume after crashes/restarts.
-        try
+        if (!_restoreRetirementFailed)
         {
-            await StartSubscriptionAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to auto-start stream subscription on activation: {ProjectorName}",
-                projectorName);
+            try
+            {
+                await StartSubscriptionAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to auto-start stream subscription on activation: {ProjectorName}",
+                    projectorName);
+            }
         }
 
         // Mark state restore source based on whether we need full catch-up
-        if (_stateRestoreSource == StateRestoreSource.Failed && _eventsProcessed == 0)
+        if (_restoreRetirementFailed)
+        {
+            _activationHealthy = false;
+            _logger.LogError(
+                MultiProjectionLogEvents.UnhealthyActivation,
+                "Grain activation halted: integrity watermark retirement failed; no durable checkpoint was committed: {ProjectorName}, Reason: {Reason}",
+                projectorName,
+                _activationFailureReason);
+        }
+        else if (_stateRestoreSource == StateRestoreSource.Failed && _eventsProcessed == 0)
         {
             // External store restore failed, catch-up will rebuild state
             _activationHealthy = false;
@@ -3670,6 +3857,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task CatchUpFromEventStoreAsync(bool forceFull = false)
     {
+        if (_restoreRetirementFailed)
+        {
+            return;
+        }
+
         // Legacy method for compatibility - now triggers timer-based catch-up
         if (_host == null || _eventStore == null) return;
 
