@@ -127,10 +127,11 @@ buffer. Save-side streaming and compression-format changes are outside this rest
 Stream implementations must use asynchronous reads, honor `CancellationToken`, support non-seekable partial-read streams
 at their current position, and never dispose the stream. The resolver caller owns disposal. While a stream restore is in
 progress, state queries, event application, promotion, compaction, and snapshot persistence fail rather than publishing
-old or partial payload/tracking metadata. A terminal restore failure keeps that same fail-closed barrier latched: the
-previous payload and tracking metadata are not usable by query, apply, catch-up, promotion, or persistence. A later
-restore/rebuild attempt is still permitted, and only a successful atomic restore clears the barrier; otherwise the host
-follows its normal recovery/catch-up policy without serving the stale state.
+old or partial payload/tracking metadata. When a terminal restore failure leaves an already-published payload or
+tracking metadata, that same fail-closed barrier remains latched: the previous checkpoint is not usable by query,
+apply, catch-up, promotion, or persistence. A failed first restore has no prior payload to serve and retains the legacy
+empty-state/rebuild path. A later restore/rebuild attempt is still permitted, and only a successful atomic restore
+clears a latched barrier; otherwise the host follows its normal recovery/catch-up policy without serving stale state.
 
 #### Restore caller inventory
 

@@ -126,10 +126,12 @@ buffer は作りません。save 側の streaming 化と圧縮形式の変更は
 stream 実装は非同期 read を使い、`CancellationToken` を尊重し、現在位置からの非 seekable partial-read stream を
 サポートし、stream を dispose してはいけません。dispose の責任は resolver caller にあります。stream restore の最中は、
 state query・event apply・promotion・compaction・snapshot persistence は old / partial payload や tracking metadata を
-publish する代わりに失敗します。terminal な restore failure の後も、この fail-closed barrier は latch されたままです。
-以前の payload と tracking metadata は query、apply、catch-up、promotion、persistence に利用できません。後続の
-restore/rebuild attempt 自体は許可され、atomic な restore が成功した場合だけ barrier が解除されます。それ以外では
-host は stale state を serve せず通常の recovery/catch-up policy に従います。
+publish する代わりに失敗します。terminal な restore failure により既に publish 済みの payload または tracking
+metadata が残る場合、この fail-closed barrier は latch されたままです。以前の checkpoint は query、apply、catch-up、
+promotion、persistence に利用できません。初回 restore が失敗しただけであれば serve すべき以前の payload はないため、
+legacy の empty-state/rebuild path を維持します。後続の restore/rebuild attempt 自体は許可され、atomic な restore が
+成功した場合だけ latch 済み barrier が解除されます。それ以外では host は stale state を serve せず通常の
+recovery/catch-up policy に従います。
 
 #### Restore caller inventory
 

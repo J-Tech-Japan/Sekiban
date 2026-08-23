@@ -263,20 +263,7 @@ public class GeneralMultiProjectionActorCatchingUpTests
         Assert.True(snapshotResult.IsSuccess);
         var snapshot = snapshotResult.GetValue();
 
-        // Make projector version intentionally mismatch
-        // Modify inline state's ProjectorVersion
-        var inline = snapshot.InlineState!;
-        var mismatchedInline = Sekiban.Dcb.MultiProjections.SerializableMultiProjectionState.FromBytes(
-            inline.GetPayloadBytes(),
-            inline.MultiProjectionPayloadType,
-            inline.ProjectorName,
-            "9.9.9",
-            inline.LastSortableUniqueId,
-            inline.LastEventId,
-            inline.Version,
-            inline.IsCatchedUp,
-            inline.IsSafeState);
-        var mismatchedSnapshot = new Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope(false, mismatchedInline, null);
+        var mismatchedSnapshot = WithMismatchedProjectorVersion(snapshot);
 
         var restoredActor = new GeneralMultiProjectionActor(
             _domainTypes,
@@ -287,12 +274,42 @@ public class GeneralMultiProjectionActorCatchingUpTests
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await restoredActor.SetSnapshotAsync(mismatchedSnapshot));
 
-        // And the actor should remain at its initial state (no items)
+        // A first restore failure has no published checkpoint to quarantine, so the actor retains the legacy
+        // initial-state/rebuild contract rather than latching a failure that would prevent catch-up.
         var stateAfterFailedRestore = await restoredActor.GetStateAsync(canGetUnsafeState: false);
         Assert.True(stateAfterFailedRestore.IsSuccess);
         var payload = stateAfterFailedRestore.GetValue().Payload as TestMultiProjector;
         Assert.NotNull(payload);
         Assert.Empty(payload!.Items);
+    }
+
+    [Fact]
+    public async Task SetCurrentState_VersionMismatch_AfterPublishedState_Quarantines_PreviousCheckpoint_UntilRecovery()
+    {
+        var actor = new GeneralMultiProjectionActor(_domainTypes, TestMultiProjector.MultiProjectorName, _options);
+        await actor.AddEventsAsync([CreateEvent(new TestEventCreated("published"), DateTime.UtcNow.AddSeconds(-10))]);
+        var snapshotResult = await actor.GetSnapshotAsync(canGetUnsafeState: false);
+        Assert.True(snapshotResult.IsSuccess);
+        var snapshot = snapshotResult.GetValue();
+
+        var mismatch = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => actor.SetSnapshotAsync(WithMismatchedProjectorVersion(snapshot)));
+
+        // This kills an unconditional legacy-recovery implementation: a replacement failure must never make a
+        // previously published payload usable, and it must retain the original exception instance at all boundaries.
+        var stateAfterMismatch = await actor.GetStateAsync(canGetUnsafeState: false);
+        Assert.False(stateAfterMismatch.IsSuccess);
+        Assert.Same(mismatch, stateAfterMismatch.GetException());
+        var applyFailure = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => actor.AddEventsAsync([CreateEvent(new TestEventCreated("must-not-apply"), DateTime.UtcNow)]));
+        Assert.Same(mismatch, applyFailure);
+
+        // A successful replacement restore is the explicit recovery boundary and clears the quarantine atomically.
+        await actor.SetSnapshotAsync(snapshot);
+        var recovered = await actor.GetStateAsync(canGetUnsafeState: false);
+        Assert.True(recovered.IsSuccess);
+        var payload = Assert.IsType<TestMultiProjector>(recovered.GetValue().Payload);
+        Assert.Equal(["published"], payload.Items);
     }
 
     [Fact]
@@ -446,6 +463,23 @@ public class GeneralMultiProjectionActorCatchingUpTests
 
         var payload = finalState.GetValue().Payload as TestMultiProjector;
         Assert.Equal(4, payload!.Items.Count);
+    }
+
+    private static Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope WithMismatchedProjectorVersion(
+        Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope snapshot)
+    {
+        var inline = Assert.IsType<SerializableMultiProjectionState>(snapshot.InlineState);
+        var mismatchedInline = SerializableMultiProjectionState.FromBytes(
+            inline.GetPayloadBytes(),
+            inline.MultiProjectionPayloadType,
+            inline.ProjectorName,
+            "9.9.9",
+            inline.LastSortableUniqueId,
+            inline.LastEventId,
+            inline.Version,
+            inline.IsCatchedUp,
+            inline.IsSafeState);
+        return new Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope(false, mismatchedInline, null);
     }
 
     private Event CreateEvent(IEventPayload payload, DateTime timestamp)

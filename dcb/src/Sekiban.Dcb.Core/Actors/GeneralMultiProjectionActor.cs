@@ -45,9 +45,11 @@ public class GeneralMultiProjectionActor
     // or expose the previous payload while that boundary is in flight.
     private bool _snapshotRestoreInProgress;
 
-    // A terminal restore failure quarantines the actor's previous state. Atomic publication keeps that state intact for
-    // a later successful restore, but it is not trustworthy enough to serve, apply, promote, compact, or persist until
-    // that recovery succeeds. This is transient actor state: a fresh/rebuilt activation starts without a stale payload.
+    // A terminal restore failure after a payload has been published quarantines that previous state. Atomic publication
+    // keeps it intact for a later successful restore, but it is not trustworthy enough to serve, apply, promote,
+    // compact, or persist until recovery succeeds. A failure before first publication has no stale payload to quarantine
+    // and retains the legacy initial-state/rebuild behavior. This is transient actor state: a fresh/rebuilt activation
+    // starts without a stale payload.
     private Exception? _snapshotRestoreFailure;
 
     // Production seam observation for the most recent capability-present restore. It is intentionally private: this is
@@ -331,6 +333,10 @@ public class GeneralMultiProjectionActor
         bool validateProjectorVersion)
     {
         ThrowIfSnapshotRestoreInProgress();
+        // A fresh actor has no published payload or tracking metadata that could be served stale. Keep its long-standing
+        // version-mismatch behavior: the failed initial restore leaves it available for a normal empty-state rebuild.
+        // Once an accessor exists, however, every failed replacement restore must quarantine the prior checkpoint.
+        var hadPublishedState = _singleStateAccessor is not null;
         _snapshotRestoreInProgress = true;
         try
         {
@@ -356,8 +362,12 @@ public class GeneralMultiProjectionActor
         catch (Exception exception)
         {
             // Keep the original exception instance and stack. Callers receive it unchanged, and later consumption
-            // boundaries fail closed with that same failure until a full replacement restore succeeds.
-            _snapshotRestoreFailure = exception;
+            // boundaries fail closed with that same failure until a full replacement restore succeeds. There is no
+            // such boundary for a failed first restore because no prior payload or metadata exists to expose.
+            if (hadPublishedState)
+            {
+                _snapshotRestoreFailure = exception;
+            }
             throw;
         }
         finally
