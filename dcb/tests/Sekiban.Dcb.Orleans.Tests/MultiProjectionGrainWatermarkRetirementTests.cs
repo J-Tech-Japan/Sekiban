@@ -134,7 +134,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
                 .SelectMany(host => host.CompactionObservations),
             observation => observation.RealAllSafeEventsCountBeforeCompaction > 0);
         Assert.Equal(
-            typeof(Dictionary<,>),
+            typeof(SortedDictionary<,>),
             observation.RealAllSafeEventsCollection.GetType().GetGenericTypeDefinition());
         Assert.True(observation.DurableIntermediateCheckpointWasCommittedBeforeCompaction);
         Assert.True(observation.RealAllSafeEventsCountBeforeCompaction > 0);

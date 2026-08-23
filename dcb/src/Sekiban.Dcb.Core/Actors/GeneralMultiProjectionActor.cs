@@ -210,13 +210,16 @@ public class GeneralMultiProjectionActor
 
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)
         {
+            // A deferred safe-history repair is a consumption boundary. Returning an old head after its repair failed
+            // would falsely advertise a stale payload/position as current, so capture the actual replay-failing event
+            // before propagating the original failure to the caller.
             try
             {
                 dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain);
             }
-            catch (Exception)
+            catch (Exception exception)
             {
-                // Head-status reads are observational; ignore best-effort safe-window promotion failures here.
+                CaptureDeferredRepairFaultAndRethrow(exception);
             }
 
             var current = new ProjectionPosition(
@@ -627,14 +630,18 @@ public class GeneralMultiProjectionActor
         int offloadThresholdBytes = int.MaxValue,
         CancellationToken cancellationToken = default)
     {
-        // Promote buffered events before building a safe snapshot
+        // Promote buffered events before building a safe snapshot. A deferred-repair failure must fail closed: emitting a
+        // snapshot from the old payload would allow persistence and later compaction to discard the retained repair input.
         try
         {
             ForcePromoteBufferedEvents();
         }
-        catch
+        catch (Exception exception)
         {
-            // Ignore promotion errors to avoid blocking persistence
+            // ForcePromoteBufferedEvents has already recorded deferred replay provenance through the actor's normal
+            // first-observed-fault path. Preserve this same exception instance for the snapshot ResultBox rather than
+            // wrapping or capturing it a second time.
+            return ResultBox.Error<SnapshotPersistenceData>(exception);
         }
         var envelopeRb = await BuildSnapshotEnvelopeAsync(
             canGetUnsafeState,
@@ -798,15 +805,47 @@ public class GeneralMultiProjectionActor
     /// </summary>
     private void CaptureFaultAndRethrow(Event ev, Exception ex)
     {
+        var original = CaptureFault(ev.Id, ev.EventType, ev.SortableUniqueIdValue, ex);
+        ExceptionDispatchInfo.Capture(original).Throw();
+    }
+
+    /// <summary>
+    ///     Captures a deferred safe-history replay failure at a consumption boundary. The wrapper records the exact
+    ///     event whose fold failed on the original exception before it leaves <c>RebuildSafeState</c>; it is deliberately
+    ///     not the earlier arrival that happened to mark history dirty. This feeds the same descriptor/log discipline as
+    ///     the normal per-event path without adding a public or serialized contract.
+    /// </summary>
+    private void CaptureDeferredRepairFaultAndRethrow(Exception exception)
+    {
+        var original = CaptureDeferredRepairFault(exception);
+        ExceptionDispatchInfo.Capture(original).Throw();
+    }
+
+    private Exception CaptureDeferredRepairFault(Exception exception)
+    {
+        if (!DeferredSafeRepairFaultAttribution.TryGetReplayEvent(
+                exception,
+                out var eventId,
+                out var eventType,
+                out var position))
+        {
+            return exception;
+        }
+
+        return CaptureFault(eventId, eventType, position, exception);
+    }
+
+    private Exception CaptureFault(Guid eventId, string eventType, string position, Exception ex)
+    {
         var original = ex.InnerException ?? ex;
 
         if (_fault is null)
         {
             _fault = new ProjectionFaultDescriptor(
-                ev.Id,
-                ev.EventType,
+                eventId,
+                eventType,
                 _projectorName,
-                ev.SortableUniqueIdValue,
+                position,
                 original.Message,
                 DateTime.UtcNow.Ticks);
             // The original exception is available only at this boundary. Emit it exactly once, with its real stack;
@@ -821,33 +860,13 @@ public class GeneralMultiProjectionActor
         }
 
         _fault.Annotate(original);
-        ExceptionDispatchInfo.Capture(original).Throw();
+        return original;
     }
 
     /// <summary>The deserialize-boundary counterpart of <see cref="CaptureFaultAndRethrow" />, before an Event exists.</summary>
     private void CaptureSerializableFaultAndRethrow(SerializableEvent se, Exception ex)
     {
-        var original = ex.InnerException ?? ex;
-
-        if (_fault is null)
-        {
-            _fault = new ProjectionFaultDescriptor(
-                se.Id,
-                se.EventPayloadName,
-                _projectorName,
-                se.SortableUniqueIdValue,
-                original.Message,
-                DateTime.UtcNow.Ticks);
-            _logger.LogError(
-                ProjectionFaultFirstObserved,
-                original,
-                "Projection fault first observed: {ProjectorName}, EventId: {EventId}, Position: {Position}",
-                _fault.ProjectorName,
-                _fault.EventId,
-                _fault.Position);
-        }
-
-        _fault.Annotate(original);
+        var original = CaptureFault(se.Id, se.EventPayloadName, se.SortableUniqueIdValue, ex);
         ExceptionDispatchInfo.Capture(original).Throw();
     }
 
@@ -887,8 +906,17 @@ public class GeneralMultiProjectionActor
     {
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)
         {
-            var threshold = GetSafeWindowThreshold();
-            dualAccessor.PromoteBufferedEvents(threshold, _domain);
+            try
+            {
+                var threshold = GetSafeWindowThreshold();
+                dualAccessor.PromoteBufferedEvents(threshold, _domain);
+            }
+            catch (Exception exception)
+            {
+                // Snapshot and grain persistence call this entry point before capturing a checkpoint. A deferred replay
+                // fault therefore has to establish the actor descriptor here, before those callers fail closed.
+                CaptureDeferredRepairFaultAndRethrow(exception);
+            }
             return;
         }
 
@@ -914,7 +942,14 @@ public class GeneralMultiProjectionActor
     {
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)
         {
-            dualAccessor.CompactSafeHistory();
+            try
+            {
+                dualAccessor.CompactSafeHistory();
+            }
+            catch (Exception exception)
+            {
+                CaptureDeferredRepairFaultAndRethrow(exception);
+            }
         }
     }
 
@@ -939,12 +974,19 @@ public class GeneralMultiProjectionActor
     {
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)
         {
-            var maxThreshold = SortableUniqueId.MaxValue;
-            dualAccessor.PromoteBufferedEvents(maxThreshold, _domain);
-            _logger.LogDebug(
-                "[SafePromotion] projector={ProjectorName} force-promote-all invoked threshold={Threshold}",
-                _projectorName,
-                maxThreshold.Value);
+            try
+            {
+                var maxThreshold = SortableUniqueId.MaxValue;
+                dualAccessor.PromoteBufferedEvents(maxThreshold, _domain);
+                _logger.LogDebug(
+                    "[SafePromotion] projector={ProjectorName} force-promote-all invoked threshold={Threshold}",
+                    _projectorName,
+                    maxThreshold.Value);
+            }
+            catch (Exception exception)
+            {
+                CaptureDeferredRepairFaultAndRethrow(exception);
+            }
             return;
         }
 
@@ -992,7 +1034,15 @@ public class GeneralMultiProjectionActor
             if (canGetUnsafeState)
             {
                 // Promote buffered events before reading unsafe state
-                try { dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain); } catch { }
+                try
+                {
+                    dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain);
+                }
+                catch (Exception exception)
+                {
+                    return Task.FromResult(ResultBox.Error<MultiProjectionState>(
+                        CaptureDeferredRepairFault(exception)));
+                }
 
                 statePayload = (IMultiProjectionPayload)dualAccessor.GetUnsafeProjectorPayload();
                 lastSortableId = dualAccessor.UnsafeLastSortableUniqueId;
@@ -1019,7 +1069,15 @@ public class GeneralMultiProjectionActor
             else
             {
                 // Promote buffered events and get safe state
-                dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain);
+                try
+                {
+                    dualAccessor.PromoteBufferedEvents(safeWindowThreshold, _domain);
+                }
+                catch (Exception exception)
+                {
+                    return Task.FromResult(ResultBox.Error<MultiProjectionState>(
+                        CaptureDeferredRepairFault(exception)));
+                }
 
                 statePayload = (IMultiProjectionPayload)dualAccessor.GetSafeProjectorPayload();
                 var safeSortableId = dualAccessor.SafeLastSortableUniqueId;
