@@ -22,8 +22,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes, IStreamingMultiPr
     private readonly ConcurrentDictionary<string, (
         Func<DcbDomainTypes, string, object, SerializationResult> serialize,
         Func<DcbDomainTypes, string, ReadOnlySpan<byte>, object> deserialize)> _customSerializers = new();
-    private readonly ConcurrentDictionary<string,
-        Func<DcbDomainTypes, string, Stream, CancellationToken, Task<IMultiProjectionPayload>>> _streamDeserializers = new();
+    private readonly StreamingMultiProjectorTypesSupport _streamingRestore = new();
 
     public ResultBox<IMultiProjectionPayload> Project(
         string multiProjectorName,
@@ -172,7 +171,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes, IStreamingMultiPr
 
         // Register the initial payload generator
         _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
-        RegisterReflectionStreamDeserializer<TProjector>(projectorName);
+        _streamingRestore.RegisterReflection(projectorName, typeof(TProjector));
     }
 
     /// <summary>
@@ -232,7 +231,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes, IStreamingMultiPr
 
         // Register the initial payload generator
         _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
-        RegisterReflectionStreamDeserializer<TProjector>(projectorName);
+        _streamingRestore.RegisterReflection(projectorName, typeof(TProjector));
     }
 
     /// <summary>
@@ -404,7 +403,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes, IStreamingMultiPr
             _projectorTypes[projectorName] = typeof(T);
             _projectorVersions[projectorName] = T.MultiProjectorVersion;
             _initialPayloadGenerators[projectorName] = () => T.GenerateInitialPayload();
-            RegisterCustomStreamDeserializerIfPresent<T>(projectorName);
+            _streamingRestore.RegisterCustomOrRemove<T>(projectorName);
 
             return ResultBox.FromValue(true);
         }
@@ -453,7 +452,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes, IStreamingMultiPr
             _projectorTypes[projectorName] = typeof(T);
             _projectorVersions[projectorName] = T.MultiProjectorVersion;
             _initialPayloadGenerators[projectorName] = () => T.GenerateInitialPayload();
-            RegisterCustomStreamDeserializerIfPresent<T>(projectorName);
+            _streamingRestore.RegisterCustomOrRemove<T>(projectorName);
 
             return ResultBox.FromValue(true);
         }
@@ -464,70 +463,18 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes, IStreamingMultiPr
     }
 
     public bool SupportsStreamDeserialization(string projectorName) =>
-        _streamDeserializers.ContainsKey(projectorName);
+        _streamingRestore.Supports(projectorName);
 
-    public async Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(
+    public Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(
         string projectorName,
         DcbDomainTypes domainTypes,
         string safeWindowThreshold,
         Stream source,
         CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(safeWindowThreshold))
-        {
-            return ResultBox.Error<IMultiProjectionPayload>(
-                new ArgumentException("safeWindowThreshold must be supplied"));
-        }
-
-        if (source is null)
-        {
-            return ResultBox.Error<IMultiProjectionPayload>(new ArgumentNullException(nameof(source)));
-        }
-
-        if (!_streamDeserializers.TryGetValue(projectorName, out var deserialize))
-        {
-            return ResultBox.Error<IMultiProjectionPayload>(
-                new NotSupportedException($"Projector '{projectorName}' does not support streaming deserialization."));
-        }
-
-        try
-        {
-            return ResultBox.FromValue(
-                await deserialize(domainTypes, safeWindowThreshold, source, cancellationToken).ConfigureAwait(false));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IMultiProjectionPayload>(ex);
-        }
-    }
-
-    private void RegisterReflectionStreamDeserializer<TProjector>(string projectorName)
-        where TProjector : IMultiProjector<TProjector>, new() =>
-        _streamDeserializers[projectorName] = async (domainTypes, _, source, cancellationToken) =>
-        {
-            var deserialized = await StreamSnapshotPayloadDeserializer.DeserializeJsonAsync(
-                    source,
-                    typeof(TProjector),
-                    domainTypes.JsonSerializerOptions,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            return deserialized as IMultiProjectionPayload
-                ?? throw new InvalidOperationException(
-                    $"Failed to deserialize streaming payload to {typeof(TProjector).Name}.");
-        };
-
-    private void RegisterCustomStreamDeserializerIfPresent<TProjector>(string projectorName)
-        where TProjector : new()
-    {
-        if (typeof(ICoreMultiProjectorWithStreamDeserialization).IsAssignableFrom(typeof(TProjector)))
-        {
-            _streamDeserializers[projectorName] = (domainTypes, safeWindowThreshold, source, cancellationToken) =>
-                ((ICoreMultiProjectorWithStreamDeserialization)(object)new TProjector())
-                .DeserializeFromStreamAsync(domainTypes, safeWindowThreshold, source, cancellationToken);
-        }
-        else
-        {
-            _streamDeserializers.TryRemove(projectorName, out _);
-        }
-    }
+        => _streamingRestore.DeserializeAsync(
+            projectorName,
+            domainTypes,
+            safeWindowThreshold,
+            source,
+            cancellationToken);
 }
