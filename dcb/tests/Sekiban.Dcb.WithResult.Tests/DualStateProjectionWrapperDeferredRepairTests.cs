@@ -32,13 +32,13 @@ public class DualStateProjectionWrapperDeferredRepairTests
         var seed = SeedDirtyHistory(wrapper, fixture.DomainTypes);
         var accessor = (IDualStateAccessor)wrapper;
 
-        // The high event was folded once before the disorder. The two retained arrivals caused neither fold nor tag
-        // resolution, and served metadata remains untouched until a genuine consumption boundary is reached.
+        // The high event was folded once and cleanly reconciled before the disorder. The two retained out-of-order safe
+        // arrivals caused neither an additional fold nor tag resolution; their repair waits for a real consumption.
         Assert.Equal(1, fixture.TagTypes.FoldCount);
         Assert.Equal(1, fixture.TagTypes.TagResolutionCount);
         Assert.True(GetPrivateBool(wrapper, "_safeHistoryDirty"));
         Assert.Equal(1, accessor.SafeVersion);
-        Assert.Equal(0, accessor.UnsafeVersion);
+        Assert.Equal(1, accessor.UnsafeVersion);
 
         InvokeWrapperEntryPoint(entryPoint, wrapper, accessor, fixture.DomainTypes);
 
@@ -167,8 +167,8 @@ public class DualStateProjectionWrapperDeferredRepairTests
         var high = CreateEvent(new FoldEvent(3, "C"), SortableUniqueId.Generate(baseline.AddSeconds(2), Guid.Empty), GuidFromInt(203));
         var buffered = CreateEvent(new FoldEvent(4, "U"), SortableUniqueId.Generate(baseline.AddSeconds(10), Guid.Empty), GuidFromInt(204));
 
+        wrapper.ProcessEvent(high, threshold, fixture.DomainTypes);     // one direct safe fold and clean reconcile
         wrapper.ProcessEvent(buffered, threshold, fixture.DomainTypes); // one direct unsafe fold
-        wrapper.ProcessEvent(high, threshold, fixture.DomainTypes);     // one direct safe fold, served now deferred
         wrapper.ProcessEvent(low, threshold, fixture.DomainTypes);      // dirty-producing arrival: must not reconcile U
         wrapper.ProcessEvent(middle, threshold, fixture.DomainTypes);   // apparent in-order tail: must remain unfurled
 
@@ -176,9 +176,9 @@ public class DualStateProjectionWrapperDeferredRepairTests
         Assert.Equal(2, fixture.TagTypes.FoldCount);
         Assert.Equal(2, fixture.TagTypes.TagResolutionCount);
         Assert.Equal("C", GetPrivateProjector(wrapper, "_safeProjector").Order);
-        Assert.Equal("U", GetPrivateProjector(wrapper, "_unsafeProjector").Order);
+        Assert.Equal("CU", GetPrivateProjector(wrapper, "_unsafeProjector").Order);
         Assert.Equal(1, accessor.SafeVersion);
-        Assert.Equal(1, accessor.UnsafeVersion);
+        Assert.Equal(2, accessor.UnsafeVersion);
 
         var consumed = wrapper.GetUnsafeProjection(fixture.DomainTypes);
 

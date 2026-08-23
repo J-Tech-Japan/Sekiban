@@ -160,14 +160,20 @@ public class DualStateProjectionWrapper<T>
         if (isInSafeWindow)
         {
             // Still inside the safe window: hold it in the buffer. The served state is (safe baseline + ordered buffer).
-            // While either state is deferred, even an apparently in-order tail must stay retained until consumption; folding
-            // it now would make the result depend on arrival order again.
+            // Only a deferred SAFE-history repair suppresses the normal unsafe-window reconcile. An ordinary unsafe
+            // out-of-order arrival must still reconcile immediately so a fold failure is captured at this ProcessEvent
+            // boundary with the offending event's fault attribution.
             var inOrder = !_safeHistoryDirty && !_servedStateDirty && IsStrictlyAfterServedHead(evt);
             _bufferedEvents[evt.Id] = evt;
 
             if (inOrder)
             {
                 ProjectUnsafeInOrder(evt, safeWindowThreshold, domainTypes);
+            }
+            else if (!_safeHistoryDirty)
+            {
+                ReconcileServedState(safeWindowThreshold, domainTypes);
+                _servedStateDirty = false;
             }
             else
             {
@@ -187,7 +193,8 @@ public class DualStateProjectionWrapper<T>
             {
                 ProjectSafeInOrder(evt, domainTypes);
                 _safeVersion++;
-                _servedStateDirty = true;
+                ReconcileServedState(safeWindowThreshold, domainTypes);
+                _servedStateDirty = false;
             }
             else
             {
@@ -210,11 +217,12 @@ public class DualStateProjectionWrapper<T>
 
         if (IsStrictlyAfterSafeHead(evt))
         {
-            // In-order fresh arrivals still fold incrementally, but the served state is deliberately deferred to the next
-            // consumption boundary so a following disorder cannot trigger an arrival-time re-fold.
+            // The clean fresh path keeps the established immediate served-state reconciliation. Once an out-of-order safe
+            // arrival marks the history dirty, the branch above suppresses this path until a real consumption boundary.
             ProjectSafeInOrder(evt, domainTypes);
             _safeVersion++;
-            _servedStateDirty = true;
+            ReconcileServedState(safeWindowThreshold, domainTypes);
+            _servedStateDirty = false;
             return this;
         }
 
