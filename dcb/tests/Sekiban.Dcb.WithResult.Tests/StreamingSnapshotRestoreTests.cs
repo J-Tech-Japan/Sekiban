@@ -505,6 +505,75 @@ public sealed partial class StreamingSnapshotRestoreTests
     }
 
     [Fact]
+    [Trait("Category", "StreamingRestoreControlledMemory")]
+    public async Task Isolated_small_graph_large_wire_fixture_has_a_bounded_supported_restore_allocation()
+    {
+        // The memory workflow starts a dedicated test process for this trait. Normal CI still runs the preceding
+        // same-fixture production/counter-proof test; this opt-in assertion is the process-isolated supporting ceiling,
+        // not a no-OOM promise and not a substitute for the path-complete aggregation guard.
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("SEKIBAN_STREAM_RESTORE_CONTROLLED_CEILING"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        // JSON's internal buffers differ materially between the supported runtimes, so retain room for their normal
+        // streaming allocations while keeping a substantial gap to the same-fixture buffered control below.
+        const long restoreAllocationCeilingBytes = 256L * 1024 * 1024;
+        var (envelope, blob, uncompressedWireBytes) = await CreateSmallGraphLargeWireFixtureAsync();
+        Assert.InRange(uncompressedWireBytes, 16 * 1024 * 1024, 32 * 1024 * 1024);
+        var targetTypes = new CountingStreamingRegistry(CreateReflectionRegistry());
+        var target = CreateActor(targetTypes);
+
+        CollectForIsolatedMemoryMeasurement();
+        var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
+        var process = Process.GetCurrentProcess();
+        process.Refresh();
+        var peakBefore = process.PeakWorkingSet64;
+
+        await using var resolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
+        await target.SetResolvedSnapshotAsync(resolved);
+
+        process.Refresh();
+        var restoreAllocationBytes = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
+        var peakDeltaBytes = Math.Max(0, process.PeakWorkingSet64 - peakBefore);
+        Console.WriteLine(
+            $"SEK-G42 controlled streaming-restore telemetry: processId={Environment.ProcessId}; " +
+            $"wireBytes={uncompressedWireBytes}; restoreAllocationBytes={restoreAllocationBytes}; " +
+            $"peakDeltaBytes={peakDeltaBytes}; wholePayloadAggregations={GetLastStreamingRestoreWholePayloadAggregationCount(target)}");
+
+        Assert.InRange(restoreAllocationBytes, 0, restoreAllocationCeilingBytes);
+        Assert.Equal(2, targetTypes.StreamDeserializeCalls);
+        Assert.Equal(0, targetTypes.BufferedDeserializeCalls);
+        Assert.Equal(0, GetLastStreamingRestoreWholePayloadAggregationCount(target));
+        var restored = await target.GetStateAsync(canGetUnsafeState: true);
+        Assert.True(restored.IsSuccess);
+        Assert.Equal(["small-graph"], Payload(restored.GetValue()));
+
+        // The same wire through the deliberate capability-present buffering control must exceed the selected-path
+        // ceiling. This makes the fixture a real counter-proof while the transitive IL guard catches uninstrumented
+        // helper mutations that would otherwise bypass a runtime counter.
+        var bufferedControlTypes = new IntentionallyBufferedStreamingRegistry(CreateReflectionRegistry());
+        var bufferedControl = CreateActor(bufferedControlTypes);
+        CollectForIsolatedMemoryMeasurement();
+        var bufferedAllocationBefore = GC.GetTotalAllocatedBytes(precise: true);
+        await using var bufferedResolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
+        await bufferedControl.SetResolvedSnapshotAsync(bufferedResolved);
+        var bufferedRestoreAllocationBytes = GC.GetTotalAllocatedBytes(precise: true) - bufferedAllocationBefore;
+        Console.WriteLine(
+            $"SEK-G42 controlled buffered-control telemetry: restoreAllocationBytes={bufferedRestoreAllocationBytes}; " +
+            $"wholePayloadAggregations={GetLastStreamingRestoreWholePayloadAggregationCount(bufferedControl)}");
+
+        Assert.True(
+            bufferedRestoreAllocationBytes > restoreAllocationCeilingBytes,
+            $"The intentionally buffered control must exceed {restoreAllocationCeilingBytes} allocated bytes; actual={bufferedRestoreAllocationBytes}.");
+        Assert.Equal(2, bufferedControlTypes.WholePayloadAggregations);
+        Assert.Equal(2, GetLastStreamingRestoreWholePayloadAggregationCount(bufferedControl));
+    }
+
+    [Fact]
     [Trait("Category", "StreamingRestoreManualMemory")]
     public async Task Manual_143MiB_offloaded_fixture_reports_peak_and_selected_restore_path_without_claiming_no_oom()
     {
@@ -545,6 +614,13 @@ public sealed partial class StreamingSnapshotRestoreTests
         Assert.True(stream.ReadCalls > 1);
         Assert.Equal(0, stream.LengthAccesses);
         Assert.Equal(0, stream.SeekCalls);
+    }
+
+    private static void CollectForIsolatedMemoryMeasurement()
+    {
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
     }
 
     private static SimpleMultiProjectorTypes CreateReflectionRegistry()

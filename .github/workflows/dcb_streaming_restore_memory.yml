@@ -11,6 +11,7 @@ jobs:
     timeout-minutes: 35
     env:
       SEKIBAN_STREAM_RESTORE_SMOKE: '1'
+      SEKIBAN_STREAM_RESTORE_CONTROLLED_CEILING: '1'
 
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +31,12 @@ jobs:
 
       - name: Build focused memory fixture
         run: dotnet build dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release -f net10.0 --no-restore -p:GeneratePackageOnBuild=false --verbosity minimal
+
+      - name: Run controlled 16-32 MiB small-graph fixture in an isolated process
+        run: |
+          # This separate test host owns the allocation ceiling for the controlled fixture. The normal PR suite still
+          # runs the same fixture's supported-path and intentionally-buffered counter-proof; this is supporting evidence.
+          timeout 10m dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net10.0 --filter "Category=StreamingRestoreControlledMemory" --logger "console;verbosity=normal"
 
       - name: Run 128-200 MiB restore smoke under a process ceiling
         run: |

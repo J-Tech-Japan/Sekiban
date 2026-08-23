@@ -56,6 +56,11 @@ public class GeneralMultiProjectionActor
     // not a public runtime metric, but a regression guard that proves the supported path did not reach ReadAllBytesAsync.
     private int _lastStreamingRestoreWholePayloadAggregationCount;
 
+    // A restore selects this once and routes the exact value through its primary and clone deserializations. Keeping the
+    // last value private makes that single-selection invariant inspectable without changing the public or serialized
+    // actor contract.
+    private string _lastSnapshotRestoreSafeWindowThreshold = string.Empty;
+
     // Set the instant a per-event fold throws, and never cleared by a later apply. A faulted projection has stopped
     // at a poison event; presenting its pre-crash state as a successful query is the silence issue #1075 was about.
     // While it is set, applies are rejected (so a catch-up retry cannot re-apply the events before the poison and
@@ -382,7 +387,7 @@ public class GeneralMultiProjectionActor
         CancellationToken cancellationToken)
     {
         _lastStreamingRestoreWholePayloadAggregationCount = 0;
-        var safeThreshold = GetSafeWindowThreshold();
+        var safeThreshold = SelectSnapshotRestoreSafeWindowThreshold();
         ResultBox<IMultiProjectionPayload> deserializeResult;
         IMultiProjectionPayload? streamedClonePayload = null;
 
@@ -396,7 +401,7 @@ public class GeneralMultiProjectionActor
                 (deserializeResult, streamedClonePayload) = await DeserializeStreamingPayloadPairAsync(
                         streamingTypes,
                         state.ProjectorName,
-                        safeThreshold.Value,
+                        safeThreshold,
                         payloadStream,
                         cancellationToken)
                     .ConfigureAwait(false);
@@ -422,7 +427,7 @@ public class GeneralMultiProjectionActor
                     "capability-absent");
                 var payloadBytes = await StreamReadHelper.ReadAllBytesAsync(payloadStream, cancellationToken)
                     .ConfigureAwait(false);
-                deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadBytes);
+                deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold, payloadBytes);
                 if (!deserializeResult.IsSuccess)
                 {
                     throw deserializeResult.GetException();
@@ -434,7 +439,7 @@ public class GeneralMultiProjectionActor
         else
         {
             var payloadBytes = state.GetPayloadBytes();
-            deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadBytes);
+            deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold, payloadBytes);
             if (!deserializeResult.IsSuccess)
             {
                 throw deserializeResult.GetException();
@@ -458,7 +463,7 @@ public class GeneralMultiProjectionActor
                     _projectorName,
                     _types,
                     _domain,
-                    safeThreshold.Value,
+                    safeThreshold,
                     initialVersion: state.Version,
                     initialLastEventId: state.LastEventId,
                     initialLastSortableUniqueId: state.LastSortableUniqueId)
@@ -467,7 +472,7 @@ public class GeneralMultiProjectionActor
                     _projectorName,
                     _types,
                     _domain,
-                    safeThreshold.Value,
+                    safeThreshold,
                     initialVersion: state.Version,
                     initialLastEventId: state.LastEventId,
                     initialLastSortableUniqueId: state.LastSortableUniqueId))
@@ -482,6 +487,12 @@ public class GeneralMultiProjectionActor
         _unsafeLastSortableUniqueId = state.LastSortableUniqueId;
         _unsafeVersion = state.Version;
         _isCatchedUp = state.IsCatchedUp;
+    }
+
+    private string SelectSnapshotRestoreSafeWindowThreshold()
+    {
+        _lastSnapshotRestoreSafeWindowThreshold = GetSafeWindowThreshold().Value;
+        return _lastSnapshotRestoreSafeWindowThreshold;
     }
 
     private async Task<(ResultBox<IMultiProjectionPayload> Primary, IMultiProjectionPayload? Clone)>

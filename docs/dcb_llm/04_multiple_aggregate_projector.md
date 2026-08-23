@@ -146,9 +146,11 @@ clears a latched barrier; otherwise the host follows its normal recovery/catch-u
 The normal DCB test suite includes a controlled small-graph, 16–32 MiB offloaded gzip wire fixture. It combines a
 production aggregation counter with structural guards that reject whole-payload aggregation APIs from the supported
 stream seam. The separate **DCB Streaming Restore
-Memory Smoke** workflow runs a 143 MiB fixture on a weekly/manual schedule in an isolated process with a timeout and
-virtual-memory ceiling. It records elapsed time, peak RSS, selected capability path, read counts, and buffer counters;
-it evaluates absence of the full-payload materialization path, not a claim that an OOM is impossible.
+Memory Smoke** workflow also runs that controlled fixture in its own process with an allocation ceiling and an
+intentionally buffered control which must exceed it. Its 143 MiB fixture runs only on a weekly/manual schedule with a
+timeout and virtual-memory ceiling. The workflow records elapsed time, peak RSS, selected capability path, read counts,
+and buffer counters; it evaluates absence of the full-payload materialization path, not a claim that an OOM is
+impossible.
 
 ## Consistency Considerations
 

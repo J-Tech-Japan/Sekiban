@@ -62,21 +62,26 @@ public sealed partial class StreamingSnapshotRestoreTests
         var legacyActor = new GeneralMultiProjectionActor(CreateDomain(byteSetup.Registry), byteSetup.ProjectorName);
 
         MatrixCustomPayloadProjector.ResetRecordedSafeThresholds();
-        var legacyThresholdWindow = await RestoreInlineAndCaptureThresholdWindowAsync(
+        var legacySelectedThreshold = await RestoreInlineAndCaptureSelectedThresholdAsync(
             legacyActor,
             legacyState);
         var legacy = await legacyActor.GetStateAsync(canGetUnsafeState: true);
         Assert.True(legacy.IsSuccess);
-        AssertRecordedThresholdsWithinWindow(
+        Assert.Equal(0, byteSetup.StreamDeserializeCalls);
+        // Each path owns an actor and therefore selects its own timestamp-derived threshold. Exact equality is against
+        // that actor's one recorded selection, not a wall-clock range shared by two independently constructed actors.
+        // A recomputation for either byte-path clone or either stream-path clone is consequently observable.
+        AssertRecordedThresholdsExactly(
             byteSetup.BufferedSafeThresholds,
-            legacyThresholdWindow,
+            legacySelectedThreshold,
+            expectedCount: 2,
             "legacy byte path");
-        AssertCustomThresholdsWithinWindow(cell.Registry, legacyThresholdWindow, "legacy byte path");
+        AssertCustomThresholdsExactly(cell.Registry, legacySelectedThreshold, expectedCount: 2, "legacy byte path");
 
         var restoreSetup = CreateMatrixRegistry(cell.Registry);
         var restoreActor = new GeneralMultiProjectionActor(CreateDomain(restoreSetup.Registry), restoreSetup.ProjectorName);
         MatrixCustomPayloadProjector.ResetRecordedSafeThresholds();
-        ThresholdWindow restoreThresholdWindow;
+        string restoreSelectedThreshold;
 
         if (cell.Delivery == MatrixDelivery.Offloaded)
         {
@@ -101,27 +106,30 @@ public sealed partial class StreamingSnapshotRestoreTests
                     CompressedSizeBytes: payloadBytes.Length));
 
             await using var resolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
-            restoreThresholdWindow = await RestoreStreamAndCaptureThresholdWindowAsync(restoreActor, resolved);
+            restoreSelectedThreshold = await RestoreStreamAndCaptureSelectedThresholdAsync(restoreActor, resolved);
             Assert.Equal(2, restoreSetup.StreamDeserializeCalls);
             Assert.Empty(restoreSetup.BufferedSafeThresholds);
-            AssertRecordedThresholdsWithinWindow(
+            AssertRecordedThresholdsExactly(
                 restoreSetup.StreamSafeThresholds,
-                restoreThresholdWindow,
+                restoreSelectedThreshold,
+                expectedCount: 2,
                 "offloaded stream path");
         }
         else
         {
-            restoreThresholdWindow = await RestoreInlineAndCaptureThresholdWindowAsync(restoreActor, legacyState);
+            restoreSelectedThreshold = await RestoreInlineAndCaptureSelectedThresholdAsync(restoreActor, legacyState);
             Assert.Equal(0, restoreSetup.StreamDeserializeCalls);
-            AssertRecordedThresholdsWithinWindow(
+            AssertRecordedThresholdsExactly(
                 restoreSetup.BufferedSafeThresholds,
-                restoreThresholdWindow,
+                restoreSelectedThreshold,
+                expectedCount: 2,
                 "inline compatibility path");
         }
 
-        AssertCustomThresholdsWithinWindow(
+        AssertCustomThresholdsExactly(
             cell.Registry,
-            restoreThresholdWindow,
+            restoreSelectedThreshold,
+            expectedCount: 2,
             cell.Delivery == MatrixDelivery.Offloaded ? "offloaded stream path" : "inline compatibility path");
 
         var restored = await restoreActor.GetStateAsync(canGetUnsafeState: true);
@@ -172,23 +180,82 @@ public sealed partial class StreamingSnapshotRestoreTests
     }
 
     [Fact]
-    public void Supported_stream_restore_state_machines_have_no_whole_payload_aggregation_api_reference()
+    public void Restore_path_selects_one_safe_threshold_and_cannot_recompute_it_in_a_helper()
     {
-        // This is a production structural pin, not read-size telemetry. It kills a mutation that replaces the file tee
-        // with MemoryStream/ToArray or reaches StreamReadHelper from the capability-present seam.
-        AssertNoWholePayloadAggregationReferences(
-            typeof(GeneralMultiProjectionActor).GetMethod(
-                "DeserializeStreamingPayloadPairAsync",
-                BindingFlags.Instance | BindingFlags.NonPublic)!);
-        AssertNoWholePayloadAggregationReferences(
-            typeof(SnapshotEnvelopeResolver).GetMethod(
-                nameof(SnapshotEnvelopeResolver.ResolveForRestoreAsync),
-                BindingFlags.Static | BindingFlags.Public)!);
-        foreach (var method in typeof(StreamSnapshotPayloadDeserializer).GetMethods(
-                     BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
-        {
-            AssertNoWholePayloadAggregationReferences(method);
-        }
+        // The exact matrix assertions prove the values received by primary and clone. This complementary structural
+        // pin prevents a later actor helper from silently asking the wall clock for a second, in-window threshold.
+        var actorType = typeof(GeneralMultiProjectionActor);
+        var restorePayload = actorType.GetMethod(
+            "RestorePayloadAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var restoreDirectCalls = EnumerateDirectReferencedMembers(GetImplementationMethod(restorePayload))
+            .OfType<MethodInfo>()
+            .Where(method => method.DeclaringType == actorType)
+            .ToArray();
+        Assert.Equal(
+            1,
+            restoreDirectCalls.Count(method => method.Name == "SelectSnapshotRestoreSafeWindowThreshold"));
+
+        var allActorSafeThresholdCalls = EnumerateTransitiveReferencedMembers([restorePayload])
+            .OfType<MethodInfo>()
+            .Where(method =>
+                method.DeclaringType == actorType &&
+                method.Name == "GetSafeWindowThreshold")
+            .ToArray();
+        Assert.Single(allActorSafeThresholdCalls);
+
+        var streamPair = actorType.GetMethod(
+            "DeserializeStreamingPayloadPairAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        Assert.DoesNotContain(
+            EnumerateTransitiveReferencedMembers([streamPair]).OfType<MethodInfo>(),
+            method => method.DeclaringType == actorType && method.Name == "GetSafeWindowThreshold");
+    }
+
+    [Fact]
+    public void Supported_stream_restore_transitive_path_has_no_whole_payload_aggregation_api_reference()
+    {
+        // This is a production structural pin, not read-size telemetry. The capability-present actor branch is a
+        // deliberately closed inventory because RestorePayloadAsync also owns the allowed legacy byte fallback. From
+        // these roots, the scanner follows every method in Core/Core.Model, including async state machines, so a
+        // whole-payload helper moved into a registry forwarder, tee, or prefix wrapper cannot escape the proof.
+        var roots = GetSupportedStreamRestorePathRoots();
+        var teeType = GetSnapshotRestoreTeeReadStreamType();
+        var prefixType = GetPrefixBufferedStreamType();
+        var supportType = GetStreamingMultiProjectorTypesSupportType();
+
+        Assert.Contains(roots, method =>
+            method.DeclaringType == typeof(GeneralMultiProjectionActor) &&
+            method.Name == "DeserializeStreamingPayloadPairAsync");
+        Assert.Contains(roots, method =>
+            method.DeclaringType == typeof(SnapshotEnvelopeResolver) &&
+            method.Name == nameof(SnapshotEnvelopeResolver.ResolveForRestoreAsync));
+        Assert.Contains(roots, method => method.DeclaringType == teeType && method.Name == nameof(Stream.ReadAsync));
+        Assert.Contains(roots, method => method.DeclaringType == prefixType && method.Name == "CreateAsync");
+        Assert.Contains(roots, method => method.DeclaringType == supportType && method.Name == "DeserializeAsync");
+
+        AssertNoWholePayloadAggregationReferences(roots);
+    }
+
+    [Fact]
+    public void Transitive_aggregation_scan_rejects_each_forbidden_call_hidden_in_async_helpers()
+    {
+        // Verify the verifier itself. The async root has no direct aggregation call: each prohibited operation sits in
+        // a private helper (and ReadAllBytesAsync sits behind a second async state machine). A direct-only scan would
+        // miss exactly the mutations this production guard is intended to reject.
+        var root = typeof(StreamingSnapshotRestoreTests).GetMethod(
+            nameof(AggregationVerifierAsyncRoot),
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        var forbidden = FindWholePayloadAggregationReferences([root]);
+
+        Assert.Contains(forbidden, member => member.DeclaringType == typeof(MemoryStream) && member.Name == ".ctor");
+        Assert.Contains(forbidden, member => member.DeclaringType == typeof(MemoryStream) && member.Name == "ToArray");
+        Assert.Contains(forbidden, member =>
+            member.DeclaringType == typeof(File) &&
+            member.Name.StartsWith("ReadAllBytes", StringComparison.Ordinal));
+        Assert.Contains(forbidden, member =>
+            member.DeclaringType == typeof(SerializableMultiProjectionState) &&
+            member.Name == nameof(SerializableMultiProjectionState.GetPayloadBytes));
     }
 
     [Fact]
@@ -313,22 +380,20 @@ public sealed partial class StreamingSnapshotRestoreTests
         Assert.True(projectorDeserialize.GetParameters()[3].IsOptional);
     }
 
-    private static async Task<ThresholdWindow> RestoreInlineAndCaptureThresholdWindowAsync(
+    private static async Task<string> RestoreInlineAndCaptureSelectedThresholdAsync(
         GeneralMultiProjectionActor actor,
         SerializableMultiProjectionState state)
     {
-        var lower = actor.PeekCurrentSafeWindowThreshold().Value;
         await actor.SetSnapshotAsync(new SerializableMultiProjectionStateEnvelope(false, state, null));
-        return new ThresholdWindow(lower, actor.PeekCurrentSafeWindowThreshold().Value);
+        return GetLastSnapshotRestoreSafeWindowThreshold(actor);
     }
 
-    private static async Task<ThresholdWindow> RestoreStreamAndCaptureThresholdWindowAsync(
+    private static async Task<string> RestoreStreamAndCaptureSelectedThresholdAsync(
         GeneralMultiProjectionActor actor,
         ResolvedSnapshotRestore restore)
     {
-        var lower = actor.PeekCurrentSafeWindowThreshold().Value;
         await actor.SetResolvedSnapshotAsync(restore);
-        return new ThresholdWindow(lower, actor.PeekCurrentSafeWindowThreshold().Value);
+        return GetLastSnapshotRestoreSafeWindowThreshold(actor);
     }
 
     private static async Task<(SerializableMultiProjectionStateEnvelope Envelope, CappedBlobAccessor Blob, int UncompressedWireBytes)>
@@ -368,7 +433,7 @@ public sealed partial class StreamingSnapshotRestoreTests
     private static byte[] CreateSmallGraphLargeWireJson()
     {
         const int totalLength = 25 * 1024 * 1024;
-        var prefix = Encoding.UTF8.GetBytes("{\"Values\":[\"small-graph\"],\"IgnoredLargeWireValue\":\"");
+        var prefix = Encoding.UTF8.GetBytes("{\"values\":[\"small-graph\"],\"ignoredLargeWireValue\":\"");
         var suffix = Encoding.UTF8.GetBytes("\"}");
         var json = new byte[totalLength];
         prefix.CopyTo(json, 0);
@@ -387,29 +452,30 @@ public sealed partial class StreamingSnapshotRestoreTests
         return json;
     }
 
-    private static void AssertRecordedThresholdsWithinWindow(
+    private static void AssertRecordedThresholdsExactly(
         IReadOnlyList<string> thresholds,
-        ThresholdWindow window,
+        string actorSelectedThreshold,
+        int expectedCount,
         string path)
     {
-        Assert.NotEmpty(thresholds);
+        Assert.False(string.IsNullOrWhiteSpace(actorSelectedThreshold));
+        if (thresholds.Count != expectedCount)
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"{path} must deserialize exactly {expectedCount} times; observed {thresholds.Count}.");
+        }
+
         Assert.All(thresholds, threshold =>
         {
             Assert.False(string.IsNullOrWhiteSpace(threshold));
-            Assert.InRange(
-                string.CompareOrdinal(threshold, window.LowerInclusive),
-                0,
-                int.MaxValue);
-            Assert.InRange(
-                string.CompareOrdinal(threshold, window.UpperInclusive),
-                int.MinValue,
-                0);
+            Assert.Equal(actorSelectedThreshold, threshold);
         });
     }
 
-    private static void AssertCustomThresholdsWithinWindow(
+    private static void AssertCustomThresholdsExactly(
         MatrixRegistryKind registry,
-        ThresholdWindow window,
+        string actorSelectedThreshold,
+        int expectedCount,
         string path)
     {
         if (registry != MatrixRegistryKind.Custom)
@@ -417,9 +483,10 @@ public sealed partial class StreamingSnapshotRestoreTests
             return;
         }
 
-        AssertRecordedThresholdsWithinWindow(
+        AssertRecordedThresholdsExactly(
             MatrixCustomPayloadProjector.DrainRecordedSafeThresholds(),
-            window,
+            actorSelectedThreshold,
+            expectedCount,
             path);
     }
 
@@ -551,29 +618,153 @@ public sealed partial class StreamingSnapshotRestoreTests
             typeof(string), typeof(DcbDomainTypes), typeof(string), typeof(Stream), typeof(CancellationToken));
     }
 
-    private static void AssertNoWholePayloadAggregationReferences(MethodInfo asyncMethod)
+    private static IReadOnlyList<MethodBase> GetSupportedStreamRestorePathRoots()
     {
-        var forbidden = EnumerateReferencedMembers(asyncMethod)
-            .Where(member =>
-                (member.DeclaringType == typeof(StreamReadHelper) && member.Name == "ReadAllBytesAsync") ||
-                (member.DeclaringType == typeof(MemoryStream) && member.Name is ".ctor" or "ToArray") ||
-                (member.DeclaringType == typeof(File) && member.Name is "ReadAllBytes" or "ReadAllBytesAsync") ||
-                (member.DeclaringType == typeof(SerializableMultiProjectionState) && member.Name == "GetPayloadBytes"))
-            .Select(member => $"{member.DeclaringType!.FullName}.{member.Name}")
+        var teeType = GetSnapshotRestoreTeeReadStreamType();
+        var streamingSupportType = GetStreamingMultiProjectorTypesSupportType();
+        return
+        [
+            typeof(GeneralMultiProjectionActor).GetMethod(
+                "DeserializeStreamingPayloadPairAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic)!,
+            typeof(SnapshotEnvelopeResolver).GetMethod(
+                nameof(SnapshotEnvelopeResolver.ResolveForRestoreAsync),
+                BindingFlags.Static | BindingFlags.Public)!,
+            GetStreamingRegistryDeserializeMethod(typeof(AotMultiProjectorTypes)),
+            GetStreamingRegistryDeserializeMethod(typeof(SimpleMultiProjectorTypes)),
+            GetStreamingRegistryDeserializeMethod(typeof(GeneralMultiProjectionActor).Assembly.GetType(
+                "Sekiban.Dcb.Domains.SimpleMultiProjectorTypes",
+                throwOnError: true)!),
+            .. GetConcreteMethodsIncludingNestedTypes(teeType),
+            .. GetConcreteMethodsIncludingNestedTypes(typeof(StreamSnapshotPayloadDeserializer)),
+            .. GetConcreteMethodsIncludingNestedTypes(streamingSupportType)
+        ];
+    }
+
+    private static Type GetSnapshotRestoreTeeReadStreamType() =>
+        typeof(SnapshotEnvelopeResolver).Assembly.GetType(
+            "Sekiban.Dcb.Snapshots.SnapshotRestoreTeeReadStream",
+            throwOnError: true)!;
+
+    private static Type GetPrefixBufferedStreamType() =>
+        typeof(StreamSnapshotPayloadDeserializer).GetNestedType(
+            "PrefixBufferedStream",
+            BindingFlags.NonPublic)
+        ?? throw new Xunit.Sdk.XunitException("StreamSnapshotPayloadDeserializer.PrefixBufferedStream was not found.");
+
+    private static Type GetStreamingMultiProjectorTypesSupportType() =>
+        typeof(StreamSnapshotPayloadDeserializer).Assembly.GetType(
+            "Sekiban.Dcb.MultiProjections.StreamingMultiProjectorTypesSupport",
+            throwOnError: true)!;
+
+    private static MethodInfo GetStreamingRegistryDeserializeMethod(Type registryType) =>
+        Assert.Single(
+            registryType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly),
+            method => method.Name == nameof(IStreamingMultiProjectorTypes.DeserializeFromStreamAsync));
+
+    private static IEnumerable<MethodBase> GetConcreteMethodsIncludingNestedTypes(Type type)
+    {
+        foreach (var constructor in type.GetConstructors(
+                     BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            yield return constructor;
+        }
+
+        if (type.TypeInitializer is { } typeInitializer)
+        {
+            yield return typeInitializer;
+        }
+
+        foreach (var method in type.GetMethods(
+                     BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic |
+                     BindingFlags.DeclaredOnly)
+                 .Where(method => !method.IsAbstract))
+        {
+            yield return method;
+        }
+
+        foreach (var nestedType in type.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            foreach (var nestedMethod in GetConcreteMethodsIncludingNestedTypes(nestedType))
+            {
+                yield return nestedMethod;
+            }
+        }
+    }
+
+    private static void AssertNoWholePayloadAggregationReferences(IEnumerable<MethodBase> roots)
+    {
+        var forbidden = FindWholePayloadAggregationReferences(roots)
+            .Select(DescribeMember)
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
         Assert.Empty(forbidden);
     }
 
-    private static IEnumerable<MemberInfo> EnumerateReferencedMembers(MethodInfo asyncMethod)
+    private static IReadOnlyList<MemberInfo> FindWholePayloadAggregationReferences(IEnumerable<MethodBase> roots) =>
+        EnumerateTransitiveReferencedMembers(roots)
+            .Where(IsWholePayloadAggregationReference)
+            .ToArray();
+
+    private static IEnumerable<MemberInfo> EnumerateTransitiveReferencedMembers(IEnumerable<MethodBase> roots)
     {
-        var stateMachine = asyncMethod.GetCustomAttribute<AsyncStateMachineAttribute>()?.StateMachineType
-            ?? throw new Xunit.Sdk.XunitException($"{asyncMethod.Name} is expected to be an async state machine.");
-        var moveNext = stateMachine.GetMethod("MoveNext", BindingFlags.Instance | BindingFlags.NonPublic)
+        var productAssemblies = new HashSet<Assembly>(roots
+            .Select(root => root.DeclaringType?.Assembly)
+            .OfType<Assembly>())
+        {
+            typeof(SnapshotEnvelopeResolver).Assembly,
+            typeof(StreamSnapshotPayloadDeserializer).Assembly
+        };
+        var pending = new Stack<MethodBase>(roots.Reverse());
+        var visited = new HashSet<MethodBase>();
+
+        while (pending.TryPop(out var candidate))
+        {
+            var implementation = GetImplementationMethod(candidate);
+            if (!visited.Add(implementation))
+            {
+                continue;
+            }
+
+            foreach (var member in EnumerateDirectReferencedMembers(implementation))
+            {
+                yield return member;
+                if (member is MethodBase called &&
+                    called.DeclaringType is not null &&
+                    productAssemblies.Contains(called.DeclaringType.Assembly))
+                {
+                    pending.Push(called);
+                }
+            }
+        }
+    }
+
+    private static MethodBase GetImplementationMethod(MethodBase method)
+    {
+        if (method is not MethodInfo asyncMethod ||
+            asyncMethod.GetCustomAttribute<AsyncStateMachineAttribute>()?.StateMachineType is not { } stateMachine)
+        {
+            return method;
+        }
+
+        return stateMachine.GetMethod("MoveNext", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new Xunit.Sdk.XunitException($"{stateMachine.FullName}.MoveNext was not found.");
-        var il = moveNext.GetMethodBody()?.GetILAsByteArray()
-            ?? throw new Xunit.Sdk.XunitException($"{stateMachine.FullName}.MoveNext has no IL body.");
-        var genericTypeArguments = stateMachine.IsGenericType ? stateMachine.GetGenericArguments() : null;
-        var genericMethodArguments = asyncMethod.IsGenericMethod ? asyncMethod.GetGenericArguments() : null;
+    }
+
+    private static IEnumerable<MemberInfo> EnumerateDirectReferencedMembers(MethodBase method)
+    {
+        var il = method.GetMethodBody()?.GetILAsByteArray();
+        if (il is null)
+        {
+            yield break;
+        }
+
+        var genericTypeArguments = method.DeclaringType?.IsGenericType == true
+            ? method.DeclaringType.GetGenericArguments()
+            : null;
+        var genericMethodArguments = method is MethodInfo methodInfo && methodInfo.IsGenericMethod
+            ? methodInfo.GetGenericArguments()
+            : null;
 
         for (var offset = 0; offset < il.Length;)
         {
@@ -585,9 +776,9 @@ public sealed partial class StreamingSnapshotRestoreTests
                 MemberInfo? member = null;
                 try
                 {
-                    member = moveNext.Module.ResolveMember(token, genericTypeArguments, genericMethodArguments);
+                    member = method.Module.ResolveMember(token, genericTypeArguments, genericMethodArguments);
                 }
-                catch (ArgumentException)
+                catch (Exception exception) when (exception is ArgumentException or BadImageFormatException)
                 {
                     // A generic method specification can be unresolved while still having no relevant aggregation call.
                 }
@@ -603,6 +794,63 @@ public sealed partial class StreamingSnapshotRestoreTests
             offset += OperandSize(opCode.OperandType, il, offset);
         }
     }
+
+    private static bool IsWholePayloadAggregationReference(MemberInfo member)
+    {
+        var declaringType = member.DeclaringType;
+        if (declaringType is null)
+        {
+            return false;
+        }
+
+        return
+            (declaringType == typeof(StreamReadHelper) && member.Name == "ReadAllBytesAsync") ||
+            (declaringType == typeof(SerializableMultiProjectionState) && member.Name == "GetPayloadBytes") ||
+            (declaringType == typeof(MemoryStream) && member.Name is ".ctor" or "ToArray" or "GetBuffer") ||
+            (declaringType == typeof(File) &&
+             (member.Name.StartsWith("ReadAllBytes", StringComparison.Ordinal) ||
+              member.Name.StartsWith("ReadAllText", StringComparison.Ordinal))) ||
+            (declaringType.IsGenericType &&
+             declaringType.GetGenericTypeDefinition() == typeof(System.Buffers.ArrayBufferWriter<>) &&
+             member.Name == ".ctor") ||
+            (declaringType == typeof(StringBuilder) && member.Name == nameof(StringBuilder.ToString)) ||
+            (typeof(TextReader).IsAssignableFrom(declaringType) &&
+             member.Name is "ReadToEnd" or "ReadToEndAsync") ||
+            (typeof(BinaryReader).IsAssignableFrom(declaringType) &&
+             member.Name == nameof(BinaryReader.ReadBytes));
+    }
+
+    private static string DescribeMember(MemberInfo member) =>
+        $"{member.DeclaringType?.FullName ?? "<unknown>"}.{member.Name}";
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static async Task<byte[]> AggregationVerifierAsyncRoot(SerializableMultiProjectionState state)
+    {
+        await Task.Yield();
+        _ = AggregationVerifierHiddenMemoryStreamHelper();
+        _ = AggregationVerifierHiddenReadAllBytesHelperAsync();
+        return AggregationVerifierHiddenPayloadBytesHelper(state);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static byte[] AggregationVerifierHiddenMemoryStreamHelper()
+    {
+        using var aggregate = new MemoryStream();
+        return aggregate.ToArray();
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static async Task<byte[]> AggregationVerifierHiddenReadAllBytesHelperAsync()
+    {
+        await Task.Yield();
+        // This helper is scanned, never executed. Its only purpose is to prove that a ReadAllBytes* mutation hidden
+        // behind an async helper cannot evade the recursive production-path guard.
+        return await File.ReadAllBytesAsync(Path.Combine(Path.GetTempPath(), "aggregation-verifier-never-read"));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static byte[] AggregationVerifierHiddenPayloadBytesHelper(SerializableMultiProjectionState state) =>
+        state.GetPayloadBytes();
 
     private static OpCode ReadOpCode(byte[] il, ref int offset)
     {
@@ -790,8 +1038,6 @@ public sealed partial class StreamingSnapshotRestoreTests
     public enum MatrixWireVersion { V9, V10 }
     public enum MatrixDelivery { Offloaded, Inline }
 
-    private sealed record ThresholdWindow(string LowerInclusive, string UpperInclusive);
-
     private sealed record RestoreRollbackSnapshot(
         object StateAccessor,
         Guid LastEventId,
@@ -819,6 +1065,9 @@ public sealed partial class StreamingSnapshotRestoreTests
 
     private static int GetLastStreamingRestoreWholePayloadAggregationCount(GeneralMultiProjectionActor actor) =>
         ReadActorField<int>(actor, "_lastStreamingRestoreWholePayloadAggregationCount");
+
+    private static string GetLastSnapshotRestoreSafeWindowThreshold(GeneralMultiProjectionActor actor) =>
+        ReadActorField<string>(actor, "_lastSnapshotRestoreSafeWindowThreshold");
 
     private static T ReadActorField<T>(GeneralMultiProjectionActor actor, string name) =>
         (T)(typeof(GeneralMultiProjectionActor)

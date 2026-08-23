@@ -146,9 +146,10 @@ recovery/catch-up policy に従います。
 通常の DCB test suite には、小さな graph と 16–32 MiB の offloaded gzip wire を組み合わせた制御 fixture があります。
 これは production aggregation counter と、supported stream seam に whole-payload aggregation API が入ることを拒否する
 structural guard を併用します。別の **DCB Streaming Restore
-Memory Smoke** workflow は、週次/manual schedule で 143 MiB fixture を timeout と virtual-memory ceiling 付きの
-isolated process で実行します。elapsed time、peak RSS、選択された capability path、read count、buffer counter を記録し、
-full-payload materialization path がないことを評価します。OOM が不可能だという主張ではありません。
+Memory Smoke** workflow は、その制御 fixture も allocation ceiling 付きの独立 process で実行し、意図的に buffering
+する control がその ceiling を超えることを確認します。143 MiB fixture は週次/manual schedule でのみ timeout と
+virtual-memory ceiling 付きで実行します。elapsed time、peak RSS、選択された capability path、read count、buffer counter
+を記録し、full-payload materialization path がないことを評価します。OOM が不可能だという主張ではありません。
 
 ## 整合性のポイント
 
