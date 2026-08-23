@@ -126,8 +126,8 @@ public class MultiProjectionStateBuilder
             string? startPosition = null;
             if (currentState != null)
             {
-                var envelope = await LoadEnvelopeAsync(currentState, ct);
-                await actor.SetSnapshotAsync(envelope, ct);
+                await using var resolvedSnapshot = await LoadRestoreAsync(currentState, ct);
+                await actor.SetResolvedSnapshotAsync(resolvedSnapshot, ct);
                 startPosition = currentState.LastSortableUniqueId;
                 _logger.LogDebug("  Restored from position: {StartPosition}", startPosition);
             }
@@ -398,7 +398,7 @@ public class MultiProjectionStateBuilder
     ///     Load envelope from saved record.
     ///     Supports both v10 (no outer Gzip) and v9 (with outer Gzip) formats.
     /// </summary>
-    private async Task<SerializableMultiProjectionStateEnvelope> LoadEnvelopeAsync(
+    private async Task<ResolvedSnapshotRestore> LoadRestoreAsync(
         MultiProjectionStateRecord record,
         CancellationToken ct)
     {
@@ -426,7 +426,7 @@ public class MultiProjectionStateBuilder
             throw new InvalidOperationException("Failed to deserialize Envelope JSON");
         }
 
-        return await SnapshotEnvelopeResolver.ResolveInlineAsync(envelope, _blobAccessor, ct);
+        return await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, _blobAccessor, ct);
     }
 
     // SEK-G20: the CLI/offline build persists through the sole checkpoint-mutation coordinator (generation/tombstone CAS

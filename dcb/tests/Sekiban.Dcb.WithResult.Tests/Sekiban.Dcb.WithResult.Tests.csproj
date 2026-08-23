@@ -40,7 +40,17 @@
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core.Testing\Sekiban.Dcb.Core.Testing.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithResult.Testing\Sekiban.Dcb.WithResult.Testing.csproj" />
         <ProjectReference Include="..\Sekiban.Dcb.LegacyConsumerFixture\Sekiban.Dcb.LegacyConsumerFixture.csproj" />
+        <!-- Build the genuinely separate v10.18 package fixture but do not let its old package references participate
+             in this test project's compile-time dependency resolution. The test loads its produced DLL by reflection. -->
+        <ProjectReference Include="..\Sekiban.Dcb.StreamingRestore.Legacy1018Fixture\Sekiban.Dcb.StreamingRestore.Legacy1018Fixture.csproj"
+                          ReferenceOutputAssembly="false" />
     </ItemGroup>
+
+    <Target Name="CopyStreamingRestoreLegacy1018Fixture" AfterTargets="Build">
+        <Copy SourceFiles="$(MSBuildProjectDirectory)/../Sekiban.Dcb.StreamingRestore.Legacy1018Fixture/bin/$(Configuration)/$(TargetFramework)/Sekiban.Dcb.StreamingRestore.Legacy1018Fixture.dll"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+    </Target>
 
     <ItemGroup>
         <!-- SEK-G17: frozen dcb-v10.1.17 wire artifacts. Embedded verbatim so tests read the exact committed bytes as the

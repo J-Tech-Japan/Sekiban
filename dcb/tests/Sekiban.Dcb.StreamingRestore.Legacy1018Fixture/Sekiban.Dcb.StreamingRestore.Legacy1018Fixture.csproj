@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      This assembly is deliberately compiled against the published 10.18 packages, not this repository's project
+      references. It is the binary-compatibility fixture for the additive streaming-restore capability: an external
+      ICoreMultiProjectorTypes implementor from 10.18 must still load and be invoked by the current runtime.
+    -->
+    <PropertyGroup>
+        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <LangVersion>preview</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <GenerateSBOM>false</GenerateSBOM>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Sekiban.Dcb.Core" Version="10.18.0" />
+        <PackageReference Include="Sekiban.Dcb.Core.Model" Version="10.18.0" />
+        <PackageReference Include="ResultBoxes" Version="0.4.0" />
+    </ItemGroup>
+
+</Project>

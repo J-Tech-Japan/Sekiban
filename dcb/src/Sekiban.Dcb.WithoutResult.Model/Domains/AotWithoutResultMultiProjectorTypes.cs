@@ -13,7 +13,7 @@ namespace Sekiban.Dcb.Domains;
 /// <summary>
 ///     AOT-compatible implementation of ICoreMultiProjectorTypes for exception-based projectors.
 /// </summary>
-public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTypes
+public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTypes, IStreamingMultiProjectorTypes
 {
     private static readonly bool DebugBypassProject =
         Environment.GetEnvironmentVariable("SEKIBAN_WASM_DEBUG_BYPASS_MULTI_PROJECT") == "1";
@@ -26,7 +26,8 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
         string Version,
         Func<DcbDomainTypes, string, IMultiProjectionPayload, SerializationResult> Serialize,
         Func<Stream, DcbDomainTypes, string, IMultiProjectionPayload, SerializationSizeInfo> SerializeToStream,
-        Func<DcbDomainTypes, string, byte[], IMultiProjectionPayload> Deserialize);
+        Func<DcbDomainTypes, string, byte[], IMultiProjectionPayload> Deserialize,
+        Func<Stream, DcbDomainTypes, string, CancellationToken, Task<IMultiProjectionPayload>> DeserializeFromStream);
 
     public void RegisterProjector<TProjector>(JsonTypeInfo<TProjector> typeInfo)
         where TProjector : IMultiProjector<TProjector>, new()
@@ -69,7 +70,11 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
                 byte[] jsonBytes = GzipCompression.Decompress(data);
                 return JsonSerializer.Deserialize(jsonBytes, typeInfo)
                     ?? throw new InvalidOperationException($"Failed to deserialize {typeof(TProjector).Name}");
-            });
+            },
+            DeserializeFromStream: async (source, _, _, cancellationToken) =>
+                await StreamSnapshotPayloadDeserializer.DeserializeJsonAsync(source, typeInfo, cancellationToken)
+                    .ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"Failed to deserialize {typeof(TProjector).Name}"));
     }
 
     public ResultBox<IMultiProjectionPayload> Project(
@@ -156,6 +161,43 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
         }
 
         return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Projector not found: {projectorName}"));
+    }
+
+    public bool SupportsStreamDeserialization(string projectorName) => _projectors.ContainsKey(projectorName);
+
+    public async Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(
+        string projectorName,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
+        Stream source,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(safeWindowThreshold))
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(
+                new ArgumentException("safeWindowThreshold must be supplied"));
+        }
+
+        if (source is null)
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(new ArgumentNullException(nameof(source)));
+        }
+
+        if (!_projectors.TryGetValue(projectorName, out var registration))
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Projector not found: {projectorName}"));
+        }
+
+        try
+        {
+            return ResultBox.FromValue(
+                await registration.DeserializeFromStream(source, domainTypes, safeWindowThreshold, cancellationToken)
+                    .ConfigureAwait(false));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(ex);
+        }
     }
 
     public ResultBox<IMultiProjectionPayload> DeserializeJson(

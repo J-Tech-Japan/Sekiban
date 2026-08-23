@@ -11,7 +11,7 @@ namespace Sekiban.Dcb.Domains;
 /// <summary>
 ///     Simple in-memory registry for multi projectors.
 /// </summary>
-internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
+internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes, IStreamingMultiProjectorTypes
 {
     private readonly ConcurrentDictionary<string, Func<IMultiProjectionPayload>> _initialPayloadGenerators = new();
     private readonly ConcurrentDictionary<string,
@@ -22,6 +22,8 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
     private readonly ConcurrentDictionary<string, (
         Func<DcbDomainTypes, string, object, SerializationResult> serialize,
         Func<DcbDomainTypes, string, ReadOnlySpan<byte>, object> deserialize)> _customSerializers = new();
+    private readonly ConcurrentDictionary<string,
+        Func<DcbDomainTypes, string, Stream, CancellationToken, Task<IMultiProjectionPayload>>> _streamDeserializers = new();
 
     public ResultBox<IMultiProjectionPayload> Project(
         string multiProjectorName,
@@ -170,6 +172,7 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
 
         // Register the initial payload generator
         _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
+        RegisterReflectionStreamDeserializer<TProjector>(projectorName);
     }
 
     /// <summary>
@@ -229,6 +232,7 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
 
         // Register the initial payload generator
         _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
+        RegisterReflectionStreamDeserializer<TProjector>(projectorName);
     }
 
     /// <summary>
@@ -381,6 +385,7 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
             // Since ICoreMultiProjectorWithCustomSerialization<T> inherits from ICoreMultiProjector<T>,
             // we can directly call RegisterProjector
             RegisterProjector<T>();
+            RegisterCustomStreamDeserializerIfPresent<T>(projectorName);
 
             return ResultBox.FromValue(true);
         }
@@ -409,12 +414,83 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
             // Since ICoreMultiProjectorWithCustomSerialization<T> inherits from ICoreMultiProjector<T>,
             // we can directly call RegisterProjector
             RegisterProjectorWithoutResult<T>();
+            RegisterCustomStreamDeserializerIfPresent<T>(projectorName);
 
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)
         {
             return ResultBox.Error<bool>(ex);
+        }
+    }
+
+    public bool SupportsStreamDeserialization(string projectorName) =>
+        _streamDeserializers.ContainsKey(projectorName);
+
+    public async Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(
+        string projectorName,
+        DcbDomainTypes domainTypes,
+        string safeWindowThreshold,
+        Stream source,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(safeWindowThreshold))
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(
+                new ArgumentException("safeWindowThreshold must be supplied"));
+        }
+
+        if (source is null)
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(new ArgumentNullException(nameof(source)));
+        }
+
+        if (!_streamDeserializers.TryGetValue(projectorName, out var deserialize))
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(
+                new NotSupportedException($"Projector '{projectorName}' does not support streaming deserialization."));
+        }
+
+        try
+        {
+            return ResultBox.FromValue(
+                await deserialize(domainTypes, safeWindowThreshold, source, cancellationToken).ConfigureAwait(false));
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<IMultiProjectionPayload>(ex);
+        }
+    }
+
+    private void RegisterReflectionStreamDeserializer<TProjector>(string projectorName)
+        where TProjector : ICoreMultiProjector<TProjector>, new() =>
+        _streamDeserializers[projectorName] = async (domainTypes, _, source, cancellationToken) =>
+        {
+            var deserialized = await StreamSnapshotPayloadDeserializer.DeserializeJsonAsync(
+                    source,
+                    typeof(TProjector),
+                    domainTypes.JsonSerializerOptions,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return deserialized as IMultiProjectionPayload
+                ?? throw new InvalidOperationException(
+                    $"Failed to deserialize streaming payload to {typeof(TProjector).Name}.");
+        };
+
+    private void RegisterCustomStreamDeserializerIfPresent<TProjector>(string projectorName)
+        where TProjector : ICoreMultiProjectorWithCustomSerialization<TProjector>, new()
+    {
+        if (typeof(ICoreMultiProjectorWithStreamDeserialization).IsAssignableFrom(typeof(TProjector)))
+        {
+            _streamDeserializers[projectorName] = (domainTypes, safeWindowThreshold, source, cancellationToken) =>
+                ((ICoreMultiProjectorWithStreamDeserialization)(object)new TProjector())
+                .DeserializeFromStreamAsync(domainTypes, safeWindowThreshold, source, cancellationToken);
+        }
+        else
+        {
+            // A custom serializer's bytes are not necessarily JSON+gzip, so it must explicitly opt in rather than
+            // inheriting the normal reflection projector path registered above.
+            _streamDeserializers.TryRemove(projectorName, out _);
         }
     }
 }
