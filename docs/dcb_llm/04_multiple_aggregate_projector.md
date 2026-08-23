@@ -127,8 +127,10 @@ buffer. Save-side streaming and compression-format changes are outside this rest
 Stream implementations must use asynchronous reads, honor `CancellationToken`, support non-seekable partial-read streams
 at their current position, and never dispose the stream. The resolver caller owns disposal. While a stream restore is in
 progress, state queries, event application, promotion, compaction, and snapshot persistence fail rather than publishing
-old or partial payload/tracking metadata. A failed restore returns an activation error before it can be served; the host
-then follows its normal recovery/catch-up policy.
+old or partial payload/tracking metadata. A terminal restore failure keeps that same fail-closed barrier latched: the
+previous payload and tracking metadata are not usable by query, apply, catch-up, promotion, or persistence. A later
+restore/rebuild attempt is still permitted, and only a successful atomic restore clears the barrier; otherwise the host
+follows its normal recovery/catch-up policy without serving the stale state.
 
 #### Restore caller inventory
 
@@ -140,7 +142,9 @@ then follows its normal recovery/catch-up policy.
 | `GeneralMultiProjectionActor.SetCurrentState` / `SetCurrentStateIgnoringVersion` | Direct legacy inline state | Buffered compatibility path only |
 | `SnapshotEnvelopeResolver.ResolveInlineAsync` | Explicit compatibility adapter | Materializes only because its caller explicitly asks for an inline envelope; production offloaded restore must use `ResolveForRestoreAsync` |
 
-The normal DCB test suite includes a controlled 18 MiB offloaded gzip fixture. The separate **DCB Streaming Restore
+The normal DCB test suite includes a controlled small-graph, 16–32 MiB offloaded gzip wire fixture. It combines a
+production aggregation counter with structural guards that reject whole-payload aggregation APIs from the supported
+stream seam. The separate **DCB Streaming Restore
 Memory Smoke** workflow runs a 143 MiB fixture on a weekly/manual schedule in an isolated process with a timeout and
 virtual-memory ceiling. It records elapsed time, peak RSS, selected capability path, read counts, and buffer counters;
 it evaluates absence of the full-payload materialization path, not a claim that an OOM is impossible.

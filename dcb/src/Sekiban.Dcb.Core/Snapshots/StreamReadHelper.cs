@@ -10,6 +10,10 @@ public static class StreamReadHelper
         Stream stream,
         CancellationToken cancellationToken = default)
     {
+        // The actor opens a diagnostic scope only around a capability-present streaming restore. Reaching this
+        // whole-payload helper inside that scope is a real production seam observation, not a test-supplied counter.
+        SnapshotRestoreAggregationDiagnostics.RecordWholePayloadAggregation();
+
         if (TryReadWholeMemoryStream(stream, out var memoryBytes))
         {
             return memoryBytes;

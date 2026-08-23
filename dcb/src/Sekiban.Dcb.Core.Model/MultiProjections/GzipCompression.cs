@@ -194,6 +194,15 @@ public static class GzipCompression
     }
 
     /// <summary>
+    ///     Returns legacy raw UTF-8 JSON unchanged in content, or decompresses a gzip payload. This is internal because
+    ///     it is a registry compatibility detail rather than an additional serialization contract.
+    /// </summary>
+    internal static byte[] DecompressIfGzip(ReadOnlySpan<byte> payload) =>
+        payload.Length >= 2 && payload[0] == 0x1f && payload[1] == 0x8b
+            ? Decompress(payload)
+            : payload.ToArray();
+
+    /// <summary>
     ///     Decompress GZip bytes into a UTF8 string.
     /// </summary>
     public static string DecompressToString(ReadOnlySpan<byte> compressed)

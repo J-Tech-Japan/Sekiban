@@ -75,7 +75,9 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes, IStreamin
             },
             Deserialize: (domainTypes, safeWindowThreshold, data) =>
             {
-                var jsonBytes = GzipCompression.Decompress(data);
+                // Legacy raw UTF-8 snapshots and gzip snapshots must remain equivalent to the stream helper, which
+                // chooses gzip only from its two-byte marker.
+                var jsonBytes = GzipCompression.DecompressIfGzip(data);
                 return JsonSerializer.Deserialize(jsonBytes, typeInfo)!;
             });
         StreamingMultiProjectorTypesSupport.RegisterJsonTypeInfo(this, name, typeInfo);

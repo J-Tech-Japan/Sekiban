@@ -126,8 +126,10 @@ buffer は作りません。save 側の streaming 化と圧縮形式の変更は
 stream 実装は非同期 read を使い、`CancellationToken` を尊重し、現在位置からの非 seekable partial-read stream を
 サポートし、stream を dispose してはいけません。dispose の責任は resolver caller にあります。stream restore の最中は、
 state query・event apply・promotion・compaction・snapshot persistence は old / partial payload や tracking metadata を
-publish する代わりに失敗します。restore の失敗は activation を serve 前に error とし、その後 host は通常の
-recovery/catch-up policy に従います。
+publish する代わりに失敗します。terminal な restore failure の後も、この fail-closed barrier は latch されたままです。
+以前の payload と tracking metadata は query、apply、catch-up、promotion、persistence に利用できません。後続の
+restore/rebuild attempt 自体は許可され、atomic な restore が成功した場合だけ barrier が解除されます。それ以外では
+host は stale state を serve せず通常の recovery/catch-up policy に従います。
 
 #### Restore caller inventory
 
@@ -139,7 +141,9 @@ recovery/catch-up policy に従います。
 | `GeneralMultiProjectionActor.SetCurrentState` / `SetCurrentStateIgnoringVersion` | direct legacy inline state | buffered compatibility path のみ |
 | `SnapshotEnvelopeResolver.ResolveInlineAsync` | explicit compatibility adapter | caller が inline envelope を明示的に要求したためだけに materialize する。本番の offloaded restore では `ResolveForRestoreAsync` を使う必要がある |
 
-通常の DCB test suite には制御された 18 MiB の offloaded gzip fixture があります。別の **DCB Streaming Restore
+通常の DCB test suite には、小さな graph と 16–32 MiB の offloaded gzip wire を組み合わせた制御 fixture があります。
+これは production aggregation counter と、supported stream seam に whole-payload aggregation API が入ることを拒否する
+structural guard を併用します。別の **DCB Streaming Restore
 Memory Smoke** workflow は、週次/manual schedule で 143 MiB fixture を timeout と virtual-memory ceiling 付きの
 isolated process で実行します。elapsed time、peak RSS、選択された capability path、read count、buffer counter を記録し、
 full-payload materialization path がないことを評価します。OOM が不可能だという主張ではありません。

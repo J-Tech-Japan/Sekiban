@@ -22,7 +22,7 @@ namespace Sekiban.Dcb.Orleans.Tests;
 ///     NativeProjectionSnapshotHandler.RestoreSnapshotFromStreamAsync — the same state-store activation path in the
 ///     incident trace — rather than calling a registry helper in isolation.
 /// </summary>
-public sealed class StreamingSnapshotRestoreProductionPathTests
+public sealed partial class StreamingSnapshotRestoreProductionPathTests
 {
     [Theory]
     [InlineData(false)] // v10 envelope: raw outer JSON
@@ -234,6 +234,11 @@ public sealed class StreamingSnapshotRestoreProductionPathTests
         private readonly Dictionary<string, byte[]> _payloads = new(StringComparer.Ordinal);
         private int _nextKey;
         public string ProviderName => "blocking-stream-test";
+        public int OpenReadCalls { get; private set; }
+        public bool BlockOnFirstRead { get; set; } = true;
+        public Exception? OpenReadFailure { get; set; }
+        public Exception? MidStreamReadFailure { get; set; }
+        public int FailOnReadNumber { get; set; } = int.MaxValue;
         public TaskCompletionSource<BlockingCappedNonSeekableStream> Opened { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -248,16 +253,46 @@ public sealed class StreamingSnapshotRestoreProductionPathTests
 
         public Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken = default)
         {
-            var stream = new BlockingCappedNonSeekableStream(_payloads[key], maxReadBytes: 97);
+            OpenReadCalls++;
+            if (OpenReadFailure is not null)
+            {
+                return Task.FromException<Stream>(OpenReadFailure);
+            }
+
+            var stream = new BlockingCappedNonSeekableStream(
+                _payloads[key],
+                maxReadBytes: 97,
+                blockOnFirstRead: BlockOnFirstRead,
+                midStreamReadFailure: MidStreamReadFailure,
+                failOnReadNumber: FailOnReadNumber);
             Opened.TrySetResult(stream);
             return Task.FromResult<Stream>(stream);
         }
     }
 
-    private sealed class BlockingCappedNonSeekableStream(byte[] payload, int maxReadBytes) : Stream
+    private sealed class BlockingCappedNonSeekableStream : Stream
     {
-        private readonly MemoryStream _inner = new(payload, writable: false);
+        private readonly MemoryStream _inner;
+        private readonly int _maxReadBytes;
+        private readonly bool _blockOnFirstRead;
+        private readonly Exception? _midStreamReadFailure;
+        private readonly int _failOnReadNumber;
         private readonly TaskCompletionSource<bool> _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public BlockingCappedNonSeekableStream(
+            byte[] payload,
+            int maxReadBytes,
+            bool blockOnFirstRead = true,
+            Exception? midStreamReadFailure = null,
+            int failOnReadNumber = int.MaxValue)
+        {
+            _inner = new MemoryStream(payload, writable: false);
+            _maxReadBytes = maxReadBytes;
+            _blockOnFirstRead = blockOnFirstRead;
+            _midStreamReadFailure = midStreamReadFailure;
+            _failOnReadNumber = failOnReadNumber;
+        }
+
         public TaskCompletionSource<bool> FirstReadStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int ReadCalls { get; private set; }
         public int LengthAccesses { get; private set; }
@@ -286,15 +321,30 @@ public sealed class StreamingSnapshotRestoreProductionPathTests
             Read(buffer.AsSpan(offset, count));
         public override int Read(Span<byte> buffer)
         {
+            FirstReadStarted.TrySetResult(true);
             ReadCalls++;
-            return _inner.Read(buffer[..Math.Min(maxReadBytes, buffer.Length)]);
+            ThrowIfConfiguredReadFailure();
+            return _inner.Read(buffer[..Math.Min(_maxReadBytes, buffer.Length)]);
         }
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             FirstReadStarted.TrySetResult(true);
-            await _release.Task.WaitAsync(cancellationToken);
+            if (_blockOnFirstRead)
+            {
+                await _release.Task.WaitAsync(cancellationToken);
+            }
+
             ReadCalls++;
-            return await _inner.ReadAsync(buffer[..Math.Min(maxReadBytes, buffer.Length)], cancellationToken);
+            ThrowIfConfiguredReadFailure();
+            return await _inner.ReadAsync(buffer[..Math.Min(_maxReadBytes, buffer.Length)], cancellationToken);
+        }
+
+        private void ThrowIfConfiguredReadFailure()
+        {
+            if (_midStreamReadFailure is not null && ReadCalls >= _failOnReadNumber)
+            {
+                throw _midStreamReadFailure;
+            }
         }
         public override long Seek(long offset, SeekOrigin origin)
         {

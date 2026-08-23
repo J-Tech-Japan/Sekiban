@@ -66,7 +66,7 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
             },
             Deserialize: (_, _, data) =>
             {
-                byte[] jsonBytes = GzipCompression.Decompress(data);
+                byte[] jsonBytes = GzipCompression.DecompressIfGzip(data);
                 return JsonSerializer.Deserialize(jsonBytes, typeInfo)
                     ?? throw new InvalidOperationException($"Failed to deserialize {typeof(TProjector).Name}");
             });

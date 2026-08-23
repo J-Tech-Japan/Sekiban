@@ -44,10 +44,7 @@ public sealed partial class StreamingSnapshotRestoreTests
 
             Assert.Equal(2, targetTypes.StreamDeserializeCalls);
             Assert.Equal(0, targetTypes.BufferedDeserializeCalls);
-            Assert.True(SatisfiesNoWholePayloadStructuralDiscriminant(
-                targetTypes.StreamDeserializeCalls,
-                targetTypes.BufferedDeserializeCalls,
-                wholePayloadAggregations: 0));
+            Assert.Equal(0, GetLastStreamingRestoreWholePayloadAggregationCount(target));
             Assert.True(stream.ReadCalls > 1);
             Assert.Equal(0, stream.LengthAccesses);
             Assert.Equal(0, stream.SeekCalls);
@@ -106,10 +103,9 @@ public sealed partial class StreamingSnapshotRestoreTests
 
         Assert.Equal(2, targetTypes.StreamDeserializeCalls);
         Assert.Equal(2, targetTypes.WholePayloadAggregations);
-        Assert.False(SatisfiesNoWholePayloadStructuralDiscriminant(
-            targetTypes.StreamDeserializeCalls,
-            targetTypes.BufferedDeserializeCalls,
-            targetTypes.WholePayloadAggregations));
+        // The actor's production-scope counter observes StreamReadHelper itself. This is deliberately independent of
+        // the control registry's own counter, so a MemoryStream/ToArray mutation at the shared seam is also killed.
+        Assert.Equal(2, GetLastStreamingRestoreWholePayloadAggregationCount(target));
     }
 
     [Fact]
@@ -177,18 +173,16 @@ public sealed partial class StreamingSnapshotRestoreTests
         var before = await target.GetStateAsync();
         Assert.True(before.IsSuccess);
         var beforeState = before.GetValue();
+        var beforeRawState = CaptureRestoreRollbackSnapshot(target);
 
         await using var resolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
-        await Assert.ThrowsAnyAsync<Exception>(() => target.SetResolvedSnapshotAsync(resolved));
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => target.SetResolvedSnapshotAsync(resolved));
 
         var after = await target.GetStateAsync();
-        Assert.True(after.IsSuccess);
-        Assert.Equal(Payload(beforeState), Payload(after.GetValue()));
-        Assert.Equal(beforeState.Version, after.GetValue().Version);
-        Assert.Equal(beforeState.LastEventId, after.GetValue().LastEventId);
-        Assert.Equal(beforeState.LastSortableUniqueId, after.GetValue().LastSortableUniqueId);
-        Assert.Equal(beforeState.IsCatchedUp, after.GetValue().IsCatchedUp);
-        Assert.Equal(beforeState.IsSafeState, after.GetValue().IsSafeState);
+        Assert.False(after.IsSuccess);
+        Assert.Same(exception, after.GetException());
+        AssertRestoreRollbackSnapshotUnchanged(target, beforeRawState);
+        Assert.Equal(["before"], Payload(beforeState));
     }
 
     [Fact]
@@ -201,18 +195,18 @@ public sealed partial class StreamingSnapshotRestoreTests
         var target = CreateActor(targetTypes);
         await target.AddEventsAsync([CreateEvent("before-corrupt")]);
         var before = (await target.GetStateAsync()).GetValue();
+        var beforeRawState = CaptureRestoreRollbackSnapshot(target);
 
         await using var resolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
-        await Assert.ThrowsAnyAsync<Exception>(() => target.SetResolvedSnapshotAsync(resolved));
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => target.SetResolvedSnapshotAsync(resolved));
 
         Assert.Equal(1, targetTypes.StreamDeserializeCalls);
         Assert.Equal(0, targetTypes.BufferedDeserializeCalls);
         var after = await target.GetStateAsync();
-        Assert.True(after.IsSuccess);
-        Assert.Equal(Payload(before), Payload(after.GetValue()));
-        Assert.Equal(before.LastEventId, after.GetValue().LastEventId);
-        Assert.Equal(before.LastSortableUniqueId, after.GetValue().LastSortableUniqueId);
-        Assert.Equal(before.Version, after.GetValue().Version);
+        Assert.False(after.IsSuccess);
+        Assert.Same(exception, after.GetException());
+        AssertRestoreRollbackSnapshotUnchanged(target, beforeRawState);
+        Assert.Equal(["before-corrupt"], Payload(before));
     }
 
     [Theory]
@@ -480,15 +474,12 @@ public sealed partial class StreamingSnapshotRestoreTests
 
     [Fact]
     [Trait("Category", "StreamingRestoreNormalMemory")]
-    public async Task Controlled_18MiB_offloaded_gzip_fixture_uses_the_same_nonbuffering_production_seam()
+    public async Task Controlled_small_graph_large_wire_offloaded_gzip_fixture_uses_the_same_nonbuffering_production_seam()
     {
         // Normal CI fixture: this is intentionally 16-32 MiB before gzip. It proves the selected path and stream
         // structure; it does not claim that the projection graph itself cannot OOM.
-        var largeBytes = new byte[13_500_000];
-        Random.Shared.NextBytes(largeBytes);
-        var largeValue = Convert.ToBase64String(largeBytes);
-        var sourceTypes = CreateReflectionRegistry();
-        var (envelope, blob) = await CreateOffloadedEnvelopeAsync(sourceTypes, [largeValue]);
+        var (envelope, blob, uncompressedWireBytes) = await CreateSmallGraphLargeWireFixtureAsync();
+        Assert.InRange(uncompressedWireBytes, 16 * 1024 * 1024, 32 * 1024 * 1024);
         var targetTypes = new CountingStreamingRegistry(CreateReflectionRegistry());
         var target = CreateActor(targetTypes);
 
@@ -501,10 +492,16 @@ public sealed partial class StreamingSnapshotRestoreTests
         Assert.True(stream.ReadCalls > 1);
         Assert.Equal(0, stream.LengthAccesses);
         Assert.Equal(0, stream.SeekCalls);
-        Assert.True(SatisfiesNoWholePayloadStructuralDiscriminant(
-            targetTypes.StreamDeserializeCalls,
-            targetTypes.BufferedDeserializeCalls,
-            wholePayloadAggregations: 0));
+        Assert.Equal(0, GetLastStreamingRestoreWholePayloadAggregationCount(target));
+
+        // Same envelope, same resolver-to-actor production seam, but a deliberately buffered capability. The shared
+        // actor-side observation — not the registry's test counter — must expose the whole-payload aggregation.
+        var bufferedControlTypes = new IntentionallyBufferedStreamingRegistry(CreateReflectionRegistry());
+        var bufferedControl = CreateActor(bufferedControlTypes);
+        await using var bufferedResolved = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(envelope, blob);
+        await bufferedControl.SetResolvedSnapshotAsync(bufferedResolved);
+        Assert.Equal(2, bufferedControlTypes.WholePayloadAggregations);
+        Assert.Equal(2, GetLastStreamingRestoreWholePayloadAggregationCount(bufferedControl));
     }
 
     [Fact]
@@ -544,10 +541,7 @@ public sealed partial class StreamingSnapshotRestoreTests
             $"streamDeserializeCalls={targetTypes.StreamDeserializeCalls}; bufferedDeserializeCalls={targetTypes.BufferedDeserializeCalls}; " +
             $"readCalls={stream.ReadCalls}; lengthAccesses={stream.LengthAccesses}; seekCalls={stream.SeekCalls}");
 
-        Assert.True(SatisfiesNoWholePayloadStructuralDiscriminant(
-            targetTypes.StreamDeserializeCalls,
-            targetTypes.BufferedDeserializeCalls,
-            wholePayloadAggregations: 0));
+        Assert.Equal(0, GetLastStreamingRestoreWholePayloadAggregationCount(target));
         Assert.True(stream.ReadCalls > 1);
         Assert.Equal(0, stream.LengthAccesses);
         Assert.Equal(0, stream.SeekCalls);
@@ -572,12 +566,6 @@ public sealed partial class StreamingSnapshotRestoreTests
             candidate.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(parameterTypes));
         Assert.True(method.IsPublic);
     }
-
-    private static bool SatisfiesNoWholePayloadStructuralDiscriminant(
-        int streamDeserializeCalls,
-        int bufferedDeserializeCalls,
-        int wholePayloadAggregations) =>
-        streamDeserializeCalls == 2 && bufferedDeserializeCalls == 0 && wholePayloadAggregations == 0;
 
     private static GeneralMultiProjectionActor CreateActor(
         ICoreMultiProjectorTypes types,
@@ -756,7 +744,7 @@ public sealed partial class StreamingSnapshotRestoreTests
             Inner.Deserialize(data, name, options);
         public ResultBox<SerializationResult> Serialize(string name, DcbDomainTypes domain, string threshold,
             IMultiProjectionPayload payload) => Inner.Serialize(name, domain, threshold, payload);
-        public ResultBox<IMultiProjectionPayload> Deserialize(string name, DcbDomainTypes domain, string threshold,
+        public virtual ResultBox<IMultiProjectionPayload> Deserialize(string name, DcbDomainTypes domain, string threshold,
             byte[] data)
         {
             BufferedDeserializeCalls++;
