@@ -11,7 +11,7 @@ namespace Sekiban.Dcb.Domains;
 /// <summary>
 ///     Simple in-memory registry for multi projectors.
 /// </summary>
-internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
+internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes, IStreamingMultiProjectorTypes
 {
     private readonly ConcurrentDictionary<string, Func<IMultiProjectionPayload>> _initialPayloadGenerators = new();
     private readonly ConcurrentDictionary<string,
@@ -170,6 +170,7 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
 
         // Register the initial payload generator
         _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
+        StreamingMultiProjectorTypesSupport.RegisterReflection(this, projectorName, typeof(TProjector));
     }
 
     /// <summary>
@@ -229,6 +230,7 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
 
         // Register the initial payload generator
         _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
+        StreamingMultiProjectorTypesSupport.RegisterReflection(this, projectorName, typeof(TProjector));
     }
 
     /// <summary>
@@ -381,6 +383,7 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
             // Since ICoreMultiProjectorWithCustomSerialization<T> inherits from ICoreMultiProjector<T>,
             // we can directly call RegisterProjector
             RegisterProjector<T>();
+            StreamingMultiProjectorTypesSupport.RegisterCustomOrRemove<T>(this, projectorName);
 
             return ResultBox.FromValue(true);
         }
@@ -409,6 +412,7 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
             // Since ICoreMultiProjectorWithCustomSerialization<T> inherits from ICoreMultiProjector<T>,
             // we can directly call RegisterProjector
             RegisterProjectorWithoutResult<T>();
+            StreamingMultiProjectorTypesSupport.RegisterCustomOrRemove<T>(this, projectorName);
 
             return ResultBox.FromValue(true);
         }
@@ -417,4 +421,8 @@ internal class SimpleMultiProjectorTypes : ICoreMultiProjectorTypes
             return ResultBox.Error<bool>(ex);
         }
     }
+
+    public bool SupportsStreamDeserialization(string projectorName) => StreamingMultiProjectorTypesSupport.Supports(this, projectorName);
+
+    public Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(string projectorName, DcbDomainTypes domainTypes, string safeWindowThreshold, Stream source, CancellationToken cancellationToken = default) => StreamingMultiProjectorTypesSupport.DeserializeAsync(this, projectorName, domainTypes, safeWindowThreshold, source, cancellationToken);
 }

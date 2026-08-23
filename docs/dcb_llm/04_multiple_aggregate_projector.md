@@ -102,6 +102,56 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 The Orleans grain detects the accessor and periodically checkpoints state, reducing silo memory usage
 (`src/Sekiban.Dcb.Orleans/Grains/MultiProjectionGrainState.cs`).
 
+### Streaming restore for offloaded snapshots
+
+When an offloaded snapshot is restored, Sekiban opens the blob payload once and carries that non-seekable stream through
+the resolver and actor to the projector registry. The built-in reflection and AOT JSON registries use this path. A custom
+projector can opt in per projector by implementing the additive `ICoreMultiProjectorWithStreamDeserialization`; registries
+expose the separate `IStreamingMultiProjectorTypes` capability. `ICoreMultiProjectorTypes` itself is unchanged, so
+existing external registries remain supported.
+
+The guarantee is deliberately limited: for an **offloaded** snapshot whose projector supports the capability, restore
+does not materialize an additional contiguous `byte[]` or `string` proportional to the complete uncompressed payload.
+The projection graph still has to exist (and can dominate memory), so this is **not a no-OOM guarantee**. Sekiban uses a
+temporary file only to create the independent safe/unsafe restore graphs; it does not create a whole managed payload
+buffer. Save-side streaming and compression-format changes are outside this restore guarantee.
+
+| Snapshot and registry condition | Restore behavior | Guaranteed non-buffering path? |
+| --- | --- | --- |
+| Offloaded payload + capability present | The opened stream is passed to the projector, using async reads and the current stream position. Reflection/AOT JSON accepts gzip or raw legacy JSON. | Yes |
+| Offloaded payload + custom projector implements the stream capability | The custom projector receives the caller-owned stream. | Yes, subject to the custom implementation honoring the contract |
+| Offloaded payload + capability absent | One observable compatibility fallback buffers the payload and logs projector, registry, `Format=offloaded`, and `Reason=capability-absent`; payload content is never logged. | No |
+| Offloaded payload + capability present but open/read/decompress/deserialize fails | The original failure is returned. Sekiban makes **zero** buffered retries. | No successful restore; fail closed |
+| Inline JSON/Base64 (including legacy v9/V10 inline envelopes) | The existing inline restore remains buffered for compatibility. | No — inline Base64 is explicitly outside this guarantee |
+
+Stream implementations must use asynchronous reads, honor `CancellationToken`, support non-seekable partial-read streams
+at their current position, and never dispose the stream. The resolver caller owns disposal. While a stream restore is in
+progress, state queries, event application, promotion, compaction, and snapshot persistence fail rather than publishing
+old or partial payload/tracking metadata. When a terminal restore failure leaves an already-published payload or
+tracking metadata, that same fail-closed barrier remains latched: the previous checkpoint is not usable by query,
+apply, catch-up, promotion, or persistence. A failed first restore has no prior payload to serve and retains the legacy
+empty-state/rebuild path. A later restore/rebuild attempt is still permitted, and only a successful atomic restore
+clears a latched barrier; otherwise the host follows its normal recovery/catch-up policy without serving stale state.
+
+#### Restore caller inventory
+
+| Caller | Snapshot shape | Path |
+| --- | --- | --- |
+| `MultiProjectionGrain` → `NativeProjectionActorHost` → `NativeProjectionSnapshotHandler` | Orleans state-store activation; this is the production incident/OOM entry point | Opens the outer state stream, calls `SnapshotEnvelopeResolver.ResolveForRestoreAsync`, then awaits `GeneralMultiProjectionActor.SetResolvedSnapshotAsync` |
+| `MultiProjectionStateBuilder.LoadRestoreAsync` | Offline/builder checkpoint restore | Deserializes the outer envelope, resolves the offloaded payload stream, and awaits the same actor seam |
+| `NativeMultiProjectionProjectionPrimitive.ApplySnapshot` | Inline primitive snapshot | Calls `SetSnapshotAsync`; inline compatibility path only |
+| `GeneralMultiProjectionActor.SetCurrentState` / `SetCurrentStateIgnoringVersion` | Direct legacy inline state | Buffered compatibility path only |
+| `SnapshotEnvelopeResolver.ResolveInlineAsync` | Explicit compatibility adapter | Materializes only because its caller explicitly asks for an inline envelope; production offloaded restore must use `ResolveForRestoreAsync` |
+
+The normal DCB test suite includes a controlled small-graph, 16–32 MiB offloaded gzip wire fixture. It combines a
+production aggregation counter with structural guards that reject whole-payload aggregation APIs from the supported
+stream seam. The separate **DCB Streaming Restore
+Memory Smoke** workflow also runs that controlled fixture in its own process with an allocation ceiling and an
+intentionally buffered control which must exceed it. Its 143 MiB fixture runs only on a weekly/manual schedule with a
+timeout and virtual-memory ceiling. The workflow records elapsed time, peak RSS, selected capability path, read counts,
+and buffer counters; it evaluates absence of the full-payload materialization path, not a claim that an OOM is
+impossible.
+
 ## Consistency Considerations
 
 - MultiProjection receives events in global order; use `WaitForSortableUniqueId` on queries to avoid stale reads.

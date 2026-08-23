@@ -11,7 +11,7 @@ namespace Sekiban.Dcb.Domains;
 /// <summary>
 ///     Simple in-memory registry for multi projectors.
 /// </summary>
-public class SimpleMultiProjectorTypes : IMultiProjectorTypes
+public class SimpleMultiProjectorTypes : IMultiProjectorTypes, IStreamingMultiProjectorTypes
 {
     private readonly ConcurrentDictionary<string, Func<IMultiProjectionPayload>> _initialPayloadGenerators = new();
     private readonly ConcurrentDictionary<string,
@@ -170,6 +170,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
 
         // Register the initial payload generator
         _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
+        StreamingMultiProjectorTypesSupport.RegisterReflection(this, projectorName, typeof(TProjector));
     }
 
     /// <summary>
@@ -229,6 +230,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
 
         // Register the initial payload generator
         _initialPayloadGenerators[projectorName] = () => TProjector.GenerateInitialPayload();
+        StreamingMultiProjectorTypesSupport.RegisterReflection(this, projectorName, typeof(TProjector));
     }
 
     /// <summary>
@@ -400,6 +402,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             _projectorTypes[projectorName] = typeof(T);
             _projectorVersions[projectorName] = T.MultiProjectorVersion;
             _initialPayloadGenerators[projectorName] = () => T.GenerateInitialPayload();
+            StreamingMultiProjectorTypesSupport.RegisterCustomOrRemove<T>(this, projectorName);
 
             return ResultBox.FromValue(true);
         }
@@ -448,6 +451,7 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             _projectorTypes[projectorName] = typeof(T);
             _projectorVersions[projectorName] = T.MultiProjectorVersion;
             _initialPayloadGenerators[projectorName] = () => T.GenerateInitialPayload();
+            StreamingMultiProjectorTypesSupport.RegisterCustomOrRemove<T>(this, projectorName);
 
             return ResultBox.FromValue(true);
         }
@@ -456,4 +460,8 @@ public class SimpleMultiProjectorTypes : IMultiProjectorTypes
             return ResultBox.Error<bool>(ex);
         }
     }
+
+    public bool SupportsStreamDeserialization(string projectorName) => StreamingMultiProjectorTypesSupport.Supports(this, projectorName);
+
+    public Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(string projectorName, DcbDomainTypes domainTypes, string safeWindowThreshold, Stream source, CancellationToken cancellationToken = default) => StreamingMultiProjectorTypesSupport.DeserializeAsync(this, projectorName, domainTypes, safeWindowThreshold, source, cancellationToken);
 }

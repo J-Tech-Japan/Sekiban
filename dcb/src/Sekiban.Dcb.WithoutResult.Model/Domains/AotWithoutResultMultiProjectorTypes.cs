@@ -13,7 +13,7 @@ namespace Sekiban.Dcb.Domains;
 /// <summary>
 ///     AOT-compatible implementation of ICoreMultiProjectorTypes for exception-based projectors.
 /// </summary>
-public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTypes
+public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTypes, IStreamingMultiProjectorTypes
 {
     private static readonly bool DebugBypassProject =
         Environment.GetEnvironmentVariable("SEKIBAN_WASM_DEBUG_BYPASS_MULTI_PROJECT") == "1";
@@ -66,10 +66,11 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
             },
             Deserialize: (_, _, data) =>
             {
-                byte[] jsonBytes = GzipCompression.Decompress(data);
+                byte[] jsonBytes = GzipCompression.DecompressIfGzip(data);
                 return JsonSerializer.Deserialize(jsonBytes, typeInfo)
                     ?? throw new InvalidOperationException($"Failed to deserialize {typeof(TProjector).Name}");
             });
+        StreamingMultiProjectorTypesSupport.RegisterJsonTypeInfo(this, name, typeInfo);
     }
 
     public ResultBox<IMultiProjectionPayload> Project(
@@ -157,6 +158,10 @@ public sealed class AotWithoutResultMultiProjectorTypes : ICoreMultiProjectorTyp
 
         return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Projector not found: {projectorName}"));
     }
+
+    public bool SupportsStreamDeserialization(string projectorName) => StreamingMultiProjectorTypesSupport.Supports(this, projectorName);
+
+    public Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(string projectorName, DcbDomainTypes domainTypes, string safeWindowThreshold, Stream source, CancellationToken cancellationToken = default) => StreamingMultiProjectorTypesSupport.DeserializeWithProjectorNotFoundAsync(this, projectorName, domainTypes, safeWindowThreshold, source, cancellationToken);
 
     public ResultBox<IMultiProjectionPayload> DeserializeJson(
         string projectorName,

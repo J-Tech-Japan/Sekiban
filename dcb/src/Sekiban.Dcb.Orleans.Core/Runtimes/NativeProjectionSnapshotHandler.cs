@@ -48,12 +48,15 @@ internal class NativeProjectionSnapshotHandler
                     new InvalidOperationException("Snapshot stream deserialized to null envelope."));
             }
 
-            var resolvedEnvelope = await SnapshotEnvelopeResolver.ResolveInlineAsync(
-                envelope,
-                _blobAccessor,
-                cancellationToken);
+            await using var resolvedSnapshot = await SnapshotEnvelopeResolver.ResolveForRestoreAsync(
+                    envelope,
+                    _blobAccessor,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
-            await _actor.SetSnapshotAsync(resolvedEnvelope);
+            // The resolver-owned stream stays open through the actor and optional per-projector streaming registry.
+            // Do not publish anything from the host until this await succeeds.
+            await _actor.SetResolvedSnapshotAsync(resolvedSnapshot, cancellationToken).ConfigureAwait(false);
             return ResultBox.FromValue(true);
         }
         catch (Exception ex)

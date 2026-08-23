@@ -101,6 +101,56 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 
 `MultiProjectionGrain` がアクセサを検出すると、定期的にスナップショットを保存しメモリ使用量を抑えます。
 
+### 退避済みスナップショットのストリーミング復元
+
+退避済みスナップショットを復元する際、Sekiban は Blob ペイロードを 1 回だけ開き、その非 seekable stream を
+resolver と actor を通して projector registry まで渡します。組み込みの reflection JSON / AOT JSON registry はこの
+経路を使います。custom projector は加法的な `ICoreMultiProjectorWithStreamDeserialization` を実装することで
+projector 単位で opt-in できます。registry 側は別インターフェース `IStreamingMultiProjectorTypes` で capability を
+公開します。`ICoreMultiProjectorTypes` 自体は変更されないため、既存の外部 registry も引き続き利用できます。
+
+保証は意図的に限定されています。capability をサポートする projector の **退避済み** スナップショットでは、復元時に
+完全な非圧縮ペイロードの長さに比例する追加の連続 `byte[]` / `string` を materialize しません。projection graph
+そのものは必要で、こちらがメモリ使用量の大半になる場合があるため、これは **no-OOM の保証ではありません**。
+Sekiban は independent な safe/unsafe restore graph を作るためだけに一時ファイルを使いますが、payload 全体の managed
+buffer は作りません。save 側の streaming 化と圧縮形式の変更は、この restore の保証の範囲外です。
+
+| スナップショットと registry の条件 | 復元時の動作 | 非 buffering 経路の保証 |
+| --- | --- | --- |
+| 退避済み payload + capability あり | 開いた stream を projector に渡し、非同期読み取りと現在位置を使う。reflection/AOT JSON は gzip と raw の legacy JSON を受け入れる。 | あり |
+| 退避済み payload + custom projector が stream capability を実装 | custom projector が caller 所有の stream を受け取る。 | custom 実装が契約を守る範囲であり |
+| 退避済み payload + capability なし | 1 回だけ observable な compatibility fallback が payload を buffer し、projector / registry / `Format=offloaded` / `Reason=capability-absent` を log する。payload 内容は log しない。 | なし |
+| 退避済み payload + capability はあるが open/read/decompress/deserialize が失敗 | 元の failure を返す。buffering retry は **0 回**。 | restore は成功せず fail-closed |
+| inline JSON/Base64（legacy v9/V10 inline envelope を含む） | 互換性のため既存の inline restore は buffer を使う。 | なし — inline Base64 はこの保証の明示的な対象外 |
+
+stream 実装は非同期 read を使い、`CancellationToken` を尊重し、現在位置からの非 seekable partial-read stream を
+サポートし、stream を dispose してはいけません。dispose の責任は resolver caller にあります。stream restore の最中は、
+state query・event apply・promotion・compaction・snapshot persistence は old / partial payload や tracking metadata を
+publish する代わりに失敗します。terminal な restore failure により既に publish 済みの payload または tracking
+metadata が残る場合、この fail-closed barrier は latch されたままです。以前の checkpoint は query、apply、catch-up、
+promotion、persistence に利用できません。初回 restore が失敗しただけであれば serve すべき以前の payload はないため、
+legacy の empty-state/rebuild path を維持します。後続の restore/rebuild attempt 自体は許可され、atomic な restore が
+成功した場合だけ latch 済み barrier が解除されます。それ以外では host は stale state を serve せず通常の
+recovery/catch-up policy に従います。
+
+#### Restore caller inventory
+
+| Caller | Snapshot 形状 | 経路 |
+| --- | --- | --- |
+| `MultiProjectionGrain` → `NativeProjectionActorHost` → `NativeProjectionSnapshotHandler` | Orleans の state-store activation。incident/OOM の本番 entry point | outer state stream を開き、`SnapshotEnvelopeResolver.ResolveForRestoreAsync` を呼び、その後 `GeneralMultiProjectionActor.SetResolvedSnapshotAsync` を await する |
+| `MultiProjectionStateBuilder.LoadRestoreAsync` | offline/builder checkpoint restore | outer envelope を deserialize し、退避済み payload stream を resolve して同じ actor seam を await する |
+| `NativeMultiProjectionProjectionPrimitive.ApplySnapshot` | inline primitive snapshot | `SetSnapshotAsync` を呼ぶ。inline compatibility path のみ |
+| `GeneralMultiProjectionActor.SetCurrentState` / `SetCurrentStateIgnoringVersion` | direct legacy inline state | buffered compatibility path のみ |
+| `SnapshotEnvelopeResolver.ResolveInlineAsync` | explicit compatibility adapter | caller が inline envelope を明示的に要求したためだけに materialize する。本番の offloaded restore では `ResolveForRestoreAsync` を使う必要がある |
+
+通常の DCB test suite には、小さな graph と 16–32 MiB の offloaded gzip wire を組み合わせた制御 fixture があります。
+これは production aggregation counter と、supported stream seam に whole-payload aggregation API が入ることを拒否する
+structural guard を併用します。別の **DCB Streaming Restore
+Memory Smoke** workflow は、その制御 fixture も allocation ceiling 付きの独立 process で実行し、意図的に buffering
+する control がその ceiling を超えることを確認します。143 MiB fixture は週次/manual schedule でのみ timeout と
+virtual-memory ceiling 付きで実行します。elapsed time、peak RSS、選択された capability path、read count、buffer counter
+を記録し、full-payload materialization path がないことを評価します。OOM が不可能だという主張ではありません。
+
 ## 整合性のポイント
 
 - イベントはグローバル順序で届くため、`IWaitForSortableUniqueId` を活用すると最新データを保証できます。

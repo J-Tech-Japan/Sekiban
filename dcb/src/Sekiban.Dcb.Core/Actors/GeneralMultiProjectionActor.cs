@@ -41,6 +41,26 @@ public class GeneralMultiProjectionActor
     private string _unsafeLastSortableUniqueId = string.Empty;
     private int _unsafeVersion;
 
+    // Snapshot restore has an asynchronous stream boundary. No read, apply, persistence, or promotion path may initialize
+    // or expose the previous payload while that boundary is in flight.
+    private bool _snapshotRestoreInProgress;
+
+    // A terminal restore failure after a payload has been published quarantines that previous state. Atomic publication
+    // keeps it intact for a later successful restore, but it is not trustworthy enough to serve, apply, promote,
+    // compact, or persist until recovery succeeds. A failure before first publication has no stale payload to quarantine
+    // and retains the legacy initial-state/rebuild behavior. This is transient actor state: a fresh/rebuilt activation
+    // starts without a stale payload.
+    private Exception? _snapshotRestoreFailure;
+
+    // Production seam observation for the most recent capability-present restore. It is intentionally private: this is
+    // not a public runtime metric, but a regression guard that proves the supported path did not reach ReadAllBytesAsync.
+    private int _lastStreamingRestoreWholePayloadAggregationCount;
+
+    // A restore selects this once and routes the exact value through its primary and clone deserializations. Keeping the
+    // last value private makes that single-selection invariant inspectable without changing the public or serialized
+    // actor contract.
+    private string _lastSnapshotRestoreSafeWindowThreshold = string.Empty;
+
     // Set the instant a per-event fold throws, and never cleared by a later apply. A faulted projection has stopped
     // at a poison event; presenting its pre-crash state as a successful query is the silence issue #1075 was about.
     // While it is set, applies are rejected (so a catch-up retry cannot re-apply the events before the poison and
@@ -72,6 +92,7 @@ public class GeneralMultiProjectionActor
     public async Task AddEventsAsync(IReadOnlyList<Event> events, bool finishedCatchUp = true, EventSource source = EventSource.Unknown)
     {
         ThrowIfFaulted();
+        ThrowIfSnapshotRestoreUnavailable();
 
         // Initialize projectors if needed
         InitializeProjectorsIfNeeded();
@@ -102,6 +123,7 @@ public class GeneralMultiProjectionActor
     public async Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
     {
         ThrowIfFaulted();
+        ThrowIfSnapshotRestoreUnavailable();
         InitializeProjectorsIfNeeded();
         _isCatchedUp = finishedCatchUp;
 
@@ -161,6 +183,12 @@ public class GeneralMultiProjectionActor
 
     public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
     {
+        var restoreBlocker = GetSnapshotRestoreBlocker();
+        if (restoreBlocker is not null)
+        {
+            return Task.FromResult(ResultBox.Error<MultiProjectionState>(restoreBlocker));
+        }
+
         // A faulted projection has no trustworthy state to return. Every read surface — state, and through it the
         // scalar and list query surfaces that all fetch state here first — fails with the fault context instead of
         // handing back the last pre-crash payload as a success.
@@ -196,8 +224,37 @@ public class GeneralMultiProjectionActor
         }
     }
 
+    private void ThrowIfSnapshotRestoreInProgress()
+    {
+        if (_snapshotRestoreInProgress)
+        {
+            throw CreateRestoreInProgressException();
+        }
+    }
+
+    /// <summary>
+    ///     Rejects all consumption and persistence boundaries while restore is in flight or after its terminal failure.
+    ///     A new restore is deliberately not gated here: it is the documented recovery operation and clears the latch
+    ///     only after it has atomically published a complete replacement payload and tracking metadata.
+    /// </summary>
+    private void ThrowIfSnapshotRestoreUnavailable()
+    {
+        var restoreBlocker = GetSnapshotRestoreBlocker();
+        if (restoreBlocker is not null)
+        {
+            ExceptionDispatchInfo.Capture(restoreBlocker).Throw();
+        }
+    }
+
+    private Exception? GetSnapshotRestoreBlocker() =>
+        _snapshotRestoreInProgress ? CreateRestoreInProgressException() : _snapshotRestoreFailure;
+
+    private InvalidOperationException CreateRestoreInProgressException() =>
+        new($"Snapshot restore is still in progress for projector '{_projectorName}'.");
+
     public async Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync()
     {
+        ThrowIfSnapshotRestoreUnavailable();
         InitializeProjectorsIfNeeded();
 
         var versionResult = _types.GetProjectorVersion(_projectorName);
@@ -250,77 +307,289 @@ public class GeneralMultiProjectionActor
             ToProjectionPosition(consistentStateResult.GetValue()));
     }
 
-    public Task SetCurrentState(SerializableMultiProjectionState state)
+    public Task SetCurrentState(SerializableMultiProjectionState state) =>
+        SetCurrentStateCoreAsync(state, payloadStream: null, CancellationToken.None, validateProjectorVersion: true);
+
+    // Compatibility restore: ignore projector version mismatch and restore snapshot payload as-is.
+    public Task SetCurrentStateIgnoringVersion(SerializableMultiProjectionState state) =>
+        SetCurrentStateCoreAsync(state, payloadStream: null, CancellationToken.None, validateProjectorVersion: false);
+
+    /// <summary>
+    ///     Applies a resolver-produced snapshot restore input. The caller retains ownership of an offloaded payload
+    ///     stream; this actor and the projector registry never dispose it. Restore is awaited before any actor payload
+    ///     or tracking metadata is published.
+    /// </summary>
+    public Task SetResolvedSnapshotAsync(
+        ResolvedSnapshotRestore snapshot,
+        CancellationToken cancellationToken = default)
     {
-        // Validate projector version before restoring state
-        var versionResult = _types.GetProjectorVersion(_projectorName);
-        if (!versionResult.IsSuccess)
-        {
-            throw versionResult.GetException();
-        }
-
-        var currentVersion = versionResult.GetValue();
-        if (!string.Equals(currentVersion, state.ProjectorVersion, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"Snapshot projector version mismatch. Current='{currentVersion}', Snapshot='{state.ProjectorVersion}' for projector '{_projectorName}'.");
-        }
-
-        RestorePayload(state);
-        return Task.CompletedTask;
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return SetCurrentStateCoreAsync(
+            snapshot.State,
+            snapshot.PayloadStream,
+            cancellationToken,
+            validateProjectorVersion: true);
     }
 
-    // Compatibility restore: ignore projector version mismatch and restore snapshot payload as-is
-    public Task SetCurrentStateIgnoringVersion(SerializableMultiProjectionState state)
+    private async Task SetCurrentStateCoreAsync(
+        SerializableMultiProjectionState state,
+        Stream? payloadStream,
+        CancellationToken cancellationToken,
+        bool validateProjectorVersion)
     {
-        RestorePayload(state);
-        return Task.CompletedTask;
+        ThrowIfSnapshotRestoreInProgress();
+        // A fresh actor has no published payload or tracking metadata that could be served stale. Keep its long-standing
+        // version-mismatch behavior: the failed initial restore leaves it available for a normal empty-state rebuild.
+        // Once an accessor exists, however, every failed replacement restore must quarantine the prior checkpoint.
+        var hadPublishedState = _singleStateAccessor is not null;
+        _snapshotRestoreInProgress = true;
+        try
+        {
+            if (validateProjectorVersion)
+            {
+                var versionResult = _types.GetProjectorVersion(_projectorName);
+                if (!versionResult.IsSuccess)
+                {
+                    throw versionResult.GetException();
+                }
+
+                var currentVersion = versionResult.GetValue();
+                if (!string.Equals(currentVersion, state.ProjectorVersion, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Snapshot projector version mismatch. Current='{currentVersion}', Snapshot='{state.ProjectorVersion}' for projector '{_projectorName}'.");
+                }
+            }
+
+            await RestorePayloadAsync(state, payloadStream, cancellationToken).ConfigureAwait(false);
+            _snapshotRestoreFailure = null;
+        }
+        catch (Exception exception)
+        {
+            // Keep the original exception instance and stack. Callers receive it unchanged, and later consumption
+            // boundaries fail closed with that same failure until a full replacement restore succeeds. There is no
+            // such boundary for a failed first restore because no prior payload or metadata exists to expose.
+            if (hadPublishedState)
+            {
+                _snapshotRestoreFailure = exception;
+            }
+            throw;
+        }
+        finally
+        {
+            _snapshotRestoreInProgress = false;
+        }
     }
 
-    private void RestorePayload(SerializableMultiProjectionState state)
+    private async Task RestorePayloadAsync(
+        SerializableMultiProjectionState state,
+        Stream? payloadStream,
+        CancellationToken cancellationToken)
     {
-        var payloadBytes = state.GetPayloadBytes();
-        var projTypeRb = _types.GetProjectorType(state.ProjectorName);
-        if (!projTypeRb.IsSuccess) throw projTypeRb.GetException();
+        _lastStreamingRestoreWholePayloadAggregationCount = 0;
+        var safeThreshold = SelectSnapshotRestoreSafeWindowThreshold();
+        ResultBox<IMultiProjectionPayload> deserializeResult;
+        IMultiProjectionPayload? streamedClonePayload = null;
 
-        var safeThreshold = GetSafeWindowThreshold();
-        var deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold.Value, payloadBytes);
-        if (!deserializeResult.IsSuccess) throw deserializeResult.GetException();
-
-        var loadedPayload = deserializeResult.GetValue();
-        _logger.LogDebug("[{ProjectorName}] Deserialize: via ICoreMultiProjectorTypes", _projectorName);
-
-        if (loadedPayload is IDualStateAccessor)
+        if (payloadStream is not null)
         {
-            _singleStateAccessor = loadedPayload;
+            if (_types is IStreamingMultiProjectorTypes streamingTypes &&
+                streamingTypes.SupportsStreamDeserialization(state.ProjectorName))
+            {
+                // A present capability owns the restore attempt. Its failures are never retried through the buffered
+                // compatibility route because doing so both doubles memory and hides stream/data corruption.
+                (deserializeResult, streamedClonePayload) = await DeserializeStreamingPayloadPairAsync(
+                        streamingTypes,
+                        state.ProjectorName,
+                        safeThreshold,
+                        payloadStream,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (!deserializeResult.IsSuccess)
+                {
+                    throw deserializeResult.GetException();
+                }
+
+                _logger.LogDebug(
+                    "[{ProjectorName}] Deserialize: via IStreamingMultiProjectorTypes",
+                    _projectorName);
+            }
+            else
+            {
+                // Old external registries and projector-specific custom serializers that have not opted into the
+                // additive capability remain supported. This is the sole buffered fallback and it occurs exactly once
+                // per restore attempt; the message intentionally carries no payload material.
+                _logger.LogInformation(
+                    "Snapshot restore buffered fallback. Projector={ProjectorName}, Registry={Registry}, Format={Format}, Reason={Reason}",
+                    _projectorName,
+                    _types.GetType().FullName ?? _types.GetType().Name,
+                    "offloaded",
+                    "capability-absent");
+                var payloadBytes = await StreamReadHelper.ReadAllBytesAsync(payloadStream, cancellationToken)
+                    .ConfigureAwait(false);
+                deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold, payloadBytes);
+                if (!deserializeResult.IsSuccess)
+                {
+                    throw deserializeResult.GetException();
+                }
+
+                _logger.LogDebug("[{ProjectorName}] Deserialize: buffered compatibility fallback", _projectorName);
+            }
         }
         else
         {
-            _singleStateAccessor = DualStateProjectionWrapperFactory.CreateFromRestoredSnapshot(
-                loadedPayload,
-                _projectorName,
-                _types,
-                _domain,
-                safeThreshold.Value,
-                initialVersion: state.Version,
-                initialLastEventId: state.LastEventId,
-                initialLastSortableUniqueId: state.LastSortableUniqueId);
-
-            if (_singleStateAccessor == null)
+            var payloadBytes = state.GetPayloadBytes();
+            deserializeResult = _types.Deserialize(state.ProjectorName, _domain, safeThreshold, payloadBytes);
+            if (!deserializeResult.IsSuccess)
             {
-                throw new InvalidOperationException($"Failed to create wrapper for projector {_projectorName}");
+                throw deserializeResult.GetException();
             }
+
+            _logger.LogDebug("[{ProjectorName}] Deserialize: via ICoreMultiProjectorTypes", _projectorName);
         }
 
-        // Update tracking variables
+        var loadedPayload = deserializeResult.GetValue();
+        IMultiProjectionPayload loadedAccessor;
+        if (loadedPayload is IDualStateAccessor)
+        {
+            loadedAccessor = loadedPayload;
+        }
+        else
+        {
+            loadedAccessor = (streamedClonePayload is not null
+                ? DualStateProjectionWrapperFactory.CreateFromRestoredSnapshot(
+                    loadedPayload,
+                    streamedClonePayload,
+                    _projectorName,
+                    _types,
+                    _domain,
+                    safeThreshold,
+                    initialVersion: state.Version,
+                    initialLastEventId: state.LastEventId,
+                    initialLastSortableUniqueId: state.LastSortableUniqueId)
+                : DualStateProjectionWrapperFactory.CreateFromRestoredSnapshot(
+                    loadedPayload,
+                    _projectorName,
+                    _types,
+                    _domain,
+                    safeThreshold,
+                    initialVersion: state.Version,
+                    initialLastEventId: state.LastEventId,
+                    initialLastSortableUniqueId: state.LastSortableUniqueId))
+                ?? throw new InvalidOperationException($"Failed to create wrapper for projector {_projectorName}");
+        }
+
+        // Publish the payload and all tracking metadata together only after the entire deserialize/wrapper construction
+        // succeeded. A stream failure therefore leaves the previous state intact and the activation cannot serve a
+        // partially restored checkpoint.
+        _singleStateAccessor = loadedAccessor;
         _unsafeLastEventId = state.LastEventId;
         _unsafeLastSortableUniqueId = state.LastSortableUniqueId;
         _unsafeVersion = state.Version;
         _isCatchedUp = state.IsCatchedUp;
     }
 
+    private string SelectSnapshotRestoreSafeWindowThreshold()
+    {
+        _lastSnapshotRestoreSafeWindowThreshold = GetSafeWindowThreshold().Value;
+        return _lastSnapshotRestoreSafeWindowThreshold;
+    }
+
+    private async Task<(ResultBox<IMultiProjectionPayload> Primary, IMultiProjectionPayload? Clone)>
+        DeserializeStreamingPayloadPairAsync(
+            IStreamingMultiProjectorTypes streamingTypes,
+            string projectorName,
+            string safeWindowThreshold,
+            Stream source,
+            CancellationToken cancellationToken)
+    {
+        // The dual-state wrapper needs independent safe/unsafe graphs. Tee the already-opened payload to an explicit
+        // temporary file while deserializing the first graph, then deserialize that file for the second graph. This is
+        // deliberately not a MemoryStream or byte[] clone: the offloaded restore guarantee removes the whole-payload
+        // overlap while retaining the two object graphs that the dual-state semantics require.
+        var temporaryPath = Path.Combine(Path.GetTempPath(), $"sekiban-stream-restore-{Guid.NewGuid():N}.payload");
+        using var aggregationScope = SnapshotRestoreAggregationDiagnostics.BeginStreamingRestoreScope();
+        try
+        {
+            ResultBox<IMultiProjectionPayload> primary;
+            await using (var copy = new FileStream(
+                             temporaryPath,
+                             FileMode.CreateNew,
+                             FileAccess.Write,
+                             FileShare.None,
+                             bufferSize: 81920,
+                             options: FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                await using var tee = new SnapshotRestoreTeeReadStream(source, copy);
+                primary = await streamingTypes.DeserializeFromStreamAsync(
+                        projectorName,
+                        _domain,
+                        safeWindowThreshold,
+                        tee,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (!primary.IsSuccess)
+                {
+                    return (primary, null);
+                }
+
+                // JsonSerializer normally drains the input, but the capability contract permits a custom projector to
+                // finish after it has consumed its own representation. The independent second graph must still see the
+                // complete original payload, so forward any remaining bytes straight to the temporary file instead of
+                // relying on a seek or aggregating them in memory.
+                await tee.CopyToAsync(Stream.Null, bufferSize: 81920, cancellationToken).ConfigureAwait(false);
+                await copy.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (primary.GetValue() is IDualStateAccessor)
+            {
+                // A projector that already owns dual-state semantics does not need a framework clone.
+                return (primary, null);
+            }
+
+            await using var cloneSource = new FileStream(
+                temporaryPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 81920,
+                options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var clone = await streamingTypes.DeserializeFromStreamAsync(
+                    projectorName,
+                    _domain,
+                    safeWindowThreshold,
+                    cloneSource,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (!clone.IsSuccess)
+            {
+                throw clone.GetException();
+            }
+
+            return (primary, clone.GetValue());
+        }
+        finally
+        {
+            _lastStreamingRestoreWholePayloadAggregationCount = aggregationScope.WholePayloadAggregationCount;
+            try
+            {
+                File.Delete(temporaryPath);
+            }
+            catch
+            {
+                // A failed cleanup must not mask a deserialize failure; the unique file has no durable role.
+            }
+        }
+    }
+
     public async Task<ResultBox<SerializedMultiProjectionStatePayload>> BuildSerializedStatePayloadAsync(bool canGetUnsafeState)
     {
+        var restoreBlocker = GetSnapshotRestoreBlocker();
+        if (restoreBlocker is not null)
+        {
+            return ResultBox.Error<SerializedMultiProjectionStatePayload>(restoreBlocker);
+        }
+
         InitializeProjectorsIfNeeded();
         var stateResult = await GetStateAsync(canGetUnsafeState);
         if (!stateResult.IsSuccess) return ResultBox.Error<SerializedMultiProjectionStatePayload>(stateResult.GetException());
@@ -422,6 +691,12 @@ public class GeneralMultiProjectionActor
         int offloadThresholdBytes = int.MaxValue,
         CancellationToken cancellationToken = default)
     {
+        var restoreBlocker = GetSnapshotRestoreBlocker();
+        if (restoreBlocker is not null)
+        {
+            return ResultBox.Error<SerializableMultiProjectionStateEnvelope>(restoreBlocker);
+        }
+
         // Without a spill buffer we cannot stream-first; fall back to the legacy path.
         if (payloadBufferProvider is null)
         {
@@ -616,7 +891,12 @@ public class GeneralMultiProjectionActor
 
         if (envelope.InlineState == null)
             throw new InvalidOperationException("Inline snapshot missing InlineState");
-        await SetCurrentState(envelope.InlineState);
+        await SetCurrentStateCoreAsync(
+                envelope.InlineState,
+                payloadStream: null,
+                cancellationToken,
+                validateProjectorVersion: true)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -630,6 +910,12 @@ public class GeneralMultiProjectionActor
         int offloadThresholdBytes = int.MaxValue,
         CancellationToken cancellationToken = default)
     {
+        var restoreBlocker = GetSnapshotRestoreBlocker();
+        if (restoreBlocker is not null)
+        {
+            return ResultBox.Error<SnapshotPersistenceData>(restoreBlocker);
+        }
+
         // Promote buffered events before building a safe snapshot. A deferred-repair failure must fail closed: emitting a
         // snapshot from the old payload would allow persistence and later compaction to discard the retained repair input.
         try
@@ -704,6 +990,7 @@ public class GeneralMultiProjectionActor
     /// </summary>
     public async Task<string> GetSafeLastSortableUniqueIdAsync()
     {
+        ThrowIfSnapshotRestoreUnavailable();
         InitializeProjectorsIfNeeded();
 
         // Get safe state to retrieve its last sortable unique ID
@@ -904,6 +1191,7 @@ public class GeneralMultiProjectionActor
 
     public void ForcePromoteBufferedEvents()
     {
+        ThrowIfSnapshotRestoreUnavailable();
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)
         {
             try
@@ -940,6 +1228,7 @@ public class GeneralMultiProjectionActor
 
     public void CompactSafeHistory()
     {
+        ThrowIfSnapshotRestoreUnavailable();
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)
         {
             try
@@ -972,6 +1261,7 @@ public class GeneralMultiProjectionActor
 
     public void ForcePromoteAllBufferedEvents()
     {
+        ThrowIfSnapshotRestoreUnavailable();
         if (_singleStateAccessor is IDualStateAccessor dualAccessor)
         {
             try
@@ -1154,6 +1444,12 @@ public class GeneralMultiProjectionActor
     /// </summary>
     public Task<ResultBox<MultiProjectionState>> GetUnsafeStateAsync()
     {
+        var restoreBlocker = GetSnapshotRestoreBlocker();
+        if (restoreBlocker is not null)
+        {
+            return Task.FromResult(ResultBox.Error<MultiProjectionState>(restoreBlocker));
+        }
+
         InitializeProjectorsIfNeeded();
 
         // Always get unsafe state
@@ -1162,6 +1458,7 @@ public class GeneralMultiProjectionActor
 
     private void InitializeProjectorsIfNeeded()
     {
+        ThrowIfSnapshotRestoreUnavailable();
         if (_singleStateAccessor == null)
         {
             var init = _types.GenerateInitialPayload(_projectorName);
@@ -1224,7 +1521,11 @@ public class GeneralMultiProjectionActor
     ///     Public helper to obtain current safe window threshold without triggering state mutation.
     ///     (Primarily used to supply query context metadata.)
     /// </summary>
-    public SortableUniqueId PeekCurrentSafeWindowThreshold() => GetSafeWindowThreshold();
+    public SortableUniqueId PeekCurrentSafeWindowThreshold()
+    {
+        ThrowIfSnapshotRestoreUnavailable();
+        return GetSafeWindowThreshold();
+    }
 
     private void UpdateObservedLag(IReadOnlyList<Event> events)
     {

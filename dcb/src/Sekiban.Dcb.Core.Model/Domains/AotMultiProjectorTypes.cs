@@ -13,7 +13,7 @@ namespace Sekiban.Dcb.Domains;
 ///     AOT-compatible implementation of ICoreMultiProjectorTypes.
 ///     Uses JsonTypeInfo for serialization instead of reflection.
 /// </summary>
-public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
+public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes, IStreamingMultiProjectorTypes
 {
     private static volatile bool _debugBypassProject;
     private readonly Dictionary<string, ProjectorRegistration> _projectors = new();
@@ -75,10 +75,12 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
             },
             Deserialize: (domainTypes, safeWindowThreshold, data) =>
             {
-                var jsonBytes = GzipCompression.Decompress(data);
+                // Legacy raw UTF-8 snapshots and gzip snapshots must remain equivalent to the stream helper, which
+                // chooses gzip only from its two-byte marker.
+                var jsonBytes = GzipCompression.DecompressIfGzip(data);
                 return JsonSerializer.Deserialize(jsonBytes, typeInfo)!;
-            }
-        );
+            });
+        StreamingMultiProjectorTypesSupport.RegisterJsonTypeInfo(this, name, typeInfo);
     }
 
     /// <inheritdoc />
@@ -177,6 +179,10 @@ public sealed class AotMultiProjectorTypes : ICoreMultiProjectorTypes
             return ResultBox.FromValue(reg.Deserialize(domainTypes, safeWindowThreshold, data));
         return ResultBox.Error<IMultiProjectionPayload>(new Exception($"Projector not found: {projectorName}"));
     }
+
+    public bool SupportsStreamDeserialization(string projectorName) => StreamingMultiProjectorTypesSupport.Supports(this, projectorName);
+
+    public Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(string projectorName, DcbDomainTypes domainTypes, string safeWindowThreshold, Stream source, CancellationToken cancellationToken = default) => StreamingMultiProjectorTypesSupport.DeserializeWithProjectorNotFoundAsync(this, projectorName, domainTypes, safeWindowThreshold, source, cancellationToken);
 
     public ResultBox<IMultiProjectionPayload> DeserializeJson(
         string projectorName,
