@@ -387,7 +387,8 @@ public class DualStateProjectionWrapper<T>
     ///     The sole fresh-history consumption seam. A dirty arrival does no re-fold and no reconciliation; a real consumer
     ///     reaches this method to repair the sorted history, publish safe payload + metadata as one state transition, then
     ///     reconcile the served state before the caller consumes it. If either repair or reconciliation fails, the prior
-    ///     published state remains intact and the original dirty-causing event stays attributable for retry/fault handling.
+    ///     published state remains intact. The replay event whose projector fold failed is attached to the original
+    ///     exception for actor fault capture, while the earlier dirty-producing arrival remains separate diagnostics.
     /// </summary>
     private void ConsumeServedState(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
@@ -446,7 +447,7 @@ public class DualStateProjectionWrapper<T>
             _unsafeLastEventId = published.UnsafeLastEventId;
             _unsafeLastSortableUniqueId = published.UnsafeLastSortableUniqueId;
             _servedStateDirty = true;
-            AttachDeferredRepairAttribution(exception);
+            AttachDeferredRepairDirtyAttribution(exception);
             throw;
         }
     }
@@ -463,16 +464,22 @@ public class DualStateProjectionWrapper<T>
         _servedStateDirty = true;
     }
 
-    private void AttachDeferredRepairAttribution(Exception exception)
+    private void AttachDeferredRepairDirtyAttribution(Exception exception)
     {
         if (_dirtyCausingEventId is { } eventId)
         {
-            exception.Data["DeferredSafeRepairEventId"] = eventId.ToString();
+            DeferredSafeRepairFaultAttribution.TryAnnotate(
+                exception,
+                DeferredSafeRepairFaultAttribution.DirtyEventIdDataKey,
+                eventId.ToString());
         }
 
         if (!string.IsNullOrEmpty(_dirtyCausingPosition))
         {
-            exception.Data["DeferredSafeRepairPosition"] = _dirtyCausingPosition;
+            DeferredSafeRepairFaultAttribution.TryAnnotate(
+                exception,
+                DeferredSafeRepairFaultAttribution.DirtyPositionDataKey,
+                _dirtyCausingPosition);
         }
     }
 
@@ -552,7 +559,9 @@ public class DualStateProjectionWrapper<T>
                     safeWindowThreshold);
                 if (!projected.IsSuccess)
                 {
-                    throw projected.GetException();
+                    var exception = projected.GetException();
+                    DeferredSafeRepairFaultAttribution.AnnotateReplayEvent(exception, ev);
+                    throw exception;
                 }
                 served = (T)projected.GetValue();
                 lastEventId = ev.Id;
@@ -655,7 +664,9 @@ public class DualStateProjectionWrapper<T>
 
             if (!projected.IsSuccess)
             {
-                throw projected.GetException();
+                var exception = projected.GetException();
+                DeferredSafeRepairFaultAttribution.AnnotateReplayEvent(exception, ev);
+                throw exception;
             }
 
             newSafeProjector = (T)projected.GetValue();
@@ -694,5 +705,102 @@ public class DualStateProjectionWrapper<T>
         var json = JsonSerializer.Serialize(source, source.GetType(), options);
         var cloned = JsonSerializer.Deserialize(json, source.GetType(), options);
         return (T)cloned!;
+    }
+}
+
+/// <summary>
+///     Internal provenance exchanged by the deferred-repair wrapper and its actor host. It deliberately lives outside
+///     serialized projection state and public accessor contracts: the original projector exception remains the thing
+///     callers receive, with only diagnostic <see cref="Exception.Data" /> attached to it.
+/// </summary>
+internal static class DeferredSafeRepairFaultAttribution
+{
+    internal const string ReplayEventIdDataKey = "DeferredSafeRepairEventId";
+    internal const string ReplayEventTypeDataKey = "DeferredSafeRepairEventType";
+    internal const string ReplayPositionDataKey = "DeferredSafeRepairPosition";
+    internal const string DirtyEventIdDataKey = "DeferredSafeRepairDirtyEventId";
+    internal const string DirtyPositionDataKey = "DeferredSafeRepairDirtyPosition";
+
+    internal static void AnnotateReplayEvent(Exception exception, Event replayEvent)
+    {
+        Annotate(exception, ReplayEventIdDataKey, replayEvent.Id.ToString());
+        Annotate(exception, ReplayEventTypeDataKey, replayEvent.EventType);
+        Annotate(exception, ReplayPositionDataKey, replayEvent.SortableUniqueIdValue);
+    }
+
+    internal static bool TryGetReplayEvent(
+        Exception exception,
+        out Guid eventId,
+        out string eventType,
+        out string position)
+    {
+        if (TryGetReplayEventCore(exception, out eventId, out eventType, out position))
+        {
+            return true;
+        }
+
+        return exception.InnerException is not null &&
+               TryGetReplayEventCore(exception.InnerException, out eventId, out eventType, out position);
+    }
+
+    internal static void TryAnnotate(Exception exception, string key, string value)
+    {
+        Annotate(exception, key, value);
+    }
+
+    private static bool TryGetReplayEventCore(
+        Exception exception,
+        out Guid eventId,
+        out string eventType,
+        out string position)
+    {
+        eventId = Guid.Empty;
+        eventType = string.Empty;
+        position = string.Empty;
+
+        try
+        {
+            var eventIdText = exception.Data[ReplayEventIdDataKey] as string;
+            eventType = exception.Data[ReplayEventTypeDataKey] as string ?? string.Empty;
+            position = exception.Data[ReplayPositionDataKey] as string ?? string.Empty;
+            return Guid.TryParse(eventIdText, out eventId) &&
+                   !string.IsNullOrEmpty(eventType) &&
+                   !string.IsNullOrEmpty(position);
+        }
+        catch (Exception)
+        {
+            eventId = Guid.Empty;
+            eventType = string.Empty;
+            position = string.Empty;
+            return false;
+        }
+    }
+
+    private static void Annotate(Exception exception, string key, string value)
+    {
+        TryAnnotateOne(exception, key, value);
+
+        // Actor fault capture intentionally unwraps legacy boundary exceptions before it records the descriptor. Keep
+        // the provenance with both layers when a projector implementation supplied one, without changing either type
+        // or stack semantics.
+        if (exception.InnerException is not null)
+        {
+            TryAnnotateOne(exception.InnerException, key, value);
+        }
+    }
+
+    private static void TryAnnotateOne(Exception exception, string key, string value)
+    {
+        try
+        {
+            if (!exception.Data.IsReadOnly && !exception.Data.Contains(key))
+            {
+                exception.Data[key] = value;
+            }
+        }
+        catch (Exception)
+        {
+            // Provenance is diagnostic and must never replace the projector failure itself.
+        }
     }
 }

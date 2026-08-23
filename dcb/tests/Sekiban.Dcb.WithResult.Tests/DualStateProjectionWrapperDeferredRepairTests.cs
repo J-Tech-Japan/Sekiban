@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Microsoft.Extensions.Logging;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
@@ -73,23 +74,27 @@ public class DualStateProjectionWrapperDeferredRepairTests
         var seed = SeedDirtyHistory(wrapper, fixture.DomainTypes);
         var accessor = (IDualStateAccessor)wrapper;
         var published = CapturePublishedState(wrapper, accessor);
-        fixture.TagTypes.FailDuringFold.Add(seed.Low.Id);
+        // Low made the retained history dirty, but high is the event that fails when the sorted history is replayed.
+        // This must never be attributed to the dirty trigger merely because it arrived later.
+        fixture.TagTypes.FailDuringFold.Add(seed.High.Id);
 
         var failure = Assert.Throws<InvalidOperationException>(
             () => InvokeWrapperEntryPoint(entryPoint, wrapper, accessor, fixture.DomainTypes));
 
-        Assert.Equal(seed.Low.Id.ToString(), failure.Data["DeferredSafeRepairEventId"]);
-        Assert.Equal(seed.Low.SortableUniqueIdValue, failure.Data["DeferredSafeRepairPosition"]);
+        Assert.Equal(seed.High.Id.ToString(), failure.Data["DeferredSafeRepairEventId"]);
+        Assert.Equal(seed.High.SortableUniqueIdValue, failure.Data["DeferredSafeRepairPosition"]);
+        Assert.Equal(seed.Low.Id.ToString(), failure.Data["DeferredSafeRepairDirtyEventId"]);
+        Assert.Equal(seed.Low.SortableUniqueIdValue, failure.Data["DeferredSafeRepairDirtyPosition"]);
         AssertPublishedState(published, wrapper, accessor);
         Assert.True(GetPrivateBool(wrapper, "_safeHistoryDirty"));
         Assert.True(GetPrivateBool(wrapper, "_servedStateDirty"));
         Assert.Equal(3, GetPrivateCount(wrapper, "_allSafeEvents"));
         Assert.False(GetPrivateBool(wrapper, "_useIncrementalSafePromotion"));
 
-        fixture.TagTypes.FailDuringFold.Remove(seed.Low.Id);
+        fixture.TagTypes.FailDuringFold.Remove(seed.High.Id);
         InvokeWrapperEntryPoint(entryPoint, wrapper, accessor, fixture.DomainTypes);
 
-        AssertConsumedState(wrapper, accessor, fixture, seed, expectedFoldCount: 5);
+        AssertConsumedState(wrapper, accessor, fixture, seed, expectedFoldCount: 7);
         Assert.Equal(entryPoint == "CompactSafeHistory" ? 0 : 3, GetPrivateCount(wrapper, "_allSafeEvents"));
         Assert.Equal(entryPoint == "CompactSafeHistory", GetPrivateBool(wrapper, "_useIncrementalSafePromotion"));
     }
@@ -124,10 +129,12 @@ public class DualStateProjectionWrapperDeferredRepairTests
     public async Task DirtyHistory_ActorHeadStatusEntryPoint_FailsWithoutPublishingAndCanRetry()
     {
         var fixture = new Fixture();
+        var logger = new RecordingLogger();
         var actor = new GeneralMultiProjectionActor(
             fixture.DomainTypes,
             CountingProjector.MultiProjectorName,
-            new GeneralMultiProjectionActorOptions { SafeWindowMs = 1 });
+            new GeneralMultiProjectionActorOptions { SafeWindowMs = 1 },
+            logger);
         var seed = CreateSeedEvents();
 
         await actor.AddEventsAsync([seed.High]);
@@ -137,21 +144,92 @@ public class DualStateProjectionWrapperDeferredRepairTests
             GetPrivateValue<object>(actor, "_singleStateAccessor"));
         var accessor = (IDualStateAccessor)wrapper;
         var published = CapturePublishedState(wrapper, accessor);
-        fixture.TagTypes.FailDuringFold.Add(seed.Low.Id);
+        var original = new InvalidOperationException($"Configured replay fold failure for {seed.High.Id}");
+        fixture.TagTypes.ReplayFailures[seed.High.Id] = original;
 
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(actor.GetProjectionHeadStatusAsync);
 
-        Assert.Equal(seed.Low.Id.ToString(), failure.Data["DeferredSafeRepairEventId"]);
-        Assert.Equal(seed.Low.SortableUniqueIdValue, failure.Data["DeferredSafeRepairPosition"]);
+        Assert.Same(original, failure);
+        Assert.Equal(original.Message, failure.Message);
+        Assert.Contains("RebuildSafeState", failure.StackTrace, StringComparison.Ordinal);
+        Assert.Equal(seed.High.Id.ToString(), failure.Data["DeferredSafeRepairEventId"]);
+        Assert.Equal(seed.High.SortableUniqueIdValue, failure.Data["DeferredSafeRepairPosition"]);
+        Assert.Equal(seed.Low.Id.ToString(), failure.Data["DeferredSafeRepairDirtyEventId"]);
+        Assert.Equal(seed.Low.SortableUniqueIdValue, failure.Data["DeferredSafeRepairDirtyPosition"]);
+        var fault = Assert.IsType<ProjectionFaultDescriptor>(actor.CurrentFault);
+        Assert.Equal(seed.High.Id, fault.EventId);
+        Assert.Equal(nameof(FoldEvent), fault.EventType);
+        Assert.Equal(seed.High.SortableUniqueIdValue, fault.Position);
+        Assert.Equal(seed.High.Id.ToString(), failure.Data[ProjectionFaultDescriptor.EventIdDataKey]);
+        Assert.Equal(seed.High.SortableUniqueIdValue, failure.Data[ProjectionFaultDescriptor.PositionDataKey]);
+        var firstObserved = Assert.Single(
+            logger.Entries,
+            entry => entry.EventId.Name == "ProjectionFaultFirstObserved");
+        Assert.Same(original, firstObserved.Exception);
         AssertPublishedState(published, wrapper, accessor);
         Assert.True(GetPrivateBool(wrapper, "_safeHistoryDirty"));
         Assert.Equal(3, GetPrivateCount(wrapper, "_allSafeEvents"));
 
-        fixture.TagTypes.FailDuringFold.Remove(seed.Low.Id);
+        // A fault re-raise does not create another first-observed entry. Deliberate recovery leaves the retained dirty
+        // history in place, then lets the same actor consume it without dropping high/low/middle.
+        _ = await actor.GetStateAsync();
+        Assert.Single(logger.Entries, entry => entry.EventId.Name == "ProjectionFaultFirstObserved");
+        fixture.TagTypes.ReplayFailures.Remove(seed.High.Id);
+        actor.ClearFaultForRebuild();
         var retried = await actor.GetProjectionHeadStatusAsync();
         Assert.Equal(3, retried.Current.EventVersion);
         Assert.Equal(3, retried.Consistent.EventVersion);
-        AssertConsumedState(wrapper, accessor, fixture, seed, expectedFoldCount: 5);
+        AssertConsumedState(wrapper, accessor, fixture, seed, expectedFoldCount: 7);
+    }
+
+    [Fact]
+    public async Task DirtyHistory_ActorStateRead_CapturesTheReplayFailingEventWithoutReturningStaleState()
+    {
+        var fixture = new Fixture();
+        var logger = new RecordingLogger();
+        var actor = new GeneralMultiProjectionActor(
+            fixture.DomainTypes,
+            CountingProjector.MultiProjectorName,
+            new GeneralMultiProjectionActorOptions { SafeWindowMs = 1 },
+            logger);
+        var seed = CreateSeedEvents();
+
+        await actor.AddEventsAsync([seed.High]);
+        await actor.AddEventsAsync([seed.Low]);
+        await actor.AddEventsAsync([seed.Middle]);
+        var wrapper = Assert.IsType<DualStateProjectionWrapper<CountingProjector>>(
+            GetPrivateValue<object>(actor, "_singleStateAccessor"));
+        var accessor = (IDualStateAccessor)wrapper;
+        var published = CapturePublishedState(wrapper, accessor);
+        var original = new InvalidOperationException($"Configured state-read replay failure for {seed.High.Id}");
+        fixture.TagTypes.ReplayFailures[seed.High.Id] = original;
+
+        var state = await actor.GetStateAsync(canGetUnsafeState: true);
+
+        Assert.False(state.IsSuccess);
+        var failure = Assert.IsType<InvalidOperationException>(state.GetException());
+        Assert.Same(original, failure);
+        Assert.Equal(original.Message, failure.Message);
+        Assert.Contains("RebuildSafeState", failure.StackTrace, StringComparison.Ordinal);
+        Assert.Equal(seed.High.Id.ToString(), failure.Data["DeferredSafeRepairEventId"]);
+        Assert.Equal(seed.High.SortableUniqueIdValue, failure.Data["DeferredSafeRepairPosition"]);
+        Assert.Equal(seed.Low.Id.ToString(), failure.Data["DeferredSafeRepairDirtyEventId"]);
+        Assert.Equal(seed.Low.SortableUniqueIdValue, failure.Data["DeferredSafeRepairDirtyPosition"]);
+        Assert.Equal(seed.High.Id, Assert.IsType<ProjectionFaultDescriptor>(actor.CurrentFault).EventId);
+        var firstObserved = Assert.Single(
+            logger.Entries,
+            entry => entry.EventId.Name == "ProjectionFaultFirstObserved");
+        Assert.Same(original, firstObserved.Exception);
+        AssertPublishedState(published, wrapper, accessor);
+        Assert.True(GetPrivateBool(wrapper, "_safeHistoryDirty"));
+        Assert.True(GetPrivateBool(wrapper, "_servedStateDirty"));
+        Assert.Equal(3, GetPrivateCount(wrapper, "_allSafeEvents"));
+
+        fixture.TagTypes.ReplayFailures.Remove(seed.High.Id);
+        actor.ClearFaultForRebuild();
+        var retried = await actor.GetStateAsync(canGetUnsafeState: true);
+        Assert.True(retried.IsSuccess);
+        Assert.Equal("ABC", Assert.IsType<CountingProjector>(retried.GetValue().Payload).Order);
     }
 
     [Fact]
@@ -258,32 +336,27 @@ public class DualStateProjectionWrapperDeferredRepairTests
 
         wrapper.ProcessEvent(seed.High, SortableUniqueId.MaxValue, fixture.DomainTypes);
         wrapper.ProcessEvent(seed.Low, SortableUniqueId.MaxValue, fixture.DomainTypes);
-        fixture.TagTypes.FailDuringFold.Add(seed.Low.Id);
+        fixture.TagTypes.FailDuringFold.Add(seed.High.Id);
 
-        var safeBefore = GetPrivateProjector(wrapper, "_safeProjector");
-        var unsafeBefore = GetPrivateProjector(wrapper, "_unsafeProjector");
-        var safeVersionBefore = accessor.SafeVersion;
-        var unsafeVersionBefore = accessor.UnsafeVersion;
-        var safeLastBefore = GetPrivateValue<string>(wrapper, "_safeLastSortableUniqueId");
-        var unsafeLastBefore = GetPrivateValue<string>(wrapper, "_unsafeLastSortableUniqueId");
+        // This snapshot includes both payloads and every published safe/unsafe metadata field, so repair cannot leak a
+        // partial checkpoint before its failing high replay event is reported.
+        var published = CapturePublishedState(wrapper, accessor);
 
         var failure = Assert.Throws<InvalidOperationException>(() => wrapper.GetUnsafeProjection(fixture.DomainTypes));
-        Assert.Equal(seed.Low.Id.ToString(), failure.Data["DeferredSafeRepairEventId"]);
-        Assert.Equal(seed.Low.SortableUniqueIdValue, failure.Data["DeferredSafeRepairPosition"]);
-        Assert.Equal(safeBefore, GetPrivateProjector(wrapper, "_safeProjector"));
-        Assert.Equal(unsafeBefore, GetPrivateProjector(wrapper, "_unsafeProjector"));
-        Assert.Equal(safeVersionBefore, accessor.SafeVersion);
-        Assert.Equal(unsafeVersionBefore, accessor.UnsafeVersion);
-        Assert.Equal(safeLastBefore, GetPrivateValue<string>(wrapper, "_safeLastSortableUniqueId"));
-        Assert.Equal(unsafeLastBefore, GetPrivateValue<string>(wrapper, "_unsafeLastSortableUniqueId"));
+        Assert.Equal(seed.High.Id.ToString(), failure.Data["DeferredSafeRepairEventId"]);
+        Assert.Equal(seed.High.SortableUniqueIdValue, failure.Data["DeferredSafeRepairPosition"]);
+        Assert.Equal(seed.Low.Id.ToString(), failure.Data["DeferredSafeRepairDirtyEventId"]);
+        Assert.Equal(seed.Low.SortableUniqueIdValue, failure.Data["DeferredSafeRepairDirtyPosition"]);
+        AssertPublishedState(published, wrapper, accessor);
         Assert.True(GetPrivateBool(wrapper, "_safeHistoryDirty"));
+        Assert.True(GetPrivateBool(wrapper, "_servedStateDirty"));
         Assert.Equal(2, GetPrivateCount(wrapper, "_allSafeEvents"));
 
         Assert.Throws<InvalidOperationException>(() => accessor.CompactSafeHistory());
         Assert.False(GetPrivateBool(wrapper, "_useIncrementalSafePromotion"));
         Assert.Equal(2, GetPrivateCount(wrapper, "_allSafeEvents"));
 
-        fixture.TagTypes.FailDuringFold.Remove(seed.Low.Id);
+        fixture.TagTypes.FailDuringFold.Remove(seed.High.Id);
         accessor.CompactSafeHistory();
 
         var repaired = Assert.IsType<CountingProjector>(accessor.GetSafeProjectorPayload());
@@ -297,23 +370,52 @@ public class DualStateProjectionWrapperDeferredRepairTests
     public async Task RepairFailure_FailsClosedAtTheProductionSnapshotPersistenceBoundary()
     {
         var fixture = new Fixture();
+        var logger = new RecordingLogger();
         var actor = new GeneralMultiProjectionActor(
             fixture.DomainTypes,
             CountingProjector.MultiProjectorName,
-            new GeneralMultiProjectionActorOptions { SafeWindowMs = 1 });
+            new GeneralMultiProjectionActorOptions { SafeWindowMs = 1 },
+            logger);
         var seed = CreateSeedEvents();
 
         await actor.AddEventsAsync([seed.High]);
         await actor.AddEventsAsync([seed.Low]);
-        fixture.TagTypes.FailDuringFold.Add(seed.Low.Id);
+        var wrapper = Assert.IsType<DualStateProjectionWrapper<CountingProjector>>(
+            GetPrivateValue<object>(actor, "_singleStateAccessor"));
+        var accessor = (IDualStateAccessor)wrapper;
+        var published = CapturePublishedState(wrapper, accessor);
+        var original = new InvalidOperationException($"Configured snapshot replay failure for {seed.High.Id}");
+        fixture.TagTypes.ReplayFailures[seed.High.Id] = original;
 
         var result = await actor.BuildSnapshotForPersistenceAsync();
 
         Assert.False(result.IsSuccess);
-        var failure = result.GetException();
-        Assert.Equal(seed.Low.Id.ToString(), failure.Data["DeferredSafeRepairEventId"]);
-        Assert.Equal(seed.Low.SortableUniqueIdValue, failure.Data["DeferredSafeRepairPosition"]);
-        Assert.Equal(2, fixture.TagTypes.FoldCount); // the staged repair attempted its first fold, but no state was published
+        var failure = Assert.IsType<InvalidOperationException>(result.GetException());
+        Assert.Same(original, failure);
+        Assert.Equal(original.Message, failure.Message);
+        Assert.Contains("RebuildSafeState", failure.StackTrace, StringComparison.Ordinal);
+        Assert.Equal(seed.High.Id.ToString(), failure.Data["DeferredSafeRepairEventId"]);
+        Assert.Equal(seed.High.SortableUniqueIdValue, failure.Data["DeferredSafeRepairPosition"]);
+        Assert.Equal(seed.Low.Id.ToString(), failure.Data["DeferredSafeRepairDirtyEventId"]);
+        Assert.Equal(seed.Low.SortableUniqueIdValue, failure.Data["DeferredSafeRepairDirtyPosition"]);
+        var fault = Assert.IsType<ProjectionFaultDescriptor>(actor.CurrentFault);
+        Assert.Equal(seed.High.Id, fault.EventId);
+        Assert.Equal(seed.High.SortableUniqueIdValue, fault.Position);
+        var firstObserved = Assert.Single(
+            logger.Entries,
+            entry => entry.EventId.Name == "ProjectionFaultFirstObserved");
+        Assert.Same(original, firstObserved.Exception);
+        AssertPublishedState(published, wrapper, accessor);
+        Assert.True(GetPrivateBool(wrapper, "_safeHistoryDirty"));
+        Assert.True(GetPrivateBool(wrapper, "_servedStateDirty"));
+        Assert.Equal(2, GetPrivateCount(wrapper, "_allSafeEvents"));
+        Assert.Equal(3, fixture.TagTypes.FoldCount); // low folded into an unpublished local replay, then high failed
+
+        fixture.TagTypes.ReplayFailures.Remove(seed.High.Id);
+        actor.ClearFaultForRebuild();
+        var retried = await actor.BuildSnapshotForPersistenceAsync();
+        Assert.True(retried.IsSuccess);
+        Assert.Equal(seed.High.SortableUniqueIdValue, retried.GetValue().SafeLastSortableUniqueId);
     }
 
     [Fact]
@@ -561,6 +663,7 @@ public class DualStateProjectionWrapperDeferredRepairTests
         public int FoldCount { get; set; }
         public int FoldStartCount { get; set; }
         public HashSet<Guid> FailDuringFold { get; } = [];
+        public Dictionary<Guid, Exception> ReplayFailures { get; } = [];
 
         public ITag GetTag(string tag)
         {
@@ -615,6 +718,11 @@ public class DualStateProjectionWrapperDeferredRepairTests
                 counters.FoldStartCount++;
             }
 
+            if (counters.ReplayFailures.TryGetValue(ev.Id, out var replayFailure))
+            {
+                return ResultBox.Error<CountingProjector>(replayFailure);
+            }
+
             if (counters.FailDuringFold.Contains(ev.Id))
             {
                 return ResultBox.Error<CountingProjector>(
@@ -625,5 +733,31 @@ public class DualStateProjectionWrapperDeferredRepairTests
                 ? ResultBox.FromValue(payload with { Total = payload.Total + fold.Amount, Order = payload.Order + fold.Label })
                 : ResultBox.FromValue(payload);
         }
+    }
+
+    private sealed class RecordingLogger : ILogger
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NoopDisposable.Instance;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add(new LogEntry(eventId, exception, formatter(state, exception)));
+        }
+    }
+
+    private sealed record LogEntry(EventId EventId, Exception? Exception, string Message);
+
+    private sealed class NoopDisposable : IDisposable
+    {
+        public static readonly NoopDisposable Instance = new();
+        public void Dispose() { }
     }
 }
