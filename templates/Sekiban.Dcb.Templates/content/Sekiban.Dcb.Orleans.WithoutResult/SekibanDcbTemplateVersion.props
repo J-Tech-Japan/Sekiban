@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <SekibanDcbVersion>10.19.0</SekibanDcbVersion>
+  </PropertyGroup>
+</Project>

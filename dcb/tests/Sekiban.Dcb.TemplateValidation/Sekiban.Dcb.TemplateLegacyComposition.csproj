@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Sekiban.Dcb.TemplateLegacyComposition</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- The frozen provider graph is intentionally restored as published so the negative can distinguish 10.8.2. -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+    <DcbVersion Condition="'$(DcbVersion)' == ''">10.8.2</DcbVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Program.cs" />
+    <Compile Remove="StatusCompositionProgram.cs" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="$(DcbVersion)" />
+    <PackageReference Include="Sekiban.Dcb.DynamoDB" Version="$(DcbVersion)" />
+    <PackageReference Include="Sekiban.Dcb.Postgres" Version="$(DcbVersion)" />
+    <PackageReference Include="Sekiban.Dcb.Sqlite" Version="$(DcbVersion)" />
+  </ItemGroup>
+</Project>

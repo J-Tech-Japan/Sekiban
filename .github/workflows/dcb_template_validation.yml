@@ -1,0 +1,52 @@
+name: DCB template packaged-consumer validation
+
+on:
+  pull_request:
+    paths:
+      - 'templates/Sekiban.Dcb.Templates/**'
+      - 'dcb/tests/Sekiban.Dcb.TemplateValidation/**'
+      - '.github/workflows/dcb_template_validation.yml'
+      - '.github/workflows/packagesDcbTemplate.yml'
+      - 'docs/dcb_llm/20_materialized_view.md'
+      - 'docs/dcb_llm/11_storage_providers.md'
+      - 'docs/dcb_llm_ja/20_materialized_view.md'
+      - 'docs/dcb_llm_ja/11_storage_providers.md'
+      - 'CONTRIBUTING.md'
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  packaged-consumer:
+    name: Pack, install, generate, restore, build, and test templates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9 carrier SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Setup .NET 10 generated-output SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate packaged consumer path and killing fixtures
+        run: dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh --repo-root "$GITHUB_WORKSPACE" --version 10.19.0
+
+  currency-drift:
+    name: Scheduled stable DCB/template currency check
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect stable-semver DCB/template drift
+        run: dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh --check-drift --repo-root "$GITHUB_WORKSPACE"

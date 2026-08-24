@@ -1,0 +1,9 @@
+<Project>
+  <!-- The frozen 10.8.2 graph must not overwrite the current composition graph's restore assets. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Sekiban.Dcb.TemplateLegacyComposition'">
+    <MSBuildProjectExtensionsPath>$(MSBuildThisFileDirectory)obj/LegacyComposition/</MSBuildProjectExtensionsPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj/LegacyComposition/</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)bin/LegacyComposition/</BaseOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildThisFileDirectory)obj/**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

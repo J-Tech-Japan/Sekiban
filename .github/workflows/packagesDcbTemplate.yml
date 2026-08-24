@@ -11,6 +11,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
@@ -31,9 +33,22 @@ jobs:
           fi
           echo "VERSION=${TAG#dcbTemplates-v}" >> $GITHUB_ENV
 
+      - name: Verify published library/template parity before pack
+        run: |
+          git fetch --force --tags
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh --check-publish-parity --repo-root "$GITHUB_WORKSPACE" --version "$VERSION" --template-tag "$GITHUB_REF_NAME"
+
+      - name: Wait for all published DCB packages
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh --wait-for-published-packages --version "$VERSION" --timeout-seconds 900 --interval-seconds 15
+
       - name: Pack Template
         run: |
           dotnet pack templates/Sekiban.Dcb.Templates/Sekiban.Dcb.Templates.csproj -c Release -o out -p:PackageVersion=$VERSION
+
+      - name: Validate packed consumer path
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh --repo-root "$GITHUB_WORKSPACE" --package "$GITHUB_WORKSPACE/out/Sekiban.Dcb.Templates.$VERSION.nupkg" --version "$VERSION"
 
       - name: Push Template
         run: |

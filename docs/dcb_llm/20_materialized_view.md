@@ -546,6 +546,16 @@ The sample application in `internalUsages/DcbOrleans.WithoutResult.ApiService` u
 - bump `ViewVersion` when table schema or projection logic changes
 - do not treat the materialized view as the source of truth; rebuilds must remain possible
 
+<!-- sek-g44:mv-production-guidance -->
+## DCB template production default
+
+The DCB templates intentionally leave `MvOptions.InitializationMode` unset. The library default is
+`CreateOrEnsure`, which keeps a newly generated application usable on its first run without adding a
+template-specific mode or test seam. It is not a promise that production schema changes are automatic:
+operators who need `VerifyOnly` must explicitly choose it after the target schema has been pre-provisioned
+and after they have accepted that first-run convenience is no longer available. Keep that operational
+choice in the application deployment policy rather than changing the template default.
+
 ## Related Reading
 
 - [MultiProjection](04_multiple_aggregate_projector.md)

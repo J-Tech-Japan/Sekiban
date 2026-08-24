@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="$(MSBuildThisFileDirectory)..\SekibanDcbTemplateVersion.props" />
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -14,9 +15,9 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="10.8.2" />
-    <PackageReference Include="Sekiban.Dcb.Core.Testing" Version="10.8.2" />
-    <PackageReference Include="Sekiban.Dcb.WithoutResult.Testing" Version="10.8.2" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult" Version="$(SekibanDcbVersion)" />
+    <PackageReference Include="Sekiban.Dcb.Core.Testing" Version="$(SekibanDcbVersion)" />
+    <PackageReference Include="Sekiban.Dcb.WithoutResult.Testing" Version="$(SekibanDcbVersion)" />
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
   <ItemGroup>

@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <Import Project="$(MSBuildThisFileDirectory)..\SekibanDcbTemplateVersion.props" />
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
@@ -44,14 +45,14 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="10.8.2" />
-        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="10.8.2" />
-        <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.8.2" />
-        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.8.2" />
-        <PackageReference Include="Sekiban.Dcb.Sqlite" Version="10.8.2" />
-        <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="10.8.2" />
-        <PackageReference Include="Sekiban.Dcb.MaterializedView.Postgres" Version="10.8.2" />
-        <PackageReference Include="Sekiban.Dcb.MaterializedView.Orleans" Version="10.8.2" />
+        <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="$(SekibanDcbVersion)" />
+        <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="$(SekibanDcbVersion)" />
+        <PackageReference Include="Sekiban.Dcb.Postgres" Version="$(SekibanDcbVersion)" />
+        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="$(SekibanDcbVersion)" />
+        <PackageReference Include="Sekiban.Dcb.Sqlite" Version="$(SekibanDcbVersion)" />
+        <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="$(SekibanDcbVersion)" />
+        <PackageReference Include="Sekiban.Dcb.MaterializedView.Postgres" Version="$(SekibanDcbVersion)" />
+        <PackageReference Include="Sekiban.Dcb.MaterializedView.Orleans" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Dapper" Version="2.1.66" />
     </ItemGroup>
 </Project>
