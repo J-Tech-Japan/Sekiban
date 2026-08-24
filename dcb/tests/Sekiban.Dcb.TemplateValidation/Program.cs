@@ -12,6 +12,10 @@ internal static class Program
     private const string ExpectedVersion = "10.19.0";
     private const string NonexistentPackageVersion = "999.999.999";
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex DcbVersionMention = new(
+        @"Sekiban\.Dcb[ \t]+(?<version>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(?![0-9A-Za-z.+-])",
+        RegexOptions.CultureInvariant,
+        RegexTimeout);
 
     private static readonly TemplateSpec[] Templates =
     [
@@ -65,6 +69,23 @@ internal static class Program
                     ValidatePackage(Required(options, "package"), expectedVersion);
                     break;
 
+                case "package-mutate":
+                    CreatePackageMutation(
+                        Required(options, "source"),
+                        Required(options, "destination"),
+                        RequiredValue(options, "kind"),
+                        expectedVersion);
+                    break;
+
+                case "authorities":
+                    var authoritiesRoot = Required(options, "repo-root");
+                    ValidateTemplateTree(
+                        Path.Combine(authoritiesRoot, "templates", "Sekiban.Dcb.Templates", "content"),
+                        expectedVersion,
+                        requireAllTemplateRoots: true,
+                        parentSentinel: null);
+                    break;
+
                 case "mv":
                     ValidateMaterializedViewSurface(
                         Required(options, "template-root"),
@@ -74,6 +95,10 @@ internal static class Program
 
                 case "docs":
                     ValidateDocs(Required(options, "repo-root"), requireContributing: true);
+                    break;
+
+                case "docs-currency":
+                    ValidateTemplateDocsCurrency(Required(options, "repo-root"), expectedVersion);
                     break;
 
                 case "workflow":
@@ -211,6 +236,13 @@ internal static class Program
 
         Assert(!entries.Any(entry => entry.FullName.EndsWith("Directory.Build.props", StringComparison.OrdinalIgnoreCase)),
             "The packed template must not carry Directory.Build.props.");
+
+        var readmeEntries = entries
+            .Where(entry => string.Equals(entry.FullName.Replace('\\', '/'), "README.md", StringComparison.Ordinal))
+            .ToArray();
+        Assert(readmeEntries.Length == 1,
+            "The packed template must carry exactly one root README.md.");
+        ValidateDcbVersionPayload(ReadArchiveEntry(readmeEntries[0]), expectedVersion, "packed README.md");
 
         foreach (var template in Templates)
         {
@@ -394,13 +426,79 @@ internal static class Program
         }
     }
 
+    private static void ValidateTemplateDocsCurrency(string repoRoot, string expectedVersion)
+    {
+        var templateRoot = Path.Combine(repoRoot, "templates", "Sekiban.Dcb.Templates");
+        Assert(Directory.Exists(templateRoot), $"DCB template root does not exist: {templateRoot}");
+
+        var markdownPaths = Directory.EnumerateFiles(templateRoot, "*.md", SearchOption.AllDirectories)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+        Assert(markdownPaths.Length > 0, $"No Markdown files were found under {templateRoot}.");
+
+        var authorityVersions = Templates
+            .Select(template => Path.Combine(templateRoot, "content", template.Root, PropsFileName))
+            .Select(path => (Path: path, Version: ReadPropertyValue(path, VersionProperty)))
+            .ToArray();
+        Assert(authorityVersions.All(authority => authority.Version is not null),
+            "Every DCB template authority must declare SekibanDcbVersion before docs currency is validated.");
+        Assert(authorityVersions.Select(authority => authority.Version).Distinct(StringComparer.Ordinal).Count() == 1,
+            "All five DCB template authorities must agree before docs currency is validated.");
+        var authorityVersion = authorityVersions[0].Version!;
+        Assert(authorityVersion == expectedVersion,
+            $"The five DCB template authorities must equal {expectedVersion}, found {authorityVersion}.");
+
+        var mentions = markdownPaths
+            .SelectMany(path => FindDcbVersionMentions(File.ReadAllText(path), path))
+            .ToArray();
+        Assert(mentions.Length == 1,
+            $"Expected exactly one whole-token Sekiban.Dcb version mention under {templateRoot}, found {mentions.Length}.");
+        Assert(mentions[0].Version == authorityVersion,
+            $"The sole template Markdown Sekiban.Dcb version must be {authorityVersion}, found {mentions[0].Version} in {mentions[0].Source}.");
+
+        var rootReadme = Path.Combine(templateRoot, "README.md");
+        Assert(File.Exists(rootReadme), $"The template root README is missing: {rootReadme}");
+        ValidateDcbVersionPayload(File.ReadAllText(rootReadme), authorityVersion, rootReadme);
+    }
+
+    private static void ValidateDcbVersionPayload(string content, string expectedVersion, string source)
+    {
+        Assert(content.Contains($"Sekiban.Dcb {expectedVersion}", StringComparison.Ordinal),
+            $"{source} must contain the required payload 'Sekiban.Dcb {expectedVersion}'.");
+
+        var mentions = FindDcbVersionMentions(content, source).ToArray();
+        Assert(mentions.Length == 1,
+            $"{source} must contain exactly one whole-token Sekiban.Dcb version mention, found {mentions.Length}.");
+        Assert(mentions[0].Version == expectedVersion,
+            $"{source} must state Sekiban.Dcb {expectedVersion}, found {mentions[0].Version}.");
+    }
+
+    private static IEnumerable<DcbVersionMatch> FindDcbVersionMentions(string content, string source) =>
+        DcbVersionMention.Matches(content)
+            .Cast<Match>()
+            .Select(match => new DcbVersionMatch(source, match.Groups["version"].Value));
+
+    private static string ReadArchiveEntry(ZipArchiveEntry entry)
+    {
+        using var stream = entry.Open();
+        using var reader = new StreamReader(stream, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
+    }
+
     private static void ValidateWorkflowSurface(string repoRoot)
     {
         var workflowRoot = Path.Combine(repoRoot, ".github", "workflows");
         var validationWorkflow = Path.Combine(workflowRoot, "dcb_template_validation.yml");
         var publishWorkflow = Path.Combine(workflowRoot, "packagesDcbTemplate.yml");
+        var packagedConsumerScript = Path.Combine(
+            repoRoot,
+            "dcb",
+            "tests",
+            "Sekiban.Dcb.TemplateValidation",
+            "run-packaged-consumer.sh");
         Assert(File.Exists(validationWorkflow), "The DCB template validation workflow is missing.");
         Assert(File.Exists(publishWorkflow), "The DCB template publish workflow is missing.");
+        Assert(File.Exists(packagedConsumerScript), "The DCB packaged-consumer script is missing.");
         var validation = File.ReadAllText(validationWorkflow);
         var publish = File.ReadAllText(publishWorkflow);
 
@@ -413,7 +511,6 @@ internal static class Program
                      "dcb/tests/Sekiban.Dcb.TemplateValidation/**",
                      ".github/workflows/dcb_template_validation.yml",
                      ".github/workflows/packagesDcbTemplate.yml",
-                     "run-packaged-consumer.sh",
                      "validate-release-tags.sh --check-drift"
                  })
         {
@@ -421,13 +518,120 @@ internal static class Program
                 $"The validation workflow must include '{required}'.");
         }
 
-        var parityIndex = publish.IndexOf("validate-release-tags.sh --check-publish-parity", StringComparison.Ordinal);
-        var waitIndex = publish.IndexOf("validate-release-tags.sh --wait-for-published-packages", StringComparison.Ordinal);
-        var packIndex = publish.IndexOf("Pack Template", StringComparison.Ordinal);
-        Assert(parityIndex >= 0 && waitIndex >= 0 && packIndex >= 0 && parityIndex < packIndex && waitIndex < packIndex,
+        var validationSteps = ReadNamedWorkflowSteps(validation);
+        var publishSteps = ReadNamedWorkflowSteps(publish);
+        RequireStepWithRun(
+            validationSteps,
+            "dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh",
+            "The PR validation workflow must run the packaged-consumer path.");
+        var publishParity = RequireNamedStep(publishSteps, "Verify published library/template parity before pack");
+        var packageAvailability = RequireNamedStep(publishSteps, "Wait for all published DCB packages");
+        var pack = RequireNamedStep(publishSteps, "Pack Template");
+        var packagedConsumer = RequireStepWithRun(
+            publishSteps,
+            "dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh",
+            "The publish workflow must run the packaged-consumer/docs path.");
+        var push = RequireNamedStep(publishSteps, "Push Template");
+        Assert(publishParity.Body.Contains("validate-release-tags.sh --check-publish-parity", StringComparison.Ordinal),
+            "The publish parity workflow step must run the parity gate.");
+        Assert(packageAvailability.Body.Contains("validate-release-tags.sh --wait-for-published-packages", StringComparison.Ordinal),
+            "The package-availability workflow step must run the availability gate.");
+        Assert(publishParity.Ordinal < pack.Ordinal && packageAvailability.Ordinal < pack.Ordinal,
             "Publish parity and package-availability gates must run before Pack Template.");
-        Assert(publish.Contains("run-packaged-consumer.sh", StringComparison.Ordinal),
-            "The publish workflow must run the packaged-consumer validation before push.");
+        Assert(packagedConsumer.Ordinal < push.Ordinal,
+            "The publish workflow must run the packaged-consumer/docs path before Push Template.");
+
+        var script = File.ReadAllText(packagedConsumerScript);
+        var sourceStage = script.IndexOf("\"$validator\" source", StringComparison.Ordinal);
+        var docsCurrencyStage = script.IndexOf("\"$validator\" docs-currency", StringComparison.Ordinal);
+        var packageBoundary = script.IndexOf("if [[ -z \"$package_path\" ]]; then", StringComparison.Ordinal);
+        Assert(sourceStage >= 0 && docsCurrencyStage >= 0 && packageBoundary >= 0 &&
+               sourceStage < docsCurrencyStage && docsCurrencyStage < packageBoundary,
+            "The packaged-consumer source phase must run the docs-currency stage after source validation and before packing.");
+    }
+
+    private static IReadOnlyList<WorkflowStep> ReadNamedWorkflowSteps(string workflow)
+    {
+        var lines = workflow.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var starts = new List<(int Index, string Indent, string Name)>();
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var match = Regex.Match(
+                lines[index],
+                @"^(?<indent>[ \t]*)-\s+name:\s*(?<name>.+?)\s*$",
+                RegexOptions.CultureInvariant,
+                RegexTimeout);
+            if (match.Success)
+            {
+                starts.Add((index, match.Groups["indent"].Value, match.Groups["name"].Value));
+            }
+        }
+
+        var result = new List<WorkflowStep>(starts.Count);
+        for (var index = 0; index < starts.Count; index++)
+        {
+            var current = starts[index];
+            var nextStep = lines.Length;
+            for (var candidate = current.Index + 1; candidate < lines.Length; candidate++)
+            {
+                if (lines[candidate].StartsWith($"{current.Indent}- ", StringComparison.Ordinal))
+                {
+                    nextStep = candidate;
+                    break;
+                }
+            }
+
+            result.Add(new WorkflowStep(
+                current.Name,
+                string.Join("\n", lines[current.Index..nextStep]),
+                index));
+        }
+
+        return result;
+    }
+
+    private static WorkflowStep RequireNamedStep(IReadOnlyList<WorkflowStep> steps, string name)
+    {
+        var matches = steps.Where(step => string.Equals(step.Name, name, StringComparison.Ordinal)).ToArray();
+        Assert(matches.Length == 1, $"Expected exactly one workflow step named '{name}', found {matches.Length}.");
+        return matches[0];
+    }
+
+    private static WorkflowStep RequireStepWithRun(IReadOnlyList<WorkflowStep> steps, string command, string message)
+    {
+        var matches = steps.Where(step => step.Body.Contains(command, StringComparison.Ordinal)).ToArray();
+        Assert(matches.Length == 1, $"{message} Found {matches.Length} matching workflow steps.");
+        return matches[0];
+    }
+
+    private static void CreatePackageMutation(string source, string destination, string kind, string expectedVersion)
+    {
+        source = Path.GetFullPath(source);
+        destination = Path.GetFullPath(destination);
+        Assert(File.Exists(source), $"Package mutation source does not exist: {source}");
+        Assert(!File.Exists(destination), $"Package mutation destination already exists: {destination}");
+        File.Copy(source, destination);
+
+        using var archive = ZipFile.Open(destination, ZipArchiveMode.Update);
+        var readmeEntries = archive.Entries
+            .Where(entry => string.Equals(entry.FullName.Replace('\\', '/'), "README.md", StringComparison.Ordinal))
+            .ToArray();
+        Assert(readmeEntries.Length == 1, "Package mutation requires exactly one root README.md.");
+        var readme = ReadArchiveEntry(readmeEntries[0]);
+        var requiredPayload = $"Sekiban.Dcb {expectedVersion}";
+        var replacement = kind switch
+        {
+            "readme-version-mismatch" => $"Sekiban.Dcb 0.0.0",
+            _ => throw new InvalidOperationException($"Unknown package mutation kind '{kind}'.")
+        };
+        Assert(readme.Contains(requiredPayload, StringComparison.Ordinal),
+            $"Package mutation source README does not contain '{requiredPayload}'.");
+
+        readmeEntries[0].Delete();
+        var replacementEntry = archive.CreateEntry("README.md", CompressionLevel.Optimal);
+        using var stream = replacementEntry.Open();
+        using var writer = new StreamWriter(stream);
+        writer.Write(readme.Replace(requiredPayload, replacement, StringComparison.Ordinal));
     }
 
     private static void CreateMutation(string source, string destination, string kind)
@@ -627,6 +831,10 @@ internal static class Program
     }
 
     private sealed record TemplateSpec(string Root, string ShortName, string Solution);
+
+    private sealed record DcbVersionMatch(string Source, string Version);
+
+    private sealed record WorkflowStep(string Name, string Body, int Ordinal);
 
     private sealed record ProcessResult(int ExitCode, string Output);
 }

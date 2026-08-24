@@ -55,6 +55,7 @@ run_net10 build "$validator_project" -c Release --nologo
 validator="$script_dir/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll"
 
 run_net10 "$validator" source --repo-root "$repo_root" --expected-version "$version"
+run_net10 "$validator" docs-currency --repo-root "$repo_root" --expected-version "$version"
 
 if [[ -z "$package_path" ]]; then
   pack_directory="$work_root/pack"
@@ -218,17 +219,126 @@ cp "$repo_root/CONTRIBUTING.md" "$docs_mutant/CONTRIBUTING.md"
 perl -0pi -e 's/<!-- sek-g44:cas-non-default -->//' "$docs_mutant/docs/dcb_llm_ja/11_storage_providers.md"
 expect_failure run_net10 "$validator" docs --repo-root "$docs_mutant"
 
+make_minimal_currency_docs_fixture() {
+  local destination="$1"
+  mkdir -p "$destination/templates/Sekiban.Dcb.Templates"
+  cp "$repo_root/templates/Sekiban.Dcb.Templates/README.md" \
+    "$destination/templates/Sekiban.Dcb.Templates/README.md"
+  local authority_root
+  for authority_root in \
+    Sekiban.Dcb.Orleans \
+    Sekiban.Dcb.Orleans.WithoutResult \
+    Sekiban.Dcb.Orleans.WithoutResult.Aws \
+    Sekiban.Dcb.Orleans.Decider \
+    Sekiban.Dcb.Orleans.Decider.Aws; do
+    mkdir -p "$destination/templates/Sekiban.Dcb.Templates/content/$authority_root"
+    cp "$repo_root/templates/Sekiban.Dcb.Templates/content/$authority_root/SekibanDcbTemplateVersion.props" \
+      "$destination/templates/Sekiban.Dcb.Templates/content/$authority_root/SekibanDcbTemplateVersion.props"
+  done
+}
+
+# SEK-G47 fixture family 1: prose that looks version-like must not become a currency mention.
+false_positive_fixture="$work_root/docs-false-positive"
+make_minimal_currency_docs_fixture "$false_positive_fixture"
+printf '%s\n' \
+  '' \
+  'Azure VNet CIDR: 10.0.0.0/16.' \
+  'RFC URL: https://www.rfc-editor.org/rfc/rfc1918.' \
+  'Release tag: dcb-v10.19.0.' \
+  '本番ガード (10.4.0 以降、既定で有効)。' \
+  >> "$false_positive_fixture/templates/Sekiban.Dcb.Templates/README.md"
+run_net10 "$validator" docs-currency --repo-root "$false_positive_fixture" --expected-version "$version"
+
+# SEK-G47 fixture family 2: invalid whole-token boundaries and leading-zero components cannot pass.
+invalid_versions=(
+  '10.19.0.1'
+  '10.19.0-preview'
+  '10.19.0x'
+  '010.19.0'
+  '10.01.0'
+  '10.19.00'
+)
+for invalid_version in "${invalid_versions[@]}"; do
+  invalid_fixture="$work_root/docs-invalid-${invalid_version//[^0-9A-Za-z]/-}"
+  make_minimal_currency_docs_fixture "$invalid_fixture"
+  perl -0pi -e "s/Sekiban\\.Dcb 10\\.19\\.0/Sekiban.Dcb ${invalid_version}/" \
+    "$invalid_fixture/templates/Sekiban.Dcb.Templates/README.md"
+  expect_failure run_net10 "$validator" docs-currency --repo-root "$invalid_fixture" --expected-version "$version"
+done
+
+newline_fixture="$work_root/docs-invalid-newline"
+make_minimal_currency_docs_fixture "$newline_fixture"
+perl -0pi -e 's/Sekiban\.Dcb 10\.19\.0/Sekiban.Dcb\n10.19.0/' \
+  "$newline_fixture/templates/Sekiban.Dcb.Templates/README.md"
+expect_failure run_net10 "$validator" docs-currency --repo-root "$newline_fixture" --expected-version "$version"
+
+# SEK-G47 fixture family 3: only the new stage rejects stale, deleted, and duplicate README claims.
+stale_currency_fixture="$work_root/docs-stale-currency"
+mkdir -p "$stale_currency_fixture/templates" "$stale_currency_fixture/docs/dcb_llm" "$stale_currency_fixture/docs/dcb_llm_ja"
+cp -R "$repo_root/templates/Sekiban.Dcb.Templates" "$stale_currency_fixture/templates/Sekiban.Dcb.Templates"
+cp "$repo_root/docs/dcb_llm/20_materialized_view.md" "$stale_currency_fixture/docs/dcb_llm/20_materialized_view.md"
+cp "$repo_root/docs/dcb_llm_ja/20_materialized_view.md" "$stale_currency_fixture/docs/dcb_llm_ja/20_materialized_view.md"
+cp "$repo_root/docs/dcb_llm/11_storage_providers.md" "$stale_currency_fixture/docs/dcb_llm/11_storage_providers.md"
+cp "$repo_root/docs/dcb_llm_ja/11_storage_providers.md" "$stale_currency_fixture/docs/dcb_llm_ja/11_storage_providers.md"
+cp "$repo_root/CONTRIBUTING.md" "$stale_currency_fixture/CONTRIBUTING.md"
+perl -0pi -e 's/Sekiban\.Dcb 10\.19\.0/Sekiban.Dcb 10.8.2/' \
+  "$stale_currency_fixture/templates/Sekiban.Dcb.Templates/README.md"
+run_net10 "$validator" authorities --repo-root "$stale_currency_fixture" --expected-version "$version"
+run_net10 "$validator" docs --repo-root "$stale_currency_fixture"
+expect_failure run_net10 "$validator" docs-currency --repo-root "$stale_currency_fixture" --expected-version "$version"
+
+deleted_currency_fixture="$work_root/docs-deleted-currency"
+make_minimal_currency_docs_fixture "$deleted_currency_fixture"
+perl -0pi -e 's/Sekiban\.Dcb 10\.19\.0//' \
+  "$deleted_currency_fixture/templates/Sekiban.Dcb.Templates/README.md"
+expect_failure run_net10 "$validator" docs-currency --repo-root "$deleted_currency_fixture" --expected-version "$version"
+
+duplicate_currency_fixture="$work_root/docs-duplicate-currency"
+make_minimal_currency_docs_fixture "$duplicate_currency_fixture"
+printf '%s\n' 'Duplicate package statement: **Sekiban.Dcb 10.19.0**.' \
+  >> "$duplicate_currency_fixture/templates/Sekiban.Dcb.Templates/README.md"
+expect_failure run_net10 "$validator" docs-currency --repo-root "$duplicate_currency_fixture" --expected-version "$version"
+
+# SEK-G47 fixture family 4: a packed root README uses the same whole-token validation.
+packed_readme_mutant="$work_root/packed-readme-currency-mutant.nupkg"
+run_net10 "$validator" package-mutate --source "$package_path" --destination "$packed_readme_mutant" \
+  --kind readme-version-mismatch --expected-version "$version"
+expect_failure run_net10 "$validator" package --package "$packed_readme_mutant" --expected-version "$version"
+
+copy_workflow_fixture() {
+  local destination="$1"
+  mkdir -p "$destination/.github/workflows" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation"
+  cp "$repo_root/.github/workflows/dcb_template_validation.yml" "$destination/.github/workflows/dcb_template_validation.yml"
+  cp "$repo_root/.github/workflows/packagesDcbTemplate.yml" "$destination/.github/workflows/packagesDcbTemplate.yml"
+  cp "$script_dir/run-packaged-consumer.sh" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh"
+}
+
+# SEK-G47 fixture family 5: route removal and step reordering must fail structurally.
+workflow_route_mutant="$work_root/workflow-route-mutant"
+copy_workflow_fixture "$workflow_route_mutant"
+perl -0pi -e 's{      - name: Validate packed consumer path\n        run: \|\n          dcb/tests/Sekiban\.Dcb\.TemplateValidation/run-packaged-consumer\.sh[^\n]*\n\n}{}s' \
+  "$workflow_route_mutant/.github/workflows/packagesDcbTemplate.yml"
+expect_failure run_net10 "$validator" workflow --repo-root "$workflow_route_mutant"
+
+workflow_order_mutant="$work_root/workflow-order-mutant"
+copy_workflow_fixture "$workflow_order_mutant"
+perl -0pi -e 's{(      - name: Validate packed consumer path\n        run: \|\n          dcb/tests/Sekiban\.Dcb\.TemplateValidation/run-packaged-consumer\.sh[^\n]*\n\n)(      - name: Push Template\n        run: \|\n          dotnet nuget push out/\*\.nupkg[^\n]*\n)}{$2$1}s' \
+  "$workflow_order_mutant/.github/workflows/packagesDcbTemplate.yml"
+expect_failure run_net10 "$validator" workflow --repo-root "$workflow_order_mutant"
+
+source_docs_route_mutant="$work_root/source-docs-route-mutant"
+copy_workflow_fixture "$source_docs_route_mutant"
+perl -0pi -e 's/^.*"\$validator" docs-currency.*\n//m' \
+  "$source_docs_route_mutant/dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh"
+expect_failure run_net10 "$validator" workflow --repo-root "$source_docs_route_mutant"
+
 workflow_mutant="$work_root/workflow-mutant"
-mkdir -p "$workflow_mutant/.github/workflows"
-cp "$repo_root/.github/workflows/dcb_template_validation.yml" "$workflow_mutant/.github/workflows/dcb_template_validation.yml"
-cp "$repo_root/.github/workflows/packagesDcbTemplate.yml" "$workflow_mutant/.github/workflows/packagesDcbTemplate.yml"
+copy_workflow_fixture "$workflow_mutant"
 perl -0pi -e 's/^.*validate-release-tags\.sh --check-drift.*\n//m' "$workflow_mutant/.github/workflows/dcb_template_validation.yml"
 expect_failure run_net10 "$validator" workflow --repo-root "$workflow_mutant"
 
 publish_workflow_mutant="$work_root/publish-workflow-mutant"
-mkdir -p "$publish_workflow_mutant/.github/workflows"
-cp "$repo_root/.github/workflows/dcb_template_validation.yml" "$publish_workflow_mutant/.github/workflows/dcb_template_validation.yml"
-cp "$repo_root/.github/workflows/packagesDcbTemplate.yml" "$publish_workflow_mutant/.github/workflows/packagesDcbTemplate.yml"
+copy_workflow_fixture "$publish_workflow_mutant"
 perl -0pi -e 's/^.*validate-release-tags\.sh --check-publish-parity.*\n//m' "$publish_workflow_mutant/.github/workflows/packagesDcbTemplate.yml"
 expect_failure run_net10 "$validator" workflow --repo-root "$publish_workflow_mutant"
 
