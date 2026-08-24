@@ -2,7 +2,7 @@
 
 Sekiban DCB (Dynamic Consistency Boundary) 向けの .NET Aspire + Orleans スターターテンプレートです。
 
-生成されるプロジェクトはすべて **.NET 10.0** / **Aspire 13.x** / **Sekiban.Dcb 10.8.2** です。
+生成されるプロジェクトはすべて **.NET 10.0** / **Aspire 13.x** / **Sekiban.Dcb 10.19.0** です。
 
 ## インストール
 
