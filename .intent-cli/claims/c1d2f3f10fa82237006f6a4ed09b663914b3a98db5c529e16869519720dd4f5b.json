@@ -1,0 +1,8 @@
+{
+  "schema_version": "1",
+  "scope": "execution-unit:SEK-G47",
+  "actor": "implementation",
+  "team": "sekiban-orch",
+  "claimed_at": "2026-08-24T19:11:07.332687+00:00",
+  "base_commit": "ed76a44ea69af6fdd3415ad8a4daac08207b66e6"
+}
