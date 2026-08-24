@@ -736,6 +736,16 @@ reconciliation が検出できるのは `MAX` query 実行時に既に可視な 
 best-effort detection であり、premature mixed-version enablement が安全という主張ではありません。正しさの境界は
 drain-before-epoch です。violation 0 件は monitoring evidence であって clean cutover の証明ではありません。
 
+<!-- sek-g44:cas-non-default -->
+## expected tag-position CAS は template の既定値ではない
+
+`CommandExecutionOptions.ExpectedTagPositions` と `AssertEmpty` / `Exact` policy は、expected-tag-position
+protocol を明示的に採用した application のために利用できます。DCB template がこれらを**自動**で enable することは
+ありません。deployment は store を provision し、service の enablement epoch を確立し、conditional command/write API を
+意図して使用する必要があります。package graph に capability が含まれるだけで、template が
+`TagHeadEnablementEpochs` を seed したり、startup で migration を実行したり、CAS write usage を追加したりしてはなりません。
+これらは rollout と writer-drain を必要とする本番整合性の判断です。
+
 ## SEK-G20 generation-aware checkpoint CAS
 
 **バージョン: 10.8.0(マイナー)。** SEK-G18 のクラスタ間・共有ストアの穴を解消します

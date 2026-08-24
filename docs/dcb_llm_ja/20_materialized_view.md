@@ -541,6 +541,16 @@ query context から取得できるもの:
 - テーブル定義や投影ロジック変更時は `ViewVersion` を上げる
 - 正本は event store であり、マテリアライズドビューは再構築可能にしておく
 
+<!-- sek-g44:mv-production-guidance -->
+## DCB template の本番既定値
+
+DCB template は `MvOptions.InitializationMode` を意図的に設定しません。library の既定値は
+`CreateOrEnsure` であり、template 固有の mode や test seam を追加せず、新しく生成した application を
+初回起動で利用できる状態にします。ただし、これは本番の schema 変更が自動で安全になるという意味ではありません。
+`VerifyOnly` が必要な operator は、target schema を事前に provision し、初回起動の利便性を手放すことを
+受け入れた上で明示的に選択してください。この運用上の選択は template の既定値を変えるのではなく、application の
+deployment policy に置きます。
+
 ## 関連資料
 
 - [マルチプロジェクション](04_multiple_aggregate_projector.md)

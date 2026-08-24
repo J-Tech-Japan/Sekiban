@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="$(MSBuildThisFileDirectory)..\SekibanDcbTemplateVersion.props" />
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -14,10 +15,10 @@
         <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.3" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
         <PackageReference Include="System.CommandLine" Version="2.0.2" />
-        <PackageReference Include="Sekiban.Dcb.WithResult" Version="10.8.2" />
-        <PackageReference Include="Sekiban.Dcb.Postgres" Version="10.8.2" />
-        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="10.8.2" />
-        <PackageReference Include="Sekiban.Dcb.Sqlite" Version="10.8.2" />
+        <PackageReference Include="Sekiban.Dcb.WithResult" Version="$(SekibanDcbVersion)" />
+        <PackageReference Include="Sekiban.Dcb.Postgres" Version="$(SekibanDcbVersion)" />
+        <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="$(SekibanDcbVersion)" />
+        <PackageReference Include="Sekiban.Dcb.Sqlite" Version="$(SekibanDcbVersion)" />
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 

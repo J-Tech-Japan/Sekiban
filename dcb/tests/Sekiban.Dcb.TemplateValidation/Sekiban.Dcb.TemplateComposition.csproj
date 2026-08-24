@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- The SQLite provider's published 10.19 transitive graph contains this advisory. This harness does not ship it;
+         retaining the exact published graph is necessary to prove the consumer composition path. -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+    <DcbVersion Condition="'$(DcbVersion)' == ''">10.19.0</DcbVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Program.cs" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="$(DcbVersion)" />
+    <PackageReference Include="Sekiban.Dcb.DynamoDB" Version="$(DcbVersion)" />
+    <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="$(DcbVersion)" />
+    <PackageReference Include="Sekiban.Dcb.Postgres" Version="$(DcbVersion)" />
+    <PackageReference Include="Sekiban.Dcb.Sqlite" Version="$(DcbVersion)" />
+  </ItemGroup>
+</Project>

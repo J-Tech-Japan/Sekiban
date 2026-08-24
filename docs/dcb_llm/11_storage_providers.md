@@ -727,6 +727,16 @@ can escape this particular audit if a newer head later overtakes it. This is del
 claim that premature mixed-version enablement is safe. The drain-before-epoch step is the correctness boundary; a zero
 violation count is monitoring evidence, never clean-cutover proof.
 
+<!-- sek-g44:cas-non-default -->
+## Expected tag-position CAS is not a template default
+
+`CommandExecutionOptions.ExpectedTagPositions` and its `AssertEmpty` / `Exact` policies are available for an
+application that explicitly adopts the expected-tag-position protocol. They are **not enabled automatically** by a
+DCB template: a deployment must provision its store, establish the service enablement epoch, and deliberately use
+the conditional command/write APIs. A template must not seed `TagHeadEnablementEpochs`, run a migration at startup,
+or add CAS write usage merely because the package graph contains the capability. Those are production consistency
+decisions with a rollout and writer-drain requirement.
+
 ## SEK-G20 generation-aware checkpoint CAS
 
 **Version: 10.8.0 (minor).** Closes the cross-cluster shared-store hole from SEK-G18 (see

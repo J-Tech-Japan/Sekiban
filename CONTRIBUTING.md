@@ -46,4 +46,22 @@ If you've noticed that our documentation can be improved or expanded, we'd appre
 
 If you're ready to start contributing code or documentation, please submit a pull request. Our team will review your submission as soon as possible. In order for your pull request to be approved, you'll need to follow our coding and documentation guidelines.
 
+<!-- sek-g44:two-stage-template-release -->
+## DCB template release protocol
+
+DCB libraries and DCB templates are intentionally separate NuGet and Git tag series. Release a library version first
+with `dcb-vX.Y.Z`; do not publish a matching template merely because the source version was edited. After the library
+publish, use a bounded retry with a timeout to confirm that all 17 template package IDs resolve from nuget.org. Then
+move all five `SekibanDcbTemplateVersion.props` authorities to the published version and run the packaged-consumer
+gate: pack the net9 carrier, install it into an isolated `dotnet new` hive, generate all five net10 templates, restore
+only from nuget.org using an isolated package cache, build, and run the bundled tests. Only after that gate is green
+may `dcbTemplates-vX.Y.Z` publish the template package.
+
+The scheduled currency workflow compares stable `dcb-v*` and `dcbTemplates-v*` tags numerically. Pre-release and
+unparseable tags are logged and excluded. A stale but still restorable template version is a release failure, not a
+reason to skip the consumer gate.
+
+`CONTRIBUTING.md` is intentionally outside the EN/JA documentation parity gate: it is the single contributor-facing
+release procedure, while the paired materialized-view and storage-provider documents must remain semantically aligned.
+
 Thank you once again for your interest in contributing to our project. We appreciate your effort and are excited to see what you bring to our project!
