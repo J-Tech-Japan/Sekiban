@@ -10,6 +10,8 @@ internal static class Program
     private const string VersionProperty = "SekibanDcbVersion";
     private const string PropsFileName = "SekibanDcbTemplateVersion.props";
     private const string ExpectedVersion = "10.19.0";
+    private const string NonexistentPackageVersion = "999.999.999";
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     private static readonly TemplateSpec[] Templates =
     [
@@ -441,9 +443,10 @@ internal static class Program
         switch (kind)
         {
             case "broken-reference":
-                var brokenDocument = XDocument.Load(csproj, LoadOptions.PreserveWhitespace);
-                DcbReferences(brokenDocument).First().SetAttributeValue("Version", "$(MissingDcbVersion)");
-                brokenDocument.Save(csproj);
+                var brokenProps = Directory.EnumerateFiles(destination, PropsFileName, SearchOption.AllDirectories).Single();
+                var brokenPropsDocument = XDocument.Load(brokenProps, LoadOptions.PreserveWhitespace);
+                brokenPropsDocument.Descendants().Single(element => element.Name.LocalName == VersionProperty).Value = NonexistentPackageVersion;
+                brokenPropsDocument.Save(brokenProps);
                 return;
 
             case "currency":
@@ -539,7 +542,7 @@ internal static class Program
         var result = RunProcess("dotnet", "msbuild", csprojPath, "-nologo", $"-getProperty:{property}");
         return result.ExitCode == 0 &&
                (result.Output.Trim() == expected ||
-                Regex.IsMatch(result.Output, $@"\b{Regex.Escape(property)}\b[^\r\n]*{Regex.Escape(expected)}", RegexOptions.CultureInvariant) ||
+                Regex.IsMatch(result.Output, $@"\b{Regex.Escape(property)}\b[^\r\n]*{Regex.Escape(expected)}", RegexOptions.CultureInvariant, RegexTimeout) ||
                 result.Output.Contains($"\"{property}\": \"{expected}\"", StringComparison.Ordinal));
     }
 

@@ -20,7 +20,7 @@ while (( $# > 0 )); do
   esac
 done
 
-temp_root="${TMPDIR:-/tmp}"
+temp_root="$(cd -P "${TMPDIR:-/tmp}" && pwd)"
 work_root="$(mktemp -d "${temp_root%/}/sek-g44-template-validation.XXXXXX")"
 cleanup() {
   rm -rf "$work_root"
@@ -144,11 +144,54 @@ expect_failure() {
   fi
 }
 
-for mutation in broken-reference missing-props missing-import; do
+assert_unavailable_package_diagnostic() {
+  local operation="$1"
+  local output="$2"
+  local unavailable_version="$3"
+  if [[ "$output" != *"$unavailable_version"* ]] ||
+     [[ "$output" != *"Unable to find package"* && "$output" != *"NU1101"* && "$output" != *"NU1102"* ]]; then
+    echo "The unavailable-version ${operation} did not report a package-resolution diagnostic for ${unavailable_version}." >&2
+    return 1
+  fi
+}
+
+expect_unavailable_package_restore_and_build() {
+  local solution="$1"
+  local unavailable_version="$2"
+  local output
+  if output="$(run_net10 restore "$solution" --configfile "$nuget_config" --no-http-cache --nologo 2>&1)"; then
+    printf '%s\n' "$output"
+    echo "Expected the isolated nuget.org-only restore for ${unavailable_version} to fail." >&2
+    return 1
+  fi
+  printf '%s\n' "$output"
+  assert_unavailable_package_diagnostic restore "$output" "$unavailable_version"
+
+  if output="$(run_net10 build "$solution" -c Release --configfile "$nuget_config" --no-http-cache --nologo 2>&1)"; then
+    printf '%s\n' "$output"
+    echo "Expected the isolated nuget.org-only build for ${unavailable_version} to fail." >&2
+    return 1
+  fi
+  printf '%s\n' "$output"
+  assert_unavailable_package_diagnostic build "$output" "$unavailable_version"
+}
+
+for mutation in missing-props missing-import; do
   mutant="$work_root/mutant-${mutation}"
   run_net10 "$validator" mutate --source "$negative_output" --destination "$mutant" --kind "$mutation"
   expect_failure run_net10 "$validator" generated --output "$mutant" --expected-version "$version"
 done
+
+broken_reference_version="999.999.999"
+broken_reference_mutant="$work_root/mutant-broken-reference"
+run_net10 "$validator" mutate --source "$negative_output" --destination "$broken_reference_mutant" --kind broken-reference
+run_net10 "$validator" generated --output "$broken_reference_mutant" --expected-version "$broken_reference_version"
+broken_reference_solution="$(find "$broken_reference_mutant" -maxdepth 1 -name '*.slnx' -print -quit)"
+if [[ -z "$broken_reference_solution" ]]; then
+  echo "The unavailable-version mutation did not contain a solution file." >&2
+  exit 1
+fi
+expect_unavailable_package_restore_and_build "$broken_reference_solution" "$broken_reference_version"
 
 currency_mutant="$work_root/mutant-currency"
 run_net10 "$validator" mutate --source "$negative_output" --destination "$currency_mutant" --kind currency

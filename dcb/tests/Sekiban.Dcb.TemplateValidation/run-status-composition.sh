@@ -16,7 +16,7 @@ while (( $# > 0 )); do
   esac
 done
 
-temp_root="${TMPDIR:-/tmp}"
+temp_root="$(cd -P "${TMPDIR:-/tmp}" && pwd)"
 work_root="$(mktemp -d "${temp_root%/}/sek-g44-status-composition.XXXXXX")"
 trap 'rm -rf "$work_root"' EXIT
 export NUGET_PACKAGES="$work_root/nuget-packages"
@@ -27,6 +27,12 @@ net10_host="$work_root/net10-host"
 mkdir -p "$net10_host"
 printf '%s\n' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allowPrerelease":false}}' > "$net10_host/global.json"
 run_net10() { (cd "$net10_host" && dotnet "$@"); }
+legacy_nuget_packages="$work_root/legacy-nuget-packages"
+legacy_nuget_http_cache="$work_root/legacy-nuget-http-cache"
+mkdir -p "$legacy_nuget_packages" "$legacy_nuget_http_cache"
+run_legacy_net10() {
+  (cd "$net10_host" && NUGET_PACKAGES="$legacy_nuget_packages" NUGET_HTTP_CACHE_PATH="$legacy_nuget_http_cache" dotnet "$@");
+}
 
 nuget_config="$work_root/NuGet.Config"
 printf '%s\n' \
@@ -40,19 +46,20 @@ printf '%s\n' \
 composition_project="$script_dir/Sekiban.Dcb.TemplateComposition.csproj"
 run_net10 restore "$composition_project" --configfile "$nuget_config" --no-http-cache -p:DcbVersion="$version" --nologo
 run_net10 build "$composition_project" -c Release --no-restore -p:DcbVersion="$version" --nologo
+run_net10 "$script_dir/bin/Release/net10.0/Sekiban.Dcb.TemplateComposition.dll"
 
-legacy_project="$work_root/legacy/LegacyCore.csproj"
-mkdir -p "$(dirname "$legacy_project")"
-printf '%s\n' \
-  '<Project Sdk="Microsoft.NET.Sdk">' \
-  '  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>' \
-  '  <ItemGroup><PackageReference Include="Sekiban.Dcb.Core" Version="10.8.2" /></ItemGroup>' \
-  '</Project>' > "$legacy_project"
-run_net10 restore "$legacy_project" --configfile "$nuget_config" --no-http-cache --nologo
-legacy_core="$(find "$NUGET_PACKAGES/sekiban.dcb.core/10.8.2/lib" -name Sekiban.Dcb.Core.dll -print -quit)"
-if [[ -z "$legacy_core" ]]; then
-  echo "Could not locate the frozen 10.8.2 Sekiban.Dcb.Core assembly." >&2
+legacy_project="$script_dir/Sekiban.Dcb.TemplateLegacyComposition.csproj"
+run_legacy_net10 restore "$legacy_project" --configfile "$nuget_config" --no-http-cache -p:DcbVersion=10.8.2 --nologo
+run_legacy_net10 build "$legacy_project" -c Release --no-restore -p:DcbVersion=10.8.2 --nologo
+
+legacy_output=""
+if legacy_output="$(run_legacy_net10 "$script_dir/bin/LegacyComposition/Release/net10.0/Sekiban.Dcb.TemplateLegacyComposition.dll" 2>&1)"; then
+  printf '%s\n' "$legacy_output"
+  echo "The isolated 10.8.2 four-provider graph unexpectedly satisfied the status-reader composition proof." >&2
   exit 1
 fi
-
-run_net10 "$script_dir/bin/Release/net10.0/Sekiban.Dcb.TemplateComposition.dll" --legacy-core-path "$legacy_core"
+printf '%s\n' "$legacy_output"
+if [[ "$legacy_output" != *"Legacy 10.8.2 four-provider composition failed as required"* ]]; then
+  echo "The isolated legacy graph failed without the expected four-provider composition diagnostic." >&2
+  exit 1
+fi

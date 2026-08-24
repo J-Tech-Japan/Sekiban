@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="StatusCompositionProgram.cs" />
+    <Compile Remove="LegacyStatusCompositionProgram.cs" />
   </ItemGroup>
 </Project>

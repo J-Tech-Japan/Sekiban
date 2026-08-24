@@ -38,7 +38,27 @@ require_value() {
 }
 
 version_is_stable() {
-  [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\+[0-9A-Za-z.-]+)?$ ]]
+  [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\+[0-9A-Za-z.-]+)?$ ]]
+}
+
+version_has_leading_zero_component() {
+  local core="${1%%+*}"
+  local major minor patch
+  IFS='.' read -r major minor patch <<< "$core"
+  [[ ( ${#major} -gt 1 && "$major" == 0* ) ||
+     ( ${#minor} -gt 1 && "$minor" == 0* ) ||
+     ( ${#patch} -gt 1 && "$patch" == 0* ) ]]
+}
+
+stable_tag_rejection_reason() {
+  local value="$1"
+  if [[ "$value" == *-* ]]; then
+    printf '%s\n' "pre-release versions are excluded from stable currency comparison"
+  elif version_has_leading_zero_component "$value"; then
+    printf '%s\n' "leading-zero numeric component is not valid strict SemVer"
+  else
+    printf '%s\n' "not a strict stable semantic version"
+  fi
 }
 
 version_core() {
@@ -88,7 +108,7 @@ latest_stable_tag_version() {
         latest="$value"
       fi
     else
-      echo "Excluded ${label} tag '${tag}': not a stable semantic version." >&2
+      echo "Excluded ${label} tag '${tag}': $(stable_tag_rejection_reason "$value")." >&2
     fi
   done < <(tags_from_source "$repo_root" "$prefix" "$tags_file")
 
@@ -237,6 +257,8 @@ self_test() {
   local exclusion_output
   exclusion_output="$(check_drift "$repo_root" "$fixture_root/library-10.19.0-with-exclusions.txt" "$fixture_root/template-10.19.0-with-exclusions.txt" 2>&1)"
   if [[ "$exclusion_output" != *"Excluded library tag 'dcb-v10.20.0-preview.1'"* ]] ||
+     [[ "$exclusion_output" != *"Excluded library tag 'dcb-v10.1.06': leading-zero numeric component is not valid strict SemVer."* ]] ||
+     [[ "$exclusion_output" != *"Excluded template tag 'dcbTemplates-v10.1.06': leading-zero numeric component is not valid strict SemVer."* ]] ||
      [[ "$exclusion_output" != *"Excluded template tag 'dcbTemplates-vnot-a-version'"* ]]; then
     echo "Stable-semver exclusion logging was not observed." >&2
     return 1

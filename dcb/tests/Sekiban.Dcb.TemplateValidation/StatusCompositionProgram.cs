@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.Loader;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sekiban.Dcb.Actors;
@@ -18,18 +17,13 @@ internal static class StatusCompositionProgram
     {
         try
         {
-            VerifyProvider("PostgreSQL", services => services.AddSekibanDcbPostgres("Host=localhost;Database=template_validation;Username=postgres;Password=postgres"));
-            VerifyProvider("Cosmos", services => services.AddSekibanDcbCosmosDb("AccountEndpoint=https://localhost:8081/;AccountKey=template-validation"));
+            VerifyProvider("PostgreSQL WithAspire", services => services.AddSekibanDcbPostgresWithAspire());
+            VerifyProvider("Cosmos WithAspire", services => services.AddSekibanDcbCosmosDbWithAspire(options =>
+                options.WriteFailurePolicy = CosmosWriteFailurePolicy.RollForward));
             VerifyProvider("SQLite", services => services.AddSekibanDcbSqlite(Path.Combine(Path.GetTempPath(), "template-validation.db")));
             VerifyProvider("DynamoDB", services => services.AddSekibanDcbDynamoDbWithAspire());
             Assert(new MvOptions().InitializationMode == MvInitializationMode.CreateOrEnsure,
                 "MvOptions no longer defaults to CreateOrEnsure.");
-
-            var legacyPath = GetOption(args, "--legacy-core-path");
-            if (legacyPath is not null)
-            {
-                VerifyLegacy1018Absence(legacyPath);
-            }
 
             Console.WriteLine("All four provider extensions resolve exactly one status reader and serialized status reader.");
             return 0;
@@ -65,41 +59,7 @@ internal static class StatusCompositionProgram
             $"{providerName} did not resolve exactly one ISerializedProjectionStatusReader.");
     }
 
-    private static void VerifyLegacy1018Absence(string legacyCorePath)
-    {
-        legacyCorePath = Path.GetFullPath(legacyCorePath);
-        Assert(File.Exists(legacyCorePath), $"The frozen 10.8.2 Sekiban.Dcb.Core assembly was not restored: {legacyCorePath}");
-
-        var loadContext = new AssemblyLoadContext("sek-g44-legacy-10-8-2", isCollectible: true);
-        try
-        {
-            var legacyAssembly = loadContext.LoadFromAssemblyPath(legacyCorePath);
-            var extensionType = legacyAssembly.GetType("Sekiban.Dcb.Actors.ProjectionStatusServiceCollectionExtensions", throwOnError: false);
-            var registrationExists = extensionType?.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Any(method => method.Name == "AddSekibanDcbProjectionStatusReader") == true;
-            Assert(!registrationExists,
-                "The 10.8.2 frozen package unexpectedly contains AddSekibanDcbProjectionStatusReader; the negative did not distinguish the 10.19 provider composition.");
-        }
-        finally
-        {
-            loadContext.Unload();
-        }
-    }
-
     private static T CreateNullProxy<T>() where T : class => DispatchProxy.Create<T, NullDispatchProxy>();
-
-    private static string? GetOption(IReadOnlyList<string> arguments, string name)
-    {
-        for (var index = 0; index < arguments.Count - 1; index++)
-        {
-            if (arguments[index] == name)
-            {
-                return arguments[index + 1];
-            }
-        }
-
-        return null;
-    }
 
     private static void Assert(bool condition, string message)
     {
