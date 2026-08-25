@@ -539,5 +539,14 @@ jobs:
       run: |
         ./eng/validate-net10-serialization.sh --repo-root "$GITHUB_WORKSPACE" --self-test
     - name: Validate browser IndexedDb default runtime
+      env:
+        SEKIBAN_NET10_INDEXEDDB_BROWSER_ARTIFACTS: ${{ runner.temp }}/sek-g49-indexeddb-browser-artifacts
       run: |
         ./eng/validate-net10-indexeddb-browser.sh --repo-root "$GITHUB_WORKSPACE" --self-test
+    - name: Upload IndexedDb browser gate evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: net10-slice-b-indexeddb-browser-evidence
+        path: ${{ runner.temp }}/sek-g49-indexeddb-browser-artifacts
+        if-no-files-found: error

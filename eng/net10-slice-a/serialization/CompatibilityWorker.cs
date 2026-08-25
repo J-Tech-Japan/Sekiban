@@ -119,9 +119,11 @@ public sealed record DurableVector
 
         return new DurableVector
         {
-            // Keep the frozen 0.24.x global type identity so the actual pinned
-            // net8/net9 reader processes can consume a vector written by net10.
-            RuntimeTypeName = CompatibilityTypeIdentity.LegacyDerivedEventAssemblyQualifiedName,
+            // Persist the actual runtime identity emitted by this type-bearing
+            // worker assembly. The pinned net8/net9 reader processes and the
+            // current net10 worker must each resolve this exact frozen value.
+            RuntimeTypeName = eventPayload.GetType().AssemblyQualifiedName
+                ?? throw new InvalidOperationException("derived event has no assembly-qualified runtime type identity"),
             EventJson = eventJson,
             CasingEventJson = eventJson
                 .Replace("\"Payload\"", "\"pAyLoAd\"", StringComparison.Ordinal)
@@ -140,9 +142,14 @@ public sealed record DurableVector
     public static void Verify(DurableVector vector)
     {
         Require(vector.SchemaVersion == Schema, "unexpected durable vector schema");
+        var expectedRuntimeType = typeof(DerivedCompatibilityEvent);
+        var resolvedRuntimeType = Type.GetType(vector.RuntimeTypeName, throwOnError: false);
         Require(
-            CompatibilityTypeIdentity.Resolve(vector.RuntimeTypeName) == typeof(DerivedCompatibilityEvent),
+            resolvedRuntimeType == expectedRuntimeType,
             "runtime Type did not resolve to the derived event type");
+        Require(
+            vector.RuntimeTypeName == expectedRuntimeType.AssemblyQualifiedName,
+            "runtime Type identity did not match the actual derived event type");
         Require(!vector.EventJson.Contains("\"Optional\"", StringComparison.Ordinal), "null event property was not omitted by Sekiban JSON options");
 
         VerifyEvent(DeserializeEvent(vector.EventJson), "Sekiban event");
@@ -261,19 +268,4 @@ public sealed record DurableVector
             throw new InvalidOperationException(message);
         }
     }
-}
-
-internal static class CompatibilityTypeIdentity
-{
-    // This is the exact public type identity frozen in the old net8/net9
-    // vectors. The current helper type lives in a named namespace, while the
-    // vector keeps this identity so an actual 0.24.x reader resolves it.
-    public const string LegacyDerivedEventAssemblyQualifiedName =
-        "DerivedCompatibilityEvent, Sekiban.SerializationCompatibility.Worker, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null";
-
-    public static Type Resolve(string runtimeTypeName) =>
-        runtimeTypeName == LegacyDerivedEventAssemblyQualifiedName
-            ? typeof(DerivedCompatibilityEvent)
-            : Type.GetType(runtimeTypeName)
-              ?? throw new InvalidOperationException("runtime Type name could not be resolved");
 }

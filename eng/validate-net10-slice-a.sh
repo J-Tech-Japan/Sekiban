@@ -478,7 +478,6 @@ validate_package_assets() {
   local package_output="$work_dir/packages"
   local repository_commit="0123456789abcdef0123456789abcdef01234567"
   local project package_id expected archive actual_assets expected_nuspec actual_nuspec packed_count=0
-  local -a mutation_pack_properties=()
 
   mkdir -p "$cache_root/dotnet-cli" "$cache_root/nuget-packages" "$cache_root/nuget-http-cache" "$package_output"
   export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-$cache_root/dotnet-cli}"
@@ -486,12 +485,20 @@ validate_package_assets() {
   export NUGET_HTTP_CACHE_PATH="${NUGET_HTTP_CACHE_PATH:-$cache_root/nuget-http-cache}"
   export npm_config_cache="${npm_config_cache:-$cache_root/npm-cache}"
   # The normal gate deliberately performs all twelve producers' full package
-  # path. A targeted root-nuspec mutation shares that exact pack/normalize
-  # code, but SBOM generation is irrelevant to the root nuspec discriminant
-  # and can make the single-mutant counter-proof needlessly network-bound.
-  if [[ -n "$only_package" ]]; then
-    mutation_pack_properties=(-p:GenerateSBOM=false)
-  fi
+  # path. This validator compares only the produced lib/ref shape and root
+  # nuspec, so disable unrelated SBOM work for both the full and targeted
+  # paths. Otherwise the macOS pack process can remain in SBOM generation
+  # after emitting an archive, leaving the required twelve-package proof
+  # incomplete.
+  # Keep the pack options in positional parameters, not an empty array: Bash
+  # 3.2 expands an empty local array under nounset as an unbound variable and
+  # can falsely return success after the first package.
+  set -- \
+    -p:GeneratePackageOnBuild=false \
+    -p:GenerateSBOM=false \
+    -p:PackageVersion=0.0.0-sek-g49 \
+    -p:Version=0.0.0-sek-g49 \
+    -p:RepositoryCommit="$repository_commit"
   while IFS=$'\034' read -r project package_id expected; do
     if [[ -n "$only_package" && "$package_id" != "$only_package" ]]; then
       continue
@@ -511,11 +518,7 @@ validate_package_assets() {
       --no-restore \
       --nologo \
       --output "$package_output" \
-      -p:GeneratePackageOnBuild=false \
-      -p:PackageVersion=0.0.0-sek-g49 \
-      -p:Version=0.0.0-sek-g49 \
-      -p:RepositoryCommit="$repository_commit" \
-      "${mutation_pack_properties[@]}"
+      "$@"
 
     archive="$package_output/$package_id.0.0.0-sek-g49.nupkg"
     [[ -f "$archive" ]] || die "pack did not create $archive"
@@ -544,9 +547,14 @@ validate_package_assets() {
       "$actual_nuspec"
   done < <(records3 "$baseline_dir/package-assets.tsv")
 
-  if [[ -n "$only_package" && "$packed_count" != "1" ]]; then
-    die "--only-package is not one of the twelve packaged producers: $only_package"
+  if [[ -n "$only_package" ]]; then
+    [[ "$packed_count" == "1" ]] ||
+      die "--only-package is not one of the twelve packaged producers: $only_package"
+  else
+    [[ "$packed_count" == "12" ]] ||
+      die "normal full package validation must pack all twelve producers, found $packed_count"
   fi
+  printf 'net10 slice B package validation completed %s producer(s)\n' "$packed_count"
 }
 
 validate_packages() {

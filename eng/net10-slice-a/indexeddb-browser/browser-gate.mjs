@@ -1,15 +1,35 @@
 import { chromium } from "playwright";
 import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
-import { extname, resolve, sep } from "node:path";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { extname, join, resolve, sep } from "node:path";
 
-const [publishedRoot, runtimePath] = process.argv.slice(2);
+const [publishedRoot, runtimePath, artifactDirectory] = process.argv.slice(2);
 
-if (!publishedRoot || !runtimePath) {
-	throw new Error("usage: browser-gate.mjs <published-wwwroot> <runtime-path>");
+if (!publishedRoot || !runtimePath || !artifactDirectory) {
+	throw new Error("usage: browser-gate.mjs <published-wwwroot> <runtime-path> <artifact-directory>");
 }
 
 const root = resolve(publishedRoot);
+const artifacts = resolve(artifactDirectory);
+const diagnosticsPath = join(artifacts, "browser-gate-diagnostics.json");
+const screenshotPath = join(artifacts, "browser-gate-screenshot.png");
+const tracePath = join(artifacts, "browser-gate-trace.zip");
+const diagnostics = {
+	artifactDirectory: artifacts,
+	phase: "starting",
+	result: "running",
+	artifacts: {
+		diagnostics: diagnosticsPath,
+		screenshot: screenshotPath,
+		trace: tracePath,
+	},
+};
+
+await mkdir(artifacts, { recursive: true });
+const writeDiagnostics = async () =>
+	await writeFile(diagnosticsPath, `${JSON.stringify(diagnostics, null, 2)}\n`, "utf8");
+await writeDiagnostics();
+
 const contentTypes = new Map([
 	[".html", "text/html; charset=utf-8"],
 	[".js", "text/javascript; charset=utf-8"],
@@ -54,6 +74,8 @@ if (!address || typeof address === "string") {
 	throw new Error("browser gate static server did not expose a TCP address");
 }
 const url = `http://127.0.0.1:${address.port}`;
+diagnostics.url = url;
+await writeDiagnostics();
 
 const expected = {
 	Id: "6de901b9-14eb-45f8-9c5c-9ab2a0f54ac5",
@@ -71,9 +93,16 @@ const expected = {
 };
 
 let browser;
+let context;
+let page;
+let tracingStarted = false;
 try {
+	diagnostics.phase = "launching-browser";
 	browser = await chromium.launch({ headless: true });
-	const page = await browser.newPage();
+	context = await browser.newContext();
+	await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+	tracingStarted = true;
+	page = await context.newPage();
 	const runtimeResponses = [];
 	page.on("response", (response) => {
 		if (new URL(response.url()).pathname.endsWith(runtimePath)) {
@@ -93,6 +122,9 @@ try {
 		error: document.body.dataset.sekG49BrowserError,
 		record: document.body.dataset.sekG49BrowserRecord,
 	}));
+	diagnostics.phase = "asserting-browser-state";
+	diagnostics.state = state;
+	diagnostics.runtimeResponses = runtimeResponses;
 	if (state.state !== "passed") {
 		throw new Error(`browser gate reported failure: ${state.error ?? "unknown failure"}`);
 	}
@@ -133,11 +165,37 @@ try {
 		throw new Error("browser IndexedDB does not contain the record written through BlazorJsRuntime");
 	}
 
+	diagnostics.phase = "passed";
+	diagnostics.result = "passed";
 	console.log("IndexedDB browser gate passed: default BlazorJsRuntime imported packed runtime and round-tripped the record");
+
+} catch (error) {
+	diagnostics.phase = "failed";
+	diagnostics.result = "failed";
+	diagnostics.error = {
+		message: error instanceof Error ? error.message : String(error),
+		stack: error instanceof Error ? error.stack : undefined,
+	};
+	throw error;
 } finally {
+	if (page) {
+		try {
+			await page.screenshot({ path: screenshotPath, fullPage: true });
+		} catch (error) {
+			diagnostics.screenshotError = error instanceof Error ? error.message : String(error);
+		}
+	}
+	if (tracingStarted && context) {
+		try {
+			await context.tracing.stop({ path: tracePath });
+		} catch (error) {
+			diagnostics.traceError = error instanceof Error ? error.message : String(error);
+		}
+	}
 	if (browser) {
 		await browser.close();
 	}
+	await writeDiagnostics();
 	await new Promise((resolveClose, rejectClose) =>
 		server.close((error) => (error ? rejectClose(error) : resolveClose())),
 	);

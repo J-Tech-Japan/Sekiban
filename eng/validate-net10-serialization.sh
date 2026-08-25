@@ -13,7 +13,8 @@ Usage: eng/validate-net10-serialization.sh [options]
 
 Options:
   --repo-root PATH  Repository root (default: this script's repository).
-  --self-test       Corrupt a frozen semantic field and prove verification fails.
+  --self-test       Corrupt frozen semantic and runtime-Type fields and prove
+                    every relevant reader rejects them.
 EOF
 }
 
@@ -217,6 +218,46 @@ expect_semantic_failure() {
   printf 'serialization semantic mutant failed at the intended assertion\n'
 }
 
+expect_runtime_type_identity_failure() {
+  local label="$1"
+  shift
+  local log_file="$work_dir/$label-runtime-type-mutant.log"
+
+  if "$@" >"$log_file" 2>&1; then
+    die "serialization runtime Type identity mutant unexpectedly passed: $label"
+  fi
+  grep -Fq "runtime Type did not resolve to the derived event type" "$log_file" ||
+    die "serialization runtime Type identity mutant did not fail at the Type.GetType assertion: $label"
+  printf 'serialization runtime Type identity mutant failed at the Type.GetType assertion: %s\n' "$label"
+}
+
+validate_worker_identity_contract() {
+  grep -Fq 'eventPayload.GetType().AssemblyQualifiedName' "$fixture_dir/CompatibilityWorker.cs" ||
+    die "serialization worker does not persist the actual derived event runtime identity"
+  grep -Fq 'Type.GetType(vector.RuntimeTypeName, throwOnError: false)' "$fixture_dir/CompatibilityWorker.cs" ||
+    die "serialization worker does not resolve the frozen runtime identity through Type.GetType"
+  if grep -Fq 'CompatibilityTypeIdentity' "$fixture_dir/CompatibilityWorker.cs"; then
+    die "serialization worker must not special-case a frozen runtime type identity"
+  fi
+}
+
+assert_frozen_identity_is_emitted_by_old_writer() {
+  local label="$1"
+  local worker_dir="$2"
+  local target_framework="$3"
+  local runtime_version="$4"
+  local fixture="$5"
+  local produced="$work_dir/$label-produced.json"
+  local expected_identity actual_identity
+
+  run_old_worker "$worker_dir" "$target_framework" "$runtime_version" write "$produced"
+  expected_identity="$(jq -r '.RuntimeTypeName' "$fixture")"
+  actual_identity="$(jq -r '.RuntimeTypeName' "$produced")"
+  [[ "$actual_identity" == "$expected_identity" ]] ||
+    die "frozen runtime Type identity was not emitted by the actual $label writer"
+  printf 'frozen runtime Type identity was emitted by the actual %s writer\n' "$label"
+}
+
 run_gate() {
   local feed="$work_dir/current-feed"
   local new_worker old_net8_worker old_net9_worker new_vector fixture
@@ -227,6 +268,7 @@ run_gate() {
   need_file "$fixture_dir/CompatibilityWorker.csproj.template"
   need_file "$fixture_dir/old-0.24.3-net8.json"
   need_file "$fixture_dir/old-0.24.3-net9.json"
+  validate_worker_identity_contract
   ensure_exact_sdk
 
   pack_current_graph "$feed"
@@ -238,11 +280,33 @@ run_gate() {
   build_worker "$old_net8_worker" net8.0 0.24.3
   build_worker "$old_net9_worker" net9.0 0.24.3
 
+  assert_frozen_identity_is_emitted_by_old_writer \
+    "old-net8" \
+    "$old_net8_worker" \
+    net8.0 \
+    8.0.16 \
+    "$fixture_dir/old-0.24.3-net8.json"
+  assert_frozen_identity_is_emitted_by_old_writer \
+    "old-net9" \
+    "$old_net9_worker" \
+    net9.0 \
+    9.0.9 \
+    "$fixture_dir/old-0.24.3-net9.json"
+
   # Frozen 0.24.3 writers must be semantically accepted by current net10.
   for fixture in \
     "$fixture_dir/old-0.24.3-net8.json" \
     "$fixture_dir/old-0.24.3-net9.json"; do
     run_current_worker "$new_worker" verify "$fixture"
+  done
+
+  # The frozen identities must resolve in both real pinned reader processes,
+  # rather than only in the current worker that created the vector fixture.
+  for fixture in \
+    "$fixture_dir/old-0.24.3-net8.json" \
+    "$fixture_dir/old-0.24.3-net9.json"; do
+    run_old_worker "$old_net8_worker" net8.0 8.0.16 verify "$fixture"
+    run_old_worker "$old_net9_worker" net9.0 9.0.9 verify "$fixture"
   done
 
   # The current net10 writer must be read by actual pinned old-target processes.
@@ -252,10 +316,23 @@ run_gate() {
   run_old_worker "$old_net9_worker" net9.0 9.0.9 verify "$new_vector"
 
   if [[ "$run_self_test" == true ]]; then
-    local mutant="$work_dir/frozen-snapshot-mutant.json"
-    cp "$fixture_dir/old-0.24.3-net8.json" "$mutant"
-    perl -0pi -e 's/\\u0022SavedVersion\\u0022:43/\\u0022SavedVersion\\u0022:99/g' "$mutant"
-    expect_semantic_failure "$new_worker" "$mutant"
+    local semantic_mutant="$work_dir/frozen-snapshot-mutant.json"
+    local identity_mutant="$work_dir/frozen-runtime-type-mutant.json"
+    cp "$fixture_dir/old-0.24.3-net8.json" "$semantic_mutant"
+    perl -0pi -e 's/\\u0022SavedVersion\\u0022:43/\\u0022SavedVersion\\u0022:99/g' "$semantic_mutant"
+    expect_semantic_failure "$new_worker" "$semantic_mutant"
+
+    cp "$fixture_dir/old-0.24.3-net8.json" "$identity_mutant"
+    perl -0pi -e 's/Sekiban\.SerializationCompatibility\.DerivedCompatibilityEvent/MissingCompatibilityEvent/' "$identity_mutant"
+    expect_runtime_type_identity_failure \
+      "current-net10" \
+      run_current_worker "$new_worker" verify "$identity_mutant"
+    expect_runtime_type_identity_failure \
+      "old-net8" \
+      run_old_worker "$old_net8_worker" net8.0 8.0.16 verify "$identity_mutant"
+    expect_runtime_type_identity_failure \
+      "old-net9" \
+      run_old_worker "$old_net9_worker" net9.0 9.0.9 verify "$identity_mutant"
   fi
 }
 

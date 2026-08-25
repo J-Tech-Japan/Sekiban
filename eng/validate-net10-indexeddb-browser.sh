@@ -45,8 +45,10 @@ repo_root="$(cd "$repo_root" && pwd -P)"
 fixture_dir="$repo_root/eng/net10-slice-a/indexeddb-browser"
 tmp_base="${TMPDIR:-/tmp}"
 work_dir="$(mktemp -d "$tmp_base/sek-g49-indexeddb-browser.XXXXXX")"
+work_dir="$(cd "$work_dir" && pwd -P)"
 cache_root="${SEKIBAN_NET10_INDEXEDDB_BROWSER_CACHE:-$tmp_base/sek-g49-indexeddb-browser-cache}"
 sdk_dotnet="$(command -v dotnet)"
+artifact_dir=""
 
 cleanup() {
   rm -rf "$work_dir"
@@ -57,6 +59,16 @@ die() {
   printf 'net10 IndexedDB browser gate: %s\n' "$*" >&2
   exit 1
 }
+
+artifact_dir="${SEKIBAN_NET10_INDEXEDDB_BROWSER_ARTIFACTS:-$tmp_base/sek-g49-indexeddb-browser-artifacts}"
+mkdir -p "$artifact_dir"
+artifact_dir="$(cd "$artifact_dir" && pwd -P)"
+case "$artifact_dir" in
+  "$work_dir"|"$work_dir"/*)
+    die "browser artifacts must be outside the trap-deleted work directory"
+    ;;
+esac
+printf 'browser harness started\nartifact_dir=%s\n' "$artifact_dir" > "$artifact_dir/harness-diagnostics.txt"
 
 need() {
   local required_command="$1"
@@ -83,6 +95,37 @@ ensure_exact_sdk() {
     die "browser harness must build with the exact 10.0.400 SDK, found $actual"
 }
 
+validate_browser_artifact_contract() {
+  local workflow="$repo_root/.github/workflows/run_test.yml"
+  local compatibility_job
+
+  grep -Fq 'browser-gate-trace.zip' "$fixture_dir/browser-gate.mjs" ||
+    die "browser gate does not emit a Playwright trace artifact"
+  grep -Fq 'browser-gate-screenshot.png' "$fixture_dir/browser-gate.mjs" ||
+    die "browser gate does not emit a screenshot artifact"
+  grep -Fq 'browser-gate-diagnostics.json' "$fixture_dir/browser-gate.mjs" ||
+    die "browser gate does not emit a diagnostics artifact"
+
+  need_file "$workflow"
+  compatibility_job="$(awk '
+    /^  net10SliceBCompatibility:$/ { capture = 1 }
+    capture && /^  [[:alnum:]_]+:$/ && $0 != "  net10SliceBCompatibility:" { exit }
+    capture { print }
+  ' "$workflow")"
+  [[ -n "$compatibility_job" ]] ||
+    die "net10SliceBCompatibility is missing from the CI workflow"
+  printf '%s\n' "$compatibility_job" | grep -Fq 'SEKIBAN_NET10_INDEXEDDB_BROWSER_ARTIFACTS: ${{ runner.temp }}/sek-g49-indexeddb-browser-artifacts' ||
+    die "net10SliceBCompatibility does not route browser artifacts outside the work directory"
+  printf '%s\n' "$compatibility_job" | grep -Fq 'name: Upload IndexedDb browser gate evidence' ||
+    die "net10SliceBCompatibility does not upload browser gate evidence"
+  printf '%s\n' "$compatibility_job" | grep -Fq 'if: always()' ||
+    die "net10SliceBCompatibility browser artifact upload is not unconditional"
+  printf '%s\n' "$compatibility_job" | grep -Fq 'uses: actions/upload-artifact@v4' ||
+    die "net10SliceBCompatibility does not use actions/upload-artifact for browser evidence"
+  printf '%s\n' "$compatibility_job" | grep -Fq 'path: ${{ runner.temp }}/sek-g49-indexeddb-browser-artifacts' ||
+    die "net10SliceBCompatibility does not upload the retained browser artifact path"
+}
+
 validate_fixture() {
   need_file "$fixture_dir/BrowserGate.csproj.template"
   need_file "$fixture_dir/Program.cs"
@@ -102,6 +145,7 @@ validate_fixture() {
     die "browser consumer does not exercise an IndexedDB write"
   grep -Fq 'GetEventsAsync(new DbEventQuery())' "$fixture_dir/App.razor" ||
     die "browser consumer does not exercise an IndexedDB read"
+  validate_browser_artifact_contract
 }
 
 pack_current_packages() {
@@ -195,7 +239,20 @@ run_browser_consumer() {
 
   node "$fixture_dir/browser-gate.mjs" \
     "$consumer/publish/wwwroot" \
-    "/_content/Sekiban.Infrastructure.IndexedDb/sekiban-runtime.mjs"
+    "/_content/Sekiban.Infrastructure.IndexedDb/sekiban-runtime.mjs" \
+    "$artifact_dir"
+  assert_browser_evidence
+}
+
+assert_browser_evidence() {
+  local artifact
+  for artifact in \
+    browser-gate-trace.zip \
+    browser-gate-screenshot.png \
+    browser-gate-diagnostics.json; do
+    [[ -s "$artifact_dir/$artifact" ]] ||
+      die "browser gate did not retain required artifact: $artifact"
+  done
 }
 
 copy_mutant() {
@@ -222,8 +279,10 @@ expect_browser_failure() {
   local mutant_root="$2"
   local expected_message="$3"
   local log_file="$work_dir/$label.log"
+  local mutation_artifact_dir="$work_dir/$label-artifacts"
 
-  if bash "$script_path" --repo-root "$mutant_root" >"$log_file" 2>&1; then
+  if SEKIBAN_NET10_INDEXEDDB_BROWSER_ARTIFACTS="$mutation_artifact_dir" \
+    bash "$script_path" --repo-root "$mutant_root" >"$log_file" 2>&1; then
     die "IndexedDB browser mutation unexpectedly passed: $label"
   fi
   grep -Fq "$expected_message" "$log_file" || {
@@ -255,6 +314,37 @@ run_self_tests() {
     "init"
 }
 
+run_artifact_self_tests() {
+  local mutant
+
+  mutant="$work_dir/mutant-browser-artifact-production"
+  copy_mutant "$mutant"
+  perl -0pi -e 's/browser-gate-trace\.zip/browser-gate-trace-removed.zip/' \
+    "$mutant/eng/net10-slice-a/indexeddb-browser/browser-gate.mjs"
+  expect_browser_failure \
+    "browser-artifact-production" \
+    "$mutant" \
+    "browser gate does not emit a Playwright trace artifact"
+
+  mutant="$work_dir/mutant-browser-artifact-upload"
+  copy_mutant "$mutant"
+  perl -0pi -e 's/actions\/upload-artifact\@v4/actions\/upload-browser-evidence\@v4/' \
+    "$mutant/.github/workflows/run_test.yml"
+  expect_browser_failure \
+    "browser-artifact-upload" \
+    "$mutant" \
+    "net10SliceBCompatibility does not use actions/upload-artifact for browser evidence"
+
+  mutant="$work_dir/mutant-browser-artifact-upload-condition"
+  copy_mutant "$mutant"
+  perl -0pi -e 's/if: always\(\)/if: success()/g' \
+    "$mutant/.github/workflows/run_test.yml"
+  expect_browser_failure \
+    "browser-artifact-upload-condition" \
+    "$mutant" \
+    "net10SliceBCompatibility browser artifact upload is not unconditional"
+}
+
 need dotnet
 need npm
 need node
@@ -265,6 +355,11 @@ need perl
 need cmp
 
 validate_fixture
+if [[ "$run_self_test" == true ]]; then
+  # These fail at fixture/workflow validation, before a local browser sandbox
+  # can obscure the artifact-route counter-proofs.
+  run_artifact_self_tests
+fi
 ensure_exact_sdk
 ensure_browser
 feed="$work_dir/current-feed"
