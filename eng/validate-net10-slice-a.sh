@@ -103,6 +103,10 @@ need_baselines() {
   need_file "$baseline_dir/package-reference-versions.tsv"
   need_file "$baseline_dir/package-assets.tsv"
   need_file "$baseline_dir/ci-command-matrix.tsv"
+  [[ -d "$baseline_dir/package-nuspecs" ]] ||
+    die "required package nuspec baseline directory is missing"
+  [[ "$(find "$baseline_dir/package-nuspecs" -type f -name '*.nuspec' | wc -l | tr -d ' ')" == "12" ]] ||
+    die "expected twelve root nuspec baselines"
 }
 
 validate_root_authority() {
@@ -318,9 +322,35 @@ build_package_reference_inventory() {
     die "expected 244 PackageReference versions"
 }
 
+normalize_root_nuspec() {
+  local archive="$1"
+  local package_id="$2"
+  local output="$3"
+  local root_nuspecs root_nuspec root_count
+
+  root_nuspecs="$(unzip -Z1 "$archive" | grep -E '^[^/]+\.nuspec$' || true)"
+  root_count="$(printf '%s\n' "$root_nuspecs" | sed '/^$/d' | wc -l | tr -d ' ')"
+  [[ "$root_count" == "1" ]] ||
+    die "package must contain exactly one root nuspec: $package_id"
+  root_nuspec="$root_nuspecs"
+  [[ "$root_nuspec" == "$package_id.nuspec" ]] ||
+    die "root nuspec identity changed for $package_id: found $root_nuspec"
+
+  unzip -p "$archive" "$root_nuspec" |
+    perl -0pe 's/^\xEF\xBB\xBF//; s/\r\n?/\n/g; s/\n*\z/\n/; s{<version>0\.0\.0-sek-g48</version>}{<version>__SEK_G48_PACKAGE_VERSION__</version>}g; s{commit="[0-9a-f]{40}"}{commit="__SEK_G48_SOURCE_COMMIT__"}g' \
+      > "$output"
+
+  grep -Fq "<id>$package_id</id>" "$output" ||
+    die "normalized nuspec identity changed for $package_id"
+  grep -Fq '<version>__SEK_G48_PACKAGE_VERSION__</version>' "$output" ||
+    die "normalized nuspec did not normalize synthetic package version for $package_id"
+  grep -Fq 'commit="__SEK_G48_SOURCE_COMMIT__"' "$output" ||
+    die "normalized nuspec did not normalize source commit for $package_id"
+}
+
 validate_package_assets() {
   local package_output="$work_dir/packages"
-  local project package_id expected archive actual_assets
+  local project package_id expected archive actual_assets expected_nuspec actual_nuspec
 
   mkdir -p "$cache_root/dotnet-cli" "$cache_root/nuget-packages" "$cache_root/nuget-http-cache" "$package_output"
   export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-$cache_root/dotnet-cli}"
@@ -356,6 +386,13 @@ validate_package_assets() {
     )"
     [[ "$actual_assets" == "$expected" ]] ||
       die "package assets changed for $package_id: expected $expected, found $actual_assets"
+
+    expected_nuspec="$baseline_dir/package-nuspecs/$package_id.nuspec"
+    actual_nuspec="$work_dir/$package_id.nuspec"
+    need_file "$expected_nuspec"
+    normalize_root_nuspec "$archive" "$package_id" "$actual_nuspec"
+    diff -u "$expected_nuspec" "$actual_nuspec" ||
+      die "package nuspec changed for $package_id"
   done < <(records3 "$baseline_dir/package-assets.tsv")
 }
 
@@ -492,6 +529,23 @@ expect_failure() {
   printf 'mutation self-test failed as required: %s\n' "$label"
 }
 
+expect_nuspec_only_failure() {
+  local label="$1"
+  local mutant_root="$2"
+  local package_id="$3"
+  local log_file="$work_dir/$label.log"
+
+  if bash "$script_path" --repo-root "$mutant_root" --mode packages >"$log_file" 2>&1; then
+    die "mutation self-test unexpectedly passed: $label"
+  fi
+  grep -Fq "package nuspec changed for $package_id" "$log_file" ||
+    die "nuspec-only mutation did not reach the root nuspec comparison: $label"
+  if grep -Fq 'package assets changed' "$log_file"; then
+    die "nuspec-only mutation changed the lib/ref asset shape: $label"
+  fi
+  printf 'mutation self-test failed only at the root nuspec comparison as required: %s\n' "$label"
+}
+
 run_self_tests() {
   local mutant
 
@@ -524,6 +578,12 @@ run_self_tests() {
   perl -0pi -e 's{(PackageReference Include="Sekiban\.Core\.DotNet" Version=")0\.24\.3"}{${1}0.24.4"}' \
     "$mutant/src/Sekiban.Core/Sekiban.Core.csproj"
   expect_failure "package-reference-version" "$mutant" packages
+
+  mutant="$work_dir/mutant-package-nuspec-dependencies"
+  copy_mutant "$mutant"
+  perl -0pi -e 's{(<PropertyGroup>)}{$1\n    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>}s' \
+    "$mutant/src/Sekiban.Core/Sekiban.Core.csproj"
+  expect_nuspec_only_failure "package-nuspec-dependencies" "$mutant" "Sekiban.Core"
 
   mutant="$work_dir/mutant-sdk-policy"
   copy_mutant "$mutant"

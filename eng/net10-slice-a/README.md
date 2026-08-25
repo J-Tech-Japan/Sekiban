@@ -14,3 +14,8 @@ do not consume the core authority. `package-reference-versions.tsv` freezes the
 244 C# PackageReference versions, `package-assets.tsv` freezes the twelve
 package-producing `lib/` asset sets, and `ci-command-matrix.tsv` freezes every
 restore/build/test command and its actual `-f` flag across the three workflows.
+
+`package-nuspecs/` captures the root `.nuspec` from the same full-pack path for
+all twelve packages. The validator normalizes only its synthetic package version
+and source commit; package identity, framework groups, and dependency metadata
+must match exactly.
