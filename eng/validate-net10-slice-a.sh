@@ -538,8 +538,11 @@ expect_nuspec_only_failure() {
   if bash "$script_path" --repo-root "$mutant_root" --mode packages >"$log_file" 2>&1; then
     die "mutation self-test unexpectedly passed: $label"
   fi
-  grep -Fq "package nuspec changed for $package_id" "$log_file" ||
+  if ! grep -Fq "package nuspec changed for $package_id" "$log_file"; then
+    printf 'nuspec-only mutation inner log (%s):\n' "$label" >&2
+    sed -n '1,240p' "$log_file" >&2
     die "nuspec-only mutation did not reach the root nuspec comparison: $label"
+  fi
   if grep -Fq 'package assets changed' "$log_file"; then
     die "nuspec-only mutation changed the lib/ref asset shape: $label"
   fi
