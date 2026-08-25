@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>__TFM__</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Sekiban.SerializationCompatibility.Worker</AssemblyName>
+    <RootNamespace>Sekiban.SerializationCompatibility.Worker</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <RestoreSources>__RESTORE_SOURCES__</RestoreSources>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Sekiban.Core.DotNet" Version="__SEKIBAN_VERSION__" />
+    <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="__SEKIBAN_VERSION__" />
+    <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="__SEKIBAN_VERSION__" />
+    <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="__SEKIBAN_VERSION__" />
+    <PackageReference Include="Sekiban.Infrastructure.Dynamo" Version="__SEKIBAN_VERSION__" />
+    <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="__SEKIBAN_VERSION__" />
+  </ItemGroup>
+</Project>

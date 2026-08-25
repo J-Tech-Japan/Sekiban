@@ -11,8 +11,12 @@ on:
       - "Samples/**"
       - "tools/**"
       - "Directory.Build.props"
+      - "SekibanCore.slnf"
       - "global.json"
       - "eng/validate-net10-slice-a.sh"
+      - "eng/validate-net10-api-compat.sh"
+      - "eng/validate-net10-serialization.sh"
+      - "eng/validate-net10-indexeddb-browser.sh"
       - "eng/net10-slice-a/**"
       - ".github/workflows/run_test.yml"
       - ".github/workflows/packages.yml"
@@ -27,10 +31,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -65,28 +65,21 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Test Build
       run: |
-        dotnet build Sekiban.sln -c Release
-    - name: Test dotnet FeatureCheck .NET8
+        dotnet build SekibanCore.slnf -c Release
+    - name: Test dotnet FeatureCheck .NET10
       run: |
-        dotnet test tests/FeatureCheck.Test/FeatureCheck.Test.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
-    - name: Test dotnet FeatureCheck .NET9
-      run: |
-        dotnet test tests/FeatureCheck.Test/FeatureCheck.Test.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0
+        dotnet test tests/FeatureCheck.Test/FeatureCheck.Test.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net10.0
 
 
-  regular80Mixed:
+  regularMixed:
     strategy:
       max-parallel: 4
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -121,14 +114,14 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Test Build
       run: |
-        dotnet build Sekiban.sln -c Release
+        dotnet build SekibanCore.slnf -c Release
 
     - name: Test dotnet tests/Mixed.Test
       run: |
-        dotnet test tests/Mixed.Test/Mixed.Test.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
+        dotnet test tests/Mixed.Test/Mixed.Test.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net10.0
 
 
   regularMultitenant:
@@ -138,10 +131,6 @@ jobs:
     needs: [ regularAggregateTest ]
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -176,29 +165,22 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Test Build
       run: |
-        dotnet build Sekiban.sln -c Release
-    - name: Test dotnet tests/MultiTenant.AggregateTest .NET8
+        dotnet build SekibanCore.slnf -c Release
+    - name: Test dotnet tests/MultiTenant.AggregateTest .NET10
       run: |
-        dotnet test tests/MultiTenant.AggregateTest/MultiTenant.AggregateTest.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
-    - name: Test dotnet tests/MultiTenant.AggregateTest .NET9
-      run: |
-        dotnet test tests/MultiTenant.AggregateTest/MultiTenant.AggregateTest.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0
+        dotnet test tests/MultiTenant.AggregateTest/MultiTenant.AggregateTest.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net10.0
 
 
-  regular80Cosmos:
+  regularCosmos:
     strategy:
       max-parallel: 4
     runs-on: ubuntu-latest
-    needs: [ regular80Mixed ]
+    needs: [ regularMixed ]
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -233,125 +215,14 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Test Build
       run: |
-        dotnet build Sekiban.sln -c Release
+        dotnet build SekibanCore.slnf -c Release
 
     - name: Test dotnet tests/Sekiban.Test.CosmosDb
       run: |
-        dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
-
-  # SEK-G48: regular90Cosmos intentionally executes its Cosmos test at net8.0.
-  # The structural matrix records this historic job-name/command mismatch.
-  regular90Cosmos:
-    strategy:
-      max-parallel: 4
-    runs-on: ubuntu-latest
-    needs: [ regular90Mixed ]
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
-    - name: Setup .NET 10
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 10.0.400
-    - name: Secret Settings
-      run: |
-        pushd ./tests/Sekiban.Test.Abstructs
-        dotnet user-secrets set "ConnectionStrings:SekibanBlob" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanCosmos" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresDefault" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_DEFAULT}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresSecondary" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_SECONDARY}}"
-        dotnet user-secrets set "Sekiban:Default:Azure:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Azure:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Default:Aws:AccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Default:Aws:AccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoItemsTable" "jjga_items"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoEventsTable" "jjga_events"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoItemsTableDissolvable" "jjga_d_items"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoEventsTableDissolvable" "jjga_d_events"
-        dotnet user-secrets set "Sekiban:Default:Aws:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:Aws:S3BucketName" "jjga-s3"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:AccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:AccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoItemsTable" "jjga_items_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoEventsTable" "jjga_events_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoItemsTableDissolvable" "jjga_d_items_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoEventsTableDissolvable" "jjga_d_events_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"
-    - name: Restore dependencies
-      run: |
-        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
-    - name: Test Build
-      run: |
-        dotnet build Sekiban.sln -c Release
-
-    - name: Test dotnet tests/Sekiban.Test.CosmosDb
-      run: |
-        dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
-    - name: Test dotnet tests/MultiTenant.AggregateTest
-      run: |
-        dotnet test tests/MultiTenant.AggregateTest/MultiTenant.AggregateTest.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0
-
-  regular90Mixed:
-    strategy:
-      max-parallel: 4
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
-    - name: Setup .NET 10
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 10.0.400
-    - name: Secret Settings
-      run: |
-        pushd ./tests/Sekiban.Test.Abstructs
-        dotnet user-secrets set "ConnectionStrings:SekibanBlob" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanCosmos" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresDefault" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_DEFAULT}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresSecondary" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_SECONDARY}}"
-        dotnet user-secrets set "Sekiban:Default:Azure:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Azure:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Default:Aws:AccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Default:Aws:AccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoItemsTable" "jjga_items"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoEventsTable" "jjga_events"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoItemsTableDissolvable" "jjga_d_items"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoEventsTableDissolvable" "jjga_d_events"
-        dotnet user-secrets set "Sekiban:Default:Aws:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:Aws:S3BucketName" "jjga-s3"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:AccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:AccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoItemsTable" "jjga_items_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoEventsTable" "jjga_events_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoItemsTableDissolvable" "jjga_d_items_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoEventsTableDissolvable" "jjga_d_events_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"
-    - name: Restore dependencies
-      run: |
-        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
-    - name: Test Build
-      run: |
-        dotnet build Sekiban.sln -c Release
-    - name: Test dotnet tests/Mixed.Test
-      run: |
-        dotnet test tests/Mixed.Test/Mixed.Test.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0
+        dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net10.0
 
   regularDynamo:
     strategy:
@@ -359,10 +230,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -397,17 +264,14 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Test Build
       run: |
-        dotnet build Sekiban.sln -c Release
+        dotnet build SekibanCore.slnf -c Release
 
-    - name: Test dotnet tests/Sekiban.Test.Dynamo .NET8
+    - name: Test dotnet tests/Sekiban.Test.Dynamo .NET10
       run: |
-        dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
-    - name: Test dotnet tests/Sekiban.Test.Dynamo .NET9
-      run: |
-        dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0
+        dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net10.0
 
   regularPostgres:
     strategy:
@@ -415,10 +279,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -453,17 +313,14 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Test Build
       run: |
-        dotnet build Sekiban.sln -c Release
+        dotnet build SekibanCore.slnf -c Release
 
-    - name: Test dotnet tests/Sekiban.Test.Postgres .NET8
+    - name: Test dotnet tests/Sekiban.Test.Postgres .NET10
       run: |
-        dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
-    - name: Test dotnet tests/Sekiban.Test.Postgres .NET9
-      run: |
-        dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0
+        dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net10.0
 
   regularIndexedDb:
     strategy:
@@ -471,10 +328,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -482,30 +335,23 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Test Build
       run: |
-        dotnet build Sekiban.sln -c Release
+        dotnet build SekibanCore.slnf -c Release
 
-    - name: Test dotnet tests/Sekiban.Test.IndexedDb .NET8
+    - name: Test dotnet tests/Sekiban.Test.IndexedDb .NET10
       run: |
-        dotnet test tests/Sekiban.Test.IndexedDb/Sekiban.Test.IndexedDb.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
-    - name: Test dotnet tests/Sekiban.Test.IndexedDb .NET9
-      run: |
-        dotnet test tests/Sekiban.Test.IndexedDb/Sekiban.Test.IndexedDb.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0
+        dotnet test tests/Sekiban.Test.IndexedDb/Sekiban.Test.IndexedDb.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net10.0
 
   flaky:
     strategy:
       max-parallel: 4
 
     runs-on: ubuntu-latest
-    needs: [ regularMultitenant, regularPostgres, regularDynamo, regularIndexedDb, regular80Cosmos ]
+    needs: [ regularMultitenant, regularPostgres, regularDynamo, regularIndexedDb, regularCosmos ]
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -540,73 +386,17 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore SekibanFor8.sln
+        dotnet restore SekibanCore.slnf
     - name: Test dotnet
       uses: nick-fields/retry@v2
       with:
         timeout_seconds: 1500
         max_attempts: 3
         retry_on: error
-        command: dotnet test SekibanFor8.sln  --filter "Category=Flaky" -v m -c Release -m:1 -f net8.0
+        command: dotnet test SekibanCore.slnf  --filter "Category=Flaky" -v m -c Release -m:1 -f net10.0
 
 
-  flaky90:
-    strategy:
-      max-parallel: 4
-
-    runs-on: ubuntu-latest
-    needs: [ regularMultitenant, regularPostgres, regularDynamo, regularIndexedDb, regular90Cosmos ]
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
-    - name: Setup .NET 10
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 10.0.400
-    - name: Secret Settings
-      run: |
-        pushd ./tests/Sekiban.Test.Abstructs
-        dotnet user-secrets set "ConnectionStrings:SekibanBlob" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanCosmos" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresDefault" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_DEFAULT}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresSecondary" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_SECONDARY}}"
-        dotnet user-secrets set "Sekiban:Default:Azure:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Azure:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Default:Aws:AccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Default:Aws:AccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoItemsTable" "jjga_items"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoEventsTable" "jjga_events"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoItemsTableDissolvable" "jjga_d_items"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoEventsTableDissolvable" "jjga_d_events"
-        dotnet user-secrets set "Sekiban:Default:Aws:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:Aws:S3BucketName" "jjga-s3"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:AccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:AccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoItemsTable" "jjga_items_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoEventsTable" "jjga_events_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoItemsTableDissolvable" "jjga_d_items_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoEventsTableDissolvable" "jjga_d_events_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"
-    - name: Restore dependencies
-      run: |
-        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
-    - name: Test dotnet
-      uses: nick-fields/retry@v2
-      with:
-        timeout_seconds: 1500
-        max_attempts: 3
-        retry_on: error
-        command: dotnet test Sekiban.sln  --filter "Category=Flaky" -v m -c Release -m:1 -f net9.0
-
-
-  performance80cosmos:
+  performanceCosmos:
     strategy:
       max-parallel: 4
 
@@ -614,10 +404,6 @@ jobs:
     needs: [ flaky ]
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -632,44 +418,11 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Test dotnet
       run: |
-        dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
-  # SEK-G48: performance90cosmos intentionally executes its Cosmos test at net8.0.
-  # The structural matrix records this historic job-name/command mismatch.
-  performance90cosmos:
-    strategy:
-      max-parallel: 4
-
-    runs-on: ubuntu-latest
-    needs: [ flaky90 ]
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
-    - name: Setup .NET 10
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 10.0.400
-    - name: Secret Settings
-      run: |
-        pushd ./tests/Sekiban.Test.Abstructs
-        dotnet user-secrets set "ConnectionStrings:SekibanBlob" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanCosmos" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
-        dotnet user-secrets set "Sekiban:Default:Azure:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Azure:CosmosDatabase" "GithubActions"
-    - name: Restore dependencies
-      run: |
-        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
-    - name: Test dotnet
-      run: |
-        dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
-
-  performance80dynamo:
+        dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net10.0
+  performanceDynamo:
     strategy:
       max-parallel: 4
 
@@ -677,10 +430,6 @@ jobs:
     needs: [ flaky ]
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -709,64 +458,13 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Test dotnet
       run: |
-        dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
+        dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net10.0
 
 
-  performance90dynamo:
-    strategy:
-      max-parallel: 4
-
-    runs-on: ubuntu-latest
-    needs: [ flaky90 ]
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
-    - name: Setup .NET 10
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 10.0.400
-    - name: Secret Settings
-      run: |
-        pushd ./tests/Sekiban.Test.Abstructs
-        dotnet user-secrets set "ConnectionStrings:SekibanBlob" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanCosmos" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresDefault" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_DEFAULT}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresSecondary" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_SECONDARY}}"
-        dotnet user-secrets set "Sekiban:Default:Azure:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Azure:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Default:Aws:AccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Default:Aws:AccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoItemsTable" "jjga_items"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoEventsTable" "jjga_events"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoItemsTableDissolvable" "jjga_d_items"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoEventsTableDissolvable" "jjga_d_events"
-        dotnet user-secrets set "Sekiban:Default:Aws:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:Aws:S3BucketName" "jjga-s3"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:AccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:AccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoItemsTable" "jjga_items_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoEventsTable" "jjga_events_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoItemsTableDissolvable" "jjga_d_items_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoEventsTableDissolvable" "jjga_d_events_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"
-    - name: Restore dependencies
-      run: |
-        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
-    - name: Test dotnet
-      run: |
-        dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net9.0
-
-  performance80postgres:
+  performancePostgres:
     strategy:
       max-parallel: 4
 
@@ -774,10 +472,6 @@ jobs:
     needs: [ flaky ]
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -791,44 +485,13 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Test dotnet
       run: |
-        dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
+        dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net10.0
 
 
-  performance90postgres:
-    strategy:
-      max-parallel: 4
-
-    runs-on: ubuntu-latest
-    needs: [ flaky90 ]
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
-    - name: Setup .NET 10
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 10.0.400
-    - name: Secret Settings
-      run: |
-        pushd ./tests/Sekiban.Test.Abstructs
-        dotnet user-secrets set "ConnectionStrings:SekibanBlob" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresDefault" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_DEFAULT}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresSecondary" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_SECONDARY}}"
-    - name: Restore dependencies
-      run: |
-        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
-    - name: Test dotnet
-      run: |
-        dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net9.0
-
-
-  performance80IndexedDb:
+  performanceIndexedDb:
     strategy:
       max-parallel: 4
 
@@ -836,10 +499,6 @@ jobs:
     needs: [ flaky ]
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -847,44 +506,20 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Test dotnet
       run: |
-        dotnet test tests/Sekiban.Test.IndexedDb/Sekiban.Test.IndexedDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
+        dotnet test tests/Sekiban.Test.IndexedDb/Sekiban.Test.IndexedDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net10.0
 
 
-  performance90IndexedDb:
-    strategy:
-      max-parallel: 4
-
-    runs-on: ubuntu-latest
-    needs: [ flaky90 ]
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
-    - name: Setup .NET 10
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 10.0.400
-    - name: Restore dependencies
-      run: |
-        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
-    - name: Test dotnet
-      run: |
-        dotnet test tests/Sekiban.Test.IndexedDb/Sekiban.Test.IndexedDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net9.0
-
-  net10SliceACharacterization:
+  net10SliceBCompatibility:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
+    - name: Setup Node for browser gate
+      uses: actions/setup-node@v4
       with:
-        dotnet-version: 8.0.410
+        node-version: 24
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -894,6 +529,15 @@ jobs:
         expected="$(jq -r '.sdk.version' global.json)"
         actual="$(dotnet --version)"
         test "$actual" = "$expected"
-    - name: Validate net10 slice A characterization
+    - name: Validate net10 slice B characterization
       run: |
         ./eng/validate-net10-slice-a.sh --repo-root "$GITHUB_WORKSPACE" --self-test
+    - name: Validate 12-package public API compatibility
+      run: |
+        ./eng/validate-net10-api-compat.sh --repo-root "$GITHUB_WORKSPACE" --self-test
+    - name: Validate bidirectional durable serialization
+      run: |
+        ./eng/validate-net10-serialization.sh --repo-root "$GITHUB_WORKSPACE" --self-test
+    - name: Validate browser IndexedDb default runtime
+      run: |
+        ./eng/validate-net10-indexeddb-browser.sh --repo-root "$GITHUB_WORKSPACE" --self-test

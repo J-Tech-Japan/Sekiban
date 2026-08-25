@@ -1,5 +1,11 @@
 # Sekiban - Event Sourcing and CQRS Framework using C#
 
+## Release notes — 0.25.0
+
+The `Sekiban.*` 0.25.0 package line targets **net10.0 only**. Applications
+running .NET 8 or .NET 9 must remain on the compatible 0.24.x package line.
+`MemStat.Net` is independently versioned.
+
 Sekiban - Event Sourcing and CQRS Framework using C#. It can store data into Azure Cosmos DB or AWS Dynamo DB
 
 <p align="center">
@@ -84,7 +90,8 @@ projections, tests, and queries for practical solutions without unnecessary comp
 
 ## Compatibility
 
-Sekiban is compatible with .NET 8 and 9.
+Sekiban 0.25.0 is compatible with .NET 10. For .NET 8 or .NET 9, use Sekiban
+0.24.x.
 
 For **Azure Cosmos DB**, Sekiban supports
 the [Hierarchical Partition Key](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys?tabs=net-v3%2Cbicep)

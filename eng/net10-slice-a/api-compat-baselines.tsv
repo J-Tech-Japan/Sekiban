@@ -1,0 +1,12 @@
+MemStat.Net	0.1.4	net9.0
+Sekiban.Aspire.Infrastructure.Cosmos	0.24.3	net9.0
+Sekiban.Core.DotNet	0.24.3	net9.0
+Sekiban.Core	0.24.3	net9.0
+Sekiban.Infrastructure.Aws.S3	0.24.3	net9.0
+Sekiban.Infrastructure.Azure.Storage.Blobs	0.24.3	net9.0
+Sekiban.Infrastructure.Cosmos	0.24.3	net9.0
+Sekiban.Infrastructure.Dynamo	0.24.3	net9.0
+Sekiban.Infrastructure.IndexedDb	0.24.3	net9.0
+Sekiban.Infrastructure.Postgres	0.24.3	net9.0
+Sekiban.Testing	0.24.3	net9.0
+Sekiban.Web	0.24.3	net9.0

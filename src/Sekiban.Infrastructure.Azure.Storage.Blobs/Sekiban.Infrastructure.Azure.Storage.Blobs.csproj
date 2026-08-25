@@ -4,12 +4,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Azure.Storage.Blobs</PackageId>
-        <Version>0.24.3</Version>
+        <Version>$(SekibanCorePackageVersion)</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Azure Storage Blob</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.24.3</PackageVersion>
+        <PackageVersion>$(SekibanCorePackageVersion)</PackageVersion>
         <Description>Add Indexed DB as infrastructure</Description>
         <TargetFrameworks>$(SekibanCoreNet8Net9TargetFrameworks)</TargetFrameworks>
         <LangVersion>preview</LangVersion>

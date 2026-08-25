@@ -9,10 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.410
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -21,11 +17,11 @@ jobs:
       run: |
         pushd ./
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanCore.slnf
     - name: Build with dotnet
       run: |
         pushd ./
-        dotnet build Sekiban.sln -c Release
+        dotnet build SekibanCore.slnf -c Release
     - name: Pack MemStat
       run: |
         dotnet nuget push "src/MemStat.Net/bin/Release/MemStat.Net.0.1.4.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json

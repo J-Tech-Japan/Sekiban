@@ -2,19 +2,13 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
   <metadata>
     <id>Sekiban.Aspire.Infrastructure.Cosmos</id>
-    <version>__SEK_G48_PACKAGE_VERSION__</version>
+    <version>__SEK_G49_PACKAGE_VERSION__</version>
     <authors>J-Tech Group</authors>
     <readme>README.md</readme>
     <description>Sekiban - Event Sourcing Framework Cosmos Aspire Connector</description>
-    <repository type="git" url="https://github.com/J-Tech-Japan/Sekiban" commit="__SEK_G48_SOURCE_COMMIT__" />
+    <repository type="git" url="https://github.com/J-Tech-Japan/Sekiban" commit="__SEK_G49_SOURCE_COMMIT__" />
     <dependencies>
-      <group targetFramework="net8.0">
-        <dependency id="Sekiban.Infrastructure.Cosmos" version="0.24.3" exclude="Build,Analyzers" />
-        <dependency id="Sekiban.Web" version="0.24.3" exclude="Build,Analyzers" />
-        <dependency id="Aspire.Azure.Storage.Blobs" version="9.0.0" exclude="Build,Analyzers" />
-        <dependency id="Aspire.Microsoft.Azure.Cosmos" version="9.0.0" exclude="Build,Analyzers" />
-      </group>
-      <group targetFramework="net9.0">
+      <group targetFramework="net10.0">
         <dependency id="Sekiban.Infrastructure.Cosmos" version="0.24.3" exclude="Build,Analyzers" />
         <dependency id="Sekiban.Web" version="0.24.3" exclude="Build,Analyzers" />
         <dependency id="Aspire.Azure.Storage.Blobs" version="9.0.0" exclude="Build,Analyzers" />

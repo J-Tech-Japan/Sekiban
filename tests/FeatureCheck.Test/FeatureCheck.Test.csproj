@@ -24,6 +24,7 @@
         <ProjectReference Include="..\..\internalUsages\FeatureCheck.Domain\FeatureCheck.Domain.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Core.DotNet\Sekiban.Core.DotNet.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Web\Sekiban.Web.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

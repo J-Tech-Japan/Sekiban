@@ -1,0 +1,2 @@
+# No per-API suppressions are approved for SEK-G49.
+# Any future row must be a TFM-only difference with an asserted operator-approved reason.

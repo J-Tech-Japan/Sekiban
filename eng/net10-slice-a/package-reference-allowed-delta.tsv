@@ -1,0 +1,4 @@
+remove	src/Sekiban.Core.DotNet/Sekiban.Core.DotNet.csproj	System.Runtime.InteropServices	4.3.0
+remove	src/Sekiban.Infrastructure.IndexedDb/Sekiban.Infrastructure.IndexedDb.csproj	Microsoft.AspNetCore.Components.WebAssembly	8.0.12
+remove	src/Sekiban.Infrastructure.IndexedDb/Sekiban.Infrastructure.IndexedDb.csproj	Microsoft.AspNetCore.Components.WebAssembly	9.0.1
+add	src/Sekiban.Infrastructure.IndexedDb/Sekiban.Infrastructure.IndexedDb.csproj	Microsoft.AspNetCore.Components.WebAssembly	10.0.11

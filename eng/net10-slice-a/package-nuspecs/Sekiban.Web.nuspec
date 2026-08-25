@@ -2,18 +2,13 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
   <metadata>
     <id>Sekiban.Web</id>
-    <version>__SEK_G48_PACKAGE_VERSION__</version>
+    <version>__SEK_G49_PACKAGE_VERSION__</version>
     <authors>J-Tech Group</authors>
     <readme>README.md</readme>
     <description>Sekiban - Event Sourcing Framework WebHelper</description>
-    <repository type="git" url="https://github.com/J-Tech-Japan/Sekiban" commit="__SEK_G48_SOURCE_COMMIT__" />
+    <repository type="git" url="https://github.com/J-Tech-Japan/Sekiban" commit="__SEK_G49_SOURCE_COMMIT__" />
     <dependencies>
-      <group targetFramework="net8.0">
-        <dependency id="Sekiban.Core" version="0.24.3" exclude="Build,Analyzers" />
-        <dependency id="Jtechs.OpenApi.AspNetCore.Swashbuckle" version="0.2.5" exclude="Build,Analyzers" />
-        <dependency id="Swashbuckle.AspNetCore" version="7.2.0" exclude="Build,Analyzers" />
-      </group>
-      <group targetFramework="net9.0">
+      <group targetFramework="net10.0">
         <dependency id="Sekiban.Core" version="0.24.3" exclude="Build,Analyzers" />
         <dependency id="Jtechs.OpenApi.AspNetCore.Swashbuckle" version="0.2.5" exclude="Build,Analyzers" />
         <dependency id="Swashbuckle.AspNetCore" version="7.2.0" exclude="Build,Analyzers" />
