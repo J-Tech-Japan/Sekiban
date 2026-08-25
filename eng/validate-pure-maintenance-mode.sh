@@ -53,6 +53,7 @@ done
 
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/sekiban-pure-policy.XXXXXX")"
 trap 'rm -rf "$tmp_dir"' EXIT
+trap 'status=$?; printf "ERROR: validation command failed at line %s (status %s)\\n" "$LINENO" "$status" >&2; exit "$status"' ERR
 
 policy_file="$repo_root/eng/pure-maintenance-mode/canonical-block.md"
 manifest_file="$repo_root/eng/pure-maintenance-mode/targets.txt"
@@ -251,6 +252,7 @@ check_ci_wiring() {
     local required_path
 
     require_file "$workflow"
+    require_fixed_line "$workflow" "          fetch-depth: 0"
     require_fixed_line "$workflow" "        run: ./eng/validate-pure-maintenance-mode.sh --repo-root . --self-test"
     require_fixed_line "$workflow" "      - 'README.md'"
     require_fixed_line "$workflow" "      - 'pure/README.md'"
@@ -475,6 +477,11 @@ run_self_test() {
     copy_fixture "$fixture"
     perl -0pi -e 's#eng/pure-maintenance-mode/\*\*#eng/pure-maintenance-policy/\*\*#' "$fixture/$workflow_path"
     expect_failure "workflow-path-filter-altered" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+
+    fixture="$tmp_dir/mutant-workflow-fetch-depth"
+    copy_fixture "$fixture"
+    perl -0pi -e 's/fetch-depth: 0/fetch-depth: 1/' "$fixture/$workflow_path"
+    expect_failure "workflow-fetch-depth-altered" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
 }
 
 run_validation
