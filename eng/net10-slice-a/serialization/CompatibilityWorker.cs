@@ -11,35 +11,43 @@ using System.Text;
 using System.Text.Json;
 using DynamoDocument = Amazon.DynamoDBv2.DocumentModel.Document;
 
-if (args.Length != 2 || (args[0] != "write" && args[0] != "verify"))
-{
-    Console.Error.WriteLine("usage: CompatibilityWorker write|verify <vector-path>");
-    return 2;
-}
+namespace Sekiban.SerializationCompatibility;
 
-try
+internal static class Program
 {
-    if (args[0] == "write")
+    public static async Task<int> Main(string[] args)
     {
-        var vector = DurableVector.Create();
-        DurableVector.Verify(vector);
-        await File.WriteAllTextAsync(args[1], JsonSerializer.Serialize(vector, DurableVector.FileOptions));
-        Console.WriteLine($"wrote and verified durable vector: {args[1]}");
-    }
-    else
-    {
-        var vector = JsonSerializer.Deserialize<DurableVector>(await File.ReadAllTextAsync(args[1]), DurableVector.FileOptions)
-            ?? throw new InvalidOperationException("durable vector was empty");
-        DurableVector.Verify(vector);
-        Console.WriteLine($"verified durable vector: {args[1]}");
-    }
+        if (args.Length != 2 || (args[0] != "write" && args[0] != "verify"))
+        {
+            await Console.Error.WriteLineAsync("usage: CompatibilityWorker write|verify <vector-path>");
+            return 2;
+        }
 
-    return 0;
-}
-catch (Exception exception)
-{
-    Console.Error.WriteLine($"durable serialization compatibility failure: {exception}");
-    return 1;
+        try
+        {
+            if (args[0] == "write")
+            {
+                var vector = DurableVector.Create();
+                DurableVector.Verify(vector);
+                await File.WriteAllTextAsync(args[1], JsonSerializer.Serialize(vector, DurableVector.FileOptions));
+                await Console.Out.WriteLineAsync($"wrote and verified durable vector: {args[1]}");
+            }
+            else
+            {
+                var vector = JsonSerializer.Deserialize<DurableVector>(await File.ReadAllTextAsync(args[1]), DurableVector.FileOptions)
+                    ?? throw new InvalidOperationException("durable vector was empty");
+                DurableVector.Verify(vector);
+                await Console.Out.WriteLineAsync($"verified durable vector: {args[1]}");
+            }
+
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            await Console.Error.WriteLineAsync($"durable serialization compatibility failure: {exception}");
+            return 1;
+        }
+    }
 }
 
 public interface ICompatibilityShape
@@ -111,8 +119,9 @@ public sealed record DurableVector
 
         return new DurableVector
         {
-            RuntimeTypeName = typeof(DerivedCompatibilityEvent).AssemblyQualifiedName
-                ?? throw new InvalidOperationException("derived event type did not have an assembly-qualified name"),
+            // Keep the frozen 0.24.x global type identity so the actual pinned
+            // net8/net9 reader processes can consume a vector written by net10.
+            RuntimeTypeName = CompatibilityTypeIdentity.LegacyDerivedEventAssemblyQualifiedName,
             EventJson = eventJson,
             CasingEventJson = eventJson
                 .Replace("\"Payload\"", "\"pAyLoAd\"", StringComparison.Ordinal)
@@ -131,7 +140,9 @@ public sealed record DurableVector
     public static void Verify(DurableVector vector)
     {
         Require(vector.SchemaVersion == Schema, "unexpected durable vector schema");
-        Require(Type.GetType(vector.RuntimeTypeName) == typeof(DerivedCompatibilityEvent), "runtime Type did not resolve to the derived event type");
+        Require(
+            CompatibilityTypeIdentity.Resolve(vector.RuntimeTypeName) == typeof(DerivedCompatibilityEvent),
+            "runtime Type did not resolve to the derived event type");
         Require(!vector.EventJson.Contains("\"Optional\"", StringComparison.Ordinal), "null event property was not omitted by Sekiban JSON options");
 
         VerifyEvent(DeserializeEvent(vector.EventJson), "Sekiban event");
@@ -196,7 +207,7 @@ public sealed record DurableVector
         var verifiedPayload = payload ?? throw new InvalidOperationException($"{seam} payload was null");
         ICompatibilityShape interfaceShape = verifiedPayload;
         Require(
-            interfaceShape.GetType() == typeof(DerivedCompatibilityEvent) &&
+            interfaceShape is DerivedCompatibilityEvent &&
             interfaceShape.Label == "derived-event" &&
             verifiedPayload.Count == 17 &&
             verifiedPayload.Optional is null,
@@ -222,7 +233,7 @@ public sealed record DurableVector
         var verifiedShape = shape ?? throw new InvalidOperationException($"{seam} snapshot shape was null");
         ICompatibilityShape interfaceShape = verifiedShape;
         Require(
-            interfaceShape.GetType() == typeof(DerivedCompatibilityShape) &&
+            interfaceShape is DerivedCompatibilityShape &&
             interfaceShape.Label == "derived-snapshot" &&
             verifiedShape.Count == 23 &&
             verifiedShape.Optional is null,
@@ -250,4 +261,19 @@ public sealed record DurableVector
             throw new InvalidOperationException(message);
         }
     }
+}
+
+internal static class CompatibilityTypeIdentity
+{
+    // This is the exact public type identity frozen in the old net8/net9
+    // vectors. The current helper type lives in a named namespace, while the
+    // vector keeps this identity so an actual 0.24.x reader resolves it.
+    public const string LegacyDerivedEventAssemblyQualifiedName =
+        "DerivedCompatibilityEvent, Sekiban.SerializationCompatibility.Worker, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null";
+
+    public static Type Resolve(string runtimeTypeName) =>
+        runtimeTypeName == LegacyDerivedEventAssemblyQualifiedName
+            ? typeof(DerivedCompatibilityEvent)
+            : Type.GetType(runtimeTypeName)
+              ?? throw new InvalidOperationException("runtime Type name could not be resolved");
 }

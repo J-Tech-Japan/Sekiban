@@ -59,11 +59,13 @@ die() {
 }
 
 need() {
-  command -v "$1" >/dev/null 2>&1 || die "required command is unavailable: $1"
+  local required_command="$1"
+  command -v "$required_command" >/dev/null 2>&1 || die "required command is unavailable: $required_command"
 }
 
 need_file() {
-  [[ -f "$1" ]] || die "required file is missing: $1"
+  local required_file="$1"
+  [[ -f "$required_file" ]] || die "required file is missing: $required_file"
 }
 
 mkdir -p "$cache_root/dotnet-cli" "$cache_root/nuget-packages" "$cache_root/nuget-http-cache" "$cache_root/runtimes"
@@ -136,7 +138,8 @@ ensure_old_runtime() {
 
   if [[ ! -x "$runtime_root/dotnet" ]]; then
     if [[ ! -f "$install_script" ]]; then
-      curl --fail --silent --show-error --location https://dot.net/v1/dotnet-install.sh --output "$install_script"
+      curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+        https://dot.net/v1/dotnet-install.sh --output "$install_script"
     fi
     bash "$install_script" --runtime dotnet --version "$runtime_version" --install-dir "$runtime_root" --no-path >&2
   fi

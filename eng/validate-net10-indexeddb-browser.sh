@@ -59,11 +59,13 @@ die() {
 }
 
 need() {
-  command -v "$1" >/dev/null 2>&1 || die "required command is unavailable: $1"
+  local required_command="$1"
+  command -v "$required_command" >/dev/null 2>&1 || die "required command is unavailable: $required_command"
 }
 
 need_file() {
-  [[ -f "$1" ]] || die "required file is missing: $1"
+  local required_file="$1"
+  [[ -f "$required_file" ]] || die "required file is missing: $required_file"
 }
 
 mkdir -p "$cache_root/dotnet-cli" "$cache_root/nuget-packages" "$cache_root/nuget-http-cache" "$cache_root/npm-cache" "$cache_root/browsers"
@@ -176,10 +178,14 @@ run_browser_consumer() {
   local feed="$1"
   local consumer="$work_dir/browser-consumer"
   local archive
+  local consumer_packages="$consumer/nuget-packages"
 
   prepare_consumer "$feed" "$consumer"
-  "$sdk_dotnet" restore "$consumer/BrowserGate.csproj" --nologo >&2
-  "$sdk_dotnet" publish "$consumer/BrowserGate.csproj" \
+  # Every positive or mutant run packs the same synthetic package version.
+  # Keep the consumer cache local to this invocation so NuGet cannot satisfy a
+  # mutant restore from a package that the preceding positive run cached.
+  NUGET_PACKAGES="$consumer_packages" "$sdk_dotnet" restore "$consumer/BrowserGate.csproj" --nologo >&2
+  NUGET_PACKAGES="$consumer_packages" "$sdk_dotnet" publish "$consumer/BrowserGate.csproj" \
     --configuration Release \
     --no-restore \
     --nologo \

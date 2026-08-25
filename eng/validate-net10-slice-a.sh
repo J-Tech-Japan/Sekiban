@@ -193,19 +193,13 @@ expected_literal_element() {
 }
 
 validate_source_authority() {
-  local project tf tfs project_file
+  local project project_file
   local in_scope_actual="$work_dir/in-scope-projects.txt"
   local in_scope_expected="$work_dir/in-scope-expected.txt"
 
   list_projects | awk -F/ '$1 == "src" || $1 == "tests" || $1 == "internalUsages"' > "$in_scope_actual"
   records3 "$baseline_dir/evaluated-target-frameworks.tsv" |
-    while IFS=$'\034' read -r project tf tfs; do
-      case "$project" in
-        src/*|tests/*|internalUsages/*)
-          printf '%s\n' "$project"
-          ;;
-      esac
-    done |
+    awk -F '\034' '$1 ~ /^(src|tests|internalUsages)\// { print $1 }' |
     LC_ALL=C sort > "$in_scope_expected"
 
   diff -u "$in_scope_expected" "$in_scope_actual" ||
@@ -368,9 +362,9 @@ validate_package_reference_inventory() {
 }
 
 validate_package_version_authority() {
-  local project package_id expected props version package_version count=0
+  local project package_id props version package_version count=0
 
-  while IFS=$'\034' read -r project package_id expected; do
+  while IFS=$'\034' read -r project package_id; do
     [[ "$package_id" == "MemStat.Net" ]] && continue
     grep -Fq '<Version>$(SekibanCorePackageVersion)</Version>' "$repo_root/$project" ||
       die "package producer does not consume the 0.25.0 version authority: $project"
@@ -383,7 +377,7 @@ validate_package_version_authority() {
     [[ "$version" == "0.25.0" && "$package_version" == "0.25.0" ]] ||
       die "package producer did not evaluate to version 0.25.0: $project"
     count=$((count + 1))
-  done < <(records3 "$baseline_dir/package-assets.tsv")
+  done < <(records3 "$baseline_dir/package-assets.tsv" | awk -F '\034' '{ print $1 FS $2 }')
 
   [[ "$count" == "11" ]] ||
     die "expected eleven Sekiban package producers to consume the 0.25.0 authority"
@@ -442,16 +436,16 @@ validate_internal_nuspec_dependency_provenance() {
 }
 
 validate_baselined_internal_nuspec_dependency_provenance() {
-  local project package_id expected expected_nuspec
+  local project package_id expected_nuspec
 
-  while IFS=$'\034' read -r project package_id expected; do
+  while IFS=$'\034' read -r project package_id; do
     expected_nuspec="$baseline_dir/package-nuspecs/$package_id.nuspec"
     need_file "$expected_nuspec"
     validate_internal_nuspec_dependency_provenance \
       "$repo_root/$project" \
       "$package_id" \
       "$expected_nuspec"
-  done < <(records3 "$baseline_dir/package-assets.tsv")
+  done < <(records3 "$baseline_dir/package-assets.tsv" | awk -F '\034' '{ print $1 FS $2 }')
 }
 
 normalize_root_nuspec() {

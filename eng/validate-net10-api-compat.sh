@@ -76,11 +76,13 @@ die() {
 }
 
 need() {
-  command -v "$1" >/dev/null 2>&1 || die "required command is unavailable: $1"
+  local required_command="$1"
+  command -v "$required_command" >/dev/null 2>&1 || die "required command is unavailable: $required_command"
 }
 
 need_file() {
-  [[ -f "$1" ]] || die "required file is missing: $1"
+  local required_file="$1"
+  [[ -f "$required_file" ]] || die "required file is missing: $required_file"
 }
 
 records3() {
@@ -154,7 +156,7 @@ download_nupkg() {
   local destination="$3"
   local normalized_id
   normalized_id="$(printf '%s' "$package_id" | tr '[:upper:]' '[:lower:]')"
-  curl --fail --silent --show-error --location --retry 3 \
+  curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' --tlsv1.2 \
     "https://api.nuget.org/v3-flatcontainer/$normalized_id/$version/$normalized_id.$version.nupkg" \
     --output "$destination" ||
     die "failed to resolve published baseline $package_id $version"
@@ -254,14 +256,14 @@ run_gate() {
   local tool_dll
   local package_output="$work_dir/current-packages"
   local baseline_output="$work_dir/published-baselines"
-  local project package_id expected_assets baseline_record baseline_version baseline_framework current_version baseline_archive current_archive baseline_assembly current_assembly
+  local project package_id baseline_record baseline_version baseline_framework current_version baseline_archive current_archive baseline_assembly current_assembly
   local package_count=0
 
   validate_manifest
   tool_dll="$(resolve_api_compat_tool)"
   mkdir -p "$package_output" "$baseline_output"
 
-  while IFS=$'\034' read -r project package_id expected_assets; do
+  while IFS=$'\034' read -r project package_id; do
     package_count=$((package_count + 1))
     baseline_record="$(baseline_for_package "$package_id")"
     IFS=$'\034' read -r baseline_version baseline_framework <<< "$baseline_record"
@@ -279,7 +281,7 @@ run_gate() {
     assembly_from_package "$current_archive" "net10.0" "$package_id" "$current_assembly"
     run_api_compat "$tool_dll" "$baseline_assembly" "$current_assembly" "$package_id"
     printf 'ApiCompat passed: %s %s/%s -> %s/net10.0\n' "$package_id" "$baseline_version" "$baseline_framework" "$current_version"
-  done < <(records3 "$package_manifest")
+  done < <(records3 "$package_manifest" | awk -F '\034' '{ print $1 FS $2 }')
 
   [[ "$package_count" == "12" ]] || die "ApiCompat did not inspect all 12 package producers"
 }

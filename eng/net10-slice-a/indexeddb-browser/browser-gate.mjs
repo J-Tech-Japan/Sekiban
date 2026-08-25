@@ -110,13 +110,17 @@ try {
 
 	const indexedDbRecord = await page.evaluate(async (eventId) =>
 		await new Promise((resolve, reject) => {
+			const asError = (reason, action) =>
+				reason instanceof Error
+					? reason
+					: new Error(`${action}: ${reason?.message ?? String(reason)}`);
 			const request = indexedDB.open("sek-g49-indexeddb-browser-gate");
-			request.onerror = () => reject(request.error);
+			request.onerror = () => reject(asError(request.error, "IndexedDB open failed"));
 			request.onsuccess = () => {
 				const database = request.result;
 				const transaction = database.transaction("events", "readonly");
 				const get = transaction.objectStore("events").get(eventId);
-				get.onerror = () => reject(get.error);
+				get.onerror = () => reject(asError(get.error, "IndexedDB read failed"));
 				get.onsuccess = () => {
 					database.close();
 					resolve(get.result);
@@ -125,7 +129,7 @@ try {
 		}),
 		expected.Id,
 	);
-	if (!indexedDbRecord || indexedDbRecord.Id !== expected.Id) {
+	if (indexedDbRecord?.Id !== expected.Id) {
 		throw new Error("browser IndexedDB does not contain the record written through BlazorJsRuntime");
 	}
 
