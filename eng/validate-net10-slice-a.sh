@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Validates the zero-evaluated-TFM characterization contract for SEK-G48 slice A.
+# Validates the SEK-G49 net10 single-target conversion contract.
 set -euo pipefail
 
 repo_root=""
 mode="all"
 run_self_test=false
 skip_pack=false
+only_package=""
 
 usage() {
   cat <<'EOF'
@@ -15,6 +16,8 @@ Options:
   --repo-root PATH  Repository root to validate (default: this script's repository).
   --mode MODE       all, authority, sdk, matrix, or packages (default: all).
   --skip-pack       Do not restore/pack the twelve package-producing projects.
+  --only-package ID Pack and compare one manifest package through the normal
+                    full-pack path. Internal mutation helper only.
   --self-test       Run the mutation suite after the selected validation passes.
 EOF
 }
@@ -36,6 +39,10 @@ while (($#)); do
       skip_pack=true
       shift
       ;;
+    --only-package)
+      only_package="${2:?--only-package requires a package ID}"
+      shift 2
+      ;;
     --self-test)
       run_self_test=true
       shift
@@ -54,8 +61,13 @@ done
 repo_root="$(cd "$repo_root" && pwd -P)"
 baseline_dir="$repo_root/eng/net10-slice-a"
 tmp_base="${TMPDIR:-/tmp}"
-work_dir="$(mktemp -d "$tmp_base/sek-g48-net10-slice-a.XXXXXX")"
-cache_root="${SEKIBAN_NET10_SLICE_A_CACHE:-$tmp_base/sek-g48-net10-slice-a-cache}"
+work_dir="$(mktemp -d "$tmp_base/sek-g49-net10-slice-b.XXXXXX")"
+cache_root="${SEKIBAN_NET10_SLICE_A_CACHE:-$tmp_base/sek-g49-net10-slice-b-cache}"
+
+# The validator is intentionally runnable from a clean consumer/CI account;
+# never require an inherited writable ~/.dotnet first-use location.
+mkdir -p "$cache_root/dotnet-cli"
+export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-$cache_root/dotnet-cli}"
 
 cleanup() {
   rm -rf "$work_dir"
@@ -63,7 +75,7 @@ cleanup() {
 trap cleanup EXIT
 
 die() {
-  printf 'net10 slice A validation: %s\n' "$*" >&2
+  printf 'net10 slice B validation: %s\n' "$*" >&2
   exit 1
 }
 
@@ -101,8 +113,12 @@ need_baselines() {
   need_file "$baseline_dir/evaluated-target-frameworks.tsv"
   need_file "$baseline_dir/excluded-projects.tsv"
   need_file "$baseline_dir/package-reference-versions.tsv"
+  need_file "$baseline_dir/package-reference-allowed-delta.tsv"
   need_file "$baseline_dir/package-assets.tsv"
   need_file "$baseline_dir/ci-command-matrix.tsv"
+  need_file "$repo_root/eng/validate-net10-api-compat.sh"
+  need_file "$repo_root/eng/validate-net10-serialization.sh"
+  need_file "$repo_root/eng/validate-net10-indexeddb-browser.sh"
   [[ -d "$baseline_dir/package-nuspecs" ]] ||
     die "required package nuspec baseline directory is missing"
   [[ "$(find "$baseline_dir/package-nuspecs" -type f -name '*.nuspec' | wc -l | tr -d ' ')" == "12" ]] ||
@@ -113,12 +129,14 @@ validate_root_authority() {
   local root_props="$repo_root/Directory.Build.props"
   need_file "$root_props"
 
-  grep -Fq '<SekibanCoreNet9TargetFramework>net9.0</SekibanCoreNet9TargetFramework>' "$root_props" ||
-    die "root authority does not define the net9 single-target value"
-  grep -Fq '<SekibanCoreNet8Net9TargetFrameworks>net8.0;net9.0</SekibanCoreNet8Net9TargetFrameworks>' "$root_props" ||
-    die "root authority does not define the net8/net9 multi-target value"
-  grep -Fq '<SekibanCoreNet9Net8TargetFrameworks>net9.0;net8.0</SekibanCoreNet9Net8TargetFrameworks>' "$root_props" ||
-    die "root authority does not define the net9/net8 multi-target value"
+  grep -Fq '<SekibanCoreNet9TargetFramework>net10.0</SekibanCoreNet9TargetFramework>' "$root_props" ||
+    die "root authority does not define the net10 single-target value"
+  grep -Fq '<SekibanCoreNet8Net9TargetFrameworks>net10.0</SekibanCoreNet8Net9TargetFrameworks>' "$root_props" ||
+    die "root authority does not define the net10 target-frameworks value"
+  grep -Fq '<SekibanCoreNet9Net8TargetFrameworks>net10.0</SekibanCoreNet9Net8TargetFrameworks>' "$root_props" ||
+    die "root authority does not define the alternate net10 target-frameworks value"
+  grep -Fq '<SekibanCorePackageVersion>0.25.0</SekibanCorePackageVersion>' "$root_props" ||
+    die "root authority does not define package version 0.25.0"
 
   local nested
   nested="$(find "$repo_root/src" "$repo_root/tests" "$repo_root/internalUsages" "$repo_root/Samples" "$repo_root/tools" -name Directory.Build.props -print)"
@@ -147,12 +165,12 @@ evaluate_target_frameworks() {
     authority_two="$(printf '%s' "$props" | jq -r '.Properties.SekibanCoreNet8Net9TargetFrameworks // ""')"
     authority_three="$(printf '%s' "$props" | jq -r '.Properties.SekibanCoreNet9Net8TargetFrameworks // ""')"
 
-    [[ "$authority_one" == "net9.0" ]] ||
+    [[ "$authority_one" == "net10.0" ]] ||
       die "root authority did not reach $project (single target property)"
-    [[ "$authority_two" == "net8.0;net9.0" ]] ||
-      die "root authority did not reach $project (net8/net9 property)"
-    [[ "$authority_three" == "net9.0;net8.0" ]] ||
-      die "root authority did not reach $project (net9/net8 property)"
+    [[ "$authority_two" == "net10.0" ]] ||
+      die "root authority did not reach $project (target-frameworks property)"
+    [[ "$authority_three" == "net10.0" ]] ||
+      die "root authority did not reach $project (alternate target-frameworks property)"
 
     [[ -n "$tf" ]] || tf="-"
     [[ -n "$tfs" ]] || tfs="-"
@@ -162,23 +180,6 @@ evaluate_target_frameworks() {
   LC_ALL=C sort -o "$output" "$output"
   [[ "$(wc -l < "$output" | tr -d ' ')" == "69" ]] ||
     die "expected 69 evaluated projects"
-}
-
-expected_authority_element() {
-  case "$1|$2" in
-    "net9.0|")
-      printf '%s' '<TargetFramework>$(SekibanCoreNet9TargetFramework)</TargetFramework>'
-      ;;
-    "|net8.0;net9.0")
-      printf '%s' '<TargetFrameworks>$(SekibanCoreNet8Net9TargetFrameworks)</TargetFrameworks>'
-      ;;
-    "|net9.0;net8.0")
-      printf '%s' '<TargetFrameworks>$(SekibanCoreNet9Net8TargetFrameworks)</TargetFrameworks>'
-      ;;
-    *)
-      die "no root-authority mapping exists for $1|$2"
-      ;;
-  esac
 }
 
 expected_literal_element() {
@@ -192,19 +193,13 @@ expected_literal_element() {
 }
 
 validate_source_authority() {
-  local project tf tfs expected project_file
+  local project project_file
   local in_scope_actual="$work_dir/in-scope-projects.txt"
   local in_scope_expected="$work_dir/in-scope-expected.txt"
 
   list_projects | awk -F/ '$1 == "src" || $1 == "tests" || $1 == "internalUsages"' > "$in_scope_actual"
   records3 "$baseline_dir/evaluated-target-frameworks.tsv" |
-    while IFS=$'\034' read -r project tf tfs; do
-      case "$project" in
-        src/*|tests/*|internalUsages/*)
-          printf '%s\n' "$project"
-          ;;
-      esac
-    done |
+    awk -F '\034' '$1 ~ /^(src|tests|internalUsages)\// { print $1 }' |
     LC_ALL=C sort > "$in_scope_expected"
 
   diff -u "$in_scope_expected" "$in_scope_actual" ||
@@ -216,9 +211,15 @@ validate_source_authority() {
     case "$project" in
       src/*|tests/*|internalUsages/*)
         project_file="$repo_root/$project"
-        expected="$(expected_authority_element "$tf" "$tfs")"
-        grep -Fq "$expected" "$project_file" ||
+        if grep -Fq '<TargetFramework>$(SekibanCoreNet9TargetFramework)</TargetFramework>' "$project_file"; then
+          :
+        elif grep -Fq '<TargetFrameworks>$(SekibanCoreNet8Net9TargetFrameworks)</TargetFrameworks>' "$project_file"; then
+          :
+        elif grep -Fq '<TargetFrameworks>$(SekibanCoreNet9Net8TargetFrameworks)</TargetFrameworks>' "$project_file"; then
+          :
+        else
           die "in-scope project does not consume its required root authority: $project"
+        fi
         if grep -Eq '<TargetFrameworks?>[[:space:]]*[^<]*net[0-9]' "$project_file"; then
           die "in-scope project contains a literal target framework: $project"
         fi
@@ -259,7 +260,9 @@ validate_authority() {
   validate_exclusion_manifest
   evaluate_target_frameworks "$actual"
   diff -u "$baseline_dir/evaluated-target-frameworks.tsv" "$actual" ||
-    die "evaluated target framework inventory changed from the captured core_main baseline"
+    die "evaluated target framework inventory changed from the committed net10 baseline"
+  [[ "$(awk -F '\t' '$1 ~ "^(src|tests|internalUsages)/" && (($2 == "net10.0" && $3 == "-") || ($2 == "-" && $3 == "net10.0")) { count++ } END { print count + 0 }' "$actual")" == "40" ]] ||
+    die "all forty in-scope projects must evaluate to net10.0 exactly once"
 }
 
 validate_sdk() {
@@ -318,8 +321,131 @@ build_package_reference_inventory() {
   )
 
   LC_ALL=C sort -o "$output" "$output"
-  [[ "$(wc -l < "$output" | tr -d ' ')" == "244" ]] ||
-    die "expected 244 PackageReference versions"
+}
+
+validate_package_reference_inventory() {
+  local actual="$1"
+  local removals="$work_dir/package-reference-removals.tsv"
+  local additions="$work_dir/package-reference-additions.tsv"
+  local expected="$work_dir/package-reference-expected.tsv"
+  local retained="$work_dir/package-reference-retained.tsv"
+
+  [[ "$(wc -l < "$baseline_dir/package-reference-versions.tsv" | tr -d ' ')" == "244" ]] ||
+    die "the frozen slice-A package-reference inventory must contain 244 literal references"
+  [[ "$(awk -F '\t' '$1 == "remove" { count++ } END { print count + 0 }' "$baseline_dir/package-reference-allowed-delta.tsv")" == "3" ]] ||
+    die "the dependency delta must remove exactly the two approved source edits' three prior references"
+  [[ "$(awk -F '\t' '$1 == "add" { count++ } END { print count + 0 }' "$baseline_dir/package-reference-allowed-delta.tsv")" == "1" ]] ||
+    die "the dependency delta must add exactly the approved WebAssembly 10.x reference"
+
+  awk -F '\t' '$1 == "remove" { print $2 "\t" $3 "\t" $4 }' "$baseline_dir/package-reference-allowed-delta.tsv" |
+    LC_ALL=C sort > "$removals"
+  awk -F '\t' '$1 == "add" { print $2 "\t" $3 "\t" $4 }' "$baseline_dir/package-reference-allowed-delta.tsv" |
+    LC_ALL=C sort > "$additions"
+
+  grep -Fvx -f "$removals" "$baseline_dir/package-reference-versions.tsv" > "$retained" || true
+  cat "$retained" "$additions" | LC_ALL=C sort > "$expected"
+  diff -u "$expected" "$actual" ||
+    die "PackageReference inventory changed outside the two approved dependency-reference edits"
+  [[ "$(wc -l < "$actual" | tr -d ' ')" == "242" ]] ||
+    die "net10 conversion must leave exactly 242 literal PackageReference versions after the approved delta"
+
+  local indexeddb_project="$repo_root/src/Sekiban.Infrastructure.IndexedDb/Sekiban.Infrastructure.IndexedDb.csproj"
+  local core_dotnet_project="$repo_root/src/Sekiban.Core.DotNet/Sekiban.Core.DotNet.csproj"
+  [[ "$(grep -Fc '<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.11"/>' "$indexeddb_project")" == "1" ]] ||
+    die "IndexedDb must have one unconditional Microsoft.AspNetCore.Components.WebAssembly 10.0.11 reference"
+  if grep -Eq 'PackageReference[^>]*Microsoft\.AspNetCore\.Components\.WebAssembly[^>]*Condition=' "$indexeddb_project"; then
+    die "IndexedDb must not condition its WebAssembly reference on an old target framework"
+  fi
+  if grep -Fq 'System.Runtime.InteropServices' "$core_dotnet_project"; then
+    die "Sekiban.Core.DotNet must not retain a direct System.Runtime.InteropServices reference"
+  fi
+}
+
+validate_package_version_authority() {
+  local project package_id props version package_version count=0
+
+  while IFS=$'\034' read -r project package_id; do
+    [[ "$package_id" == "MemStat.Net" ]] && continue
+    grep -Fq '<Version>$(SekibanCorePackageVersion)</Version>' "$repo_root/$project" ||
+      die "package producer does not consume the 0.25.0 version authority: $project"
+    grep -Fq '<PackageVersion>$(SekibanCorePackageVersion)</PackageVersion>' "$repo_root/$project" ||
+      die "package producer does not consume the package-version authority: $project"
+    props="$(dotnet msbuild "$repo_root/$project" -nologo -getProperty:Version -getProperty:PackageVersion)" ||
+      die "MSBuild package-version evaluation failed for $project"
+    version="$(printf '%s' "$props" | jq -r '.Properties.Version // ""')"
+    package_version="$(printf '%s' "$props" | jq -r '.Properties.PackageVersion // ""')"
+    [[ "$version" == "0.25.0" && "$package_version" == "0.25.0" ]] ||
+      die "package producer did not evaluate to version 0.25.0: $project"
+    count=$((count + 1))
+  done < <(records3 "$baseline_dir/package-assets.tsv" | awk -F '\034' '{ print $1 FS $2 }')
+
+  [[ "$count" == "11" ]] ||
+    die "expected eleven Sekiban package producers to consume the 0.25.0 authority"
+}
+
+# Project references compile the sibling source project, while an explicit
+# Sekiban.* PackageReference is the intentionally published compatibility
+# dependency. Keep those roles distinguishable: a direct pin remains exact,
+# whereas an unshadowed sibling ProjectReference must become a 0.25.0 package
+# dependency in this release.
+explicit_internal_dependencies_from_project() {
+  local project="$1"
+  perl -ne 'if (/<PackageReference\s+Include="(Sekiban\.[^"]+)"\s+Version="([^"]+)"/) { print "$1\t$2\n"; }' "$project" |
+    LC_ALL=C sort
+}
+
+project_reference_internal_package_ids() {
+  local project="$1"
+  perl -ne 'if (/<ProjectReference\s+Include="\.\.[\\\\\/](Sekiban\.[^\\\\\/"]+)[\\\\\/][^"]+\.csproj"/) { print "$1\n"; }' "$project" |
+    LC_ALL=C sort -u
+}
+
+expected_internal_dependencies_from_project() {
+  local project="$1"
+  local direct_dependencies="$work_dir/$(basename "$project").direct-internal-dependencies.tsv"
+  local project_reference_id
+
+  explicit_internal_dependencies_from_project "$project" > "$direct_dependencies"
+  {
+    cat "$direct_dependencies"
+    while IFS= read -r project_reference_id; do
+      if ! awk -F '\t' -v package_id="$project_reference_id" '$1 == package_id { found = 1 } END { exit !found }' "$direct_dependencies"; then
+        printf '%s\t0.25.0\n' "$project_reference_id"
+      fi
+    done < <(project_reference_internal_package_ids "$project")
+  } | LC_ALL=C sort -u
+}
+
+internal_dependencies_from_nuspec() {
+  local nuspec="$1"
+  perl -ne 'if (/<dependency\s+id="(Sekiban\.[^"]+)"\s+version="([^"]+)"/) { print "$1\t$2\n"; }' "$nuspec" |
+    LC_ALL=C sort
+}
+
+validate_internal_nuspec_dependency_provenance() {
+  local project="$1"
+  local package_id="$2"
+  local nuspec="$3"
+  local source_dependencies="$work_dir/$package_id.source-internal-dependencies.tsv"
+  local nuspec_dependencies="$work_dir/$package_id.nuspec-internal-dependencies.tsv"
+
+  expected_internal_dependencies_from_project "$project" > "$source_dependencies"
+  internal_dependencies_from_nuspec "$nuspec" > "$nuspec_dependencies"
+  diff -u "$source_dependencies" "$nuspec_dependencies" ||
+    die "internal nuspec dependency does not match its explicit source pin or 0.25.0 project-reference edge for $package_id"
+}
+
+validate_baselined_internal_nuspec_dependency_provenance() {
+  local project package_id expected_nuspec
+
+  while IFS=$'\034' read -r project package_id; do
+    expected_nuspec="$baseline_dir/package-nuspecs/$package_id.nuspec"
+    need_file "$expected_nuspec"
+    validate_internal_nuspec_dependency_provenance \
+      "$repo_root/$project" \
+      "$package_id" \
+      "$expected_nuspec"
+  done < <(records3 "$baseline_dir/package-assets.tsv" | awk -F '\034' '{ print $1 FS $2 }')
 }
 
 normalize_root_nuspec() {
@@ -337,29 +463,48 @@ normalize_root_nuspec() {
     die "root nuspec identity changed for $package_id: found $root_nuspec"
 
   unzip -p "$archive" "$root_nuspec" |
-    perl -0pe 's/^\xEF\xBB\xBF//; s/\r\n?/\n/g; s/\n*\z/\n/; s{<version>0\.0\.0-sek-g48</version>}{<version>__SEK_G48_PACKAGE_VERSION__</version>}g; s{commit="[0-9a-f]{40}"}{commit="__SEK_G48_SOURCE_COMMIT__"}g' \
+      perl -0pe 's/^\xEF\xBB\xBF//; s/\r\n?/\n/g; s/\n*\z/\n/; s{<version>0\.0\.0-sek-g49</version>}{<version>__SEK_G49_PACKAGE_VERSION__</version>}g; s{(<dependency id="Sekiban\.[^"]+" version=")0\.0\.0-sek-g49"}{$1 . "0.25.0\""}ge; s{commit="[0-9a-f]{40}"}{commit="__SEK_G49_SOURCE_COMMIT__"}g' \
       > "$output"
 
   grep -Fq "<id>$package_id</id>" "$output" ||
     die "normalized nuspec identity changed for $package_id"
-  grep -Fq '<version>__SEK_G48_PACKAGE_VERSION__</version>' "$output" ||
+  grep -Fq '<version>__SEK_G49_PACKAGE_VERSION__</version>' "$output" ||
     die "normalized nuspec did not normalize synthetic package version for $package_id"
-  grep -Fq 'commit="__SEK_G48_SOURCE_COMMIT__"' "$output" ||
+  grep -Fq 'commit="__SEK_G49_SOURCE_COMMIT__"' "$output" ||
     die "normalized nuspec did not normalize source commit for $package_id"
 }
 
 validate_package_assets() {
   local package_output="$work_dir/packages"
   local repository_commit="0123456789abcdef0123456789abcdef01234567"
-  local project package_id expected archive actual_assets expected_nuspec actual_nuspec
+  local project package_id expected archive actual_assets expected_nuspec actual_nuspec packed_count=0
 
   mkdir -p "$cache_root/dotnet-cli" "$cache_root/nuget-packages" "$cache_root/nuget-http-cache" "$package_output"
   export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-$cache_root/dotnet-cli}"
   export NUGET_PACKAGES="${NUGET_PACKAGES:-$cache_root/nuget-packages}"
   export NUGET_HTTP_CACHE_PATH="${NUGET_HTTP_CACHE_PATH:-$cache_root/nuget-http-cache}"
-  dotnet restore "$repo_root/Sekiban.sln" --nologo
-
+  export npm_config_cache="${npm_config_cache:-$cache_root/npm-cache}"
+  # The normal gate deliberately performs all twelve producers' full package
+  # path. This validator compares only the produced lib/ref shape and root
+  # nuspec, so disable unrelated SBOM work for both the full and targeted
+  # paths. Otherwise the macOS pack process can remain in SBOM generation
+  # after emitting an archive, leaving the required twelve-package proof
+  # incomplete.
+  # Keep the pack options in positional parameters, not an empty array: Bash
+  # 3.2 expands an empty local array under nounset as an unbound variable and
+  # can falsely return success after the first package.
+  set -- \
+    -p:GeneratePackageOnBuild=false \
+    -p:GenerateSBOM=false \
+    -p:PackageVersion=0.0.0-sek-g49 \
+    -p:Version=0.0.0-sek-g49 \
+    -p:RepositoryCommit="$repository_commit"
   while IFS=$'\034' read -r project package_id expected; do
+    if [[ -n "$only_package" && "$package_id" != "$only_package" ]]; then
+      continue
+    fi
+    packed_count=$((packed_count + 1))
+    dotnet restore "$repo_root/$project" --nologo
     # Several current package producers use GeneratePackageOnBuild. Build first
     # with that behavior disabled, then inspect the explicit no-build package.
     dotnet build "$repo_root/$project" \
@@ -373,12 +518,9 @@ validate_package_assets() {
       --no-restore \
       --nologo \
       --output "$package_output" \
-      -p:GeneratePackageOnBuild=false \
-      -p:PackageVersion=0.0.0-sek-g48 \
-      -p:Version=0.0.0-sek-g48 \
-      -p:RepositoryCommit="$repository_commit"
+      "$@"
 
-    archive="$package_output/$package_id.0.0.0-sek-g48.nupkg"
+    archive="$package_output/$package_id.0.0.0-sek-g49.nupkg"
     [[ -f "$archive" ]] || die "pack did not create $archive"
     actual_assets="$(
       unzip -Z1 "$archive" |
@@ -393,17 +535,35 @@ validate_package_assets() {
     actual_nuspec="$work_dir/$package_id.nuspec"
     need_file "$expected_nuspec"
     normalize_root_nuspec "$archive" "$package_id" "$actual_nuspec"
+    # Compare the full normalized root document before its focused provenance
+    # assertion. This makes a dependencies-only pack mutation demonstrably
+    # reach (and fail only at) the root-nuspec comparison while retaining the
+    # more specific provenance guard for matching documents.
     diff -u "$expected_nuspec" "$actual_nuspec" ||
       die "package nuspec changed for $package_id"
+    validate_internal_nuspec_dependency_provenance \
+      "$repo_root/$project" \
+      "$package_id" \
+      "$actual_nuspec"
   done < <(records3 "$baseline_dir/package-assets.tsv")
+
+  if [[ -n "$only_package" ]]; then
+    [[ "$packed_count" == "1" ]] ||
+      die "--only-package is not one of the twelve packaged producers: $only_package"
+  else
+    [[ "$packed_count" == "12" ]] ||
+      die "normal full package validation must pack all twelve producers, found $packed_count"
+  fi
+  printf 'net10 slice B package validation completed %s producer(s)\n' "$packed_count"
 }
 
 validate_packages() {
   local actual="$work_dir/package-reference-versions.tsv"
   need_baselines
+  validate_package_version_authority
   build_package_reference_inventory "$actual"
-  diff -u "$baseline_dir/package-reference-versions.tsv" "$actual" ||
-    die "PackageReference version inventory changed from the captured baseline"
+  validate_package_reference_inventory "$actual"
+  validate_baselined_internal_nuspec_dependency_provenance
   if [[ "$skip_pack" == false ]]; then
     validate_package_assets
   fi
@@ -451,37 +611,47 @@ extract_ci_matrix() {
 validate_ci_matrix() {
   local actual="$work_dir/ci-command-matrix.tsv"
   local run_workflow="$repo_root/.github/workflows/run_test.yml"
-  local workflow pattern
+  local workflow pattern retired_job
 
   need_baselines
   extract_ci_matrix "$actual"
+  if grep -Eq '(^|[^0-9])net(8|9)\.0([^0-9]|$)' "$run_workflow"; then
+    die "the core test workflow still contains a net8.0 or net9.0 lane"
+  fi
+  if awk -F '\t' '$5 != "-" && $5 != "net10.0" { exit 1 }' "$actual"; then
+    :
+  else
+    die "every CI test command must explicitly target net10.0"
+  fi
+  if ! awk -F '\t' '$5 == "net10.0" { count[$4]++; jobs[$4] = jobs[$4] " " $2 } END { for (command in count) if (count[command] > 1) { print command ":" jobs[command]; failed = 1 } exit failed }' "$actual"; then
+    die "the net10 CI matrix contains a duplicate test command"
+  fi
+  for retired_job in \
+    regular80Mixed regular90Mixed regular80Cosmos regular90Cosmos flaky90 \
+    performance80cosmos performance90cosmos performance80dynamo performance90dynamo \
+    performance80postgres performance90postgres performance80IndexedDb performance90IndexedDb; do
+    if grep -Eq "^  ${retired_job}:" "$run_workflow"; then
+      die "the retired paired lane remains in the net10 workflow: $retired_job"
+    fi
+  done
   diff -u "$baseline_dir/ci-command-matrix.tsv" "$actual" ||
     die "restore/build/test command matrix differs from its committed inventory"
-  [[ "$(wc -l < "$actual" | tr -d ' ')" == "57" ]] ||
-    die "expected 57 restore/build/test command entries"
-
-  grep -Fq 'SEK-G48: regular90Cosmos intentionally executes its Cosmos test at net8.0.' "$run_workflow" ||
-    die "regular90Cosmos' net8.0 command/name mismatch is not documented"
-  grep -Fq 'SEK-G48: performance90cosmos intentionally executes its Cosmos test at net8.0.' "$run_workflow" ||
-    die "performance90cosmos' net8.0 command/name mismatch is not documented"
-  grep -Fq $'run_test.yml\tregular90Cosmos\tTest dotnet tests/Sekiban.Test.CosmosDb\tdotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0\tnet8.0' "$actual" ||
-    die "regular90Cosmos' actual net8.0 command is not surfaced by the matrix"
-  grep -Fq $'run_test.yml\tperformance90cosmos\tTest dotnet\tdotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj --filter "Category=Performance" -v m -c Release -m:1 -f net8.0\tnet8.0' "$actual" ||
-    die "performance90cosmos' actual net8.0 command is not surfaced by the matrix"
+  [[ "$(wc -l < "$actual" | tr -d ' ')" == "35" ]] ||
+    die "expected 35 de-duplicated restore/build/test command entries"
 
   for workflow in \
     "$repo_root/.github/workflows/packageMemStat.yml" \
     "$repo_root/.github/workflows/packages.yml" \
     "$run_workflow"; do
-    grep -Fq 'dotnet-version: 8.0.410' "$workflow" ||
-      die "workflow is not provisioned with the exact .NET 8 SDK: $workflow"
     grep -Fq 'dotnet-version: 10.0.400' "$workflow" ||
       die "workflow is not provisioned with the exact SDK pin: $workflow"
     grep -Fq 'name: Setup .NET 10' "$workflow" ||
       die "workflow does not identify the exact .NET 10 SDK setup: $workflow"
-    if grep -Eq 'dotnet-version: (8\.0\.x|9\.0\.x|10\.0\.x)' "$workflow"; then
-      die "workflow still provisions a floating SDK: $workflow"
+    if grep -Eq 'dotnet-version: (8|9)\.|dotnet-version: 10\.0\.x' "$workflow"; then
+      die "workflow provisions an unsupported or floating SDK: $workflow"
     fi
+    grep -Fq 'SekibanCore.slnf' "$workflow" ||
+      die "workflow does not use the core-only solution filter: $workflow"
   done
 
   grep -Fq 'name: Assert exact SDK pin' "$run_workflow" ||
@@ -491,11 +661,27 @@ validate_ci_matrix() {
   grep -Fq 'test "$actual" = "$expected"' "$run_workflow" ||
     die "the harness workflow does not compare the resolved SDK with global.json"
 
-  local invocation='./eng/validate-net10-slice-a.sh --repo-root "$GITHUB_WORKSPACE" --self-test'
-  grep -Fq "$invocation" "$run_workflow" ||
-    die "the harness invocation is missing from CI"
+  local characterization_invocation='./eng/validate-net10-slice-a.sh --repo-root "$GITHUB_WORKSPACE" --self-test'
+  local api_compat_invocation='./eng/validate-net10-api-compat.sh --repo-root "$GITHUB_WORKSPACE" --self-test'
+  local serialization_invocation='./eng/validate-net10-serialization.sh --repo-root "$GITHUB_WORKSPACE" --self-test'
+  local browser_invocation='./eng/validate-net10-indexeddb-browser.sh --repo-root "$GITHUB_WORKSPACE" --self-test'
+  grep -Fq "$characterization_invocation" "$run_workflow" ||
+    die "the characterization harness invocation is missing from CI"
+  grep -Fq "$api_compat_invocation" "$run_workflow" ||
+    die "the ApiCompat harness invocation is missing from CI"
+  grep -Fq "$serialization_invocation" "$run_workflow" ||
+    die "the serialization harness invocation is missing from CI"
+  grep -Fq "$browser_invocation" "$run_workflow" ||
+    die "the browser harness invocation is missing from CI"
+  grep -Fq 'name: Setup Node for browser gate' "$run_workflow" ||
+    die "the browser harness does not provision Node in CI"
+  grep -Fq 'node-version: 24' "$run_workflow" ||
+    die "the browser harness does not pin its Node version in CI"
   for pattern in \
     '"eng/validate-net10-slice-a.sh"' \
+    '"eng/validate-net10-api-compat.sh"' \
+    '"eng/validate-net10-serialization.sh"' \
+    '"eng/validate-net10-indexeddb-browser.sh"' \
     '"eng/net10-slice-a/**"' \
     '".github/workflows/run_test.yml"'; do
     grep -Fq "$pattern" "$run_workflow" ||
@@ -515,6 +701,8 @@ copy_mutant() {
     --exclude 'dcb/' \
     --exclude 'bin' \
     --exclude 'obj' \
+    --exclude 'node_modules/' \
+    --exclude '**/node_modules/' \
     "$repo_root/" \
     "$target/"
 }
@@ -531,13 +719,28 @@ expect_failure() {
   printf 'mutation self-test failed as required: %s\n' "$label"
 }
 
+expect_failure_with_message() {
+  local label="$1"
+  local mutant_root="$2"
+  local mutant_mode="$3"
+  local expected_message="$4"
+  local log_file="$work_dir/$label.log"
+
+  if bash "$script_path" --repo-root "$mutant_root" --skip-pack --mode "$mutant_mode" >"$log_file" 2>&1; then
+    die "mutation self-test unexpectedly passed: $label"
+  fi
+  grep -Fq "$expected_message" "$log_file" ||
+    die "mutation self-test did not fail at its intended guard: $label"
+  printf 'mutation self-test failed at the intended guard: %s\n' "$label"
+}
+
 expect_nuspec_only_failure() {
   local label="$1"
   local mutant_root="$2"
   local package_id="$3"
   local log_file="$work_dir/$label.log"
 
-  if bash "$script_path" --repo-root "$mutant_root" --mode packages >"$log_file" 2>&1; then
+  if bash "$script_path" --repo-root "$mutant_root" --mode packages --only-package "$package_id" >"$log_file" 2>&1; then
     die "mutation self-test unexpectedly passed: $label"
   fi
   grep -Fq "package nuspec changed for $package_id" "$log_file" ||
@@ -581,6 +784,18 @@ run_self_tests() {
     "$mutant/src/Sekiban.Core/Sekiban.Core.csproj"
   expect_failure "package-reference-version" "$mutant" packages
 
+  mutant="$work_dir/mutant-internal-nuspec-source-pin"
+  copy_mutant "$mutant"
+  perl -0pi -e 's{(<dependency id="Sekiban\.Core\.DotNet" version=")0\.24\.3"}{${1}0.25.0"}' \
+    "$mutant/eng/net10-slice-a/package-nuspecs/Sekiban.Core.nuspec"
+  expect_failure_with_message "internal-nuspec-source-pin" "$mutant" packages "internal nuspec dependency does not match its explicit source pin or 0.25.0 project-reference edge"
+
+  mutant="$work_dir/mutant-project-reference-nuspec-version"
+  copy_mutant "$mutant"
+  perl -0pi -e 's{(<dependency id="Sekiban\.Infrastructure\.Aws\.S3" version=")0\.25\.0"}{${1}0.24.3"}' \
+    "$mutant/eng/net10-slice-a/package-nuspecs/Sekiban.Infrastructure.Postgres.nuspec"
+  expect_failure_with_message "project-reference-nuspec-version" "$mutant" packages "internal nuspec dependency does not match its explicit source pin or 0.25.0 project-reference edge"
+
   mutant="$work_dir/mutant-package-nuspec-dependencies"
   copy_mutant "$mutant"
   perl -0pi -e 's{(<PropertyGroup>)}{$1\n    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>}s' \
@@ -601,21 +816,51 @@ run_self_tests() {
 
   mutant="$work_dir/mutant-matrix-lane"
   copy_mutant "$mutant"
-  perl -0pi -e 's{^  regular90Cosmos:\n.*?(?=^  regular90Mixed:)}{# removed regular90Cosmos lane\n}ms' \
+  perl -0pi -e 's{^  regularCosmos:\n.*?(?=^  regularDynamo:)}{# removed regularCosmos lane\n}ms' \
     "$mutant/.github/workflows/run_test.yml"
   expect_failure "ci-matrix-lane-removed" "$mutant" matrix
 
   mutant="$work_dir/mutant-matrix-flag"
   copy_mutant "$mutant"
-  perl -0pi -e 's{(^  regular90Cosmos:.*?-f )net8\.0}{${1}net9.0}ms' \
+  perl -0pi -e 's{(^  regularCosmos:.*?-f )net10\.0}{${1}net9.0}ms' \
     "$mutant/.github/workflows/run_test.yml"
-  expect_failure "ci-matrix-framework-flag" "$mutant" matrix
+  expect_failure_with_message "ci-matrix-stale-framework" "$mutant" matrix "still contains a net8.0 or net9.0 lane"
+
+  mutant="$work_dir/mutant-matrix-duplicate"
+  copy_mutant "$mutant"
+  perl -0pi -e 's{(    - name: Test dotnet FeatureCheck \.NET10\n      run: \|\n        dotnet test tests/FeatureCheck\.Test/FeatureCheck\.Test\.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net10\.0\n)}{$1$1}' \
+    "$mutant/.github/workflows/run_test.yml"
+  expect_failure_with_message "ci-matrix-duplicate-net10-command" "$mutant" matrix "contains a duplicate test command"
+
+  mutant="$work_dir/mutant-matrix-retired-pair"
+  copy_mutant "$mutant"
+  perl -0pi -e 's{^  regularCosmos:}{  regular90Cosmos:}m' \
+    "$mutant/.github/workflows/run_test.yml"
+  expect_failure_with_message "ci-matrix-retired-paired-lane" "$mutant" matrix "retired paired lane remains"
 
   mutant="$work_dir/mutant-matrix-invocation"
   copy_mutant "$mutant"
   perl -0pi -e 's{^[[:space:]]*\./eng/validate-net10-slice-a\.sh[^\n]*\n}{}m' \
     "$mutant/.github/workflows/run_test.yml"
-  expect_failure "ci-harness-invocation" "$mutant" matrix
+  expect_failure_with_message "ci-characterization-harness-invocation" "$mutant" matrix "characterization harness invocation is missing from CI"
+
+  mutant="$work_dir/mutant-api-compat-invocation"
+  copy_mutant "$mutant"
+  perl -0pi -e 's{^[[:space:]]*\./eng/validate-net10-api-compat\.sh[^\n]*\n}{}m' \
+    "$mutant/.github/workflows/run_test.yml"
+  expect_failure_with_message "ci-api-compat-harness-invocation" "$mutant" matrix "ApiCompat harness invocation is missing from CI"
+
+  mutant="$work_dir/mutant-serialization-invocation"
+  copy_mutant "$mutant"
+  perl -0pi -e 's{^[[:space:]]*\./eng/validate-net10-serialization\.sh[^\n]*\n}{}m' \
+    "$mutant/.github/workflows/run_test.yml"
+  expect_failure_with_message "ci-serialization-harness-invocation" "$mutant" matrix "serialization harness invocation is missing from CI"
+
+  mutant="$work_dir/mutant-browser-invocation"
+  copy_mutant "$mutant"
+  perl -0pi -e 's{^[[:space:]]*\./eng/validate-net10-indexeddb-browser\.sh[^\n]*\n}{}m' \
+    "$mutant/.github/workflows/run_test.yml"
+  expect_failure_with_message "ci-browser-harness-invocation" "$mutant" matrix "browser harness invocation is missing from CI"
 }
 
 need dotnet
@@ -651,4 +896,4 @@ if [[ "$run_self_test" == true ]]; then
   run_self_tests
 fi
 
-printf 'net10 slice A validation passed (%s)\n' "$mode"
+printf 'net10 slice B validation passed (%s)\n' "$mode"

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEK-G49 IndexedDB browser gate</title>
+</head>
+<body data-sek-g49-browser-gate="booting">
+  <div id="app">Loading browser gate…</div>
+  <script>
+    window.sekG49BrowserGate = {
+      complete: function (record) {
+        document.body.dataset.sekG49BrowserGate = "passed";
+        document.body.dataset.sekG49BrowserRecord = record;
+      },
+      fail: function (error) {
+        document.body.dataset.sekG49BrowserGate = "failed";
+        document.body.dataset.sekG49BrowserError = error;
+      }
+    };
+  </script>
+  <script src="_framework/blazor.webassembly.js"></script>
+</body>
+</html>

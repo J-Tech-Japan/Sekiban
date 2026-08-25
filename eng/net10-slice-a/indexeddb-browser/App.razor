@@ -1,0 +1,61 @@
+@using System.Text.Json
+@using Microsoft.JSInterop
+@using Sekiban.Infrastructure.IndexedDb
+@using Sekiban.Infrastructure.IndexedDb.Databases
+@inject ISekibanJsRuntime SekibanJsRuntime
+@inject IJSRuntime JsRuntime
+
+<h1>SEK-G49 IndexedDB browser gate</h1>
+
+@code {
+    private static readonly DbEvent Expected = new()
+    {
+        Id = "6de901b9-14eb-45f8-9c5c-9ab2a0f54ac5",
+        Payload = "{\"kind\":\"browser-gate\",\"value\":10}",
+        Version = 7,
+        CallHistories = "[]",
+        AggregateId = "13facb6f-31db-46f4-9da0-bc1edc44ebd0",
+        PartitionKey = "sek-g49-browser-partition",
+        DocumentType = "Event",
+        DocumentTypeName = "BrowserGateEvent",
+        TimeStamp = "2026-08-25T00:00:00.0000000Z",
+        SortableUniqueId = "202608250000000000000000000001",
+        AggregateType = "Sekiban.Net10.BrowserGate",
+        RootPartitionKey = "sek-g49-browser-root",
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            if (SekibanJsRuntime is not BlazorJsRuntime)
+            {
+                throw new InvalidOperationException("The default BlazorJsRuntime was not selected.");
+            }
+
+            var context = await SekibanJsRuntime.CreateContextAsync("sek-g49-indexeddb-browser-gate");
+            await context.RemoveAllEventsAsync();
+            await context.WriteEventAsync(Expected);
+            var actual = await context.GetEventsAsync(new DbEventQuery());
+
+            if (actual.Length != 1 || actual[0] != Expected)
+            {
+                throw new InvalidOperationException(
+                    $"IndexedDB round trip changed the DbEvent: {JsonSerializer.Serialize(actual)}");
+            }
+
+            await JsRuntime.InvokeVoidAsync(
+                "sekG49BrowserGate.complete",
+                JsonSerializer.Serialize(actual[0]));
+        }
+        catch (Exception exception)
+        {
+            await JsRuntime.InvokeVoidAsync("sekG49BrowserGate.fail", exception.ToString());
+        }
+    }
+}

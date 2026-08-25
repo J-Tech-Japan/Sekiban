@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <TargetFrameworks>$(SekibanCoreNet8Net9TargetFrameworks)</TargetFrameworks>
         <PackageId>Sekiban.Infrastructure.Postgres</PackageId>
-        <Version>0.24.3</Version>
+        <Version>$(SekibanCorePackageVersion)</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.24.3</PackageVersion>
+        <PackageVersion>$(SekibanCorePackageVersion)</PackageVersion>
         <Description>Add Indexed DB as infrastructure</Description>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

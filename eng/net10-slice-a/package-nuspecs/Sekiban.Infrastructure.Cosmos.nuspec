@@ -2,21 +2,13 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
   <metadata>
     <id>Sekiban.Infrastructure.Cosmos</id>
-    <version>__SEK_G48_PACKAGE_VERSION__</version>
+    <version>__SEK_G49_PACKAGE_VERSION__</version>
     <authors>J-Tech Group</authors>
     <readme>README.md</readme>
     <description>Sekiban - Event Sourcing Framework CosmosInfrastructure</description>
-    <repository type="git" url="https://github.com/J-Tech-Japan/Sekiban" commit="__SEK_G48_SOURCE_COMMIT__" />
+    <repository type="git" url="https://github.com/J-Tech-Japan/Sekiban" commit="__SEK_G49_SOURCE_COMMIT__" />
     <dependencies>
-      <group targetFramework="net8.0">
-        <dependency id="Sekiban.Core.DotNet" version="0.24.3" exclude="Build,Analyzers" />
-        <dependency id="Sekiban.Infrastructure.Azure.Storage.Blobs" version="0.24.3" exclude="Build,Analyzers" />
-        <dependency id="Microsoft.Azure.Cosmos" version="3.46.1" exclude="Build,Analyzers" />
-        <dependency id="Microsoft.Extensions.Configuration" version="9.0.1" exclude="Build,Analyzers" />
-        <dependency id="Microsoft.Extensions.Configuration.Binder" version="9.0.1" exclude="Build,Analyzers" />
-        <dependency id="Newtonsoft.Json" version="13.0.3" exclude="Build,Analyzers" />
-      </group>
-      <group targetFramework="net9.0">
+      <group targetFramework="net10.0">
         <dependency id="Sekiban.Core.DotNet" version="0.24.3" exclude="Build,Analyzers" />
         <dependency id="Sekiban.Infrastructure.Azure.Storage.Blobs" version="0.24.3" exclude="Build,Analyzers" />
         <dependency id="Microsoft.Azure.Cosmos" version="3.46.1" exclude="Build,Analyzers" />

@@ -1,0 +1,9 @@
+{
+  "name": "sek-g49-indexeddb-browser-gate",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}
