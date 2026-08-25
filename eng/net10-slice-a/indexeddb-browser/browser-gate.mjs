@@ -108,14 +108,14 @@ try {
 		}
 	}
 
-	const indexedDbRecord = await page.evaluate(async () =>
+	const indexedDbRecord = await page.evaluate(async (eventId) =>
 		await new Promise((resolve, reject) => {
 			const request = indexedDB.open("sek-g49-indexeddb-browser-gate");
 			request.onerror = () => reject(request.error);
 			request.onsuccess = () => {
 				const database = request.result;
 				const transaction = database.transaction("events", "readonly");
-				const get = transaction.objectStore("events").get(expected.Id);
+				const get = transaction.objectStore("events").get(eventId);
 				get.onerror = () => reject(get.error);
 				get.onsuccess = () => {
 					database.close();
@@ -123,6 +123,7 @@ try {
 				};
 			};
 		}),
+		expected.Id,
 	);
 	if (!indexedDbRecord || indexedDbRecord.Id !== expected.Id) {
 		throw new Error("browser IndexedDB does not contain the record written through BlazorJsRuntime");
