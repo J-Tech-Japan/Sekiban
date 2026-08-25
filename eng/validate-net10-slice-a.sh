@@ -350,6 +350,7 @@ normalize_root_nuspec() {
 
 validate_package_assets() {
   local package_output="$work_dir/packages"
+  local repository_commit="0123456789abcdef0123456789abcdef01234567"
   local project package_id expected archive actual_assets expected_nuspec actual_nuspec
 
   mkdir -p "$cache_root/dotnet-cli" "$cache_root/nuget-packages" "$cache_root/nuget-http-cache" "$package_output"
@@ -374,7 +375,8 @@ validate_package_assets() {
       --output "$package_output" \
       -p:GeneratePackageOnBuild=false \
       -p:PackageVersion=0.0.0-sek-g48 \
-      -p:Version=0.0.0-sek-g48
+      -p:Version=0.0.0-sek-g48 \
+      -p:RepositoryCommit="$repository_commit"
 
     archive="$package_output/$package_id.0.0.0-sek-g48.nupkg"
     [[ -f "$archive" ]] || die "pack did not create $archive"
@@ -538,11 +540,8 @@ expect_nuspec_only_failure() {
   if bash "$script_path" --repo-root "$mutant_root" --mode packages >"$log_file" 2>&1; then
     die "mutation self-test unexpectedly passed: $label"
   fi
-  if ! grep -Fq "package nuspec changed for $package_id" "$log_file"; then
-    printf 'nuspec-only mutation inner log (%s):\n' "$label" >&2
-    sed -n '1,240p' "$log_file" >&2
+  grep -Fq "package nuspec changed for $package_id" "$log_file" ||
     die "nuspec-only mutation did not reach the root nuspec comparison: $label"
-  fi
   if grep -Fq 'package assets changed' "$log_file"; then
     die "nuspec-only mutation changed the lib/ref asset shape: $label"
   fi
