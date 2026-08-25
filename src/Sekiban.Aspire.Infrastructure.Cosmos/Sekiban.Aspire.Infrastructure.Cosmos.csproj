@@ -18,7 +18,7 @@
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <UserSecretsId>dd033285-cc41-4f0b-a790-5dc058fda775</UserSecretsId>
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+        <TargetFrameworks>$(SekibanCoreNet8Net9TargetFrameworks)</TargetFrameworks>
         <GenerateSBOM>true</GenerateSBOM>
     </PropertyGroup>
 

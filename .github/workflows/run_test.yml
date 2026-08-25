@@ -6,8 +6,17 @@ on:
     branches: [ core_main ]
     paths:
       - "src/**"
-      - "test/**"
-      - "samples/**"
+      - "tests/**"
+      - "internalUsages/**"
+      - "Samples/**"
+      - "tools/**"
+      - "Directory.Build.props"
+      - "global.json"
+      - "eng/validate-net10-slice-a.sh"
+      - "eng/net10-slice-a/**"
+      - ".github/workflows/run_test.yml"
+      - ".github/workflows/packages.yml"
+      - ".github/workflows/packageMemStat.yml"
 concurrency:
   group: CosmosDbConnect
   cancel-in-progress: false
@@ -21,11 +30,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -77,11 +86,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -132,11 +141,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -189,11 +198,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -233,7 +242,8 @@ jobs:
       run: |
         dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
 
-
+  # SEK-G48: regular90Cosmos intentionally executes its Cosmos test at net8.0.
+  # The structural matrix records this historic job-name/command mismatch.
   regular90Cosmos:
     strategy:
       max-parallel: 4
@@ -244,11 +254,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -300,11 +310,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -352,11 +362,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -408,11 +418,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -464,11 +474,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
@@ -495,11 +505,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -551,11 +561,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -607,11 +617,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -626,7 +636,8 @@ jobs:
     - name: Test dotnet
       run: |
         dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
-
+  # SEK-G48: performance90cosmos intentionally executes its Cosmos test at net8.0.
+  # The structural matrix records this historic job-name/command mismatch.
   performance90cosmos:
     strategy:
       max-parallel: 4
@@ -638,11 +649,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -669,11 +680,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -715,11 +726,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -766,11 +777,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -797,11 +808,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Secret Settings
       run: |
         pushd ./tests/Sekiban.Test.Abstructs
@@ -828,11 +839,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
@@ -853,11 +864,11 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.400
     - name: Restore dependencies
       run: |
         dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
@@ -865,3 +876,24 @@ jobs:
     - name: Test dotnet
       run: |
         dotnet test tests/Sekiban.Test.IndexedDb/Sekiban.Test.IndexedDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net9.0
+
+  net10SliceACharacterization:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.410
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.400
+    - name: Assert exact SDK pin
+      run: |
+        expected="$(jq -r '.sdk.version' global.json)"
+        actual="$(dotnet --version)"
+        test "$actual" = "$expected"
+    - name: Validate net10 slice A characterization
+      run: |
+        ./eng/validate-net10-slice-a.sh --repo-root "$GITHUB_WORKSPACE" --self-test

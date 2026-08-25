@@ -5,7 +5,7 @@
         <Nullable>enable</Nullable>
         <RootNamespace>ESSampleProjectLib</RootNamespace>
         <LangVersion>preview</LangVersion>
-        <TargetFrameworks>net9.0;net8.0</TargetFrameworks>
+        <TargetFrameworks>$(SekibanCoreNet9Net8TargetFrameworks)</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>

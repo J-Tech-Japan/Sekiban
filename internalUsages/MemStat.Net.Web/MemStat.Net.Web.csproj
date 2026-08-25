@@ -3,7 +3,7 @@
     <PropertyGroup>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFramework>$(SekibanCoreNet9TargetFramework)</TargetFramework>
     </PropertyGroup>
 
     <ItemGroup>

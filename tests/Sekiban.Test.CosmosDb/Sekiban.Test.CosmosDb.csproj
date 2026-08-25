@@ -8,7 +8,7 @@
         <UserSecretsId>55f43f08-0c5d-41bd-8846-13832dbc5714</UserSecretsId>
         <RootNamespace>Sekiban.Test.CosmosDb</RootNamespace>
         <AssemblyName>Sekiban.Test.CosmosDb</AssemblyName>
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+        <TargetFrameworks>$(SekibanCoreNet8Net9TargetFrameworks)</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>

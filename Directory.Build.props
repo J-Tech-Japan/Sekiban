@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup Label="SEK-G48 core target framework authority">
+    <!-- Slice A preserves every evaluated target framework from core_main. -->
+    <SekibanCoreNet9TargetFramework>net9.0</SekibanCoreNet9TargetFramework>
+    <SekibanCoreNet8Net9TargetFrameworks>net8.0;net9.0</SekibanCoreNet8Net9TargetFrameworks>
+    <SekibanCoreNet9Net8TargetFrameworks>net9.0;net8.0</SekibanCoreNet9Net8TargetFrameworks>
+  </PropertyGroup>
+</Project>
