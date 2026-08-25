@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>Sekiban.Infrastructure.Postgres</id>
+    <version>__SEK_G48_PACKAGE_VERSION__</version>
+    <authors>J-Tech Group</authors>
+    <readme>README.md</readme>
+    <description>Sekiban - Event Sourcing Framework Dynamo Infrastructure</description>
+    <repository type="git" url="https://github.com/J-Tech-Japan/Sekiban" commit="__SEK_G48_SOURCE_COMMIT__" />
+    <dependencies>
+      <group targetFramework="net8.0">
+        <dependency id="Sekiban.Core.DotNet" version="0.24.3" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Infrastructure.Aws.S3" version="0.0.0-sek-g48" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Infrastructure.Azure.Storage.Blobs" version="0.0.0-sek-g48" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.EntityFrameworkCore" version="9.0.1" exclude="Build,Analyzers" />
+        <dependency id="Npgsql.EntityFrameworkCore.PostgreSQL" version="9.0.3" exclude="Build,Analyzers" />
+        <dependency id="System.Configuration.ConfigurationManager" version="9.0.1" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net9.0">
+        <dependency id="Sekiban.Core.DotNet" version="0.24.3" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Infrastructure.Aws.S3" version="0.0.0-sek-g48" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Infrastructure.Azure.Storage.Blobs" version="0.0.0-sek-g48" exclude="Build,Analyzers" />
+        <dependency id="Microsoft.EntityFrameworkCore" version="9.0.1" exclude="Build,Analyzers" />
+        <dependency id="Npgsql.EntityFrameworkCore.PostgreSQL" version="9.0.3" exclude="Build,Analyzers" />
+        <dependency id="System.Configuration.ConfigurationManager" version="9.0.1" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+</package>

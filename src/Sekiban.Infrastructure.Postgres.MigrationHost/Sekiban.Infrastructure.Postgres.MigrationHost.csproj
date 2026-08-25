@@ -4,7 +4,7 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <UserSecretsId>28eedca3-0ac7-4603-91e1-765ead51c5fa</UserSecretsId>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFramework>$(SekibanCoreNet9TargetFramework)</TargetFramework>
     </PropertyGroup>
 
     <ItemGroup>

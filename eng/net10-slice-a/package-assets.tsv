@@ -1,0 +1,12 @@
+src/MemStat.Net/MemStat.Net.csproj	MemStat.Net	lib/net8.0;lib/net9.0
+src/Sekiban.Aspire.Infrastructure.Cosmos/Sekiban.Aspire.Infrastructure.Cosmos.csproj	Sekiban.Aspire.Infrastructure.Cosmos	lib/net8.0;lib/net9.0
+src/Sekiban.Core.DotNet/Sekiban.Core.DotNet.csproj	Sekiban.Core.DotNet	lib/net8.0;lib/net9.0
+src/Sekiban.Core/Sekiban.Core.csproj	Sekiban.Core	lib/net8.0;lib/net9.0
+src/Sekiban.Infrastructure.Aws.S3/Sekiban.Infrastructure.Aws.S3.csproj	Sekiban.Infrastructure.Aws.S3	lib/net8.0;lib/net9.0
+src/Sekiban.Infrastructure.Azure.Storage.Blobs/Sekiban.Infrastructure.Azure.Storage.Blobs.csproj	Sekiban.Infrastructure.Azure.Storage.Blobs	lib/net8.0;lib/net9.0
+src/Sekiban.Infrastructure.Cosmos/Sekiban.Infrastructure.Cosmos.csproj	Sekiban.Infrastructure.Cosmos	lib/net8.0;lib/net9.0
+src/Sekiban.Infrastructure.Dynamo/Sekiban.Infrastructure.Dynamo.csproj	Sekiban.Infrastructure.Dynamo	lib/net8.0;lib/net9.0
+src/Sekiban.Infrastructure.IndexedDb/Sekiban.Infrastructure.IndexedDb.csproj	Sekiban.Infrastructure.IndexedDb	lib/net8.0;lib/net9.0
+src/Sekiban.Infrastructure.Postgres/Sekiban.Infrastructure.Postgres.csproj	Sekiban.Infrastructure.Postgres	lib/net8.0;lib/net9.0
+src/Sekiban.Testing/Sekiban.Testing.csproj	Sekiban.Testing	lib/net8.0;lib/net9.0
+src/Sekiban.Web/Sekiban.Web.csproj	Sekiban.Web	lib/net8.0;lib/net9.0

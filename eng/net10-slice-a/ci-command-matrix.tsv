@@ -1,0 +1,57 @@
+packageMemStat.yml	build	Build with dotnet	dotnet build Sekiban.sln -c Release	-
+packageMemStat.yml	build	Restore dependencies	dotnet restore Sekiban.sln	-
+packages.yml	build	Build with dotnet	dotnet build Sekiban.sln -c Release	-
+packages.yml	build	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	flaky	Restore dependencies	dotnet restore SekibanFor8.sln	-
+run_test.yml	flaky	Test dotnet	command: dotnet test SekibanFor8.sln --filter "Category=Flaky" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	flaky90	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	flaky90	Test dotnet	command: dotnet test Sekiban.sln --filter "Category=Flaky" -v m -c Release -m:1 -f net9.0	net9.0
+run_test.yml	performance80IndexedDb	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	performance80IndexedDb	Test dotnet	dotnet test tests/Sekiban.Test.IndexedDb/Sekiban.Test.IndexedDb.csproj --filter "Category=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	performance80cosmos	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	performance80cosmos	Test dotnet	dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj --filter "Category=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	performance80dynamo	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	performance80dynamo	Test dotnet	dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj --filter "Category=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	performance80postgres	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	performance80postgres	Test dotnet	dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj --filter "Category=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	performance90IndexedDb	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	performance90IndexedDb	Test dotnet	dotnet test tests/Sekiban.Test.IndexedDb/Sekiban.Test.IndexedDb.csproj --filter "Category=Performance" -v m -c Release -m:1 -f net9.0	net9.0
+run_test.yml	performance90cosmos	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	performance90cosmos	Test dotnet	dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj --filter "Category=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	performance90dynamo	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	performance90dynamo	Test dotnet	dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj --filter "Category=Performance" -v m -c Release -m:1 -f net9.0	net9.0
+run_test.yml	performance90postgres	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	performance90postgres	Test dotnet	dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj --filter "Category=Performance" -v m -c Release -m:1 -f net9.0	net9.0
+run_test.yml	regular80Cosmos	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	regular80Cosmos	Test Build	dotnet build Sekiban.sln -c Release	-
+run_test.yml	regular80Cosmos	Test dotnet tests/Sekiban.Test.CosmosDb	dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	regular80Mixed	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	regular80Mixed	Test Build	dotnet build Sekiban.sln -c Release	-
+run_test.yml	regular80Mixed	Test dotnet tests/Mixed.Test	dotnet test tests/Mixed.Test/Mixed.Test.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	regular90Cosmos	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	regular90Cosmos	Test Build	dotnet build Sekiban.sln -c Release	-
+run_test.yml	regular90Cosmos	Test dotnet tests/MultiTenant.AggregateTest	dotnet test tests/MultiTenant.AggregateTest/MultiTenant.AggregateTest.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0	net9.0
+run_test.yml	regular90Cosmos	Test dotnet tests/Sekiban.Test.CosmosDb	dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	regular90Mixed	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	regular90Mixed	Test Build	dotnet build Sekiban.sln -c Release	-
+run_test.yml	regular90Mixed	Test dotnet tests/Mixed.Test	dotnet test tests/Mixed.Test/Mixed.Test.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0	net9.0
+run_test.yml	regularAggregateTest	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	regularAggregateTest	Test Build	dotnet build Sekiban.sln -c Release	-
+run_test.yml	regularAggregateTest	Test dotnet FeatureCheck .NET8	dotnet test tests/FeatureCheck.Test/FeatureCheck.Test.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	regularAggregateTest	Test dotnet FeatureCheck .NET9	dotnet test tests/FeatureCheck.Test/FeatureCheck.Test.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0	net9.0
+run_test.yml	regularDynamo	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	regularDynamo	Test Build	dotnet build Sekiban.sln -c Release	-
+run_test.yml	regularDynamo	Test dotnet tests/Sekiban.Test.Dynamo .NET8	dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	regularDynamo	Test dotnet tests/Sekiban.Test.Dynamo .NET9	dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0	net9.0
+run_test.yml	regularIndexedDb	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	regularIndexedDb	Test Build	dotnet build Sekiban.sln -c Release	-
+run_test.yml	regularIndexedDb	Test dotnet tests/Sekiban.Test.IndexedDb .NET8	dotnet test tests/Sekiban.Test.IndexedDb/Sekiban.Test.IndexedDb.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	regularIndexedDb	Test dotnet tests/Sekiban.Test.IndexedDb .NET9	dotnet test tests/Sekiban.Test.IndexedDb/Sekiban.Test.IndexedDb.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0	net9.0
+run_test.yml	regularMultitenant	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	regularMultitenant	Test Build	dotnet build Sekiban.sln -c Release	-
+run_test.yml	regularMultitenant	Test dotnet tests/MultiTenant.AggregateTest .NET8	dotnet test tests/MultiTenant.AggregateTest/MultiTenant.AggregateTest.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	regularMultitenant	Test dotnet tests/MultiTenant.AggregateTest .NET9	dotnet test tests/MultiTenant.AggregateTest/MultiTenant.AggregateTest.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0	net9.0
+run_test.yml	regularPostgres	Restore dependencies	dotnet restore Sekiban.sln	-
+run_test.yml	regularPostgres	Test Build	dotnet build Sekiban.sln -c Release	-
+run_test.yml	regularPostgres	Test dotnet tests/Sekiban.Test.Postgres .NET8	dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0	net8.0
+run_test.yml	regularPostgres	Test dotnet tests/Sekiban.Test.Postgres .NET9	dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0	net9.0
