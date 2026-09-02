@@ -193,25 +193,37 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
     public Task<string> GetTagStateActorIdAsync() => Task.FromResult(_tagStateId.GetTagStateId());
 
-    public async Task<SerializableTagState> GetStateAsync()
+    public Task<SerializableTagState> GetStateAsync() => GetStateAsync(CancellationToken.None);
+
+    public async Task<SerializableTagState> GetStateAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_statePersistent is not ISerializableTagStatePersistent)
         {
-            var typedState = await GetTypedTagStateAsync();
+            var typedState = await GetTypedTagStateAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             return SerializeTagState(typedState);
         }
 
-        return await GetSerializableStateAsync();
+        var serializableState = await GetSerializableStateAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return serializableState;
     }
 
-    public async Task<TagState> GetTagStateAsync()
+    public Task<TagState> GetTagStateAsync() => GetTagStateAsync(CancellationToken.None);
+
+    public async Task<TagState> GetTagStateAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_statePersistent is not ISerializableTagStatePersistent)
         {
-            return await GetTypedTagStateAsync();
+            var typedState = await GetTypedTagStateAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return typedState;
         }
 
-        var serializableState = await GetSerializableStateAsync();
+        var serializableState = await GetSerializableStateAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         return DeserializeTagState(serializableState);
     }
 
@@ -236,8 +248,9 @@ public class GeneralTagStateActor : ITagStateActorCommon
         await _statePersistent.SaveStateAsync(newState);
     }
 
-    private async Task<SerializableTagState> GetSerializableStateAsync()
+    private async Task<SerializableTagState> GetSerializableStateAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var projectorVersion = GetCurrentProjectorVersion();
 
         // Always get the latest sortable unique ID from TagConsistentActor
@@ -245,10 +258,12 @@ public class GeneralTagStateActor : ITagStateActorCommon
         var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
         var tagConsistentActorResult
             = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        cancellationToken.ThrowIfCancellationRequested();
         if (tagConsistentActorResult.IsSuccess)
         {
             var tagConsistentActor = tagConsistentActorResult.GetValue();
             var latestSortableUniqueIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+            cancellationToken.ThrowIfCancellationRequested();
             if (latestSortableUniqueIdResult.IsSuccess)
             {
                 currentLatestSortableUniqueId = latestSortableUniqueIdResult.GetValue();
@@ -259,6 +274,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         if (_statePersistent is ISerializableTagStatePersistent serializablePersistent)
         {
             var cachedSerializableState = await serializablePersistent.LoadSerializableStateAsync();
+            cancellationToken.ThrowIfCancellationRequested();
             if (cachedSerializableState != null &&
                 cachedSerializableState.ProjectorVersion == projectorVersion &&
                 cachedSerializableState.LastSortedUniqueId == currentLatestSortableUniqueId)
@@ -274,6 +290,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         else
         {
             cachedState = await _statePersistent.LoadStateAsync();
+            cancellationToken.ThrowIfCancellationRequested();
             if (
                 cachedState != null &&
                 cachedState.ProjectorVersion == projectorVersion &&
@@ -285,23 +302,28 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
         // Cache is stale or doesn't exist, compute new state.
         // Pass the latest sortable unique ID and cached state to avoid duplicate calls.
-        var computedState = await ComputeStateFromEventsAsync(currentLatestSortableUniqueId, cachedState);
+        var computedState = await ComputeStateFromEventsAsync(currentLatestSortableUniqueId, cachedState, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var computedSerializableState = SerializeTagState(computedState);
 
         if (_statePersistent is ISerializableTagStatePersistent serializableStatePersistent)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             await serializableStatePersistent.SaveSerializableStateAsync(computedSerializableState);
         }
         else
         {
+            cancellationToken.ThrowIfCancellationRequested();
             await _statePersistent.SaveStateAsync(computedState);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return computedSerializableState;
     }
 
-    private async Task<TagState> GetTypedTagStateAsync()
+    private async Task<TagState> GetTypedTagStateAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var projectorVersion = GetCurrentProjectorVersion();
 
         // Always get the latest sortable unique ID from TagConsistentActor
@@ -309,10 +331,12 @@ public class GeneralTagStateActor : ITagStateActorCommon
         var tagConsistentActorId = $"{_tagStateId.TagGroup}:{_tagStateId.TagContent}";
         var tagConsistentActorResult
             = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        cancellationToken.ThrowIfCancellationRequested();
         if (tagConsistentActorResult.IsSuccess)
         {
             var tagConsistentActor = tagConsistentActorResult.GetValue();
             var latestSortableUniqueIdResult = await tagConsistentActor.GetLatestSortableUniqueIdAsync();
+            cancellationToken.ThrowIfCancellationRequested();
             if (latestSortableUniqueIdResult.IsSuccess)
             {
                 currentLatestSortableUniqueId = latestSortableUniqueIdResult.GetValue();
@@ -321,6 +345,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
         // Check if we have cached state
         var cachedState = await _statePersistent.LoadStateAsync();
+        cancellationToken.ThrowIfCancellationRequested();
 
         // If cached state exists and is up-to-date, return it
         if (
@@ -333,11 +358,14 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
         // Cache is stale or doesn't exist, compute new state
         // Pass the latest sortable unique ID and cached state to avoid duplicate calls
-        var computedState = await ComputeStateFromEventsAsync(currentLatestSortableUniqueId, cachedState);
+        var computedState = await ComputeStateFromEventsAsync(currentLatestSortableUniqueId, cachedState, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
         // Save the newly computed state to cache
+        cancellationToken.ThrowIfCancellationRequested();
         await _statePersistent.SaveStateAsync(computedState);
 
+        cancellationToken.ThrowIfCancellationRequested();
         return computedState;
     }
 
@@ -414,8 +442,12 @@ public class GeneralTagStateActor : ITagStateActorCommon
         return projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : string.Empty;
     }
 
-    private async Task<TagState> ComputeStateFromEventsAsync(string? latestSortableUniqueId, TagState? cachedState)
+    private async Task<TagState> ComputeStateFromEventsAsync(
+        string? latestSortableUniqueId,
+        TagState? cachedState,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         // Get the projector function
         var projectorFuncResult = _tagProjectorTypes.GetProjectorFunction(_tagStateId.TagProjectorName);
         if (!projectorFuncResult.IsSuccess)
@@ -475,10 +507,16 @@ public class GeneralTagStateActor : ITagStateActorCommon
                     incrementalCachedState.Payload,
                     lastSortedUniqueId,
                     lastSortedUniqueId,
-                    CancellationToken.None);
+                    cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!streamResult.IsSuccess)
                 {
                     var error = streamResult.GetException();
+                    if (error is OperationCanceledException cancellationException)
+                    {
+                        throw cancellationException;
+                    }
+
                     _logger.LogError(error, "[GeneralTagStateActor] Error streaming events for tag {Tag}", tag.GetTag());
                     throw new InvalidOperationException($"Failed to stream events for tag {tag.GetTag()}: {error.Message}", error);
                 }
@@ -491,6 +529,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
             else
             {
                 var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!eventsResult.IsSuccess)
                 {
                     // Log the error and throw exception instead of silently returning cached state
@@ -519,7 +558,9 @@ public class GeneralTagStateActor : ITagStateActorCommon
                 // Project only the new events on top of cached state
                 foreach (var evt in newEvents)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     currentState = projectFunc(currentState, evt);
+                    cancellationToken.ThrowIfCancellationRequested();
                     version++;
                     lastSortedUniqueId = evt.SortableUniqueIdValue;
                 }
@@ -540,10 +581,16 @@ public class GeneralTagStateActor : ITagStateActorCommon
                     new EmptyTagStatePayload(),
                     null,
                     string.Empty,
-                    CancellationToken.None);
+                    cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!streamResult.IsSuccess)
                 {
                     var error = streamResult.GetException();
+                    if (error is OperationCanceledException cancellationException)
+                    {
+                        throw cancellationException;
+                    }
+
                     _logger.LogError(
                         error,
                         "[GeneralTagStateActor] Error streaming events for full rebuild of tag {Tag}",
@@ -561,6 +608,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
             else
             {
                 var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!eventsResult.IsSuccess)
                 {
                     // Log the error for debugging
@@ -590,11 +638,13 @@ public class GeneralTagStateActor : ITagStateActorCommon
 
                 foreach (var evt in events)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     // Initialize state with EmptyTagStatePayload if needed
                     currentState ??= new EmptyTagStatePayload();
 
                     // Project the event
                     currentState = projectFunc(currentState, evt);
+                    cancellationToken.ThrowIfCancellationRequested();
                     version++;
 
                     // Keep track of the last sortable unique id
@@ -607,6 +657,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         }
 
         // If no events were processed, ensure we have at least EmptyTagStatePayload
+        cancellationToken.ThrowIfCancellationRequested();
         currentState ??= new EmptyTagStatePayload();
 
         return new TagState(

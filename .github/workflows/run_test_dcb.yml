@@ -34,6 +34,7 @@ on:
       - 'dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.WithResult.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.WithoutResult.Tests/**'
+      - 'dcb/tests/Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture/**'
       - 'dcb/tests/Sekiban.Dcb.ColdEvents.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/**'
 

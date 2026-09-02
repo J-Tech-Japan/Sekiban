@@ -179,16 +179,28 @@ public class TagStateGrain : Grain, ITagStateGrain
                     eventsResult.GetException());
             }
 
-            if (!accumulator.ApplyEvents(eventsResult.GetValue(), latestSortableUniqueId, cancellationToken))
+            // IEventStore's frozen list read cannot be interrupted. Once it returns, feed one ordered event at a time
+            // so every legacy/default accumulator receives a cancellation observation between events.
+            foreach (var serializableEvent in eventsResult.GetValue().OrderBy(
+                         @event => @event.SortableUniqueIdValue,
+                         StringComparer.Ordinal))
             {
-                throw new InvalidOperationException(
-                    $"Failed to apply events for tag state {_tagStateId.GetTagStateId()}");
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!accumulator.ApplyEvent(serializableEvent, latestSortableUniqueId, cancellationToken))
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to apply events for tag state {_tagStateId.GetTagStateId()}");
+                }
             }
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         var projectedState = accumulator.GetSerializedState();
+        // Cache persistence itself is token-unaware. The two checks define the public boundary: a cancellation
+        // observed before the write starts cannot publish the locally-folded state.
+        cancellationToken.ThrowIfCancellationRequested();
         _cache.State = new TagStateCacheState { CachedState = projectedState };
+        cancellationToken.ThrowIfCancellationRequested();
         await _cache.WriteStateAsync();
         cancellationToken.ThrowIfCancellationRequested();
         return projectedState;
@@ -230,6 +242,7 @@ public class TagStateGrain : Grain, ITagStateGrain
         var deserializeResult = _tagStatePayloadTypes.DeserializePayload(
             serialized.ResolvedPayloadName,
             serialized.Payload);
+        cancellationToken.ThrowIfCancellationRequested();
         if (!deserializeResult.IsSuccess)
         {
             throw new InvalidOperationException(
@@ -237,6 +250,7 @@ public class TagStateGrain : Grain, ITagStateGrain
                 deserializeResult.GetException());
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return new TagState(
             deserializeResult.GetValue(),
             serialized.Version,

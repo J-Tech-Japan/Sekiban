@@ -178,9 +178,24 @@ downstream の store は再コンパイルなしで従来の list fallback を�
 - capability 選択は fail-closed です。store は optional interface の実装に加え、live-instance descriptor で native
   tagged streaming を宣言する必要があります。`HybridEventStore` は検証済み hot-store stream だけを forward し、それ
   以外では hot の list API を読まずに unsupported `ResultBox` を返します。
-- 現在の tag-state public operation は cancellation を公開していないため、意図的に `CancellationToken.None` を渡します。
-  provider の直接 caller は tagged stream を cancel でき、cancellation は `OperationCanceledException` として伝播します。
-  それ以外の read/callback failure は `ResultBox.Error` で返されます。
+- **任意の tag-state cancellation entry path (SEK-G55)。** 既存の token なし member は変更されません。cancel が必要な
+  caller は `ISekibanExecutor.GetTagStateAsync(TagStateId, CancellationToken)`（generic convenience form を含む）、
+  `ITagStateActorCommon.GetStateAsync(CancellationToken)`、Core/SQLite の
+  `TagStateService.ProjectTagStateAsync` overload、または Orleans の通常の grain method
+  `ITagStateGrain.GetStateAsync(CancellationToken)` / `GetTagStateAsync(CancellationToken)` を使えます。executor と
+  in-process actor の追加 member は token なし member へ委譲する default interface fallback です。そのため SEK-G55 より前に
+  compile した downstream 実装も動き続けますが、それ自体が cancellation 対応を意味するわけではありません。Sekiban の
+  built-in 実装は fallback を override し、caller token を native stream まで渡します。Orleans member は request 後の
+  cancellation を Orleans 10 が dispatch できる通常の grain method であり、`Reentrant`、`AlwaysInterleave`、
+  `GrainCancellationToken` は不要です。
+- streaming provider には caller と同一の token が渡され、cancellation を観測すると次の row/callback より前で停止します。
+  凍結された list fallback は開始済み provider read を中断できませんが、その read の直後と各 event の projection 前で
+  cancellation を観測します。cancel 済み rebuild は local fold を破棄し、actor/grain cache publish の直前にも再確認するため、
+  write 開始前に観測した cancellation では cache write も partial result の成功返却も行いません（開始済み write は rollback
+  しません）。
+- `WithResult` では `OperationCanceledException` を持つ `ResultBox.Error` として、`WithoutResult`、actor、grain、service
+  caller では `OperationCanceledException` として cancellation が見えます。凍結された `IEventStore` read に cancellation
+  parameter がないため、`GetLatestTagState*` には見かけだけの token overload を追加していません。
 
 ## 受動的なプロジェクション状態レジストリ (SEK-G24 / dcb-v10.10.0)
 

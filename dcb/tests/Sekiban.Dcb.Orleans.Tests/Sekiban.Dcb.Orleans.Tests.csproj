@@ -36,6 +36,23 @@
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj"/>
         <ProjectReference Include="..\Sekiban.Dcb.WithResult.Tests\Sekiban.Dcb.WithResult.Tests.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core.Testing\Sekiban.Dcb.Core.Testing.csproj" />
+        <!-- Build the pre-SEK-G55 grain client separately and copy only its output so the v10.18 package graph does
+             not participate in this test project's compile-time dependency resolution. -->
+        <ProjectReference Include="..\Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture\Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture.csproj"
+                          ReferenceOutputAssembly="false" />
     </ItemGroup>
+
+    <Target Name="CopyTagStateCancellationLegacy1018Fixture"
+            AfterTargets="Build"
+            Condition="'$(TargetFramework)' != ''">
+        <MSBuild Projects="$(MSBuildProjectDirectory)/../Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture/Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture.csproj"
+                 Targets="Build;GetTargetPath"
+                 Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);ArtifactsPath=$(ArtifactsPath)">
+            <Output TaskParameter="TargetOutputs" ItemName="_TagStateCancellationLegacy1018FixtureOutput" />
+        </MSBuild>
+        <Copy SourceFiles="@(_TagStateCancellationLegacy1018FixtureOutput)"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+    </Target>
 
 </Project>

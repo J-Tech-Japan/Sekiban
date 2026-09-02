@@ -174,9 +174,24 @@ continue to use the list fallback without recompilation.
 - Capability selection is fail-closed: a store must implement the optional interface **and** declare native tagged
   streaming through the live-instance descriptor. `HybridEventStore` forwards only a verified hot-store stream and
   returns an unsupported `ResultBox` without reading its hot list API otherwise.
-- Current tag-state public operations do not expose cancellation and intentionally pass `CancellationToken.None`.
-  Direct provider callers can cancel a tagged stream; cancellation propagates as `OperationCanceledException`, while
-  other read or callback failures are returned as `ResultBox.Error`.
+- **Optional tag-state cancellation entry paths (SEK-G55).** Existing token-less members remain unchanged. Callers
+  that need cancellation can use `ISekibanExecutor.GetTagStateAsync(TagStateId, CancellationToken)` (including its
+  generic convenience form), `ITagStateActorCommon.GetStateAsync(CancellationToken)`, the Core/SQLite
+  `TagStateService.ProjectTagStateAsync` overloads, or the Orleans `ITagStateGrain.GetStateAsync(CancellationToken)` /
+  `GetTagStateAsync(CancellationToken)` grain methods. The executor and in-process actor additions are default
+  interface fallbacks to their token-less members, so a downstream implementation compiled before SEK-G55 keeps
+  working but does **not** thereby promise cancellation. Sekiban's built-in implementations override the fallback and
+  pass the caller token to the native stream. The Orleans members are ordinary grain methods rather than default
+  interface members so Orleans 10 can dispatch post-request cancellation; no `Reentrant`, `AlwaysInterleave`, or
+  `GrainCancellationToken` is required.
+- A streaming provider receives the exact caller token and stops before its next row/callback once cancellation is
+  observed. The frozen list fallback cannot interrupt its already-started provider read; it observes cancellation
+  immediately after that read and before each projected event. A cancelled rebuild discards its local fold and checks
+  again immediately before actor/grain cache publication, so cancellation observed before a write starts produces no
+  cache write or successful partial result (a write already in progress is not rolled back).
+- `WithResult` exposes cancellation as a `ResultBox.Error` holding `OperationCanceledException`; `WithoutResult`,
+  actor, grain, and service callers observe `OperationCanceledException`. `GetLatestTagState*` intentionally has no
+  cosmetic token overload because its frozen `IEventStore` read has no cancellation parameter.
 
 ## Passive projection status registry (SEK-G24 / dcb-v10.10.0)
 

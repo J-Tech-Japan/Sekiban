@@ -15,7 +15,11 @@ using Orleans.TestingHost;
 using Orleans;
 using Orleans.Configuration;
 using Orleans.Hosting;
+using Orleans.Runtime;
+using Orleans.Runtime.Hosting;
+using Orleans.Storage;
 using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -25,6 +29,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
     // Shared in-memory store per test run to keep state deterministic and inspectable
     private static readonly CountingEventStore SharedEventStore = new();
     private static readonly TagStateGrainRequestCounter SharedGrainRequestCounter = new();
+    private static readonly CountingTagStateCacheStorage SharedTagStateCacheStorage = new();
 
     private TestCluster _cluster = null!;
     private IClusterClient _client => _cluster.Client;
@@ -69,6 +74,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         SharedEventStore.Clear();
         SharedEventStore.ClearCounts();
         SharedGrainRequestCounter.Clear();
+        SharedTagStateCacheStorage.Reset();
     }
 
     [Fact]
@@ -205,6 +211,28 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         AssertPostDispatchCancellationAsync(_client);
 
     [Fact]
+    public async Task CancellationTokenProbe_Frozen1018ClientUsesTokenlessGrainMethodAgainstNewSilo()
+    {
+        ResetSharedState();
+        var grain = GetTagStateGrain(BuildTagStateId(Guid.NewGuid()));
+        var fixturePath = Path.Combine(
+            AppContext.BaseDirectory,
+            "Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture.dll");
+        var assembly = Assembly.LoadFrom(fixturePath);
+        var type = assembly.GetType(
+            "Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture.Legacy1018TagStateGrainClient",
+            throwOnError: true)!;
+        var method = type.GetMethod("GetStateAsync", BindingFlags.Public | BindingFlags.Static)!;
+
+        var call = Assert.IsAssignableFrom<Task<SerializableTagState>>(method.Invoke(null, [grain]));
+        var state = await call;
+
+        Assert.Equal(0, state.Version);
+        Assert.Equal("Counter", state.TagGroup);
+        Assert.Equal(1, SharedGrainRequestCounter.GetStateRequestCount);
+    }
+
+    [Fact]
     public async Task CancellationTokenProbe_AckFalse_CoversPreCancelledAndPostDispatchCancellation()
     {
         var cluster = await CreateClusterAsync(waitForCancellationAcknowledgement: false, portOffset: 2_000);
@@ -236,6 +264,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         Assert.Equal(0, SharedEventStore.StreamSerializableEventsByTagCallCount);
         Assert.Equal(0, SharedEventStore.StreamRowsRead);
         Assert.Equal(0, SharedEventStore.StreamCallbackCount);
+        Assert.Equal(0, SharedTagStateCacheStorage.TagStateWriteCount);
     }
 
     private static async Task AssertPostDispatchCancellationAsync(IClusterClient client)
@@ -258,6 +287,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         await grain.ClearCacheAsync();
         SharedEventStore.ClearCounts();
         SharedGrainRequestCounter.Clear();
+        SharedTagStateCacheStorage.ClearWriteCount();
         var firstRowGate = SharedEventStore.GateFirstStreamRow();
 
         using var cancellation = new CancellationTokenSource();
@@ -277,6 +307,16 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         Assert.Equal(1, SharedEventStore.StreamRowsRead);
         Assert.Equal(0, SharedEventStore.StreamCallbackCount);
         Assert.True(firstRowGate.ReceivedCancelableGrainToken);
+        Assert.Equal(0, SharedTagStateCacheStorage.TagStateWriteCount);
+
+        // A cancelled fold must not retain a cache value. A subsequent ordinary (legacy token-less) call therefore
+        // rebuilds both rows instead of observing a partially published state.
+        SharedEventStore.ClearCounts();
+        var recovered = await grain.GetStateAsync();
+        Assert.Equal(2, recovered.Version);
+        Assert.Equal(1, SharedEventStore.StreamSerializableEventsByTagCallCount);
+        Assert.Equal(2, SharedEventStore.StreamRowsRead);
+        Assert.Equal(1, SharedTagStateCacheStorage.TagStateWriteCount);
     }
 
     private ITagStateGrain GetTagStateGrain(TagStateId id) =>
@@ -367,9 +407,9 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
                         SafeWindowMs = 20000
                     });
                     services.AddSekibanDcbNativeRuntime();
+                    services.AddGrainStorage("OrleansStorage", (_, _) => SharedTagStateCacheStorage);
                 })
                 .AddMemoryGrainStorageAsDefault()
-                .AddMemoryGrainStorage("OrleansStorage")
                 .AddMemoryGrainStorage("PubSubStore")
                 .AddMemoryStreams("EventStreamProvider")
                 .AddMemoryGrainStorage("EventStreamProvider");
@@ -444,6 +484,70 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
             }
 
             return context.Invoke();
+        }
+    }
+
+    private sealed class CountingTagStateCacheStorage : IGrainStorage
+    {
+        private readonly Dictionary<string, object?> _states = new();
+        private readonly object _gate = new();
+        private int _tagStateWriteCount;
+
+        public int TagStateWriteCount => Volatile.Read(ref _tagStateWriteCount);
+
+        public void Reset()
+        {
+            lock (_gate)
+            {
+                _states.Clear();
+            }
+
+            Interlocked.Exchange(ref _tagStateWriteCount, 0);
+        }
+
+        public void ClearWriteCount() => Interlocked.Exchange(ref _tagStateWriteCount, 0);
+
+        public Task ReadStateAsync<T>(string grainType, GrainId grainId, IGrainState<T> grainState)
+        {
+            lock (_gate)
+            {
+                if (_states.TryGetValue(grainId.ToString(), out var saved) && saved is T typed)
+                {
+                    grainState.State = typed;
+                    grainState.RecordExists = true;
+                }
+                else
+                {
+                    grainState.RecordExists = false;
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task WriteStateAsync<T>(string grainType, GrainId grainId, IGrainState<T> grainState)
+        {
+            lock (_gate)
+            {
+                _states[grainId.ToString()] = grainState.State;
+            }
+
+            if (typeof(T) == typeof(TagStateCacheState))
+            {
+                Interlocked.Increment(ref _tagStateWriteCount);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task ClearStateAsync<T>(string grainType, GrainId grainId, IGrainState<T> grainState)
+        {
+            lock (_gate)
+            {
+                _states.Remove(grainId.ToString());
+            }
+
+            return Task.CompletedTask;
         }
     }
 
