@@ -204,8 +204,8 @@ public class SerializedCommitAcceptorTests
     }
 
     [Theory]
-    [InlineData(SerializedCommitVersionKind.KnownVersion, null, """{"version":1,"eventCandidates":[]}""")]           // V1 known
-    [InlineData(SerializedCommitVersionKind.KnownVersion, null, """{"version":2,"eventCandidates":[]}""")]           // V2 known (shape binds later)
+    [InlineData(SerializedCommitVersionKind.KnownVersion, null, """{"version":1,"eventCandidates":[],"consistencyTags":[]}""")]           // V1 known
+    [InlineData(SerializedCommitVersionKind.KnownVersion, null, """{"version":2,"eventCandidates":[],"consistencyTags":[],"expectedTagPositions":[]}""")] // V2 known
     [InlineData(SerializedCommitVersionKind.UnsupportedVersion, null, """{"version":999,"eventCandidates":[]}""")]   // exact unknown
     [InlineData(SerializedCommitVersionKind.LegacyUnversioned, null, """{"eventCandidates":[],"consistencyTags":[]}""")] // missing → legacy
     [InlineData(SerializedCommitVersionKind.Malformed, SerializedCommitShapeError.VersionNotInteger, """{"version":"1"}""")]   // wrong type (string)
