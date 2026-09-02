@@ -10,8 +10,9 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.ColdEvents;
 
-public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventStore, IStorageDurabilityDescriptorProvider,
-    IWriteConditionCapabilityProvider, IConditionalEventStore, IExpectedTagPositionEventStore
+public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventStore,
+    IStreamingTaggedSerializableEventStore, IStorageDurabilityDescriptorProvider, IWriteConditionCapabilityProvider,
+    ITaggedStreamCapabilityProvider, IConditionalEventStore, IExpectedTagPositionEventStore
 {
     private const string ReadAllSerializableEventsCall = nameof(ReadAllSerializableEventsAsync);
 
@@ -44,6 +45,20 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             _ => false
         }).ToHashSet();
         return new WriteConditionCapabilityDescriptor(forwardable, $"HybridEventStore({hot.ProviderName})");
+    }
+
+    /// <summary>
+    ///     Tagged streaming is honest only when the live hot store both exposes the optional method and declares native
+    ///     streaming. The Hybrid's unconditional interface membership must not turn a list-backed hot store into a false
+    ///     positive.
+    /// </summary>
+    public TaggedStreamCapabilityDescriptor DescribeTaggedStream()
+    {
+        var hot = SekibanDcbCapabilityResolver.ResolveTaggedStream(_hotStore, "hot event store");
+        var providerName = $"HybridEventStore({hot.Descriptor.ProviderName})";
+        return hot.IsSupported
+            ? TaggedStreamCapabilityDescriptor.Native(providerName)
+            : TaggedStreamCapabilityDescriptor.None(providerName);
     }
 
     /// <summary>
@@ -157,6 +172,34 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
         ITag tag, SortableUniqueId? since = null)
         => _hotStore.ReadSerializableEventsByTagAsync(tag, since);
+
+    /// <summary>
+    ///     Forwards only a verified native tagged stream from the hot store. In particular, this never calls the hot
+    ///     list API as a pretend stream: unsupported configurations fail deterministically before any read.
+    /// </summary>
+    public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        ITag tag,
+        SortableUniqueId? since,
+        SortableUniqueId? until,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken = default)
+    {
+        var hot = SekibanDcbCapabilityResolver.ResolveTaggedStream(_hotStore, "hot event store");
+        if (hot.IsSupported)
+        {
+            return hot.StreamStore!.StreamSerializableEventsByTagAsync(
+                tag,
+                since,
+                until,
+                onEvent,
+                cancellationToken);
+        }
+
+        return Task.FromResult(ResultBox.Error<SerializableEventStreamReadResult>(
+            new NotSupportedException(
+                $"Tagged streaming is not supported by HybridEventStore({hot.Descriptor.ProviderName}): " +
+                hot.UnsupportedReason)));
+    }
 
     public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
         => _hotStore.ReadSerializableEventAsync(eventId);

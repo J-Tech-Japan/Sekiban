@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Common;
@@ -69,6 +70,34 @@ public class NativeTagStateProjectionPrimitiveTests
         Assert.Equal(cached.LastSortedUniqueId, finalState.LastSortedUniqueId);
     }
 
+    [Fact]
+    public void ApplyEvent_UsesTheActualNativeOverride_WithoutEnteringTheBatchOrderByPath()
+    {
+        NativeApplyTripwireProjector.Reset();
+        var eventTypes = new SimpleEventTypes();
+        eventTypes.RegisterEventType<CounterIncremented>();
+        var projectors = new SimpleTagProjectorTypes();
+        projectors.RegisterProjector<NativeApplyTripwireProjector>();
+        var payloadTypes = new SimpleTagStatePayloadTypes();
+        payloadTypes.RegisterPayloadType<CounterState>();
+        var primitive = new NativeTagStateProjectionPrimitive(eventTypes, projectors, payloadTypes);
+        var tagStateId = TagStateId.Parse(
+            $"Counter:stream:{NativeApplyTripwireProjector.ProjectorName}");
+        var serializableEvent = BuildSerializedEvents(7).Single();
+
+        using var accumulator = primitive.CreateAccumulator(tagStateId);
+        Assert.True(accumulator.ApplyState(null));
+        Assert.True(accumulator.ApplyEvent(serializableEvent, serializableEvent.SortableUniqueIdValue));
+
+        // The projector runs inside the real private NativeTagStateProjectionAccumulator. If ApplyEvent is deleted or
+        // changed to its default/batch fallback, the stack contains ApplyEvents (and therefore its OrderBy) and this
+        // tripwire becomes true before a successful state can be accepted.
+        Assert.False(NativeApplyTripwireProjector.BatchApplyEventsObserved);
+        var state = accumulator.GetSerializedState();
+        Assert.Equal(1, state.Version);
+        Assert.Equal(serializableEvent.SortableUniqueIdValue, state.LastSortedUniqueId);
+    }
+
     private static NativeTagStateProjectionPrimitive BuildPrimitive()
     {
         var eventTypes = new SimpleEventTypes();
@@ -129,6 +158,27 @@ public class NativeTagStateProjectionPrimitiveTests
 
         public static ITagStatePayload Project(ITagStatePayload current, Event ev)
         {
+            var counter = current as CounterState ?? new CounterState(0);
+            return ev.Payload is CounterIncremented incremented
+                ? counter with { Value = counter.Value + incremented.Delta }
+                : counter;
+        }
+    }
+
+    private sealed class NativeApplyTripwireProjector : ITagProjector<NativeApplyTripwireProjector>
+    {
+        public static string ProjectorVersion => "v1";
+        public static string ProjectorName => nameof(NativeApplyTripwireProjector);
+        public static bool BatchApplyEventsObserved { get; private set; }
+
+        public static void Reset() => BatchApplyEventsObserved = false;
+
+        public static ITagStatePayload Project(ITagStatePayload current, Event ev)
+        {
+            BatchApplyEventsObserved |= new StackTrace(skipFrames: 1, fNeedFileInfo: false)
+                .GetFrames()?
+                .Any(frame => frame.GetMethod()?.Name == nameof(ITagStateProjectionAccumulator.ApplyEvents)) == true;
+
             var counter = current as CounterState ?? new CounterState(0);
             return ev.Payload is CounterIncremented incremented
                 ? counter with { Value = counter.Value + incremented.Delta }

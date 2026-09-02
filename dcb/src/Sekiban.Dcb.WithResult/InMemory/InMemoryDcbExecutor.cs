@@ -144,7 +144,8 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
     ///     This implementation serializes/deserializes events to simulate real storage behavior
     ///     and validate that event types are properly registered.
     /// </summary>
-    private sealed class InternalInMemoryEventStore : IEventStore
+    private sealed class InternalInMemoryEventStore : IEventStore, IStreamingTaggedSerializableEventStore,
+        ITaggedStreamCapabilityProvider
     {
         private sealed class ServiceState
         {
@@ -162,6 +163,9 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
             _domainTypes = domainTypes;
             _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
         }
+
+        public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+            TaggedStreamCapabilityDescriptor.Native("InMemoryExecutor");
 
         private ServiceState GetState()
         {
@@ -497,6 +501,27 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                     .ToList();
                 return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(result));
             }
+        }
+
+        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            var state = GetState();
+            return TaggedSerializableEventStreamHelper.StreamSnapshotByTagAsync(
+                state.Lock,
+                state.Events,
+                static @event => @event.Tags,
+                static @event => @event.SortableUniqueIdValue,
+                ToSerializableEvent,
+                tag,
+                since,
+                until,
+                onEvent,
+                cancellationToken);
         }
 
         private sealed class EventStoreAdapter : InMemorySerializableEventWriter.IAddableEventStore

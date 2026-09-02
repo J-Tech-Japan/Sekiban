@@ -147,7 +147,8 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
     ///     and validate that event types are properly registered.
     ///     Throws exceptions on errors instead of returning ResultBox.
     /// </summary>
-    private sealed class InternalInMemoryEventStore : IEventStore
+    private sealed class InternalInMemoryEventStore : IEventStore, IStreamingTaggedSerializableEventStore,
+        ITaggedStreamCapabilityProvider
     {
         private sealed class ServiceState
         {
@@ -165,6 +166,9 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
             _domainTypes = domainTypes;
             _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
         }
+
+        public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+            TaggedStreamCapabilityDescriptor.Native("InMemoryExecutor");
 
         private ServiceState GetState()
         {
@@ -482,6 +486,27 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                 events = events.OrderBy(e => e.SortableUniqueIdValue);
                 return Task.FromResult(ResultBox.FromValue(events.Select(ToSerializableEvent).ToList().AsEnumerable()));
             }
+        }
+
+        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            var state = GetState();
+            return TaggedSerializableEventStreamHelper.StreamSnapshotByTagAsync(
+                state.Lock,
+                state.Events,
+                static @event => @event.Tags,
+                static @event => @event.SortableUniqueIdValue,
+                ToSerializableEvent,
+                tag,
+                since,
+                until,
+                onEvent,
+                cancellationToken);
         }
 
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(

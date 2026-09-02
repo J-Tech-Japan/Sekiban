@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -187,6 +188,83 @@ public class GeneralTagStateActorPersistenceTests
     }
 
     [Fact]
+    public async Task ColdRebuild_UsesTheVerifiedTaggedStream_AndCacheHitPerformsNoRead()
+    {
+        var domainTypes = BuildDomainTypes();
+        var baseEventStore = new CoreInMemoryEventStore(domainTypes.EventTypes);
+        var eventStore = new StreamingCountingEventStore(baseEventStore);
+        var actorAccessor = new TestActorAccessor();
+        actorAccessor.SetLatestSortableUniqueId("TestTag:stream", "002");
+        var tag = new TestTag("stream");
+
+        await baseEventStore.WriteEventsAsync(
+            new[]
+            {
+                CreateEvent(new TestEvent { Value = 10 }, tag, "001"),
+                CreateEvent(new IncrementEvent { Increment = 2 }, tag, "002")
+            },
+            domainTypes.EventTypes);
+
+        var actor = new GeneralTagStateActor(
+            "TestTag:stream:TestIncrementalProjector",
+            eventStore,
+            domainTypes.EventTypes,
+            domainTypes.TagProjectorTypes,
+            domainTypes.TagTypes,
+            domainTypes.TagStatePayloadTypes,
+            new TagStateOptions(),
+            actorAccessor,
+            new InMemoryTagStatePersistent());
+
+        var rebuilt = await actor.GetTagStateAsync();
+        Assert.Equal(12, ((TestIncrementalState)rebuilt.Payload).Total);
+        Assert.Equal(1, eventStore.StreamCallCount);
+        Assert.Equal(0, eventStore.ReadEventsByTagCallCount);
+
+        var cached = await actor.GetTagStateAsync();
+        Assert.Equal(rebuilt.Version, cached.Version);
+        Assert.Equal(1, eventStore.StreamCallCount);
+        Assert.Equal(0, eventStore.ReadEventsByTagCallCount);
+    }
+
+    [Fact]
+    public async Task OutOfOrderTaggedStream_FailsBeforeThePartialProjectionCanBeCached()
+    {
+        var domainTypes = BuildDomainTypes();
+        var baseEventStore = new CoreInMemoryEventStore(domainTypes.EventTypes);
+        var eventStore = new OutOfOrderStreamingStore(baseEventStore);
+        var actorAccessor = new TestActorAccessor();
+        actorAccessor.SetLatestSortableUniqueId("TestTag:out-of-order", "002");
+        var tag = new TestTag("out-of-order");
+        var persistent = new InMemoryTagStatePersistent();
+
+        await baseEventStore.WriteEventsAsync(
+            new[]
+            {
+                CreateEvent(new TestEvent { Value = 10 }, tag, "001"),
+                CreateEvent(new IncrementEvent { Increment = 2 }, tag, "002")
+            },
+            domainTypes.EventTypes);
+
+        var actor = new GeneralTagStateActor(
+            "TestTag:out-of-order:TestIncrementalProjector",
+            eventStore,
+            domainTypes.EventTypes,
+            domainTypes.TagProjectorTypes,
+            domainTypes.TagTypes,
+            domainTypes.TagStatePayloadTypes,
+            new TagStateOptions(),
+            actorAccessor,
+            persistent);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => actor.GetTagStateAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => actor.GetTagStateAsync());
+
+        Assert.Equal(2, eventStore.StreamCallCount);
+        Assert.Equal(0, eventStore.ReadEventsByTagCallCount);
+    }
+
+    [Fact]
     public async Task Should_Serialize_TagState_Only_When_Persisting_State()
     {
         var tagStatePayloadTypes = new SimpleTagStatePayloadTypes();
@@ -349,6 +427,7 @@ public class GeneralTagStateActorPersistenceTests
     private class CountingEventStore(IEventStore inner) : IEventStore
     {
         private readonly IEventStore _inner = inner;
+        protected IEventStore Inner => _inner;
         public int ReadEventsByTagCallCount { get; private set; }
 
         public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
@@ -385,6 +464,78 @@ public class GeneralTagStateActorPersistenceTests
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events)
             => _inner.WriteSerializableEventsAsync(events);
+    }
+
+    private sealed class StreamingCountingEventStore(IEventStore inner) : CountingEventStore(inner),
+        IStreamingTaggedSerializableEventStore, ITaggedStreamCapabilityProvider
+    {
+        public int StreamCallCount { get; private set; }
+
+        public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+            TaggedStreamCapabilityDescriptor.Native("test streaming wrapper");
+
+        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            StreamCallCount++;
+            return ((IStreamingTaggedSerializableEventStore)Inner).StreamSerializableEventsByTagAsync(
+                tag,
+                since,
+                until,
+                onEvent,
+                cancellationToken);
+        }
+    }
+
+    private sealed class OutOfOrderStreamingStore(IEventStore inner) : CountingEventStore(inner),
+        IStreamingTaggedSerializableEventStore, ITaggedStreamCapabilityProvider
+    {
+        public int StreamCallCount { get; private set; }
+
+        public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+            TaggedStreamCapabilityDescriptor.Native("out-of-order test double");
+
+        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            StreamCallCount++;
+            try
+            {
+                var source = await Inner.ReadSerializableEventsByTagAsync(tag, since);
+                if (!source.IsSuccess)
+                {
+                    return ResultBox.Error<SerializableEventStreamReadResult>(source.GetException());
+                }
+
+                var count = 0;
+                string? lastSortableUniqueId = null;
+                foreach (var serializableEvent in source.GetValue().OrderByDescending(e => e.SortableUniqueIdValue))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await onEvent(serializableEvent);
+                    count++;
+                    lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
+                }
+
+                return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return ResultBox.Error<SerializableEventStreamReadResult>(ex);
+            }
+        }
     }
 
     private class CountingTagStatePayloadTypes(ITagStatePayloadTypes inner) : ITagStatePayloadTypes

@@ -147,6 +147,25 @@ builder.Services.AddSekibanDcbPostgres("Host=localhost;Database=sekiban_dcb;User
 
 マイグレーションは `Sekiban.Dcb.Postgres.MigrationHost` から実行するか、Aspire の初期化サービスに任せます。
 
+## タグのコールド再構築ストリーミング (SEK-G53)
+
+コールドな tag-state 再構築は、追加専用の `IStreamingTaggedSerializableEventStore` capability を使用できます。
+凍結済みの `IEventStore.ReadSerializableEventsByTagAsync` の list API は変更していないため、既存 provider と
+downstream の store は再コンパイルなしで従来の list fallback を使い続けられます。
+
+- Postgres と SQLite は、順序付きの tag query を callback へ直接 stream します。`since` は exclusive、任意の
+  capture 済み `until` head は inclusive であり、両方の境界を provider query に push down します。
+- callback は ordinal な `SortableUniqueId` を厳密昇順で返します。tag-state consumer は小さい値を受け取った場合、
+  再構築済み state を publish する前に拒否します。同じ値は既存の duplicate-skip policy に従います。
+- `InMemory` と in-process executor の store は parity test 用に callback shape を実装しますが、bounded-memory の
+  production provider ではありません。Cosmos DB と DynamoDB は専用の streaming 作業が入るまで list fallback のままです。
+- capability 選択は fail-closed です。store は optional interface の実装に加え、live-instance descriptor で native
+  tagged streaming を宣言する必要があります。`HybridEventStore` は検証済み hot-store stream だけを forward し、それ
+  以外では hot の list API を読まずに unsupported `ResultBox` を返します。
+- 現在の tag-state public operation は cancellation を公開していないため、意図的に `CancellationToken.None` を渡します。
+  provider の直接 caller は tagged stream を cancel でき、cancellation は `OperationCanceledException` として伝播します。
+  それ以外の read/callback failure は `ResultBox.Error` で返されます。
+
 ## 受動的なプロジェクション状態レジストリ (SEK-G24 / dcb-v10.10.0)
 
 各プロバイダーは、プロジェクション状態ストアと同時に受動的な `IProjectionStatusStore` と reader を登録します。

@@ -18,7 +18,8 @@ namespace Sekiban.Dcb.Sqlite;
 ///     Can be used as a standalone event store or as a local cache for remote stores.
 /// </summary>
 public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider,
-    IConditionalEventStore, IWriteConditionCapabilityProvider
+    IConditionalEventStore, IWriteConditionCapabilityProvider, IStreamingTaggedSerializableEventStore,
+    ITaggedStreamCapabilityProvider
 {
     private const string ConditionalProviderName = "Sqlite";
 
@@ -34,6 +35,17 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
     internal Func<Task>? AfterConditionalCommitHook { get; set; }
 
     /// <summary>
+    ///     Test-only tagged-stream reader milestones. The provider tests use these gates around the real
+    ///     <see cref="SqliteDataReader.ReadAsync(CancellationToken)" /> call to prove cancellation reaches the native
+    ///     reader and that a cancelled callback never triggers a later row read. They are intentionally internal,
+    ///     instance-scoped, and unset in production composition.
+    /// </summary>
+    internal Func<Task>? BeforeTaggedStreamReaderReadHook { get; set; }
+
+    /// <summary>Test-only notification after the real tagged-stream reader returned a row and before it is consumed.</summary>
+    internal Func<Task>? AfterTaggedStreamReaderReadHook { get; set; }
+
+    /// <summary>
     ///     SEK-G16 conditional (unique-key) append. This is a NEW path — the unconditional <c>INSERT OR REPLACE</c> write
     ///     paths are untouched. The claim event is written under the deterministic id with a PLAIN <c>INSERT</c>, so the
     ///     existing <c>(ServiceId, Id)</c> primary key is the uniqueness primitive (no schema change): the first writer
@@ -47,6 +59,10 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
 
     /// <inheritdoc />
     public WriteConditionCapabilityDescriptor DescribeWriteConditions() => _conditionalAppend.Descriptor;
+
+    /// <summary>SQLite reads tagged rows directly from an ordered data reader.</summary>
+    public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+        TaggedStreamCapabilityDescriptor.Native("Sqlite");
 
     private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
         Guid deterministicId,
@@ -1255,6 +1271,89 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
         {
             _logger?.LogError(ex, "Error reading serializable events by tag from SQLite: {Tag}", tag.GetTag());
             return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Streams a tag from the SQLite reader. Bounds stay in SQL; cancellation reaches opening the connection,
+    ///     executing the command, and reading every row.
+    /// </summary>
+    public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        ITag tag,
+        SortableUniqueId? since,
+        SortableUniqueId? until,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var tagString = tag.GetTag();
+            var serviceId = CurrentServiceId;
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var cmd = connection.CreateCommand();
+
+            cmd.CommandText = """
+                SELECT DISTINCT e.Id, e.SortableUniqueId, e.EventType, e.PayloadJson, e.TagsJson, e.Timestamp, e.CausationId, e.CorrelationId, e.ExecutedUser
+                FROM dcb_events e
+                INNER JOIN dcb_tags t ON e.Id = t.EventId
+                WHERE e.ServiceId = @serviceId
+                    AND t.ServiceId = @serviceId
+                    AND t.Tag = @tag
+                    AND (@since IS NULL OR e.SortableUniqueId > @since)
+                    AND (@until IS NULL OR e.SortableUniqueId <= @until)
+                ORDER BY e.SortableUniqueId
+                """;
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+            cmd.Parameters.AddWithValue("@tag", tagString);
+            cmd.Parameters.AddWithValue("@since", (object?)since?.Value ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@until", (object?)until?.Value ?? DBNull.Value);
+
+            var count = 0;
+            string? lastSortableUniqueId = null;
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (true)
+            {
+                if (BeforeTaggedStreamReaderReadHook is not null)
+                {
+                    await BeforeTaggedStreamReaderReadHook();
+                }
+
+                if (!await reader.ReadAsync(cancellationToken))
+                {
+                    break;
+                }
+
+                if (AfterTaggedStreamReaderReadHook is not null)
+                {
+                    await AfterTaggedStreamReaderReadHook();
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                var serializableEvent = ReadSerializableEvent(reader);
+                if (serializableEvent is null)
+                {
+                    continue;
+                }
+
+                await onEvent(serializableEvent);
+                cancellationToken.ThrowIfCancellationRequested();
+                count++;
+                lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
+            }
+
+            return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error streaming serializable events by tag from SQLite: {Tag}", tag.GetTag());
+            return ResultBox.Error<SerializableEventStreamReadResult>(ex);
         }
     }
 

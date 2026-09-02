@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
@@ -110,6 +111,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         Assert.Equal(first.ProjectorVersion, second.ProjectorVersion);
         Assert.Equal(first.Payload, second.Payload);
         Assert.Equal(0, SharedEventStore.ReadSerializableEventsByTagCallCount);
+        Assert.Equal(0, SharedEventStore.StreamSerializableEventsByTagCallCount);
         Assert.Equal(1, second.Version);
     }
 
@@ -142,7 +144,8 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         Assert.NotSame(original, rebuilt);
         Assert.Equal("1.0", rebuilt.ProjectorVersion);
         Assert.Equal(1, rebuilt.Version);
-        Assert.Equal(1, SharedEventStore.ReadSerializableEventsByTagCallCount);
+        Assert.Equal(0, SharedEventStore.ReadSerializableEventsByTagCallCount);
+        Assert.Equal(1, SharedEventStore.StreamSerializableEventsByTagCallCount);
     }
 
     [Fact]
@@ -165,6 +168,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         Assert.Equal(1, second.Version);
         Assert.Equal("CounterState", second.TagPayloadName);
         Assert.Equal(0, SharedEventStore.ReadSerializableEventsByTagCallCount);
+        Assert.Equal(0, SharedEventStore.StreamSerializableEventsByTagCallCount);
     }
 
     private ITagStateGrain GetTagStateGrain(TagStateId id) =>
@@ -325,14 +329,23 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         }
     }
 
-    private class CountingEventStore : IEventStore
+    private class CountingEventStore : IEventStore, IStreamingTaggedSerializableEventStore,
+        ITaggedStreamCapabilityProvider
     {
         private readonly InMemoryEventStore _inner = CreateInnerStore();
 
         public void Clear() => _inner.Clear();
         public int ReadSerializableEventsByTagCallCount { get; private set; }
+        public int StreamSerializableEventsByTagCallCount { get; private set; }
 
-        public void ClearCounts() => ReadSerializableEventsByTagCallCount = 0;
+        public void ClearCounts()
+        {
+            ReadSerializableEventsByTagCallCount = 0;
+            StreamSerializableEventsByTagCallCount = 0;
+        }
+
+        public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+            TaggedStreamCapabilityDescriptor.Native("Orleans test InMemory");
 
         private static InMemoryEventStore CreateInnerStore()
         {
@@ -384,6 +397,22 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
 
         public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId)
             => _inner.ReadSerializableEventAsync(eventId);
+
+        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            StreamSerializableEventsByTagCallCount++;
+            return ((IStreamingTaggedSerializableEventStore)_inner).StreamSerializableEventsByTagAsync(
+                tag,
+                since,
+                until,
+                onEvent,
+                cancellationToken);
+        }
 
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events)

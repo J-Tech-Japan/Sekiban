@@ -86,4 +86,66 @@ public static class SekibanDcbCapabilityResolver
             IWriteConditionCapabilityProvider provider => provider.DescribeWriteConditions(),
             _ => WriteConditionCapabilityDescriptor.None(store.GetType().Name)
         };
+
+    /// <summary>
+    ///     What tagged callback-streaming a store explicitly declares. A missing declaration is no capability, even if a
+    ///     type happens to expose the optional stream interface.
+    /// </summary>
+    public static TaggedStreamCapabilityDescriptor DescribeTaggedStream(object? store, string role) =>
+        store switch
+        {
+            null => TaggedStreamCapabilityDescriptor.None($"(no {role} registered)"),
+            ITaggedStreamCapabilityProvider provider => provider.DescribeTaggedStream(),
+            _ => TaggedStreamCapabilityDescriptor.None(store.GetType().Name)
+        };
+
+    /// <summary>
+    ///     Resolves tagged streaming from the live instance. Both the optional interface and an honest native declaration
+    ///     are required, so silent and deceptive providers remain on the safe list fallback.
+    /// </summary>
+    public static TaggedStreamCapabilityResolution ResolveTaggedStream(object? store, string role)
+    {
+        var descriptor = DescribeTaggedStream(store, role);
+        if (store is not IStreamingTaggedSerializableEventStore streamStore)
+        {
+            return new TaggedStreamCapabilityResolution(
+                false,
+                null,
+                descriptor,
+                $"{descriptor.ProviderName} does not implement {nameof(IStreamingTaggedSerializableEventStore)}.");
+        }
+
+        if (!descriptor.NativeStreaming)
+        {
+            return new TaggedStreamCapabilityResolution(
+                false,
+                null,
+                descriptor,
+                $"{descriptor.ProviderName} does not declare native tagged streaming.");
+        }
+
+        return new TaggedStreamCapabilityResolution(true, streamStore, descriptor, null);
+    }
+
+    /// <summary>
+    ///     Applies the tagged-stream order policy at consumer boundaries. Equal ids preserve the existing duplicate
+    ///     policy; a smaller id is a contract violation and callers must fail before publishing their partial state.
+    /// </summary>
+    public static bool IsTaggedStreamOrderValid(string? previousId, string currentId, out bool isDuplicate)
+    {
+        isDuplicate = false;
+        if (string.IsNullOrEmpty(previousId))
+        {
+            return true;
+        }
+
+        var comparison = string.Compare(currentId, previousId, StringComparison.Ordinal);
+        if (comparison < 0)
+        {
+            return false;
+        }
+
+        isDuplicate = comparison == 0;
+        return true;
+    }
 }

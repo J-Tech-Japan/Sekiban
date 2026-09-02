@@ -19,7 +19,8 @@ using System.Text.Json;
 namespace Sekiban.Dcb.Postgres;
 
 public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader, IStorageDurabilityDescriptorProvider,
-    IConditionalEventStore, IExpectedTagPositionEventStore, IWriteConditionCapabilityProvider
+    IConditionalEventStore, IExpectedTagPositionEventStore, IWriteConditionCapabilityProvider,
+    IStreamingTaggedSerializableEventStore, ITaggedStreamCapabilityProvider
 {
     private const string ConditionalProviderName = "Postgres";
 
@@ -50,6 +51,16 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     internal Func<Task>? TagHeadProtocolHook { get; set; }
 
     /// <summary>
+    ///     Test-only tagged-stream reader milestones. Provider tests gate the real EF/Npgsql enumerator around its
+    ///     <c>MoveNextAsync</c> call, proving that cancellation reaches native I/O and prevents a later row attempt.
+    ///     This is internal, per-instance, and remains unset by production composition.
+    /// </summary>
+    internal Func<Task>? BeforeTaggedStreamReaderReadHook { get; set; }
+
+    /// <summary>Test-only notification after the real tagged-stream reader returned a row and before it is consumed.</summary>
+    internal Func<Task>? AfterTaggedStreamReaderReadHook { get; set; }
+
+    /// <summary>
     ///     SEK-G16 conditional (unique-key) append. The claim event is inserted under the deterministic id, so the
     ///     existing <c>(ServiceId, Id)</c> primary key is the uniqueness primitive — no schema change. A duplicate raises
     ///     SQLSTATE 23505 (unique_violation), which is classified by fingerprint against the stored winner (the real
@@ -68,6 +79,10 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             ConditionalProviderName,
             WriteConditionKind.SingleEventUniqueKey,
             WriteConditionKind.ExpectedTagPosition);
+
+    /// <summary>Postgres pushes tagged-stream bounds and ordering into its indexed query.</summary>
+    public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+        TaggedStreamCapabilityDescriptor.Native("Postgres");
 
     private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
         Guid deterministicId,
@@ -643,6 +658,95 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         catch (Exception ex)
         {
             return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Streams a single tag without materializing the tagged history. The context remains alive until the callback
+    ///     finishes, and both bounds are retained in the database query.
+    /// </summary>
+    public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        ITag tag,
+        SortableUniqueId? since,
+        SortableUniqueId? until,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            var serviceId = CurrentServiceId;
+            var tagString = tag.GetTag();
+
+            var tagQuery = context.Tags
+                .AsNoTracking()
+                .Where(t => t.ServiceId == serviceId && t.Tag == tagString);
+
+            if (since != null)
+            {
+                var sinceValue = since.Value;
+                tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, sinceValue) > 0);
+            }
+
+            if (until != null)
+            {
+                var untilValue = until.Value;
+                tagQuery = tagQuery.Where(t => string.Compare(t.SortableUniqueId, untilValue) <= 0);
+            }
+
+            var query = tagQuery
+                .Join(
+                    context.Events.AsNoTracking(),
+                    t => new { t.ServiceId, EventId = t.EventId },
+                    e => new { e.ServiceId, EventId = e.Id },
+                    (t, e) => new { Tag = t, Event = e })
+                .OrderBy(row => row.Tag.SortableUniqueId)
+                .Select(row => row.Event);
+
+            var count = 0;
+            string? lastSortableUniqueId = null;
+            await using var enumerator = query.AsAsyncEnumerable().GetAsyncEnumerator(cancellationToken);
+            while (true)
+            {
+                if (BeforeTaggedStreamReaderReadHook is not null)
+                {
+                    await BeforeTaggedStreamReaderReadHook();
+                }
+
+                if (!await enumerator.MoveNextAsync())
+                {
+                    break;
+                }
+
+                if (AfterTaggedStreamReaderReadHook is not null)
+                {
+                    await AfterTaggedStreamReaderReadHook();
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                var dbEvent = enumerator.Current;
+                await onEvent(new SerializableEvent(
+                    Encoding.UTF8.GetBytes(dbEvent.Payload),
+                    dbEvent.SortableUniqueId,
+                    dbEvent.Id,
+                    new EventMetadata(dbEvent.CausationId ?? "", dbEvent.CorrelationId ?? "", dbEvent.ExecutedUser ?? ""),
+                    JsonSerializer.Deserialize<List<string>>(dbEvent.Tags) ?? new List<string>(),
+                    dbEvent.EventType));
+                cancellationToken.ThrowIfCancellationRequested();
+                count++;
+                lastSortableUniqueId = dbEvent.SortableUniqueId;
+            }
+
+            return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<SerializableEventStreamReadResult>(ex);
         }
     }
 

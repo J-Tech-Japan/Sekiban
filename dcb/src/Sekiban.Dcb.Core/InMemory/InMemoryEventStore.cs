@@ -21,13 +21,21 @@ internal sealed class InMemoryEventStoreBackend
 /// </summary>
 [Obsolete(
     "Moved to Sekiban.Dcb.Core.Testing (namespace Sekiban.Dcb.Testing). This type is volatile/in-process and is for tests only; it lives in a production package for historical reasons, which is how it reached production once. Behaviour is unchanged and it will not be removed before the next major version.")]
-public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, IStorageDurabilityDescriptorProvider
+public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, IStorageDurabilityDescriptorProvider,
+    IStreamingTaggedSerializableEventStore, ITaggedStreamCapabilityProvider
 {
     private const string EventTypesRequiredMessage = "IEventTypes is required for SerializableEvent operations";
 
     /// <summary>Everything here is a dictionary in this process. It is gone when the process is.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Volatile, "InMemory");
+
+    /// <summary>
+    ///     In-memory is a parity implementation: it invokes callbacks from an ordered snapshot, but callers can still
+    ///     select the tagged callback shape without using the public list API.
+    /// </summary>
+    public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+        TaggedStreamCapabilityDescriptor.Native("InMemory");
 
     internal sealed class ServiceState
     {
@@ -487,6 +495,34 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, I
 
             return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(serializableEvents));
         }
+    }
+
+    public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        ITag tag,
+        SortableUniqueId? since,
+        SortableUniqueId? until,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken = default)
+    {
+        var eventTypes = _eventTypes;
+        if (eventTypes is null)
+        {
+            return Task.FromResult(ResultBox.Error<SerializableEventStreamReadResult>(
+                new NotSupportedException(EventTypesRequiredMessage)));
+        }
+
+        var state = GetState();
+        return TaggedSerializableEventStreamHelper.StreamSnapshotByTagAsync(
+            state.Lock,
+            state.EventOrder,
+            static @event => @event.Tags,
+            static @event => @event.SortableUniqueIdValue,
+            @event => @event.ToSerializableEvent(eventTypes),
+            tag,
+            since,
+            until,
+            onEvent,
+            cancellationToken);
     }
 
     public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(

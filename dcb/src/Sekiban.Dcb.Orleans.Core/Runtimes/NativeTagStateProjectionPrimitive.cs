@@ -129,31 +129,55 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
 
             foreach (var serializableEvent in events.OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!string.IsNullOrEmpty(_lastSortableUniqueId) &&
-                    string.Compare(serializableEvent.SortableUniqueIdValue, _lastSortableUniqueId, StringComparison.Ordinal) <= 0)
-                {
-                    continue;
-                }
-
-                if (!string.IsNullOrWhiteSpace(latestSortableUniqueId) &&
-                    string.Compare(serializableEvent.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) > 0)
-                {
-                    continue;
-                }
-
-                var eventResult = serializableEvent.ToEvent(_eventTypes);
-                if (!eventResult.IsSuccess)
+                if (!ApplyEvent(serializableEvent, latestSortableUniqueId, cancellationToken))
                 {
                     return false;
                 }
-
-                _currentPayload = _projector!(_currentPayload, eventResult.GetValue());
-                _version++;
-                _lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
-                _hasChanges = true;
             }
 
+            return true;
+        }
+
+        /// <summary>
+        ///     Native streaming path: deliberately bypasses the batch method's OrderBy because callers validate stream
+        ///     order before invoking this member.
+        /// </summary>
+        public bool ApplyEvent(
+            SerializableEvent serializableEvent,
+            string? latestSortableUniqueId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!_hasProjector)
+            {
+                _version = 0;
+                _lastSortableUniqueId = string.Empty;
+                _currentPayload = new EmptyTagStatePayload();
+                return true;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.IsNullOrEmpty(_lastSortableUniqueId) &&
+                string.Compare(serializableEvent.SortableUniqueIdValue, _lastSortableUniqueId, StringComparison.Ordinal) <= 0)
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(latestSortableUniqueId) &&
+                string.Compare(serializableEvent.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) > 0)
+            {
+                return true;
+            }
+
+            var eventResult = serializableEvent.ToEvent(_eventTypes);
+            if (!eventResult.IsSuccess)
+            {
+                return false;
+            }
+
+            _currentPayload = _projector!(_currentPayload, eventResult.GetValue());
+            _version++;
+            _lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
+            _hasChanges = true;
             return true;
         }
 

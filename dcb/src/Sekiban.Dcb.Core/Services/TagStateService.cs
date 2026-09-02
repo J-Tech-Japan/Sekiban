@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
@@ -128,24 +129,52 @@ public class TagStateService
         var projectorVersionResult = _tagProjectorTypes.GetProjectorVersion(projectorName);
         var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : "unknown";
 
-        // Fetch events for the tag
-        var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
-        if (!eventsResult.IsSuccess)
-        {
-            return ResultBox.Error<TagStateProjectionResult>(eventsResult.GetException());
-        }
-
-        var events = eventsResult.GetValue().ToList();
         var projectorFunc = projectorFuncResult.GetValue();
 
-        // Project all events
+        // Project all events. Existing public operations have no cancellation token, so the optional stream receives
+        // CancellationToken.None just like the actor/grain paths.
         ITagStatePayload state = new EmptyTagStatePayload();
         string? lastSortableUniqueId = null;
+        var eventCount = 0;
+        var taggedStream = SekibanDcbCapabilityResolver.ResolveTaggedStream(_eventStore, "event store");
 
-        foreach (var evt in events)
+        if (taggedStream.IsSupported)
         {
-            state = projectorFunc(state, evt);
-            lastSortableUniqueId = evt.SortableUniqueIdValue;
+            var streamResult = await TaggedStreamProjectionHelper.ProjectAsync(
+                taggedStream.StreamStore!,
+                tag,
+                null,
+                null,
+                _eventTypes,
+                projectorFunc,
+                state,
+                null,
+                string.Empty,
+                CancellationToken.None);
+            if (!streamResult.IsSuccess)
+            {
+                return ResultBox.Error<TagStateProjectionResult>(streamResult.GetException());
+            }
+
+            var streamProjection = streamResult.GetValue();
+            state = streamProjection.State;
+            eventCount = streamProjection.EventCount;
+            lastSortableUniqueId = streamProjection.LastSortableUniqueId;
+        }
+        else
+        {
+            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
+            if (!eventsResult.IsSuccess)
+            {
+                return ResultBox.Error<TagStateProjectionResult>(eventsResult.GetException());
+            }
+
+            foreach (var evt in eventsResult.GetValue())
+            {
+                state = projectorFunc(state, evt);
+                eventCount++;
+                lastSortableUniqueId = evt.SortableUniqueIdValue;
+            }
         }
 
         var result = new TagStateProjectionResult(
@@ -153,7 +182,7 @@ public class TagStateService
             projectorName,
             projectorVersion,
             state,
-            events.Count,
+            eventCount,
             lastSortableUniqueId);
 
         return ResultBox.FromValue(result);

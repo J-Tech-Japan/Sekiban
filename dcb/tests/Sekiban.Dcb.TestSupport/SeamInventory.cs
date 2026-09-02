@@ -20,7 +20,11 @@ public static class SeamInventory
     {
         new SeamEntry(PostgresAssembly, "Sekiban.Dcb.Postgres.PostgresEventStore", "AfterConditionalCommitHook"),
         new SeamEntry(PostgresAssembly, "Sekiban.Dcb.Postgres.PostgresEventStore", "TagHeadProtocolHook"),
+        new SeamEntry(PostgresAssembly, "Sekiban.Dcb.Postgres.PostgresEventStore", "BeforeTaggedStreamReaderReadHook"),
+        new SeamEntry(PostgresAssembly, "Sekiban.Dcb.Postgres.PostgresEventStore", "AfterTaggedStreamReaderReadHook"),
         new SeamEntry(SqliteAssembly, "Sekiban.Dcb.Sqlite.SqliteEventStore", "AfterConditionalCommitHook"),
+        new SeamEntry(SqliteAssembly, "Sekiban.Dcb.Sqlite.SqliteEventStore", "BeforeTaggedStreamReaderReadHook"),
+        new SeamEntry(SqliteAssembly, "Sekiban.Dcb.Sqlite.SqliteEventStore", "AfterTaggedStreamReaderReadHook"),
         new SeamEntry(CosmosAssembly, "Sekiban.Dcb.CosmosDb.CosmosDbEventStore", "AfterConditionalCommitHook"),
         new SeamEntry(CoreAssembly, "Sekiban.Dcb.Actors.CoreGeneralSekibanExecutor", "ConditionalEventIdFactory"),
         new SeamEntry(CoreAssembly, "Sekiban.Dcb.Actors.CoreGeneralSekibanExecutor", "ConditionalSortableIdFactory"),

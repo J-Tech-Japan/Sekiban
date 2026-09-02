@@ -73,6 +73,46 @@ public class HybridEventStoreWriteConditionDescriptorTests
         Assert.True(hot.ForwardReceived); // the append was forwarded to the hot store, not handled by the wrapper
     }
 
+    [Fact]
+    public async Task Hybrid_WithSilentTaggedStreamHotStore_IsUnsupportedWithoutTouchingTheListApi()
+    {
+        var hot = new ListTripwireStreamingStore();
+        var hybrid = Wrap(hot);
+
+        var capability = SekibanDcbCapabilityResolver.ResolveTaggedStream(hybrid, "event store");
+        Assert.False(capability.IsSupported);
+        Assert.False(hybrid.DescribeTaggedStream().NativeStreaming);
+
+        var result = await hybrid.StreamSerializableEventsByTagAsync(
+            new TestTag(),
+            null,
+            null,
+            _ => ValueTask.CompletedTask);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(0, hot.ListReadCalls);
+    }
+
+    [Fact]
+    public async Task Hybrid_WithHonestTaggedStreamHotStore_IsSupportedAndForwardsTheCallback()
+    {
+        var hot = new HonestTaggedStreamStore();
+        var hybrid = Wrap(hot);
+
+        var capability = SekibanDcbCapabilityResolver.ResolveTaggedStream(hybrid, "event store");
+        Assert.True(capability.IsSupported);
+        Assert.True(hybrid.DescribeTaggedStream().NativeStreaming);
+
+        var result = await hybrid.StreamSerializableEventsByTagAsync(
+            new TestTag(),
+            null,
+            null,
+            _ => ValueTask.CompletedTask);
+
+        Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+        Assert.Equal(1, hot.StreamCalls);
+    }
+
     /// <summary>A hot store that declares AND implements the capability (the honest case).</summary>
     private sealed class ConditionalStore : SilentStore, IWriteConditionCapabilityProvider, IConditionalEventStore
     {
@@ -116,10 +156,63 @@ public class HybridEventStoreWriteConditionDescriptorTests
         public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount) =>
             throw new NotSupportedException();
         public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) => throw new NotSupportedException();
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+        public virtual Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
             throw new NotSupportedException();
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
             WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
         public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    ///     Looks stream-capable to a bare <c>is</c> check, but deliberately does not declare native streaming. The
+    ///     Hybrid must return unsupported rather than calling either this member or the list API.
+    /// </summary>
+    private sealed class ListTripwireStreamingStore : SilentStore, IStreamingTaggedSerializableEventStore
+    {
+        public int ListReadCalls { get; private set; }
+
+        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since = null)
+        {
+            ListReadCalls++;
+            throw new InvalidOperationException("The Hybrid must not call a list API to simulate tagged streaming.");
+        }
+
+        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("The Hybrid must reject this silent provider before forwarding.");
+    }
+
+    private sealed class HonestTaggedStreamStore : SilentStore, IStreamingTaggedSerializableEventStore,
+        ITaggedStreamCapabilityProvider
+    {
+        public int StreamCalls { get; private set; }
+
+        public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+            TaggedStreamCapabilityDescriptor.Native("honest hybrid test");
+
+        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            StreamCalls++;
+            return Task.FromResult(ResultBox.FromValue(new SerializableEventStreamReadResult(0, null)));
+        }
+    }
+
+    private sealed class TestTag : ITag
+    {
+        public bool IsConsistencyTag() => false;
+        public string GetTagGroup() => "Test";
+        public string GetTagContent() => "tag";
+        public string GetTag() => "Test:tag";
     }
 }
