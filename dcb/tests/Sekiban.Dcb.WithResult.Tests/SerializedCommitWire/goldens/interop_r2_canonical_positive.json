@@ -1,0 +1,1 @@
+{"candidates":[{"eventId":"33333333-3333-3333-3333-333333333333","eventPayloadName":"CanonicalEvent","payload":{"alpha":1,"beta":"two","nested":{"value":true}},"tags":["Canonical:1"]}],"consistency":[{"tag":"Canonical:1","lastSortableUniqueId":""}]}

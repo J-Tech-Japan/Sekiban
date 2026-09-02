@@ -1,0 +1,1 @@
+{"eventCandidates":[{"payload":"eyJhbW91bnQiOjEsIm1lbW8iOiJjb2ZmZWUifQ==","eventPayloadName":"OrderPlaced","tags":["Order:42","Customer:7"]},{"payload":"eyJpdGVtcyI6WzEsMl0sInNoaXBwZWQiOnRydWV9","eventPayloadName":"OrderShipped","tags":["Order:42","Shipment:9"]}],"consistencyTags":[{"tag":"Order:42","lastSortableUniqueId":""}]}
