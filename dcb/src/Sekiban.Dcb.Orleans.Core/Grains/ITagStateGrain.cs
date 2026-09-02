@@ -18,9 +18,19 @@ public interface ITagStateGrain : IGrainWithStringKey
     Task<SerializableTagState> GetStateAsync();
 
     /// <summary>
+    ///     Get the current state while propagating cancellation to the grain implementation.
+    /// </summary>
+    Task<SerializableTagState> GetStateAsync(CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Get the tag state
     /// </summary>
     Task<TagState> GetTagStateAsync();
+
+    /// <summary>
+    ///     Get the tag state while propagating cancellation to the grain implementation.
+    /// </summary>
+    Task<TagState> GetTagStateAsync(CancellationToken cancellationToken);
 
     /// <summary>
     ///     Update the state
