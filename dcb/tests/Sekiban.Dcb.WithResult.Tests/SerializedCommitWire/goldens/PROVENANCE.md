@@ -24,7 +24,7 @@ Official serialized-commit wire contract: `Sekiban.Dcb.Commands.SerializedCommit
 ## Pinned integrity (SHA-256, lowercase hex)
 - `legacy_1017_unversioned.json` — 531 bytes — `26c103ab7c8f117de809711a7b31f26d37ef374c1e551bc1ad0948e4105a17cf`
 - `legacy_1017_empty.json` — 43 bytes — `52d11a52f7657262da74a613935aad9cdda2cf4f2191b3d838b56c3e2aa85439`
-- `ts_client_aliased_unversioned.json` — 87 bytes — `dd3715a784f3a8628e28815501d4358b6bb23d040e2e71be3247689de7fbe5d2`
+- `ts_client_aliased_unversioned.json` — 86 bytes — `327f845705080b9d69819640217b0cec3aac0933c6f65b8575cacff414c5eec6`
   (SEK-G51 frozen negative fixture: the exact executed consult JSON
   `{"candidates":[{"eventPayloadName":"X","payload":{},"tags":["T:1"]}],"consistency":[]}`; the TypeScript-client
   top-level aliases `candidates` / `consistency` must fail closed before execution rather than producing the legacy empty

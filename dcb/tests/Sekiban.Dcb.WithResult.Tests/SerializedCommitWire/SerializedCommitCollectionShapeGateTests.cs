@@ -18,8 +18,8 @@ namespace Sekiban.Dcb.Tests.SerializedCommitWire;
 /// </summary>
 public class SerializedCommitCollectionShapeGateTests
 {
-    private const int FrozenConsultFixtureLength = 87;
-    private const string FrozenConsultFixtureSha256 = "dd3715a784f3a8628e28815501d4358b6bb23d040e2e71be3247689de7fbe5d2";
+    private const int FrozenConsultFixtureLength = 86;
+    private const string FrozenConsultFixtureSha256 = "327f845705080b9d69819640217b0cec3aac0933c6f65b8575cacff414c5eec6";
 
     private static readonly int?[] Versions = [null, VersionedSerializedCommitRequest.CurrentVersion,
         VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion];
