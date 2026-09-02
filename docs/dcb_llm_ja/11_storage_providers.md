@@ -158,7 +158,23 @@ downstream の store は再コンパイルなしで従来の list fallback を�
 - callback は ordinal な `SortableUniqueId` を厳密昇順で返します。tag-state consumer は小さい値を受け取った場合、
   再構築済み state を publish する前に拒否します。同じ値は既存の duplicate-skip policy に従います。
 - `InMemory` と in-process executor の store は parity test 用に callback shape を実装しますが、bounded-memory の
-  production provider ではありません。Cosmos DB と DynamoDB は専用の streaming 作業が入るまで list fallback のままです。
+  production provider ではありません。Cosmos DB と DynamoDB は互換性のある既存 list reader を変更せず、同じ native
+  capability を実装します:
+  - Cosmos DB は順序付き tag index を page 単位で読み、event point read を ordinal sliding window で実行します。専用の
+    `MaxConcurrentTaggedStreamPointReads` は既定 **8**、**1〜64** で検証され、effective tag-index page cap を超えられません
+    （明示設定時は `MaxItemCountPerPage`、legacy SDK-default sentinel 時は 100）。完了済み read も queue head の後ろで待つため、
+    遅い／失敗した head が後続 event を publish することはありません。head
+    failure 時は、既に発行済みの read を cancel して観測します。aggregate callback
+    (`TaggedStreamTelemetryCallback`) と `Sekiban.Dcb.CosmosDb` meter は、raw tag string/event id を含めず、bounded な
+    page/read/RU/429 値だけを報告します（`sekiban.dcb.cosmos.tag_stream.index_pages`、`.point_reads`、
+    `.request_charge`、`.throttles`）。これは意図的に RU-sublinear な read ではありません。順序付き tag-index scan
+    1 回と、参照 event 1 件につきおおむね 1 回の event point read を予算化してください。window は total RU ではなく、
+    in-flight work と memory を制限します。
+  - DynamoDB は `since`（exclusive）と `until`（inclusive）を tag row の sort-key condition に push down し、query は
+    1 page ずつ、`BatchGetItem` は 1 つの bounded chunk ずつ読みます。順序保証のない BatchGet response は、callback の前に
+    query reference 順へ並べ直されます。`ReadProgressCallback` と optional な `TaggedStreamTelemetryCallback` は
+    page/chunk と consumed capacity の aggregate を公開します。実装は最大で 1 reference page と 1 event-body chunk のみを
+    保持し、caller の cancellation token を Query、BatchGet、retry delay に渡します。
 - capability 選択は fail-closed です。store は optional interface の実装に加え、live-instance descriptor で native
   tagged streaming を宣言する必要があります。`HybridEventStore` は検証済み hot-store stream だけを forward し、それ
   以外では hot の list API を読まずに unsupported `ResultBox` を返します。

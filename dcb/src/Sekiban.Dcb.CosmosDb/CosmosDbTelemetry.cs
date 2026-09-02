@@ -34,6 +34,23 @@ public static class CosmosDbTelemetry
         "sekiban.dcb.cosmos.event_write.partial_failures",
         description: "Multi-event writes that failed partway through the parallel event-create phase.");
 
+    private static readonly Counter<long> TaggedStreamIndexPages = Meter.CreateCounter<long>(
+        "sekiban.dcb.cosmos.tag_stream.index_pages",
+        description: "Tag-index pages read by the native tagged-stream path.");
+
+    private static readonly Counter<long> TaggedStreamPointReads = Meter.CreateCounter<long>(
+        "sekiban.dcb.cosmos.tag_stream.point_reads",
+        description: "Event point reads issued by the native tagged-stream path.");
+
+    private static readonly Counter<double> TaggedStreamRequestCharge = Meter.CreateCounter<double>(
+        "sekiban.dcb.cosmos.tag_stream.request_charge",
+        unit: "Request Units",
+        description: "Cosmos request charge consumed by native tagged streams.");
+
+    private static readonly Counter<long> TaggedStreamThrottles = Meter.CreateCounter<long>(
+        "sekiban.dcb.cosmos.tag_stream.throttles",
+        description: "429 responses observed by native tagged streams.");
+
     /// <summary>Records a failed tag-write attempt. <paramref name="reason" /> must be a bounded label.</summary>
     internal static void RecordTagWriteFailure(TagWriteFailureReason reason) =>
         TagWriteFailures.Add(1, new KeyValuePair<string, object?>("reason", ToLabel(reason)));
@@ -63,6 +80,30 @@ public static class CosmosDbTelemetry
 
     /// <summary>Records a partially-failed multi-event write.</summary>
     internal static void RecordPartialEventWrite() => PartialEventWrites.Add(1);
+
+    /// <summary>Records the bounded aggregate for a native tagged stream without creating tag/event-id dimensions.</summary>
+    internal static void RecordTaggedStream(CosmosTaggedStreamTelemetry telemetry)
+    {
+        if (telemetry.IndexPages > 0)
+        {
+            TaggedStreamIndexPages.Add(telemetry.IndexPages);
+        }
+
+        if (telemetry.PointReads > 0)
+        {
+            TaggedStreamPointReads.Add(telemetry.PointReads);
+        }
+
+        if (telemetry.RequestCharge > 0)
+        {
+            TaggedStreamRequestCharge.Add(telemetry.RequestCharge);
+        }
+
+        if (telemetry.ThrottledRequests > 0)
+        {
+            TaggedStreamThrottles.Add(telemetry.ThrottledRequests);
+        }
+    }
 
     /// <summary>Records how a sweep run ended. <paramref name="outcome" /> must be a bounded label.</summary>
     internal static void RecordSweepRun(SweepRunOutcome outcome) =>

@@ -153,8 +153,24 @@ continue to use the list fallback without recompilation.
 - The callback contract emits strictly increasing ordinal `SortableUniqueId` values. Tag-state consumers reject a
   decreasing value before publishing a rebuilt state; an equal value follows the established duplicate-skip policy.
 - `InMemory` and the in-process executor stores implement the callback shape for parity tests. They are not a
-  bounded-memory production provider. Cosmos DB and DynamoDB remain on the list fallback until their dedicated
-  streaming work lands.
+  bounded-memory production provider. Cosmos DB and DynamoDB implement the same native capability without changing
+  their compatible list readers:
+  - Cosmos DB pages the ordered tag index and runs an ordinal sliding window of event point reads. The separate
+    `MaxConcurrentTaggedStreamPointReads` option defaults to **8**, is validated from **1 through 64**, and may not
+    exceed the effective tag-index page cap (`MaxItemCountPerPage` when explicitly configured, or 100 for the legacy
+    SDK-default sentinel); completed reads wait behind the queue head, so a slow or failed head never publishes a later
+    event. A failed head cancels and observes already-issued reads. Its aggregate callback
+    (`TaggedStreamTelemetryCallback`) and `Sekiban.Dcb.CosmosDb` meter report only bounded page/read/RU/429 values
+    (`sekiban.dcb.cosmos.tag_stream.index_pages`, `.point_reads`, `.request_charge`, and `.throttles`) — never raw
+    tag strings or event ids. This is deliberately **not** an RU-sublinear read: budget for one ordered tag-index scan
+    plus approximately one event point read per referenced event; the window limits in-flight work and memory, not
+    total RU.
+  - DynamoDB pushes `since` (exclusive) and `until` (inclusive) into the tag row sort-key condition, reads one query
+    page at a time, reads one bounded `BatchGetItem` chunk at a time, and reorders the unordered BatchGet response by
+    the query references before invoking the callback. `ReadProgressCallback` and the optional
+    `TaggedStreamTelemetryCallback` expose page/chunk and consumed-capacity aggregates. The implementation keeps at
+    most one reference page plus one event-body chunk and forwards the caller cancellation token to Query, BatchGet,
+    and retry delay operations.
 - Capability selection is fail-closed: a store must implement the optional interface **and** declare native tagged
   streaming through the live-instance descriptor. `HybridEventStore` forwards only a verified hot-store stream and
   returns an unsupported `ResultBox` without reading its hot list API otherwise.

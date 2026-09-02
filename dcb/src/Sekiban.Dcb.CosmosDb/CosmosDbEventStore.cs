@@ -20,7 +20,8 @@ namespace Sekiban.Dcb.CosmosDb;
 ///     CosmosDB-backed event store implementation.
 /// </summary>
 public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider,
-    IConditionalEventStore, IWriteConditionCapabilityProvider
+    IConditionalEventStore, IWriteConditionCapabilityProvider, IStreamingTaggedSerializableEventStore,
+    ITaggedStreamCapabilityProvider
 {
     private const string ConditionalProviderName = "CosmosDb";
 
