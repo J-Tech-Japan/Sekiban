@@ -140,47 +140,26 @@ public class TagStateService
 
         if (taggedStream.IsSupported)
         {
-            string? previousId = null;
-            var streamResult = await taggedStream.StreamStore!.StreamSerializableEventsByTagAsync(
+            var streamResult = await TaggedStreamProjectionHelper.ProjectAsync(
+                taggedStream.StreamStore!,
                 tag,
                 null,
                 null,
-                serializableEvent =>
-                {
-                    if (!SekibanDcbCapabilityResolver.IsTaggedStreamOrderValid(
-                            previousId,
-                            serializableEvent.SortableUniqueIdValue,
-                            out var duplicate))
-                    {
-                        throw new InvalidOperationException(
-                            $"Tagged stream for {tag.GetTag()} emitted out-of-order id " +
-                            $"{serializableEvent.SortableUniqueIdValue} after {previousId}.");
-                    }
-
-                    if (duplicate)
-                    {
-                        return ValueTask.CompletedTask;
-                    }
-
-                    var eventResult = serializableEvent.ToEvent(_eventTypes);
-                    if (!eventResult.IsSuccess)
-                    {
-                        throw new InvalidOperationException(
-                            $"Failed to deserialize event for tag {tag.GetTag()}: {eventResult.GetException().Message}",
-                            eventResult.GetException());
-                    }
-
-                    state = projectorFunc(state, eventResult.GetValue());
-                    eventCount++;
-                    lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
-                    previousId = serializableEvent.SortableUniqueIdValue;
-                    return ValueTask.CompletedTask;
-                },
+                _eventTypes,
+                projectorFunc,
+                state,
+                null,
+                string.Empty,
                 CancellationToken.None);
             if (!streamResult.IsSuccess)
             {
                 return ResultBox.Error<TagStateProjectionResult>(streamResult.GetException());
             }
+
+            var streamProjection = streamResult.GetValue();
+            state = streamProjection.State;
+            eventCount = streamProjection.EventCount;
+            lastSortableUniqueId = streamProjection.LastSortableUniqueId;
         }
         else
         {

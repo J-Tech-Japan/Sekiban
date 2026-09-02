@@ -503,64 +503,25 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
             }
         }
 
-        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
             ITag tag,
             SortableUniqueId? since,
             SortableUniqueId? until,
             Func<SerializableEvent, ValueTask> onEvent,
             CancellationToken cancellationToken = default)
         {
-            try
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                List<SerializableEvent> snapshot;
-                var state = GetState();
-                lock (state.Lock)
-                {
-                    var events = state.Events.Where(e => e.Tags.Contains(tag.GetTag()));
-                    if (since != null)
-                    {
-                        events = events.Where(e => string.Compare(
-                            e.SortableUniqueIdValue,
-                            since.Value,
-                            StringComparison.Ordinal) > 0);
-                    }
-
-                    if (until != null)
-                    {
-                        events = events.Where(e => string.Compare(
-                            e.SortableUniqueIdValue,
-                            until.Value,
-                            StringComparison.Ordinal) <= 0);
-                    }
-
-                    snapshot = events
-                        .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
-                        .Select(ToSerializableEvent)
-                        .ToList();
-                }
-
-                var count = 0;
-                string? lastSortableUniqueId = null;
-                foreach (var serializableEvent in snapshot)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await onEvent(serializableEvent);
-                    cancellationToken.ThrowIfCancellationRequested();
-                    count++;
-                    lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
-                }
-
-                return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                return ResultBox.Error<SerializableEventStreamReadResult>(ex);
-            }
+            var state = GetState();
+            return TaggedSerializableEventStreamHelper.StreamSnapshotByTagAsync(
+                state.Lock,
+                state.Events,
+                static @event => @event.Tags,
+                static @event => @event.SortableUniqueIdValue,
+                ToSerializableEvent,
+                tag,
+                since,
+                until,
+                onEvent,
+                cancellationToken);
         }
 
         private sealed class EventStoreAdapter : InMemorySerializableEventWriter.IAddableEventStore

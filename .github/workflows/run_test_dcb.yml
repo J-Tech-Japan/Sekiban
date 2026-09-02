@@ -45,7 +45,6 @@ jobs:
   dcbTestsNet9:
     runs-on: ubuntu-latest
     env:
-      SEKIBAN_STREAM_RESTORE_CONTROLLED_CEILING: '1'
       SEKIBAN_TAG_STREAM_CONTROLLED_CEILING: '1'
     concurrency:
       group: dcb-tests-net9-${{ github.ref }}
@@ -97,7 +96,6 @@ jobs:
   dcbTestsNet10:
     runs-on: ubuntu-latest
     env:
-      SEKIBAN_STREAM_RESTORE_CONTROLLED_CEILING: '1'
       SEKIBAN_TAG_STREAM_CONTROLLED_CEILING: '1'
     concurrency:
       group: dcb-tests-net10-${{ github.ref }}

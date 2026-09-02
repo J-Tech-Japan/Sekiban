@@ -465,51 +465,16 @@ public class GeneralTagStateActor : ITagStateActorCommon
             var since = new SortableUniqueId(incrementalCachedState.LastSortedUniqueId);
             if (taggedStream.IsSupported)
             {
-                var previousId = lastSortedUniqueId;
-                var streamResult = await taggedStream.StreamStore!.StreamSerializableEventsByTagAsync(
+                var streamResult = await TaggedStreamProjectionHelper.ProjectAsync(
+                    taggedStream.StreamStore!,
                     tag,
                     since,
                     new SortableUniqueId(latestSortableUniqueId),
-                    serializableEvent =>
-                    {
-                        if (!SekibanDcbCapabilityResolver.IsTaggedStreamOrderValid(
-                                previousId,
-                                serializableEvent.SortableUniqueIdValue,
-                                out var duplicate))
-                        {
-                            throw new InvalidOperationException(
-                                $"Tagged stream for {tag.GetTag()} emitted out-of-order id " +
-                                $"{serializableEvent.SortableUniqueIdValue} after {previousId}.");
-                        }
-
-                        if (duplicate)
-                        {
-                            return ValueTask.CompletedTask;
-                        }
-
-                        if (string.Compare(
-                                serializableEvent.SortableUniqueIdValue,
-                                latestSortableUniqueId,
-                                StringComparison.Ordinal) > 0)
-                        {
-                            throw new InvalidOperationException(
-                                $"Tagged stream for {tag.GetTag()} exceeded captured head {latestSortableUniqueId}.");
-                        }
-
-                        var eventResult = serializableEvent.ToEvent(_eventTypes);
-                        if (!eventResult.IsSuccess)
-                        {
-                            throw new InvalidOperationException(
-                                $"Failed to deserialize event for tag {tag.GetTag()}: {eventResult.GetException().Message}",
-                                eventResult.GetException());
-                        }
-
-                        currentState = projectFunc(currentState!, eventResult.GetValue());
-                        version++;
-                        lastSortedUniqueId = serializableEvent.SortableUniqueIdValue;
-                        previousId = serializableEvent.SortableUniqueIdValue;
-                        return ValueTask.CompletedTask;
-                    },
+                    _eventTypes,
+                    projectFunc,
+                    incrementalCachedState.Payload,
+                    lastSortedUniqueId,
+                    lastSortedUniqueId,
                     CancellationToken.None);
                 if (!streamResult.IsSuccess)
                 {
@@ -517,6 +482,11 @@ public class GeneralTagStateActor : ITagStateActorCommon
                     _logger.LogError(error, "[GeneralTagStateActor] Error streaming events for tag {Tag}", tag.GetTag());
                     throw new InvalidOperationException($"Failed to stream events for tag {tag.GetTag()}: {error.Message}", error);
                 }
+
+                var streamProjection = streamResult.GetValue();
+                currentState = streamProjection.State;
+                version += streamProjection.EventCount;
+                lastSortedUniqueId = streamProjection.LastSortableUniqueId;
             }
             else
             {
@@ -560,52 +530,16 @@ public class GeneralTagStateActor : ITagStateActorCommon
             // Full rebuild: projector version changed or no valid cache
             if (taggedStream.IsSupported)
             {
-                string? previousId = null;
-                var streamResult = await taggedStream.StreamStore!.StreamSerializableEventsByTagAsync(
+                var streamResult = await TaggedStreamProjectionHelper.ProjectAsync(
+                    taggedStream.StreamStore!,
                     tag,
                     null,
                     new SortableUniqueId(latestSortableUniqueId),
-                    serializableEvent =>
-                    {
-                        if (!SekibanDcbCapabilityResolver.IsTaggedStreamOrderValid(
-                                previousId,
-                                serializableEvent.SortableUniqueIdValue,
-                                out var duplicate))
-                        {
-                            throw new InvalidOperationException(
-                                $"Tagged stream for {tag.GetTag()} emitted out-of-order id " +
-                                $"{serializableEvent.SortableUniqueIdValue} after {previousId}.");
-                        }
-
-                        if (duplicate)
-                        {
-                            return ValueTask.CompletedTask;
-                        }
-
-                        if (string.Compare(
-                                serializableEvent.SortableUniqueIdValue,
-                                latestSortableUniqueId,
-                                StringComparison.Ordinal) > 0)
-                        {
-                            throw new InvalidOperationException(
-                                $"Tagged stream for {tag.GetTag()} exceeded captured head {latestSortableUniqueId}.");
-                        }
-
-                        var eventResult = serializableEvent.ToEvent(_eventTypes);
-                        if (!eventResult.IsSuccess)
-                        {
-                            throw new InvalidOperationException(
-                                $"Failed to deserialize event for tag {tag.GetTag()}: {eventResult.GetException().Message}",
-                                eventResult.GetException());
-                        }
-
-                        currentState ??= new EmptyTagStatePayload();
-                        currentState = projectFunc(currentState, eventResult.GetValue());
-                        version++;
-                        lastSortedUniqueId = serializableEvent.SortableUniqueIdValue;
-                        previousId = serializableEvent.SortableUniqueIdValue;
-                        return ValueTask.CompletedTask;
-                    },
+                    _eventTypes,
+                    projectFunc,
+                    new EmptyTagStatePayload(),
+                    null,
+                    string.Empty,
                     CancellationToken.None);
                 if (!streamResult.IsSuccess)
                 {
@@ -618,6 +552,11 @@ public class GeneralTagStateActor : ITagStateActorCommon
                         $"Failed to stream events for tag {tag.GetTag()} during full rebuild: {error.Message}",
                         error);
                 }
+
+                var streamProjection = streamResult.GetValue();
+                currentState = streamProjection.State;
+                version = streamProjection.EventCount;
+                lastSortedUniqueId = streamProjection.LastSortableUniqueId;
             }
             else
             {

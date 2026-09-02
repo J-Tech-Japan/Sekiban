@@ -497,71 +497,32 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, I
         }
     }
 
-    public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+    public Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
         ITag tag,
         SortableUniqueId? since,
         SortableUniqueId? until,
         Func<SerializableEvent, ValueTask> onEvent,
         CancellationToken cancellationToken = default)
     {
-        try
+        var eventTypes = _eventTypes;
+        if (eventTypes is null)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (_eventTypes == null)
-            {
-                return ResultBox.Error<SerializableEventStreamReadResult>(
-                    new NotSupportedException(EventTypesRequiredMessage));
-            }
-
-            List<SerializableEvent> snapshot;
-            var state = GetState();
-            lock (state.Lock)
-            {
-                var tagString = tag.GetTag();
-                var events = state.EventOrder.Where(e => e.Tags.Contains(tagString));
-                if (since != null)
-                {
-                    events = events.Where(e => string.Compare(
-                        e.SortableUniqueIdValue,
-                        since.Value,
-                        StringComparison.Ordinal) > 0);
-                }
-
-                if (until != null)
-                {
-                    events = events.Where(e => string.Compare(
-                        e.SortableUniqueIdValue,
-                        until.Value,
-                        StringComparison.Ordinal) <= 0);
-                }
-
-                snapshot = events
-                    .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
-                    .Select(e => e.ToSerializableEvent(_eventTypes))
-                    .ToList();
-            }
-
-            var count = 0;
-            string? lastSortableUniqueId = null;
-            foreach (var serializableEvent in snapshot)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await onEvent(serializableEvent);
-                cancellationToken.ThrowIfCancellationRequested();
-                count++;
-                lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
-            }
-
-            return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
+            return Task.FromResult(ResultBox.Error<SerializableEventStreamReadResult>(
+                new NotSupportedException(EventTypesRequiredMessage)));
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<SerializableEventStreamReadResult>(ex);
-        }
+
+        var state = GetState();
+        return TaggedSerializableEventStreamHelper.StreamSnapshotByTagAsync(
+            state.Lock,
+            state.EventOrder,
+            static @event => @event.Tags,
+            static @event => @event.SortableUniqueIdValue,
+            @event => @event.ToSerializableEvent(eventTypes),
+            tag,
+            since,
+            until,
+            onEvent,
+            cancellationToken);
     }
 
     public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(

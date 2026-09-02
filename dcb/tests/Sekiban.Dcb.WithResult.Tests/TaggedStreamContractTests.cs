@@ -507,7 +507,7 @@ public class TaggedStreamContractTests
     }
 
     [Fact]
-    public void DcbWorkflow_ObservesEveryTouchedProviderAndSetsTheControlledMemoryGate()
+    public void DcbWorkflow_ObservesEveryTouchedProviderAndSetsTheTaggedStreamControlledMemoryGate()
     {
         var assembly = typeof(TaggedStreamContractTests).Assembly;
         var resourceName = Assert.Single(
@@ -533,8 +533,8 @@ public class TaggedStreamContractTests
             Assert.Contains(requiredPath, workflow, StringComparison.Ordinal);
         }
 
-        Assert.Contains("SEKIBAN_STREAM_RESTORE_CONTROLLED_CEILING: '1'", workflow, StringComparison.Ordinal);
         Assert.Contains("SEKIBAN_TAG_STREAM_CONTROLLED_CEILING: '1'", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("SEKIBAN_STREAM_RESTORE_CONTROLLED_CEILING", workflow, StringComparison.Ordinal);
     }
 
     private static SerializableEvent Event(string sortableUniqueId, ITag tag) =>

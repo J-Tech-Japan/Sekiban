@@ -1295,28 +1295,21 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
             await connection.OpenAsync(cancellationToken);
             await using var cmd = connection.CreateCommand();
 
-            var bounds = string.Empty;
-            if (since != null)
-            {
-                bounds += " AND e.SortableUniqueId > @since";
-                cmd.Parameters.AddWithValue("@since", since.Value);
-            }
-
-            if (until != null)
-            {
-                bounds += " AND e.SortableUniqueId <= @until";
-                cmd.Parameters.AddWithValue("@until", until.Value);
-            }
-
-            cmd.CommandText = $"""
+            cmd.CommandText = """
                 SELECT DISTINCT e.Id, e.SortableUniqueId, e.EventType, e.PayloadJson, e.TagsJson, e.Timestamp, e.CausationId, e.CorrelationId, e.ExecutedUser
                 FROM dcb_events e
                 INNER JOIN dcb_tags t ON e.Id = t.EventId
-                WHERE e.ServiceId = {ParamServiceId} AND t.ServiceId = {ParamServiceId} AND t.Tag = @tag{bounds}
+                WHERE e.ServiceId = @serviceId
+                    AND t.ServiceId = @serviceId
+                    AND t.Tag = @tag
+                    AND (@since IS NULL OR e.SortableUniqueId > @since)
+                    AND (@until IS NULL OR e.SortableUniqueId <= @until)
                 ORDER BY e.SortableUniqueId
                 """;
             cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
             cmd.Parameters.AddWithValue("@tag", tagString);
+            cmd.Parameters.AddWithValue("@since", (object?)since?.Value ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@until", (object?)until?.Value ?? DBNull.Value);
 
             var count = 0;
             string? lastSortableUniqueId = null;
