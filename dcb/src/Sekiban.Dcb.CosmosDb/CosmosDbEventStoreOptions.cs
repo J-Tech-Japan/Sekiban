@@ -148,10 +148,86 @@ public class CosmosDbEventStoreOptions
     public int MaxConcurrentDeserializations { get; set; } = Environment.ProcessorCount * 2;
 
     /// <summary>
+    ///     Default maximum number of in-flight event point reads used only by the native tagged-stream path.
+    ///     It is intentionally separate from <see cref="MaxConcurrentDeserializations" />: a tagged stream is an
+    ///     ordered, bounded producer rather than a bulk list deserialization operation.
+    /// </summary>
+    public const int DefaultMaxConcurrentTaggedStreamPointReads = 8;
+
+    /// <summary>Hard upper bound for <see cref="MaxConcurrentTaggedStreamPointReads" />.</summary>
+    public const int MaximumMaxConcurrentTaggedStreamPointReads = 64;
+
+    // The compatibility preset deliberately retains MaxItemCountPerPage = -1 for its legacy readers. Native tagged
+    // streams instead make that SDK-default sentinel explicit at their own boundary so W remains coupled to a known
+    // page size without changing any existing list-reader request shape.
+    internal const int DefaultTaggedStreamIndexPageSize = 100;
+
+    /// <summary>
+    ///     Maximum event point reads the native tagged stream may issue before it has emitted the queue head.
+    ///     The value is validated for every tagged stream: 1 through 64 and no larger than its tag-index page size.
+    /// </summary>
+    public int MaxConcurrentTaggedStreamPointReads { get; set; } = DefaultMaxConcurrentTaggedStreamPointReads;
+
+    /// <summary>
+    ///     Optional bounded telemetry seam for one native tagged-stream invocation. The callback receives aggregate
+    ///     page/read/RU/throttle values only; it never receives event identifiers or tag strings.
+    /// </summary>
+    public Action<CosmosTaggedStreamTelemetry>? TaggedStreamTelemetryCallback { get; set; }
+
+    /// <summary>
     ///     Callback for progress reporting during bulk read operations.
     ///     Called with (eventsRead, totalRuConsumed) after each page.
     /// </summary>
     public Action<int, double>? ReadProgressCallback { get; set; }
+
+    /// <summary>
+    ///     Validates and returns the native tagged-stream point-read window. A tagged stream needs a concrete page cap
+    ///     to make the one-page-plus-window memory bound meaningful, so the SDK-default sentinel is rejected here.
+    /// </summary>
+    public int ValidateTaggedStreamPointReadWindow()
+    {
+        var pageSize = GetTaggedStreamIndexPageSize();
+
+        if (MaxConcurrentTaggedStreamPointReads is < 1 or > MaximumMaxConcurrentTaggedStreamPointReads)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxConcurrentTaggedStreamPointReads),
+                MaxConcurrentTaggedStreamPointReads,
+                $"Native tagged-stream point reads must be between 1 and {MaximumMaxConcurrentTaggedStreamPointReads}.");
+        }
+
+        if (MaxConcurrentTaggedStreamPointReads > pageSize)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxConcurrentTaggedStreamPointReads),
+                MaxConcurrentTaggedStreamPointReads,
+                "Native tagged-stream point reads may not exceed MaxItemCountPerPage.");
+        }
+
+        return MaxConcurrentTaggedStreamPointReads;
+    }
+
+    /// <summary>
+    ///     Returns the page cap used only by a native tagged stream. The old SDK-default sentinel remains untouched for
+    ///     compatible list readers, while this path uses an explicit cap to retain the <c>W &lt;= page size</c> invariant.
+    /// </summary>
+    internal int GetTaggedStreamIndexPageSize()
+    {
+        if (MaxItemCountPerPage == -1)
+        {
+            return DefaultTaggedStreamIndexPageSize;
+        }
+
+        if (MaxItemCountPerPage < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxItemCountPerPage),
+                MaxItemCountPerPage,
+                "Native tagged streaming requires MaxItemCountPerPage to be at least one or the SDK-default sentinel (-1).");
+        }
+
+        return MaxItemCountPerPage;
+    }
 
     /// <summary>
     ///     Creates QueryRequestOptions configured based on current settings.
@@ -209,3 +285,13 @@ public class CosmosDbEventStoreOptions
             MaxConcurrentDeserializations = 1 // Sequential processing
         };
 }
+
+/// <summary>
+///     Aggregate telemetry for one Cosmos native tagged stream. It deliberately contains no high-cardinality identifiers.
+/// </summary>
+public sealed record CosmosTaggedStreamTelemetry(
+    int IndexPages,
+    int PointReads,
+    int PeakInFlightPointReads,
+    double RequestCharge,
+    int ThrottledRequests);

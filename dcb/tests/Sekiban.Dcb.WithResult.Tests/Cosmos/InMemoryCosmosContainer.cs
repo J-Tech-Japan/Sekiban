@@ -36,6 +36,9 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     /// </summary>
     public Queue<Exception> PostWriteFaults { get; } = new();
 
+    /// <summary>Fails the next N point reads, before their resource is materialized.</summary>
+    public Queue<Exception> ReadFaults { get; } = new();
+
     private void ThrowIfPostFaulted()
     {
         if (PostWriteFaults.Count > 0)
@@ -57,12 +60,29 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     /// </summary>
     public Func<CancellationToken, Task>? ReadItemGate { get; set; }
 
+    /// <summary>
+    ///     Optional per-id point-read gate. It supplements <see cref="ReadItemGate" /> for ordered-stream tests that
+    ///     need the second request to finish before the first without changing the production ordering contract.
+    /// </summary>
+    public Func<string, CancellationToken, Task>? ReadItemGateById { get; set; }
+
     /// <summary>Every document currently stored, newest last.</summary>
     public IReadOnlyList<JObject> Items => _items.Values.ToList();
 
     public int Creates { get; private set; }
     public int Deletes { get; private set; }
     public int Queries { get; private set; }
+    public int PointReads => Volatile.Read(ref _pointReads);
+    public int InFlightPointReads => Volatile.Read(ref _inFlightPointReads);
+    public int MaximumInFlightPointReads => Volatile.Read(ref _maximumInFlightPointReads);
+    public IReadOnlyList<CancellationToken> PointReadTokens => _pointReadTokens;
+    public IReadOnlyList<CancellationToken> QueryReadTokens => _queryReadTokens;
+
+    private int _pointReads;
+    private int _inFlightPointReads;
+    private int _maximumInFlightPointReads;
+    private readonly List<CancellationToken> _pointReadTokens = new();
+    private readonly List<CancellationToken> _queryReadTokens = new();
 
     public override string Id => _name;
 
@@ -169,27 +189,59 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         ItemRequestOptions? requestOptions = null,
         CancellationToken cancellationToken = default)
     {
-        // Optional blocking gate (observing the read's token) — lets a test prove the bounded verification budget cancels
-        // a stuck production read. Awaited OUTSIDE the lock.
-        if (ReadItemGate is not null)
+        Interlocked.Increment(ref _pointReads);
+        var inFlight = Interlocked.Increment(ref _inFlightPointReads);
+        while (true)
         {
-            await ReadItemGate(cancellationToken).ConfigureAwait(false);
-        }
-
-        lock (_gate)
-        {
-            // Partition-scoped point read, exactly as Cosmos behaves: an id is unique WITHIN a partition, but the same id
-            // can exist in different partitions (e.g. tag rows share the event id across per-tag partitions). Matching by
-            // id alone would return another partition's row.
-            var pk = UnwrapPartitionKey(partitionKey);
-            var match = _items.TryGetValue((pk, id), out var found) ? found : null;
-
-            if (match == null)
+            var observedMaximum = Volatile.Read(ref _maximumInFlightPointReads);
+            if (inFlight <= observedMaximum ||
+                Interlocked.CompareExchange(ref _maximumInFlightPointReads, inFlight, observedMaximum) == observedMaximum)
             {
-                throw CosmosFailures.NotFound();
+                break;
+            }
+        }
+        try
+        {
+            lock (_gate)
+            {
+                _pointReadTokens.Add(cancellationToken);
+                if (ReadFaults.Count > 0)
+                {
+                    throw ReadFaults.Dequeue();
+                }
             }
 
-            return new FakeItemResponse<T>(match.ToObject<T>()!, HttpStatusCode.OK);
+            // Optional blocking gate (observing the read's token) — lets a test prove the bounded verification budget cancels
+            // a stuck production read. Awaited OUTSIDE the lock.
+            if (ReadItemGateById is not null)
+            {
+                await ReadItemGateById(id, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (ReadItemGate is not null)
+            {
+                await ReadItemGate(cancellationToken).ConfigureAwait(false);
+            }
+
+            lock (_gate)
+            {
+                // Partition-scoped point read, exactly as Cosmos behaves: an id is unique WITHIN a partition, but the same id
+                // can exist in different partitions (e.g. tag rows share the event id across per-tag partitions). Matching by
+                // id alone would return another partition's row.
+                var pk = UnwrapPartitionKey(partitionKey);
+                var match = _items.TryGetValue((pk, id), out var found) ? found : null;
+
+                if (match == null)
+                {
+                    throw CosmosFailures.NotFound();
+                }
+
+                return new FakeItemResponse<T>(match.ToObject<T>()!, HttpStatusCode.OK);
+            }
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _inFlightPointReads);
         }
     }
 
@@ -402,12 +454,16 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         // A query with an item cap pages; the store and the repair both follow continuation tokens.
         var pageSize = requestOptions?.MaxItemCount is > 0 ? requestOptions.MaxItemCount!.Value : rows.Count;
         var offset = continuationToken == null ? 0 : int.Parse(continuationToken, null);
-        var page = rows.Skip(offset).Take(Math.Max(1, pageSize)).ToList();
-        var consumed = offset + page.Count;
-        var next = consumed < rows.Count ? consumed.ToString(null as IFormatProvider) : null;
+        var typed = rows.Select(Materialize<T>).ToList();
+        return new FakeFeedIterator<T>(typed, Math.Max(1, pageSize), offset, RecordQueryReadToken);
+    }
 
-        var typed = page.Select(Materialize<T>).ToList();
-        return new FakeFeedIterator<T>(typed, next);
+    private void RecordQueryReadToken(CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            _queryReadTokens.Add(cancellationToken);
+        }
     }
 
     private static T Materialize<T>(JObject row) =>
@@ -467,7 +523,16 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
             if (parameters.TryGetValue("@since", out var since))
             {
-                rows = rows.Where(row => SinceMatches(text, row["sortableUniqueId"]!.Value<string>(), (string)since));
+                rows = rows.Where(row => SinceMatches(
+                    text,
+                    row["sortableUniqueId"]!.Value<string>() ?? string.Empty,
+                    (string)since));
+            }
+
+            if (parameters.TryGetValue("@until", out var until))
+            {
+                rows = rows.Where(row =>
+                    string.CompareOrdinal(row["sortableUniqueId"]!.Value<string>(), (string)until) <= 0);
             }
 
             if (text.Contains("COUNT(1)", StringComparison.Ordinal))
@@ -506,7 +571,10 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
             if (parameters.TryGetValue("@since", out var since))
             {
-                rows = rows.Where(row => SinceMatches(text, row["sortableUniqueId"]!.Value<string>(), (string)since));
+                rows = rows.Where(row => SinceMatches(
+                    text,
+                    row["sortableUniqueId"]!.Value<string>() ?? string.Empty,
+                    (string)since));
             }
 
             if (parameters.TryGetValue("@from", out var from))
@@ -728,23 +796,33 @@ internal sealed class FakeItemResponse<T> : ItemResponse<T>
 
 internal sealed class FakeFeedIterator<T> : FeedIterator<T>
 {
-    private readonly string? _continuationToken;
     private readonly IReadOnlyList<T> _rows;
-    private bool _served;
+    private readonly int _pageSize;
+    private readonly Action<CancellationToken>? _recordToken;
+    private int _offset;
 
-    public FakeFeedIterator(IReadOnlyList<T> rows, string? continuationToken)
+    public FakeFeedIterator(
+        IReadOnlyList<T> rows,
+        int pageSize,
+        int offset,
+        Action<CancellationToken>? recordToken = null)
     {
         _rows = rows;
-        _continuationToken = continuationToken;
+        _pageSize = pageSize;
+        _offset = offset;
+        _recordToken = recordToken;
     }
 
-    public override bool HasMoreResults => !_served;
+    public override bool HasMoreResults => _offset < _rows.Count;
 
     public override Task<FeedResponse<T>> ReadNextAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _served = true;
-        return Task.FromResult<FeedResponse<T>>(new FakeFeedResponse<T>(_rows, _continuationToken));
+        _recordToken?.Invoke(cancellationToken);
+        var page = _rows.Skip(_offset).Take(_pageSize).ToList();
+        _offset += page.Count;
+        var continuation = _offset < _rows.Count ? _offset.ToString(null as IFormatProvider) : null;
+        return Task.FromResult<FeedResponse<T>>(new FakeFeedResponse<T>(page, continuation));
     }
 }
 

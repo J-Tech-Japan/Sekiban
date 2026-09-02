@@ -97,4 +97,18 @@ public class DynamoDbEventStoreOptions
     ///     Callback for reporting read progress (events read, consumed capacity).
     /// </summary>
     public Action<long, double>? ReadProgressCallback { get; set; }
+
+    /// <summary>
+    ///     Optional aggregate telemetry for one native tagged-stream invocation. This supplements the existing
+    ///     <see cref="ReadProgressCallback" /> seam with its bounded page/chunk high-water marks.
+    /// </summary>
+    public Action<DynamoDbTaggedStreamTelemetry>? TaggedStreamTelemetryCallback { get; set; }
 }
+
+/// <summary>Bounded aggregate telemetry for one DynamoDB native tagged stream.</summary>
+public sealed record DynamoDbTaggedStreamTelemetry(
+    int QueryPages,
+    int BatchGetChunks,
+    int PeakPageReferences,
+    int PeakChunkBodies,
+    double ConsumedCapacity);

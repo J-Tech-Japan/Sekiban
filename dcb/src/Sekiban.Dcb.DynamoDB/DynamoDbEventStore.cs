@@ -20,8 +20,9 @@ namespace Sekiban.Dcb.DynamoDB;
 /// <summary>
 ///     DynamoDB-backed event store implementation.
 /// </summary>
-public class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider,
-    IConditionalEventStore, IWriteConditionCapabilityProvider
+public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider,
+    IConditionalEventStore, IWriteConditionCapabilityProvider, IStreamingTaggedSerializableEventStore,
+    ITaggedStreamCapabilityProvider
 {
     private const string ConditionalProviderName = "DynamoDB";
 
