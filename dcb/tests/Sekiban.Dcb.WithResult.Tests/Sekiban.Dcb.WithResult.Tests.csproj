@@ -71,6 +71,10 @@
         <EmbeddedResource Include="SerializedCommitWire/goldens/legacy_1017_unversioned.json" />
         <EmbeddedResource Include="SerializedCommitWire/goldens/legacy_1017_empty.json" />
         <EmbeddedResource Include="SerializedCommitWire/goldens/ts_client_aliased_unversioned.json" />
+        <!-- SEK-G52: frozen paired interop witnesses. The C# runner reads these embedded bytes while the Node runner
+             reads the same committed files from the checkout; both verify interop_manifest.json and PROVENANCE.md. -->
+        <EmbeddedResource Include="SerializedCommitWire/goldens/interop_*.json" />
+        <EmbeddedResource Include="SerializedCommitWire/goldens/PROVENANCE.md" />
     </ItemGroup>
 
 </Project>

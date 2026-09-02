@@ -215,3 +215,34 @@ their own request binder: this package cannot make a downstream binder stop coal
 - Any endpoint claiming compatibility with this contract must conform to the spec above and pass the golden vectors.
 - A downstream adapter that collapses per-event tags into per-commit tags may do so ONLY when every event in the commit
   carries an identical tag set, and must reject any other commit explicitly rather than silently dropping tags.
+
+### C# V1 and TypeScript-client directional interop (SEK-G52)
+
+The shared server wire is runtime V1. The TypeScript client object is an adapter input, not an alternate server request
+dialect. The committed paired fixtures and the C# plus dependency-free Node runners make the following directional claims
+executable:
+
+- **R1, C# V1 to TS runtime to response payload** is byte-identical only for standard padded base64 containing valid
+  UTF-8 JSON without a BOM and without a nested protocol-name collision. The runtime keeps that decoded JSON text; this
+  is not a claim for arbitrary server payload bytes.
+- **R2, TS client model to C# V1** is equal only after the canonical profile: compact UTF-8 without a BOM, no duplicate
+  keys, JavaScript property enumeration (integer-like keys first), JavaScript numeric spelling, and client insertion
+  order for the remaining keys. `1.0`, `1e2`, `-0`, and integers above 2^53 are intentionally loss witnesses, not
+  bijections.
+- **R3, C# bytes to client model** returns a typed adapter bind error for a BOM-prefixed, non-UTF-8, or non-JSON payload;
+  it never attempts equality. The server commit path still treats its payload bytes as opaque.
+
+<!-- SEK-G52-MAPPING-START -->
+| Boundary | Official C# V1 / TS runtime input | TS client model / adapter input | Directional rule |
+| --- | --- | --- | --- |
+| Envelope | `version`, `eventCandidates`, `consistencyTags` | `candidates`, `consistency` | Client aliases are adapter-only and the unversioned acceptor rejects them through the SEK-G51 closed gate. |
+| Event candidate | `payload`, `eventPayloadName`, `tags` | `eventId`, `payload`, `eventPayloadName`, `tags` | `eventId` is client-only and excluded from comparison and official output. |
+| Commit reservation | `tag`, `lastSortableUniqueId` | `tag`, `lastSortableUniqueId` | This is the commit reservation spelling. |
+| Tag-state response | `lastSortedUniqueId`, `projectorVersion` | adapter observes response | This is the tag-state spelling; it is deliberately different from commit `lastSortableUniqueId`. |
+| Commit response | `writtenEvents`, `tagWriteResults`, `duration` | adapter observes response | Response shape is pinned by named CLR and JSON tests, not a request source-generated context. |
+| Written event response | `sortableUniqueIdValue`, `id`, `eventMetadata`, `causationId`, `correlationId`, `executedUser` | adapter observes response | Server assigns event identity and metadata. |
+| Tag-write response | `writtenAt` | adapter observes response | The tag and version names are shared with the reservation/result vocabulary above. |
+<!-- SEK-G52-MAPPING-END -->
+
+The `SerializedCommitWire/goldens/PROVENANCE.md` table pins literal fixture lengths and SHA-256 values. Both runners
+verify those values, and both deliberately fail when a supplied provenance digest does not match the fixture bytes.

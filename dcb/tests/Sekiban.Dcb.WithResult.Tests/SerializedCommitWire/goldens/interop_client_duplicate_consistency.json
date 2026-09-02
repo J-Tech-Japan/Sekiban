@@ -1,0 +1,1 @@
+{"candidates":[{"eventId":"88888888-8888-8888-8888-888888888888","eventPayloadName":"DuplicateConsistencyEvent","payload":{"valid":true},"tags":["Duplicate:1"]}],"consistency":[{"tag":"Duplicate:1","lastSortableUniqueId":""},{"tag":"Duplicate:1","lastSortableUniqueId":""}]}
