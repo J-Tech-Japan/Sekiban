@@ -1,0 +1,1 @@
+{"candidates":[{"eventId":"55555555-5555-5555-5555-555555555555","eventPayloadName":"NumericEvent","payload":{"one":1.0,"exp":1e2,"negativeZero":-0,"large":9007199254740993},"tags":["Number:1"]}],"consistency":[]}

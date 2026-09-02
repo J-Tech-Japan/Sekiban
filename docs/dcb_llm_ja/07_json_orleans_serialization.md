@@ -198,3 +198,32 @@ WASM 境界で使用される公式 serialized-commit ワイヤ契約の正規�
 - 本契約との互換性を主張するエンドポイントは、上記仕様に適合しゴールデンベクタを通過しなければなりません。
 - イベント単位のタグをコミット単位のタグへ縮約する下流アダプタは、コミット内の全イベントが同一のタグ集合を持つ場合に
   限り許され、それ以外のコミットは黙ってタグを落とさず明示的に拒否しなければなりません。
+
+### C# V1 と TypeScript クライアントの方向付き相互運用 (SEK-G52)
+
+共有されるサーバーワイヤは runtime V1 です。TypeScript のクライアントオブジェクトはアダプター入力であり、別のサーバー
+リクエスト方言ではありません。コミット済みのペア fixture と C# / 依存関係なし Node runner は、次の方向付き主張を実行します。
+
+- **R1、C# V1 → TS runtime → response payload** は、標準 padded base64 が BOM なしの有効な UTF-8 JSON を含み、ネストした
+  protocol-name 衝突を含まない場合だけ byte-identical です。runtime はデコード済み JSON text を保持します。これは任意の
+  サーバーペイロード bytes に対する主張ではありません。
+- **R2、TS client model → C# V1** は、BOM なしの compact UTF-8、duplicate key なし、JavaScript の property enumeration
+  (integer-like key を先にする)、JavaScript の numeric spelling、および残る key の client insertion order という canonical
+  profile の後だけ equal です。`1.0`、`1e2`、`-0`、2^53 を超える整数は、bijection ではなく意図的な loss witness です。
+- **R3、C# bytes → client model** は BOM 付き、non-UTF-8、または non-JSON payload に対し typed adapter bind error を返し、
+  equality を試みません。サーバーの commit path は引き続き payload bytes を opaque として扱います。
+
+<!-- SEK-G52-MAPPING-START -->
+| 境界 | 公式 C# V1 / TS runtime input | TS client model / adapter input | 方向付きルール |
+| --- | --- | --- | --- |
+| Envelope | `version`, `eventCandidates`, `consistencyTags` | `candidates`, `consistency` | Client alias は adapter 専用であり、unversioned acceptor は SEK-G51 の closed gate で拒否します。 |
+| Event candidate | `payload`, `eventPayloadName`, `tags` | `eventId`, `payload`, `eventPayloadName`, `tags` | `eventId` は client-only で、comparison と official output から除外されます。 |
+| Commit reservation | `tag`, `lastSortableUniqueId` | `tag`, `lastSortableUniqueId` | これは commit reservation の spelling です。 |
+| Tag-state response | `lastSortedUniqueId`, `projectorVersion` | adapter は response を観測 | tag-state の spelling は commit の `lastSortableUniqueId` と意図的に異なります。 |
+| Commit response | `writtenEvents`, `tagWriteResults`, `duration` | adapter は response を観測 | response shape は request source-generated context ではなく、名前付き CLR / JSON test で pin されます。 |
+| Written event response | `sortableUniqueIdValue`, `id`, `eventMetadata`, `causationId`, `correlationId`, `executedUser` | adapter は response を観測 | server が event identity と metadata を割り当てます。 |
+| Tag-write response | `writtenAt` | adapter は response を観測 | tag と version の名前は上記 reservation/result vocabulary と共有されます。 |
+<!-- SEK-G52-MAPPING-END -->
+
+`SerializedCommitWire/goldens/PROVENANCE.md` の table は literal fixture の length と SHA-256 を pin します。両 runner は
+それらを検証し、指定された provenance digest が fixture bytes と一致しなければ両方とも意図的に失敗します。
