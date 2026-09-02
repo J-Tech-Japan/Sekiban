@@ -77,12 +77,14 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     public int MaximumInFlightPointReads => Volatile.Read(ref _maximumInFlightPointReads);
     public IReadOnlyList<CancellationToken> PointReadTokens => _pointReadTokens;
     public IReadOnlyList<CancellationToken> QueryReadTokens => _queryReadTokens;
+    public IReadOnlyList<string> QueryTexts => _queryTexts;
 
     private int _pointReads;
     private int _inFlightPointReads;
     private int _maximumInFlightPointReads;
     private readonly List<CancellationToken> _pointReadTokens = new();
     private readonly List<CancellationToken> _queryReadTokens = new();
+    private readonly List<string> _queryTexts = new();
 
     public override string Id => _name;
 
@@ -445,6 +447,10 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         Queries++;
 
         var text = queryDefinition.QueryText;
+        lock (_gate)
+        {
+            _queryTexts.Add(text);
+        }
         var parameters = queryDefinition
             .GetQueryParameters()
             .ToDictionary(parameter => parameter.Name, parameter => parameter.Value, StringComparer.Ordinal);

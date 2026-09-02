@@ -129,6 +129,66 @@ public sealed class RemoteTaggedStreamTests
     }
 
     [Fact]
+    public async Task CosmosNativeTaggedStream_SelectsAStaticParameterizedQueryForEachBoundShape()
+    {
+        var options = new CosmosDbEventStoreOptions
+        {
+            EventsContainerName = "g54-events",
+            TagsContainerName = "g54-tags",
+            MaxItemCountPerPage = 8,
+            MaxConcurrentTaggedStreamPointReads = 2
+        };
+        var (store, client) = NewCosmosStore(options);
+        var tag = new NativeTag("cosmos-static-bound-shapes");
+        Assert.True((await store.WriteSerializableEventsAsync(FivePointFixture(tag))).IsSuccess);
+        var tags = client.Container(options.TagsContainerName);
+
+        await AssertBoundShapeAsync(
+            null,
+            null,
+            new[] { P0, P1, P2, P3, P4 },
+            "SELECT c.eventId FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId");
+        await AssertBoundShapeAsync(
+            new SortableUniqueId(P1),
+            null,
+            new[] { P2, P3, P4 },
+            "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId");
+        await AssertBoundShapeAsync(
+            null,
+            new SortableUniqueId(P3),
+            new[] { P0, P1, P2, P3 },
+            "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId");
+        await AssertBoundShapeAsync(
+            new SortableUniqueId(P1),
+            new SortableUniqueId(P3),
+            new[] { P2, P3 },
+            "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > @since AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId");
+
+        async Task AssertBoundShapeAsync(
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            IReadOnlyList<string> expectedIds,
+            string expectedQueryText)
+        {
+            var queryStart = tags.QueryTexts.Count;
+            var emitted = new List<string>();
+            var result = await store.StreamSerializableEventsByTagAsync(
+                tag,
+                since,
+                until,
+                @event =>
+                {
+                    emitted.Add(@event.SortableUniqueIdValue);
+                    return ValueTask.CompletedTask;
+                });
+
+            Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+            Assert.Equal(expectedIds, emitted);
+            Assert.Equal(expectedQueryText, tags.QueryTexts.Skip(queryStart).Single());
+        }
+    }
+
+    [Fact]
     public async Task CosmosNativeTaggedStream_DefaultWindowReportsTheEmulatorRuModelAndKeepsAllFiveReadsBounded()
     {
         var telemetry = new List<CosmosTaggedStreamTelemetry>();
@@ -688,6 +748,11 @@ public sealed class RemoteTaggedStreamTests
         Assert.DoesNotContain("FetchSerializableEventsByIdsAsync", cosmos, StringComparison.Ordinal);
         Assert.DoesNotContain("Task.WhenAll", cosmos, StringComparison.Ordinal);
         Assert.DoesNotContain("ReadSerializableEventsByTagAsync", cosmos, StringComparison.Ordinal);
+        Assert.DoesNotContain("where +=", cosmos, StringComparison.Ordinal);
+        Assert.Contains("TaggedStreamIndexQueryWithoutBounds", cosmos, StringComparison.Ordinal);
+        Assert.Contains("TaggedStreamIndexQuerySinceOnly", cosmos, StringComparison.Ordinal);
+        Assert.Contains("TaggedStreamIndexQueryUntilOnly", cosmos, StringComparison.Ordinal);
+        Assert.Contains("TaggedStreamIndexQuerySinceAndUntil", cosmos, StringComparison.Ordinal);
         Assert.DoesNotContain("QueryTagsAsync", dynamo, StringComparison.Ordinal);
         Assert.DoesNotContain("BatchGetEventsAsync", dynamo, StringComparison.Ordinal);
         Assert.DoesNotContain("Task.WhenAll", dynamo, StringComparison.Ordinal);

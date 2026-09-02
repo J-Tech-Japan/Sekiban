@@ -13,6 +13,18 @@ namespace Sekiban.Dcb.CosmosDb;
 
 public partial class CosmosDbEventStore
 {
+    private const string TaggedStreamIndexQueryWithoutBounds =
+        "SELECT c.eventId FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId";
+
+    private const string TaggedStreamIndexQuerySinceOnly =
+        "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId";
+
+    private const string TaggedStreamIndexQueryUntilOnly =
+        "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId";
+
+    private const string TaggedStreamIndexQuerySinceAndUntil =
+        "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > @since AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId";
+
     /// <summary>
     ///     Declares that this store has a callback-native tagged stream. The legacy list member remains intentionally
     ///     unchanged; callers that need bounded cold rebuilds resolve this capability instead of wrapping that list.
@@ -214,37 +226,39 @@ public partial class CosmosDbEventStore
         int pageSize)
     {
         var tagPartitionKey = GetTagPartitionKey(tagString, serviceId);
-        var where = "c.pk = @pk";
-        if (since is not null)
-        {
-            where += " AND c.sortableUniqueId > @since";
-        }
-
-        if (until is not null)
-        {
-            where += " AND c.sortableUniqueId <= @until";
-        }
-
-        var query = new QueryDefinition($"SELECT c.eventId FROM c WHERE {where} ORDER BY c.sortableUniqueId")
-            .WithParameter("@pk", tagPartitionKey);
-        if (since is not null)
-        {
-            query = query.WithParameter("@since", since.Value);
-        }
-
-        if (until is not null)
-        {
-            query = query.WithParameter("@until", until.Value);
-        }
-
         return (
-            query,
+            CreateTaggedStreamIndexQuery(tagPartitionKey, since, until),
             new QueryRequestOptions
             {
                 PartitionKey = new PartitionKey(tagPartitionKey),
                 MaxItemCount = pageSize
             });
     }
+
+    /// <summary>
+    ///     Selects one fully static query shape before binding values. Keeping query text constant and binding all
+    ///     runtime values through Cosmos parameters is intentional: it preserves the four exact bound semantics while
+    ///     making the native path verifiably free of dynamically assembled SQL text.
+    /// </summary>
+    private static QueryDefinition CreateTaggedStreamIndexQuery(
+        string tagPartitionKey,
+        SortableUniqueId? since,
+        SortableUniqueId? until) =>
+        (since, until) switch
+        {
+            ({ } lower, { } upper) => new QueryDefinition(TaggedStreamIndexQuerySinceAndUntil)
+                .WithParameter("@pk", tagPartitionKey)
+                .WithParameter("@since", lower.Value)
+                .WithParameter("@until", upper.Value),
+            ({ } lower, null) => new QueryDefinition(TaggedStreamIndexQuerySinceOnly)
+                .WithParameter("@pk", tagPartitionKey)
+                .WithParameter("@since", lower.Value),
+            (null, { } upper) => new QueryDefinition(TaggedStreamIndexQueryUntilOnly)
+                .WithParameter("@pk", tagPartitionKey)
+                .WithParameter("@until", upper.Value),
+            _ => new QueryDefinition(TaggedStreamIndexQueryWithoutBounds)
+                .WithParameter("@pk", tagPartitionKey)
+        };
 
     private static async Task<SerializableEvent?> ReadEventPointAsync(
         Container eventsContainer,
