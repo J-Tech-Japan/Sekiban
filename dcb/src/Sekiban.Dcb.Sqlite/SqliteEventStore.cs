@@ -35,6 +35,17 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
     internal Func<Task>? AfterConditionalCommitHook { get; set; }
 
     /// <summary>
+    ///     Test-only tagged-stream reader milestones. The provider tests use these gates around the real
+    ///     <see cref="SqliteDataReader.ReadAsync(CancellationToken)" /> call to prove cancellation reaches the native
+    ///     reader and that a cancelled callback never triggers a later row read. They are intentionally internal,
+    ///     instance-scoped, and unset in production composition.
+    /// </summary>
+    internal Func<Task>? BeforeTaggedStreamReaderReadHook { get; set; }
+
+    /// <summary>Test-only notification after the real tagged-stream reader returned a row and before it is consumed.</summary>
+    internal Func<Task>? AfterTaggedStreamReaderReadHook { get; set; }
+
+    /// <summary>
     ///     SEK-G16 conditional (unique-key) append. This is a NEW path — the unconditional <c>INSERT OR REPLACE</c> write
     ///     paths are untouched. The claim event is written under the deterministic id with a PLAIN <c>INSERT</c>, so the
     ///     existing <c>(ServiceId, Id)</c> primary key is the uniqueness primitive (no schema change): the first writer
@@ -1310,8 +1321,23 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
             var count = 0;
             string? lastSortableUniqueId = null;
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
+            while (true)
             {
+                if (BeforeTaggedStreamReaderReadHook is not null)
+                {
+                    await BeforeTaggedStreamReaderReadHook();
+                }
+
+                if (!await reader.ReadAsync(cancellationToken))
+                {
+                    break;
+                }
+
+                if (AfterTaggedStreamReaderReadHook is not null)
+                {
+                    await AfterTaggedStreamReaderReadHook();
+                }
+
                 cancellationToken.ThrowIfCancellationRequested();
                 var serializableEvent = ReadSerializableEvent(reader);
                 if (serializableEvent is null)

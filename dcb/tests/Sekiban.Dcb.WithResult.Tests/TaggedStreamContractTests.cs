@@ -30,6 +30,7 @@ public class TaggedStreamContractTests
     private static readonly string P2 = SortableUniqueId.Generate(BaseTime.AddSeconds(1), Guid.Empty);
     private static readonly string P3 = SortableUniqueId.Generate(BaseTime.AddSeconds(2), Guid.Empty);
     private static readonly string P4 = SortableUniqueId.Generate(BaseTime.AddSeconds(3), Guid.Empty);
+    private static readonly string P5 = SortableUniqueId.Generate(BaseTime.AddSeconds(4), Guid.Empty);
     private static readonly DcbDomainTypes Domain = DomainType.GetDomainTypes();
 
     [Fact]
@@ -61,6 +62,63 @@ public class TaggedStreamContractTests
     }
 
     [Fact]
+    public async Task InMemoryTaggedStream_CapturedHeadSnapshot_ExcludesWritesAboveTheHeadDuringTheReleasedCallback()
+    {
+        var tag = new StreamTag("memory-interleave");
+        var store = new CoreInMemoryEventStore(Domain.EventTypes);
+        var initialWrite = await store.WriteSerializableEventsAsync(new[]
+        {
+            Event(P0, tag), Event(P1, tag), Event(P2, tag), Event(P3, tag)
+        });
+        Assert.True(initialWrite.IsSuccess, initialWrite.IsSuccess ? string.Empty : initialWrite.GetException().ToString());
+
+        var head = await store.GetLatestSortableUniqueIdAsync();
+        Assert.True(head.IsSuccess, head.IsSuccess ? string.Empty : head.GetException().ToString());
+        Assert.Equal(P3, head.GetValue());
+        var capturedHead = new SortableUniqueId(head.GetValue());
+
+        // P4 is the five-point fixture's after-until boundary. P5 is appended only after the native stream has started.
+        var afterUntilWrite = await store.WriteSerializableEventsAsync(new[] { Event(P4, tag) });
+        Assert.True(afterUntilWrite.IsSuccess, afterUntilWrite.IsSuccess ? string.Empty : afterUntilWrite.GetException().ToString());
+
+        var nativeSnapshotStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseCallback = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var emitted = new List<string>();
+        var callbackCount = 0;
+        var streamTask = ((IStreamingTaggedSerializableEventStore)store).StreamSerializableEventsByTagAsync(
+            tag,
+            new SortableUniqueId(P1),
+            capturedHead,
+            async serializableEvent =>
+            {
+                emitted.Add(serializableEvent.SortableUniqueIdValue);
+                if (Interlocked.Increment(ref callbackCount) == 1)
+                {
+                    nativeSnapshotStarted.TrySetResult();
+                    await releaseCallback.Task;
+                }
+            });
+
+        try
+        {
+            await nativeSnapshotStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var aboveHeadWrite = await store.WriteSerializableEventsAsync(new[] { Event(P5, tag) });
+            Assert.True(aboveHeadWrite.IsSuccess, aboveHeadWrite.IsSuccess ? string.Empty : aboveHeadWrite.GetException().ToString());
+        }
+        finally
+        {
+            releaseCallback.TrySetResult();
+        }
+
+        var result = await streamTask;
+        Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+        Assert.Equal(new[] { P2, P3 }, emitted);
+        Assert.Equal(emitted.OrderBy(id => id, StringComparer.Ordinal), emitted);
+        Assert.DoesNotContain(P4, emitted);
+        Assert.DoesNotContain(P5, emitted);
+    }
+
+    [Fact]
     public async Task SqliteTaggedStream_FivePointBoundsArePushedDownAndOrdinallyOrdered()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"g53-tagged-bounds-{Guid.NewGuid():N}.db");
@@ -89,6 +147,219 @@ public class TaggedStreamContractTests
             Assert.Equal(new[] { P2, P3 }, emitted);
             Assert.Equal(2, result.GetValue().EventsRead);
             Assert.Equal(P3, result.GetValue().LastSortableUniqueId);
+        }
+        finally
+        {
+            if (File.Exists(databasePath))
+            {
+                File.Delete(databasePath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SqliteTaggedStream_CapturedHeadSnapshot_ExcludesWritesAboveTheHeadDuringTheReleasedCallback()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"g53-tagged-interleave-{Guid.NewGuid():N}.db");
+        try
+        {
+            var tag = new StreamTag("sqlite-interleave");
+            var store = new SqliteEventStore(
+                databasePath,
+                Domain.EventTypes,
+                new SqliteEventStoreOptions { UseWalMode = true });
+            var initialWrite = await store.WriteSerializableEventsAsync(new[]
+            {
+                Event(P0, tag), Event(P1, tag), Event(P2, tag), Event(P3, tag)
+            });
+            Assert.True(initialWrite.IsSuccess, initialWrite.IsSuccess ? string.Empty : initialWrite.GetException().ToString());
+
+            var head = await store.GetLatestSortableUniqueIdAsync();
+            Assert.True(head.IsSuccess, head.IsSuccess ? string.Empty : head.GetException().ToString());
+            Assert.Equal(P3, head.GetValue());
+            var capturedHead = new SortableUniqueId(head.GetValue());
+
+            var afterUntilWrite = await store.WriteSerializableEventsAsync(new[] { Event(P4, tag) });
+            Assert.True(afterUntilWrite.IsSuccess, afterUntilWrite.IsSuccess ? string.Empty : afterUntilWrite.GetException().ToString());
+
+            var nativeReaderStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseCallback = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var emitted = new List<string>();
+            var callbackCount = 0;
+            var streamTask = ((IStreamingTaggedSerializableEventStore)store).StreamSerializableEventsByTagAsync(
+                tag,
+                new SortableUniqueId(P1),
+                capturedHead,
+                async serializableEvent =>
+                {
+                    emitted.Add(serializableEvent.SortableUniqueIdValue);
+                    if (Interlocked.Increment(ref callbackCount) == 1)
+                    {
+                        nativeReaderStarted.TrySetResult();
+                        await releaseCallback.Task;
+                    }
+                });
+
+            try
+            {
+                await nativeReaderStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                var aboveHeadWrite = await store.WriteSerializableEventsAsync(new[] { Event(P5, tag) })
+                    .WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.True(aboveHeadWrite.IsSuccess, aboveHeadWrite.IsSuccess ? string.Empty : aboveHeadWrite.GetException().ToString());
+            }
+            finally
+            {
+                releaseCallback.TrySetResult();
+            }
+
+            var result = await streamTask;
+            Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+            Assert.Equal(new[] { P2, P3 }, emitted);
+            Assert.Equal(emitted.OrderBy(id => id, StringComparer.Ordinal), emitted);
+            Assert.DoesNotContain(P4, emitted);
+            Assert.DoesNotContain(P5, emitted);
+        }
+        finally
+        {
+            if (File.Exists(databasePath))
+            {
+                File.Delete(databasePath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SqliteTaggedStream_GatedNativeReader_CancellationBeforeReadReachesIoWithoutReadingARow()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"g53-tagged-cancel-before-read-{Guid.NewGuid():N}.db");
+        try
+        {
+            var tag = new StreamTag("sqlite-cancel-before-read");
+            var store = new SqliteEventStore(databasePath, Domain.EventTypes);
+            var write = await store.WriteSerializableEventsAsync(new[] { Event(P1, tag), Event(P2, tag) });
+            Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
+
+            var readerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseReader = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var beforeReadAttempts = 0;
+            var rowsRead = 0;
+            var callbacks = 0;
+            store.BeforeTaggedStreamReaderReadHook = async () =>
+            {
+                Interlocked.Increment(ref beforeReadAttempts);
+                readerStarted.TrySetResult();
+                await releaseReader.Task;
+            };
+            store.AfterTaggedStreamReaderReadHook = () =>
+            {
+                Interlocked.Increment(ref rowsRead);
+                return Task.CompletedTask;
+            };
+
+            using var cancellation = new CancellationTokenSource();
+            try
+            {
+                var streamTask = ((IStreamingTaggedSerializableEventStore)store).StreamSerializableEventsByTagAsync(
+                    tag,
+                    null,
+                    null,
+                    _ =>
+                    {
+                        callbacks++;
+                        return ValueTask.CompletedTask;
+                    },
+                    cancellation.Token);
+
+                await readerStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                cancellation.Cancel();
+                releaseReader.TrySetResult();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await streamTask);
+            }
+            finally
+            {
+                releaseReader.TrySetResult();
+                store.BeforeTaggedStreamReaderReadHook = null;
+                store.AfterTaggedStreamReaderReadHook = null;
+            }
+
+            Assert.Equal(1, beforeReadAttempts);
+            Assert.Equal(0, rowsRead);
+            Assert.Equal(0, callbacks);
+        }
+        finally
+        {
+            if (File.Exists(databasePath))
+            {
+                File.Delete(databasePath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SqliteTaggedStream_GatedNativeReader_CancellationAfterFirstCallbackDoesNotAttemptALaterRow()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"g53-tagged-cancel-after-callback-{Guid.NewGuid():N}.db");
+        try
+        {
+            var tag = new StreamTag("sqlite-cancel-after-callback");
+            var store = new SqliteEventStore(databasePath, Domain.EventTypes);
+            var write = await store.WriteSerializableEventsAsync(new[] { Event(P1, tag), Event(P2, tag) });
+            Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
+
+            var readerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseReader = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var callbackStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseCallback = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var beforeReadAttempts = 0;
+            var rowsRead = 0;
+            var callbacks = 0;
+            store.BeforeTaggedStreamReaderReadHook = async () =>
+            {
+                if (Interlocked.Increment(ref beforeReadAttempts) == 1)
+                {
+                    readerStarted.TrySetResult();
+                    await releaseReader.Task;
+                }
+            };
+            store.AfterTaggedStreamReaderReadHook = () =>
+            {
+                Interlocked.Increment(ref rowsRead);
+                return Task.CompletedTask;
+            };
+
+            using var cancellation = new CancellationTokenSource();
+            try
+            {
+                var streamTask = ((IStreamingTaggedSerializableEventStore)store).StreamSerializableEventsByTagAsync(
+                    tag,
+                    null,
+                    null,
+                    async _ =>
+                    {
+                        Interlocked.Increment(ref callbacks);
+                        callbackStarted.TrySetResult();
+                        await releaseCallback.Task;
+                    },
+                    cancellation.Token);
+
+                await readerStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                releaseReader.TrySetResult();
+                await callbackStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                cancellation.Cancel();
+                releaseCallback.TrySetResult();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await streamTask);
+            }
+            finally
+            {
+                releaseReader.TrySetResult();
+                releaseCallback.TrySetResult();
+                store.BeforeTaggedStreamReaderReadHook = null;
+                store.AfterTaggedStreamReaderReadHook = null;
+            }
+
+            Assert.Equal(1, beforeReadAttempts);
+            Assert.Equal(1, rowsRead);
+            Assert.Equal(1, callbacks);
         }
         finally
         {

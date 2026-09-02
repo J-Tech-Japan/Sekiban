@@ -35,6 +35,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Sqlite\Sekiban.Dcb.Sqlite.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" Aliases="WithoutResultFacade" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult.Model\Sekiban.Dcb.WithoutResult.Model.csproj" Aliases="WithoutResultFacade" />
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj"/>

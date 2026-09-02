@@ -18,6 +18,8 @@ public class PostgresSeamArchitectureTests
     private static readonly Assembly PostgresAssembly = StoreType.Assembly;
     private const string HookName = "AfterConditionalCommitHook";
     private const string TagHeadHookName = "TagHeadProtocolHook";
+    private const string BeforeTaggedStreamReaderReadHookName = "BeforeTaggedStreamReaderReadHook";
+    private const string AfterTaggedStreamReaderReadHookName = "AfterTaggedStreamReaderReadHook";
 
     // Authoritative assemblies resolved to the ones this project owns for scanning; only Postgres is owned here.
     private static Assembly? ResolveOwnedAssembly(string name) =>
@@ -48,7 +50,15 @@ public class PostgresSeamArchitectureTests
     {
         var entries = SeamInventory.Entries.Where(e => e.AssemblyName == SeamInventory.PostgresAssembly)
             .OrderBy(e => e.PropertyName, StringComparer.Ordinal).ToArray();
-        Assert.Equal(new[] { HookName, TagHeadHookName }, entries.Select(e => e.PropertyName).ToArray());
+        Assert.Equal(
+            new[]
+            {
+                HookName,
+                TagHeadHookName,
+                BeforeTaggedStreamReaderReadHookName,
+                AfterTaggedStreamReaderReadHookName
+            }.OrderBy(name => name, StringComparer.Ordinal).ToArray(),
+            entries.Select(e => e.PropertyName).ToArray());
         foreach (var entry in entries)
         {
             Assert.Equal("Sekiban.Dcb.Postgres.PostgresEventStore", entry.DeclaringTypeFullName);
@@ -65,12 +75,18 @@ public class PostgresSeamArchitectureTests
     [Fact]
     public void Hook_IsNonPublic_Instance_NotStatic()
     {
-        Assert.NotNull(StoreType.GetProperty(HookName, BindingFlags.Instance | BindingFlags.NonPublic));
-        Assert.NotNull(StoreType.GetProperty(TagHeadHookName, BindingFlags.Instance | BindingFlags.NonPublic));
-        Assert.Null(StoreType.GetProperty(HookName, BindingFlags.Instance | BindingFlags.Public));
-        Assert.Null(StoreType.GetProperty(TagHeadHookName, BindingFlags.Instance | BindingFlags.Public));
-        Assert.Null(StoreType.GetProperty(HookName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic));
-        Assert.Null(StoreType.GetProperty(TagHeadHookName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic));
+        foreach (var hookName in new[]
+                 {
+                     HookName,
+                     TagHeadHookName,
+                     BeforeTaggedStreamReaderReadHookName,
+                     AfterTaggedStreamReaderReadHookName
+                 })
+        {
+            Assert.NotNull(StoreType.GetProperty(hookName, BindingFlags.Instance | BindingFlags.NonPublic));
+            Assert.Null(StoreType.GetProperty(hookName, BindingFlags.Instance | BindingFlags.Public));
+            Assert.Null(StoreType.GetProperty(hookName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic));
+        }
     }
 
     [Fact]
@@ -78,8 +94,16 @@ public class PostgresSeamArchitectureTests
     {
         foreach (var contract in new[] { typeof(IEventStore), typeof(IConditionalEventStore), typeof(IHotEventStore) })
         {
-            Assert.Null(contract.GetProperty(HookName));
-            Assert.Null(contract.GetProperty(TagHeadHookName));
+            foreach (var hookName in new[]
+                     {
+                         HookName,
+                         TagHeadHookName,
+                         BeforeTaggedStreamReaderReadHookName,
+                         AfterTaggedStreamReaderReadHookName
+                     })
+            {
+                Assert.Null(contract.GetProperty(hookName));
+            }
         }
     }
 

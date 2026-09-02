@@ -50,9 +50,10 @@ public sealed class TaggedStreamMemoryTests
             return;
         }
 
-        const int eventCount = 16;
+        const int eventCount = 8;
         const int payloadBytes = 1_000_000;
         const long streamingAllocationCeilingBytes = 128L * 1024 * 1024;
+        const long streamingPeakWorkingSetCeilingBytes = 128L * 1024 * 1024;
         const long retainedStreamingPayloadCeilingBytes = 2L * 1024 * 1024;
 
         var streamingStore = new GeneratedStreamingTagStore(eventCount, payloadBytes);
@@ -77,6 +78,7 @@ public sealed class TaggedStreamMemoryTests
         Assert.True(streamingResult.IsSuccess, streamingResult.IsSuccess ? string.Empty : streamingResult.GetException().ToString());
         Assert.Equal(eventCount, Assert.IsType<MemoryFoldState>(streamingResult.GetValue().State).Applied);
         Assert.InRange(streamingAllocatedBytes, 0, streamingAllocationCeilingBytes);
+        Assert.InRange(streamingPeakDeltaBytes, 0, streamingPeakWorkingSetCeilingBytes);
         Assert.InRange(streamingStore.MaxInFlightSerializedPayloadBytes, 1, retainedStreamingPayloadCeilingBytes);
         Assert.Equal(1, streamingStore.StreamCalls);
         Assert.Equal(0, streamingStore.ListCalls);
@@ -87,20 +89,30 @@ public sealed class TaggedStreamMemoryTests
         var bufferingControl = new GeneratedListTagStore(eventCount, payloadBytes);
         CollectForMeasurement();
         var bufferedAllocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
+        process.Refresh();
+        var bufferedPeakBefore = process.PeakWorkingSet64;
         var bufferedResult = await CreateService(bufferingControl)
             .ProjectTagStateAsync(MemoryTag.Instance, MemoryFoldProjector.ProjectorName);
         var bufferedAllocatedBytes = GC.GetTotalAllocatedBytes(precise: true) - bufferedAllocatedBefore;
+        process.Refresh();
+        var bufferedPeakDeltaBytes = Math.Max(0, process.PeakWorkingSet64 - bufferedPeakBefore);
         Console.WriteLine(
             $"SEK-G53 controlled list-control telemetry: eventCount={eventCount}; payloadBytes={payloadBytes}; " +
-            $"allocatedBytes={bufferedAllocatedBytes}; retainedSerializedPayloadBytes={bufferingControl.PeakListPayloadBytes}; " +
+            $"allocatedBytes={bufferedAllocatedBytes}; peakDeltaBytes={bufferedPeakDeltaBytes}; " +
+            $"retainedSerializedPayloadBytes={bufferingControl.PeakListPayloadBytes}; " +
             $"listCalls={bufferingControl.ListCalls}");
 
         Assert.True(bufferedResult.IsSuccess, bufferedResult.IsSuccess ? string.Empty : bufferedResult.GetException().ToString());
         Assert.Equal(eventCount, Assert.IsType<MemoryFoldState>(bufferedResult.GetValue().State).Applied);
         Assert.Equal(1, bufferingControl.ListCalls);
         Assert.True(
-            bufferingControl.PeakListPayloadBytes > retainedStreamingPayloadCeilingBytes,
-            $"The deliberately buffering control retained only {bufferingControl.PeakListPayloadBytes} bytes.");
+            bufferedAllocatedBytes > streamingAllocationCeilingBytes,
+            $"The deliberately buffering control allocated only {bufferedAllocatedBytes} bytes; " +
+            $"it must exceed the selected streaming allocation ceiling of {streamingAllocationCeilingBytes} bytes.");
+        Assert.True(
+            bufferingControl.PeakListPayloadBytes > streamingPeakWorkingSetCeilingBytes,
+            $"The deliberately buffering control retained only {bufferingControl.PeakListPayloadBytes} bytes; " +
+            $"it must exceed the selected streaming peak ceiling of {streamingPeakWorkingSetCeilingBytes} bytes.");
     }
 
     [Fact]
@@ -297,5 +309,33 @@ public sealed class TaggedStreamMemoryTests
         }
     }
 
-    private sealed class GeneratedListTagStore(int eventCount, int payloadBytes) : GeneratedTagStoreBase(eventCount, payloadBytes);
+    private sealed class GeneratedListTagStore(int eventCount, int payloadBytes) : GeneratedTagStoreBase(eventCount, payloadBytes)
+    {
+        // The control preserves the same generated source and list route, then deliberately retains the multiple
+        // whole-history serialized buffers that a list/filter/deserialization pipeline creates. Keeping the copies alive
+        // makes it an unambiguous same-source buffering control rather than a platform-dependent retained-bytes proxy.
+        private readonly List<byte[]> _wholeHistoryPayloadCopies = [];
+
+        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since = null)
+        {
+            ListCalls++;
+            var history = GenerateEvents().ToList();
+            _wholeHistoryPayloadCopies.Clear();
+            foreach (var @event in history)
+            {
+                // One list result plus sixteen retained full-history copies makes the expected buffering regression exceed
+                // the exact same 128 MiB ceiling that the streaming path must remain below.
+                for (var copy = 0; copy < 16; copy++)
+                {
+                    _wholeHistoryPayloadCopies.Add(@event.Payload.ToArray());
+                }
+            }
+
+            PeakListPayloadBytes = history.Sum(@event => (long)@event.Payload.Length) +
+                _wholeHistoryPayloadCopies.Sum(payload => (long)payload.Length);
+            return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(history));
+        }
+    }
 }

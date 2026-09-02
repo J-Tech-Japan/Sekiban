@@ -51,6 +51,16 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
     internal Func<Task>? TagHeadProtocolHook { get; set; }
 
     /// <summary>
+    ///     Test-only tagged-stream reader milestones. Provider tests gate the real EF/Npgsql enumerator around its
+    ///     <c>MoveNextAsync</c> call, proving that cancellation reaches native I/O and prevents a later row attempt.
+    ///     This is internal, per-instance, and remains unset by production composition.
+    /// </summary>
+    internal Func<Task>? BeforeTaggedStreamReaderReadHook { get; set; }
+
+    /// <summary>Test-only notification after the real tagged-stream reader returned a row and before it is consumed.</summary>
+    internal Func<Task>? AfterTaggedStreamReaderReadHook { get; set; }
+
+    /// <summary>
     ///     SEK-G16 conditional (unique-key) append. The claim event is inserted under the deterministic id, so the
     ///     existing <c>(ServiceId, Id)</c> primary key is the uniqueness primitive — no schema change. A duplicate raises
     ///     SQLSTATE 23505 (unique_violation), which is classified by fingerprint against the stored winner (the real
@@ -696,9 +706,26 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
 
             var count = 0;
             string? lastSortableUniqueId = null;
-            await foreach (var dbEvent in query.AsAsyncEnumerable().WithCancellation(cancellationToken))
+            await using var enumerator = query.AsAsyncEnumerable().GetAsyncEnumerator(cancellationToken);
+            while (true)
             {
+                if (BeforeTaggedStreamReaderReadHook is not null)
+                {
+                    await BeforeTaggedStreamReaderReadHook();
+                }
+
+                if (!await enumerator.MoveNextAsync())
+                {
+                    break;
+                }
+
+                if (AfterTaggedStreamReaderReadHook is not null)
+                {
+                    await AfterTaggedStreamReaderReadHook();
+                }
+
                 cancellationToken.ThrowIfCancellationRequested();
+                var dbEvent = enumerator.Current;
                 await onEvent(new SerializableEvent(
                     Encoding.UTF8.GetBytes(dbEvent.Payload),
                     dbEvent.SortableUniqueId,
