@@ -129,6 +129,46 @@ public sealed class RemoteTaggedStreamTests
     }
 
     [Fact]
+    public async Task CosmosNativeTaggedStream_DefaultWindowReportsTheEmulatorRuModelAndKeepsAllFiveReadsBounded()
+    {
+        var telemetry = new List<CosmosTaggedStreamTelemetry>();
+        var options = new CosmosDbEventStoreOptions
+        {
+            EventsContainerName = "g54-events",
+            TagsContainerName = "g54-tags",
+            TaggedStreamTelemetryCallback = telemetry.Add
+        };
+        var (store, client) = NewCosmosStore(options);
+        var tag = new NativeTag("cosmos-default-window-telemetry");
+        Assert.True((await store.WriteSerializableEventsAsync(FivePointFixture(tag))).IsSuccess);
+
+        var emitted = new List<string>();
+        var result = await store.StreamSerializableEventsByTagAsync(
+            tag,
+            null,
+            null,
+            @event =>
+            {
+                emitted.Add(@event.SortableUniqueIdValue);
+                return ValueTask.CompletedTask;
+            });
+
+        Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+        Assert.Equal(new[] { P0, P1, P2, P3, P4 }, emitted);
+        Assert.Equal(CosmosDbEventStoreOptions.DefaultMaxConcurrentTaggedStreamPointReads,
+            options.MaxConcurrentTaggedStreamPointReads);
+        var observed = Assert.Single(telemetry);
+        Assert.Equal(1, observed.IndexPages);
+        Assert.Equal(5, observed.PointReads);
+        Assert.InRange(observed.PeakInFlightPointReads, 1, options.MaxConcurrentTaggedStreamPointReads);
+        // InMemoryCosmosContainer deterministically charges one unit per index row and point read: 2 units/reference.
+        Assert.Equal(10d, observed.RequestCharge);
+        Assert.Equal(0, observed.ThrottledRequests);
+        Assert.InRange(client.Container(options.EventsContainerName).MaximumInFlightPointReads, 1,
+            options.MaxConcurrentTaggedStreamPointReads);
+    }
+
+    [Fact]
     public async Task CosmosNativeTaggedStream_CompletionOrderMutant_IsKilledByHeadOrderedPublication()
     {
         var options = new CosmosDbEventStoreOptions
