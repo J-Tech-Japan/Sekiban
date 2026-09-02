@@ -18,8 +18,8 @@ namespace Sekiban.Dcb.Tests.SerializedCommitWire;
 /// </summary>
 public class SerializedCommitCollectionShapeGateTests
 {
-    private const int FrozenAliasedFixtureLength = 91;
-    private const string FrozenAliasedFixtureSha256 = "5a37e6735553f2025a3a005da9ded1a77f1b35d41aed8ac4ca7bcdd6f121e383";
+    private const int FrozenConsultFixtureLength = 87;
+    private const string FrozenConsultFixtureSha256 = "dd3715a784f3a8628e28815501d4358b6bb23d040e2e71be3247689de7fbe5d2";
 
     private static readonly int?[] Versions = [null, VersionedSerializedCommitRequest.CurrentVersion,
         VersionedExpectedTagPositionSerializedCommitRequest.CurrentVersion];
@@ -148,14 +148,15 @@ public class SerializedCommitCollectionShapeGateTests
     }
 
     [Fact]
-    public async Task FrozenTypeScriptClientAliasFixture_FailsClosedInsteadOfCommittingEmpty()
+    public async Task FrozenConsultClientAliasFixture_FailsClosedInsteadOfCommittingEmpty()
     {
-        // Mutation guard: if the raw gate is removed, this reaches the executor and returns a successful empty commit,
-        // causing this assertion to fail. The fixture is embedded rather than rebuilt from current DTOs.
+        // Exact raw UTF-8 JSON witness from reports/design-1172-consult.md. Mutation guard: if the raw gate is removed,
+        // this reaches the executor and returns a successful empty commit, causing this assertion to fail. The fixture is
+        // embedded rather than rebuilt from current DTOs.
         var seams = new CountingExecutionSeams();
         var fixture = LoadFrozen("ts_client_aliased_unversioned.json");
-        Assert.Equal(FrozenAliasedFixtureLength, fixture.Length);
-        Assert.Equal(FrozenAliasedFixtureSha256, Convert.ToHexString(SHA256.HashData(fixture)).ToLowerInvariant());
+        Assert.Equal(FrozenConsultFixtureLength, fixture.Length);
+        Assert.Equal(FrozenConsultFixtureSha256, Convert.ToHexString(SHA256.HashData(fixture)).ToLowerInvariant());
 
         var result = await new SerializedCommitAcceptor(seams).AcceptAsync(fixture);
 

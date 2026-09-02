@@ -178,7 +178,7 @@ WASM 境界で使用される公式 serialized-commit ワイヤ契約の正規�
 空の成功コミットとしてデシリアライズされ得る protocol name だけを保護します。
 
 | 生のトップレベル形状 | Legacy | V1 | V2 | 結果 |
-| --- | --- | --- | --- |
+| --- | --- | --- | --- | --- |
 | `eventCandidates` + `consistencyTags` が各 1 回。V2 は `expectedTagPositions` も持つ | 許可 | 許可 | 許可 | 通常どおり bind + route。明示的な空配列ペアは空コミットとして成功します。 |
 | 必須 member の片方または両方が欠如 | 拒否 | 拒否 | 拒否 | 副作用前に固定メッセージの `MalformedSerializedCommitException`。 |
 | `candidates` / `consistency` が単独または公式名と混在 | 拒否 | 拒否 | 拒否 | Alias dialect を黙って無視しません。 |

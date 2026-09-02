@@ -195,7 +195,7 @@ protects protocol names whose omission, aliasing, or ambiguity could otherwise b
 commit.
 
 | Raw top-level form | Legacy | V1 | V2 | Result |
-| --- | --- | --- | --- |
+| --- | --- | --- | --- | --- |
 | `eventCandidates` + `consistencyTags`, both once; V2 also has `expectedTagPositions` | accepted | accepted | accepted | Bound and routed normally; explicit empty arrays remain a successful empty commit. |
 | either or both required members absent | rejected | rejected | rejected | Fixed-message `MalformedSerializedCommitException`, before side effects. |
 | `candidates` and/or `consistency`, alone or mixed with official names | rejected | rejected | rejected | Alias dialects are never silently ignored. |
