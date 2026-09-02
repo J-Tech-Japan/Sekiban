@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Storage;
@@ -129,24 +130,72 @@ public class TagStateService
         var projectorVersionResult = _tagProjectorTypes.GetProjectorVersion(projectorName);
         var projectorVersion = projectorVersionResult.IsSuccess ? projectorVersionResult.GetValue() : "unknown";
 
-        // Fetch events for the tag
-        var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
-        if (!eventsResult.IsSuccess)
-        {
-            return ResultBox.Error<TagStateProjectionResult>(eventsResult.GetException());
-        }
-
-        var events = eventsResult.GetValue().ToList();
         var projectorFunc = projectorFuncResult.GetValue();
 
-        // Project all events
+        // Existing public operations have no cancellation token, so the optional stream intentionally receives None.
         ITagStatePayload state = new EmptyTagStatePayload();
         string? lastSortableUniqueId = null;
+        var eventCount = 0;
+        var taggedStream = SekibanDcbCapabilityResolver.ResolveTaggedStream(_eventStore, "event store");
 
-        foreach (var evt in events)
+        if (taggedStream.IsSupported)
         {
-            state = projectorFunc(state, evt);
-            lastSortableUniqueId = evt.SortableUniqueIdValue;
+            string? previousId = null;
+            var streamResult = await taggedStream.StreamStore!.StreamSerializableEventsByTagAsync(
+                tag,
+                null,
+                null,
+                serializableEvent =>
+                {
+                    if (!SekibanDcbCapabilityResolver.IsTaggedStreamOrderValid(
+                            previousId,
+                            serializableEvent.SortableUniqueIdValue,
+                            out var duplicate))
+                    {
+                        throw new InvalidOperationException(
+                            $"Tagged stream for {tag.GetTag()} emitted out-of-order id " +
+                            $"{serializableEvent.SortableUniqueIdValue} after {previousId}.");
+                    }
+
+                    if (duplicate)
+                    {
+                        return ValueTask.CompletedTask;
+                    }
+
+                    var eventResult = serializableEvent.ToEvent(_eventTypes);
+                    if (!eventResult.IsSuccess)
+                    {
+                        throw new InvalidOperationException(
+                            $"Failed to deserialize event for tag {tag.GetTag()}: {eventResult.GetException().Message}",
+                            eventResult.GetException());
+                    }
+
+                    state = projectorFunc(state, eventResult.GetValue());
+                    eventCount++;
+                    lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
+                    previousId = serializableEvent.SortableUniqueIdValue;
+                    return ValueTask.CompletedTask;
+                },
+                CancellationToken.None);
+            if (!streamResult.IsSuccess)
+            {
+                return ResultBox.Error<TagStateProjectionResult>(streamResult.GetException());
+            }
+        }
+        else
+        {
+            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
+            if (!eventsResult.IsSuccess)
+            {
+                return ResultBox.Error<TagStateProjectionResult>(eventsResult.GetException());
+            }
+
+            foreach (var evt in eventsResult.GetValue())
+            {
+                state = projectorFunc(state, evt);
+                eventCount++;
+                lastSortableUniqueId = evt.SortableUniqueIdValue;
+            }
         }
 
         var result = new TagStateProjectionResult(
@@ -154,7 +203,7 @@ public class TagStateService
             projectorName,
             projectorVersion,
             state,
-            events.Count,
+            eventCount,
             lastSortableUniqueId);
 
         return ResultBox.FromValue(result);

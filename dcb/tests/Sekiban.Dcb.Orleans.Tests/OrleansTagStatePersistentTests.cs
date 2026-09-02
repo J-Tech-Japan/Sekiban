@@ -1,6 +1,7 @@
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Queries;
@@ -210,6 +211,38 @@ public class OrleansTagStatePersistentTests
         Assert.Equal("TestContent", state.TagContent);
     }
 
+    [Fact]
+    public async Task GetStateAsync_UsesTaggedStreamAndDefaultPerEventAccumulatorMemberWithoutTheListApi()
+    {
+        var domainTypes = new DcbDomainTypes(
+            eventTypes: new SimpleEventTypes(),
+            tagTypes: new SimpleTagTypes(),
+            tagProjectorTypes: new SimpleTagProjectorTypes(),
+            tagStatePayloadTypes: _tagStatePayloadTypes,
+            multiProjectorTypes: new SimpleMultiProjectorTypes(),
+            queryTypes: new SimpleQueryTypes(),
+            jsonSerializerOptions: new JsonSerializerOptions());
+        var primitive = new TrackingTagStateProjectionPrimitive();
+        var eventStore = new StreamingEventStore();
+        var grain = new TagStateGrain(
+            eventStore,
+            domainTypes,
+            primitive,
+            new MissingActorAccessor(),
+            new TestPersistentState<TagStateCacheState>(new TagStateCacheState()));
+        var tagStateId = new TagStateId(new FallbackTag("TestGroup", "stream"), "MissingProjector");
+
+        typeof(TagStateGrain)
+            .GetField("_tagStateId", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(grain, tagStateId);
+
+        await grain.GetStateAsync();
+
+        Assert.Equal(1, eventStore.StreamCalls);
+        Assert.Equal(0, eventStore.ListCalls);
+        Assert.Equal(1, primitive.ApplyEventsCalls);
+    }
+
     // Test helper class
     private class TestPersistentState<T> : IPersistentState<T> where T : new()
     {
@@ -248,20 +281,23 @@ public class OrleansTagStatePersistentTests
     private sealed class TrackingTagStateProjectionPrimitive : ITagStateProjectionPrimitive
     {
         public int DisposeCount { get; private set; }
+        public int ApplyEventsCalls { get; private set; }
 
         public ITagStateProjectionAccumulator CreateAccumulator(TagStateId tagStateId) =>
-            new TrackingAccumulator(tagStateId, () => DisposeCount++);
+            new TrackingAccumulator(tagStateId, () => DisposeCount++, () => ApplyEventsCalls++);
     }
 
     private sealed class TrackingAccumulator : ITagStateProjectionAccumulator
     {
         private readonly TagStateId _tagStateId;
         private readonly Action _onDispose;
+        private readonly Action _onApplyEvents;
 
-        public TrackingAccumulator(TagStateId tagStateId, Action onDispose)
+        public TrackingAccumulator(TagStateId tagStateId, Action onDispose, Action onApplyEvents)
         {
             _tagStateId = tagStateId;
             _onDispose = onDispose;
+            _onApplyEvents = onApplyEvents;
         }
 
         public bool ApplyState(SerializableTagState? cachedState) => true;
@@ -269,7 +305,11 @@ public class OrleansTagStatePersistentTests
         public bool ApplyEvents(
             IReadOnlyList<SerializableEvent> events,
             string? latestSortableUniqueId,
-            CancellationToken cancellationToken = default) => true;
+            CancellationToken cancellationToken = default)
+        {
+            _onApplyEvents();
+            return true;
+        }
 
         public SerializableTagState GetSerializedState() =>
             new(
@@ -285,7 +325,7 @@ public class OrleansTagStatePersistentTests
         public void Dispose() => _onDispose();
     }
 
-    private sealed class EmptyEventStore : IEventStore
+    private class EmptyEventStore : IEventStore
     {
         public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) =>
             Task.FromResult(ResultBox.FromValue(Enumerable.Empty<TagStream>()));
@@ -314,12 +354,51 @@ public class OrleansTagStatePersistentTests
         public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid eventId) =>
             Task.FromResult(ResultBox.Error<SerializableEvent>(new NotImplementedException()));
 
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
+        public virtual Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) =>
             Task.FromResult(ResultBox.FromValue(Enumerable.Empty<SerializableEvent>()));
 
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events) =>
             Task.FromResult(ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(new NotImplementedException()));
+    }
+
+    private sealed class StreamingEventStore : EmptyEventStore, IStreamingTaggedSerializableEventStore,
+        ITaggedStreamCapabilityProvider
+    {
+        private readonly SerializableEvent _event = new(
+            new byte[] { 1 },
+            "001",
+            Guid.NewGuid(),
+            new EventMetadata("cause", "correlation", "user"),
+            new List<string> { "TestGroup:stream" },
+            "TestEvent");
+
+        public int StreamCalls { get; private set; }
+        public int ListCalls { get; private set; }
+
+        public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+            TaggedStreamCapabilityDescriptor.Native("grain streaming test");
+
+        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since = null)
+        {
+            ListCalls++;
+            throw new InvalidOperationException("The tagged stream grain path must not read the list API.");
+        }
+
+        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            StreamCalls++;
+            cancellationToken.ThrowIfCancellationRequested();
+            await onEvent(_event);
+            return ResultBox.FromValue(new SerializableEventStreamReadResult(1, _event.SortableUniqueIdValue));
+        }
     }
 
     private sealed class MissingActorAccessor : IActorObjectAccessor

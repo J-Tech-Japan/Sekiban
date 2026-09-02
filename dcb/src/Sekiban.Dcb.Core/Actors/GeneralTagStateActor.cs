@@ -1,6 +1,8 @@
 using ResultBoxes;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -440,6 +442,7 @@ public class GeneralTagStateActor : ITagStateActorCommon
         ITagStatePayload? currentState = null;
         var version = 0;
         var lastSortedUniqueId = "";
+        var taggedStream = SekibanDcbCapabilityResolver.ResolveTaggedStream(_eventStore, "event store");
 
         // Try incremental update if possible
         if (cachedState is { } incrementalCachedState &&
@@ -460,84 +463,206 @@ public class GeneralTagStateActor : ITagStateActorCommon
             // originates from an event's SortableUniqueId and the branch above
             // guarantees it is not null or empty.
             var since = new SortableUniqueId(incrementalCachedState.LastSortedUniqueId);
-            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since);
-            if (!eventsResult.IsSuccess)
+            if (taggedStream.IsSupported)
             {
-                // Log the error and throw exception instead of silently returning cached state
-                var error = eventsResult.GetException();
-                _logger.LogError(
-                    error,
-                    "[GeneralTagStateActor] Error reading events for tag {Tag}",
-                    tag.GetTag());
+                var previousId = lastSortedUniqueId;
+                var streamResult = await taggedStream.StreamStore!.StreamSerializableEventsByTagAsync(
+                    tag,
+                    since,
+                    new SortableUniqueId(latestSortableUniqueId),
+                    serializableEvent =>
+                    {
+                        if (!SekibanDcbCapabilityResolver.IsTaggedStreamOrderValid(
+                                previousId,
+                                serializableEvent.SortableUniqueIdValue,
+                                out var duplicate))
+                        {
+                            throw new InvalidOperationException(
+                                $"Tagged stream for {tag.GetTag()} emitted out-of-order id " +
+                                $"{serializableEvent.SortableUniqueIdValue} after {previousId}.");
+                        }
 
-                // For deserialization errors, we should not use cached state as it may be inconsistent
-                // Instead, throw the error so developers can see and fix the issue
-                throw new InvalidOperationException(
-                    $"Failed to read events for tag {tag.GetTag()}: {error.Message}",
-                    error);
+                        if (duplicate)
+                        {
+                            return ValueTask.CompletedTask;
+                        }
+
+                        if (string.Compare(
+                                serializableEvent.SortableUniqueIdValue,
+                                latestSortableUniqueId,
+                                StringComparison.Ordinal) > 0)
+                        {
+                            throw new InvalidOperationException(
+                                $"Tagged stream for {tag.GetTag()} exceeded captured head {latestSortableUniqueId}.");
+                        }
+
+                        var eventResult = serializableEvent.ToEvent(_eventTypes);
+                        if (!eventResult.IsSuccess)
+                        {
+                            throw new InvalidOperationException(
+                                $"Failed to deserialize event for tag {tag.GetTag()}: {eventResult.GetException().Message}",
+                                eventResult.GetException());
+                        }
+
+                        currentState = projectFunc(currentState!, eventResult.GetValue());
+                        version++;
+                        lastSortedUniqueId = serializableEvent.SortableUniqueIdValue;
+                        previousId = serializableEvent.SortableUniqueIdValue;
+                        return ValueTask.CompletedTask;
+                    },
+                    CancellationToken.None);
+                if (!streamResult.IsSuccess)
+                {
+                    var error = streamResult.GetException();
+                    _logger.LogError(error, "[GeneralTagStateActor] Error streaming events for tag {Tag}", tag.GetTag());
+                    throw new InvalidOperationException($"Failed to stream events for tag {tag.GetTag()}: {error.Message}", error);
+                }
             }
-
-            // The DB already filtered out events <= cachedState.LastSortedUniqueId.
-            // We still need the upper-bound filter to stay consistent with the
-            // latestSortableUniqueId snapshot taken from TagConsistentActor.
-            var newEvents = eventsResult
-                .GetValue()
-                .Where(e =>
-                    string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
-                .ToList();
-
-            // Project only the new events on top of cached state
-            foreach (var evt in newEvents)
+            else
             {
-                currentState = projectFunc(currentState, evt);
-                version++;
-                lastSortedUniqueId = evt.SortableUniqueIdValue;
+                var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes, since);
+                if (!eventsResult.IsSuccess)
+                {
+                    // Log the error and throw exception instead of silently returning cached state
+                    var error = eventsResult.GetException();
+                    _logger.LogError(
+                        error,
+                        "[GeneralTagStateActor] Error reading events for tag {Tag}",
+                        tag.GetTag());
+
+                    // For deserialization errors, we should not use cached state as it may be inconsistent
+                    // Instead, throw the error so developers can see and fix the issue
+                    throw new InvalidOperationException(
+                        $"Failed to read events for tag {tag.GetTag()}: {error.Message}",
+                        error);
+                }
+
+                // The DB already filtered out events <= cachedState.LastSortedUniqueId.
+                // We still need the upper-bound filter to stay consistent with the
+                // latestSortableUniqueId snapshot taken from TagConsistentActor.
+                var newEvents = eventsResult
+                    .GetValue()
+                    .Where(e =>
+                        string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <= 0)
+                    .ToList();
+
+                // Project only the new events on top of cached state
+                foreach (var evt in newEvents)
+                {
+                    currentState = projectFunc(currentState, evt);
+                    version++;
+                    lastSortedUniqueId = evt.SortableUniqueIdValue;
+                }
             }
         }
         else
         {
             // Full rebuild: projector version changed or no valid cache
-            var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
-            if (!eventsResult.IsSuccess)
+            if (taggedStream.IsSupported)
             {
-                // Log the error for debugging
-                var error = eventsResult.GetException();
-                _logger.LogError(
-                    error,
-                    "[GeneralTagStateActor] Error reading events for full rebuild of tag {Tag}",
-                    tag.GetTag());
+                string? previousId = null;
+                var streamResult = await taggedStream.StreamStore!.StreamSerializableEventsByTagAsync(
+                    tag,
+                    null,
+                    new SortableUniqueId(latestSortableUniqueId),
+                    serializableEvent =>
+                    {
+                        if (!SekibanDcbCapabilityResolver.IsTaggedStreamOrderValid(
+                                previousId,
+                                serializableEvent.SortableUniqueIdValue,
+                                out var duplicate))
+                        {
+                            throw new InvalidOperationException(
+                                $"Tagged stream for {tag.GetTag()} emitted out-of-order id " +
+                                $"{serializableEvent.SortableUniqueIdValue} after {previousId}.");
+                        }
 
-                // For full rebuild, if we can't read events, throw the error
-                // This ensures developers see the issue (like missing event type registration)
-                throw new InvalidOperationException(
-                    $"Failed to read events for tag {tag.GetTag()} during full rebuild: {error.Message}",
-                    error);
-            }
+                        if (duplicate)
+                        {
+                            return ValueTask.CompletedTask;
+                        }
 
-            var events = eventsResult
-                .GetValue()
-                .Where(e => string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <=
-                    0)
-                .ToList();
+                        if (string.Compare(
+                                serializableEvent.SortableUniqueIdValue,
+                                latestSortableUniqueId,
+                                StringComparison.Ordinal) > 0)
+                        {
+                            throw new InvalidOperationException(
+                                $"Tagged stream for {tag.GetTag()} exceeded captured head {latestSortableUniqueId}.");
+                        }
 
-            // Project all events from scratch
-            currentState = null;
-            version = 0;
-            lastSortedUniqueId = "";
+                        var eventResult = serializableEvent.ToEvent(_eventTypes);
+                        if (!eventResult.IsSuccess)
+                        {
+                            throw new InvalidOperationException(
+                                $"Failed to deserialize event for tag {tag.GetTag()}: {eventResult.GetException().Message}",
+                                eventResult.GetException());
+                        }
 
-            foreach (var evt in events)
-            {
-                // Initialize state with EmptyTagStatePayload if needed
-                currentState ??= new EmptyTagStatePayload();
-
-                // Project the event
-                currentState = projectFunc(currentState, evt);
-                version++;
-
-                // Keep track of the last sortable unique id
-                if (!string.IsNullOrEmpty(evt.SortableUniqueIdValue))
+                        currentState ??= new EmptyTagStatePayload();
+                        currentState = projectFunc(currentState, eventResult.GetValue());
+                        version++;
+                        lastSortedUniqueId = serializableEvent.SortableUniqueIdValue;
+                        previousId = serializableEvent.SortableUniqueIdValue;
+                        return ValueTask.CompletedTask;
+                    },
+                    CancellationToken.None);
+                if (!streamResult.IsSuccess)
                 {
-                    lastSortedUniqueId = evt.SortableUniqueIdValue;
+                    var error = streamResult.GetException();
+                    _logger.LogError(
+                        error,
+                        "[GeneralTagStateActor] Error streaming events for full rebuild of tag {Tag}",
+                        tag.GetTag());
+                    throw new InvalidOperationException(
+                        $"Failed to stream events for tag {tag.GetTag()} during full rebuild: {error.Message}",
+                        error);
+                }
+            }
+            else
+            {
+                var eventsResult = await _eventStore.ReadEventsByTagAsync(tag, _eventTypes);
+                if (!eventsResult.IsSuccess)
+                {
+                    // Log the error for debugging
+                    var error = eventsResult.GetException();
+                    _logger.LogError(
+                        error,
+                        "[GeneralTagStateActor] Error reading events for full rebuild of tag {Tag}",
+                        tag.GetTag());
+
+                    // For full rebuild, if we can't read events, throw the error
+                    // This ensures developers see the issue (like missing event type registration)
+                    throw new InvalidOperationException(
+                        $"Failed to read events for tag {tag.GetTag()} during full rebuild: {error.Message}",
+                        error);
+                }
+
+                var events = eventsResult
+                    .GetValue()
+                    .Where(e => string.Compare(e.SortableUniqueIdValue, latestSortableUniqueId, StringComparison.Ordinal) <=
+                        0)
+                    .ToList();
+
+                // Project all events from scratch
+                currentState = null;
+                version = 0;
+                lastSortedUniqueId = "";
+
+                foreach (var evt in events)
+                {
+                    // Initialize state with EmptyTagStatePayload if needed
+                    currentState ??= new EmptyTagStatePayload();
+
+                    // Project the event
+                    currentState = projectFunc(currentState, evt);
+                    version++;
+
+                    // Keep track of the last sortable unique id
+                    if (!string.IsNullOrEmpty(evt.SortableUniqueIdValue))
+                    {
+                        lastSortedUniqueId = evt.SortableUniqueIdValue;
+                    }
                 }
             }
         }

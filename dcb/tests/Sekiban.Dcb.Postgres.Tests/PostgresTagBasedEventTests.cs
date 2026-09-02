@@ -10,6 +10,13 @@ namespace Sekiban.Dcb.Postgres.Tests;
 
 public class PostgresTagBasedEventTests : PostgresTestBase
 {
+    private static readonly DateTime TaggedStreamBaseTime = new(2026, 2, 2, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly string TaggedStreamP0 = SortableUniqueId.Generate(TaggedStreamBaseTime.AddSeconds(-1), Guid.Empty);
+    private static readonly string TaggedStreamP1 = SortableUniqueId.Generate(TaggedStreamBaseTime, Guid.Empty);
+    private static readonly string TaggedStreamP2 = SortableUniqueId.Generate(TaggedStreamBaseTime.AddSeconds(1), Guid.Empty);
+    private static readonly string TaggedStreamP3 = SortableUniqueId.Generate(TaggedStreamBaseTime.AddSeconds(2), Guid.Empty);
+    private static readonly string TaggedStreamP4 = SortableUniqueId.Generate(TaggedStreamBaseTime.AddSeconds(3), Guid.Empty);
+
     public PostgresTagBasedEventTests(PostgresTestFixture fixture) : base(fixture)
     {
     }
@@ -99,6 +106,106 @@ public class PostgresTagBasedEventTests : PostgresTestBase
         Assert.Equal(events[2].Id, returnedEvents[0].Id);
         Assert.Equal(events[3].Id, returnedEvents[1].Id);
         Assert.Equal(events[4].Id, returnedEvents[2].Id);
+    }
+
+    [Fact]
+    public async Task TaggedStream_SinceIsExclusive_UntilIsInclusive_AndPreservesOrdinalOrder()
+    {
+        var studentId = Guid.NewGuid();
+        var tag = new StudentTag(studentId);
+        var events = new[]
+        {
+            new Event(
+                new StudentCreated(studentId, "before-since"),
+                TaggedStreamP0,
+                nameof(StudentCreated),
+                Guid.NewGuid(),
+                new EventMetadata("cause", "correlation", "user"),
+                new List<string> { tag.GetTag() }),
+            new Event(
+                new StudentCreated(studentId, "one"),
+                TaggedStreamP1,
+                nameof(StudentCreated),
+                Guid.NewGuid(),
+                new EventMetadata("cause", "correlation", "user"),
+                new List<string> { tag.GetTag() }),
+            new Event(
+                new StudentCreated(studentId, "two"),
+                TaggedStreamP2,
+                nameof(StudentCreated),
+                Guid.NewGuid(),
+                new EventMetadata("cause", "correlation", "user"),
+                new List<string> { tag.GetTag() }),
+            new Event(
+                new StudentCreated(studentId, "three"),
+                TaggedStreamP3,
+                nameof(StudentCreated),
+                Guid.NewGuid(),
+                new EventMetadata("cause", "correlation", "user"),
+                new List<string> { tag.GetTag() }),
+            new Event(
+                new StudentCreated(studentId, "after-until"),
+                TaggedStreamP4,
+                nameof(StudentCreated),
+                Guid.NewGuid(),
+                new EventMetadata("cause", "correlation", "user"),
+                new List<string> { tag.GetTag() })
+        };
+        var write = await Fixture.EventStore.WriteEventsAsync(events);
+        Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
+
+        var stream = Assert.IsAssignableFrom<IStreamingTaggedSerializableEventStore>(Fixture.EventStore);
+        var emitted = new List<string>();
+        var result = await stream.StreamSerializableEventsByTagAsync(
+            tag,
+            new SortableUniqueId(TaggedStreamP1),
+            new SortableUniqueId(TaggedStreamP3),
+            serializableEvent =>
+            {
+                emitted.Add(serializableEvent.SortableUniqueIdValue);
+                return ValueTask.CompletedTask;
+            });
+
+        Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+        Assert.Equal(new[] { TaggedStreamP2, TaggedStreamP3 }, emitted);
+        Assert.Equal(2, result.GetValue().EventsRead);
+        Assert.Equal(TaggedStreamP3, result.GetValue().LastSortableUniqueId);
+    }
+
+    [Fact]
+    public async Task TaggedStream_CancellationAfterFirstCallbackStopsBeforeTheNextPostgresRow()
+    {
+        var studentId = Guid.NewGuid();
+        var tag = new StudentTag(studentId);
+        var start = TaggedStreamBaseTime.AddDays(1);
+        var events = Enumerable.Range(0, 3)
+            .Select(index => new Event(
+                new StudentCreated(studentId, $"cancellation-{index}"),
+                SortableUniqueId.Generate(start.AddSeconds(index), Guid.Empty),
+                nameof(StudentCreated),
+                Guid.NewGuid(),
+                new EventMetadata("cause", "correlation", "user"),
+                new List<string> { tag.GetTag() }))
+            .ToArray();
+        var write = await Fixture.EventStore.WriteEventsAsync(events);
+        Assert.True(write.IsSuccess, write.IsSuccess ? string.Empty : write.GetException().ToString());
+
+        using var cancellation = new CancellationTokenSource();
+        var callbacks = 0;
+        var stream = Assert.IsAssignableFrom<IStreamingTaggedSerializableEventStore>(Fixture.EventStore);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stream.StreamSerializableEventsByTagAsync(
+            tag,
+            null,
+            null,
+            _ =>
+            {
+                callbacks++;
+                cancellation.Cancel();
+                return ValueTask.CompletedTask;
+            },
+            cancellation.Token));
+
+        Assert.Equal(1, callbacks);
     }
 
     [Fact]

@@ -44,6 +44,10 @@
              in this test project's compile-time dependency resolution. The test loads its produced DLL by reflection. -->
         <ProjectReference Include="..\Sekiban.Dcb.StreamingRestore.Legacy1018Fixture\Sekiban.Dcb.StreamingRestore.Legacy1018Fixture.csproj"
                           ReferenceOutputAssembly="false" />
+        <!-- A separately compiled pre-SEK-G53 accumulator implementor. Its output is loaded by reflection so its
+             old package graph never participates in this project's compile-time dependency resolution. -->
+        <ProjectReference Include="..\Sekiban.Dcb.TagStateAccumulator.Legacy1018Fixture\Sekiban.Dcb.TagStateAccumulator.Legacy1018Fixture.csproj"
+                          ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <Target Name="BuildStreamingRestoreLegacy1018FixtureForCurrentTarget"
@@ -65,11 +69,27 @@
               SkipUnchangedFiles="true" />
     </Target>
 
+    <Target Name="CopyTagStateAccumulatorLegacy1018Fixture"
+            AfterTargets="Build"
+            Condition="'$(TargetFramework)' != ''">
+        <!-- Use GetTargetPath's output rather than reconstructing bin paths; the artifacts-path option changes those paths. -->
+        <MSBuild Projects="$(MSBuildProjectDirectory)/../Sekiban.Dcb.TagStateAccumulator.Legacy1018Fixture/Sekiban.Dcb.TagStateAccumulator.Legacy1018Fixture.csproj"
+                 Targets="Build;GetTargetPath"
+                 Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);ArtifactsPath=$(ArtifactsPath)">
+            <Output TaskParameter="TargetOutputs" ItemName="_TagStateAccumulatorLegacy1018FixtureOutput" />
+        </MSBuild>
+        <Copy SourceFiles="@(_TagStateAccumulatorLegacy1018FixtureOutput)"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+    </Target>
+
     <ItemGroup>
         <!-- SEK-G17: frozen dcb-v10.1.17 wire artifacts. Embedded verbatim so tests read the exact committed bytes as the
              authority (not regenerated from current DTOs). See SerializedCommitWire/goldens/PROVENANCE.md. -->
         <EmbeddedResource Include="SerializedCommitWire/goldens/legacy_1017_unversioned.json" />
         <EmbeddedResource Include="SerializedCommitWire/goldens/legacy_1017_empty.json" />
+        <!-- SEK-G53: path filters and the controlled-memory gate are executable workflow contract, not documentation. -->
+        <EmbeddedResource Include="..\..\..\.github\workflows\run_test_dcb.yml" Link="run_test_dcb.yml" />
     </ItemGroup>
 
 </Project>

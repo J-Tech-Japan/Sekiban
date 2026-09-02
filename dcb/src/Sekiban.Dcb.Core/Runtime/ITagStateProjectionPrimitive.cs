@@ -27,6 +27,17 @@ public interface ITagStateProjectionPrimitive
 public interface ITagStateProjectionAccumulator : IDisposable
 {
     bool ApplyState(SerializableTagState? cachedState);
+
+    /// <summary>
+    ///     Applies one serialized event. This default member keeps accumulators compiled against the previous batch-only
+    ///     interface shape binary compatible while allowing streaming callers to avoid assembling a history list.
+    /// </summary>
+    bool ApplyEvent(
+        SerializableEvent @event,
+        string? latestSortableUniqueId,
+        CancellationToken cancellationToken = default) =>
+        ApplyEvents(new[] { @event }, latestSortableUniqueId, cancellationToken);
+
     bool ApplyEvents(
         IReadOnlyList<SerializableEvent> events,
         string? latestSortableUniqueId,

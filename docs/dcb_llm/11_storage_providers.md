@@ -142,6 +142,26 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 | DynamoDB | `Sekiban.Dcb.DynamoDB` | `Sekiban.Dcb.BlobStorage.S3` | Production |
 | SQLite | `Sekiban.Dcb.Sqlite` | N/A | Development |
 
+## Tagged cold-rebuild streaming (SEK-G53)
+
+Cold tag-state rebuilds can consume the additive `IStreamingTaggedSerializableEventStore` capability. It leaves the
+frozen `IEventStore.ReadSerializableEventsByTagAsync` list API unchanged, so existing providers and downstream stores
+continue to use the list fallback without recompilation.
+
+- Postgres and SQLite stream the ordered tag query directly into the callback. `since` is exclusive and the optional
+  captured `until` head is inclusive; both bounds are pushed into the provider query.
+- The callback contract emits strictly increasing ordinal `SortableUniqueId` values. Tag-state consumers reject a
+  decreasing value before publishing a rebuilt state; an equal value follows the established duplicate-skip policy.
+- `InMemory` and the in-process executor stores implement the callback shape for parity tests. They are not a
+  bounded-memory production provider. Cosmos DB and DynamoDB remain on the list fallback until their dedicated
+  streaming work lands.
+- Capability selection is fail-closed: a store must implement the optional interface **and** declare native tagged
+  streaming through the live-instance descriptor. `HybridEventStore` forwards only a verified hot-store stream and
+  returns an unsupported `ResultBox` without reading its hot list API otherwise.
+- Current tag-state public operations do not expose cancellation and intentionally pass `CancellationToken.None`.
+  Direct provider callers can cancel a tagged stream; cancellation propagates as `OperationCanceledException`, while
+  other read or callback failures are returned as `ResultBox.Error`.
+
 ## Passive projection status registry (SEK-G24 / dcb-v10.10.0)
 
 The passive `IProjectionStatusStore` is registered alongside each provider's projection-state store, and the

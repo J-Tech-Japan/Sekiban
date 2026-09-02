@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
@@ -89,14 +90,8 @@ public class TagStateGrain : Grain, ITagStateGrain
         var usableCachedState = cachedState?.ProjectorVersion == projectorVersion ? cachedState : null;
 
         var since = ResolveSinceForRead(usableCachedState, projectorVersion, latestSortableUniqueId);
-        var eventsResult = await ReadSerializableEventsByTagAsync(
-            _tagTypes.GetTag($"{_tagStateId.TagGroup}:{_tagStateId.TagContent}"), since);
-        if (!eventsResult.IsSuccess)
-        {
-            throw new InvalidOperationException(
-                $"Failed to read serialized events: {eventsResult.GetException().Message}",
-                eventsResult.GetException());
-        }
+        var tag = _tagTypes.GetTag($"{_tagStateId.TagGroup}:{_tagStateId.TagContent}");
+        var taggedStream = SekibanDcbCapabilityResolver.ResolveTaggedStream(_eventStore, "event store");
 
         using var accumulator = await _tagStateProjectionPrimitive.CreateAccumulatorAsync(_tagStateId);
         if (!accumulator.ApplyState(usableCachedState))
@@ -105,10 +100,75 @@ public class TagStateGrain : Grain, ITagStateGrain
                 $"Failed to apply cached state for tag state {_tagStateId.GetTagStateId()}");
         }
 
-        if (!accumulator.ApplyEvents(eventsResult.GetValue(), latestSortableUniqueId))
+        if (taggedStream.IsSupported)
         {
-            throw new InvalidOperationException(
-                $"Failed to apply events for tag state {_tagStateId.GetTagStateId()}");
+            var previousId = since?.Value;
+            var until = string.IsNullOrEmpty(latestSortableUniqueId)
+                ? null
+                : new SortableUniqueId(latestSortableUniqueId);
+            var streamResult = await taggedStream.StreamStore!.StreamSerializableEventsByTagAsync(
+                tag,
+                since,
+                until,
+                serializableEvent =>
+                {
+                    if (!SekibanDcbCapabilityResolver.IsTaggedStreamOrderValid(
+                            previousId,
+                            serializableEvent.SortableUniqueIdValue,
+                            out var duplicate))
+                    {
+                        throw new InvalidOperationException(
+                            $"Tagged stream for {tag.GetTag()} emitted out-of-order id " +
+                            $"{serializableEvent.SortableUniqueIdValue} after {previousId}.");
+                    }
+
+                    if (duplicate)
+                    {
+                        return ValueTask.CompletedTask;
+                    }
+
+                    if (!string.IsNullOrEmpty(latestSortableUniqueId) &&
+                        string.Compare(
+                            serializableEvent.SortableUniqueIdValue,
+                            latestSortableUniqueId,
+                            StringComparison.Ordinal) > 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Tagged stream for {tag.GetTag()} exceeded captured head {latestSortableUniqueId}.");
+                    }
+
+                    if (!accumulator.ApplyEvent(serializableEvent, latestSortableUniqueId, CancellationToken.None))
+                    {
+                        throw new InvalidOperationException(
+                            $"Failed to apply streamed event for tag state {_tagStateId.GetTagStateId()}");
+                    }
+
+                    previousId = serializableEvent.SortableUniqueIdValue;
+                    return ValueTask.CompletedTask;
+                },
+                CancellationToken.None);
+            if (!streamResult.IsSuccess)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to stream serialized events: {streamResult.GetException().Message}",
+                    streamResult.GetException());
+            }
+        }
+        else
+        {
+            var eventsResult = await ReadSerializableEventsByTagAsync(tag, since);
+            if (!eventsResult.IsSuccess)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to read serialized events: {eventsResult.GetException().Message}",
+                    eventsResult.GetException());
+            }
+
+            if (!accumulator.ApplyEvents(eventsResult.GetValue(), latestSortableUniqueId))
+            {
+                throw new InvalidOperationException(
+                    $"Failed to apply events for tag state {_tagStateId.GetTagStateId()}");
+            }
         }
 
         var projectedState = accumulator.GetSerializedState();

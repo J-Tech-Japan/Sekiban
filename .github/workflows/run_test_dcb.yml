@@ -23,6 +23,8 @@ on:
       - 'dcb/src/Sekiban.Dcb.DynamoDB/**'
       - 'dcb/src/Sekiban.Dcb.Postgres/**'
       - 'dcb/src/Sekiban.Dcb.Postgres.MigrationHost/**'
+      - 'dcb/src/Sekiban.Dcb.Sqlite/**'
+      - 'dcb/src/Sekiban.Dcb.ColdStorage/**'
       - 'dcb/tests/Sekiban.Dcb.Orleans.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.Postgres.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/**'
@@ -32,6 +34,7 @@ on:
       - 'dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.WithResult.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.WithoutResult.Tests/**'
+      - 'dcb/tests/Sekiban.Dcb.ColdEvents.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/**'
 
 concurrency:
@@ -41,6 +44,9 @@ concurrency:
 jobs:
   dcbTestsNet9:
     runs-on: ubuntu-latest
+    env:
+      SEKIBAN_STREAM_RESTORE_CONTROLLED_CEILING: '1'
+      SEKIBAN_TAG_STREAM_CONTROLLED_CEILING: '1'
     concurrency:
       group: dcb-tests-net9-${{ github.ref }}
       cancel-in-progress: false
@@ -90,6 +96,9 @@ jobs:
 
   dcbTestsNet10:
     runs-on: ubuntu-latest
+    env:
+      SEKIBAN_STREAM_RESTORE_CONTROLLED_CEILING: '1'
+      SEKIBAN_TAG_STREAM_CONTROLLED_CEILING: '1'
     concurrency:
       group: dcb-tests-net10-${{ github.ref }}
       cancel-in-progress: false

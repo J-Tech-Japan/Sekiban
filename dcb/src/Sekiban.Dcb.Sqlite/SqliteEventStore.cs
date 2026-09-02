@@ -18,7 +18,8 @@ namespace Sekiban.Dcb.Sqlite;
 ///     Can be used as a standalone event store or as a local cache for remote stores.
 /// </summary>
 public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider,
-    IConditionalEventStore, IWriteConditionCapabilityProvider
+    IConditionalEventStore, IWriteConditionCapabilityProvider, IStreamingTaggedSerializableEventStore,
+    ITaggedStreamCapabilityProvider
 {
     private const string ConditionalProviderName = "Sqlite";
 
@@ -47,6 +48,10 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
 
     /// <inheritdoc />
     public WriteConditionCapabilityDescriptor DescribeWriteConditions() => _conditionalAppend.Descriptor;
+
+    /// <summary>SQLite reads tagged rows directly from an ordered data reader.</summary>
+    public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+        TaggedStreamCapabilityDescriptor.Native("Sqlite");
 
     private async Task<ConditionalWriteOutcome> TryWriteConditionalClaimAsync(
         Guid deterministicId,
@@ -1255,6 +1260,81 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
         {
             _logger?.LogError(ex, "Error reading serializable events by tag from SQLite: {Tag}", tag.GetTag());
             return ResultBox.Error<IEnumerable<SerializableEvent>>(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Streams a tag from the SQLite reader. Bounds stay in SQL; cancellation reaches opening the connection,
+    ///     executing the command, and reading every row.
+    /// </summary>
+    public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        ITag tag,
+        SortableUniqueId? since,
+        SortableUniqueId? until,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var tagString = tag.GetTag();
+            var serviceId = CurrentServiceId;
+
+            await using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var cmd = connection.CreateCommand();
+
+            var bounds = string.Empty;
+            if (since != null)
+            {
+                bounds += " AND e.SortableUniqueId > @since";
+                cmd.Parameters.AddWithValue("@since", since.Value);
+            }
+
+            if (until != null)
+            {
+                bounds += " AND e.SortableUniqueId <= @until";
+                cmd.Parameters.AddWithValue("@until", until.Value);
+            }
+
+            cmd.CommandText = $"""
+                SELECT DISTINCT e.Id, e.SortableUniqueId, e.EventType, e.PayloadJson, e.TagsJson, e.Timestamp, e.CausationId, e.CorrelationId, e.ExecutedUser
+                FROM dcb_events e
+                INNER JOIN dcb_tags t ON e.Id = t.EventId
+                WHERE e.ServiceId = {ParamServiceId} AND t.ServiceId = {ParamServiceId} AND t.Tag = @tag{bounds}
+                ORDER BY e.SortableUniqueId
+                """;
+            cmd.Parameters.AddWithValue(ParamServiceId, serviceId);
+            cmd.Parameters.AddWithValue("@tag", tagString);
+
+            var count = 0;
+            string? lastSortableUniqueId = null;
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var serializableEvent = ReadSerializableEvent(reader);
+                if (serializableEvent is null)
+                {
+                    continue;
+                }
+
+                await onEvent(serializableEvent);
+                cancellationToken.ThrowIfCancellationRequested();
+                count++;
+                lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
+            }
+
+            return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error streaming serializable events by tag from SQLite: {Tag}", tag.GetTag());
+            return ResultBox.Error<SerializableEventStreamReadResult>(ex);
         }
     }
 

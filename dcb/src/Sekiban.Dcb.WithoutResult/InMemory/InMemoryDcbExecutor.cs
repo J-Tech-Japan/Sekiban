@@ -147,7 +147,8 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
     ///     and validate that event types are properly registered.
     ///     Throws exceptions on errors instead of returning ResultBox.
     /// </summary>
-    private sealed class InternalInMemoryEventStore : IEventStore
+    private sealed class InternalInMemoryEventStore : IEventStore, IStreamingTaggedSerializableEventStore,
+        ITaggedStreamCapabilityProvider
     {
         private sealed class ServiceState
         {
@@ -165,6 +166,9 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
             _domainTypes = domainTypes;
             _serviceIdProvider = serviceIdProvider ?? new DefaultServiceIdProvider();
         }
+
+        public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+            TaggedStreamCapabilityDescriptor.Native("InMemoryExecutor");
 
         private ServiceState GetState()
         {
@@ -481,6 +485,66 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
                 }
                 events = events.OrderBy(e => e.SortableUniqueIdValue);
                 return Task.FromResult(ResultBox.FromValue(events.Select(ToSerializableEvent).ToList().AsEnumerable()));
+            }
+        }
+
+        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                List<SerializableEvent> snapshot;
+                var state = GetState();
+                lock (state.Lock)
+                {
+                    var events = state.Events.Where(e => e.Tags.Contains(tag.GetTag()));
+                    if (since != null)
+                    {
+                        events = events.Where(e => string.Compare(
+                            e.SortableUniqueIdValue,
+                            since.Value,
+                            StringComparison.Ordinal) > 0);
+                    }
+
+                    if (until != null)
+                    {
+                        events = events.Where(e => string.Compare(
+                            e.SortableUniqueIdValue,
+                            until.Value,
+                            StringComparison.Ordinal) <= 0);
+                    }
+
+                    snapshot = events
+                        .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+                        .Select(ToSerializableEvent)
+                        .ToList();
+                }
+
+                var count = 0;
+                string? lastSortableUniqueId = null;
+                foreach (var serializableEvent in snapshot)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await onEvent(serializableEvent);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    count++;
+                    lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
+                }
+
+                return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return ResultBox.Error<SerializableEventStreamReadResult>(ex);
             }
         }
 

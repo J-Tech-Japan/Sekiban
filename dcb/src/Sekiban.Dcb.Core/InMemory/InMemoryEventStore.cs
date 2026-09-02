@@ -21,13 +21,21 @@ internal sealed class InMemoryEventStoreBackend
 /// </summary>
 [Obsolete(
     "Moved to Sekiban.Dcb.Core.Testing (namespace Sekiban.Dcb.Testing). This type is volatile/in-process and is for tests only; it lives in a production package for historical reasons, which is how it reached production once. Behaviour is unchanged and it will not be removed before the next major version.")]
-public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, IStorageDurabilityDescriptorProvider
+public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, IStorageDurabilityDescriptorProvider,
+    IStreamingTaggedSerializableEventStore, ITaggedStreamCapabilityProvider
 {
     private const string EventTypesRequiredMessage = "IEventTypes is required for SerializableEvent operations";
 
     /// <summary>Everything here is a dictionary in this process. It is gone when the process is.</summary>
     public StorageDurabilityDescriptor DescribeStorage() =>
         new(StorageDurability.Volatile, "InMemory");
+
+    /// <summary>
+    ///     In-memory is a parity implementation: it invokes callbacks from an ordered snapshot, but callers can still
+    ///     select the tagged callback shape without using the public list API.
+    /// </summary>
+    public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+        TaggedStreamCapabilityDescriptor.Native("InMemory");
 
     internal sealed class ServiceState
     {
@@ -486,6 +494,73 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, I
                 .ToList();
 
             return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(serializableEvents));
+        }
+    }
+
+    public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+        ITag tag,
+        SortableUniqueId? since,
+        SortableUniqueId? until,
+        Func<SerializableEvent, ValueTask> onEvent,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (_eventTypes == null)
+            {
+                return ResultBox.Error<SerializableEventStreamReadResult>(
+                    new NotSupportedException(EventTypesRequiredMessage));
+            }
+
+            List<SerializableEvent> snapshot;
+            var state = GetState();
+            lock (state.Lock)
+            {
+                var tagString = tag.GetTag();
+                var events = state.EventOrder.Where(e => e.Tags.Contains(tagString));
+                if (since != null)
+                {
+                    events = events.Where(e => string.Compare(
+                        e.SortableUniqueIdValue,
+                        since.Value,
+                        StringComparison.Ordinal) > 0);
+                }
+
+                if (until != null)
+                {
+                    events = events.Where(e => string.Compare(
+                        e.SortableUniqueIdValue,
+                        until.Value,
+                        StringComparison.Ordinal) <= 0);
+                }
+
+                snapshot = events
+                    .OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal)
+                    .Select(e => e.ToSerializableEvent(_eventTypes))
+                    .ToList();
+            }
+
+            var count = 0;
+            string? lastSortableUniqueId = null;
+            foreach (var serializableEvent in snapshot)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await onEvent(serializableEvent);
+                cancellationToken.ThrowIfCancellationRequested();
+                count++;
+                lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
+            }
+
+            return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return ResultBox.Error<SerializableEventStreamReadResult>(ex);
         }
     }
 
