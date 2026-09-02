@@ -1,4 +1,4 @@
-# Frozen legacy serialized-commit wire artifacts (dcb-v10.1.17)
+# Frozen serialized-commit wire artifacts
 
 These committed UTF-8 JSON files are the FROZEN AUTHORITY for the SEK-G17 behavioral no-migration
 proof. Tests read these exact bytes directly and drive them through the public
@@ -24,3 +24,6 @@ Official serialized-commit wire contract: `Sekiban.Dcb.Commands.SerializedCommit
 ## Pinned integrity (SHA-256, lowercase hex)
 - `legacy_1017_unversioned.json` — 531 bytes — `26c103ab7c8f117de809711a7b31f26d37ef374c1e551bc1ad0948e4105a17cf`
 - `legacy_1017_empty.json` — 43 bytes — `52d11a52f7657262da74a613935aad9cdda2cf4f2191b3d838b56c3e2aa85439`
+- `ts_client_aliased_unversioned.json` — 91 bytes — `5a37e6735553f2025a3a005da9ded1a77f1b35d41aed8ac4ca7bcdd6f121e383`
+  (SEK-G51 frozen negative fixture: the TypeScript-client top-level aliases `candidates` / `consistency`; this must fail
+  closed before execution rather than producing the legacy empty commit.)

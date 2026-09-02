@@ -40,6 +40,8 @@ public class SerializedCommitMalformedSecretSafetyTests
         new object[] { "{\"version\":\"" + Sentinel + "\"}" },
         // Secret property key alongside a bad version.
         new object[] { "{\"" + Sentinel + "\":1,\"version\":1.5}" },
+        // Aliased top-level collection names must also be fixed-message failures, even when a value holds the secret.
+        new object[] { "{\"candidates\":[\"" + Sentinel + "\"],\"consistency\":[]}" },
         // Known version but invalid base64 payload + secret type name / tag.
         new object[]
         {

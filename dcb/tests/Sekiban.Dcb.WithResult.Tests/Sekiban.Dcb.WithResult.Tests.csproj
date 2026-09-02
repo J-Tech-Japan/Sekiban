@@ -70,6 +70,7 @@
              authority (not regenerated from current DTOs). See SerializedCommitWire/goldens/PROVENANCE.md. -->
         <EmbeddedResource Include="SerializedCommitWire/goldens/legacy_1017_unversioned.json" />
         <EmbeddedResource Include="SerializedCommitWire/goldens/legacy_1017_empty.json" />
+        <EmbeddedResource Include="SerializedCommitWire/goldens/ts_client_aliased_unversioned.json" />
     </ItemGroup>
 
 </Project>

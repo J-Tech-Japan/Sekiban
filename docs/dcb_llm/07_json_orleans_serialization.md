@@ -166,10 +166,11 @@ shape:
 Acceptance is optional and additive via `ISerializedCommitAcceptor` / `SerializedCommitAcceptor` (no member is added to any
 existing interface). It is two-phase:
 
-1. **Phase 1 — raw discrimination** (`SerializedCommitVersionDiscriminator`): the `version` property is read straight from
-   the raw UTF-8 bytes, before any typed payload binding, base64 decode, tag reservation, EventId allocation, or
-   executor/store call. The discriminator is the **exact** ordinal property name `version` (the camelCase spelling of the
-   contract). Matching is deliberately **case-sensitive** and never uses ambient case-insensitivity.
+1. **Phase 1 — raw discrimination and shape gate** (`SerializedCommitVersionDiscriminator`): the `version` property and
+   top-level collection-member shape are read straight from the raw UTF-8 bytes, before any typed payload binding, base64
+   decode, tag reservation, EventId allocation, or executor/store call. The discriminator is the **exact** ordinal property
+   name `version` (the camelCase spelling of the contract). Matching is deliberately **case-sensitive** and never uses
+   ambient case-insensitivity.
    - No `version` and no case-variant of it → legacy path.
    - One integer exact `version` == 1 → known version.
    - One integer exact `version` != 1 → **`UnsupportedSerializedCommitEnvelopeVersionException`** (fail closed, before side effects).
@@ -178,11 +179,32 @@ existing interface). It is two-phase:
    - Non-object root, non-integer `version`, or a duplicated exact `version` → **`MalformedSerializedCommitException`** (a
      DISTINCT typed shape error). The typed error is **secret-safe**: it carries only a closed reason code and a fixed
      message, never the offending JSON, keys, payload/base64, type names, or a raw parser exception.
+   - `eventCandidates` and `consistencyTags` must each occur exactly once in every legacy, V1, and V2 body. V2 also
+     requires exactly one `expectedTagPositions`; that V2-only member is rejected on legacy and V1 so a conditional write
+     cannot silently become an unconditional one. `candidates` and `consistency` are rejected aliases, not fallback names.
 2. **Phase 2 — bind + route**: only the resolved shape is bound. A missing version is the legacy official shape, lifted
    losslessly to V1 by `LegacyUnversionedSerializedCommitAdapter` (per-event tags preserved; no per-commit-tag model
    involved). A known version binds `VersionedSerializedCommitRequest`. A binding failure (including a malformed V1 payload)
    is reported as a typed `MalformedSerializedCommitException`, never a null-reference. Either path routes the same event
    candidates + consistency tags to `ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync` with identical semantics.
+
+### Raw shape matrix (SEK-G51)
+
+The gate is deliberately not a strict-schema migration: unrelated top-level extension members are tolerated. It only
+protects protocol names whose omission, aliasing, or ambiguity could otherwise be deserialized as an empty successful
+commit.
+
+| Raw top-level form | Legacy | V1 | V2 | Result |
+| --- | --- | --- | --- |
+| `eventCandidates` + `consistencyTags`, both once; V2 also has `expectedTagPositions` | accepted | accepted | accepted | Bound and routed normally; explicit empty arrays remain a successful empty commit. |
+| either or both required members absent | rejected | rejected | rejected | Fixed-message `MalformedSerializedCommitException`, before side effects. |
+| `candidates` and/or `consistency`, alone or mixed with official names | rejected | rejected | rejected | Alias dialects are never silently ignored. |
+| duplicate or case-variant official names (`eventCandidates`, `consistencyTags`, `expectedTagPositions`) | rejected | rejected | rejected | Ambiguous protocol shape fails closed. |
+| complete official shape plus an unrelated member such as `x-trace` | accepted | accepted | accepted | Extension member is ignored by the contract binder. |
+
+`{"eventCandidates":[],"consistencyTags":[]}` is intentionally accepted; `{"consistencyTags":[]}` is intentionally
+rejected. Consumers such as **SekibanWasmRuntime** must consume the release containing this gate and independently prove
+their own request binder: this package cannot make a downstream binder stop coalescing missing arrays by itself.
 
 ### Ownership and compatibility-claim guidance
 

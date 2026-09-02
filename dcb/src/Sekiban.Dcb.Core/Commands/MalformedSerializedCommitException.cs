@@ -16,7 +16,19 @@ public enum SerializedCommitShapeError
     /// <summary>The legacy unversioned payload does not bind to the contract shape.</summary>
     LegacyPayloadInvalid,
     /// <summary>The known-version (V1) payload does not bind to the contract shape.</summary>
-    VersionedPayloadInvalid
+    VersionedPayloadInvalid,
+    /// <summary>One or both official collection members are absent from the raw envelope.</summary>
+    MissingOfficialCollectionMembers,
+    /// <summary>A legacy client alias such as <c>candidates</c> or <c>consistency</c> is present.</summary>
+    AliasedCollectionMember,
+    /// <summary>An official top-level collection member appears more than once.</summary>
+    DuplicateCollectionMember,
+    /// <summary>A case-variant of an official top-level collection member is present.</summary>
+    AmbiguousCollectionMemberCasing,
+    /// <summary>The V2-only <c>expectedTagPositions</c> collection is absent.</summary>
+    MissingV2ExpectedTagPositions,
+    /// <summary>The V2-only <c>expectedTagPositions</c> collection was supplied to a legacy or V1 envelope.</summary>
+    UnexpectedV2ExpectedTagPositions
 }
 
 /// <summary>
@@ -47,6 +59,12 @@ public sealed class MalformedSerializedCommitException : Exception
         SerializedCommitShapeError.UnreadableJson => "Malformed serialized commit envelope: the request is not well-formed JSON.",
         SerializedCommitShapeError.LegacyPayloadInvalid => "Malformed serialized commit envelope: the legacy unversioned payload does not match the contract shape.",
         SerializedCommitShapeError.VersionedPayloadInvalid => "Malformed serialized commit envelope: the versioned (V1) payload does not match the contract shape.",
+        SerializedCommitShapeError.MissingOfficialCollectionMembers => "Malformed serialized commit envelope: both required official collection members must be present exactly once.",
+        SerializedCommitShapeError.AliasedCollectionMember => "Malformed serialized commit envelope: aliased collection member names are not accepted.",
+        SerializedCommitShapeError.DuplicateCollectionMember => "Malformed serialized commit envelope: an official collection member appears more than once.",
+        SerializedCommitShapeError.AmbiguousCollectionMemberCasing => "Malformed serialized commit envelope: official collection member names must use exact camelCase spelling.",
+        SerializedCommitShapeError.MissingV2ExpectedTagPositions => "Malformed serialized commit envelope: V2 requires the expectedTagPositions collection member.",
+        SerializedCommitShapeError.UnexpectedV2ExpectedTagPositions => "Malformed serialized commit envelope: expectedTagPositions is valid only for V2.",
         _ => "Malformed serialized commit envelope."
     };
 }
