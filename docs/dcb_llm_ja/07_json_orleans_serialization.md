@@ -149,10 +149,10 @@ WASM 境界で使用される公式 serialized-commit ワイヤ契約の正規�
 受理は `ISerializedCommitAcceptor` / `SerializedCommitAcceptor` による任意かつ追加的なものです (既存インターフェイスへの
 メンバ追加はありません)。二段階です。
 
-1. **フェーズ 1 — 生の識別** (`SerializedCommitVersionDiscriminator`): `version` プロパティを、型付きペイロードの
-   バインド・base64 デコード・タグ予約・EventId 採番・executor/store 呼び出しの前に、生の UTF-8 バイトから読み取ります。
-   識別子は **厳密な** 序数プロパティ名 `version` (契約の camelCase 表記) です。照合は意図的に **大文字小文字を区別** し、
-   周囲の大文字小文字非依存は一切使いません。
+1. **フェーズ 1 — 生の識別と形状ゲート** (`SerializedCommitVersionDiscriminator`): `version` プロパティとトップレベルの
+   collection-member 形状を、型付きペイロードのバインド・base64 デコード・タグ予約・EventId 採番・executor/store 呼び出しの前に、
+   生の UTF-8 バイトから読み取ります。識別子は **厳密な** 序数プロパティ名 `version` (契約の camelCase 表記) です。照合は意図的に
+   **大文字小文字を区別** し、周囲の大文字小文字非依存は一切使いません。
    - `version` もその大小文字違いも無し → レガシー経路。
    - 厳密な整数 `version` が 1 → 既知バージョン。
    - 厳密な整数 `version` が 1 以外 → **`UnsupportedSerializedCommitEnvelopeVersionException`** (副作用の前に fail closed)。
@@ -161,12 +161,33 @@ WASM 境界で使用される公式 serialized-commit ワイヤ契約の正規�
    - 非オブジェクトのルート、非整数 `version`、厳密な `version` の重複 → **`MalformedSerializedCommitException`** (別種の
      型付き shape エラー)。この型付きエラーは **秘密安全** で、閉じた理由コードと固定メッセージのみを持ち、問題の JSON・
      キー・ペイロード/base64・型名・生のパーサ例外を一切含みません。
+   - legacy/V1/V2 のすべてで `eventCandidates` と `consistencyTags` はそれぞれ厳密に 1 回必要です。V2 では
+     `expectedTagPositions` も厳密に 1 回必要であり、conditional write が unconditional write に黙って変わらないよう、
+     この V2 専用 member は legacy/V1 では拒否されます。`candidates` と `consistency` はフォールバック名ではなく拒否対象の
+     alias です。
 2. **フェーズ 2 — バインド + ルーティング**: 解決された形状のみをバインドします。version 欠如はレガシー公式形状であり、
    `LegacyUnversionedSerializedCommitAdapter` が V1 へ無損失にリフトします (イベント単位のタグを保持、per-commit-tag
    モデルは介在しません)。既知バージョンは `VersionedSerializedCommitRequest` をバインドします。バインド失敗 (不正な V1
    ペイロードを含む) は型付き `MalformedSerializedCommitException` として報告され、null 参照にはなりません。いずれの
    経路も同じイベント候補 + 整合性タグを `ISerializedSekibanDcbExecutor.CommitSerializableEventsAsync` へ同一セマンティクス
    でルーティングします。
+
+### 生の形状マトリクス (SEK-G51)
+
+このゲートは strict-schema migration ではありません。無関係なトップレベル拡張 member は許容し、欠如・alias・曖昧さによって
+空の成功コミットとしてデシリアライズされ得る protocol name だけを保護します。
+
+| 生のトップレベル形状 | Legacy | V1 | V2 | 結果 |
+| --- | --- | --- | --- | --- |
+| `eventCandidates` + `consistencyTags` が各 1 回。V2 は `expectedTagPositions` も持つ | 許可 | 許可 | 許可 | 通常どおり bind + route。明示的な空配列ペアは空コミットとして成功します。 |
+| 必須 member の片方または両方が欠如 | 拒否 | 拒否 | 拒否 | 副作用前に固定メッセージの `MalformedSerializedCommitException`。 |
+| `candidates` / `consistency` が単独または公式名と混在 | 拒否 | 拒否 | 拒否 | Alias dialect を黙って無視しません。 |
+| 公式名 (`eventCandidates`、`consistencyTags`、`expectedTagPositions`) の重複または大小文字違い | 拒否 | 拒否 | 拒否 | 曖昧な protocol shape は fail closed。 |
+| 完全な公式形状 + `x-trace` のような無関係 member | 許可 | 許可 | 許可 | 契約 binder は extension member を無視します。 |
+
+`{"eventCandidates":[],"consistencyTags":[]}` は意図的に許可され、`{"consistencyTags":[]}` は意図的に拒否されます。
+**SekibanWasmRuntime** などの consumer はこのゲートを含む release を取り込み、自身の request binder を個別に証明する必要があります。
+このパッケージだけでは downstream binder の欠如配列 coalesce を停止できません。
 
 ### 所有と互換性主張のガイダンス
 

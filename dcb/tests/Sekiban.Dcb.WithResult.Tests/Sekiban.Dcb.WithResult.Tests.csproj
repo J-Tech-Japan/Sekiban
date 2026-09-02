@@ -88,6 +88,7 @@
              authority (not regenerated from current DTOs). See SerializedCommitWire/goldens/PROVENANCE.md. -->
         <EmbeddedResource Include="SerializedCommitWire/goldens/legacy_1017_unversioned.json" />
         <EmbeddedResource Include="SerializedCommitWire/goldens/legacy_1017_empty.json" />
+        <EmbeddedResource Include="SerializedCommitWire/goldens/ts_client_aliased_unversioned.json" />
         <!-- SEK-G53: path filters and the controlled-memory gate are executable workflow contract, not documentation. -->
         <EmbeddedResource Include="..\..\..\.github\workflows\run_test_dcb.yml" Link="run_test_dcb.yml" />
     </ItemGroup>

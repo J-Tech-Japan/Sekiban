@@ -8,10 +8,11 @@ namespace Sekiban.Dcb.Commands;
 /// <summary>
 ///     SEK-G17 default two-phase implementation of <see cref="ISerializedCommitAcceptor" />.
 ///     <para>
-///         Phase 1 (<see cref="SerializedCommitVersionDiscriminator" />) reads the raw <c>version</c> discriminator. An
-///         unsupported version fails closed with <see cref="UnsupportedSerializedCommitEnvelopeVersionException" /> and a
-///         structurally invalid envelope with <see cref="MalformedSerializedCommitException" /> — BOTH before any typed
-///         binding, base64 decode, tag reservation, EventId allocation, or executor/store call.
+///         Phase 1 (<see cref="SerializedCommitVersionDiscriminator" />) reads the raw <c>version</c> discriminator and
+///         validates the official collection-member shape. An unsupported version fails closed with
+///         <see cref="UnsupportedSerializedCommitEnvelopeVersionException" /> and a structurally invalid envelope with
+///         <see cref="MalformedSerializedCommitException" /> — BOTH before any typed binding, base64 decode, tag
+///         reservation, EventId allocation, or executor/store call.
 ///     </para>
 ///     <para>
 ///         Phase 2 binds only the resolved shape: a missing version is the legacy official shape (lifted losslessly to V1
@@ -35,7 +36,7 @@ public sealed class SerializedCommitAcceptor : ISerializedCommitAcceptor
         ReadOnlyMemory<byte> utf8Json,
         CancellationToken cancellationToken = default)
     {
-        // Phase 1: raw version discrimination — no typed binding / no side effect yet.
+        // Phase 1: raw version + official collection-member discrimination — no typed binding / no side effect yet.
         var discrimination = SerializedCommitVersionDiscriminator.Read(utf8Json.Span);
         switch (discrimination.Kind)
         {
