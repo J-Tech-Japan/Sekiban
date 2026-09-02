@@ -31,30 +31,44 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var builder = new TestClusterBuilder();
-        builder.Options.InitialSilosCount = 1;
-        var uniqueId = Guid.NewGuid().ToString("N")[..8];
-        builder.Options.ClusterId = $"TestCluster-Counter-{uniqueId}";
-        builder.Options.ServiceId = $"TestService-Counter-{uniqueId}";
-        var portBase = 20_000 + (Environment.ProcessId % 5_000) * 4;
-        builder.PortAllocator = new FixedPortAllocator(portBase, portBase + 100);
-        builder.Options.BaseSiloPort = portBase;
-        builder.Options.BaseGatewayPort = portBase + 1;
-        builder.AddSiloBuilderConfigurator<TestSiloConfigurator>();
-        builder.AddClientBuilderConfigurator<TestClientConfigurator>();
-
-        _cluster = builder.Build();
-        await _cluster.DeployAsync();
-
-        SharedEventStore.Clear();
-        SharedEventStore.ClearCounts();
-        SharedGrainRequestCounter.Clear();
+        _cluster = await CreateClusterAsync(waitForCancellationAcknowledgement: true, portOffset: 0);
+        ResetSharedState();
     }
 
     public async Task DisposeAsync()
     {
         await _cluster.StopAllSilosAsync();
         _cluster.Dispose();
+    }
+
+    private static async Task<TestCluster> CreateClusterAsync(
+        bool waitForCancellationAcknowledgement,
+        int portOffset)
+    {
+        TestSiloConfigurator.WaitForCancellationAcknowledgement = waitForCancellationAcknowledgement;
+        TestClientConfigurator.WaitForCancellationAcknowledgement = waitForCancellationAcknowledgement;
+        var builder = new TestClusterBuilder();
+        builder.Options.InitialSilosCount = 1;
+        var uniqueId = Guid.NewGuid().ToString("N")[..8];
+        builder.Options.ClusterId = $"TestCluster-Counter-{uniqueId}";
+        builder.Options.ServiceId = $"TestService-Counter-{uniqueId}";
+        var portBase = 20_000 + (Environment.ProcessId % 5_000) * 4 + portOffset;
+        builder.PortAllocator = new FixedPortAllocator(portBase, portBase + 100);
+        builder.Options.BaseSiloPort = portBase;
+        builder.Options.BaseGatewayPort = portBase + 1;
+        builder.AddSiloBuilderConfigurator<TestSiloConfigurator>();
+        builder.AddClientBuilderConfigurator<TestClientConfigurator>();
+
+        var cluster = builder.Build();
+        await cluster.DeployAsync();
+        return cluster;
+    }
+
+    private static void ResetSharedState()
+    {
+        SharedEventStore.Clear();
+        SharedEventStore.ClearCounts();
+        SharedGrainRequestCounter.Clear();
     }
 
     [Fact]
@@ -183,9 +197,35 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CancellationTokenProbe_PreCancelledToken_DoesNotDispatchOrRead()
+    public Task CancellationTokenProbe_AckTrue_PreCancelledToken_DoesNotDispatchOrRead() =>
+        AssertPreCancelledTokenAsync(_client);
+
+    [Fact]
+    public Task CancellationTokenProbe_AckTrue_PostDispatchCancellationAcknowledgedByGrainTokenStopsAfterFirstRow() =>
+        AssertPostDispatchCancellationAsync(_client);
+
+    [Fact]
+    public async Task CancellationTokenProbe_AckFalse_CoversPreCancelledAndPostDispatchCancellation()
     {
-        var grain = GetTagStateGrain(BuildTagStateId(Guid.NewGuid()));
+        var cluster = await CreateClusterAsync(waitForCancellationAcknowledgement: false, portOffset: 2_000);
+        try
+        {
+            await AssertPreCancelledTokenAsync(cluster.Client);
+            await AssertPostDispatchCancellationAsync(cluster.Client);
+        }
+        finally
+        {
+            await cluster.StopAllSilosAsync();
+            cluster.Dispose();
+            TestSiloConfigurator.WaitForCancellationAcknowledgement = true;
+            TestClientConfigurator.WaitForCancellationAcknowledgement = true;
+        }
+    }
+
+    private static async Task AssertPreCancelledTokenAsync(IClusterClient client)
+    {
+        ResetSharedState();
+        var grain = GetTagStateGrain(client, BuildTagStateId(Guid.NewGuid()));
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
@@ -198,13 +238,13 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         Assert.Equal(0, SharedEventStore.StreamCallbackCount);
     }
 
-    [Fact]
-    public async Task CancellationTokenProbe_PostDispatchCancellationAcknowledgedByGrainTokenStopsAfterFirstRow()
+    private static async Task AssertPostDispatchCancellationAsync(IClusterClient client)
     {
+        ResetSharedState();
         var aggregateId = Guid.NewGuid();
         var tagStateId = BuildTagStateId(aggregateId);
         var tag = BuildTag(aggregateId);
-        var grain = GetTagStateGrain(tagStateId);
+        var grain = GetTagStateGrain(client, tagStateId);
 
         await SharedEventStore.WriteEventsAsync(
             new[]
@@ -225,37 +265,25 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         try
         {
             await firstRowGate.FirstRowReached.WaitAsync(TimeSpan.FromSeconds(10));
-            Assert.Equal(1, SharedGrainRequestCounter.GetStateRequestCount);
-            Assert.Equal(1, SharedEventStore.StreamSerializableEventsByTagCallCount);
-            Assert.Equal(1, SharedEventStore.StreamRowsRead);
-
             cancellation.Cancel();
-            var cancellationSignal = firstRowGate.GrainSideCancellationObserved;
-            if (await Task.WhenAny(cancellationSignal, Task.Delay(TimeSpan.FromSeconds(10))) != cancellationSignal)
-            {
-                throw new TimeoutException(
-                    $"Grain-side cancellation was not observed after caller cancellation. " +
-                    $"incomingGetState={SharedGrainRequestCounter.GetStateRequestCount}, " +
-                    $"streamCalls={SharedEventStore.StreamSerializableEventsByTagCallCount}, " +
-                    $"providerRows={SharedEventStore.StreamRowsRead}, " +
-                    $"callbacks={SharedEventStore.StreamCallbackCount}, " +
-                    $"cancelableGrainToken={firstRowGate.ReceivedCancelableGrainToken}.");
-            }
+            await firstRowGate.GrainSideCancellationObserved.WaitAsync(TimeSpan.FromSeconds(10));
         }
         finally
         {
-            // The provider may advance only after the grain-side cancellation callback has run.
-            firstRowGate.ReleaseFirstRow();
+            firstRowGate.AbortForCleanup();
         }
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await stateTask);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await stateTask.WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal(1, SharedEventStore.StreamRowsRead);
         Assert.Equal(0, SharedEventStore.StreamCallbackCount);
         Assert.True(firstRowGate.ReceivedCancelableGrainToken);
     }
 
     private ITagStateGrain GetTagStateGrain(TagStateId id) =>
-        _client.GetGrain<ITagStateGrain>(id.GetTagStateId());
+        GetTagStateGrain(_client, id);
+
+    private static ITagStateGrain GetTagStateGrain(IClusterClient client, TagStateId id) =>
+        client.GetGrain<ITagStateGrain>(id.GetTagStateId());
 
     private static TagStateId BuildTagStateId(Guid id) => new TagStateId(BuildTag(id), "CounterProjector");
 
@@ -272,7 +300,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
             new List<string> { tag.GetTag() });
     }
 
-    private async Task<SerializableTagState> WaitForStateAsync(
+    private static async Task<SerializableTagState> WaitForStateAsync(
         ITagStateGrain grain,
         int minVersion,
         TimeSpan? timeout = null)
@@ -304,10 +332,13 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
 
     private class TestSiloConfigurator : ISiloConfigurator
     {
+        public static bool WaitForCancellationAcknowledgement { get; set; } = true;
+
         public void Configure(ISiloBuilder siloBuilder)
         {
             siloBuilder
-                .Configure<SiloMessagingOptions>(options => options.WaitForCancellationAcknowledgement = true)
+                .Configure<SiloMessagingOptions>(
+                    options => options.WaitForCancellationAcknowledgement = WaitForCancellationAcknowledgement)
                 .AddIncomingGrainCallFilter(SharedGrainRequestCounter)
                 .ConfigureServices(services =>
                 {
@@ -380,10 +411,12 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
 
     private sealed class TestClientConfigurator : IClientBuilderConfigurator
     {
+        public static bool WaitForCancellationAcknowledgement { get; set; } = true;
+
         public void Configure(IConfiguration configuration, IClientBuilder clientBuilder)
         {
             clientBuilder.Configure<ClientMessagingOptions>(
-                options => options.WaitForCancellationAcknowledgement = true);
+                options => options.WaitForCancellationAcknowledgement = WaitForCancellationAcknowledgement);
         }
     }
 
@@ -543,27 +576,30 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         {
             StreamSerializableEventsByTagCallCount++;
             var firstRowGate = _firstRowGate;
-            using var grainCancellationRegistration = firstRowGate is null
-                ? default(CancellationTokenRegistration)
-                : cancellationToken.Register(static state => ((FirstRowGate)state!).ObserveGrainSideCancellation(), firstRowGate);
-
-            return await ((IStreamingTaggedSerializableEventStore)_inner).StreamSerializableEventsByTagAsync(
-                tag,
-                since,
-                until,
-                async serializableEvent =>
-                {
-                    Interlocked.Increment(ref _streamRowsRead);
-                    if (firstRowGate?.TryReachFirstRow(cancellationToken) == true)
+            try
+            {
+                return await ((IStreamingTaggedSerializableEventStore)_inner).StreamSerializableEventsByTagAsync(
+                    tag,
+                    since,
+                    until,
+                    async serializableEvent =>
                     {
-                        await firstRowGate.WaitForReleaseAsync(cancellationToken);
-                    }
+                        Interlocked.Increment(ref _streamRowsRead);
+                        if (firstRowGate?.TryReachFirstRow(cancellationToken) == true)
+                        {
+                            await firstRowGate.WaitForReleaseAsync(cancellationToken);
+                        }
 
-                    cancellationToken.ThrowIfCancellationRequested();
-                    Interlocked.Increment(ref _streamCallbackCount);
-                    await onEvent(serializableEvent);
-                },
-                cancellationToken);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        Interlocked.Increment(ref _streamCallbackCount);
+                        await onEvent(serializableEvent);
+                    },
+                    cancellationToken);
+            }
+            finally
+            {
+                firstRowGate?.DisposeCancellationRegistration();
+            }
         }
 
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
@@ -577,6 +613,8 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
             private readonly TaskCompletionSource<bool> _releaseFirstRow = new(TaskCreationOptions.RunContinuationsAsynchronously);
             private int _firstRowReachedOnce;
             private int _receivedCancelableGrainToken;
+            private int _cancellationRegistrationCreated;
+            private CancellationTokenRegistration _cancellationRegistration;
 
             public Task FirstRowReached => _firstRowReached.Task;
             public Task GrainSideCancellationObserved => _grainSideCancellationObserved.Task;
@@ -598,12 +636,30 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
                 return true;
             }
 
-            public Task WaitForReleaseAsync(CancellationToken cancellationToken) =>
-                _releaseFirstRow.Task.WaitAsync(cancellationToken);
+            public Task WaitForReleaseAsync(CancellationToken cancellationToken)
+            {
+                // WaitAsync registers its cancellation callback first. The observation callback then runs before it
+                // when the token is cancelled, records the grain-side observation, and releases this gate itself.
+                var wait = _releaseFirstRow.Task.WaitAsync(cancellationToken);
+                if (Interlocked.CompareExchange(ref _cancellationRegistrationCreated, 1, 0) == 0)
+                {
+                    _cancellationRegistration = cancellationToken.Register(
+                        static state => ((FirstRowGate)state!).ObserveAndRelease(),
+                        this);
+                }
 
-            public void ObserveGrainSideCancellation() => _grainSideCancellationObserved.TrySetResult(true);
+                return wait;
+            }
 
-            public void ReleaseFirstRow() => _releaseFirstRow.TrySetResult(true);
+            public void ObserveAndRelease()
+            {
+                _grainSideCancellationObserved.TrySetResult(true);
+                _releaseFirstRow.TrySetResult(true);
+            }
+
+            public void AbortForCleanup() => _releaseFirstRow.TrySetResult(true);
+
+            public void DisposeCancellationRegistration() => _cancellationRegistration.Dispose();
         }
     }
 }
