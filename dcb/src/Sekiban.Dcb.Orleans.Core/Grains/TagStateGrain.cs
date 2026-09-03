@@ -56,8 +56,12 @@ public class TagStateGrain : Grain, ITagStateGrain
         return Task.FromResult(_tagStateId.GetTagStateId());
     }
 
-    public async Task<SerializableTagState> GetStateAsync()
+    public Task<SerializableTagState> GetStateAsync() => GetStateAsync(CancellationToken.None);
+
+    public async Task<SerializableTagState> GetStateAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (_tagStateId == null)
         {
             // Return empty serializable state
@@ -73,7 +77,8 @@ public class TagStateGrain : Grain, ITagStateGrain
                 nameof(EmptyTagStatePayload));
         }
 
-        var latestSortableUniqueId = await GetLatestSortableUniqueIdAsync(_tagStateId);
+        var latestSortableUniqueId = await GetLatestSortableUniqueIdAsync(_tagStateId, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var cachedState = _cache.State?.CachedState;
 
         var projectorVersionResult = _tagProjectorTypes.GetProjectorVersion(_tagStateId.TagProjectorName);
@@ -93,7 +98,8 @@ public class TagStateGrain : Grain, ITagStateGrain
         var tag = _tagTypes.GetTag($"{_tagStateId.TagGroup}:{_tagStateId.TagContent}");
         var taggedStream = SekibanDcbCapabilityResolver.ResolveTaggedStream(_eventStore, "event store");
 
-        using var accumulator = await _tagStateProjectionPrimitive.CreateAccumulatorAsync(_tagStateId);
+        using var accumulator = await _tagStateProjectionPrimitive.CreateAccumulatorAsync(_tagStateId, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         if (!accumulator.ApplyState(usableCachedState))
         {
             throw new InvalidOperationException(
@@ -112,6 +118,8 @@ public class TagStateGrain : Grain, ITagStateGrain
                 until,
                 serializableEvent =>
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     if (!SekibanDcbCapabilityResolver.IsTaggedStreamOrderValid(
                             previousId,
                             serializableEvent.SortableUniqueIdValue,
@@ -137,7 +145,7 @@ public class TagStateGrain : Grain, ITagStateGrain
                             $"Tagged stream for {tag.GetTag()} exceeded captured head {latestSortableUniqueId}.");
                     }
 
-                    if (!accumulator.ApplyEvent(serializableEvent, latestSortableUniqueId, CancellationToken.None))
+                    if (!accumulator.ApplyEvent(serializableEvent, latestSortableUniqueId, cancellationToken))
                     {
                         throw new InvalidOperationException(
                             $"Failed to apply streamed event for tag state {_tagStateId.GetTagStateId()}");
@@ -146,9 +154,15 @@ public class TagStateGrain : Grain, ITagStateGrain
                     previousId = serializableEvent.SortableUniqueIdValue;
                     return ValueTask.CompletedTask;
                 },
-                CancellationToken.None);
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (!streamResult.IsSuccess)
             {
+                if (streamResult.GetException() is OperationCanceledException cancellationException)
+                {
+                    throw cancellationException;
+                }
+
                 throw new InvalidOperationException(
                     $"Failed to stream serialized events: {streamResult.GetException().Message}",
                     streamResult.GetException());
@@ -156,7 +170,8 @@ public class TagStateGrain : Grain, ITagStateGrain
         }
         else
         {
-            var eventsResult = await ReadSerializableEventsByTagAsync(tag, since);
+            var eventsResult = await ReadSerializableEventsByTagAsync(tag, since, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (!eventsResult.IsSuccess)
             {
                 throw new InvalidOperationException(
@@ -164,21 +179,39 @@ public class TagStateGrain : Grain, ITagStateGrain
                     eventsResult.GetException());
             }
 
-            if (!accumulator.ApplyEvents(eventsResult.GetValue(), latestSortableUniqueId))
+            // IEventStore's frozen list read cannot be interrupted. Once it returns, feed one ordered event at a time
+            // so every legacy/default accumulator receives a cancellation observation between events.
+            foreach (var serializableEvent in eventsResult.GetValue().OrderBy(
+                         @event => @event.SortableUniqueIdValue,
+                         StringComparer.Ordinal))
             {
-                throw new InvalidOperationException(
-                    $"Failed to apply events for tag state {_tagStateId.GetTagStateId()}");
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!accumulator.ApplyEvent(serializableEvent, latestSortableUniqueId, cancellationToken))
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to apply events for tag state {_tagStateId.GetTagStateId()}");
+                }
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var projectedState = accumulator.GetSerializedState();
+        // Cache persistence itself is token-unaware. The two checks define the public boundary: a cancellation
+        // observed before the write starts cannot publish the locally-folded state.
+        cancellationToken.ThrowIfCancellationRequested();
         _cache.State = new TagStateCacheState { CachedState = projectedState };
+        cancellationToken.ThrowIfCancellationRequested();
         await _cache.WriteStateAsync();
+        cancellationToken.ThrowIfCancellationRequested();
         return projectedState;
     }
 
-    public async Task<TagState> GetTagStateAsync()
+    public Task<TagState> GetTagStateAsync() => GetTagStateAsync(CancellationToken.None);
+
+    public async Task<TagState> GetTagStateAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (_tagStateId == null)
         {
             // Return empty tag state
@@ -192,7 +225,8 @@ public class TagStateGrain : Grain, ITagStateGrain
                 string.Empty);
         }
 
-        var serialized = await GetStateAsync();
+        var serialized = await GetStateAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         if (serialized.ResolvedPayloadName == nameof(EmptyTagStatePayload))
         {
             return new TagState(
@@ -208,6 +242,7 @@ public class TagStateGrain : Grain, ITagStateGrain
         var deserializeResult = _tagStatePayloadTypes.DeserializePayload(
             serialized.ResolvedPayloadName,
             serialized.Payload);
+        cancellationToken.ThrowIfCancellationRequested();
         if (!deserializeResult.IsSuccess)
         {
             throw new InvalidOperationException(
@@ -215,6 +250,7 @@ public class TagStateGrain : Grain, ITagStateGrain
                 deserializeResult.GetException());
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return new TagState(
             deserializeResult.GetValue(),
             serialized.Version,
@@ -299,16 +335,21 @@ public class TagStateGrain : Grain, ITagStateGrain
         return base.OnActivateAsync(cancellationToken);
     }
 
-    private async Task<string?> GetLatestSortableUniqueIdAsync(TagStateId tagStateId)
+    private async Task<string?> GetLatestSortableUniqueIdAsync(
+        TagStateId tagStateId,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var tagConsistentActorId = $"{tagStateId.TagGroup}:{tagStateId.TagContent}";
         var tagConsistentActorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tagConsistentActorId);
+        cancellationToken.ThrowIfCancellationRequested();
         if (!tagConsistentActorResult.IsSuccess)
         {
             return null;
         }
 
         var latestSortableUniqueIdResult = await tagConsistentActorResult.GetValue().GetLatestSortableUniqueIdAsync();
+        cancellationToken.ThrowIfCancellationRequested();
         return latestSortableUniqueIdResult.IsSuccess
             ? latestSortableUniqueIdResult.GetValue()
             : null;
@@ -347,9 +388,12 @@ public class TagStateGrain : Grain, ITagStateGrain
 
     private async Task<ResultBox<IReadOnlyList<SerializableEvent>>> ReadSerializableEventsByTagAsync(
         ITag tag,
-        SortableUniqueId? since)
+        SortableUniqueId? since,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var serializableResult = await _eventStore.ReadSerializableEventsByTagAsync(tag, since);
+        cancellationToken.ThrowIfCancellationRequested();
         if (serializableResult.IsSuccess)
         {
             return ResultBox.FromValue<IReadOnlyList<SerializableEvent>>(serializableResult.GetValue().ToList());

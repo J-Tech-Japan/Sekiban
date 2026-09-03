@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      This assembly deliberately compiles against the published pre-SEK-G55 contract. It knows only the token-less
+      ITagStateActorCommon member, so loading it against the current runtime proves that the additive default member
+      remains binary compatible and delegates exactly once.
+    -->
+    <PropertyGroup>
+        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <LangVersion>preview</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <GenerateSBOM>false</GenerateSBOM>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Sekiban.Dcb.Core" Version="10.18.0" />
+        <PackageReference Include="Sekiban.Dcb.Core.Model" Version="10.18.0" />
+        <PackageReference Include="Sekiban.Dcb.Orleans.Core" Version="10.18.0" />
+    </ItemGroup>
+
+</Project>

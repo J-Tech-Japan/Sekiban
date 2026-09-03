@@ -17,7 +17,19 @@ public interface ISekibanExecutor : ICommandExecutor
     /// <param name="tagStateId">The tag state identifier</param>
     /// <returns>ResultBox containing the tag state or error</returns>
     Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId);
+
+    /// <summary>
+    ///     Additive cancellation entry point. Existing executor implementations retain token-less behavior until they
+    ///     override this default compatibility fallback.
+    /// </summary>
+    Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId, CancellationToken cancellationToken) =>
+        GetTagStateAsync(tagStateId);
+
     Task<ResultBox<TagState>> GetTagStateAsync<TProjector>(ITag tag) where TProjector : ITagProjector<TProjector> => GetTagStateAsync(TagStateId.FromProjector<TProjector>(tag));
+
+    Task<ResultBox<TagState>> GetTagStateAsync<TProjector>(ITag tag, CancellationToken cancellationToken)
+        where TProjector : ITagProjector<TProjector> =>
+        GetTagStateAsync(TagStateId.FromProjector<TProjector>(tag), cancellationToken);
 
     /// <summary>
     ///     Execute a single-result query

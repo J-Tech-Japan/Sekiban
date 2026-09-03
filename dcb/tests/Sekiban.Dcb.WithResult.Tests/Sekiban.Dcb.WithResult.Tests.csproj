@@ -48,6 +48,10 @@
              old package graph never participates in this project's compile-time dependency resolution. -->
         <ProjectReference Include="..\Sekiban.Dcb.TagStateAccumulator.Legacy1018Fixture\Sekiban.Dcb.TagStateAccumulator.Legacy1018Fixture.csproj"
                           ReferenceOutputAssembly="false" />
+        <!-- A separately compiled pre-SEK-G55 actor implementor. Its output is loaded by reflection so the old
+             package graph never participates in this test project's compile-time dependency resolution. -->
+        <ProjectReference Include="..\Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture\Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture.csproj"
+                          ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <Target Name="BuildStreamingRestoreLegacy1018FixtureForCurrentTarget"
@@ -79,6 +83,19 @@
             <Output TaskParameter="TargetOutputs" ItemName="_TagStateAccumulatorLegacy1018FixtureOutput" />
         </MSBuild>
         <Copy SourceFiles="@(_TagStateAccumulatorLegacy1018FixtureOutput)"
+              DestinationFolder="$(OutputPath)"
+              SkipUnchangedFiles="true" />
+    </Target>
+
+    <Target Name="CopyTagStateCancellationLegacy1018Fixture"
+            AfterTargets="Build"
+            Condition="'$(TargetFramework)' != ''">
+        <MSBuild Projects="$(MSBuildProjectDirectory)/../Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture/Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture.csproj"
+                 Targets="Build;GetTargetPath"
+                 Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);ArtifactsPath=$(ArtifactsPath)">
+            <Output TaskParameter="TargetOutputs" ItemName="_TagStateCancellationLegacy1018FixtureOutput" />
+        </MSBuild>
+        <Copy SourceFiles="@(_TagStateCancellationLegacy1018FixtureOutput)"
               DestinationFolder="$(OutputPath)"
               SkipUnchangedFiles="true" />
     </Target>

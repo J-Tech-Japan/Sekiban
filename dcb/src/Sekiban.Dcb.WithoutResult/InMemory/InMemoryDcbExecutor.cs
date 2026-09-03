@@ -115,6 +115,9 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
     Task<TagState> ISekibanExecutor.GetTagStateAsync(TagStateId tagStateId) =>
         _inner.GetTagStateAsync(tagStateId);
 
+    Task<TagState> ISekibanExecutor.GetTagStateAsync(TagStateId tagStateId, CancellationToken cancellationToken) =>
+        _inner.GetTagStateAsync(tagStateId, cancellationToken);
+
     Task<TResult> ISekibanExecutor.QueryAsync<TResult>(IQueryCommon<TResult> queryCommon) =>
         _inner.QueryAsync(queryCommon);
 

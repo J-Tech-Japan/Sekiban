@@ -192,6 +192,13 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
             new BoundaryContext("ISekibanExecutor.GetTagStateAsync", tagStateId.GetTagStateId()));
     }
 
+    public async Task<TagState> GetTagStateAsync(TagStateId tagStateId, CancellationToken cancellationToken)
+    {
+        return await GuardedUnwrap.UnwrapAsync(
+            _core.GetTagStateAsync(tagStateId, cancellationToken),
+            new BoundaryContext("ISekibanExecutor.GetTagStateAsync", tagStateId.GetTagStateId()));
+    }
+
     /// <summary>
     ///     Execute a single-result query
     /// </summary>

@@ -56,14 +56,34 @@ public class TagStateService
     public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(string tagString, string projectorName) =>
         ConvertProjectionAsync(_inner.ProjectTagStateAsync(tagString, projectorName));
 
+    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(
+        string tagString,
+        string projectorName,
+        CancellationToken cancellationToken) =>
+        ConvertProjectionAsync(_inner.ProjectTagStateAsync(tagString, projectorName, cancellationToken));
+
     public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(string tagString) =>
         ConvertProjectionAsync(_inner.ProjectTagStateAsync(tagString));
+
+    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(
+        string tagString,
+        CancellationToken cancellationToken) =>
+        ConvertProjectionAsync(_inner.ProjectTagStateAsync(tagString, cancellationToken));
 
     public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(ITag tag) =>
         ConvertProjectionAsync(_inner.ProjectTagStateAsync(tag));
 
+    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(ITag tag, CancellationToken cancellationToken) =>
+        ConvertProjectionAsync(_inner.ProjectTagStateAsync(tag, cancellationToken));
+
     public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(ITag tag, string projectorName) =>
         ConvertProjectionAsync(_inner.ProjectTagStateAsync(tag, projectorName));
+
+    public Task<ResultBox<TagStateProjectionResult>> ProjectTagStateAsync(
+        ITag tag,
+        string projectorName,
+        CancellationToken cancellationToken) =>
+        ConvertProjectionAsync(_inner.ProjectTagStateAsync(tag, projectorName, cancellationToken));
 
     /// <inheritdoc cref="CoreTagStateService.GetAllTagProjectorNames" />
     public IReadOnlyList<string> GetAllTagProjectorNames() => _inner.GetAllTagProjectorNames();

@@ -157,6 +157,9 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId) =>
         _core.GetTagStateAsync(tagStateId);
 
+    public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId, CancellationToken cancellationToken) =>
+        _core.GetTagStateAsync(tagStateId, cancellationToken);
+
     /// <summary>
     ///     Execute a single-result query
     /// </summary>

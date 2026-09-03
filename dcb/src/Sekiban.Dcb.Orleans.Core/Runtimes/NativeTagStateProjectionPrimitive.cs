@@ -119,6 +119,7 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
             string? latestSortableUniqueId,
             CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!_hasProjector)
             {
                 _version = 0;
@@ -129,6 +130,7 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
 
             foreach (var serializableEvent in events.OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!ApplyEvent(serializableEvent, latestSortableUniqueId, cancellationToken))
                 {
                     return false;
@@ -147,6 +149,7 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
             string? latestSortableUniqueId,
             CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!_hasProjector)
             {
                 _version = 0;
@@ -169,11 +172,13 @@ public sealed class NativeTagStateProjectionPrimitive : ITagStateProjectionPrimi
             }
 
             var eventResult = serializableEvent.ToEvent(_eventTypes);
+            cancellationToken.ThrowIfCancellationRequested();
             if (!eventResult.IsSuccess)
             {
                 return false;
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             _currentPayload = _projector!(_currentPayload, eventResult.GetValue());
             _version++;
             _lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;

@@ -139,6 +139,9 @@ public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntime
 
         public Task<SerializableTagState> GetStateAsync() => _grain.GetStateAsync();
 
+        public Task<SerializableTagState> GetStateAsync(CancellationToken cancellationToken) =>
+            _grain.GetStateAsync(cancellationToken);
+
         public Task<string> GetTagStateActorIdAsync() => _grain.GetTagStateActorIdAsync();
     }
 }

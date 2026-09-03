@@ -507,6 +507,56 @@ public class TaggedStreamContractTests
     }
 
     [Fact]
+    public async Task CoreAndSqliteTagStateServices_PropagateCancellationToTheNativeStream()
+    {
+        var eventTypes = new SimpleEventTypes();
+        eventTypes.RegisterEventType<ServiceCounterAdded>();
+        var tagTypes = new SimpleTagTypes();
+        var projectors = new SimpleTagProjectorTypes();
+        projectors.RegisterProjector<ServiceCounterProjector>();
+        var tag = new StreamTag("service-cancellation");
+        var events = new[]
+        {
+            new SerializableEvent(
+                JsonSerializer.SerializeToUtf8Bytes(new ServiceCounterAdded(3)),
+                P1,
+                Guid.NewGuid(),
+                new EventMetadata("cause", "correlation", "user"),
+                new List<string> { tag.GetTag() },
+                nameof(ServiceCounterAdded)),
+            new SerializableEvent(
+                JsonSerializer.SerializeToUtf8Bytes(new ServiceCounterAdded(4)),
+                P2,
+                Guid.NewGuid(),
+                new EventMetadata("cause", "correlation", "user"),
+                new List<string> { tag.GetTag() },
+                nameof(ServiceCounterAdded))
+        };
+
+        var coreStore = new GatedServiceStreamStore(events);
+        var core = new CoreTagStateService(
+            coreStore,
+            eventTypes,
+            tagTypes,
+            projectors,
+            new JsonSerializerOptions());
+        await AssertServiceCancellationAsync(
+            coreStore,
+            cancellationToken => core.ProjectTagStateAsync(tag, ServiceCounterProjector.ProjectorName, cancellationToken));
+
+        var sqliteStore = new GatedServiceStreamStore(events);
+        var sqlite = new SqliteTagStateService(
+            sqliteStore,
+            eventTypes,
+            tagTypes,
+            projectors,
+            new JsonSerializerOptions());
+        await AssertServiceCancellationAsync(
+            sqliteStore,
+            cancellationToken => sqlite.ProjectTagStateAsync(tag, ServiceCounterProjector.ProjectorName, cancellationToken));
+    }
+
+    [Fact]
     public void DcbWorkflow_ObservesEveryTouchedProviderAndSetsTheTaggedStreamControlledMemoryGate()
     {
         var assembly = typeof(TaggedStreamContractTests).Assembly;
@@ -520,11 +570,17 @@ public class TaggedStreamContractTests
         foreach (var requiredPath in new[]
                  {
                      "dcb/src/Sekiban.Dcb.Core/**",
+                     "dcb/src/Sekiban.Dcb.WithResult/**",
+                     "dcb/src/Sekiban.Dcb.WithoutResult/**",
                      "dcb/src/Sekiban.Dcb.Orleans.Core/**",
+                     "dcb/src/Sekiban.Dcb.Orleans.WithResult/**",
+                     "dcb/src/Sekiban.Dcb.Orleans.WithoutResult/**",
                      "dcb/src/Sekiban.Dcb.Postgres/**",
                      "dcb/src/Sekiban.Dcb.Sqlite/**",
                      "dcb/src/Sekiban.Dcb.ColdStorage/**",
                      "dcb/tests/Sekiban.Dcb.WithResult.Tests/**",
+                     "dcb/tests/Sekiban.Dcb.WithoutResult.Tests/**",
+                     "dcb/tests/Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture/**",
                      "dcb/tests/Sekiban.Dcb.Orleans.Tests/**",
                      "dcb/tests/Sekiban.Dcb.Postgres.Tests/**",
                      "dcb/tests/Sekiban.Dcb.ColdEvents.Tests/**"
@@ -535,6 +591,12 @@ public class TaggedStreamContractTests
 
         Assert.Contains("SEKIBAN_TAG_STREAM_CONTROLLED_CEILING: '1'", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("SEKIBAN_STREAM_RESTORE_CONTROLLED_CEILING", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "dotnet test dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains("-f net9.0", workflow, StringComparison.Ordinal);
+        Assert.Contains("-f net10.0", workflow, StringComparison.Ordinal);
     }
 
     private static SerializableEvent Event(string sortableUniqueId, ITag tag) =>
@@ -547,6 +609,37 @@ public class TaggedStreamContractTests
             new EventMetadata("cause", "correlation", "user"),
             new List<string> { tag.GetTag() },
             nameof(StudentCreated));
+
+    private static async Task AssertServiceCancellationAsync<TProjection>(
+        GatedServiceStreamStore store,
+        Func<CancellationToken, Task<ResultBox<TProjection>>> project)
+        where TProjection : notnull
+    {
+        using (var preCancelled = new CancellationTokenSource())
+        {
+            preCancelled.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await project(preCancelled.Token));
+            Assert.Equal(0, store.StreamCalls);
+            Assert.Equal(0, store.RowsRead);
+        }
+
+        using var cancellation = new CancellationTokenSource();
+        var projectTask = project(cancellation.Token);
+        try
+        {
+            await store.FirstRowReached.WaitAsync(TimeSpan.FromSeconds(10));
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await projectTask);
+        }
+        finally
+        {
+            store.ReleaseFirstRow();
+        }
+
+        Assert.Equal(cancellation.Token, store.ReceivedCancellationToken);
+        Assert.Equal(1, store.RowsRead);
+        Assert.Equal(0, store.ConsumerCallbacks);
+    }
 
     private sealed class StreamTag(string content) : ITag
     {
@@ -644,6 +737,58 @@ public class TaggedStreamContractTests
 
             return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastId));
         }
+    }
+
+    private sealed class GatedServiceStreamStore(IReadOnlyList<SerializableEvent> events) : EmptyStore,
+        IStreamingTaggedSerializableEventStore, ITaggedStreamCapabilityProvider
+    {
+        private readonly IReadOnlyList<SerializableEvent> _events = events;
+        private readonly TaskCompletionSource _firstRowReached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseFirstRow = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _streamCalls;
+        private int _rowsRead;
+        private int _consumerCallbacks;
+
+        public int StreamCalls => _streamCalls;
+        public int RowsRead => _rowsRead;
+        public int ConsumerCallbacks => _consumerCallbacks;
+        public CancellationToken ReceivedCancellationToken { get; private set; }
+        public Task FirstRowReached => _firstRowReached.Task;
+
+        public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+            TaggedStreamCapabilityDescriptor.Native("service cancellation gate");
+
+        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _streamCalls);
+            ReceivedCancellationToken = cancellationToken;
+            var count = 0;
+            string? lastSortableUniqueId = null;
+            foreach (var serializableEvent in _events)
+            {
+                var row = Interlocked.Increment(ref _rowsRead);
+                if (row == 1)
+                {
+                    _firstRowReached.TrySetResult();
+                    await _releaseFirstRow.Task.WaitAsync(cancellationToken);
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                Interlocked.Increment(ref _consumerCallbacks);
+                await onEvent(serializableEvent);
+                count++;
+                lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
+            }
+
+            return ResultBox.FromValue(new SerializableEventStreamReadResult(count, lastSortableUniqueId));
+        }
+
+        public void ReleaseFirstRow() => _releaseFirstRow.TrySetResult();
     }
 
     private sealed record ServiceCounterAdded(int Delta) : IEventPayload;

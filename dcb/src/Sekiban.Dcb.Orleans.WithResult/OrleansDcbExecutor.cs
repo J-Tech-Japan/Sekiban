@@ -150,6 +150,9 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId) =>
         _generalExecutor.GetTagStateAsync(tagStateId);
 
+    public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId, CancellationToken cancellationToken) =>
+        _generalExecutor.GetTagStateAsync(tagStateId, cancellationToken);
+
     /// <summary>
     ///     Execute a single-result query using Orleans grains
     /// </summary>

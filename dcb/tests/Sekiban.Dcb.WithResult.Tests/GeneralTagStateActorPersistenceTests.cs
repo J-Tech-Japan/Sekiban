@@ -228,6 +228,183 @@ public class GeneralTagStateActorPersistenceTests
     }
 
     [Fact]
+    public async Task CancellationToken_StopsTheActorStreamBeforeCachePublication_AndTheNextCallRebuilds()
+    {
+        var domainTypes = BuildDomainTypes();
+        var baseEventStore = new CoreInMemoryEventStore(domainTypes.EventTypes);
+        var eventStore = new GatedStreamingEventStore(baseEventStore);
+        var actorAccessor = new TestActorAccessor();
+        actorAccessor.SetLatestSortableUniqueId("TestTag:cancel", "002");
+        var persistent = new InMemorySerializableTagStatePersistent();
+        var tag = new TestTag("cancel");
+
+        await baseEventStore.WriteEventsAsync(
+            new[]
+            {
+                CreateEvent(new TestEvent { Value = 10 }, tag, "001"),
+                CreateEvent(new IncrementEvent { Increment = 2 }, tag, "002")
+            },
+            domainTypes.EventTypes);
+
+        var actor = new GeneralTagStateActor(
+            "TestTag:cancel:TestIncrementalProjector",
+            eventStore,
+            domainTypes.EventTypes,
+            domainTypes.TagProjectorTypes,
+            domainTypes.TagTypes,
+            domainTypes.TagStatePayloadTypes,
+            new TagStateOptions(),
+            actorAccessor,
+            persistent);
+
+        using var cancellation = new CancellationTokenSource();
+        var cancelledRead = actor.GetStateAsync(cancellation.Token);
+        try
+        {
+            await eventStore.FirstRowReached.WaitAsync(TimeSpan.FromSeconds(10));
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await cancelledRead);
+        }
+        finally
+        {
+            eventStore.ReleaseFirstRow();
+        }
+
+        Assert.Equal(cancellation.Token, eventStore.ReceivedCancellationToken);
+        Assert.Equal(1, eventStore.RowsRead);
+        Assert.Equal(0, eventStore.ConsumerCallbacks);
+        Assert.Equal(0, persistent.SaveSerializableStateCalls);
+        Assert.Null(persistent.SavedState);
+
+        var recovered = await actor.GetStateAsync();
+        Assert.Equal(2, recovered.Version);
+        Assert.Equal(12, Assert.IsType<TestIncrementalState>(
+            domainTypes.TagStatePayloadTypes.DeserializePayload(recovered.ResolvedPayloadName, recovered.Payload).GetValue()).Total);
+        Assert.Equal(1, persistent.SaveSerializableStateCalls);
+    }
+
+    [Fact]
+    public async Task PreCancelledToken_DoesNotReachTheActorStreamingProvider()
+    {
+        var domainTypes = BuildDomainTypes();
+        var baseEventStore = new CoreInMemoryEventStore(domainTypes.EventTypes);
+        var eventStore = new GatedStreamingEventStore(baseEventStore);
+        var actorAccessor = new TestActorAccessor();
+        actorAccessor.SetLatestSortableUniqueId("TestTag:pre-cancel", "001");
+        var actor = new GeneralTagStateActor(
+            "TestTag:pre-cancel:TestIncrementalProjector",
+            eventStore,
+            domainTypes.EventTypes,
+            domainTypes.TagProjectorTypes,
+            domainTypes.TagTypes,
+            domainTypes.TagStatePayloadTypes,
+            new TagStateOptions(),
+            actorAccessor,
+            new InMemorySerializableTagStatePersistent());
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await actor.GetStateAsync(cancellation.Token));
+        Assert.Equal(0, eventStore.StreamCallCount);
+        Assert.Equal(0, eventStore.RowsRead);
+    }
+
+    [Fact]
+    public async Task TokenlessNoneAndLiveToken_ProduceIdenticalTaggedStreamStateAndProviderCounts()
+    {
+        var domainTypes = BuildDomainTypes();
+        var baseEventStore = new CoreInMemoryEventStore(domainTypes.EventTypes);
+        var tag = new TestTag("cancellation-parity");
+        await baseEventStore.WriteEventsAsync(
+            [
+                CreateEvent(new TestEvent { Value = 10 }, tag, "001"),
+                CreateEvent(new IncrementEvent { Increment = 2 }, tag, "002")
+            ],
+            domainTypes.EventTypes);
+
+        using var liveCancellation = new CancellationTokenSource();
+        var results = new List<(SerializableTagState State, int StreamCalls, int ListCalls)>();
+        foreach (var getState in new Func<GeneralTagStateActor, Task<SerializableTagState>>[]
+                 {
+                     actor => actor.GetStateAsync(),
+                     actor => actor.GetStateAsync(CancellationToken.None),
+                     actor => actor.GetStateAsync(liveCancellation.Token)
+                 })
+        {
+            var eventStore = new StreamingCountingEventStore(baseEventStore);
+            var actorAccessor = new TestActorAccessor();
+            actorAccessor.SetLatestSortableUniqueId("TestTag:cancellation-parity", "002");
+            var actor = new GeneralTagStateActor(
+                "TestTag:cancellation-parity:TestIncrementalProjector",
+                eventStore,
+                domainTypes.EventTypes,
+                domainTypes.TagProjectorTypes,
+                domainTypes.TagTypes,
+                domainTypes.TagStatePayloadTypes,
+                new TagStateOptions(),
+                actorAccessor,
+                new InMemorySerializableTagStatePersistent());
+
+            var state = await getState(actor);
+            results.Add((state, eventStore.StreamCallCount, eventStore.ReadEventsByTagCallCount));
+        }
+
+        var baseline = results[0];
+        Assert.All(results, result =>
+        {
+            Assert.Equal(baseline.State.Payload, result.State.Payload);
+            Assert.Equal(baseline.State.Version, result.State.Version);
+            Assert.Equal(baseline.State.LastSortedUniqueId, result.State.LastSortedUniqueId);
+            Assert.Equal(1, result.StreamCalls);
+            Assert.Equal(0, result.ListCalls);
+        });
+    }
+
+    [Fact]
+    public async Task CancellationDuringFinalSerialization_PreventsTheActorCacheWrite()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var serializingPayloadTypes = new CountingTagStatePayloadTypes(new SimpleTagStatePayloadTypes());
+        serializingPayloadTypes.RegisterPayloadType<TestIncrementalState>();
+        serializingPayloadTypes.OnSerializePayload = cancellation.Cancel;
+        var domainTypes = BuildDomainTypes(tagStatePayloadTypes: serializingPayloadTypes);
+        var eventStore = new CoreInMemoryEventStore(domainTypes.EventTypes);
+        var actorAccessor = new TestActorAccessor();
+        actorAccessor.SetLatestSortableUniqueId("TestTag:cancel-before-save", "001");
+        var persistent = new InMemorySerializableTagStatePersistent();
+        var tag = new TestTag("cancel-before-save");
+
+        await eventStore.WriteEventsAsync(
+            [CreateEvent(new TestEvent { Value = 7 }, tag, "001")],
+            domainTypes.EventTypes);
+
+        var actor = new GeneralTagStateActor(
+            "TestTag:cancel-before-save:TestIncrementalProjector",
+            eventStore,
+            domainTypes.EventTypes,
+            domainTypes.TagProjectorTypes,
+            domainTypes.TagTypes,
+            domainTypes.TagStatePayloadTypes,
+            new TagStateOptions(),
+            actorAccessor,
+            persistent);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await actor.GetStateAsync(cancellation.Token));
+
+        Assert.Equal(1, serializingPayloadTypes.SerializePayloadCount);
+        Assert.Equal(0, persistent.SaveSerializableStateCalls);
+        Assert.Null(persistent.SavedState);
+
+        var recovered = await actor.GetStateAsync();
+        Assert.Equal(1, recovered.Version);
+        Assert.Equal(7, Assert.IsType<TestIncrementalState>(
+            domainTypes.TagStatePayloadTypes.DeserializePayload(recovered.ResolvedPayloadName, recovered.Payload).GetValue()).Total);
+        Assert.Equal(1, persistent.SaveSerializableStateCalls);
+    }
+
+    [Fact]
     public async Task OutOfOrderTaggedStream_FailsBeforeThePartialProjectionCanBeCached()
     {
         var domainTypes = BuildDomainTypes();
@@ -491,6 +668,56 @@ public class GeneralTagStateActorPersistenceTests
         }
     }
 
+    private sealed class GatedStreamingEventStore(IEventStore inner) : CountingEventStore(inner),
+        IStreamingTaggedSerializableEventStore, ITaggedStreamCapabilityProvider
+    {
+        private readonly TaskCompletionSource _firstRowReached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseFirstRow = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _streamCallCount;
+        private int _rowsRead;
+        private int _consumerCallbacks;
+
+        public int StreamCallCount => _streamCallCount;
+        public int RowsRead => _rowsRead;
+        public int ConsumerCallbacks => _consumerCallbacks;
+        public CancellationToken ReceivedCancellationToken { get; private set; }
+        public Task FirstRowReached => _firstRowReached.Task;
+
+        public TaggedStreamCapabilityDescriptor DescribeTaggedStream() =>
+            TaggedStreamCapabilityDescriptor.Native("cancellation gate");
+
+        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamSerializableEventsByTagAsync(
+            ITag tag,
+            SortableUniqueId? since,
+            SortableUniqueId? until,
+            Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _streamCallCount);
+            ReceivedCancellationToken = cancellationToken;
+            return await ((IStreamingTaggedSerializableEventStore)Inner).StreamSerializableEventsByTagAsync(
+                tag,
+                since,
+                until,
+                async serializableEvent =>
+                {
+                    var row = Interlocked.Increment(ref _rowsRead);
+                    if (row == 1)
+                    {
+                        _firstRowReached.TrySetResult();
+                        await _releaseFirstRow.Task.WaitAsync(cancellationToken);
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    Interlocked.Increment(ref _consumerCallbacks);
+                    await onEvent(serializableEvent);
+                },
+                cancellationToken);
+        }
+
+        public void ReleaseFirstRow() => _releaseFirstRow.TrySetResult();
+    }
+
     private sealed class OutOfOrderStreamingStore(IEventStore inner) : CountingEventStore(inner),
         IStreamingTaggedSerializableEventStore, ITaggedStreamCapabilityProvider
     {
@@ -543,6 +770,7 @@ public class GeneralTagStateActorPersistenceTests
         private readonly ITagStatePayloadTypes _inner = inner;
         public int SerializePayloadCount { get; private set; }
         public int DeserializePayloadCount { get; private set; }
+        public Action? OnSerializePayload { get; set; }
 
         public Type? GetPayloadType(string payloadName) => _inner.GetPayloadType(payloadName);
 
@@ -557,7 +785,9 @@ public class GeneralTagStateActorPersistenceTests
         public ResultBox<byte[]> SerializePayload(ITagStatePayload payload)
         {
             SerializePayloadCount++;
-            return _inner.SerializePayload(payload);
+            var serialized = _inner.SerializePayload(payload);
+            OnSerializePayload?.Invoke();
+            return serialized;
         }
 
         public void RegisterPayloadType<TPayload>() where TPayload : class, ITagStatePayload =>
@@ -568,10 +798,14 @@ public class GeneralTagStateActorPersistenceTests
     {
         private SerializableTagState? _state;
 
+        public int SaveSerializableStateCalls { get; private set; }
+        public SerializableTagState? SavedState => _state;
+
         public Task<SerializableTagState?> LoadSerializableStateAsync() => Task.FromResult(_state);
 
         public Task SaveSerializableStateAsync(SerializableTagState state)
         {
+            SaveSerializableStateCalls++;
             _state = state;
             return Task.CompletedTask;
         }

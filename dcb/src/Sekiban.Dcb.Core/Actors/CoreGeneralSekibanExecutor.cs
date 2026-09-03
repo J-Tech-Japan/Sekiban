@@ -421,10 +421,16 @@ public class CoreGeneralSekibanExecutor
         }
     }
 
-    public async Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId)
+    public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId) =>
+        GetTagStateAsync(tagStateId, CancellationToken.None);
+
+    public async Task<ResultBox<TagState>> GetTagStateAsync(
+        TagStateId tagStateId,
+        CancellationToken cancellationToken)
     {
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             // Step 0: Validate tagStateId using DataAnnotations attributes
             var validationErrors = SekibanValidator.Validate(tagStateId);
             if (validationErrors.Count > 0)
@@ -435,6 +441,7 @@ public class CoreGeneralSekibanExecutor
             // Get the tag state actor for this tag state ID
             var tagStateActorId = tagStateId.GetTagStateId();
             var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (!actorResult.IsSuccess)
             {
@@ -444,12 +451,14 @@ public class CoreGeneralSekibanExecutor
             var actor = actorResult.GetValue();
 
             // Get the state from the actor
-            var state = await actor.GetStateAsync();
+            var state = await actor.GetStateAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Convert SerializableTagState to TagState
             // We need to deserialize the payload from the serializable state
             if (state.ResolvedPayloadName == nameof(EmptyTagStatePayload))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 return ResultBox.FromValue(
                     new TagState(
                         new EmptyTagStatePayload(),
@@ -472,6 +481,7 @@ public class CoreGeneralSekibanExecutor
             var deserializeResult = _domainTypes.TagStatePayloadTypes.DeserializePayload(
                 state.ResolvedPayloadName,
                 state.Payload);
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (!deserializeResult.IsSuccess)
             {
@@ -479,6 +489,7 @@ public class CoreGeneralSekibanExecutor
             }
 
             var payload = deserializeResult.GetValue();
+            cancellationToken.ThrowIfCancellationRequested();
 
             return ResultBox.FromValue(
                 new TagState(

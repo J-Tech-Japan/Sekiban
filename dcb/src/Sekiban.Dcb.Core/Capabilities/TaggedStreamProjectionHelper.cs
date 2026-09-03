@@ -34,6 +34,7 @@ internal static class TaggedStreamProjectionHelper
         string initialLastSortableUniqueId,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var state = initialState;
         var eventCount = 0;
         var lastSortableUniqueId = initialLastSortableUniqueId;
@@ -44,6 +45,9 @@ internal static class TaggedStreamProjectionHelper
             until,
             serializableEvent =>
             {
+                // The provider can only stop between callback invocations. Observe before every consumer-side step so
+                // a cancellation never deserializes or projects another event after it has reached this boundary.
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!SekibanDcbCapabilityResolver.IsTaggedStreamOrderValid(
                         previousId,
                         serializableEvent.SortableUniqueIdValue,
@@ -70,6 +74,7 @@ internal static class TaggedStreamProjectionHelper
                 }
 
                 var eventResult = serializableEvent.ToEvent(eventTypes);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!eventResult.IsSuccess)
                 {
                     throw new InvalidOperationException(
@@ -78,6 +83,7 @@ internal static class TaggedStreamProjectionHelper
                 }
 
                 state = projector(state, eventResult.GetValue());
+                cancellationToken.ThrowIfCancellationRequested();
                 eventCount++;
                 lastSortableUniqueId = serializableEvent.SortableUniqueIdValue;
                 previousId = serializableEvent.SortableUniqueIdValue;
@@ -85,6 +91,7 @@ internal static class TaggedStreamProjectionHelper
             },
             cancellationToken);
 
+        cancellationToken.ThrowIfCancellationRequested();
         if (!streamResult.IsSuccess)
         {
             return ResultBox.Error<TaggedStreamProjectionState>(streamResult.GetException());
