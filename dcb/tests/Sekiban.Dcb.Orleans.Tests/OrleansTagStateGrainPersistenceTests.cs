@@ -1,3 +1,5 @@
+extern alias WithoutResultFacade;
+
 using ResultBoxes;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
@@ -22,6 +24,12 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using System.Text.Json;
 using Xunit;
+using WithResultExecutor = Sekiban.Dcb.ISekibanExecutor;
+using WithResultInMemoryDcbExecutor = Sekiban.Dcb.InMemory.InMemoryDcbExecutor;
+using WithResultOrleansDcbExecutor = Sekiban.Dcb.Orleans.OrleansDcbExecutor;
+using WithoutResultExecutor = WithoutResultFacade::Sekiban.Dcb.ISekibanExecutor;
+using WithoutResultInMemoryDcbExecutor = WithoutResultFacade::Sekiban.Dcb.InMemory.InMemoryDcbExecutor;
+using WithoutResultOrleansDcbExecutor = WithoutResultFacade::Sekiban.Dcb.Orleans.OrleansDcbExecutor;
 namespace Sekiban.Dcb.Orleans.Tests;
 
 public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
@@ -250,6 +258,102 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task CancellationTokenRelay_WithResultOrleansExecutor_ReachesWrapperAndGrain()
+    {
+        WithResultExecutor executor = new WithResultOrleansDcbExecutor(
+            _client,
+            SharedEventStore,
+            TestSiloConfigurator.CreateDomainTypes());
+
+        await AssertOrleansExecutorCancellationRelayAsync(
+            _client,
+            async (tagStateId, cancellationToken) =>
+            {
+                var result = await executor.GetTagStateAsync(tagStateId, cancellationToken);
+                Assert.False(result.IsSuccess);
+                Assert.IsAssignableFrom<OperationCanceledException>(result.GetException());
+            },
+            async tagStateId =>
+            {
+                var result = await executor.GetTagStateAsync(tagStateId);
+                Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+                Assert.Equal(2, result.GetValue().Version);
+            });
+    }
+
+    [Fact]
+    public async Task CancellationTokenRelay_WithoutResultOrleansExecutor_ReachesWrapperAndGrain()
+    {
+        WithoutResultExecutor executor = new WithoutResultOrleansDcbExecutor(
+            _client,
+            SharedEventStore,
+            TestSiloConfigurator.CreateDomainTypes());
+
+        await AssertOrleansExecutorCancellationRelayAsync(
+            _client,
+            async (tagStateId, cancellationToken) =>
+            {
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                    () => executor.GetTagStateAsync(tagStateId, cancellationToken));
+            },
+            async tagStateId =>
+            {
+                var state = await executor.GetTagStateAsync(tagStateId);
+                Assert.Equal(2, state.Version);
+            });
+    }
+
+    [Fact]
+    public async Task CancellationTokenRelay_WithResultInMemoryExecutor_ReachesNativeStream()
+    {
+        var eventStore = new CountingEventStore();
+#pragma warning disable CS0618
+        WithResultExecutor executor = new WithResultInMemoryDcbExecutor(
+            TestSiloConfigurator.CreateDomainTypes(),
+            eventStore);
+#pragma warning restore CS0618
+
+        await AssertInMemoryExecutorCancellationRelayAsync(
+            eventStore,
+            async (tagStateId, cancellationToken) =>
+            {
+                var result = await executor.GetTagStateAsync(tagStateId, cancellationToken);
+                Assert.False(result.IsSuccess);
+                Assert.IsAssignableFrom<OperationCanceledException>(result.GetException());
+            },
+            async tagStateId =>
+            {
+                var result = await executor.GetTagStateAsync(tagStateId);
+                Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+                Assert.Equal(2, result.GetValue().Version);
+            });
+    }
+
+    [Fact]
+    public async Task CancellationTokenRelay_WithoutResultInMemoryExecutor_ReachesNativeStream()
+    {
+        var eventStore = new CountingEventStore();
+#pragma warning disable CS0618
+        WithoutResultExecutor executor = new WithoutResultInMemoryDcbExecutor(
+            TestSiloConfigurator.CreateDomainTypes(),
+            eventStore);
+#pragma warning restore CS0618
+
+        await AssertInMemoryExecutorCancellationRelayAsync(
+            eventStore,
+            async (tagStateId, cancellationToken) =>
+            {
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                    () => executor.GetTagStateAsync(tagStateId, cancellationToken));
+            },
+            async tagStateId =>
+            {
+                var state = await executor.GetTagStateAsync(tagStateId);
+                Assert.Equal(2, state.Version);
+            });
+    }
+
     private static async Task AssertPreCancelledTokenAsync(IClusterClient client)
     {
         ResetSharedState();
@@ -319,6 +423,102 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
         Assert.Equal(1, SharedTagStateCacheStorage.TagStateWriteCount);
     }
 
+    private static async Task AssertOrleansExecutorCancellationRelayAsync(
+        IClusterClient client,
+        Func<TagStateId, CancellationToken, Task> cancelledRead,
+        Func<TagStateId, Task> recovery)
+    {
+        ResetSharedState();
+        var aggregateId = Guid.NewGuid();
+        var tagStateId = BuildTagStateId(aggregateId);
+        var tag = BuildTag(aggregateId);
+        var grain = GetTagStateGrain(client, tagStateId);
+
+        await SharedEventStore.WriteEventsAsync(
+            new[]
+            {
+                CreateEvent(new CounterIncremented(1), tag, "001"),
+                CreateEvent(new CounterIncremented(2), tag, "002")
+            });
+
+        // Prime the actual grain, then clear its persistence cache so the public executor must relay into a stream.
+        await WaitForStateAsync(grain, 2, TimeSpan.FromSeconds(10));
+        await grain.ClearCacheAsync();
+        SharedEventStore.ClearCounts();
+        SharedGrainRequestCounter.Clear();
+        SharedTagStateCacheStorage.ClearWriteCount();
+        var firstRowGate = SharedEventStore.GateFirstStreamRow();
+
+        using var cancellation = new CancellationTokenSource();
+        var stateTask = cancelledRead(tagStateId, cancellation.Token);
+        try
+        {
+            await firstRowGate.FirstRowReached.WaitAsync(TimeSpan.FromSeconds(10));
+            cancellation.Cancel();
+            await firstRowGate.GrainSideCancellationObserved.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            firstRowGate.AbortForCleanup();
+        }
+
+        await stateTask.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(1, SharedGrainRequestCounter.GetStateRequestCount);
+        Assert.Equal(1, SharedEventStore.StreamRowsRead);
+        Assert.Equal(0, SharedEventStore.StreamCallbackCount);
+        Assert.True(firstRowGate.ReceivedCancelableGrainToken);
+        Assert.Equal(0, SharedTagStateCacheStorage.TagStateWriteCount);
+
+        SharedEventStore.ClearCounts();
+        await recovery(tagStateId);
+        Assert.Equal(1, SharedEventStore.StreamSerializableEventsByTagCallCount);
+        Assert.Equal(2, SharedEventStore.StreamRowsRead);
+        Assert.Equal(1, SharedTagStateCacheStorage.TagStateWriteCount);
+    }
+
+    private static async Task AssertInMemoryExecutorCancellationRelayAsync(
+        CountingEventStore eventStore,
+        Func<TagStateId, CancellationToken, Task> cancelledRead,
+        Func<TagStateId, Task> recovery)
+    {
+        eventStore.Clear();
+        eventStore.ClearCounts();
+        var aggregateId = Guid.NewGuid();
+        var tagStateId = BuildTagStateId(aggregateId);
+        var tag = BuildTag(aggregateId);
+
+        await eventStore.WriteEventsAsync(
+            new[]
+            {
+                CreateEvent(new CounterIncremented(1), tag, "001"),
+                CreateEvent(new CounterIncremented(2), tag, "002")
+            });
+
+        var firstRowGate = eventStore.GateFirstStreamRow();
+        using var cancellation = new CancellationTokenSource();
+        var stateTask = cancelledRead(tagStateId, cancellation.Token);
+        try
+        {
+            await firstRowGate.FirstRowReached.WaitAsync(TimeSpan.FromSeconds(10));
+            cancellation.Cancel();
+            await firstRowGate.GrainSideCancellationObserved.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            firstRowGate.AbortForCleanup();
+        }
+
+        await stateTask.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(1, eventStore.StreamRowsRead);
+        Assert.Equal(0, eventStore.StreamCallbackCount);
+        Assert.True(firstRowGate.ReceivedCancelableGrainToken);
+
+        eventStore.ClearCounts();
+        await recovery(tagStateId);
+        Assert.Equal(1, eventStore.StreamSerializableEventsByTagCallCount);
+        Assert.Equal(2, eventStore.StreamRowsRead);
+    }
+
     private ITagStateGrain GetTagStateGrain(TagStateId id) =>
         GetTagStateGrain(_client, id);
 
@@ -374,6 +574,16 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
     {
         public static bool WaitForCancellationAcknowledgement { get; set; } = true;
 
+        public static DcbDomainTypes CreateDomainTypes() =>
+            new(
+                eventTypes: BuildEventTypes(),
+                tagTypes: BuildTagTypes(),
+                tagProjectorTypes: BuildTagProjectorTypes(),
+                tagStatePayloadTypes: BuildTagStatePayloadTypes(),
+                multiProjectorTypes: BuildMultiProjectorTypes(),
+                queryTypes: new SimpleQueryTypes(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
         public void Configure(ISiloBuilder siloBuilder)
         {
             siloBuilder
@@ -382,18 +592,7 @@ public class OrleansTagStateGrainPersistenceTests : IAsyncLifetime
                 .AddIncomingGrainCallFilter(SharedGrainRequestCounter)
                 .ConfigureServices(services =>
                 {
-                    services.AddSingleton<DcbDomainTypes>(provider =>
-                    {
-                        var domainTypes = new DcbDomainTypes(
-                            eventTypes: BuildEventTypes(),
-                            tagTypes: BuildTagTypes(),
-                            tagProjectorTypes: BuildTagProjectorTypes(),
-                            tagStatePayloadTypes: BuildTagStatePayloadTypes(),
-                            multiProjectorTypes: BuildMultiProjectorTypes(),
-                            queryTypes: new SimpleQueryTypes(),
-                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                        return domainTypes;
-                    });
+                    services.AddSingleton<DcbDomainTypes>(_ => CreateDomainTypes());
 
                     services.AddSingleton<IEventStore>(SharedEventStore);
                     services.AddSingleton<IMultiProjectionStateStore, Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore>();

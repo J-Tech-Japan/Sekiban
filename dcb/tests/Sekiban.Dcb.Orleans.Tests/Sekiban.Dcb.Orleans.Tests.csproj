@@ -30,6 +30,9 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans.WithResult\Sekiban.Dcb.Orleans.WithResult.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.Orleans.WithoutResult\Sekiban.Dcb.Orleans.WithoutResult.csproj" Aliases="WithoutResultFacade" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" Aliases="WithoutResultFacade" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult.Model\Sekiban.Dcb.WithoutResult.Model.csproj" Aliases="WithoutResultFacade" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.Orleans\Sekiban.Dcb.MaterializedView.Orleans.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj"/>
