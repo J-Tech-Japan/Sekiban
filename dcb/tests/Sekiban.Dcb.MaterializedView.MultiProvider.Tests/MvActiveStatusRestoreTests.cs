@@ -263,10 +263,27 @@ internal static class MvActiveStatusRestoreAssertions
             if (!isSqlite)
             {
                 await using var superseder = await fixture.OpenConnectionAsync().ConfigureAwait(false);
+                await using var supersederTransaction = await superseder.BeginTransactionAsync().ConfigureAwait(false);
                 await superseder.ExecuteAsync(
-                        "UPDATE sekiban_mv_active SET active_generation = active_generation + 1 WHERE service_id = @ServiceId AND view_name = @ViewName;",
-                        new { ServiceId, ViewName })
+                        new CommandDefinition(
+                            "UPDATE sekiban_mv_active SET active_generation = active_generation + 1 WHERE service_id = @ServiceId AND view_name = @ViewName;",
+                            new { ServiceId, ViewName },
+                            supersederTransaction))
                     .ConfigureAwait(false);
+                continueRestore.TrySetResult();
+
+                var completedBeforeCommit = await Task.WhenAny(
+                        restoreTask,
+                        Task.Delay(TimeSpan.FromSeconds(1)))
+                    .ConfigureAwait(false);
+                Assert.NotSame(
+                    restoreTask,
+                    completedBeforeCommit);
+                await supersederTransaction.CommitAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                continueRestore.TrySetResult();
             }
         }
         finally

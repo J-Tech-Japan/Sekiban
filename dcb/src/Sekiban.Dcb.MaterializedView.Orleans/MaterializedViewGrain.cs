@@ -11,6 +11,10 @@ namespace Sekiban.Dcb.MaterializedView.Orleans;
 
 public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 {
+    // A provider restore request already has its own bounded transaction retry. This outer bound prevents a
+    // conflict that persists across fresh catch-up ticks from becoming a permanent busy loop in the grain.
+    private const int MaxActiveStatusRestoreAttempts = 3;
+
     // Global catch-up concurrency gate. Shared across all MaterializedViewGrain activations
     // in the current process/silo to protect the event store and MV relational store from
     // concurrent catch-up floods when many grains activate together.
@@ -56,6 +60,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private string? _lastProgressSortableUniqueId;
     private long _catchUpBatchSkipCount;
     private bool _statusMarkedCatchingUp;
+    private int _activeStatusRestoreAttempts;
 
     private MvModeCapabilities ResolveCapabilities(MvTransition transition)
     {
@@ -149,8 +154,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         var servingActive = await _registryStore.GetActiveAsync(
                 _serviceId!,
                 _host!.ViewName,
-                CancellationToken.None)
-            .ConfigureAwait(false);
+                CancellationToken.None);
         if (servingActive?.ActiveVersion == _host.ViewVersion)
         {
             _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
@@ -160,6 +164,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _isCatchUpActive = true;
         _needsImmediateCatchUp = true;
         _consecutiveEmptyBatches = 0;
+        _activeStatusRestoreAttempts = 0;
         _lastError = null;
         _lastCatchUpStartedAt = DateTimeOffset.UtcNow;
         _statusMarkedCatchingUp = false;
@@ -186,6 +191,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             _isCatchUpActive = true;
             _needsImmediateCatchUp = true;
             _consecutiveEmptyBatches = 0;
+            _activeStatusRestoreAttempts = 0;
             _statusMarkedCatchingUp = false;
             _lastCatchUpStartedAt = DateTimeOffset.UtcNow;
             StartCatchUpTimer();
@@ -479,8 +485,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 var active = await _registryStore.GetActiveAsync(
                         _serviceId!,
                         _host!.ViewName,
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                        cancellationToken);
                 servingActive = active?.ActiveVersion == _host.ViewVersion;
                 servingGeneration = servingActive ? active!.Generation : null;
                 if (!servingActive)
@@ -508,8 +513,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 var active = await _registryStore.GetActiveAsync(
                         _serviceId!,
                         _host!.ViewName,
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                        cancellationToken);
                 servingActive = active?.ActiveVersion == _host.ViewVersion;
                 servingGeneration = servingActive ? active!.Generation : null;
             }
@@ -518,8 +522,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             var activeAfterBatch = await _registryStore.GetActiveAsync(
                     _serviceId!,
                     _host!.ViewName,
-                    cancellationToken)
-                .ConfigureAwait(false);
+                    cancellationToken);
             servingActive = servingActive &&
                 activeAfterBatch?.ActiveVersion == _host.ViewVersion &&
                 servingGeneration == activeAfterBatch.Generation;
@@ -626,8 +629,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             var active = await _registryStore.GetActiveAsync(
                     _serviceId!,
                     _host!.ViewName,
-                    cancellationToken)
-                .ConfigureAwait(false);
+                    cancellationToken);
             if (active?.ActiveVersion == _host.ViewVersion)
             {
                 var restoreRequest = MvActiveStatusRestoreRequest.FromEntries(
@@ -641,23 +643,40 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 {
                     restoration = await _registryStore.TryRestoreActiveStatusAsync(
                             restoreRequest,
-                            cancellationToken: cancellationToken)
-                        .ConfigureAwait(false);
+                            cancellationToken: cancellationToken);
                 }
                 catch (NotSupportedException ex)
                 {
-                    _lastError = $"Serving materialized-view status restoration is unsupported: {ex.Message}";
-                    _consecutiveEmptyBatches = 0;
+                    EndCatchUpAfterActiveStatusRestoreFailure(
+                        $"Serving materialized-view status restoration is unsupported: {ex.Message}");
                     return;
                 }
 
                 if (!restoration.Succeeded)
                 {
-                    _lastError = $"Serving materialized-view status restoration was rejected: {restoration.FailureReason}.";
-                    _consecutiveEmptyBatches = 0;
+                    var retryable = IsRetryableActiveStatusRestore(restoration);
+                    var attempt = ++_activeStatusRestoreAttempts;
+                    var error =
+                        $"Serving materialized-view status restoration was rejected: {restoration.FailureReason}. {restoration.Message}";
+                    if (retryable && attempt < MaxActiveStatusRestoreAttempts)
+                    {
+                        _lastError =
+                            $"{error} Retrying from a fresh catch-up boundary (attempt {attempt}/{MaxActiveStatusRestoreAttempts}).";
+                        _consecutiveEmptyBatches = 0;
+                        return;
+                    }
+
+                    if (retryable && restoration.FailureReason != MvActivationFailureReason.RetryExhausted)
+                    {
+                        error =
+                            $"{error} Outer catch-up retry bound exhausted after {attempt} attempts.";
+                    }
+
+                    EndCatchUpAfterActiveStatusRestoreFailure(error);
                     return;
                 }
 
+                _activeStatusRestoreAttempts = 0;
                 _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
                 _isCatchUpActive = false;
                 _needsImmediateCatchUp = false;
@@ -678,15 +697,13 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                     _host.ViewName,
                     _host.ViewVersion,
                     MvStatus.Ready,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
+                    cancellationToken: cancellationToken);
             _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Ready };
 
             var activation = await activationExecutor.TryActivateAsync(
                     _host,
                     _serviceId,
-                    cancellationToken)
-                .ConfigureAwait(false);
+                    cancellationToken);
             if (!activation.Succeeded && activation.FailureReason != MvActivationFailureReason.AlreadyActive)
             {
                 _lastError = $"Materialized view activation was rejected: {activation.FailureReason}.";
@@ -713,6 +730,20 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _needsImmediateCatchUp = false;
         _consecutiveEmptyBatches = 0;
         _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static bool IsRetryableActiveStatusRestore(MvActivationResult restoration) =>
+        restoration.FailureReason != MvActivationFailureReason.RetryExhausted &&
+        (restoration.IsRetryableConcurrency ||
+         restoration.FailureReason is MvActivationFailureReason.ExpectedActiveConflict or MvActivationFailureReason.ExpectedGenerationConflict);
+
+    private void EndCatchUpAfterActiveStatusRestoreFailure(string error)
+    {
+        _lastError = error;
+        _isCatchUpActive = false;
+        _needsImmediateCatchUp = false;
+        _consecutiveEmptyBatches = 0;
+        StopCatchUpTimer();
     }
 
     private void RecoverStaleCatchUpIfNeeded()

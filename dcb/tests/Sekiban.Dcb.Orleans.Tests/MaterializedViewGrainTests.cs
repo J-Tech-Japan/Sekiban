@@ -221,6 +221,73 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         Assert.NotEqual(MvStatus.Ready, entry.Status);
     }
 
+    [Fact]
+    public async Task ActiveStatusRestore_NotSupported_StopsCatchUpWithoutSyntheticCompletion()
+    {
+        var grain = await StartServingGrainAsync();
+
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
+
+        var status = await grain.GetStatusAsync();
+        Assert.False(status.IsCatchUpActive);
+        Assert.Null(status.LastCatchUpCompletedAt);
+        Assert.Contains("unsupported", status.LastError ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        var calls = SharedRegistry.ActiveStatusRestoreCalls;
+        Assert.True(calls >= 1);
+        await Task.Delay(100);
+        Assert.Equal(calls, SharedRegistry.ActiveStatusRestoreCalls);
+    }
+
+    [Fact]
+    public async Task ActiveStatusRestore_NonRetryableRejection_StopsCatchUpAndRetainsError()
+    {
+        SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Rejected(
+            MvActivationFailureReason.UnsafeLifecycle,
+            "permanent lifecycle rejection");
+        var grain = await StartServingGrainAsync();
+
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
+
+        var status = await grain.GetStatusAsync();
+        Assert.False(status.IsCatchUpActive);
+        Assert.Null(status.LastCatchUpCompletedAt);
+        Assert.Contains("UnsafeLifecycle", status.LastError ?? string.Empty, StringComparison.Ordinal);
+        Assert.Equal(1, SharedRegistry.ActiveStatusRestoreCalls);
+        await Task.Delay(100);
+        Assert.Equal(1, SharedRegistry.ActiveStatusRestoreCalls);
+    }
+
+    [Fact]
+    public async Task ActiveStatusRestore_RetryableGenerationConflict_IsBoundedAndExposesExhaustion()
+    {
+        SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Rejected(
+            MvActivationFailureReason.ExpectedGenerationConflict,
+            "the serving pointer generation is still changing");
+        var grain = await StartServingGrainAsync();
+
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
+
+        var status = await grain.GetStatusAsync();
+        Assert.False(status.IsCatchUpActive);
+        Assert.Null(status.LastCatchUpCompletedAt);
+        Assert.Contains("exhausted", status.LastError ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3, SharedRegistry.ActiveStatusRestoreCalls);
+    }
+
+    private async Task<IMaterializedViewGrain> StartServingGrainAsync()
+    {
+        SharedExecutor.InitialEvents.Clear();
+        await SharedRegistry.SetActiveAsync(
+            "orders",
+            TestMaterializedViewProjector.ViewNameConst,
+            1);
+
+        var grainKey = MvGrainKey.Build("orders", TestMaterializedViewProjector.ViewNameConst, 1);
+        var grain = _cluster.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        await grain.EnsureStartedAsync();
+        return grain;
+    }
+
     private static SerializableEvent CreateSerializableEvent(int ordinal, DateTime timestampUtc) =>
         new(
             Payload: [],
@@ -553,12 +620,16 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         private readonly Dictionary<(string ServiceId, string ViewName), MvActiveEntry> _active = [];
 
         public bool ForceUnknownCheckpointReads { get; set; }
+        public MvActivationResult? ActiveStatusRestoreResult { get; set; }
+        public int ActiveStatusRestoreCalls { get; private set; }
 
         public void Reset()
         {
             _entries.Clear();
             _active.Clear();
             ForceUnknownCheckpointReads = false;
+            ActiveStatusRestoreResult = null;
+            ActiveStatusRestoreCalls = 0;
         }
 
         public Task EnsureInfrastructureAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -670,6 +741,20 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         {
             _active.TryGetValue((serviceId, viewName), out var entry);
             return Task.FromResult(entry);
+        }
+
+        public Task<MvActivationResult> TryRestoreActiveStatusAsync(
+            MvActiveStatusRestoreRequest request,
+            System.Data.IDbTransaction? transaction = null,
+            CancellationToken cancellationToken = default)
+        {
+            ActiveStatusRestoreCalls++;
+            if (ActiveStatusRestoreResult is { } result)
+            {
+                return Task.FromResult(result);
+            }
+
+            throw new NotSupportedException("The fake registry does not support atomic serving-status restoration.");
         }
 
         public Task SetActiveAsync(

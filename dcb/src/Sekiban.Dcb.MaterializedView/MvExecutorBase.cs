@@ -820,8 +820,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
 
     private static MvStatus StatusAfterUnsuccessfulActiveRestore(IReadOnlyList<MvRegistryEntry> entries)
     {
-        var status = MvProjectionStatusSnapshot.FromEntries(entries).Status;
-        return status == MvStatus.Active ? MvStatus.CatchingUp : status;
+        return MvProjectionStatusSnapshot.FromEntries(entries).Status;
     }
 
     protected Task<int> ApplyStreamEventsAtBoundaryAsync(
