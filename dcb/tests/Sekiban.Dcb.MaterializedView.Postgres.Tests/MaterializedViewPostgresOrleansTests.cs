@@ -162,6 +162,143 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
     }
 
     [SkippableFact]
+    public async Task Grain_Reactivation_RestoresMixedLegacyStatuses_WithoutCatchUpDowngrade()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
+
+        var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "OrderSummary", 1);
+        var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        try
+        {
+            await grain.RequestDeactivationAsync();
+            await Task.Delay(200);
+        }
+        catch
+        {
+            // The grain may not be active yet; that's fine for this reset path.
+        }
+
+        await fixture.ResetAsync();
+        await grain.RefreshAsync();
+
+        var before = await ReadLifecycleRowsAsync();
+        var activeBefore = await ReadActivePointerAsync();
+        Assert.Equal(2, before.Count);
+        Assert.All(before, row => Assert.Equal("active", row.Status));
+        Assert.Equal(1, activeBefore.ActiveVersion);
+
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(200);
+
+        await using (var damageConnection = await fixture.OpenConnectionAsync())
+        {
+            await damageConnection.ExecuteAsync(
+                """
+                UPDATE sekiban_mv_registry
+                SET status = CASE logical_table
+                    WHEN 'orders' THEN 'catchingup'
+                    ELSE 'active'
+                END
+                WHERE service_id = @ServiceId
+                  AND view_name = 'OrderSummary'
+                  AND view_version = 1;
+                """,
+                new { ServiceId = DefaultServiceIdProvider.DefaultServiceId });
+        }
+
+        var damaged = await ReadLifecycleRowsAsync();
+        Assert.Equal("catchingup", damaged.Single(row => row.LogicalTable == "orders").Status);
+        Assert.Equal("active", damaged.Single(row => row.LogicalTable == "items").Status);
+
+        // Reactivation starts the normal background lifecycle; no explicit RefreshAsync is used here.
+        await grain.EnsureStartedAsync();
+        await WaitUntilAsync(async () =>
+        {
+            var rows = await ReadLifecycleRowsAsync();
+            var active = await ReadActivePointerAsync();
+            return rows.Count == 2 &&
+                   rows.All(row => row.Status == "active") &&
+                   active.ActiveVersion == activeBefore.ActiveVersion &&
+                   active.ActiveGeneration == activeBefore.ActiveGeneration;
+        }, timeoutMs: 15000);
+
+        var after = await ReadLifecycleRowsAsync();
+        var status = await grain.GetStatusAsync();
+        Assert.True(status.Started);
+        Assert.All(after, row => Assert.Equal("active", row.Status));
+        AssertLifecycleDataUnchanged(before, after);
+
+        var activeAfter = await ReadActivePointerAsync();
+        Assert.Equal(activeBefore, activeAfter);
+    }
+
+    [SkippableFact]
+    public async Task Grain_ActiveRefresh_PreservesLifecycleAndPublishesIndependentProgress()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
+
+        var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "OrderSummary", 1);
+        var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        try
+        {
+            await grain.RequestDeactivationAsync();
+            await Task.Delay(200);
+        }
+        catch
+        {
+            // The grain may not be active yet; that's fine for this reset path.
+        }
+
+        await fixture.ResetAsync();
+        await grain.RefreshAsync();
+        var activeBefore = await ReadActivePointerAsync();
+
+        var orderId = Guid.CreateVersion7();
+        var itemId = Guid.CreateVersion7();
+        var executor = fixture.CreateExecutor(publishToStream: false);
+        await executor.ExecuteAsync(new CreateOrder
+        {
+            OrderId = orderId,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-1)
+        });
+        await executor.ExecuteAsync(new AddOrderItem
+        {
+            OrderId = orderId,
+            ItemId = itemId,
+            ProductName = "G57 refresh",
+            Quantity = 1,
+            UnitPrice = 7m,
+            AddedAt = DateTimeOffset.UtcNow
+        });
+
+        var latest = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+            .OrderByDescending(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
+            .First()
+            .SortableUniqueIdValue;
+
+        await grain.RefreshAsync();
+        var afterFirstRefresh = await ReadLifecycleRowsAsync();
+        await grain.RefreshAsync();
+        var afterRepeatedRefresh = await ReadLifecycleRowsAsync();
+
+        var status = await grain.GetStatusAsync();
+        Assert.Equal(latest, status.CurrentPosition);
+        Assert.All(afterFirstRefresh, row => Assert.Equal("active", row.Status));
+        Assert.All(afterRepeatedRefresh, row => Assert.Equal("active", row.Status));
+        Assert.Equal(activeBefore, await ReadActivePointerAsync());
+
+        var ordersFirst = afterFirstRefresh.Single(row => row.LogicalTable == "orders");
+        var itemsFirst = afterFirstRefresh.Single(row => row.LogicalTable == "items");
+        Assert.Equal(latest, ordersFirst.CurrentPosition);
+        Assert.Equal(latest, itemsFirst.CurrentPosition);
+        Assert.Equal(2, ordersFirst.AppliedEventVersion);
+        Assert.Equal(2, itemsFirst.AppliedEventVersion);
+        Assert.Equal(latest, ordersFirst.LastCatchUpSortableUniqueId);
+        Assert.Equal(latest, itemsFirst.LastCatchUpSortableUniqueId);
+        Assert.Equal(afterFirstRefresh, afterRepeatedRefresh);
+    }
+
+    [SkippableFact]
     public async Task Grain_OutOfOrder_StreamDelivery_DoesNotLose_WeatherForecastRows()
     {
         Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
@@ -695,6 +832,67 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Fail("Condition was not satisfied before timeout.");
     }
 
+    private async Task<IReadOnlyList<LifecycleRegistryRow>> ReadLifecycleRowsAsync()
+    {
+        await using var connection = await fixture.OpenConnectionAsync();
+        var rows = await connection.QueryAsync<LifecycleRegistryRow>(
+            """
+            SELECT logical_table AS LogicalTable,
+                   physical_table AS PhysicalTable,
+                   status AS Status,
+                   current_position AS CurrentPosition,
+                   target_position AS TargetPosition,
+                   current_checkpoint_truth::text AS CurrentCheckpointTruth,
+                   target_checkpoint_truth::text AS TargetCheckpointTruth,
+                   last_sortable_unique_id AS LastSortableUniqueId,
+                   applied_event_version AS AppliedEventVersion,
+                   last_applied_source AS LastAppliedSource,
+                   last_applied_at AS LastAppliedAt,
+                   last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
+                   last_stream_received_at AS LastStreamReceivedAt,
+                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                   last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId,
+                   metadata::text AS Metadata
+            FROM sekiban_mv_registry
+            WHERE service_id = @ServiceId
+              AND view_name = 'OrderSummary'
+              AND view_version = 1
+            ORDER BY logical_table;
+            """,
+            new { ServiceId = DefaultServiceIdProvider.DefaultServiceId });
+        return rows.ToList();
+    }
+
+    private async Task<ActivePointerRow> ReadActivePointerAsync()
+    {
+        await using var connection = await fixture.OpenConnectionAsync();
+        return await connection.QuerySingleAsync<ActivePointerRow>(
+            """
+            SELECT active_version AS ActiveVersion,
+                   active_generation AS ActiveGeneration,
+                   activated_at AS ActivatedAt,
+                   switch_kind AS SwitchKind,
+                   switch_reason AS SwitchReason,
+                   switched_at_utc AS SwitchedAtUtc
+            FROM sekiban_mv_active
+            WHERE service_id = @ServiceId
+              AND view_name = 'OrderSummary';
+            """,
+            new { ServiceId = DefaultServiceIdProvider.DefaultServiceId });
+    }
+
+    private static void AssertLifecycleDataUnchanged(
+        IReadOnlyList<LifecycleRegistryRow> before,
+        IReadOnlyList<LifecycleRegistryRow> after)
+    {
+        Assert.Equal(before.Count, after.Count);
+        foreach (var expected in before)
+        {
+            var actual = after.Single(row => row.LogicalTable == expected.LogicalTable);
+            Assert.Equal(expected with { Status = actual.Status }, actual);
+        }
+    }
+
     private sealed class OrderProjectionRow
     {
         public Guid Id { get; set; }
@@ -715,6 +913,32 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         public string? LastStreamAppliedSortableUniqueId { get; set; }
         public string? LastCatchUpSortableUniqueId { get; set; }
     }
+
+    private sealed record LifecycleRegistryRow(
+        string LogicalTable,
+        string PhysicalTable,
+        string Status,
+        string? CurrentPosition,
+        string? TargetPosition,
+        string? CurrentCheckpointTruth,
+        string? TargetCheckpointTruth,
+        string? LastSortableUniqueId,
+        long AppliedEventVersion,
+        string? LastAppliedSource,
+        DateTimeOffset? LastAppliedAt,
+        string? LastStreamReceivedSortableUniqueId,
+        DateTimeOffset? LastStreamReceivedAt,
+        string? LastStreamAppliedSortableUniqueId,
+        string? LastCatchUpSortableUniqueId,
+        string? Metadata);
+
+    private sealed record ActivePointerRow(
+        int ActiveVersion,
+        long ActiveGeneration,
+        DateTimeOffset ActivatedAt,
+        string SwitchKind,
+        string? SwitchReason,
+        DateTimeOffset? SwitchedAtUtc);
 
     private sealed class WeatherProjectionRow
     {

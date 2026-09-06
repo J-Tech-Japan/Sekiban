@@ -716,6 +716,49 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             .ConfigureAwait(false);
         var active = await ReadActiveAsync(serviceId, host.ViewName, cancellationToken).ConfigureAwait(false);
 
+        if (active?.ActiveVersion == host.ViewVersion)
+        {
+            if (entries.Count == 0)
+            {
+                return MvStatus.Initializing;
+            }
+
+            var restoreRequest = MvActiveStatusRestoreRequest.FromEntries(
+                serviceId,
+                host.ViewName,
+                host.ViewVersion,
+                active.Generation,
+                entries);
+            try
+            {
+                var restoration = await _registryStore.TryRestoreActiveStatusAsync(
+                        restoreRequest,
+                        cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+                if (restoration.Succeeded)
+                {
+                    return MvStatus.Active;
+                }
+
+                _logger.LogWarning(
+                    "Serving materialized-view status restoration was rejected for {ViewName}/{ViewVersion}: {Reason} ({Message})",
+                    host.ViewName,
+                    host.ViewVersion,
+                    restoration.FailureReason,
+                    restoration.Message);
+                return StatusAfterUnsuccessfulActiveRestore(entries);
+            }
+            catch (NotSupportedException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Serving materialized-view status restoration is unavailable for {ViewName}/{ViewVersion}; no lifecycle fallback will be attempted.",
+                    host.ViewName,
+                    host.ViewVersion);
+                return StatusAfterUnsuccessfulActiveRestore(entries);
+            }
+        }
+
         // Retired and faulted rows are terminal lifecycle states. Only the normal catch-up/ready transition may be
         // promoted by this automatic initial-activation path.
         if (entries.Count == 0 || entries.Any(entry =>
@@ -775,6 +818,12 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             : MvStatus.Ready;
     }
 
+    private static MvStatus StatusAfterUnsuccessfulActiveRestore(IReadOnlyList<MvRegistryEntry> entries)
+    {
+        var status = MvProjectionStatusSnapshot.FromEntries(entries).Status;
+        return status == MvStatus.Active ? MvStatus.CatchingUp : status;
+    }
+
     protected Task<int> ApplyStreamEventsAtBoundaryAsync(
         IMvApplyHost host,
         IReadOnlyList<SerializableEvent> events,
@@ -824,6 +873,9 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         var safeThreshold = CreateSafeThreshold(_options.SafeWindowMs);
         var reachedUnsafeWindow = false;
         var batch = readResult.GetValue().OrderBy(serializable => serializable.SortableUniqueIdValue).ToList();
+        var catchUpStatus = currentStatus.Status is MvStatus.Active or MvStatus.Faulted
+            ? currentStatus.Status
+            : MvStatus.CatchingUp;
 
         if (batch.Count == 0)
         {
@@ -855,7 +907,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 ProjectionStatus = currentStatus with
                 {
                     CurrentCheckpointTruth = emptyTruth,
-                    Status = MvStatus.CatchingUp
+                    Status = catchUpStatus
                 }
             };
         }
@@ -876,7 +928,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         {
             return new MvCatchUpResult(0, reachedUnsafeWindow)
             {
-                ProjectionStatus = currentStatus with { Status = MvStatus.CatchingUp }
+                ProjectionStatus = currentStatus with { Status = catchUpStatus }
             };
         }
 
@@ -902,7 +954,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             ProjectionStatus = currentStatus with
             {
                 CurrentCheckpointTruth = truth,
-                Status = MvStatus.CatchingUp,
+                Status = catchUpStatus,
                 AppliedEventCount = currentStatus.AppliedEventCount + appliedEvents
             }
         };

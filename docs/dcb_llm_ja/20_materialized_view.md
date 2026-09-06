@@ -513,6 +513,31 @@ break-glass rollback は別 API の `ForceReverseAsync` です。reverse 専用�
 serialized observation へ push され、read 時に MV target database を open/query しません。通常 API に forced-forward の
 flag や mode はありません。
 
+### Active version の refresh と status の atomic restore（SEK-G57）
+
+すでに serving 中の version は、refresh や restart 後に event を再適用している間も `Active` のままです。
+runtime は serving version に対して一般的な `CatchingUp` downgrade を永続化せず、同じ version が active pointer に
+なっている競合時にも provider の status update が downgrade しないよう guard します。serving ではない candidate は
+従来通り `CatchingUp`、`Ready` を経由でき、通常の cutover、fault、retire の lifecycle は維持されます。G24 の
+publication は、この target registry lifecycle ルールから独立しています。
+
+追加された `IMvRegistryStore.TryRestoreActiveStatusAsync` は、active pointer や generation を変更せずに serving
+version の status だけを修復する境界です。request は正確な service/view/version、active generation、完全な table 数、
+logical/physical table identity、許可する lifecycle status、current checkpoint truth の最小値、権威的な target truth
+を固定します。1 つの provider transaction 内で registry の完全な行集合を deterministic な順序で lock してから active
+pointer を lock します。その後、pointer generation、target truth の完全一致、Known かつ non-legacy で request より
+後退せず target 以上である current truth を検証します。`CatchingUp` と `Ready` の行だけを `Active` にし、既存の
+`Active` 行と checkpoint、position、count、wire field はすべて保持します。行不足、fault、unknown、target の再取得、
+後退、identity/generation の不一致は rollback して拒否し、完了を捏造しません。古い custom store は追加された既定の
+`NotSupportedException` となり、runtime は serving lifecycle を保持して `Ready` write へ fallback しません。
+
+4 provider は native な serialization boundary を使います。PostgreSQL と MySQL は順序付き `FOR UPDATE` row lock、
+SQL Server は `UPDLOCK, HOLDLOCK`、SQLite は row-level lock がないため ordered registry write fence を使います。
+local transaction の deadlock、serialization、SQLite の busy/locked は、新しい connection と新しい read boundary で
+request の有限 bound まで retry し、上限到達時は型付き retryable result を返します。caller-owned transaction では
+savepoint を作り、reject、cancellation、provider failure ではそこへ rollback します。`VerifyOnly` はこの lifecycle
+mutation を呼びません。
+
 ## テーブルのクエリ方法
 
 物理テーブル名をアプリ側で決め打ちしないでください。`IMvOrleansQueryAccessor` を使って解決します。

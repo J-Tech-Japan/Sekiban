@@ -21,7 +21,12 @@ public sealed partial class SqliteMvRegistryStore
         fenceReturnsRows: false,
         savepointSql: "SAVEPOINT sekiban_mv_forced_reverse;",
         rollbackSavepointSql: "ROLLBACK TO SAVEPOINT sekiban_mv_forced_reverse;",
-        releaseSavepointSql: "RELEASE SAVEPOINT sekiban_mv_forced_reverse;");
+        releaseSavepointSql: "RELEASE SAVEPOINT sekiban_mv_forced_reverse;",
+        registryLockSql: """
+            UPDATE sekiban_mv_registry SET last_updated = last_updated
+            WHERE service_id = @ServiceId AND view_name = @ViewName;
+            """,
+        registryLockReturnsRows: false);
 
     protected override MvForcedReverseSqlPlan ForcedReversePlan => ForcedReverseSql;
     protected override string LegacySetActiveSql => LegacyActiveUpsertSql;

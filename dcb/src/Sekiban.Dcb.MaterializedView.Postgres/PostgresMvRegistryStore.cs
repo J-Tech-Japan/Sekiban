@@ -340,7 +340,15 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
                 last_updated = NOW()
             WHERE service_id = @ServiceId
               AND view_name = @ViewName
-              AND view_version = @ViewVersion;
+              AND view_version = @ViewVersion
+              AND (
+                    @Status <> 'catchingup'
+                    OR NOT EXISTS (
+                        SELECT 1
+                        FROM sekiban_mv_active
+                        WHERE service_id = @ServiceId
+                          AND view_name = @ViewName
+                          AND active_version = @ViewVersion));
             """;
 
         var parameters = new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion, Status = status.ToString().ToLowerInvariant() };
@@ -525,6 +533,14 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
         MvActivationRequest request,
         CancellationToken cancellationToken)
     {
+        const string lockRegistrySql = """
+            SELECT logical_table
+            FROM sekiban_mv_registry
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+            ORDER BY view_version, logical_table
+            FOR UPDATE;
+            """;
         const string lockCandidatesSql = """
             SELECT logical_table
             FROM sekiban_mv_registry
@@ -556,6 +572,13 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
             request.ExpectedCurrentCheckpointTruth,
             request.ExpectedTargetCheckpointTruth
         };
+        await transaction.Connection!.QueryAsync<string>(
+                new CommandDefinition(lockRegistrySql, parameters, transaction, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        await MvLifecycleTestHooks.InvokeAfterRegistryLockAsync(
+                MvLifecycleLockPoint.ActivationRegistry,
+                cancellationToken)
+            .ConfigureAwait(false);
         var lockedCandidates = (await transaction.Connection!.QueryAsync<string>(
                 new CommandDefinition(lockCandidatesSql, parameters, transaction, cancellationToken: cancellationToken))
             .ConfigureAwait(false)).AsList();

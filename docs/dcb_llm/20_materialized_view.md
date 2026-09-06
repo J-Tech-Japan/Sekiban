@@ -521,6 +521,32 @@ records `switch_kind=forced`, the operator-supplied reason, and timestamp. That 
 G24 typed and V1 serialized observation surfaces on the lifecycle publication seam; reading it never opens or queries
 the MV target database. There is no forced-forward flag or mode on the ordinary API.
 
+### Active-version refresh and atomic status restoration (SEK-G57)
+
+An already-serving version remains `Active` while it replays events after a refresh or restart. The runtime does not
+persist a generic `CatchingUp` downgrade for the serving version; the provider status update is also guarded against a
+race with an active pointer for the same version. A non-serving candidate may still move through `CatchingUp` and
+`Ready`, and ordinary cutovers, faults, and retirements retain their normal lifecycle transitions. G24 publication is
+independent of this target-registry lifecycle rule.
+
+The additive `IMvRegistryStore.TryRestoreActiveStatusAsync` boundary repairs a serving version without changing its
+active pointer or generation. Its request pins the exact service/view/version, active generation, complete table count,
+logical and physical table identities, allowed lifecycle statuses, a minimum current checkpoint truth, and the exact
+authoritative target truth. Inside one provider transaction the complete registry row set is locked in deterministic
+order before the active pointer is locked. The provider then verifies the pointer generation, exact target truth, and a
+current truth that is Known, non-legacy, monotonic relative to the request, and at or beyond the target. Only
+`CatchingUp` and `Ready` rows are changed to `Active`; existing `Active` rows and every checkpoint, position, count,
+and wire field are preserved. Missing, faulted, unknown, recaptured, regressed, or mismatched rows roll back and do
+not synthesize completion. Older custom stores receive the additive default `NotSupportedException`; the runtime keeps
+the serving lifecycle unchanged and does not fall back to a `Ready` write.
+
+The four providers use their native serialization boundary: PostgreSQL and MySQL use ordered `FOR UPDATE` row locks,
+SQL Server uses `UPDLOCK, HOLDLOCK`, and SQLite uses an ordered registry write fence because it has no row-level lock
+primitive. A local deadlock, serialization, or SQLite busy/locked outcome is retried with a fresh connection and a
+fresh read, up to the finite request bound; exhaustion is returned as a typed retryable result. A caller-owned
+transaction uses a savepoint and rolls back to it on rejection, cancellation, or provider failure. `VerifyOnly` never
+invokes this lifecycle mutation.
+
 ## Querying the Tables
 
 Applications should not hardcode the physical table name. Use `IMvOrleansQueryAccessor` to resolve it.

@@ -146,6 +146,15 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         }
 
         await RefreshPositionFromRegistryAsync(CancellationToken.None);
+        var servingActive = await _registryStore.GetActiveAsync(
+                _serviceId!,
+                _host!.ViewName,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+        if (servingActive?.ActiveVersion == _host.ViewVersion)
+        {
+            _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
+        }
         await StartSubscriptionAsync();
 
         _isCatchUpActive = true;
@@ -460,25 +469,69 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _needsImmediateCatchUp = false;
         _lastCatchUpAttemptAt = DateTimeOffset.UtcNow;
         var madeProgress = false;
+        var servingActive = false;
+        long? servingGeneration = null;
 
         try
         {
             if (!_statusMarkedCatchingUp)
             {
-                await _registryStore.UpdateStatusAsync(
-                    _serviceId!,
-                    _host!.ViewName,
-                    _host.ViewVersion,
-                    MvStatus.CatchingUp,
-                    cancellationToken: cancellationToken);
+                var active = await _registryStore.GetActiveAsync(
+                        _serviceId!,
+                        _host!.ViewName,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                servingActive = active?.ActiveVersion == _host.ViewVersion;
+                servingGeneration = servingActive ? active!.Generation : null;
+                if (!servingActive)
+                {
+                    await _registryStore.UpdateStatusAsync(
+                        _serviceId!,
+                        _host.ViewName,
+                        _host.ViewVersion,
+                        MvStatus.CatchingUp,
+                        cancellationToken: cancellationToken);
+                }
+
                 _statusMarkedCatchingUp = true;
-                _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.CatchingUp };
+                if (servingActive)
+                {
+                    _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
+                }
+                else
+                {
+                    _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.CatchingUp };
+                }
+            }
+            else
+            {
+                var active = await _registryStore.GetActiveAsync(
+                        _serviceId!,
+                        _host!.ViewName,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                servingActive = active?.ActiveVersion == _host.ViewVersion;
+                servingGeneration = servingActive ? active!.Generation : null;
             }
 
             var result = await _executor.CatchUpOnceAsync(_host!, _serviceId, cancellationToken);
+            var activeAfterBatch = await _registryStore.GetActiveAsync(
+                    _serviceId!,
+                    _host!.ViewName,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            servingActive = servingActive &&
+                activeAfterBatch?.ActiveVersion == _host.ViewVersion &&
+                servingGeneration == activeAfterBatch.Generation;
             if (result.ProjectionStatus is { } projectionStatus)
             {
                 _publicationSnapshot = projectionStatus;
+            }
+            if (servingActive)
+            {
+                // The serving version remains Active while refresh catches up. The provider restore boundary below
+                // repairs any stale lifecycle rows once the batch reaches its settle point.
+                _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
             }
 
             if (!string.IsNullOrWhiteSpace(result.LastAppliedSortableUniqueId))
@@ -577,6 +630,34 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 .ConfigureAwait(false);
             if (active?.ActiveVersion == _host.ViewVersion)
             {
+                var restoreRequest = MvActiveStatusRestoreRequest.FromEntries(
+                    _serviceId!,
+                    _host.ViewName,
+                    _host.ViewVersion,
+                    active.Generation,
+                    entries);
+                MvActivationResult restoration;
+                try
+                {
+                    restoration = await _registryStore.TryRestoreActiveStatusAsync(
+                            restoreRequest,
+                            cancellationToken: cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (NotSupportedException ex)
+                {
+                    _lastError = $"Serving materialized-view status restoration is unsupported: {ex.Message}";
+                    _consecutiveEmptyBatches = 0;
+                    return;
+                }
+
+                if (!restoration.Succeeded)
+                {
+                    _lastError = $"Serving materialized-view status restoration was rejected: {restoration.FailureReason}.";
+                    _consecutiveEmptyBatches = 0;
+                    return;
+                }
+
                 _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
                 _isCatchUpActive = false;
                 _needsImmediateCatchUp = false;

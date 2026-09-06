@@ -347,6 +347,17 @@ public interface IMvRegistryStore
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("This registry store does not support forced materialized-view reverse switching.");
 
+    /// <summary>
+    ///     Additive provider-atomic repair for the currently serving version. Implementations lock the complete
+    ///     ordered registry row set and the active pointer, validate the generation and checkpoint truth, and repair
+    ///     only CatchingUp/Ready legacy statuses. Older custom stores remain source-compatible and fail explicitly.
+    /// </summary>
+    Task<MvActivationResult> TryRestoreActiveStatusAsync(
+        MvActiveStatusRestoreRequest request,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This registry store does not support atomic serving-status restoration.");
+
     Task SetActiveAsync(
         string serviceId,
         string viewName,

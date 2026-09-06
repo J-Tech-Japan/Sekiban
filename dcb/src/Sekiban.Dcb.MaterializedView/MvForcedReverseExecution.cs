@@ -14,6 +14,15 @@ public sealed record MvForcedReverseSqlPlan(
     string RollbackSavepointSql,
     string? ReleaseSavepointSql)
 {
+    /// <summary>
+    ///     Optional provider lock over every registry row for the exact service/view. It is acquired before the
+    ///     candidate rows and active pointer so forward and forced transitions use one deterministic lock order.
+    /// </summary>
+    public string? RegistryLockSql { get; init; }
+
+    /// <summary>Whether <see cref="RegistryLockSql"/> returns rows that must be drained through a reader.</summary>
+    public bool RegistryLockReturnsRows { get; init; }
+
     private const string CommonCandidateCountSql = """
         SELECT COUNT(*) FROM sekiban_mv_registry
         WHERE service_id = @ServiceId AND view_name = @ViewName AND view_version = @ViewVersion
@@ -50,7 +59,9 @@ public sealed record MvForcedReverseSqlPlan(
         string savepointSql,
         string rollbackSavepointSql,
         string? releaseSavepointSql,
-        string? pointerCasSql = null) =>
+        string? pointerCasSql = null,
+        string? registryLockSql = null,
+        bool registryLockReturnsRows = true) =>
         new(
             candidateFenceSql,
             fenceReturnsRows,
@@ -60,7 +71,11 @@ public sealed record MvForcedReverseSqlPlan(
             CommonMarkCandidateActiveSql,
             savepointSql,
             rollbackSavepointSql,
-            releaseSavepointSql);
+            releaseSavepointSql)
+        {
+            RegistryLockSql = registryLockSql,
+            RegistryLockReturnsRows = registryLockReturnsRows
+        };
 }
 
 /// <summary>Provider SQL for audit metadata written inside an ordinary activation transaction.</summary>
@@ -296,6 +311,23 @@ public static class MvForcedReverseExecution
         CancellationToken cancellationToken)
     {
         var parameters = Parameters(request, requestedAtValue);
+        if (sql.RegistryLockSql is not null)
+        {
+            if (sql.RegistryLockReturnsRows)
+            {
+                await CountRowsAsync(transaction, sql.RegistryLockSql, parameters, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await ExecuteNonQueryAsync(transaction, sql.RegistryLockSql, parameters, cancellationToken).ConfigureAwait(false);
+            }
+
+            await MvLifecycleTestHooks.InvokeAfterRegistryLockAsync(
+                    MvLifecycleLockPoint.ForcedReverseRegistry,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var fenced = sql.FenceReturnsRows
             ? await CountRowsAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false)
             : await ExecuteNonQueryAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false);
