@@ -20,8 +20,16 @@ public sealed class PostgresMvNullParameterTests(PostgresMvFixture fixture, ITes
         MvNullParameterAssertions.AssertNullableTextAsync(fixture, output);
 
     [SkippableFact]
+    public Task StatementOnlyNullableText_IsBoundThroughTheDapperStatementPath() =>
+        MvNullParameterAssertions.AssertStatementOnlyNullableTextAsync(fixture, output);
+
+    [SkippableFact]
     public Task NonInferableScalarNull_IsMeasuredAtThePostgresQueryPort() =>
         MvNullParameterAssertions.AssertPostgresNonInferableScalarAsync(fixture, output);
+
+    [SkippableFact]
+    public Task NonTextNullableStatement_IsBoundThroughTheSerializedStatementPath() =>
+        MvNullParameterAssertions.AssertNonTextStatementAsync(fixture, output);
 }
 
 [Collection(nameof(MySqlMvCollection))]
@@ -38,6 +46,10 @@ public sealed class SqlServerMvNullParameterTests(SqlServerMvFixture fixture, IT
     [SkippableFact]
     public Task NullableText_IsBoundAsSqlNull_AndAllQueryPortsExecute() =>
         MvNullParameterAssertions.AssertNullableTextAsync(fixture, output);
+
+    [SkippableFact]
+    public Task NonTextNullableStatement_IsBoundThroughTheSerializedStatementPath() =>
+        MvNullParameterAssertions.AssertNonTextStatementAsync(fixture, output);
 }
 
 [Collection(nameof(SqliteMvCollection))]
@@ -148,6 +160,54 @@ internal static class MvNullParameterAssertions
         }
     }
 
+    public static async Task AssertStatementOnlyNullableTextAsync(
+        PostgresMvFixture fixture,
+        ITestOutputHelper output)
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "PostgreSQL fixture is unavailable.");
+
+        await fixture.ResetAsync().ConfigureAwait(false);
+        var projector = new NullableTextMvProjector(statementOnly: true);
+        var host = new NativeMvApplyHost(projector, fixture.DomainTypes.EventTypes, fixture.DatabaseTypeForTests);
+        await fixture.Executor.InitializeAsync(host).ConfigureAwait(false);
+
+        var executor = new GeneralSekibanExecutor(fixture.EventStore, fixture.ActorAccessor, fixture.DomainTypes);
+        var forecastId = Guid.CreateVersion7();
+        var forecastDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+
+        await executor.ExecuteAsync(
+                new CreateWeatherForecast
+                {
+                    ForecastId = forecastId,
+                    Location = "Tokyo",
+                    Date = forecastDate,
+                    TemperatureC = 20,
+                    Summary = "initial"
+                })
+            .ConfigureAwait(false);
+        var firstCatchUp = await fixture.Executor.CatchUpOnceAsync(host).ConfigureAwait(false);
+
+        await executor.ExecuteAsync(
+                new UpdateWeatherForecast
+                {
+                    ForecastId = forecastId,
+                    Location = "Kyoto",
+                    Date = forecastDate.AddDays(1),
+                    TemperatureC = 21,
+                    Summary = null
+                })
+            .ConfigureAwait(false);
+        var nullCatchUp = await fixture.Executor.CatchUpOnceAsync(host).ConfigureAwait(false);
+        var row = await ReadRowAsync(fixture, projector, forecastId).ConfigureAwait(false);
+
+        output.WriteLine($"provider=Postgres; version={await ReadProviderVersionAsync(fixture).ConfigureAwait(false)}");
+        output.WriteLine($"statement-only-command={projector.LastApplySql}");
+
+        Assert.Equal(1, firstCatchUp.AppliedEvents);
+        Assert.Equal(1, nullCatchUp.AppliedEvents);
+        Assert.Null(row.Summary);
+    }
+
     public static async Task AssertPostgresNonInferableScalarAsync(
         PostgresMvFixture fixture,
         ITestOutputHelper output)
@@ -190,6 +250,71 @@ internal static class MvNullParameterAssertions
         }
     }
 
+    public static async Task AssertNonTextStatementAsync(
+        MultiProviderFixtureBase fixture,
+        ITestOutputHelper output)
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Materialized-view fixture is unavailable.");
+        Skip.If(
+            fixture.DatabaseTypeForTests is not (MvDbType.Postgres or MvDbType.SqlServer),
+            $"Non-text nullable statement characterization is only supported on PostgreSQL and SQL Server; actual provider is {fixture.DatabaseTypeForTests}.");
+
+        await fixture.ResetAsync().ConfigureAwait(false);
+        var projector = new NullableNonTextStatementMvProjector();
+        var host = new NativeMvApplyHost(projector, fixture.DomainTypes.EventTypes, fixture.DatabaseTypeForTests);
+        await fixture.Executor.InitializeAsync(host).ConfigureAwait(false);
+
+        var executor = new GeneralSekibanExecutor(fixture.EventStore, fixture.ActorAccessor, fixture.DomainTypes);
+        var forecastId = Guid.CreateVersion7();
+        var forecastDate = new DateOnly(2026, 1, 2);
+
+        await executor.ExecuteAsync(
+                new CreateWeatherForecast
+                {
+                    ForecastId = forecastId,
+                    Location = "Tokyo",
+                    Date = forecastDate,
+                    TemperatureC = 20,
+                    Summary = "seed"
+                })
+            .ConfigureAwait(false);
+        var seedCatchUp = await fixture.Executor.CatchUpOnceAsync(host).ConfigureAwait(false);
+        var seededRow = await ReadNonTextRowAsync(fixture, projector, forecastId).ConfigureAwait(false);
+        Assert.Equal(1, seedCatchUp.AppliedEvents);
+        AssertSeededNonTextValues(fixture.DatabaseTypeForTests, seededRow);
+
+        await executor.ExecuteAsync(
+                new UpdateWeatherForecast
+                {
+                    ForecastId = forecastId,
+                    Location = "Kyoto",
+                    Date = forecastDate.AddDays(1),
+                    TemperatureC = 21,
+                    Summary = null
+                })
+            .ConfigureAwait(false);
+
+        try
+        {
+            var nullCatchUp = await fixture.Executor.CatchUpOnceAsync(host).ConfigureAwait(false);
+            var nullRow = await ReadNonTextRowAsync(fixture, projector, forecastId).ConfigureAwait(false);
+
+            Assert.Equal(1, nullCatchUp.AppliedEvents);
+            AssertPersistedSqlNulls(fixture.DatabaseTypeForTests, nullRow);
+            output.WriteLine(
+                $"provider={fixture.DatabaseTypeForTests}; version={await ReadProviderVersionAsync(fixture).ConfigureAwait(false)}");
+            output.WriteLine(
+                $"characterization={NullableNonTextStatementMvProjector.CharacterizationName}; command={projector.LastNullStatementSql}; outcome=supported: returned statement persisted SQL NULL in every nullable non-text column");
+        }
+        catch (DbException exception)
+        {
+            output.WriteLine(
+                $"provider={fixture.DatabaseTypeForTests}; version={await ReadProviderVersionAsync(fixture).ConfigureAwait(false)}");
+            output.WriteLine(
+                $"characterization={NullableNonTextStatementMvProjector.CharacterizationName}; command={projector.LastNullStatementSql}; outcome=provider-limited: {DescribeProviderException(exception)}");
+        }
+    }
+
     private static void AssertCheckpointAdvanced(MvRegistryEntry entry)
     {
         Assert.True(entry.CurrentCheckpointTruth.IsKnown);
@@ -214,6 +339,76 @@ internal static class MvNullParameterAssertions
                 new { ForecastId = forecastId.ToString("D") })
             .ConfigureAwait(false);
     }
+
+    private static async Task<NullableNonTextRow> ReadNonTextRowAsync(
+        MultiProviderFixtureBase fixture,
+        NullableNonTextStatementMvProjector projector,
+        Guid forecastId)
+    {
+        await using var connection = await fixture.OpenConnectionAsync().ConfigureAwait(false);
+        var sql = fixture.DatabaseTypeForTests switch
+        {
+            MvDbType.Postgres => $"""
+                SELECT uuid_probe AS UuidProbe,
+                       timestamp_probe AS TimestampProbe,
+                       bytes_probe AS BytesProbe
+                FROM {projector.Rows.PhysicalName}
+                WHERE forecast_id = @ForecastId;
+                """,
+            MvDbType.SqlServer => $"""
+                SELECT int_probe AS IntProbe,
+                       bytes_probe AS BytesProbe
+                FROM {projector.Rows.PhysicalName}
+                WHERE forecast_id = @ForecastId;
+                """,
+            _ => throw new NotSupportedException($"Unsupported database type '{fixture.DatabaseTypeForTests}'.")
+        };
+        return await connection.QuerySingleAsync<NullableNonTextRow>(
+                sql,
+                new { ForecastId = forecastId.ToString("D") })
+            .ConfigureAwait(false);
+    }
+
+    private static void AssertSeededNonTextValues(MvDbType databaseType, NullableNonTextRow row)
+    {
+        switch (databaseType)
+        {
+            case MvDbType.Postgres:
+                Assert.Equal(NullableNonTextStatementMvProjector.SeededUuid, row.UuidProbe);
+                Assert.Equal(NullableNonTextStatementMvProjector.SeededTimestamp, row.TimestampProbe);
+                Assert.Equal(NullableNonTextStatementMvProjector.SeededBytes, row.BytesProbe);
+                break;
+            case MvDbType.SqlServer:
+                Assert.Equal(NullableNonTextStatementMvProjector.SeededInt, row.IntProbe);
+                Assert.Equal(NullableNonTextStatementMvProjector.SeededBytes, row.BytesProbe);
+                break;
+            default:
+                throw new NotSupportedException($"Unsupported database type '{databaseType}'.");
+        }
+    }
+
+    private static void AssertPersistedSqlNulls(MvDbType databaseType, NullableNonTextRow row)
+    {
+        switch (databaseType)
+        {
+            case MvDbType.Postgres:
+                Assert.Null(row.UuidProbe);
+                Assert.Null(row.TimestampProbe);
+                Assert.Null(row.BytesProbe);
+                break;
+            case MvDbType.SqlServer:
+                Assert.Null(row.IntProbe);
+                Assert.Null(row.BytesProbe);
+                break;
+            default:
+                throw new NotSupportedException($"Unsupported database type '{databaseType}'.");
+        }
+    }
+
+    private static string DescribeProviderException(DbException exception) =>
+        exception is PostgresException postgresException
+            ? $"{exception.GetType().FullName}; sql-state={postgresException.SqlState}; message={postgresException.MessageText}"
+            : $"{exception.GetType().FullName}; message={exception.Message}";
 
     private static async Task<MvRegistryEntry> ReadRegistryEntryAsync(
         MultiProviderFixtureBase fixture,
@@ -248,13 +443,15 @@ internal sealed class NullableTextMvProjector : IMaterializedViewProjector, IMvS
     public const string InferableTextQuery = "SELECT COALESCE(@Summary, 'query-fallback') AS summary;";
 
     private readonly bool _runNonInferableScalar;
+    private readonly bool _statementOnly;
     private readonly List<NullParameterQueryObservation> _queryObservations = [];
     private readonly List<NullParameterCharacterization> _characterizations = [];
     private bool _characterizationComplete;
 
-    public NullableTextMvProjector(bool runNonInferableScalar = false)
+    public NullableTextMvProjector(bool runNonInferableScalar = false, bool statementOnly = false)
     {
         _runNonInferableScalar = runNonInferableScalar;
+        _statementOnly = statementOnly;
     }
 
     public string ViewName => "NullBinding";
@@ -310,6 +507,21 @@ internal sealed class NullableTextMvProjector : IMaterializedViewProjector, IMvS
                 return [];
         }
 
+        var sql = BuildUpsert(ctx.DatabaseType);
+        var statement = new MvSqlStatement(
+            sql,
+            new
+            {
+                ForecastId = forecastId.ToString("D"),
+                Summary = summary,
+                SortableUniqueId = ctx.CurrentSortableUniqueId
+            });
+        if (_statementOnly)
+        {
+            LastApplySql = sql;
+            return [statement];
+        }
+
         if (_runNonInferableScalar)
         {
             NonInferableScalarResult = await ctx.ExecuteScalarAsync<string?>(
@@ -326,19 +538,8 @@ internal sealed class NullableTextMvProjector : IMaterializedViewProjector, IMvS
             _characterizationComplete = true;
         }
 
-        var sql = BuildUpsert(ctx.DatabaseType);
         LastApplySql = sql;
-        return
-        [
-            new MvSqlStatement(
-                sql,
-                new
-                {
-                    ForecastId = forecastId.ToString("D"),
-                    Summary = summary,
-                    SortableUniqueId = ctx.CurrentSortableUniqueId
-                })
-        ];
+        return [statement];
     }
 
     private async Task ExerciseInferableQueryPortsAsync(
@@ -552,11 +753,224 @@ internal sealed class NullableTextMvProjector : IMaterializedViewProjector, IMvS
     };
 }
 
+internal sealed class NullableNonTextStatementMvProjector :
+    IMaterializedViewProjector,
+    IMvSchemaRequirementsProvider
+{
+    public const string CharacterizationName = "uncast-nullable-nontext-update";
+    public static readonly Guid SeededUuid = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    public static readonly DateTimeOffset SeededTimestamp =
+        new(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
+    public static readonly byte[] SeededBytes = [1, 2, 3];
+    public const int SeededInt = 42;
+
+    public string ViewName => "NullBindingNonText";
+    public int ViewVersion => 1;
+    public MvTable Rows { get; private set; } = default!;
+    public string LastNullStatementSql { get; private set; } = string.Empty;
+
+    public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
+        MvDbType databaseType,
+        IMvTableBindings tables)
+    {
+        var columns = new List<MvSchemaColumnRequirement>
+        {
+            new("forecast_id", MvSchemaTypeFamily.String, false),
+            new("_last_sortable_unique_id", MvSchemaTypeFamily.String, false)
+        };
+
+        switch (databaseType)
+        {
+            case MvDbType.Postgres:
+                columns.Insert(1, new("uuid_probe", MvSchemaTypeFamily.Guid, true));
+                columns.Insert(2, new("timestamp_probe", MvSchemaTypeFamily.DateTime, true));
+                columns.Insert(3, new("bytes_probe", MvSchemaTypeFamily.Binary, true));
+                break;
+            case MvDbType.SqlServer:
+                columns.Insert(1, new("int_probe", MvSchemaTypeFamily.Integer, true));
+                columns.Insert(2, new("bytes_probe", MvSchemaTypeFamily.Binary, true));
+                break;
+            default:
+                throw new NotSupportedException(
+                    $"Nullable non-text statement characterization does not support '{databaseType}'.");
+        }
+
+        return
+        [
+            new MvSchemaTableRequirement(
+                "rows",
+                tables.GetPhysicalName("rows"),
+                columns,
+                ["forecast_id"])
+        ];
+    }
+
+    public async Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default)
+    {
+        Rows = ctx.RegisterTable("rows");
+        await ctx.ExecuteAsync(
+                CreateTableSql(ctx.DatabaseType, Rows.PhysicalName),
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public Task<IReadOnlyList<MvSqlStatement>> ApplyToViewAsync(
+        Event ev,
+        IMvApplyContext ctx,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return ev.Payload switch
+        {
+            WeatherForecastCreated created => Task.FromResult<IReadOnlyList<MvSqlStatement>>(
+            [
+                new MvSqlStatement(
+                    BuildSeedStatementSql(ctx.DatabaseType),
+                    BuildSeedParameters(created.ForecastId, ctx.CurrentSortableUniqueId, ctx.DatabaseType))
+            ]),
+            WeatherForecastUpdated updated => BuildNullUpdateStatementAsync(
+                ctx.DatabaseType,
+                updated.ForecastId,
+                ctx.CurrentSortableUniqueId),
+            _ => Task.FromResult<IReadOnlyList<MvSqlStatement>>([])
+        };
+    }
+
+    private Task<IReadOnlyList<MvSqlStatement>> BuildNullUpdateStatementAsync(
+        MvDbType databaseType,
+        Guid forecastId,
+        string sortableUniqueId)
+    {
+        LastNullStatementSql = BuildNullUpdateSql(databaseType);
+        object parameters = databaseType switch
+        {
+            MvDbType.Postgres => new
+            {
+                ForecastId = forecastId.ToString("D"),
+                UuidValue = (Guid?)null,
+                TimestampValue = (DateTimeOffset?)null,
+                BytesValue = (byte[]?)null,
+                SortableUniqueId = sortableUniqueId
+            },
+            MvDbType.SqlServer => new
+            {
+                ForecastId = forecastId.ToString("D"),
+                IntValue = (int?)null,
+                BytesValue = (byte[]?)null,
+                SortableUniqueId = sortableUniqueId
+            },
+            _ => throw new NotSupportedException(
+                $"Nullable non-text statement characterization does not support '{databaseType}'.")
+        };
+
+        return Task.FromResult<IReadOnlyList<MvSqlStatement>>(
+        [new MvSqlStatement(LastNullStatementSql, parameters)]);
+    }
+
+    private static object BuildSeedParameters(
+        Guid forecastId,
+        string sortableUniqueId,
+        MvDbType databaseType) => databaseType switch
+    {
+        MvDbType.Postgres => new
+        {
+            ForecastId = forecastId.ToString("D"),
+            UuidValue = SeededUuid,
+            TimestampValue = SeededTimestamp,
+            BytesValue = SeededBytes,
+            SortableUniqueId = sortableUniqueId
+        },
+        MvDbType.SqlServer => new
+        {
+            ForecastId = forecastId.ToString("D"),
+            IntValue = SeededInt,
+            BytesValue = SeededBytes,
+            SortableUniqueId = sortableUniqueId
+        },
+        _ => throw new NotSupportedException(
+            $"Nullable non-text statement characterization does not support '{databaseType}'.")
+    };
+
+    private string BuildSeedStatementSql(MvDbType databaseType) => databaseType switch
+    {
+        MvDbType.Postgres => $"""
+            INSERT INTO {Rows.PhysicalName}
+                (forecast_id, uuid_probe, timestamp_probe, bytes_probe, _last_sortable_unique_id)
+            VALUES
+                (@ForecastId, @UuidValue, @TimestampValue, @BytesValue, @SortableUniqueId);
+            """,
+        MvDbType.SqlServer => $"""
+            INSERT INTO {Rows.PhysicalName}
+                (forecast_id, int_probe, bytes_probe, _last_sortable_unique_id)
+            VALUES
+                (@ForecastId, @IntValue, @BytesValue, @SortableUniqueId);
+            """,
+        _ => throw new NotSupportedException(
+            $"Nullable non-text statement characterization does not support '{databaseType}'.")
+    };
+
+    private string BuildNullUpdateSql(MvDbType databaseType) => databaseType switch
+    {
+        MvDbType.Postgres => $"""
+            UPDATE {Rows.PhysicalName}
+            SET uuid_probe = @UuidValue,
+                timestamp_probe = @TimestampValue,
+                bytes_probe = @BytesValue,
+                _last_sortable_unique_id = @SortableUniqueId
+            WHERE forecast_id = @ForecastId;
+            """,
+        MvDbType.SqlServer => $"""
+            UPDATE {Rows.PhysicalName}
+            SET int_probe = @IntValue,
+                bytes_probe = @BytesValue,
+                _last_sortable_unique_id = @SortableUniqueId
+            WHERE forecast_id = @ForecastId;
+            """,
+        _ => throw new NotSupportedException(
+            $"Nullable non-text statement characterization does not support '{databaseType}'.")
+    };
+
+    private static string CreateTableSql(MvDbType databaseType, string tableName) => databaseType switch
+    {
+        MvDbType.Postgres => $"""
+            CREATE TABLE IF NOT EXISTS {tableName} (
+                forecast_id VARCHAR(36) NOT NULL PRIMARY KEY,
+                uuid_probe UUID NULL,
+                timestamp_probe TIMESTAMPTZ NULL,
+                bytes_probe BYTEA NULL,
+                _last_sortable_unique_id VARCHAR(64) NOT NULL
+            );
+            """,
+        MvDbType.SqlServer => $"""
+            IF OBJECT_ID(N'{tableName}', N'U') IS NULL
+            BEGIN
+                CREATE TABLE {tableName} (
+                    forecast_id NVARCHAR(36) NOT NULL PRIMARY KEY,
+                    int_probe INT NULL,
+                    bytes_probe VARBINARY(MAX) NULL,
+                    _last_sortable_unique_id NVARCHAR(64) NOT NULL
+                );
+            END;
+            """,
+        _ => throw new NotSupportedException(
+            $"Nullable non-text statement characterization does not support '{databaseType}'.")
+    };
+}
+
 internal sealed class NullableTextRow
 {
     public string ForecastId { get; init; } = string.Empty;
     public string? Summary { get; init; }
     public string LastSortableUniqueId { get; init; } = string.Empty;
+}
+
+internal sealed class NullableNonTextRow
+{
+    public Guid? UuidProbe { get; init; }
+    public DateTimeOffset? TimestampProbe { get; init; }
+    public byte[]? BytesProbe { get; init; }
+    public int? IntProbe { get; init; }
 }
 
 internal sealed record NullParameterQueryObservation(string Port, string Input, string Output);

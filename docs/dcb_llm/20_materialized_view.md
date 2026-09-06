@@ -262,9 +262,19 @@ SQL `NULL`.
 
 The wire contract supplies an untyped SQL `NULL`, not a typed-null extension. Nullable text and query shapes that give
 the provider an inferable type are supported. UUID, timestamp, binary, and other non-text shapes are provider/query
-characterizations: add an explicit SQL cast or another type context when required, and measure the result. For example,
-PostgreSQL `SELECT @P` is deliberately non-inferable and must not be assumed to work merely because a nullable text
-column binding does.
+characterizations: add an explicit SQL cast or another type context when required, and measure the result.
+The multi-provider regression measures both the cast query shape and an uncast statement shape through a returned
+`MvSqlStatement` executed by the `NativeMvApplyHost`/`MvExecutor` path. It seeds a matching row and reads it back after
+the nullable update, so a supported result proves persisted SQL `NULL`. PostgreSQL uses
+`SELECT CAST(@UuidValue AS uuid), CAST(@TimestampValue AS timestamptz), CAST(@BytesValue AS bytea)` and
+`UPDATE ... SET uuid_probe = @UuidValue, timestamp_probe = @TimestampValue, bytes_probe = @BytesValue`, while SQL Server
+uses `SELECT CAST(@IntValue AS int), CAST(@BytesValue AS varbinary(max))` and
+`UPDATE ... SET int_probe = @IntValue, bytes_probe = @BytesValue`. In the current SQL Server 2022 fixture, the uncast
+`varbinary(max)` statement is provider-limited and measures the exact
+`Microsoft.Data.SqlClient.SqlException`: `Implicit conversion from data type nvarchar to varbinary(max) is not allowed. Use the CONVERT function to run this query.`
+The characterization retains that provider exception after the catch-up boundary, outside the event transaction. An uncast `UPDATE` assignment has column type context
+and is measured separately from a query such as PostgreSQL `SELECT @P`; the latter returned SQL `NULL` in the current
+PostgreSQL 16.15 fixture, but remains untyped and must not be assumed portable.
 
 ## Pre-Provisioned Schema and Host-Owned SQL Policy
 

@@ -446,6 +446,7 @@ public sealed class PostgresMvFixture : MultiProviderFixtureBase
 
     protected override string ResetSql => """
         DROP TABLE IF EXISTS sekiban_mv_nullbinding_v1_rows;
+        DROP TABLE IF EXISTS sekiban_mv_nullbindingnontext_v1_rows;
         DROP TABLE IF EXISTS sekiban_mv_weatherforecastportable_v1_forecasts;
         DROP TABLE IF EXISTS sekiban_mv_active;
         DROP TABLE IF EXISTS sekiban_mv_registry;
@@ -549,6 +550,7 @@ public sealed class MySqlMvFixture : MultiProviderFixtureBase
 
     protected override string ResetSql => """
         DROP TABLE IF EXISTS sekiban_mv_nullbinding_v1_rows;
+        DROP TABLE IF EXISTS sekiban_mv_nullbindingnontext_v1_rows;
         DROP TABLE IF EXISTS sekiban_mv_weatherforecastportable_v1_forecasts;
         DROP TABLE IF EXISTS sekiban_mv_active;
         DROP TABLE IF EXISTS sekiban_mv_registry;
@@ -662,6 +664,7 @@ public sealed class SqlServerMvFixture : MultiProviderFixtureBase
 
     protected override string ResetSql => """
         IF OBJECT_ID(N'sekiban_mv_nullbinding_v1_rows', N'U') IS NOT NULL DROP TABLE sekiban_mv_nullbinding_v1_rows;
+        IF OBJECT_ID(N'sekiban_mv_nullbindingnontext_v1_rows', N'U') IS NOT NULL DROP TABLE sekiban_mv_nullbindingnontext_v1_rows;
         IF OBJECT_ID(N'sekiban_mv_weatherforecastportable_v1_forecasts', N'U') IS NOT NULL DROP TABLE sekiban_mv_weatherforecastportable_v1_forecasts;
         IF OBJECT_ID(N'sekiban_mv_active', N'U') IS NOT NULL DROP TABLE sekiban_mv_active;
         IF OBJECT_ID(N'sekiban_mv_registry', N'U') IS NOT NULL DROP TABLE sekiban_mv_registry;
@@ -759,6 +762,7 @@ public sealed class SqliteMvFixture : MultiProviderFixtureBase
 
     protected override string ResetSql => """
         DROP TABLE IF EXISTS sekiban_mv_nullbinding_v1_rows;
+        DROP TABLE IF EXISTS sekiban_mv_nullbindingnontext_v1_rows;
         DROP TABLE IF EXISTS sekiban_mv_weatherforecastportable_v1_forecasts;
         DROP TABLE IF EXISTS sekiban_mv_policysurface_v1_records;
         DROP TABLE IF EXISTS sekiban_mv_active;

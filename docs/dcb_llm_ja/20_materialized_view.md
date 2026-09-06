@@ -264,9 +264,19 @@ null の `ValueJson` を持つ非 `Null` kind は SQL `NULL` として扱わず�
 
 wire contract が提供するのは型なしの SQL `NULL` であり、型付き null の拡張ではありません。nullable text と、provider が
 型を推論できる query 形状はサポート対象です。UUID、timestamp、binary などの非 text 形状は provider / query の
-characterization です。必要なら SQL の明示的な cast など型コンテキストを追加し、結果を実測してください。たとえば
-PostgreSQL の `SELECT @P` は意図的に型を推論できない形状なので、nullable text の列バインドが成功するからといって
-動作すると仮定してはいけません。
+characterization です。必要なら SQL の明示的な cast など型コンテキストを追加し、結果を実測してください。
+multi-provider 回帰テストでは、返された `MvSqlStatement` を `NativeMvApplyHost` / `MvExecutor` 経由で実行し、cast query と
+uncast statement の両方を測定します。対応できる場合は一致する行を seed して nullable update 後に読み戻すため、永続化された
+SQL `NULL` を確認できます。PostgreSQL は
+`SELECT CAST(@UuidValue AS uuid), CAST(@TimestampValue AS timestamptz), CAST(@BytesValue AS bytea)` と
+`UPDATE ... SET uuid_probe = @UuidValue, timestamp_probe = @TimestampValue, bytes_probe = @BytesValue`、SQL Server は
+`SELECT CAST(@IntValue AS int), CAST(@BytesValue AS varbinary(max))` と
+`UPDATE ... SET int_probe = @IntValue, bytes_probe = @BytesValue` を使います。current SQL Server 2022 fixture では、uncast
+`varbinary(max)` statement は provider-limited となり、次の exact な
+`Microsoft.Data.SqlClient.SqlException` を測定しました: `Implicit conversion from data type nvarchar to varbinary(max) is not allowed. Use the CONVERT function to run this query.`
+この provider exception は catch-up boundary の後、event transaction の外側で保持します。column assignment を持つ uncast `UPDATE`
+は query とは別に列の型コンテキストを測定します。PostgreSQL の `SELECT @P` は current PostgreSQL 16.15 fixture では
+SQL `NULL` を返しましたが、型なしで portable ではないため、nullable text の列バインドが成功するからといって動作を仮定してはいけません。
 
 ## 事前プロビジョニングしたスキーマとホスト所有 SQL ポリシー
 
