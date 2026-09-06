@@ -84,7 +84,7 @@ public static class MvParamConverter
                 $"Materialized view parameter '{param.Name}' has kind '{param.Kind}' but no serialized value.")
             : param.Kind switch
         {
-            MvParamKind.Null => DBNull.Value,
+            MvParamKind.Null => null,
             MvParamKind.String => Deserialize<string>(param.ValueJson),
             MvParamKind.Int32 => Deserialize<int>(param.ValueJson),
             MvParamKind.Int64 => Deserialize<long>(param.ValueJson),

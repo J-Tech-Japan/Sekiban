@@ -242,6 +242,30 @@ Projector responsibilities:
 - `ApplyToViewAsync`
   Translate one event into one or more SQL statements.
 
+## SQL Parameters and Nullable Values
+
+`MvParamConverter` preserves the distinction between an absent parameter and a present parameter whose value is null.
+An anonymous object such as `new { Summary = nullableSummary }` serializes a null value as
+`MvParamKind.Null` with no `ValueJson`, then maps it back to CLR `null` at the Dapper boundary. Dapper and the selected
+provider can therefore infer SQL `NULL` from the target column or SQL expression:
+
+```csharp
+return new MvSqlStatement(
+    $"UPDATE {Forecasts.PhysicalName} SET summary = @Summary WHERE forecast_id = @ForecastId",
+    new { ForecastId = forecastId, Summary = nullableSummary });
+```
+
+Do not pass `DBNull.Value` from application projector parameters; explicit `DBNull` input is unsupported. Passing no
+parameter object still means that no parameters are sent, and non-null values retain their existing CLR/wire kinds.
+Malformed non-null wire parameters (a non-`Null` kind with missing `ValueJson`) remain errors rather than being treated as
+SQL `NULL`.
+
+The wire contract supplies an untyped SQL `NULL`, not a typed-null extension. Nullable text and query shapes that give
+the provider an inferable type are supported. UUID, timestamp, binary, and other non-text shapes are provider/query
+characterizations: add an explicit SQL cast or another type context when required, and measure the result. For example,
+PostgreSQL `SELECT @P` is deliberately non-inferable and must not be assumed to work merely because a nullable text
+column binding does.
+
 ## Pre-Provisioned Schema and Host-Owned SQL Policy
 
 Initialization keeps the historical `CreateOrEnsure` behavior by default. Hosts that provision database objects through

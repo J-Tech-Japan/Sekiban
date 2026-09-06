@@ -273,6 +273,28 @@ public class MaterializedViewUnitTests
     }
 
     [Fact]
+    public void MvParamConverter_MapsSerializedNullToClrNull()
+    {
+        var parameters = MvParamConverter.FromObject(new { Summary = (string?)null });
+        var parameter = Assert.Single(parameters);
+
+        Assert.Equal(MvParamKind.Null, parameter.Kind);
+        Assert.Null(parameter.ValueJson);
+        Assert.Null(MvParamConverter.ToClrValue(parameter));
+    }
+
+    [Fact]
+    public void MvParamConverter_PreservesAbsentParametersAndRejectsExplicitDbNull()
+    {
+        Assert.Empty(MvParamConverter.FromObject(null));
+
+        var exception = Assert.Throws<NotSupportedException>(
+            () => MvParamConverter.FromObject(new { Summary = DBNull.Value }));
+
+        Assert.Contains("System.DBNull", exception.Message);
+    }
+
+    [Fact]
     public void MvParamConverter_RejectsNullPayloadForNonNullKind()
     {
         var exception = Assert.Throws<InvalidOperationException>(

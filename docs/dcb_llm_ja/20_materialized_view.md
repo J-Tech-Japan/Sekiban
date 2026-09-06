@@ -245,6 +245,29 @@ public sealed class WeatherForecastMvV1 : IMaterializedViewProjector
 - `ApplyToViewAsync`
   1 イベントを 1 個以上の SQL 文へ変換
 
+## SQL パラメーターと nullable 値
+
+`MvParamConverter` は、パラメーターが存在しない場合と、存在するパラメーターの値が null の場合を区別します。
+`new { Summary = nullableSummary }` のような匿名オブジェクトの null 値は、`ValueJson` を持たない
+`MvParamKind.Null` としてシリアライズされ、その後 Dapper 境界で CLR の `null` に戻ります。これにより、Dapper
+と選択した provider は、対象列または SQL 式から SQL `NULL` の型を推論できます。
+
+```csharp
+return new MvSqlStatement(
+    $"UPDATE {Forecasts.PhysicalName} SET summary = @Summary WHERE forecast_id = @ForecastId",
+    new { ForecastId = forecastId, Summary = nullableSummary });
+```
+
+application の projector パラメーターから `DBNull.Value` を渡さないでください。明示的な `DBNull` 入力は未対応です。
+パラメーター object を渡さなければパラメーターは送信されず、null でない値は従来の CLR / wire kind を維持します。
+null の `ValueJson` を持つ非 `Null` kind は SQL `NULL` として扱わず、これまでどおりエラーにします。
+
+wire contract が提供するのは型なしの SQL `NULL` であり、型付き null の拡張ではありません。nullable text と、provider が
+型を推論できる query 形状はサポート対象です。UUID、timestamp、binary などの非 text 形状は provider / query の
+characterization です。必要なら SQL の明示的な cast など型コンテキストを追加し、結果を実測してください。たとえば
+PostgreSQL の `SELECT @P` は意図的に型を推論できない形状なので、nullable text の列バインドが成功するからといって
+動作すると仮定してはいけません。
+
 ## 事前プロビジョニングしたスキーマとホスト所有 SQL ポリシー
 
 初期化の既定値は、従来互換の `CreateOrEnsure` です。deployment migration などで DB オブジェクトを管理する
