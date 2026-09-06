@@ -226,7 +226,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         var status = await grain.GetStatusAsync();
         Assert.True(status.Started);
         Assert.All(after, row => Assert.Equal("active", row.Status));
-        AssertLifecycleDataUnchanged(before, after);
+        AssertReactivationLifecycleDataUnchanged(before, after);
 
         var activeAfter = await ReadActivePointerAsync();
         Assert.Equal(activeBefore, activeAfter);
@@ -881,7 +881,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             new { ServiceId = DefaultServiceIdProvider.DefaultServiceId });
     }
 
-    private static void AssertLifecycleDataUnchanged(
+    private static void AssertReactivationLifecycleDataUnchanged(
         IReadOnlyList<LifecycleRegistryRow> before,
         IReadOnlyList<LifecycleRegistryRow> after)
     {
@@ -889,8 +889,50 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         foreach (var expected in before)
         {
             var actual = after.Single(row => row.LogicalTable == expected.LogicalTable);
-            Assert.Equal(expected with { Status = actual.Status }, actual);
+            Assert.Equal(expected.LogicalTable, actual.LogicalTable);
+            Assert.Equal(expected.PhysicalTable, actual.PhysicalTable);
+            Assert.Equal(expected.Status, actual.Status);
+            Assert.Equal(expected.CurrentPosition, actual.CurrentPosition);
+            Assert.Equal(expected.TargetPosition, actual.TargetPosition);
+            Assert.Equal(expected.CurrentCheckpointTruth, actual.CurrentCheckpointTruth);
+            AssertTargetCheckpointTruthUnchangedExceptStartupCaptureTimestamp(
+                expected.TargetCheckpointTruth,
+                actual.TargetCheckpointTruth);
+            Assert.Equal(expected.LastSortableUniqueId, actual.LastSortableUniqueId);
+            Assert.Equal(expected.AppliedEventVersion, actual.AppliedEventVersion);
+            Assert.Equal(expected.LastAppliedSource, actual.LastAppliedSource);
+            Assert.Equal(expected.LastAppliedAt, actual.LastAppliedAt);
+            Assert.Equal(expected.LastStreamReceivedSortableUniqueId, actual.LastStreamReceivedSortableUniqueId);
+            Assert.Equal(expected.LastStreamReceivedAt, actual.LastStreamReceivedAt);
+            Assert.Equal(expected.LastStreamAppliedSortableUniqueId, actual.LastStreamAppliedSortableUniqueId);
+            Assert.Equal(expected.LastCatchUpSortableUniqueId, actual.LastCatchUpSortableUniqueId);
+            Assert.Equal(expected.Metadata, actual.Metadata);
         }
+    }
+
+    private static void AssertTargetCheckpointTruthUnchangedExceptStartupCaptureTimestamp(
+        string? expectedSerialized,
+        string? actualSerialized)
+    {
+        var expected = MvCheckpointTruthCodec.Decode(expectedSerialized);
+        var actual = MvCheckpointTruthCodec.Decode(actualSerialized);
+
+        Assert.Equal(expected.State, actual.State);
+        Assert.Equal(expected.IsKnownZero, actual.IsKnownZero);
+        Assert.Equal(expected.PositionValue, actual.PositionValue);
+        Assert.Equal(expected.UnknownReason, actual.UnknownReason);
+
+        Assert.NotNull(expected.Provenance);
+        Assert.NotNull(actual.Provenance);
+        var expectedProvenance = expected.Provenance!;
+        var actualProvenance = actual.Provenance!;
+        Assert.Equal(MvCheckpointProvenanceKind.AuthoritativeTargetCapture, expectedProvenance.Kind);
+        Assert.Equal(expectedProvenance.Kind, actualProvenance.Kind);
+        Assert.Equal(expectedProvenance.ApplySource, actualProvenance.ApplySource);
+
+        Assert.True(
+            actualProvenance.ObservedAtUtc >= expectedProvenance.ObservedAtUtc,
+            $"Startup target capture provenance regressed from {expectedProvenance.ObservedAtUtc:O} to {actualProvenance.ObservedAtUtc:O}.");
     }
 
     private sealed class OrderProjectionRow
