@@ -23,6 +23,7 @@ public sealed partial class MySqlMvRegistryStore
         savepointSql: "SAVEPOINT sekiban_mv_forced_reverse;",
         rollbackSavepointSql: "ROLLBACK TO SAVEPOINT sekiban_mv_forced_reverse;",
         releaseSavepointSql: "RELEASE SAVEPOINT sekiban_mv_forced_reverse;",
+        pointerCasSql: null,
         registryLockSql: """
             SELECT logical_table FROM sekiban_mv_registry
             WHERE service_id = @ServiceId AND view_name = @ViewName

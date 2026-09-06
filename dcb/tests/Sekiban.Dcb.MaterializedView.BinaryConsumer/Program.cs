@@ -24,5 +24,16 @@ Func<IMvExecutor, IMvApplyHost, Task<int>> applySignature =
 Func<IMvActivationExecutor, IMvApplyHost, Task<MvCheckpointTruth>> captureSignature =
     static (executor, host) => executor.CaptureTargetCheckpointAsync(host);
 
+var legacyForcedReversePlan = MvForcedReverseSqlPlan.Create(
+    "candidate-fence",
+    true,
+    "savepoint",
+    "rollback",
+    null);
+if (legacyForcedReversePlan.CandidateFenceSql != "candidate-fence")
+{
+    throw new InvalidOperationException("The legacy forced-reverse factory did not execute against the current assembly.");
+}
+
 Console.WriteLine(
     $"binary-consumer-ok:{options.ServiceId}:{typeof(IMvExecutor).FullName}:{applySignature.Method.ReturnType.Name}:{captureSignature.Method.ReturnType.Name}");

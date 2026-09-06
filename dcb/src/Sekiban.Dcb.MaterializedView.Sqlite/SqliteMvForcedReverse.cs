@@ -22,6 +22,7 @@ public sealed partial class SqliteMvRegistryStore
         savepointSql: "SAVEPOINT sekiban_mv_forced_reverse;",
         rollbackSavepointSql: "ROLLBACK TO SAVEPOINT sekiban_mv_forced_reverse;",
         releaseSavepointSql: "RELEASE SAVEPOINT sekiban_mv_forced_reverse;",
+        pointerCasSql: null,
         registryLockSql: """
             UPDATE sekiban_mv_registry SET last_updated = last_updated
             WHERE service_id = @ServiceId AND view_name = @ViewName;

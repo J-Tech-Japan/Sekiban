@@ -59,9 +59,45 @@ public sealed record MvForcedReverseSqlPlan(
         string savepointSql,
         string rollbackSavepointSql,
         string? releaseSavepointSql,
-        string? pointerCasSql = null,
-        string? registryLockSql = null,
+        string? pointerCasSql = null) =>
+        CreateCore(
+            candidateFenceSql,
+            fenceReturnsRows,
+            savepointSql,
+            rollbackSavepointSql,
+            releaseSavepointSql,
+            pointerCasSql,
+            registryLockSql: null,
+            registryLockReturnsRows: true);
+
+    public static MvForcedReverseSqlPlan Create(
+        string candidateFenceSql,
+        bool fenceReturnsRows,
+        string savepointSql,
+        string rollbackSavepointSql,
+        string? releaseSavepointSql,
+        string? pointerCasSql,
+        string? registryLockSql,
         bool registryLockReturnsRows = true) =>
+        CreateCore(
+            candidateFenceSql,
+            fenceReturnsRows,
+            savepointSql,
+            rollbackSavepointSql,
+            releaseSavepointSql,
+            pointerCasSql,
+            registryLockSql,
+            registryLockReturnsRows);
+
+    private static MvForcedReverseSqlPlan CreateCore(
+        string candidateFenceSql,
+        bool fenceReturnsRows,
+        string savepointSql,
+        string rollbackSavepointSql,
+        string? releaseSavepointSql,
+        string? pointerCasSql,
+        string? registryLockSql,
+        bool registryLockReturnsRows) =>
         new(
             candidateFenceSql,
             fenceReturnsRows,
