@@ -925,9 +925,9 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         string? LastSortableUniqueId,
         long AppliedEventVersion,
         string? LastAppliedSource,
-        DateTimeOffset? LastAppliedAt,
+        DateTime? LastAppliedAt,
         string? LastStreamReceivedSortableUniqueId,
-        DateTimeOffset? LastStreamReceivedAt,
+        DateTime? LastStreamReceivedAt,
         string? LastStreamAppliedSortableUniqueId,
         string? LastCatchUpSortableUniqueId,
         string? Metadata);
@@ -935,10 +935,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
     private sealed record ActivePointerRow(
         int ActiveVersion,
         long ActiveGeneration,
-        DateTimeOffset ActivatedAt,
+        DateTime ActivatedAt,
         string SwitchKind,
         string? SwitchReason,
-        DateTimeOffset? SwitchedAtUtc);
+        DateTime? SwitchedAtUtc);
 
     private sealed class WeatherProjectionRow
     {

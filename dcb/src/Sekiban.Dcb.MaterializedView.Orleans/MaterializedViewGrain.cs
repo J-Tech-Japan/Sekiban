@@ -832,6 +832,11 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 }
 
                 firstBlocked ??= dueEvent;
+                // Do not let a later event advance the registry watermark past a missing predecessor. The executor
+                // intentionally reports a zero-row stream apply as blocked when the projected row is not present;
+                // continuing here could make a later retry classify that still-missing event as stale solely because
+                // the global position moved, permanently losing the update.
+                break;
             }
 
             if (appliedSortableUniqueIds.Count == 0)

@@ -37,6 +37,7 @@ public static class MvActiveStatusRestoreExecution
 {
     private const string SavepointOperationName = "serving-status restore";
     private static readonly AsyncLocal<Func<DbTransaction, CancellationToken, Task>?> AfterCandidateLockTestBarrier = new();
+    private static readonly AsyncLocal<Func<DbTransaction, CancellationToken, Task>?> AfterActivePointerReadTestBarrier = new();
 
     internal static IDisposable PushAfterCandidateLockTestBarrier(
         Func<DbTransaction, CancellationToken, Task> barrier)
@@ -44,7 +45,16 @@ public static class MvActiveStatusRestoreExecution
         ArgumentNullException.ThrowIfNull(barrier);
         var previous = AfterCandidateLockTestBarrier.Value;
         AfterCandidateLockTestBarrier.Value = barrier;
-        return new TestBarrierScope(previous);
+        return new TestBarrierScope(() => AfterCandidateLockTestBarrier.Value = previous);
+    }
+
+    internal static IDisposable PushAfterActivePointerReadTestBarrier(
+        Func<DbTransaction, CancellationToken, Task> barrier)
+    {
+        ArgumentNullException.ThrowIfNull(barrier);
+        var previous = AfterActivePointerReadTestBarrier.Value;
+        AfterActivePointerReadTestBarrier.Value = barrier;
+        return new TestBarrierScope(() => AfterActivePointerReadTestBarrier.Value = previous);
     }
 
     public static async Task<MvActivationResult> ExecuteAsync<TConnection>(
@@ -274,6 +284,11 @@ public static class MvActiveStatusRestoreExecution
 
         var pointer = await ReadActivePointerAsync(transaction, sql.ActivePointerLockSql, parameters, cancellationToken)
             .ConfigureAwait(false);
+        if (AfterActivePointerReadTestBarrier.Value is { } pointerReadBarrier)
+        {
+            await pointerReadBarrier(transaction, cancellationToken).ConfigureAwait(false);
+        }
+
         var validation = ValidateLockedSnapshot(request, rows, pointer);
         if (validation is not null)
         {
@@ -667,8 +682,8 @@ public static class MvActiveStatusRestoreExecution
 
     private sealed record MvActiveStatusRestorePointer(int ActiveVersion, long ActiveGeneration);
 
-    private sealed class TestBarrierScope(Func<DbTransaction, CancellationToken, Task>? previous) : IDisposable
+    private sealed class TestBarrierScope(Action restore) : IDisposable
     {
-        public void Dispose() => AfterCandidateLockTestBarrier.Value = previous;
+        public void Dispose() => restore();
     }
 }

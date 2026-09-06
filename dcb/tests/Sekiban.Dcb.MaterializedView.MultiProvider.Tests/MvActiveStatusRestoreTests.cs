@@ -13,7 +13,12 @@ public sealed class PostgresMvActiveStatusRestoreTests(PostgresMvFixture fixture
 public sealed class MySqlMvActiveStatusRestoreTests(MySqlMvFixture fixture) : MvActiveStatusRestoreTestsBase(fixture);
 
 [Collection(nameof(SqlServerMvCollection))]
-public sealed class SqlServerMvActiveStatusRestoreTests(SqlServerMvFixture fixture) : MvActiveStatusRestoreTestsBase(fixture);
+public sealed class SqlServerMvActiveStatusRestoreTests(SqlServerMvFixture fixture) : MvActiveStatusRestoreTestsBase(fixture)
+{
+    [SkippableFact]
+    public Task PointerRead_UsesUpdateHoldLockToBlockSuperseder() =>
+        MvActiveStatusRestoreAssertions.AssertSqlServerPointerReadLockAsync(fixture);
+}
 
 [Collection(nameof(SqliteMvCollection))]
 public sealed class SqliteMvActiveStatusRestoreTests(SqliteMvFixture fixture) : MvActiveStatusRestoreTestsBase(fixture);
@@ -302,6 +307,87 @@ internal static class MvActiveStatusRestoreAssertions
         var pointer = await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false);
         Assert.NotNull(pointer);
         Assert.Equal(active.Generation + (isSqlite ? 0 : 1), pointer.Generation);
+    }
+
+    public static async Task AssertSqlServerPointerReadLockAsync(MultiProviderFixtureBase fixture)
+    {
+        Assert.Equal(MvDbType.SqlServer, fixture.DatabaseTypeForTests);
+
+        var (store, active, _) = await PrepareServingVersionAsync(fixture).ConfigureAwait(false);
+        await SetStatusAsync(fixture, "orders", "catchingup").ConfigureAwait(false);
+        var damaged = await store.GetEntriesAsync(ServiceId, ViewName, ViewVersion).ConfigureAwait(false);
+        var request = MvActiveStatusRestoreRequest.FromEntries(
+            ServiceId,
+            ViewName,
+            ViewVersion,
+            active.Generation,
+            damaged);
+        var pointerRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releasePointerRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        using var barrier = MvActiveStatusRestoreExecution.PushAfterActivePointerReadTestBarrier(
+            (_, cancellationToken) =>
+            {
+                pointerRead.TrySetResult();
+                return releasePointerRead.Task.WaitAsync(cancellationToken);
+            });
+
+        var restoreTask = store.TryRestoreActiveStatusAsync(request);
+        await pointerRead.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+
+        await using var superseder = await fixture.OpenConnectionAsync().ConfigureAwait(false);
+        await using var supersederTransaction = await superseder.BeginTransactionAsync().ConfigureAwait(false);
+        var supersederUpdateTask = superseder.ExecuteAsync(
+            new CommandDefinition(
+                "UPDATE sekiban_mv_active SET active_generation = active_generation + 1 WHERE service_id = @ServiceId AND view_name = @ViewName;",
+                new { ServiceId, ViewName },
+                supersederTransaction,
+                commandTimeout: 5));
+
+        try
+        {
+            var completedBeforeRelease = await Task.WhenAny(
+                    supersederUpdateTask,
+                    Task.Delay(TimeSpan.FromSeconds(1)))
+                .ConfigureAwait(false);
+            Assert.False(
+                ReferenceEquals(supersederUpdateTask, completedBeforeRelease),
+                "The SQL Server pointer read must hold UPDLOCK,HOLDLOCK; a plain SELECT would let the superseder update complete and permit stale active restoration.");
+
+            releasePointerRead.TrySetResult();
+            var restoration = await restoreTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            Assert.True(restoration.Succeeded, restoration.Message);
+            await supersederUpdateTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            await supersederTransaction.CommitAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            releasePointerRead.TrySetResult();
+            try
+            {
+                await restoreTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Preserve the assertion or provider failure from the main path.
+            }
+
+            try
+            {
+                await supersederUpdateTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Disposal rolls back an uncommitted superseder transaction after a failed assertion.
+            }
+        }
+
+        var pointer = await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false);
+        Assert.NotNull(pointer);
+        Assert.Equal(active.Generation + 1, pointer.Generation);
+        Assert.All(
+            await store.GetEntriesAsync(ServiceId, ViewName, ViewVersion).ConfigureAwait(false),
+            entry => Assert.Equal(MvStatus.Active, entry.Status));
     }
 
     public static async Task AssertMissingRowAsync(MultiProviderFixtureBase fixture)
