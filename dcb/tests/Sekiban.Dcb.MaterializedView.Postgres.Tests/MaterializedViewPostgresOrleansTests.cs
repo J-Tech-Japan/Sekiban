@@ -850,8 +850,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         }
 
         var baselineStatus = await grain.GetStatusAsync();
-        var baselineCatchUpAttemptAt = baselineStatus.LastCatchUpAttemptAt
-            ?? throw new InvalidOperationException("The initial durable catch-up did not expose a completion attempt.");
+        Assert.NotNull(baselineStatus.LastCatchUpAttemptAt);
         Assert.False(baselineStatus.CatchUpInProgress);
         Assert.False(baselineStatus.IsCatchUpActive);
         Assert.False(baselineStatus.CatchUpHalted);
@@ -861,6 +860,8 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.CurrentPosition);
         Assert.Equal(3, beforeDuplicate.Registry.AppliedEventVersion);
         Assert.Equal("catchup", beforeDuplicate.Registry.LastAppliedSource);
+        var baselineStreamReceivedAt = beforeDuplicate.Registry.LastStreamReceivedAt
+            ?? throw new InvalidOperationException("The initial durable catch-up did not record a stream receipt timestamp.");
         Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId);
         Assert.Null(beforeDuplicate.Registry.LastStreamAppliedSortableUniqueId);
         Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.LastCatchUpSortableUniqueId);
@@ -874,11 +875,28 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         // regressing the durable checkpoint, invoking stream DML, or reapplying any event.
         await stream.OnNextAsync(delayedCreate);
 
+        // An idle probe can also advance LastCatchUpAttemptAt. First observe the duplicate's receipt through the
+        // provider-owned timestamp that MarkStreamReceivedAsync updates even when the SUID is older and therefore
+        // cannot replace LastStreamReceivedSortableUniqueId. Only after that causal receipt observation do we wait for
+        // a completed catch-up attempt.
+        await WaitUntilAsync(async () =>
+        {
+            var state = await ReadStateAsync();
+            return state.Registry.LastStreamReceivedAt is { } receivedAt &&
+                   receivedAt > baselineStreamReceivedAt;
+        }, timeoutMs: 15000);
+
+        var duplicateReceiptState = await ReadStateAsync();
+        var duplicateReceiptAt = duplicateReceiptState.Registry.LastStreamReceivedAt
+            ?? throw new InvalidOperationException("The older duplicate receipt was not persisted.");
+        var postReceiptCatchUpAttemptAt = (await grain.GetStatusAsync()).LastCatchUpAttemptAt
+            ?? throw new InvalidOperationException("The post-receipt state did not expose a catch-up attempt marker.");
+
         await WaitUntilAsync(async () =>
         {
             var status = await grain.GetStatusAsync();
             if (status.LastCatchUpAttemptAt is not { } catchUpAttemptAt ||
-                catchUpAttemptAt <= baselineCatchUpAttemptAt ||
+                catchUpAttemptAt <= postReceiptCatchUpAttemptAt ||
                 status.CatchUpInProgress ||
                 status.IsCatchUpActive ||
                 status.CatchUpHalted ||
@@ -888,7 +906,9 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             }
 
             var state = await ReadStateAsync();
-            return state.Registry.CurrentPosition == beforeDuplicate.Registry.CurrentPosition &&
+            return state.Registry.LastStreamReceivedAt is { } receivedAt &&
+                   receivedAt >= duplicateReceiptAt &&
+                   state.Registry.CurrentPosition == beforeDuplicate.Registry.CurrentPosition &&
                    state.Registry.AppliedEventVersion == beforeDuplicate.Registry.AppliedEventVersion &&
                    state.Registry.LastStreamReceivedSortableUniqueId == beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId &&
                    state.Registry.LastStreamAppliedSortableUniqueId is null &&
@@ -903,7 +923,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         var afterDuplicateStatus = await grain.GetStatusAsync();
         Assert.True(
             afterDuplicateStatus.LastCatchUpAttemptAt is { } afterCatchUpAttemptAt &&
-            afterCatchUpAttemptAt > baselineCatchUpAttemptAt);
+            afterCatchUpAttemptAt > postReceiptCatchUpAttemptAt);
         Assert.False(afterDuplicateStatus.CatchUpInProgress);
         Assert.False(afterDuplicateStatus.IsCatchUpActive);
         Assert.False(afterDuplicateStatus.CatchUpHalted);
@@ -913,6 +933,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(beforeDuplicate.Registry.CurrentPosition, afterDuplicate.Registry.CurrentPosition);
         Assert.Equal(beforeDuplicate.Registry.AppliedEventVersion, afterDuplicate.Registry.AppliedEventVersion);
         Assert.Equal("catchup", afterDuplicate.Registry.LastAppliedSource);
+        Assert.True(
+            afterDuplicate.Registry.LastStreamReceivedAt is { } afterReceiptAt &&
+            afterReceiptAt >= duplicateReceiptAt,
+            "The older duplicate receipt must remain observable through LastStreamReceivedAt.");
         Assert.Equal(beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId, afterDuplicate.Registry.LastStreamReceivedSortableUniqueId);
         Assert.Null(afterDuplicate.Registry.LastStreamAppliedSortableUniqueId);
         Assert.Equal(beforeDuplicate.Registry.LastCatchUpSortableUniqueId, afterDuplicate.Registry.LastCatchUpSortableUniqueId);

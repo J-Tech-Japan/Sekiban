@@ -477,8 +477,40 @@ hint sortable id, and observation time without fabricating Active or completed l
 or fresh activation is the retry boundary after a halt. Hint re-entry does not set the lifecycle-settlement flag;
 activation and `RefreshAsync` remain the settlement boundaries.
 
-This notification-driven path does not perform periodic no-hint idle polling, historical repair, cursor rewind, or
-automatic generation repair. Hosted-worker and other materialized-view modes retain their existing contracts.
+The G57 notification-driven baseline does not perform periodic no-hint idle polling, historical repair, cursor rewind, or
+automatic generation repair. G58 adds the separate bounded idle and settled-recovery behavior below; hosted-worker and other
+materialized-view modes retain their existing contracts.
+
+### Classic Orleans bounded store-hint recovery (SEK-G58)
+
+In classic Orleans mode 1, a stream payload is only a receipt and wake-up hint. The grain does not retain the payload or
+apply it inline. It records bounded scalar hint state, then reads the durable event store in strict ascending sortable-id
+order and applies at most one batch at a time. A single-flight guard prevents overlapping catch-up cycles. When a hint is
+quiet, durable polling still uses a floor of `max(PollInterval, SafeWindowMs)`; it must not become a tight retry loop.
+
+Catch-up reports explicit outcomes: progress, empty, unsafe-window, no-progress, failed-read, retryable failure, or
+permanent unsupported failure. A failed or permanently halted cycle keeps its error observable and never fabricates an
+active or completed lifecycle. Retryable failures are bounded; a permanent halt can be restarted by explicit `Refresh`
+or a fresh activation. Only a safe, successful no-progress result contributes to the stall limit. Receipt metadata
+remains distinct from applied-event provenance: events applied by this path are marked as catch-up-applied, while the
+stream marker records receipt only.
+
+The existing `BatchSize` limits each store read and the process semaphore plus grain single-flight guard prevent overlap.
+Transient failures stop after `max(1, MaxConsecutiveFailuresBeforeStop)` consecutive failures; safe no-progress stops at
+`CatchUpStallThreshold`. Empty/unsafe idle polling is no faster than `max(PollInterval, max(0, SafeWindowMs))`, while
+an active hint uses `PollInterval`; these are bounds, not an absolute latency guarantee. The design assumes one writer
+per view and a visible safe prefix, not distributed exactly-once delivery.
+
+The settled recovery epoch is keyed by the exact serving version, active generation, and the registry's current/target
+checkpoint truth and lifecycle state. A duplicate hint or unchanged idle observation does not perform another guarded
+restore. A true invalidation, including `RefreshAsync`, establishes a new settlement boundary and permits one guarded
+restore; the G57 locks, eligibility checks, failure distinctions, and no-synthetic-completion rules remain in force.
+
+Receipt-before-apply and commit-before-restart are separate recovery cases: a fresh activation can recover a durable receipt
+once, and a later idle probe can recover a lost notification without a new stream payload. Candidate N+1 preparation repairs
+candidate content while leaving the serving pointer and serving checkpoint unchanged until an explicit, eligible `SwitchAsync`.
+This mode does not perform automatic historical repair, cursor rewind, deletion, or selection of an older event history.
+The public apply API, hosted worker, and other materialized-view modes retain their existing contracts.
 
 ## Materialized View Registry
 

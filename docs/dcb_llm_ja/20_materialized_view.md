@@ -469,8 +469,40 @@ exhausted failure は `CatchUpHalted` として停止します。このとき er
 lifecycle を捏造しません。halt 後の再試行境界は明示的な `RefreshAsync` または fresh activation です。hint の再入場は lifecycle-settlement
 flag を設定せず、activation と `RefreshAsync` が settlement boundary のままです。
 
-この通知駆動経路は、no-hint の periodic idle polling、historical repair、cursor rewind、自動 generation repair を行いません。
-hosted worker と他の materialized-view mode の既存契約は維持されます。
+G57 の通知駆動 baseline は、no-hint の periodic idle polling、historical repair、cursor rewind、自動 generation repair を
+行いません。G58 は下記の bounded idle / settled-recovery 機能を別の拡張として追加します。hosted worker と他の
+materialized-view mode の既存契約は維持されます。
+
+### classic Orleans の bounded store-hint recovery（SEK-G58）
+
+classic Orleans mode 1 では、stream payload は receipt と wake-up hint に限られます。grain は payload を保持したり
+inline で適用したりせず、bounded な scalar hint 状態だけを記録します。その後、耐久 event store を sortable id の
+厳密な昇順で読み、1 回につき高々 1 batch だけを適用します。single-flight guard により catch-up の重複実行を防ぎます。
+hint が静かな場合も durable polling の間隔には `max(PollInterval, SafeWindowMs)` の下限があり、tight retry loop には
+なりません。
+
+catch-up は progress、empty、unsafe-window、no-progress、failed-read、retryable failure、permanent unsupported failure
+を明示的に返します。失敗または permanent halt では error を observable のまま保持し、active や completed の lifecycle を
+捏造しません。retryable failure は bounded に再試行し、permanent halt は明示的な `Refresh` または新しい activation で
+再開できます。safe かつ成功した no-progress だけが stall limit の対象です。receipt の metadata と applied-event の
+provenance は分離され、この経路で適用した event は catch-up-applied、stream marker は receipt のみを示します。
+
+この mode は automatic historical repair、cursor の rewind、削除、古い event history の選択、public apply API の変更を
+行いません。hosted worker と他の materialized-view mode の既存契約は変更しません。既存の `BatchSize` が各 store read
+の上限となり、process semaphore と grain の single-flight guard が重複実行を防ぎます。transient failure は連続
+`max(1, MaxConsecutiveFailuresBeforeStop)` 回で停止し、safe な no-progress は `CatchUpStallThreshold` で停止します。
+empty/unsafe の idle polling は `max(PollInterval, max(0, SafeWindowMs))` より速くならず、active hint がある間は
+`PollInterval` を使います。これは上限であり絶対的な latency 保証ではありません。1 view 1 writer と visible safe prefix を
+仮定し、distributed exactly-once は仮定しません。
+
+settled recovery epoch は、正確な serving version、active generation、registry の current/target checkpoint truth、lifecycle
+state によって識別されます。duplicate hint や変更のない idle observation では guarded restore を追加実行しません。
+`RefreshAsync` を含む実際の invalidation は新しい settlement boundary となり、1 回の guarded restore を許可します。G57 の
+lock、eligibility、failure distinction、synthetic completion を作らない規則はそのまま有効です。
+
+receipt-before-apply と commit-before-restart は別の recovery case です。fresh activation は durable receipt を 1 回だけ回復でき、
+後続の idle probe は新しい stream payload がなくても失われた通知を回復できます。candidate N+1 の準備は serving pointer と
+serving checkpoint を変更せず candidate の内容を修復し、明示的で eligible な `SwitchAsync` の後にだけ切り替えます。
 
 ## レジストリで管理するもの
 

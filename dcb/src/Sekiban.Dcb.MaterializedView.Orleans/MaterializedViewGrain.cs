@@ -70,6 +70,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private string? _safeNoProgressPosition;
     private bool _catchUpHalted;
     private bool _needsLifecycleSettlement;
+    private string? _settledEpochKey;
     private readonly MvCatchUpStallBudget _missingHintStallBudget;
 
     private MvModeCapabilities ResolveCapabilities(MvTransition transition)
@@ -201,6 +202,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _safeNoProgressPosition = null;
         _catchUpHalted = false;
         _needsLifecycleSettlement = true;
+        _settledEpochKey = null;
         _activeStatusRestoreAttempts = 0;
         _lastError = null;
         _lastCatchUpStartedAt = DateTimeOffset.UtcNow;
@@ -230,6 +232,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _safeNoProgressSince = null;
         _safeNoProgressPosition = null;
         _needsLifecycleSettlement = true;
+        _settledEpochKey = null;
 
         // Activate catch-up for any callers that explicitly request a refresh.
         if (!_isCatchUpActive)
@@ -460,12 +463,13 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 RecoverStaleCatchUpIfNeeded();
                 await RunCatchUpTickAsync(ignoreImmediateFlag: false, CancellationToken.None);
             }
-            else if (_pendingStreamHintCount > 0 && !_catchUpHalted && !_batchInFlight)
+            else if (ShouldRunIdleDurableProbe())
             {
-                // Notification-driven recovery has no periodic idle floor in G57. A durable receipt is enough to
-                // wake one ordered store read; G58 owns no-hint idle polling.
+                // A stream notification can be lost after the durable receipt marker is committed. Keep a bounded
+                // provider poll alive after settlement so the store, not the stream payload, is the source of truth.
                 _isCatchUpActive = true;
                 _needsImmediateCatchUp = true;
+                _needsLifecycleSettlement = false;
                 await RunCatchUpTickAsync(ignoreImmediateFlag: true, CancellationToken.None);
             }
         }
@@ -480,8 +484,28 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         }
     }
 
+    private bool ShouldRunIdleDurableProbe()
+    {
+        if (!_started || _catchUpHalted || _batchInFlight)
+        {
+            return false;
+        }
+
+        if (_pendingStreamHintCount > 0)
+        {
+            return true;
+        }
+
+        var pollInterval = _options.PollInterval > TimeSpan.Zero ? _options.PollInterval : TimeSpan.Zero;
+        var safeWindow = _options.SafeWindowMs > 0
+            ? TimeSpan.FromMilliseconds(_options.SafeWindowMs)
+            : TimeSpan.Zero;
+        var minimumInterval = pollInterval > safeWindow ? pollInterval : safeWindow;
+        return _lastCatchUpAttemptAt is null || DateTimeOffset.UtcNow - _lastCatchUpAttemptAt >= minimumInterval;
+    }
+
     /// <summary>
-    ///     Runs at most one catch-up batch. Returns true if the batch made any
+    ///     Runs at most one durable catch-up batch. Returns true if the batch made any
     ///     progress (AppliedEvents &gt; 0), false if the batch was empty, skipped
     ///     due to the global gate, or catch-up is no longer active.
     /// </summary>
@@ -586,6 +610,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             servingActive = servingActive &&
                 activeAfterBatch?.ActiveVersion == _host.ViewVersion &&
                 servingGeneration == activeAfterBatch.Generation;
+            var settlementEpochChanged = _settledEpochKey is not null &&
+                await HasSettledEpochChangedAsync(cancellationToken);
             if (result.ProjectionStatus is { } projectionStatus)
             {
                 _publicationSnapshot = projectionStatus;
@@ -641,6 +667,14 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 _consecutiveEmptyBatches++;
             }
 
+            if (settlementEpochChanged)
+            {
+                // A changed target, current truth, lifecycle status, active version, or generation invalidates the
+                // previous completion epoch. The next empty/unsafe observation must pass through the real settlement
+                // boundary again instead of reusing an unchanged-idle shortcut.
+                _needsLifecycleSettlement = true;
+            }
+
             var newerHintOutstanding = IsNewerThanCurrent(consumedStreamHint, result);
             var hintSafeEligible = MvCatchUpStallBudget.IsSafeEligible(
                 consumedStreamHint,
@@ -680,8 +714,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             }
             else if (shouldSettle && _isCatchUpActive)
             {
-                // Hint re-entry is not a lifecycle settlement boundary. A duplicate/no-work hint must not perform a
-                // second guarded restore; RefreshAsync and activation set _needsLifecycleSettlement explicitly.
+                // Neither hint re-entry nor an idle durable probe is a lifecycle settlement boundary. A duplicate or
+                // unchanged store observation must not perform a second guarded restore.
                 _isCatchUpActive = false;
                 _needsImmediateCatchUp = false;
             }
@@ -808,6 +842,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 _needsLifecycleSettlement = false;
                 _consecutiveEmptyBatches = 0;
                 _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
+                await CaptureSettledEpochAsync(cancellationToken);
                 return;
             }
 
@@ -843,6 +878,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             _needsLifecycleSettlement = false;
             _consecutiveEmptyBatches = 0;
             _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
+            await CaptureSettledEpochAsync(cancellationToken);
             return;
         }
 
@@ -858,6 +894,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _needsLifecycleSettlement = false;
         _consecutiveEmptyBatches = 0;
         _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
+        await CaptureSettledEpochAsync(cancellationToken);
     }
 
     private static bool IsRetryableActiveStatusRestore(MvActivationResult restoration) =>
@@ -1050,6 +1087,58 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             : _lastAppliedSortableUniqueId;
         return string.IsNullOrWhiteSpace(currentPosition) ||
                string.Compare(sortableUniqueId, currentPosition, StringComparison.Ordinal) > 0;
+    }
+
+    private async Task<bool> HasSettledEpochChangedAsync(CancellationToken cancellationToken)
+    {
+        var entries = await _registryStore.GetEntriesAsync(
+                _serviceId!,
+                _host!.ViewName,
+                _host.ViewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var active = await _registryStore.GetActiveAsync(
+                _serviceId!,
+                _host.ViewName,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return !string.Equals(_settledEpochKey, CreateEpochKey(entries, active), StringComparison.Ordinal);
+    }
+
+    private async Task CaptureSettledEpochAsync(CancellationToken cancellationToken)
+    {
+        var entries = await _registryStore.GetEntriesAsync(
+                _serviceId!,
+                _host!.ViewName,
+                _host.ViewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var active = await _registryStore.GetActiveAsync(
+                _serviceId!,
+                _host.ViewName,
+                cancellationToken)
+            .ConfigureAwait(false);
+        _settledEpochKey = CreateEpochKey(entries, active);
+    }
+
+    private static string CreateEpochKey(
+        IReadOnlyList<MvRegistryEntry> entries,
+        MvActiveEntry? active)
+    {
+        var activeKey = active is null
+            ? "none"
+            : $"{active.ActiveVersion}:{active.Generation}";
+        var entryKey = string.Join(
+            ";",
+            entries
+                .OrderBy(entry => entry.LogicalTable, StringComparer.Ordinal)
+                .Select(entry => string.Join(
+                    "|",
+                    entry.LogicalTable,
+                    entry.Status,
+                    MvCheckpointTruthCodec.Encode(entry.CurrentCheckpointTruth),
+                    MvCheckpointTruthCodec.Encode(entry.TargetCheckpointTruth))));
+        return $"{activeKey};{entryKey}";
     }
 
     private async Task RefreshPositionFromRegistryAsync(CancellationToken cancellationToken)

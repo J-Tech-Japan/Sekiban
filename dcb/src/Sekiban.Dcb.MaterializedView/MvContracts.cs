@@ -413,7 +413,7 @@ public interface IMvExecutor
 
 /// <summary>
 ///     Internal Orleans-only catch-up boundary. It keeps the public executor/hosted-worker contract unchanged while
-///     allowing the classic grain to receive typed store outcomes before it performs lifecycle settlement.
+///     allowing the classic grain to receive typed store outcomes before it performs its own epoch-aware settlement.
 /// </summary>
 internal interface IMvOrleansCatchUpExecutor
 {
@@ -454,7 +454,7 @@ public enum MvCatchUpOutcome
 
 /// <summary>
 ///     Result of one bounded durable catch-up operation. The first three constructor fields are intentionally kept
-///     positional for source and binary compatibility; all diagnostics are additive init-only metadata.
+///     positional for source and binary compatibility; all G58 diagnostics are additive init-only metadata.
 /// </summary>
 public sealed record MvCatchUpResult(int AppliedEvents, bool ReachedUnsafeWindow, string? LastAppliedSortableUniqueId = null)
 {

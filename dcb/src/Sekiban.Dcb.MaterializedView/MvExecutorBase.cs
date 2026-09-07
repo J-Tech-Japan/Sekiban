@@ -1399,6 +1399,12 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
             return false;
         }
 
+        if (source == MvApplySource.CatchUp && statements.Count > 0 && affectedRows == 0)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
         ThrowIfLifecycleDmlIsNotAllowed(
             capabilities,
             _options.InitializationMode,
