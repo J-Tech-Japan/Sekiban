@@ -600,6 +600,34 @@ fresh read, up to the finite request bound; exhaustion is returned as a typed re
 transaction uses a savepoint and rolls back to it on rejection, cancellation, or provider failure. `VerifyOnly` never
 invokes this lifecycle mutation.
 
+### Store-driven catch-up and its boundaries (SEK-G58)
+
+Classic Orleans stream notifications are wake-up hints, not application evidence. The grain persists the receipt
+marker and a bounded scalar maximum, then reads the service-scoped event store in ascending sortable-id order. This
+replaces the old approximately one-second stream reorder fast path with the existing `SafeWindowMs` eligibility
+boundary (default 5000 ms). A newly visible event can therefore take at least the safe window plus one bounded poll;
+idle probes are no faster than `max(PollInterval, SafeWindowMs)`, while a pending hint uses `PollInterval`. This is a
+latency and polling-cost change, not a guarantee of immediate visibility.
+
+An empty read, an unsafe-window deferral, a failed read, and a permanent unsupported/policy refusal are distinct
+outcomes. An empty or unsafe result cannot settle a newer safe-eligible hint. If the same safe-eligible newer hint
+remains without progress through `CatchUpStallThreshold`, recovery halts with the hinted sortable id and observation
+time in the grain error/status; `RefreshAsync` or a fresh activation is the explicit retry boundary. Gate contention,
+pre-eligibility time, and ordinary duplicate/current hints do not consume that budget.
+
+`IMvExecutor.ApplySerializableEventsAsync` remains a public, caller-sequenced boundary: callers must provide an
+ordered, contiguous batch whose predecessor is already represented by the caller's durable checkpoint. It is not an
+arbitrary-order recovery API, and the Orleans grain does not call it for production catch-up. G58 store-driven grain
+applications use the executor's ordered catch-up boundary so checkpoint and projection DML commit together; the
+hosted worker and the mode-2 verified-execution path retain their existing behavior.
+
+Historical correction is explicit rather than automatic. To prepare N+1, register the new projector/version, run
+`PrepareGenerationAsync`, compare the candidate content and checkpoint with durable events, and then call a separately
+authorized `SwitchAsync` after eligibility verification. Preparation does not move the serving pointer. G58 does not
+rewind a cursor, delete/reset a table, automatically select a historical version, or detect/repair newly visible
+events at or below an existing cursor; SUID is not a distributed commit sequence. Existing single-writer and
+visible-safe-prefix assumptions remain operational requirements.
+
 ## Querying the Tables
 
 Applications should not hardcode the physical table name. Use `IMvOrleansQueryAccessor` to resolve it.

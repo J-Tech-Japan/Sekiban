@@ -589,6 +589,32 @@ request の有限 bound まで retry し、上限到達時は型付き retryable
 savepoint を作り、reject、cancellation、provider failure ではそこへ rollback します。`VerifyOnly` はこの lifecycle
 mutation を呼びません。
 
+### store 駆動 catch-up と境界（SEK-G58）
+
+Classic Orleans の stream 通知は適用の証拠ではなく wake-up hint です。grain は receipt marker と bounded な scalar
+maximum だけを保存し、その後 service-scoped event store を sortable id の昇順で読みます。これにより、従来の約 1 秒の
+stream reorder fast path は、既存の `SafeWindowMs` の適格性境界（既定値 5000 ms）に置き換わります。新しく見える event の
+可視化には safe window と 1 回の bounded poll 以上かかる可能性があります。idle probe は
+`max(PollInterval, SafeWindowMs)` より速くなく、pending hint がある場合は `PollInterval` を使います。これは latency と
+polling cost の変更であり、即時可視性の保証ではありません。
+
+empty read、unsafe-window defer、failed read、permanent unsupported/policy refusal は別々の outcome です。empty または
+unsafe の結果で、新しい safe-eligible hint を settled 扱いにすることはありません。同じ safe-eligible な新しい hint が
+進展しないまま `CatchUpStallThreshold` に到達すると、hint の sortable id と観測時刻を grain の error/status に出して
+recovery を halt します。明示的な `RefreshAsync` または fresh activation が再試行の境界です。gate contention、適格になる前の
+時間、通常の duplicate/current hint はこの budget を消費しません。
+
+`IMvExecutor.ApplySerializableEventsAsync` は public な caller-sequenced boundary のままです。caller は、直前の predecessor
+が durable checkpoint に反映されている ordered/contiguous batch を渡す必要があります。これは arbitrary-order recovery API ではなく、
+Orleans grain の production catch-up から呼び出しません。G58 の grain application は checkpoint と projection DML を同時に commit
+する ordered catch-up boundary を使い、hosted worker と mode-2 verified-execution の既存動作は維持します。
+
+historical correction は自動ではなく明示的に行います。N+1 projector/version を register し、`PrepareGenerationAsync` を実行し、
+candidate の内容と durable event を比較してから、eligibility を検証した別の認可済み `SwitchAsync` を呼びます。prepare だけでは serving
+pointer は動きません。G58 は cursor の rewind、table の delete/reset、historical version の自動選択を行わず、既存 cursor 以下で後から
+visible になった event の検出・修復も行いません。SUID は distributed commit sequence ではありません。既存の single-writer と
+visible-safe-prefix の前提は運用上必要です。
+
 ## テーブルのクエリ方法
 
 物理テーブル名をアプリ側で決め打ちしないでください。`IMvOrleansQueryAccessor` を使って解決します。
