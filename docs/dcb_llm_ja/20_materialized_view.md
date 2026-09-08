@@ -453,6 +453,25 @@ WHERE id = @Id
 
 これにより、catch-up と stream 適用が最終的に同じ状態へ収束できます。
 
+### classic Orleans の通知駆動 catch-up（SEK-G57）
+
+classic Orleans mode 1 では、stream payload は inline 適用の入力ではなく、durable receipt と wake-up hint です。grain は
+bounded な scalar hint 状態だけを記録し、その後 service-scoped event store を sortable id の厳密な昇順で読み、1 回につき
+高々 `BatchSize` batch を適用します。single-flight guard は重複する catch-up を防ぎます。正当な zero-row catch-up は必要な
+場合に boundary を進めますが、durable read を次の batch まで止めません。public な caller-sequenced
+`ApplySerializableEventsAsync` の境界と direct stream の zero-row semantics は変更しません。
+
+catch-up は progress、empty、unsafe-window、no-progress、failed-read、retryable-failure、permanent unsupported の outcome を
+明示します。新しい hint に対する empty/unsafe observation は event が `SafeWindowMs` 内にある間は defer されます。safe-eligible
+で成功した empty/unsafe observation だけが `CatchUpStallThreshold` の budget を消費し、failed read と retryable failure は budget
+を pause し、診断用 hint は保持します。retryable failure は `MaxConsecutiveFailuresBeforeStop` で bounded に再試行し、permanent または
+exhausted failure は `CatchUpHalted` として停止します。このとき error、hint sortable id、観測時刻を保持し、Active や completed の
+lifecycle を捏造しません。halt 後の再試行境界は明示的な `RefreshAsync` または fresh activation です。hint の再入場は lifecycle-settlement
+flag を設定せず、activation と `RefreshAsync` が settlement boundary のままです。
+
+この通知駆動経路は、no-hint の periodic idle polling、historical repair、cursor rewind、自動 generation repair を行いません。
+hosted worker と他の materialized-view mode の既存契約は維持されます。
+
 ## レジストリで管理するもの
 
 ランタイムは logical table ごとに次の運用情報を保持します。

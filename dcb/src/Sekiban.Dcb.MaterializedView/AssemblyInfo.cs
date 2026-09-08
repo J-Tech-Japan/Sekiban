@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("Sekiban.Dcb.MaterializedView.Orleans")]
+[assembly: InternalsVisibleTo("Sekiban.Dcb.Orleans.Tests")]
 [assembly: InternalsVisibleTo("Sekiban.Dcb.MaterializedView.MultiProvider.Tests")]
 [assembly: InternalsVisibleTo("Sekiban.Dcb.MaterializedView.Postgres")]
 [assembly: InternalsVisibleTo("Sekiban.Dcb.MaterializedView.MySql")]

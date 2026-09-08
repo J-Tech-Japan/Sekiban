@@ -447,7 +447,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
     }
 
     [SkippableFact]
-    public async Task Grain_Delayed_Create_After_Streamed_Update_DoesNotAdvance_Past_Missing_Row()
+    public async Task Grain_DurableCatchUp_UsesStoreOrder_When_UpdateHintArrivesFirst()
     {
         Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
 
@@ -517,20 +517,6 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         await stream.OnNextAsync(updateEvent);
         await Task.Delay(TimeSpan.FromMilliseconds(1300));
 
-        var statusAfterUpdateOnly = await grain.GetStatusAsync();
-        await using (var interimConnection = await fixture.OpenConnectionAsync())
-        {
-            var interimCount = await interimConnection.ExecuteScalarAsync<int>(
-                "SELECT COUNT(*) FROM sekiban_mv_weatherforecast_v1_forecasts WHERE forecast_id = @ForecastId;",
-                new { ForecastId = forecastId });
-            Assert.Equal(0, interimCount);
-        }
-        Assert.True(
-            string.IsNullOrWhiteSpace(statusAfterUpdateOnly.CurrentPosition) ||
-            string.Compare(statusAfterUpdateOnly.CurrentPosition, updateEvent.SortableUniqueIdValue, StringComparison.Ordinal) < 0);
-
-        await stream.OnNextAsync(createEvent);
-
         await WaitUntilAsync(async () =>
         {
             var status = await grain.GetStatusAsync();
@@ -554,6 +540,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
                    row.Location == "Loc-delayed-U" &&
                    row.LastSortableUniqueId == updateEvent.SortableUniqueIdValue;
         }, timeoutMs: 15000);
+
+        // The predecessor notification may arrive after durable catch-up already applied the ordered pair. It is a
+        // duplicate-compatible receipt and must not move the durable checkpoint backward or invoke stream DML.
+        await stream.OnNextAsync(createEvent);
 
         await using var verifyConnection = await fixture.OpenConnectionAsync();
         var registryRow = await verifyConnection.QuerySingleAsync<RegistryProjectionRow>(
@@ -582,7 +572,8 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal("Loc-delayed-U", updatedLocation);
         Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.CurrentPosition);
         Assert.Equal(2, registryRow.AppliedEventVersion);
-        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Null(registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastCatchUpSortableUniqueId);
     }
 
     [SkippableFact]

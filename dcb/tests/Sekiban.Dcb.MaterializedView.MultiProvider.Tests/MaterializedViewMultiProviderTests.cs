@@ -15,6 +15,72 @@ using Xunit;
 
 namespace Sekiban.Dcb.MaterializedView.MultiProvider.Tests;
 
+/// <summary>
+///     Uses an update-only statement for the update event. It is the provider-backed discriminator for the removed
+///     inline stream-DML path: descending updates affect zero rows until their creates arrive, while durable catch-up
+///     orders the same aged history and applies every pair.
+/// </summary>
+internal sealed class FixedAgedInlineLossProjector(int version) : IMaterializedViewProjector
+{
+    public string ViewName => "G57InlineLoss";
+    public int ViewVersion => version;
+    public MvTable Rows { get; private set; } = default!;
+
+    public async Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default)
+    {
+        Rows = ctx.RegisterTable("rows");
+        await ctx.ExecuteAsync(CreateTableSql(ctx.DatabaseType, Rows.PhysicalName), cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        await ctx.ExecuteAsync($"DELETE FROM {Rows.PhysicalName};", cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public Task<IReadOnlyList<MvSqlStatement>> ApplyToViewAsync(
+        Event ev,
+        IMvApplyContext ctx,
+        CancellationToken cancellationToken = default)
+    {
+        var parameters = ev.Payload switch
+        {
+            WeatherForecastCreated created => new
+            {
+                ForecastId = created.ForecastId.ToString("D"),
+                Location = created.Location,
+                SortableUniqueId = ctx.CurrentSortableUniqueId
+            },
+            WeatherForecastUpdated updated => new
+            {
+                ForecastId = updated.ForecastId.ToString("D"),
+                Location = updated.Location,
+                SortableUniqueId = ctx.CurrentSortableUniqueId
+            },
+            _ => null
+        };
+
+        if (parameters is null)
+        {
+            return Task.FromResult<IReadOnlyList<MvSqlStatement>>([]);
+        }
+
+        var sql = ev.Payload switch
+        {
+            WeatherForecastCreated => $"INSERT INTO {Rows.PhysicalName} (forecast_id, location, _last_sortable_unique_id) VALUES (@ForecastId, @Location, @SortableUniqueId);",
+            WeatherForecastUpdated => $"UPDATE {Rows.PhysicalName} SET location = @Location, _last_sortable_unique_id = @SortableUniqueId WHERE forecast_id = @ForecastId AND _last_sortable_unique_id < @SortableUniqueId;",
+            _ => string.Empty
+        };
+        return Task.FromResult<IReadOnlyList<MvSqlStatement>>([new MvSqlStatement(sql, parameters)]);
+    }
+
+    private static string CreateTableSql(MvDbType databaseType, string tableName) => databaseType switch
+    {
+        MvDbType.Postgres => $"CREATE TABLE IF NOT EXISTS {tableName} (forecast_id TEXT NOT NULL PRIMARY KEY, location TEXT NOT NULL, _last_sortable_unique_id TEXT NOT NULL);",
+        MvDbType.MySql => $"CREATE TABLE IF NOT EXISTS {tableName} (forecast_id VARCHAR(64) NOT NULL PRIMARY KEY, location VARCHAR(256) NOT NULL, _last_sortable_unique_id VARCHAR(64) NOT NULL);",
+        MvDbType.Sqlite => $"CREATE TABLE IF NOT EXISTS {tableName} (forecast_id TEXT NOT NULL PRIMARY KEY, location TEXT NOT NULL, _last_sortable_unique_id TEXT NOT NULL);",
+        MvDbType.SqlServer => $"IF OBJECT_ID(N'{tableName}', N'U') IS NULL CREATE TABLE {tableName} (forecast_id NVARCHAR(64) NOT NULL PRIMARY KEY, location NVARCHAR(256) NOT NULL, _last_sortable_unique_id NVARCHAR(64) NOT NULL);",
+        _ => throw new NotSupportedException($"Database type '{databaseType}' is not supported.")
+    };
+}
+
 [CollectionDefinition(nameof(MySqlMvCollection))]
 public sealed class MySqlMvCollection : ICollectionFixture<MySqlMvFixture>;
 
@@ -68,6 +134,10 @@ public sealed class MySqlMvIntegrationTests(MySqlMvFixture fixture)
 
     [SkippableFact]
     public Task LegacyRegistry_IsMigratedWithoutRowLoss() => MultiProviderAssertions.AssertLegacyRegistryMigratesAsync(fixture);
+
+    [SkippableFact]
+    public Task FixedAgedDescendingPairs_KillSequentialInlineLoss() =>
+        MultiProviderAssertions.AssertFixedAgedDescendingPairsAsync(fixture);
 }
 
 [Collection(nameof(SqlServerMvCollection))]
@@ -78,6 +148,10 @@ public sealed class SqlServerMvIntegrationTests(SqlServerMvFixture fixture)
 
     [SkippableFact]
     public Task LegacyRegistry_IsMigratedWithoutRowLoss() => MultiProviderAssertions.AssertLegacyRegistryMigratesAsync(fixture);
+
+    [SkippableFact]
+    public Task FixedAgedDescendingPairs_KillSequentialInlineLoss() =>
+        MultiProviderAssertions.AssertFixedAgedDescendingPairsAsync(fixture);
 }
 
 [Collection(nameof(SqliteMvCollection))]
@@ -92,6 +166,18 @@ public sealed class SqliteMvIntegrationTests(SqliteMvFixture fixture)
     [SkippableFact]
     public Task SharedEventBackend_UsesOnlyTheRequestedService() =>
         MultiProviderAssertions.AssertServiceIsolationAsync(fixture);
+
+    [SkippableFact]
+    public Task FixedAgedDescendingPairs_KillSequentialInlineLoss() =>
+        MultiProviderAssertions.AssertFixedAgedDescendingPairsAsync(fixture);
+}
+
+[Collection(nameof(PostgresMvCollection))]
+public sealed class PostgresMvIntegrationTests(PostgresMvFixture fixture)
+{
+    [SkippableFact]
+    public Task FixedAgedDescendingPairs_KillSequentialInlineLoss() =>
+        MultiProviderAssertions.AssertFixedAgedDescendingPairsAsync(fixture);
 }
 
 internal static class MultiProviderAssertions
@@ -120,6 +206,107 @@ internal static class MultiProviderAssertions
                 "SELECT COUNT(*) FROM sekiban_mv_registry WHERE service_id = 'legacy-service';")
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    ///     Uses the real provider executor for both the repaired durable store read and the removed one-event inline
+    ///     mutant. The fixed-aged descending 64-pair history must materialize all updates through catch-up, while the
+    ///     old inline/global-cursor path must lose at least one update.
+    /// </summary>
+    public static async Task AssertFixedAgedDescendingPairsAsync(MultiProviderFixtureBase fixture)
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Integration fixture is unavailable.");
+
+        var projector = new FixedAgedInlineLossProjector(1);
+        var host = new NativeMvApplyHost(
+            projector,
+            fixture.DomainTypes.EventTypes,
+            fixture.Services.GetRequiredService<IMvStorageInfoProvider>().GetStorageInfo().DatabaseType);
+        var durableEvents = CreateFixedAgedDescendingPairs(fixture);
+
+        await fixture.ResetAsync().ConfigureAwait(false);
+        await fixture.Executor.InitializeAsync(host).ConfigureAwait(false);
+        var writeResult = await fixture.EventStore.WriteSerializableEventsAsync(durableEvents).ConfigureAwait(false);
+        Assert.True(writeResult.IsSuccess, writeResult.IsSuccess ? string.Empty : writeResult.GetException().Message);
+
+        var appliedByStore = 0;
+        for (var attempt = 0; attempt < 4 && appliedByStore < durableEvents.Count; attempt++)
+        {
+            appliedByStore += (await fixture.Executor.CatchUpOnceAsync(host).ConfigureAwait(false)).AppliedEvents;
+        }
+
+        Assert.Equal(durableEvents.Count, appliedByStore);
+        Assert.Equal(64, await CountUpdatedRowsAsync(fixture, projector.Rows.PhysicalName).ConfigureAwait(false));
+
+        await fixture.ResetAsync().ConfigureAwait(false);
+        await fixture.Executor.InitializeAsync(host).ConfigureAwait(false);
+        writeResult = await fixture.EventStore.WriteSerializableEventsAsync(durableEvents).ConfigureAwait(false);
+        Assert.True(writeResult.IsSuccess, writeResult.IsSuccess ? string.Empty : writeResult.GetException().Message);
+
+        foreach (var serializableEvent in durableEvents.OrderByDescending(
+                     item => item.SortableUniqueIdValue,
+                     StringComparer.Ordinal))
+        {
+            _ = await fixture.Executor.ApplySerializableEventsAsync(host, [serializableEvent]).ConfigureAwait(false);
+        }
+
+        var sequentialInlineUpdatedRows = await CountUpdatedRowsAsync(fixture, projector.Rows.PhysicalName).ConfigureAwait(false);
+        Assert.True(
+            sequentialInlineUpdatedRows < 64,
+            $"The old one-event inline mutant unexpectedly retained every update ({sequentialInlineUpdatedRows}/64).");
+
+        static async Task<int> CountUpdatedRowsAsync(MultiProviderFixtureBase provider, string tableName)
+        {
+            await using var connection = await provider.OpenConnectionAsync().ConfigureAwait(false);
+            return await connection.ExecuteScalarAsync<int>(
+                    $"SELECT COUNT(*) FROM {tableName} WHERE location LIKE '%-U';")
+                .ConfigureAwait(false);
+        }
+    }
+
+    private static IReadOnlyList<SerializableEvent> CreateFixedAgedDescendingPairs(MultiProviderFixtureBase fixture)
+    {
+        var fixedTimestamp = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        return Enumerable.Range(0, 64)
+            .SelectMany(pair =>
+            {
+                var forecastId = StableGuid(pair * 2 + 1);
+                var createdId = StableGuid(pair * 2 + 1);
+                var updatedId = StableGuid(pair * 2 + 2);
+                var created = new Event(
+                    new WeatherForecastCreated(
+                        forecastId,
+                        $"Loc-{pair:D3}",
+                        new DateOnly(2024, 1, 2).AddDays(pair % 7),
+                        20 + pair % 10,
+                        $"Forecast-{pair:D3}"),
+                    SortableUniqueId.Generate(fixedTimestamp.AddTicks(pair * 2L), createdId),
+                    nameof(WeatherForecastCreated),
+                    createdId,
+                    new EventMetadata("g57-ac8", "g57-ac8", "test"),
+                    []);
+                var updated = new Event(
+                    new WeatherForecastUpdated(
+                        forecastId,
+                        $"Loc-{pair:D3}-U",
+                        new DateOnly(2024, 1, 2).AddDays(pair % 7),
+                        20 + pair % 10,
+                        $"Forecast-{pair:D3}"),
+                    SortableUniqueId.Generate(fixedTimestamp.AddTicks(pair * 2L + 1), updatedId),
+                    nameof(WeatherForecastUpdated),
+                    updatedId,
+                    new EventMetadata("g57-ac8", "g57-ac8", "test"),
+                    []);
+                return new[]
+                {
+                    created.ToSerializableEvent(fixture.DomainTypes.EventTypes),
+                    updated.ToSerializableEvent(fixture.DomainTypes.EventTypes)
+                };
+            })
+            .ToList();
+    }
+
+    private static Guid StableGuid(int ordinal) =>
+        Guid.Parse($"00000000-0000-4000-8000-{ordinal:D12}");
 
     public static async Task AssertProviderWorksAsync(MultiProviderFixtureBase fixture)
     {

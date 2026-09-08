@@ -37,4 +37,8 @@ public sealed record MaterializedViewGrainStatus(
     [property: Id(16)]
     bool NeedsImmediateCatchUp = false,
     [property: Id(17)]
-    long CatchUpBatchSkipCount = 0);
+    long CatchUpBatchSkipCount = 0)
+{
+    [Id(18)]
+    public bool CatchUpHalted { get; init; }
+}

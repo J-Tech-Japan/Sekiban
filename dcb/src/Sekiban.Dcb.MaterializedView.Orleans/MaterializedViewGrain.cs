@@ -32,7 +32,11 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private readonly IMvRegistryStore _registryStore;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
 
-    private readonly List<SerializableEvent> _pendingStreamEvents = [];
+    // Stream payloads are wake-up hints only. Durable catch-up owns ordering and application; the grain retains only
+    // bounded scalar receipt state so a burst cannot become an unbounded in-memory event queue.
+    private int _pendingStreamHintCount;
+    private string? _pendingStreamMaximumSortableUniqueId;
+    private DateTimeOffset? _lastStreamHintReceivedAt;
     private IAsyncStream<SerializableEvent>? _stream;
     private StreamSubscriptionHandle<SerializableEvent>? _streamHandle;
     private bool _subscriptionStarting;
@@ -61,6 +65,12 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private long _catchUpBatchSkipCount;
     private bool _statusMarkedCatchingUp;
     private int _activeStatusRestoreAttempts;
+    private int _consecutiveCatchUpFailures;
+    private DateTimeOffset? _safeNoProgressSince;
+    private string? _safeNoProgressPosition;
+    private bool _catchUpHalted;
+    private bool _needsLifecycleSettlement;
+    private readonly MvCatchUpStallBudget _missingHintStallBudget;
 
     private MvModeCapabilities ResolveCapabilities(MvTransition transition)
     {
@@ -99,7 +109,28 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _logger = logger;
         _options = options.Value;
         _statusPublisher = statusPublisher;
+        _missingHintStallBudget = new MvCatchUpStallBudget(_options.CatchUpStallThreshold);
         ReconfigureCatchUpSemaphore(_options.CatchUpMaxConcurrentBatches);
+    }
+
+    // Internal only so Orleans acceptance tests can invoke the real stream-hint path without changing the public
+    // grain contract. The supplied key is parsed exactly as the Orleans primary-key path is parsed.
+    internal MaterializedViewGrain(
+        IMvApplyHostFactory hostFactory,
+        IMvExecutor executor,
+        IMvRegistryStore registryStore,
+        IEventSubscriptionResolver subscriptionResolver,
+        IOptions<MvOptions> options,
+        ILogger<MaterializedViewGrain> logger,
+        string testGrainKey)
+        : this(hostFactory, executor, registryStore, subscriptionResolver, options, logger, statusPublisher: null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(testGrainKey);
+        var (serviceId, viewName, viewVersion) = MvGrainKey.Parse(testGrainKey);
+        _grainKey = testGrainKey;
+        _serviceId = ServiceIdValidator.NormalizeAndValidate(serviceId);
+        _viewName = viewName;
+        _viewVersion = viewVersion;
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -164,6 +195,12 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _isCatchUpActive = true;
         _needsImmediateCatchUp = true;
         _consecutiveEmptyBatches = 0;
+        _consecutiveCatchUpFailures = 0;
+        _missingHintStallBudget.Reset();
+        _safeNoProgressSince = null;
+        _safeNoProgressPosition = null;
+        _catchUpHalted = false;
+        _needsLifecycleSettlement = true;
         _activeStatusRestoreAttempts = 0;
         _lastError = null;
         _lastCatchUpStartedAt = DateTimeOffset.UtcNow;
@@ -185,12 +222,26 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         }
         await EnsureStartedAsync();
 
+        // Refresh is the explicit operator/user boundary that is allowed to restart a halted or exhausted cycle.
+        _catchUpHalted = false;
+        _lastError = null;
+        _consecutiveCatchUpFailures = 0;
+        _missingHintStallBudget.Reset();
+        _safeNoProgressSince = null;
+        _safeNoProgressPosition = null;
+        _needsLifecycleSettlement = true;
+
         // Activate catch-up for any callers that explicitly request a refresh.
         if (!_isCatchUpActive)
         {
             _isCatchUpActive = true;
             _needsImmediateCatchUp = true;
             _consecutiveEmptyBatches = 0;
+            _consecutiveCatchUpFailures = 0;
+            _catchUpHalted = false;
+            _safeNoProgressSince = null;
+            _safeNoProgressPosition = null;
+            _needsLifecycleSettlement = true;
             _activeStatusRestoreAttempts = 0;
             _statusMarkedCatchingUp = false;
             _lastCatchUpStartedAt = DateTimeOffset.UtcNow;
@@ -230,13 +281,16 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                     break;
                 }
 
-                // Brief back-off when a tick was gated/in-flight; keeps this
-                // loop from spinning while another turn owns the semaphore.
-                await Task.Delay(TimeSpan.FromMilliseconds(10), CancellationToken.None);
+                // A pending receipt whose durable event is not visible yet must not turn RefreshAsync into a tight
+                // retry loop. Gate/in-flight contention keeps the short back-off; an outstanding hint uses the poll
+                // interval as the bounded provider-read cadence.
+                var retryDelay = _pendingStreamHintCount > 0 && _options.PollInterval > TimeSpan.Zero
+                    ? _options.PollInterval
+                    : TimeSpan.FromMilliseconds(10);
+                await Task.Delay(retryDelay, CancellationToken.None);
             }
         }
 
-        await DrainPendingStreamEventsAsync(CancellationToken.None);
     }
 
     public async Task<bool> IsSortableUniqueIdReceived(string sortableUniqueId)
@@ -267,7 +321,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 _started,
                 _isCatchUpActive || _batchInFlight,
                 _streamHandle is not null,
-                _pendingStreamEvents.Count,
+                _pendingStreamHintCount,
                 _lastAppliedSortableUniqueId,
                 _lastReceivedSortableUniqueId,
                 _lastError,
@@ -278,7 +332,10 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 _consecutiveEmptyBatches,
                 _lastProgressSortableUniqueId,
                 _needsImmediateCatchUp,
-                _catchUpBatchSkipCount));
+                _catchUpBatchSkipCount)
+            {
+                CatchUpHalted = _catchUpHalted
+            });
     }
 
     public Task RequestDeactivationAsync()
@@ -393,10 +450,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _catchUpTimer = null;
     }
 
-    /// <summary>
-    ///     Timer-driven tick. Runs at most one catch-up batch under the global
-    ///     concurrency gate, then drains due buffered stream events.
-    /// </summary>
+    /// <summary>Timer-driven tick. Stream notifications only wake durable catch-up; they never apply payloads inline.</summary>
     private async Task ProcessCatchUpTickAsync()
     {
         try
@@ -406,11 +460,13 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 RecoverStaleCatchUpIfNeeded();
                 await RunCatchUpTickAsync(ignoreImmediateFlag: false, CancellationToken.None);
             }
-            else
+            else if (_pendingStreamHintCount > 0 && !_catchUpHalted && !_batchInFlight)
             {
-                // Catch-up is idle: still drain buffered stream events whose
-                // reorder window has elapsed.
-                await DrainPendingStreamEventsAsync(CancellationToken.None);
+                // Notification-driven recovery has no periodic idle floor in G57. A durable receipt is enough to
+                // wake one ordered store read; G58 owns no-hint idle polling.
+                _isCatchUpActive = true;
+                _needsImmediateCatchUp = true;
+                await RunCatchUpTickAsync(ignoreImmediateFlag: true, CancellationToken.None);
             }
         }
         catch (Exception ex)
@@ -451,7 +507,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         // The immediate-catch-up flag is honoured only on the first tick after
         // startup. On later ticks we run whenever the gate is available.
         if (!ignoreImmediateFlag && !_needsImmediateCatchUp && _lastCatchUpAttemptAt is { } lastAttempt &&
-            DateTimeOffset.UtcNow - lastAttempt < _options.PollInterval.Divide(2))
+            _options.PollInterval > TimeSpan.Zero &&
+            DateTimeOffset.UtcNow - lastAttempt < _options.PollInterval)
         {
             // Not yet time for the next batch.
             return false;
@@ -462,11 +519,11 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         {
             _catchUpBatchSkipCount++;
             _logger.LogInformation(
-                "Materialized view catch-up batch skipped due to global concurrency limit. View={ViewName}/{ViewVersion}, SkipCount={SkipCount}, PendingStreamEvents={PendingStreamEvents}, CurrentPosition={CurrentPosition}.",
+                "Materialized view catch-up batch skipped due to global concurrency limit. View={ViewName}/{ViewVersion}, SkipCount={SkipCount}, PendingStreamHints={PendingStreamHints}, CurrentPosition={CurrentPosition}.",
                 _viewName,
                 _viewVersion,
                 _catchUpBatchSkipCount,
-                _pendingStreamEvents.Count,
+                _pendingStreamHintCount,
                 _lastAppliedSortableUniqueId ?? "beginning");
             return false;
         }
@@ -474,6 +531,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _batchInFlight = true;
         _needsImmediateCatchUp = false;
         _lastCatchUpAttemptAt = DateTimeOffset.UtcNow;
+        var consumedStreamHint = ConsumePendingStreamHints();
         var madeProgress = false;
         var servingActive = false;
         long? servingGeneration = null;
@@ -518,7 +576,9 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 servingGeneration = servingActive ? active!.Generation : null;
             }
 
-            var result = await _executor.CatchUpOnceAsync(_host!, _serviceId, cancellationToken);
+            var result = _executor is IMvOrleansCatchUpExecutor orleansCatchUpExecutor
+                ? await orleansCatchUpExecutor.CatchUpOnceForOrleansAsync(_host!, _serviceId, cancellationToken)
+                : await _executor.CatchUpOnceAsync(_host!, _serviceId, cancellationToken);
             var activeAfterBatch = await _registryStore.GetActiveAsync(
                     _serviceId!,
                     _host!.ViewName,
@@ -543,46 +603,111 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 _lastProgressSortableUniqueId = result.LastAppliedSortableUniqueId;
             }
 
+            if (result.IsFailure)
+            {
+                RequeueStreamHint(consumedStreamHint);
+                _missingHintStallBudget.PauseAfterFailure();
+                _consecutiveCatchUpFailures++;
+                _lastError = result.ErrorMessage ?? $"Materialized view catch-up failed ({result.Outcome}).";
+                _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Faulted };
+                if (!result.IsRetryable || result.Outcome == MvCatchUpOutcome.PermanentUnsupported ||
+                    _consecutiveCatchUpFailures >= Math.Max(1, _options.MaxConsecutiveFailuresBeforeStop))
+                {
+                    HaltCatchUp(_lastError);
+                }
+
+                return false;
+            }
+
+            _consecutiveCatchUpFailures = 0;
             if (result.AppliedEvents > 0)
             {
                 _consecutiveEmptyBatches = 0;
                 madeProgress = true;
+                _safeNoProgressSince = null;
+                _safeNoProgressPosition = null;
+                _missingHintStallBudget.Reset();
             }
-            else
+            else if (result.Outcome == MvCatchUpOutcome.NoProgress)
+            {
+                if (RecordSafeNoProgress())
+                {
+                    HaltCatchUp(
+                        $"Materialized view catch-up made no safe progress at {_lastAppliedSortableUniqueId ?? "the beginning"} for {_options.CatchUpStallThreshold}; observed at {DateTimeOffset.UtcNow:O}.");
+                }
+            }
+            else if (result.Outcome == MvCatchUpOutcome.Empty)
             {
                 _consecutiveEmptyBatches++;
             }
 
-            var shouldSettle =
-                result.ReachedUnsafeWindow ||
-                _consecutiveEmptyBatches >= Math.Max(1, _options.MaxConsecutiveEmptyBatches);
+            var newerHintOutstanding = IsNewerThanCurrent(consumedStreamHint, result);
+            var hintSafeEligible = MvCatchUpStallBudget.IsSafeEligible(
+                consumedStreamHint,
+                _options.SafeWindowMs,
+                DateTimeOffset.UtcNow);
+            if (_missingHintStallBudget.Observe(
+                    consumedStreamHint,
+                    newerHintOutstanding,
+                    result.AppliedEvents,
+                    result.Outcome,
+                    hintSafeEligible))
+            {
+                var stalledHint = _missingHintStallBudget.HintSortableUniqueId ?? consumedStreamHint ?? "unknown";
+                var firstObservedAt = _missingHintStallBudget.FirstObservedAtUtc ?? DateTimeOffset.UtcNow;
+                HaltCatchUp(
+                    $"Materialized view catch-up could not make safe progress for outstanding hint {stalledHint}; " +
+                    $"first observed at {firstObservedAt:O}, exhausted {_options.CatchUpStallThreshold} at {DateTimeOffset.UtcNow:O}.");
+            }
 
-            if (shouldSettle)
+            if (newerHintOutstanding &&
+                (result.Outcome is MvCatchUpOutcome.Empty or MvCatchUpOutcome.UnsafeWindow || result.ReachedUnsafeWindow))
+            {
+                // Do not let an empty/unsafe read settle a receipt that is newer than the durable position observed by
+                // this tick. Keep one scalar wake-up marker; the next poll retries without retaining its payload.
+                RequeueStreamHint(consumedStreamHint);
+            }
+
+            var shouldSettle =
+                ((result.ReachedUnsafeWindow || result.Outcome == MvCatchUpOutcome.UnsafeWindow) && !newerHintOutstanding) ||
+                (result.Outcome == MvCatchUpOutcome.Empty &&
+                 _consecutiveEmptyBatches >= Math.Max(1, _options.MaxConsecutiveEmptyBatches) &&
+                 !newerHintOutstanding);
+
+            if (shouldSettle && _isCatchUpActive && _needsLifecycleSettlement)
             {
                 await CompleteCatchUpAsync(cancellationToken);
+            }
+            else if (shouldSettle && _isCatchUpActive)
+            {
+                // Hint re-entry is not a lifecycle settlement boundary. A duplicate/no-work hint must not perform a
+                // second guarded restore; RefreshAsync and activation set _needsLifecycleSettlement explicitly.
+                _isCatchUpActive = false;
+                _needsImmediateCatchUp = false;
             }
         }
         catch (Exception ex)
         {
+            RequeueStreamHint(consumedStreamHint);
+            _missingHintStallBudget.PauseAfterFailure();
             _lastError = ex.Message;
             _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Faulted };
+            _consecutiveCatchUpFailures++;
             _logger.LogError(
                 ex,
                 "Materialized view catch-up batch failed for {ViewName}/{ViewVersion}.",
                 _viewName,
                 _viewVersion);
-            throw;
+            if (_consecutiveCatchUpFailures >= Math.Max(1, _options.MaxConsecutiveFailuresBeforeStop))
+            {
+                HaltCatchUp(_lastError);
+            }
         }
         finally
         {
             _batchInFlight = false;
             CatchUpBatchSemaphore.Release();
         }
-
-        // Regardless of catch-up result, drain due buffered stream events now
-        // that the gate is released. Orleans grain single-threading keeps this
-        // coordinated with subsequent ticks.
-        await DrainPendingStreamEventsAsync(cancellationToken);
 
         return madeProgress;
     }
@@ -680,6 +805,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
                 _isCatchUpActive = false;
                 _needsImmediateCatchUp = false;
+                _needsLifecycleSettlement = false;
                 _consecutiveEmptyBatches = 0;
                 _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
                 return;
@@ -714,6 +840,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Active };
             _isCatchUpActive = false;
             _needsImmediateCatchUp = false;
+            _needsLifecycleSettlement = false;
             _consecutiveEmptyBatches = 0;
             _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
             return;
@@ -728,6 +855,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Ready };
         _isCatchUpActive = false;
         _needsImmediateCatchUp = false;
+        _needsLifecycleSettlement = false;
         _consecutiveEmptyBatches = 0;
         _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
     }
@@ -739,10 +867,35 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
     private void EndCatchUpAfterActiveStatusRestoreFailure(string error)
     {
+        HaltCatchUp(error);
+    }
+
+    private bool RecordSafeNoProgress()
+    {
+        var currentPosition = _lastAppliedSortableUniqueId;
+        if (!string.Equals(_safeNoProgressPosition, currentPosition, StringComparison.Ordinal))
+        {
+            _safeNoProgressPosition = currentPosition;
+            _safeNoProgressSince = DateTimeOffset.UtcNow;
+            return false;
+        }
+
+        _safeNoProgressSince ??= DateTimeOffset.UtcNow;
+        return DateTimeOffset.UtcNow - _safeNoProgressSince >= _options.CatchUpStallThreshold;
+    }
+
+    private void HaltCatchUp(string error)
+    {
         _lastError = error;
+        _publicationSnapshot = _publicationSnapshot with { Status = MvStatus.Faulted };
+        _catchUpHalted = true;
         _isCatchUpActive = false;
         _needsImmediateCatchUp = false;
+        _needsLifecycleSettlement = false;
         _consecutiveEmptyBatches = 0;
+        _safeNoProgressSince = null;
+        _safeNoProgressPosition = null;
+        _missingHintStallBudget.Reset();
         StopCatchUpTimer();
     }
 
@@ -774,87 +927,26 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         if (_batchInFlight)
         {
             _logger.LogWarning(
-                "Materialized view catch-up appears stalled for {ViewName}/{ViewVersion} but a batch is still marked in-flight; leaving single-flight state intact. LastAttemptAt={LastAttempt}, PendingStreamEvents={PendingStreamEvents}.",
+                "Materialized view catch-up appears stalled for {ViewName}/{ViewVersion} but a batch is still marked in-flight; leaving single-flight state intact. LastAttemptAt={LastAttempt}, PendingStreamHints={PendingStreamHints}.",
                 _viewName,
                 _viewVersion,
                 lastAttempt,
-                _pendingStreamEvents.Count);
+                _pendingStreamHintCount);
             _lastCatchUpAttemptAt = DateTimeOffset.UtcNow;
             return;
         }
 
         _logger.LogWarning(
-            "Recovering stale materialized view catch-up state for {ViewName}/{ViewVersion}. LastAttemptAt={LastAttempt}, PendingStreamEvents={PendingStreamEvents}.",
+            "Recovering stale materialized view catch-up state for {ViewName}/{ViewVersion}. LastAttemptAt={LastAttempt}, PendingStreamHints={PendingStreamHints}.",
             _viewName,
             _viewVersion,
             lastAttempt,
-            _pendingStreamEvents.Count);
+            _pendingStreamHintCount);
 
         // Reset orchestration-only state. Registry state stays authoritative.
         _consecutiveEmptyBatches = 0;
         _needsImmediateCatchUp = true;
         _lastCatchUpAttemptAt = DateTimeOffset.UtcNow;
-    }
-
-    private async Task DrainPendingStreamEventsAsync(CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            var orderedBuffered = _pendingStreamEvents
-                .GroupBy(serializableEvent => serializableEvent.SortableUniqueIdValue)
-                .Select(group => group.First())
-                .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
-                .ToList();
-            if (orderedBuffered.Count == 0)
-            {
-                return;
-            }
-
-            var thresholdUtc = DateTime.UtcNow - _options.StreamReorderWindow;
-            var dueEvents = orderedBuffered
-                .TakeWhile(serializableEvent => IsReadyToApply(serializableEvent, thresholdUtc))
-                .ToList();
-            if (dueEvents.Count == 0)
-            {
-                return;
-            }
-
-            var appliedSortableUniqueIds = new HashSet<string>(StringComparer.Ordinal);
-            SerializableEvent? firstBlocked = null;
-
-            foreach (var dueEvent in dueEvents)
-            {
-                var appliedEvents = await ApplyStreamEventsAsync([dueEvent], cancellationToken);
-                if (appliedEvents > 0)
-                {
-                    appliedSortableUniqueIds.Add(dueEvent.SortableUniqueIdValue);
-                    continue;
-                }
-
-                firstBlocked ??= dueEvent;
-                // Do not let a later event advance the registry watermark past a missing predecessor. The executor
-                // intentionally reports a zero-row stream apply as blocked when the projected row is not present;
-                // continuing here could make a later retry classify that still-missing event as stale solely because
-                // the global position moved, permanently losing the update.
-                break;
-            }
-
-            if (appliedSortableUniqueIds.Count == 0)
-            {
-                var blocked = firstBlocked ?? dueEvents[0];
-                _logger.LogWarning(
-                    "Materialized view grain stream apply made no progress for {ViewName}/{ViewVersion}. Pending={PendingCount}, FirstBlockedSortableUniqueId={SortableUniqueId}, FirstBlockedEventId={EventId}, FirstBlockedEventType={EventType}.",
-                    _viewName,
-                    _viewVersion,
-                    _pendingStreamEvents.Count,
-                    blocked.SortableUniqueIdValue,
-                    blocked.Id,
-                    blocked.EventPayloadName);
-                return;
-            }
-
-            _pendingStreamEvents.RemoveAll(serializableEvent => appliedSortableUniqueIds.Contains(serializableEvent.SortableUniqueIdValue));
-        }
     }
 
     internal async Task OnStreamBatchAsync(IEnumerable<SerializableEvent> events)
@@ -888,37 +980,76 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             DateTimeOffset.UtcNow,
             cancellationToken: CancellationToken.None);
 
-        foreach (var serializableEvent in batch)
+        _pendingStreamHintCount = (int)Math.Min(int.MaxValue, (long)_pendingStreamHintCount + batch.Count);
+        if (string.IsNullOrWhiteSpace(_pendingStreamMaximumSortableUniqueId) ||
+            string.Compare(batchMaxSortableUniqueId, _pendingStreamMaximumSortableUniqueId, StringComparison.Ordinal) > 0)
         {
-            _pendingStreamEvents.Add(serializableEvent);
+            _pendingStreamMaximumSortableUniqueId = batchMaxSortableUniqueId;
         }
+        _lastStreamHintReceivedAt = DateTimeOffset.UtcNow;
 
-        // Do not apply while a catch-up batch is executing or before the grain
-        // is operational. The scheduled tick will drain buffered events once
-        // the batch completes.
-        if (_batchInFlight || !_started)
+        // A receipt is durable even when the stream callback arrives before startup or while a batch is in flight.
+        // The next bounded store read discovers events in SUID order. A permanently halted grain remains halted until
+        // an explicit RefreshAsync or a fresh activation, so a bad store cannot become a busy loop.
+        if (!_started || _catchUpHalted)
         {
             return;
         }
 
-        await DrainPendingStreamEventsAsync(CancellationToken.None);
+        if (!_isCatchUpActive)
+        {
+            _isCatchUpActive = true;
+            _needsImmediateCatchUp = true;
+            // Hint re-entry does not set _needsLifecycleSettlement. RefreshAsync and activation are the explicit
+            // settlement boundaries; a duplicate/no-work hint must not repeat a guarded lifecycle restore.
+            _consecutiveEmptyBatches = 0;
+            _activeStatusRestoreAttempts = 0;
+            _lastCatchUpStartedAt ??= DateTimeOffset.UtcNow;
+            StartCatchUpTimer();
+        }
     }
 
-    private async Task<int> ApplyStreamEventsAsync(IReadOnlyList<SerializableEvent> events, CancellationToken cancellationToken)
+    private string? ConsumePendingStreamHints()
     {
-        if (events.Count == 0)
+        var consumedMaximum = _pendingStreamMaximumSortableUniqueId;
+        if (_pendingStreamHintCount > 0 && !string.IsNullOrWhiteSpace(_pendingStreamMaximumSortableUniqueId))
         {
-            return 0;
+            _lastReceivedSortableUniqueId = _pendingStreamMaximumSortableUniqueId;
         }
 
-        ResolveHost();
-        var applied = await _executor.ApplySerializableEventsAsync(_host!, events, _serviceId, cancellationToken);
-        if (applied > 0)
+        _pendingStreamHintCount = 0;
+        _pendingStreamMaximumSortableUniqueId = null;
+        _lastStreamHintReceivedAt = null;
+        return consumedMaximum;
+    }
+
+    private void RequeueStreamHint(string? sortableUniqueId)
+    {
+        if (string.IsNullOrWhiteSpace(sortableUniqueId))
         {
-            await RefreshPositionFromRegistryAsync(cancellationToken);
+            return;
         }
 
-        return applied;
+        _pendingStreamHintCount = (int)Math.Min(int.MaxValue, (long)_pendingStreamHintCount + 1);
+        if (string.IsNullOrWhiteSpace(_pendingStreamMaximumSortableUniqueId) ||
+            string.Compare(sortableUniqueId, _pendingStreamMaximumSortableUniqueId, StringComparison.Ordinal) > 0)
+        {
+            _pendingStreamMaximumSortableUniqueId = sortableUniqueId;
+        }
+    }
+
+    private bool IsNewerThanCurrent(string? sortableUniqueId, MvCatchUpResult result)
+    {
+        if (string.IsNullOrWhiteSpace(sortableUniqueId))
+        {
+            return false;
+        }
+
+        var currentPosition = result.ProjectionStatus?.CurrentCheckpointTruth is { IsKnown: true } truth
+            ? truth.PositionValue
+            : _lastAppliedSortableUniqueId;
+        return string.IsNullOrWhiteSpace(currentPosition) ||
+               string.Compare(sortableUniqueId, currentPosition, StringComparison.Ordinal) > 0;
     }
 
     private async Task RefreshPositionFromRegistryAsync(CancellationToken cancellationToken)
@@ -938,17 +1069,6 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         {
             _lastAppliedSortableUniqueId = currentPosition;
         }
-    }
-
-    private static bool IsReadyToApply(SerializableEvent serializableEvent, DateTime thresholdUtc)
-    {
-        if (!SortableUniqueId.TryParse(serializableEvent.SortableUniqueIdValue, out var sortableUniqueId) ||
-            sortableUniqueId is null)
-        {
-            return true;
-        }
-
-        return sortableUniqueId.GetDateTime() <= thresholdUtc;
     }
 
     private void ResolveIdentity()

@@ -412,6 +412,18 @@ public interface IMvExecutor
 }
 
 /// <summary>
+///     Internal Orleans-only catch-up boundary. It keeps the public executor/hosted-worker contract unchanged while
+///     allowing the classic grain to receive typed store outcomes before it performs lifecycle settlement.
+/// </summary>
+internal interface IMvOrleansCatchUpExecutor
+{
+    Task<MvCatchUpResult> CatchUpOnceForOrleansAsync(
+        IMvApplyHost host,
+        string? serviceId = null,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
 ///     Additive G27 activation surface implemented by the four provider executors. It is separate from
 ///     <see cref="IMvExecutor"/> so existing custom executors remain binary/source compatible.
 /// </summary>
@@ -428,6 +440,22 @@ public interface IMvActivationExecutor
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>Classification of one bounded durable catch-up operation.</summary>
+public enum MvCatchUpOutcome
+{
+    Progressed = 0,
+    Empty = 1,
+    UnsafeWindow = 2,
+    NoProgress = 3,
+    FailedRead = 4,
+    PermanentUnsupported = 5,
+    RetryableFailure = 6
+}
+
+/// <summary>
+///     Result of one bounded durable catch-up operation. The first three constructor fields are intentionally kept
+///     positional for source and binary compatibility; all diagnostics are additive init-only metadata.
+/// </summary>
 public sealed record MvCatchUpResult(int AppliedEvents, bool ReachedUnsafeWindow, string? LastAppliedSortableUniqueId = null)
 {
     /// <summary>
@@ -435,4 +463,28 @@ public sealed record MvCatchUpResult(int AppliedEvents, bool ReachedUnsafeWindow
     /// custom executors that have not opted into G24 status publication.
     /// </summary>
     public MvProjectionStatusSnapshot? ProjectionStatus { get; init; }
+
+    /// <summary>Typed outcome observed before any lifecycle/active-status overlay is applied.</summary>
+    public MvCatchUpOutcome Outcome { get; init; } = AppliedEvents > 0
+        ? MvCatchUpOutcome.Progressed
+        : ReachedUnsafeWindow
+            ? MvCatchUpOutcome.UnsafeWindow
+            : MvCatchUpOutcome.Empty;
+
+    /// <summary>Secret-free machine-readable failure code, when the operation did not complete normally.</summary>
+    public string? ErrorCode { get; init; }
+
+    /// <summary>Safe diagnostic text for operators; provider secrets are never copied here.</summary>
+    public string? ErrorMessage { get; init; }
+
+    /// <summary>Whether the caller may retry this exact kind of failure from a fresh boundary.</summary>
+    public bool IsRetryable { get; init; }
+
+    /// <summary>Time at which the failure/no-progress observation was recorded.</summary>
+    public DateTimeOffset? ObservedAtUtc { get; init; }
+
+    public bool IsFailure => Outcome is
+        MvCatchUpOutcome.FailedRead or
+        MvCatchUpOutcome.PermanentUnsupported or
+        MvCatchUpOutcome.RetryableFailure;
 }

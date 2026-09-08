@@ -459,6 +459,27 @@ WHERE id = @Id
 
 This lets catch-up and live stream delivery converge on the same final state.
 
+### Classic Orleans notification-driven catch-up (SEK-G57)
+
+In classic Orleans mode 1, a stream payload is a durable receipt and wake-up hint, not inline application input. The
+grain records only bounded scalar hint state and then reads the service-scoped event store in strict ascending
+sortable-id order, applying at most one `BatchSize` batch at a time. A single-flight guard prevents overlapping
+catch-up cycles. A legitimate zero-row catch-up result advances the catch-up boundary when appropriate and does not
+stop the durable read from continuing to the next batch; the public caller-sequenced `ApplySerializableEventsAsync`
+boundary and its direct stream zero-row semantics are unchanged.
+
+Catch-up reports explicit progress, empty, unsafe-window, no-progress, failed-read, retryable-failure, and permanent
+unsupported outcomes. Empty/unsafe observations for a newer hint are deferred while the event is inside `SafeWindowMs`.
+Only a safe-eligible, successful empty/unsafe observation consumes `CatchUpStallThreshold`; failed reads and retryable
+failures pause that budget and retain the hint for diagnostics. Retryable failures are bounded by
+`MaxConsecutiveFailuresBeforeStop`; permanent or exhausted failure halts with `CatchUpHalted`, preserving the error,
+hint sortable id, and observation time without fabricating Active or completed lifecycle state. Explicit `RefreshAsync`
+or fresh activation is the retry boundary after a halt. Hint re-entry does not set the lifecycle-settlement flag;
+activation and `RefreshAsync` remain the settlement boundaries.
+
+This notification-driven path does not perform periodic no-hint idle polling, historical repair, cursor rewind, or
+automatic generation repair. Hosted-worker and other materialized-view modes retain their existing contracts.
+
 ## Materialized View Registry
 
 The runtime stores operational metadata per logical table:
