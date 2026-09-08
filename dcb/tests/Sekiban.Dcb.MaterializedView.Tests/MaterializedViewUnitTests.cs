@@ -153,9 +153,9 @@ public class MaterializedViewUnitTests
             }),
             NullLogger<MvCatchUpWorker>.Instance);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        using var cts = new CancellationTokenSource();
         await worker.StartAsync(cts.Token);
-        await Task.Delay(30, cts.Token);
+        await executor.CatchUpObserved.WaitAsync(TimeSpan.FromSeconds(1));
         await worker.StopAsync(CancellationToken.None);
 
         Assert.True(executor.InitializeCalls >= 1);
@@ -270,6 +270,28 @@ public class MaterializedViewUnitTests
         Assert.Equal(3, MvParamConverter.ToClrValue(parameters.Single(parameter => parameter.Name == "Count")));
         Assert.Equal(when, MvParamConverter.ToClrValue(parameters.Single(parameter => parameter.Name == "When")));
         Assert.Equal(id, MvParamConverter.ToClrValue(parameters.Single(parameter => parameter.Name == "Id")));
+    }
+
+    [Fact]
+    public void MvParamConverter_MapsSerializedNullToClrNull()
+    {
+        var parameters = MvParamConverter.FromObject(new { Summary = (string?)null });
+        var parameter = Assert.Single(parameters);
+
+        Assert.Equal(MvParamKind.Null, parameter.Kind);
+        Assert.Null(parameter.ValueJson);
+        Assert.Null(MvParamConverter.ToClrValue(parameter));
+    }
+
+    [Fact]
+    public void MvParamConverter_PreservesAbsentParametersAndRejectsExplicitDbNull()
+    {
+        Assert.Empty(MvParamConverter.FromObject(null));
+
+        var exception = Assert.Throws<NotSupportedException>(
+            () => MvParamConverter.FromObject(new { Summary = DBNull.Value }));
+
+        Assert.Contains("System.DBNull", exception.Message);
     }
 
     [Fact]
@@ -442,9 +464,12 @@ public class MaterializedViewUnitTests
     private sealed class FakeMvExecutor(int initializationFailuresBeforeSuccess = 0) : IMvExecutor
     {
         private int _initializationFailuresRemaining = initializationFailuresBeforeSuccess;
+        private readonly TaskCompletionSource<bool> _catchUpObserved =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int InitializeCalls { get; private set; }
         public int CatchUpCalls { get; private set; }
         public List<string?> ServiceIds { get; } = [];
+        public Task CatchUpObserved => _catchUpObserved.Task;
 
         public Task InitializeAsync(
             IMvApplyHost host,
@@ -472,6 +497,7 @@ public class MaterializedViewUnitTests
             CancellationToken cancellationToken = default)
         {
             CatchUpCalls++;
+            _catchUpObserved.TrySetResult(true);
             ServiceIds.Add(serviceId);
             return Task.FromResult(new MvCatchUpResult(0, false));
         }
