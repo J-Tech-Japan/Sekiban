@@ -392,14 +392,18 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc));
         SharedExecutor.InitialEvents.Add(durableEvent);
         SharedExecutor.ExpectAppliedEventCount(1);
+        SharedRegistry.ExpectActiveStatusRestoreCallCount(SharedRegistry.ActiveStatusRestoreCalls + 1);
         await GetEventStream().OnNextAsync(durableEvent);
         await SharedExecutor.AppliedEventCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await grain.RefreshAsync();
+        await SharedRegistry.ActiveStatusRestoreCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
         var restoreCallsAfterProgress = SharedRegistry.ActiveStatusRestoreCalls;
 
+        SharedExecutor.ExpectCatchUpCallCount(SharedExecutor.CatchUpCalls + 1);
         await GetEventStream().OnNextAsync(durableEvent);
         await GetEventStream().OnNextAsync(durableEvent);
-        await grain.RefreshAsync();
+        await SharedExecutor.CatchUpCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
 
         Assert.Equal(restoreCallsAfterProgress, SharedRegistry.ActiveStatusRestoreCalls);
         Assert.Equal(1, SharedExecutor.AppliedEventExecutionCount);
@@ -411,10 +415,12 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Success(1);
         var grain = await StartServingGrainAsync();
         await SharedRegistry.ActiveStatusRestoreCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
         var restoreCallsAtSettlement = SharedRegistry.ActiveStatusRestoreCalls;
 
         SharedExecutor.ExpectCatchUpCallCount(SharedExecutor.CatchUpCalls + 1);
         await SharedExecutor.CatchUpCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
         Assert.Equal(restoreCallsAtSettlement, SharedRegistry.ActiveStatusRestoreCalls);
 
         SharedRegistry.ExpectActiveStatusRestoreCallCount(restoreCallsAtSettlement + 1);
@@ -422,10 +428,12 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         SharedRegistry.MutateActiveGeneration();
         await SharedExecutor.CatchUpCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await SharedRegistry.ActiveStatusRestoreCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
         Assert.Equal(restoreCallsAtSettlement + 1, SharedRegistry.ActiveStatusRestoreCalls);
 
         SharedExecutor.ExpectCatchUpCallCount(SharedExecutor.CatchUpCalls + 1);
         await SharedExecutor.CatchUpCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
         Assert.Equal(restoreCallsAtSettlement + 1, SharedRegistry.ActiveStatusRestoreCalls);
         _ = grain;
     }
