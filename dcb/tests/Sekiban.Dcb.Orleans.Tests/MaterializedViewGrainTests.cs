@@ -331,20 +331,24 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         SharedExecutor.InitialEvents.Add(durableEvent);
         SharedExecutor.ExpectAppliedEventCount(1);
 
+        var receiptObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using (MaterializedViewGrain.PushAfterStreamReceiptTestHook(candidate =>
                {
-                   candidate.DeactivateOnIdle();
+                   receiptObserved.TrySetResult();
                    return true;
                }))
         {
             await GetEventStream().OnNextAsync(durableEvent);
+
+            await receiptObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(1, SharedRegistry.MarkStreamReceivedCalls);
+            Assert.Equal(0, SharedExecutor.AppliedEventExecutionCount);
+
+            await grain.RequestDeactivationAsync();
         }
 
-        Assert.Equal(1, SharedRegistry.MarkStreamReceivedCalls);
-        Assert.Equal(0, SharedExecutor.AppliedEventExecutionCount);
-
         SharedExecutor.ExpectTargetCaptureCallCount(2);
-        await grain.RequestDeactivationAsync();
         var restarted = _cluster.Client.GetGrain<IMaterializedViewGrain>(
             MvGrainKey.Build("orders", TestMaterializedViewProjector.ViewNameConst, 1));
         await restarted.EnsureStartedAsync();
