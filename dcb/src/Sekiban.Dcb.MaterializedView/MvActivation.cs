@@ -18,7 +18,9 @@ public enum MvActivationFailureReason
     ExpectedGenerationConflict = 12,
     ConcurrentSuperseded = 13,
     ProviderFailure = 14,
-    TransitionNotAllowed = 15
+    TransitionNotAllowed = 15,
+    RetryableConcurrency = 16,
+    RetryExhausted = 17
 }
 
 /// <summary>Provider-neutral result of evaluating a candidate before any active-pointer mutation.</summary>
@@ -126,6 +128,17 @@ public sealed record MvActivationResult(
             or MvActivationFailureReason.ExpectedGenerationConflict
             or MvActivationFailureReason.ConcurrentSuperseded;
 
+    /// <summary>
+    ///     True when the provider reported a transient concurrency outcome and the caller may retry from a fresh
+    ///     transaction/read boundary. The original request is intentionally not treated as an authorization to
+    ///     retry a superseded snapshot.
+    /// </summary>
+    public bool IsRetryableConcurrency =>
+        FailureReason is MvActivationFailureReason.RetryableConcurrency
+            or MvActivationFailureReason.RetryExhausted;
+
+    public int AttemptCount { get; init; }
+
     public static MvActivationResult Success(long generation) =>
         new(true, MvActivationFailureReason.None, "Candidate became active.", generation);
 
@@ -133,6 +146,147 @@ public sealed record MvActivationResult(
         MvActivationFailureReason reason,
         string message) =>
         new(false, reason, message);
+
+    public static MvActivationResult ActiveStatusRestored(long generation) =>
+        new(true, MvActivationFailureReason.None, "The serving materialized-view status was restored.", generation);
+}
+
+/// <summary>
+///     One immutable row expectation for the additive serving-status restore operation. The current checkpoint is a
+///     minimum observed value: a monotonic advance while the provider waits for the row locks is valid. The target
+///     checkpoint is exact and is compared as authoritative typed truth.
+/// </summary>
+public sealed record MvActiveStatusRestoreRow(
+    string LogicalTable,
+    string PhysicalTable,
+    IReadOnlyList<MvStatus> AllowedStatuses,
+    string MinimumCurrentCheckpointTruth,
+    string ExpectedTargetCheckpointTruth)
+{
+    public static MvActiveStatusRestoreRow FromEntry(MvRegistryEntry entry) =>
+        new(
+            entry.LogicalTable,
+            entry.PhysicalTable,
+            [MvStatus.CatchingUp, MvStatus.Ready, MvStatus.Active],
+            MvCheckpointTruthCodec.Encode(entry.CurrentCheckpointTruth),
+            MvCheckpointTruthCodec.Encode(entry.TargetCheckpointTruth));
+}
+
+/// <summary>
+///     Immutable, generation-fenced request to restore the status of the currently serving view version. The row
+///     list pins the complete logical/physical table identity and count; it is never interpreted as permission to
+///     change checkpoint, progress, pointer, or generation data.
+/// </summary>
+public sealed record MvActiveStatusRestoreRequest(
+    string ServiceId,
+    string ViewName,
+    int ViewVersion,
+    long ExpectedActiveGeneration,
+    int ExpectedTableCount,
+    IReadOnlyList<MvActiveStatusRestoreRow> Rows)
+{
+    /// <summary>Finite provider retry bound for transient deadlock/serialization/busy outcomes.</summary>
+    public int MaxAttempts { get; init; } = 3;
+
+    public static MvActiveStatusRestoreRequest FromEntries(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        long expectedActiveGeneration,
+        IReadOnlyList<MvRegistryEntry> entries) =>
+        new(
+            serviceId,
+            viewName,
+            viewVersion,
+            expectedActiveGeneration,
+            entries.Count,
+            entries.Select(MvActiveStatusRestoreRow.FromEntry).ToList());
+}
+
+/// <summary>Validation shared by all provider implementations of serving-status restoration.</summary>
+public static class MvActiveStatusRestoreValidation
+{
+    public static MvActivationResult? Validate(MvActiveStatusRestoreRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (string.IsNullOrWhiteSpace(request.ServiceId) || string.IsNullOrWhiteSpace(request.ViewName) || request.ViewVersion < 0)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.IdentityMismatch,
+                "Serving-status restore requires an exact service, view, and non-negative version.");
+        }
+
+        if (request.ExpectedActiveGeneration < 0)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.ExpectedGenerationConflict,
+                "The expected active generation cannot be negative.");
+        }
+
+        if (request.Rows is null || request.ExpectedTableCount <= 0 || request.Rows.Count != request.ExpectedTableCount)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.CandidateMissing,
+                "Serving-status restore requires the complete non-empty registry row set.");
+        }
+
+        if (request.MaxAttempts is < 1 or > 8)
+        {
+            return MvActivationResult.Rejected(
+                MvActivationFailureReason.ProviderFailure,
+                "Serving-status restore requires a finite retry bound between one and eight attempts.");
+        }
+
+        var logicalTables = new HashSet<string>(StringComparer.Ordinal);
+        var physicalTables = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var row in request.Rows)
+        {
+            if (string.IsNullOrWhiteSpace(row.LogicalTable) ||
+                string.IsNullOrWhiteSpace(row.PhysicalTable) ||
+                !logicalTables.Add(row.LogicalTable) ||
+                !physicalTables.Add(row.PhysicalTable))
+            {
+                return MvActivationResult.Rejected(
+                    MvActivationFailureReason.IdentityMismatch,
+                    "Serving-status restore requires unique logical and non-empty physical table identities.");
+            }
+
+            if (row.AllowedStatuses is null || row.AllowedStatuses.Count == 0 ||
+                row.AllowedStatuses.Any(status => status is not (MvStatus.CatchingUp or MvStatus.Ready or MvStatus.Active)) ||
+                row.AllowedStatuses.Distinct().Count() != row.AllowedStatuses.Count)
+            {
+                return MvActivationResult.Rejected(
+                    MvActivationFailureReason.UnsafeLifecycle,
+                    "Serving-status restore accepts only CatchingUp, Ready, or Active expected statuses.");
+            }
+
+            try
+            {
+                var minimumCurrent = MvCheckpointTruthCodec.Decode(row.MinimumCurrentCheckpointTruth);
+                var target = MvCheckpointTruthCodec.Decode(row.ExpectedTargetCheckpointTruth);
+                if (!minimumCurrent.IsKnown || minimumCurrent.Provenance is null ||
+                    minimumCurrent.Provenance.Kind == MvCheckpointProvenanceKind.LegacyCompatibility)
+                {
+                    return MvActivationResult.Rejected(
+                        MvActivationFailureReason.CurrentCheckpointUnknown,
+                        "Serving-status restore requires a Known non-legacy minimum current checkpoint.");
+                }
+
+                if (!target.IsKnown || target.Provenance?.Kind != MvCheckpointProvenanceKind.AuthoritativeTargetCapture)
+                {
+                    return MvActivationResult.Rejected(
+                        MvActivationFailureReason.TargetUnknown,
+                        "Serving-status restore requires an authoritative Known target checkpoint.");
+                }
+            }
+            catch (MvCheckpointMalformedException ex)
+            {
+                return MvActivationResult.Rejected(MvActivationFailureReason.ProviderFailure, ex.Message);
+            }
+        }
+
+        return null;
+    }
 }
 
 /// <summary>

@@ -1,0 +1,64 @@
+namespace Sekiban.Dcb.MaterializedView.Sqlite;
+
+public sealed partial class SqliteMvRegistryStore
+{
+    private static readonly MvActiveStatusRestoreSqlPlan ActiveStatusRestoreSql = new(
+        CandidateLockSql: """
+            SELECT service_id,
+                   view_name,
+                   view_version,
+                   logical_table,
+                   physical_table,
+                   status,
+                   current_position,
+                   target_position,
+                   current_checkpoint_truth,
+                   target_checkpoint_truth,
+                   last_sortable_unique_id,
+                   applied_event_version
+            FROM sekiban_mv_registry
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ViewVersion
+            ORDER BY logical_table;
+            """,
+        CandidateFenceSql: """
+            UPDATE sekiban_mv_registry
+            SET last_updated = last_updated
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ViewVersion;
+            """,
+        CandidateFenceReturnsRows: false,
+        ActivePointerLockSql: """
+            SELECT active_version,
+                   active_generation
+            FROM sekiban_mv_active
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName;
+            """,
+        RestoreStatusesSql: """
+            UPDATE sekiban_mv_registry
+            SET status = 'active',
+                last_updated = @Now
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ViewVersion
+              AND status IN ('catchingup', 'ready');
+            """,
+        SavepointSql: "SAVEPOINT sekiban_mv_restore_active_status;",
+        RollbackSavepointSql: "ROLLBACK TO SAVEPOINT sekiban_mv_restore_active_status;",
+        ReleaseSavepointSql: "RELEASE SAVEPOINT sekiban_mv_restore_active_status;");
+
+    public Task<MvActivationResult> TryRestoreActiveStatusAsync(
+        MvActiveStatusRestoreRequest request,
+        System.Data.IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default) =>
+        MvActiveStatusRestoreExecution.ExecuteAsync(
+            request,
+            transaction,
+            CreateForcedReverseConnection,
+            ActiveStatusRestoreSql,
+            FormatForcedReverseTimestamp(DateTimeOffset.UtcNow),
+            cancellationToken);
+}

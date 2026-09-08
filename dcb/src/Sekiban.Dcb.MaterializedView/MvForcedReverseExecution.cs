@@ -14,6 +14,15 @@ public sealed record MvForcedReverseSqlPlan(
     string RollbackSavepointSql,
     string? ReleaseSavepointSql)
 {
+    /// <summary>
+    ///     Optional provider lock over every registry row for the exact service/view. It is acquired before the
+    ///     candidate rows and active pointer so forward and forced transitions use one deterministic lock order.
+    /// </summary>
+    public string? RegistryLockSql { get; init; }
+
+    /// <summary>Whether <see cref="RegistryLockSql"/> returns rows that must be drained through a reader.</summary>
+    public bool RegistryLockReturnsRows { get; init; }
+
     private const string CommonCandidateCountSql = """
         SELECT COUNT(*) FROM sekiban_mv_registry
         WHERE service_id = @ServiceId AND view_name = @ViewName AND view_version = @ViewVersion
@@ -51,6 +60,44 @@ public sealed record MvForcedReverseSqlPlan(
         string rollbackSavepointSql,
         string? releaseSavepointSql,
         string? pointerCasSql = null) =>
+        CreateCore(
+            candidateFenceSql,
+            fenceReturnsRows,
+            savepointSql,
+            rollbackSavepointSql,
+            releaseSavepointSql,
+            pointerCasSql,
+            registryLockSql: null,
+            registryLockReturnsRows: true);
+
+    public static MvForcedReverseSqlPlan Create(
+        string candidateFenceSql,
+        bool fenceReturnsRows,
+        string savepointSql,
+        string rollbackSavepointSql,
+        string? releaseSavepointSql,
+        string? pointerCasSql,
+        string? registryLockSql,
+        bool registryLockReturnsRows = true) =>
+        CreateCore(
+            candidateFenceSql,
+            fenceReturnsRows,
+            savepointSql,
+            rollbackSavepointSql,
+            releaseSavepointSql,
+            pointerCasSql,
+            registryLockSql,
+            registryLockReturnsRows);
+
+    private static MvForcedReverseSqlPlan CreateCore(
+        string candidateFenceSql,
+        bool fenceReturnsRows,
+        string savepointSql,
+        string rollbackSavepointSql,
+        string? releaseSavepointSql,
+        string? pointerCasSql,
+        string? registryLockSql,
+        bool registryLockReturnsRows) =>
         new(
             candidateFenceSql,
             fenceReturnsRows,
@@ -60,7 +107,11 @@ public sealed record MvForcedReverseSqlPlan(
             CommonMarkCandidateActiveSql,
             savepointSql,
             rollbackSavepointSql,
-            releaseSavepointSql);
+            releaseSavepointSql)
+        {
+            RegistryLockSql = registryLockSql,
+            RegistryLockReturnsRows = registryLockReturnsRows
+        };
 }
 
 /// <summary>Provider SQL for audit metadata written inside an ordinary activation transaction.</summary>
@@ -146,8 +197,8 @@ public static class MvForcedReverseExecution
         IReadOnlyDictionary<string, object?> parameters,
         CancellationToken cancellationToken)
     {
-        await ExecuteNonQueryAsync(transaction, pointerUpsertSql, parameters, cancellationToken).ConfigureAwait(false);
-        if (await ExecuteNonQueryAsync(
+        await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, pointerUpsertSql, parameters, cancellationToken).ConfigureAwait(false);
+        if (await MvDbCommandHelper.ExecuteNonQueryAsync(
                 transaction,
                 LegacySwitchAuditSql,
                 parameters,
@@ -175,7 +226,7 @@ public static class MvForcedReverseExecution
             ["SwitchKind"] = request.SwitchKind.ToString().ToLowerInvariant(),
             ["SwitchedAtUtc"] = switchedAtValue
         };
-        if (await ExecuteNonQueryAsync(
+        if (await MvDbCommandHelper.ExecuteNonQueryAsync(
                 dbTransaction,
                 sql.PersistActiveAuditSql,
                 parameters,
@@ -186,7 +237,7 @@ public static class MvForcedReverseExecution
 
         if (request.ExpectedActiveVersion is not null)
         {
-            await ExecuteNonQueryAsync(
+            await MvDbCommandHelper.ExecuteNonQueryAsync(
                     dbTransaction,
                     sql.MarkPreviousReadySql,
                     parameters,
@@ -250,7 +301,7 @@ public static class MvForcedReverseExecution
         object requestedAtValue,
         CancellationToken cancellationToken)
     {
-        await ExecuteNonQueryAsync(transaction, sql.SavepointSql, null, cancellationToken).ConfigureAwait(false);
+        await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.SavepointSql, null, cancellationToken).ConfigureAwait(false);
         try
         {
             var result = await ExecuteInTransactionAsync(
@@ -262,13 +313,13 @@ public static class MvForcedReverseExecution
                 .ConfigureAwait(false);
             if (!result.Succeeded)
             {
-                await ExecuteNonQueryAsync(transaction, sql.RollbackSavepointSql, null, cancellationToken)
+                await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.RollbackSavepointSql, null, cancellationToken)
                     .ConfigureAwait(false);
             }
 
             if (sql.ReleaseSavepointSql is not null)
             {
-                await ExecuteNonQueryAsync(transaction, sql.ReleaseSavepointSql, null, cancellationToken)
+                await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.ReleaseSavepointSql, null, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -276,11 +327,11 @@ public static class MvForcedReverseExecution
         }
         catch
         {
-            await ExecuteNonQueryAsync(transaction, sql.RollbackSavepointSql, null, cancellationToken)
+            await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.RollbackSavepointSql, null, cancellationToken)
                 .ConfigureAwait(false);
             if (sql.ReleaseSavepointSql is not null)
             {
-                await ExecuteNonQueryAsync(transaction, sql.ReleaseSavepointSql, null, cancellationToken)
+                await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.ReleaseSavepointSql, null, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -296,9 +347,26 @@ public static class MvForcedReverseExecution
         CancellationToken cancellationToken)
     {
         var parameters = Parameters(request, requestedAtValue);
+        if (sql.RegistryLockSql is not null)
+        {
+            if (sql.RegistryLockReturnsRows)
+            {
+                await MvDbCommandHelper.CountRowsAsync(transaction, sql.RegistryLockSql, parameters, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.RegistryLockSql, parameters, cancellationToken).ConfigureAwait(false);
+            }
+
+            await MvLifecycleTestHooks.InvokeAfterRegistryLockAsync(
+                    MvLifecycleLockPoint.ForcedReverseRegistry,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var fenced = sql.FenceReturnsRows
-            ? await CountRowsAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false)
-            : await ExecuteNonQueryAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false);
+            ? await MvDbCommandHelper.CountRowsAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false)
+            : await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false);
         var matching = Convert.ToInt32(
             await ExecuteScalarAsync(transaction, sql.CandidateCountSql, parameters, cancellationToken).ConfigureAwait(false),
             System.Globalization.CultureInfo.InvariantCulture);
@@ -307,14 +375,14 @@ public static class MvForcedReverseExecution
             return Conflict();
         }
 
-        if (await ExecuteNonQueryAsync(transaction, sql.PointerCasSql, parameters, cancellationToken).ConfigureAwait(false) != 1)
+        if (await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.PointerCasSql, parameters, cancellationToken).ConfigureAwait(false) != 1)
         {
             return Conflict();
         }
 
-        await ExecuteNonQueryAsync(transaction, sql.MarkPreviousReadySql, parameters, cancellationToken)
+        await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.MarkPreviousReadySql, parameters, cancellationToken)
             .ConfigureAwait(false);
-        var marked = await ExecuteNonQueryAsync(
+        var marked = await MvDbCommandHelper.ExecuteNonQueryAsync(
                 transaction,
                 sql.MarkCandidateActiveSql,
                 parameters,
@@ -325,67 +393,14 @@ public static class MvForcedReverseExecution
             : Conflict();
     }
 
-    private static async Task<int> CountRowsAsync(
-        DbTransaction transaction,
-        string sql,
-        IReadOnlyDictionary<string, object?> parameters,
-        CancellationToken cancellationToken)
-    {
-        await using var command = CreateCommand(transaction, sql, parameters);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        var count = 0;
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            count++;
-        }
-
-        return count;
-    }
-
-    private static async Task<int> ExecuteNonQueryAsync(
-        DbTransaction transaction,
-        string sql,
-        IReadOnlyDictionary<string, object?>? parameters,
-        CancellationToken cancellationToken)
-    {
-        await using var command = CreateCommand(transaction, sql, parameters);
-        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-    }
-
     private static async Task<object?> ExecuteScalarAsync(
         DbTransaction transaction,
         string sql,
         IReadOnlyDictionary<string, object?> parameters,
         CancellationToken cancellationToken)
     {
-        await using var command = CreateCommand(transaction, sql, parameters);
+        await using var command = MvDbCommandHelper.CreateCommand(transaction, sql, parameters);
         return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    private static DbCommand CreateCommand(
-        DbTransaction transaction,
-        string sql,
-        IReadOnlyDictionary<string, object?>? parameters)
-    {
-        var connection = transaction.Connection ??
-            throw new InvalidOperationException("The transaction is not associated with a connection.");
-        var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = sql;
-        if (parameters is null)
-        {
-            return command;
-        }
-
-        foreach (var (name, value) in parameters)
-        {
-            var parameter = command.CreateParameter();
-            parameter.ParameterName = name;
-            parameter.Value = value ?? DBNull.Value;
-            command.Parameters.Add(parameter);
-        }
-
-        return command;
     }
 
     private static IReadOnlyDictionary<string, object?> Parameters(

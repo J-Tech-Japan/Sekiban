@@ -22,7 +22,13 @@ public sealed partial class MySqlMvRegistryStore
         fenceReturnsRows: true,
         savepointSql: "SAVEPOINT sekiban_mv_forced_reverse;",
         rollbackSavepointSql: "ROLLBACK TO SAVEPOINT sekiban_mv_forced_reverse;",
-        releaseSavepointSql: "RELEASE SAVEPOINT sekiban_mv_forced_reverse;");
+        releaseSavepointSql: "RELEASE SAVEPOINT sekiban_mv_forced_reverse;",
+        pointerCasSql: null,
+        registryLockSql: """
+            SELECT logical_table FROM sekiban_mv_registry
+            WHERE service_id = @ServiceId AND view_name = @ViewName
+            ORDER BY view_version, logical_table FOR UPDATE;
+            """);
 
     protected override MvForcedReverseSqlPlan ForcedReversePlan => ForcedReverseSql;
     protected override string LegacySetActiveSql => LegacyActiveUpsertSql;

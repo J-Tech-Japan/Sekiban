@@ -58,6 +58,14 @@ public abstract class MvGenerationSwitchTestsBase(MultiProviderFixtureBase fixtu
     [SkippableFact]
     public Task ForcedReverse_CallerTransactionRollback_IsRetryable() =>
         MvGenerationSwitchAssertions.AssertForcedReverseCallerRollbackAsync(fixture);
+
+    [SkippableFact]
+    public Task DeterministicForwardAndReverse_UseOneRegistryLockOrder() =>
+        MvGenerationSwitchAssertions.AssertDeterministicForwardAndReverseLockOrderAsync(fixture);
+
+    [SkippableFact]
+    public Task DeterministicForwardAndForcedReverse_DoNotDeadlockAcrossPointerAndRegistry() =>
+        MvGenerationSwitchAssertions.AssertDeterministicForwardAndForcedReverseLockOrderAsync(fixture);
 }
 
 internal static class MvGenerationSwitchAssertions
@@ -378,6 +386,198 @@ internal static class MvGenerationSwitchAssertions
         var retry = await store.TryForceReverseAsync(request).ConfigureAwait(false);
         Assert.True(retry.Succeeded, retry.Message);
         Assert.Equal(1, (await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false))!.ActiveVersion);
+    }
+
+    public static async Task AssertDeterministicForwardAndReverseLockOrderAsync(MultiProviderFixtureBase fixture)
+    {
+        var (store, _) = await PrepareAsync(fixture).ConfigureAwait(false);
+        await RegisterAsync(store, 1, known: true).ConfigureAwait(false);
+        await RegisterAsync(store, 2, known: true).ConfigureAwait(false);
+        await RegisterAsync(store, 3, known: true).ConfigureAwait(false);
+        await store.SetActiveAsync(ServiceId, ViewName, 2).ConfigureAwait(false);
+
+        var forwardEntries = await store.GetEntriesAsync(ServiceId, ViewName, 3).ConfigureAwait(false);
+        var reverseEntries = await store.GetEntriesAsync(ServiceId, ViewName, 1).ConfigureAwait(false);
+        var forward = CreateActivationRequest(
+            3,
+            2,
+            MvSwitchKind.Forward,
+            forwardEntries[0].CurrentCheckpointTruth,
+            forwardEntries[0].TargetCheckpointTruth);
+        var reverse = CreateActivationRequest(
+            1,
+            2,
+            MvSwitchKind.Reverse,
+            reverseEntries[0].CurrentCheckpointTruth,
+            reverseEntries[0].TargetCheckpointTruth);
+        var firstRegistryLock = new TaskCompletionSource<MvLifecycleLockPoint>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = 0;
+
+        using var hook = MvLifecycleTestHooks.PushAfterRegistryLock(
+            async (point, cancellationToken) =>
+            {
+                if (Interlocked.CompareExchange(ref first, 1, 0) == 0)
+                {
+                    firstRegistryLock.TrySetResult(point);
+                    await releaseFirst.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
+            });
+
+        using var cancellation = new CancellationTokenSource();
+        var forwardTask = store.TryActivateAsync(forward, cancellationToken: cancellation.Token);
+        Assert.Equal(
+            MvLifecycleLockPoint.ActivationRegistry,
+            await firstRegistryLock.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false));
+        Task<MvActivationResult> reverseTask;
+        if (fixture.DatabaseTypeForTests == MvDbType.Sqlite)
+        {
+            releaseFirst.TrySetResult();
+            await forwardTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            reverseTask = store.TryActivateAsync(reverse, cancellationToken: cancellation.Token);
+        }
+        else
+        {
+            reverseTask = store.TryActivateAsync(reverse, cancellationToken: cancellation.Token);
+            releaseFirst.TrySetResult();
+        }
+
+        var results = await AwaitCompetingTransitionsAsync(
+                forwardTask,
+                reverseTask,
+                cancellation,
+                releaseFirst,
+                "forward/reverse lifecycle transitions")
+            .ConfigureAwait(false);
+        Assert.True(results[0].Succeeded, results[0].Message);
+        Assert.False(results[1].Succeeded);
+        Assert.True(results[1].IsConflict, results[1].Message);
+        var active = Assert.IsType<MvActiveEntry>(await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false));
+        Assert.Equal(3, active.ActiveVersion);
+        Assert.Equal(2, active.Generation);
+    }
+
+    public static async Task AssertDeterministicForwardAndForcedReverseLockOrderAsync(
+        MultiProviderFixtureBase fixture)
+    {
+        var (store, _) = await PrepareAsync(fixture).ConfigureAwait(false);
+        await RegisterAsync(store, 1, known: false).ConfigureAwait(false);
+        await RegisterAsync(store, 2, known: true).ConfigureAwait(false);
+        await RegisterAsync(store, 3, known: true).ConfigureAwait(false);
+        await store.SetActiveAsync(ServiceId, ViewName, 2).ConfigureAwait(false);
+
+        var forwardEntries = await store.GetEntriesAsync(ServiceId, ViewName, 3).ConfigureAwait(false);
+        var forward = CreateActivationRequest(
+            3,
+            2,
+            MvSwitchKind.Forward,
+            forwardEntries[0].CurrentCheckpointTruth,
+            forwardEntries[0].TargetCheckpointTruth);
+        var forcedReverse = new MvForcedReverseRequest(
+            ServiceId,
+            ViewName,
+            1,
+            2,
+            1,
+            2,
+            MvStatus.Ready,
+            "deterministic registry-before-pointer race",
+            DateTimeOffset.UtcNow);
+        var firstRegistryLock = new TaskCompletionSource<MvLifecycleLockPoint>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = 0;
+
+        using var hook = MvLifecycleTestHooks.PushAfterRegistryLock(
+            async (point, cancellationToken) =>
+            {
+                if (Interlocked.CompareExchange(ref first, 1, 0) == 0)
+                {
+                    firstRegistryLock.TrySetResult(point);
+                    await releaseFirst.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
+            });
+
+        using var cancellation = new CancellationTokenSource();
+        var forwardTask = store.TryActivateAsync(forward, cancellationToken: cancellation.Token);
+        Assert.Equal(
+            MvLifecycleLockPoint.ActivationRegistry,
+            await firstRegistryLock.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false));
+        Task<MvActivationResult> forcedTask;
+        if (fixture.DatabaseTypeForTests == MvDbType.Sqlite)
+        {
+            releaseFirst.TrySetResult();
+            await forwardTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            forcedTask = store.TryForceReverseAsync(forcedReverse, cancellationToken: cancellation.Token);
+        }
+        else
+        {
+            forcedTask = store.TryForceReverseAsync(forcedReverse, cancellationToken: cancellation.Token);
+            releaseFirst.TrySetResult();
+        }
+
+        var results = await AwaitCompetingTransitionsAsync(
+                forwardTask,
+                forcedTask,
+                cancellation,
+                releaseFirst,
+                "forward/forced-reverse lifecycle transitions")
+            .ConfigureAwait(false);
+        Assert.True(results[0].Succeeded, results[0].Message);
+        Assert.False(results[1].Succeeded);
+        Assert.True(results[1].IsConflict, results[1].Message);
+        var active = Assert.IsType<MvActiveEntry>(await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false));
+        Assert.Equal(3, active.ActiveVersion);
+        Assert.Equal(2, active.Generation);
+    }
+
+    private static MvActivationRequest CreateActivationRequest(
+        int viewVersion,
+        int expectedActiveVersion,
+        MvSwitchKind switchKind,
+        MvCheckpointTruth currentTruth,
+        MvCheckpointTruth targetTruth) =>
+        new(
+            ServiceId,
+            ViewName,
+            viewVersion,
+            expectedActiveVersion,
+            1,
+            2,
+            MvStatus.Ready,
+            MvCheckpointTruthCodec.Encode(currentTruth),
+            MvCheckpointTruthCodec.Encode(targetTruth))
+        {
+            SwitchKind = switchKind
+        };
+
+    private static async Task<MvActivationResult[]> AwaitCompetingTransitionsAsync(
+        Task<MvActivationResult> firstTask,
+        Task<MvActivationResult> secondTask,
+        CancellationTokenSource cancellation,
+        TaskCompletionSource releaseFirst,
+        string description)
+    {
+        var combined = Task.WhenAll(firstTask, secondTask);
+        var completed = await Task.WhenAny(combined, Task.Delay(TimeSpan.FromSeconds(10))).ConfigureAwait(false);
+        if (completed != combined)
+        {
+            cancellation.Cancel();
+            releaseFirst.TrySetResult();
+            try
+            {
+                await combined.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            }
+            catch
+            {
+                // The assertion below is the diagnostic failure; the bounded wait prevents a mutant deadlock from
+                // leaking into later tests.
+            }
+        }
+
+        Assert.True(completed == combined, $"{description} did not complete within the deterministic barrier timeout.");
+        return await combined.ConfigureAwait(false);
     }
 
     private static async Task<(IMvRegistryStore Store, MvGenerationCoordinator Coordinator)> PrepareAsync(

@@ -453,6 +453,25 @@ WHERE id = @Id
 
 これにより、catch-up と stream 適用が最終的に同じ状態へ収束できます。
 
+### classic Orleans の通知駆動 catch-up（SEK-G57）
+
+classic Orleans mode 1 では、stream payload は inline 適用の入力ではなく、durable receipt と wake-up hint です。grain は
+bounded な scalar hint 状態だけを記録し、その後 service-scoped event store を sortable id の厳密な昇順で読み、1 回につき
+高々 `BatchSize` batch を適用します。single-flight guard は重複する catch-up を防ぎます。正当な zero-row catch-up は必要な
+場合に boundary を進めますが、durable read を次の batch まで止めません。public な caller-sequenced
+`ApplySerializableEventsAsync` の境界と direct stream の zero-row semantics は変更しません。
+
+catch-up は progress、empty、unsafe-window、no-progress、failed-read、retryable-failure、permanent unsupported の outcome を
+明示します。新しい hint に対する empty/unsafe observation は event が `SafeWindowMs` 内にある間は defer されます。safe-eligible
+で成功した empty/unsafe observation だけが `CatchUpStallThreshold` の budget を消費し、failed read と retryable failure は budget
+を pause し、診断用 hint は保持します。retryable failure は `MaxConsecutiveFailuresBeforeStop` で bounded に再試行し、permanent または
+exhausted failure は `CatchUpHalted` として停止します。このとき error、hint sortable id、観測時刻を保持し、Active や completed の
+lifecycle を捏造しません。halt 後の再試行境界は明示的な `RefreshAsync` または fresh activation です。hint の再入場は lifecycle-settlement
+flag を設定せず、activation と `RefreshAsync` が settlement boundary のままです。
+
+この通知駆動経路は、no-hint の periodic idle polling、historical repair、cursor rewind、自動 generation repair を行いません。
+hosted worker と他の materialized-view mode の既存契約は維持されます。
+
 ## レジストリで管理するもの
 
 ランタイムは logical table ごとに次の運用情報を保持します。
@@ -512,6 +531,31 @@ break-glass rollback は別 API の `ForceReverseAsync` です。reverse 専用�
 が指定した reason、timestamp を永続化します。この metadata は lifecycle publication seam から既存の G24 typed / V1
 serialized observation へ push され、read 時に MV target database を open/query しません。通常 API に forced-forward の
 flag や mode はありません。
+
+### Active version の refresh と status の atomic restore（SEK-G57）
+
+すでに serving 中の version は、refresh や restart 後に event を再適用している間も `Active` のままです。
+runtime は serving version に対して一般的な `CatchingUp` downgrade を永続化せず、同じ version が active pointer に
+なっている競合時にも provider の status update が downgrade しないよう guard します。serving ではない candidate は
+従来通り `CatchingUp`、`Ready` を経由でき、通常の cutover、fault、retire の lifecycle は維持されます。G24 の
+publication は、この target registry lifecycle ルールから独立しています。
+
+追加された `IMvRegistryStore.TryRestoreActiveStatusAsync` は、active pointer や generation を変更せずに serving
+version の status だけを修復する境界です。request は正確な service/view/version、active generation、完全な table 数、
+logical/physical table identity、許可する lifecycle status、current checkpoint truth の最小値、権威的な target truth
+を固定します。1 つの provider transaction 内で registry の完全な行集合を deterministic な順序で lock してから active
+pointer を lock します。その後、pointer generation、target truth の完全一致、Known かつ non-legacy で request より
+後退せず target 以上である current truth を検証します。`CatchingUp` と `Ready` の行だけを `Active` にし、既存の
+`Active` 行と checkpoint、position、count、wire field はすべて保持します。行不足、fault、unknown、target の再取得、
+後退、identity/generation の不一致は rollback して拒否し、完了を捏造しません。古い custom store は追加された既定の
+`NotSupportedException` となり、runtime は serving lifecycle を保持して `Ready` write へ fallback しません。
+
+4 provider は native な serialization boundary を使います。PostgreSQL と MySQL は順序付き `FOR UPDATE` row lock、
+SQL Server は `UPDLOCK, HOLDLOCK`、SQLite は row-level lock がないため ordered registry write fence を使います。
+local transaction の deadlock、serialization、SQLite の busy/locked は、新しい connection と新しい read boundary で
+request の有限 bound まで retry し、上限到達時は型付き retryable result を返します。caller-owned transaction では
+savepoint を作り、reject、cancellation、provider failure ではそこへ rollback します。`VerifyOnly` はこの lifecycle
+mutation を呼びません。
 
 ## テーブルのクエリ方法
 

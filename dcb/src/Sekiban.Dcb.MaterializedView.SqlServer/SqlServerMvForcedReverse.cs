@@ -34,6 +34,11 @@ public sealed partial class SqlServerMvRegistryStore
             WHERE service_id = @ServiceId AND view_name = @ViewName
               AND active_version = @ExpectedActiveVersion
               AND active_generation = @ExpectedActiveGeneration;
+            """,
+        registryLockSql: """
+            SELECT logical_table FROM sekiban_mv_registry WITH (UPDLOCK, HOLDLOCK)
+            WHERE service_id = @ServiceId AND view_name = @ViewName
+            ORDER BY view_version, logical_table;
             """);
 
     protected override MvForcedReverseSqlPlan ForcedReversePlan => ForcedReverseSql;

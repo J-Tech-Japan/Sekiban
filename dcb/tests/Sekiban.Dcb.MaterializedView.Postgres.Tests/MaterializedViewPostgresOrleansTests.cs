@@ -143,12 +143,12 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(latestAfterStream, registryRow.CurrentPosition);
         Assert.Equal(latestAfterStream, registryRow.LastSortableUniqueId);
         Assert.Equal(3, registryRow.AppliedEventVersion);
-        Assert.Equal("stream", registryRow.LastAppliedSource);
+        Assert.Equal("catchup", registryRow.LastAppliedSource);
         Assert.NotNull(registryRow.LastAppliedAt);
         Assert.Equal(latestAfterStream, registryRow.LastStreamReceivedSortableUniqueId);
         Assert.NotNull(registryRow.LastStreamReceivedAt);
-        Assert.Equal(latestAfterStream, registryRow.LastStreamAppliedSortableUniqueId);
-        Assert.Equal(latestBeforeStream, registryRow.LastCatchUpSortableUniqueId);
+        Assert.Null(registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(latestAfterStream, registryRow.LastCatchUpSortableUniqueId);
         Assert.Equal(latestAfterStream, orderRow.LastSortableUniqueId);
 
         async Task<string> GetLatestSortableUniqueIdAsync()
@@ -159,6 +159,143 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
                 .Select(static serializableEvent => serializableEvent.SortableUniqueIdValue)
                 .FirstOrDefault() ?? throw new InvalidOperationException("No events found in event store.");
         }
+    }
+
+    [SkippableFact]
+    public async Task Grain_Reactivation_RestoresMixedLegacyStatuses_WithoutCatchUpDowngrade()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
+
+        var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "OrderSummary", 1);
+        var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        try
+        {
+            await grain.RequestDeactivationAsync();
+            await Task.Delay(200);
+        }
+        catch
+        {
+            // The grain may not be active yet; that's fine for this reset path.
+        }
+
+        await fixture.ResetAsync();
+        await grain.RefreshAsync();
+
+        var before = await ReadLifecycleRowsAsync();
+        var activeBefore = await ReadActivePointerAsync();
+        Assert.Equal(2, before.Count);
+        Assert.All(before, row => Assert.Equal("active", row.Status));
+        Assert.Equal(1, activeBefore.ActiveVersion);
+
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(200);
+
+        await using (var damageConnection = await fixture.OpenConnectionAsync())
+        {
+            await damageConnection.ExecuteAsync(
+                """
+                UPDATE sekiban_mv_registry
+                SET status = CASE logical_table
+                    WHEN 'orders' THEN 'catchingup'
+                    ELSE 'active'
+                END
+                WHERE service_id = @ServiceId
+                  AND view_name = 'OrderSummary'
+                  AND view_version = 1;
+                """,
+                new { ServiceId = DefaultServiceIdProvider.DefaultServiceId });
+        }
+
+        var damaged = await ReadLifecycleRowsAsync();
+        Assert.Equal("catchingup", damaged.Single(row => row.LogicalTable == "orders").Status);
+        Assert.Equal("active", damaged.Single(row => row.LogicalTable == "items").Status);
+
+        // Reactivation starts the normal background lifecycle; no explicit RefreshAsync is used here.
+        await grain.EnsureStartedAsync();
+        await WaitUntilAsync(async () =>
+        {
+            var rows = await ReadLifecycleRowsAsync();
+            var active = await ReadActivePointerAsync();
+            return rows.Count == 2 &&
+                   rows.All(row => row.Status == "active") &&
+                   active.ActiveVersion == activeBefore.ActiveVersion &&
+                   active.ActiveGeneration == activeBefore.ActiveGeneration;
+        }, timeoutMs: 15000);
+
+        var after = await ReadLifecycleRowsAsync();
+        var status = await grain.GetStatusAsync();
+        Assert.True(status.Started);
+        Assert.All(after, row => Assert.Equal("active", row.Status));
+        AssertReactivationLifecycleDataUnchanged(before, after);
+
+        var activeAfter = await ReadActivePointerAsync();
+        Assert.Equal(activeBefore, activeAfter);
+    }
+
+    [SkippableFact]
+    public async Task Grain_ActiveRefresh_PreservesLifecycleAndPublishesIndependentProgress()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
+
+        var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "OrderSummary", 1);
+        var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        try
+        {
+            await grain.RequestDeactivationAsync();
+            await Task.Delay(200);
+        }
+        catch
+        {
+            // The grain may not be active yet; that's fine for this reset path.
+        }
+
+        await fixture.ResetAsync();
+        await grain.RefreshAsync();
+        var activeBefore = await ReadActivePointerAsync();
+
+        var orderId = Guid.CreateVersion7();
+        var itemId = Guid.CreateVersion7();
+        var executor = fixture.CreateExecutor(publishToStream: false);
+        await executor.ExecuteAsync(new CreateOrder
+        {
+            OrderId = orderId,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-1)
+        });
+        await executor.ExecuteAsync(new AddOrderItem
+        {
+            OrderId = orderId,
+            ItemId = itemId,
+            ProductName = "G57 refresh",
+            Quantity = 1,
+            UnitPrice = 7m,
+            AddedAt = DateTimeOffset.UtcNow
+        });
+
+        var latest = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+            .OrderByDescending(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
+            .First()
+            .SortableUniqueIdValue;
+
+        await grain.RefreshAsync();
+        var afterFirstRefresh = await ReadLifecycleRowsAsync();
+        await grain.RefreshAsync();
+        var afterRepeatedRefresh = await ReadLifecycleRowsAsync();
+
+        var status = await grain.GetStatusAsync();
+        Assert.Equal(latest, status.CurrentPosition);
+        Assert.All(afterFirstRefresh, row => Assert.Equal("active", row.Status));
+        Assert.All(afterRepeatedRefresh, row => Assert.Equal("active", row.Status));
+        Assert.Equal(activeBefore, await ReadActivePointerAsync());
+
+        var ordersFirst = afterFirstRefresh.Single(row => row.LogicalTable == "orders");
+        var itemsFirst = afterFirstRefresh.Single(row => row.LogicalTable == "items");
+        Assert.Equal(latest, ordersFirst.CurrentPosition);
+        Assert.Equal(latest, itemsFirst.CurrentPosition);
+        Assert.Equal(2, ordersFirst.AppliedEventVersion);
+        Assert.Equal(2, itemsFirst.AppliedEventVersion);
+        Assert.Equal(latest, ordersFirst.LastCatchUpSortableUniqueId);
+        Assert.Equal(latest, itemsFirst.LastCatchUpSortableUniqueId);
+        Assert.Equal(afterFirstRefresh, afterRepeatedRefresh);
     }
 
     [SkippableFact]
@@ -301,16 +438,16 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(latestSortableUniqueId, registryRow.CurrentPosition);
         Assert.Equal(latestSortableUniqueId, registryRow.LastSortableUniqueId);
         Assert.Equal(forecastCount * 2, registryRow.AppliedEventVersion);
-        Assert.Equal("stream", registryRow.LastAppliedSource);
+        Assert.Equal("catchup", registryRow.LastAppliedSource);
         Assert.NotNull(registryRow.LastAppliedAt);
         Assert.Equal(latestSortableUniqueId, registryRow.LastStreamReceivedSortableUniqueId);
         Assert.NotNull(registryRow.LastStreamReceivedAt);
-        Assert.Equal(latestSortableUniqueId, registryRow.LastStreamAppliedSortableUniqueId);
-        Assert.Null(registryRow.LastCatchUpSortableUniqueId);
+        Assert.Null(registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(latestSortableUniqueId, registryRow.LastCatchUpSortableUniqueId);
     }
 
     [SkippableFact]
-    public async Task Grain_Delayed_Create_After_Streamed_Update_DoesNotAdvance_Past_Missing_Row()
+    public async Task Grain_DurableCatchUp_UsesStoreOrder_When_UpdateHintArrivesFirst()
     {
         Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
 
@@ -380,20 +517,6 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         await stream.OnNextAsync(updateEvent);
         await Task.Delay(TimeSpan.FromMilliseconds(1300));
 
-        var statusAfterUpdateOnly = await grain.GetStatusAsync();
-        await using (var interimConnection = await fixture.OpenConnectionAsync())
-        {
-            var interimCount = await interimConnection.ExecuteScalarAsync<int>(
-                "SELECT COUNT(*) FROM sekiban_mv_weatherforecast_v1_forecasts WHERE forecast_id = @ForecastId;",
-                new { ForecastId = forecastId });
-            Assert.Equal(0, interimCount);
-        }
-        Assert.True(
-            string.IsNullOrWhiteSpace(statusAfterUpdateOnly.CurrentPosition) ||
-            string.Compare(statusAfterUpdateOnly.CurrentPosition, updateEvent.SortableUniqueIdValue, StringComparison.Ordinal) < 0);
-
-        await stream.OnNextAsync(createEvent);
-
         await WaitUntilAsync(async () =>
         {
             var status = await grain.GetStatusAsync();
@@ -417,6 +540,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
                    row.Location == "Loc-delayed-U" &&
                    row.LastSortableUniqueId == updateEvent.SortableUniqueIdValue;
         }, timeoutMs: 15000);
+
+        // The predecessor notification may arrive after durable catch-up already applied the ordered pair. It is a
+        // duplicate-compatible receipt and must not move the durable checkpoint backward or invoke stream DML.
+        await stream.OnNextAsync(createEvent);
 
         await using var verifyConnection = await fixture.OpenConnectionAsync();
         var registryRow = await verifyConnection.QuerySingleAsync<RegistryProjectionRow>(
@@ -445,7 +572,8 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal("Loc-delayed-U", updatedLocation);
         Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.CurrentPosition);
         Assert.Equal(2, registryRow.AppliedEventVersion);
-        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Null(registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastCatchUpSortableUniqueId);
     }
 
     [SkippableFact]
@@ -547,14 +675,18 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             """
             SELECT current_position AS CurrentPosition,
                    applied_event_version AS AppliedEventVersion,
-                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId
+                   last_applied_source AS LastAppliedSource,
+                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                   last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId
             FROM sekiban_mv_registry
             WHERE view_name = 'WeatherForecast' AND logical_table = 'forecasts';
             """);
 
         Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.CurrentPosition);
         Assert.Equal(2, registryRow.AppliedEventVersion);
-        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Equal("catchup", registryRow.LastAppliedSource);
+        Assert.Null(registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastCatchUpSortableUniqueId);
     }
 
     [SkippableFact]
@@ -636,17 +768,18 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
 
         await stream.OnNextAsync(advancedCreate);
         await stream.OnNextAsync(delayedUpdate);
-        await Task.Delay(TimeSpan.FromMilliseconds(1300));
 
-        var blockedStatus = await grain.GetStatusAsync();
-        Assert.Equal(advancedCreate.SortableUniqueIdValue, blockedStatus.CurrentPosition);
-
-        await stream.OnNextAsync(delayedCreate);
-
+        // All three events are already durable. The first two notifications must therefore allow the
+        // ordered store catch-up to finish both rows before the older predecessor receipt arrives.
         await WaitUntilAsync(async () =>
         {
             var status = await grain.GetStatusAsync();
-            if (status.CurrentPosition != delayedUpdate.SortableUniqueIdValue)
+            if (status.CurrentPosition != delayedUpdate.SortableUniqueIdValue ||
+                status.CatchUpInProgress ||
+                status.IsCatchUpActive ||
+                status.CatchUpHalted ||
+                status.BufferedEventCount != 0 ||
+                status.LastCatchUpAttemptAt is null)
             {
                 return false;
             }
@@ -677,6 +810,117 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
                    advancedRow is not null &&
                    advancedRow.LastSortableUniqueId == advancedCreate.SortableUniqueIdValue;
         }, timeoutMs: 15000);
+
+        async Task<(RegistryProjectionRow Registry, WeatherProjectionRow? DelayedRow, WeatherProjectionRow? AdvancedRow)> ReadStateAsync()
+        {
+            await using var connection = await fixture.OpenConnectionAsync();
+            var registry = await connection.QuerySingleAsync<RegistryProjectionRow>(
+                """
+                SELECT current_position AS CurrentPosition,
+                       last_sortable_unique_id AS LastSortableUniqueId,
+                       applied_event_version AS AppliedEventVersion,
+                       last_applied_source AS LastAppliedSource,
+                       last_applied_at AS LastAppliedAt,
+                       last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
+                       last_stream_received_at AS LastStreamReceivedAt,
+                       last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                       last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId
+                FROM sekiban_mv_registry
+                WHERE view_name = 'WeatherForecast' AND logical_table = 'forecasts';
+                """);
+            var delayedRow = await connection.QuerySingleOrDefaultAsync<WeatherProjectionRow>(
+                """
+                SELECT forecast_id AS ForecastId,
+                       location AS Location,
+                       _last_sortable_unique_id AS LastSortableUniqueId
+                FROM sekiban_mv_weatherforecast_v1_forecasts
+                WHERE forecast_id = @ForecastId;
+                """,
+                new { ForecastId = delayedForecastId });
+            var advancedRow = await connection.QuerySingleOrDefaultAsync<WeatherProjectionRow>(
+                """
+                SELECT forecast_id AS ForecastId,
+                       location AS Location,
+                       _last_sortable_unique_id AS LastSortableUniqueId
+                FROM sekiban_mv_weatherforecast_v1_forecasts
+                WHERE forecast_id = @ForecastId;
+                """,
+                new { ForecastId = advancedForecastId });
+            return (registry, delayedRow, advancedRow);
+        }
+
+        var baselineStatus = await grain.GetStatusAsync();
+        var baselineCatchUpAttemptAt = baselineStatus.LastCatchUpAttemptAt
+            ?? throw new InvalidOperationException("The initial durable catch-up did not expose a completion attempt.");
+        Assert.False(baselineStatus.CatchUpInProgress);
+        Assert.False(baselineStatus.IsCatchUpActive);
+        Assert.False(baselineStatus.CatchUpHalted);
+        Assert.Equal(0, baselineStatus.BufferedEventCount);
+
+        var beforeDuplicate = await ReadStateAsync();
+        Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.CurrentPosition);
+        Assert.Equal(3, beforeDuplicate.Registry.AppliedEventVersion);
+        Assert.Equal("catchup", beforeDuplicate.Registry.LastAppliedSource);
+        Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId);
+        Assert.Null(beforeDuplicate.Registry.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.LastCatchUpSortableUniqueId);
+        Assert.NotNull(beforeDuplicate.DelayedRow);
+        Assert.Equal("Loc-late-U", beforeDuplicate.DelayedRow.Location);
+        Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.DelayedRow.LastSortableUniqueId);
+        Assert.NotNull(beforeDuplicate.AdvancedRow);
+        Assert.Equal(advancedCreate.SortableUniqueIdValue, beforeDuplicate.AdvancedRow.LastSortableUniqueId);
+
+        // The predecessor notification is an older duplicate receipt: it must be observable as a receipt without
+        // regressing the durable checkpoint, invoking stream DML, or reapplying any event.
+        await stream.OnNextAsync(delayedCreate);
+
+        await WaitUntilAsync(async () =>
+        {
+            var status = await grain.GetStatusAsync();
+            if (status.LastCatchUpAttemptAt is not { } catchUpAttemptAt ||
+                catchUpAttemptAt <= baselineCatchUpAttemptAt ||
+                status.CatchUpInProgress ||
+                status.IsCatchUpActive ||
+                status.CatchUpHalted ||
+                status.BufferedEventCount != 0)
+            {
+                return false;
+            }
+
+            var state = await ReadStateAsync();
+            return state.Registry.CurrentPosition == beforeDuplicate.Registry.CurrentPosition &&
+                   state.Registry.AppliedEventVersion == beforeDuplicate.Registry.AppliedEventVersion &&
+                   state.Registry.LastStreamReceivedSortableUniqueId == beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId &&
+                   state.Registry.LastStreamAppliedSortableUniqueId is null &&
+                   state.Registry.LastCatchUpSortableUniqueId == beforeDuplicate.Registry.LastCatchUpSortableUniqueId &&
+                   state.DelayedRow is not null &&
+                   state.DelayedRow.Location == beforeDuplicate.DelayedRow!.Location &&
+                   state.DelayedRow.LastSortableUniqueId == beforeDuplicate.DelayedRow.LastSortableUniqueId &&
+                   state.AdvancedRow is not null &&
+                   state.AdvancedRow.LastSortableUniqueId == beforeDuplicate.AdvancedRow!.LastSortableUniqueId;
+        }, timeoutMs: 15000);
+
+        var afterDuplicateStatus = await grain.GetStatusAsync();
+        Assert.True(
+            afterDuplicateStatus.LastCatchUpAttemptAt is { } afterCatchUpAttemptAt &&
+            afterCatchUpAttemptAt > baselineCatchUpAttemptAt);
+        Assert.False(afterDuplicateStatus.CatchUpInProgress);
+        Assert.False(afterDuplicateStatus.IsCatchUpActive);
+        Assert.False(afterDuplicateStatus.CatchUpHalted);
+        Assert.Equal(0, afterDuplicateStatus.BufferedEventCount);
+
+        var afterDuplicate = await ReadStateAsync();
+        Assert.Equal(beforeDuplicate.Registry.CurrentPosition, afterDuplicate.Registry.CurrentPosition);
+        Assert.Equal(beforeDuplicate.Registry.AppliedEventVersion, afterDuplicate.Registry.AppliedEventVersion);
+        Assert.Equal("catchup", afterDuplicate.Registry.LastAppliedSource);
+        Assert.Equal(beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId, afterDuplicate.Registry.LastStreamReceivedSortableUniqueId);
+        Assert.Null(afterDuplicate.Registry.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(beforeDuplicate.Registry.LastCatchUpSortableUniqueId, afterDuplicate.Registry.LastCatchUpSortableUniqueId);
+        Assert.NotNull(afterDuplicate.DelayedRow);
+        Assert.Equal(beforeDuplicate.DelayedRow!.Location, afterDuplicate.DelayedRow.Location);
+        Assert.Equal(beforeDuplicate.DelayedRow.LastSortableUniqueId, afterDuplicate.DelayedRow.LastSortableUniqueId);
+        Assert.NotNull(afterDuplicate.AdvancedRow);
+        Assert.Equal(beforeDuplicate.AdvancedRow!.LastSortableUniqueId, afterDuplicate.AdvancedRow.LastSortableUniqueId);
     }
 
     private static async Task WaitUntilAsync(Func<Task<bool>> predicate, int timeoutMs = 10000, int pollMs = 100)
@@ -693,6 +937,109 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         }
 
         Assert.Fail("Condition was not satisfied before timeout.");
+    }
+
+    private async Task<IReadOnlyList<LifecycleRegistryRow>> ReadLifecycleRowsAsync()
+    {
+        await using var connection = await fixture.OpenConnectionAsync();
+        var rows = await connection.QueryAsync<LifecycleRegistryRow>(
+            """
+            SELECT logical_table AS LogicalTable,
+                   physical_table AS PhysicalTable,
+                   status AS Status,
+                   current_position AS CurrentPosition,
+                   target_position AS TargetPosition,
+                   current_checkpoint_truth::text AS CurrentCheckpointTruth,
+                   target_checkpoint_truth::text AS TargetCheckpointTruth,
+                   last_sortable_unique_id AS LastSortableUniqueId,
+                   applied_event_version AS AppliedEventVersion,
+                   last_applied_source AS LastAppliedSource,
+                   last_applied_at AS LastAppliedAt,
+                   last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
+                   last_stream_received_at AS LastStreamReceivedAt,
+                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                   last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId,
+                   metadata::text AS Metadata
+            FROM sekiban_mv_registry
+            WHERE service_id = @ServiceId
+              AND view_name = 'OrderSummary'
+              AND view_version = 1
+            ORDER BY logical_table;
+            """,
+            new { ServiceId = DefaultServiceIdProvider.DefaultServiceId });
+        return rows.ToList();
+    }
+
+    private async Task<ActivePointerRow> ReadActivePointerAsync()
+    {
+        await using var connection = await fixture.OpenConnectionAsync();
+        return await connection.QuerySingleAsync<ActivePointerRow>(
+            """
+            SELECT active_version AS ActiveVersion,
+                   active_generation AS ActiveGeneration,
+                   activated_at AS ActivatedAt,
+                   switch_kind AS SwitchKind,
+                   switch_reason AS SwitchReason,
+                   switched_at_utc AS SwitchedAtUtc
+            FROM sekiban_mv_active
+            WHERE service_id = @ServiceId
+              AND view_name = 'OrderSummary';
+            """,
+            new { ServiceId = DefaultServiceIdProvider.DefaultServiceId });
+    }
+
+    private static void AssertReactivationLifecycleDataUnchanged(
+        IReadOnlyList<LifecycleRegistryRow> before,
+        IReadOnlyList<LifecycleRegistryRow> after)
+    {
+        Assert.Equal(before.Count, after.Count);
+        foreach (var expected in before)
+        {
+            var actual = after.Single(row => row.LogicalTable == expected.LogicalTable);
+            Assert.Equal(expected.LogicalTable, actual.LogicalTable);
+            Assert.Equal(expected.PhysicalTable, actual.PhysicalTable);
+            Assert.Equal(expected.Status, actual.Status);
+            Assert.Equal(expected.CurrentPosition, actual.CurrentPosition);
+            Assert.Equal(expected.TargetPosition, actual.TargetPosition);
+            Assert.Equal(expected.CurrentCheckpointTruth, actual.CurrentCheckpointTruth);
+            AssertTargetCheckpointTruthUnchangedExceptStartupCaptureTimestamp(
+                expected.TargetCheckpointTruth,
+                actual.TargetCheckpointTruth);
+            Assert.Equal(expected.LastSortableUniqueId, actual.LastSortableUniqueId);
+            Assert.Equal(expected.AppliedEventVersion, actual.AppliedEventVersion);
+            Assert.Equal(expected.LastAppliedSource, actual.LastAppliedSource);
+            Assert.Equal(expected.LastAppliedAt, actual.LastAppliedAt);
+            Assert.Equal(expected.LastStreamReceivedSortableUniqueId, actual.LastStreamReceivedSortableUniqueId);
+            Assert.Equal(expected.LastStreamReceivedAt, actual.LastStreamReceivedAt);
+            Assert.Equal(expected.LastStreamAppliedSortableUniqueId, actual.LastStreamAppliedSortableUniqueId);
+            Assert.Equal(expected.LastCatchUpSortableUniqueId, actual.LastCatchUpSortableUniqueId);
+            Assert.Equal(expected.Metadata, actual.Metadata);
+        }
+    }
+
+    private static void AssertTargetCheckpointTruthUnchangedExceptStartupCaptureTimestamp(
+        string? expectedSerialized,
+        string? actualSerialized)
+    {
+        var expected = MvCheckpointTruthCodec.Decode(expectedSerialized);
+        var actual = MvCheckpointTruthCodec.Decode(actualSerialized);
+
+        Assert.Equal(expected.State, actual.State);
+        Assert.Equal(expected.IsKnownZero, actual.IsKnownZero);
+        Assert.Equal(expected.PositionValue, actual.PositionValue);
+        Assert.Equal(expected.UnknownReason, actual.UnknownReason);
+
+        Assert.NotNull(expected.Provenance);
+        Assert.NotNull(actual.Provenance);
+        var expectedProvenance = expected.Provenance!;
+        var actualProvenance = actual.Provenance!;
+        Assert.Equal(MvCheckpointProvenanceKind.AuthoritativeTargetCapture, expectedProvenance.Kind);
+        Assert.Equal(expectedProvenance.Kind, actualProvenance.Kind);
+        Assert.Equal(expectedProvenance.ApplySource, actualProvenance.ApplySource);
+
+        Assert.True(
+            actualProvenance.ObservedAtUtc >= expectedProvenance.ObservedAtUtc,
+            $"Startup target capture provenance regressed from {expectedProvenance.ObservedAtUtc:O} to {actualProvenance.ObservedAtUtc:O}.");
     }
 
     private sealed class OrderProjectionRow
@@ -715,6 +1062,32 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         public string? LastStreamAppliedSortableUniqueId { get; set; }
         public string? LastCatchUpSortableUniqueId { get; set; }
     }
+
+    private sealed record LifecycleRegistryRow(
+        string LogicalTable,
+        string PhysicalTable,
+        string Status,
+        string? CurrentPosition,
+        string? TargetPosition,
+        string? CurrentCheckpointTruth,
+        string? TargetCheckpointTruth,
+        string? LastSortableUniqueId,
+        long AppliedEventVersion,
+        string? LastAppliedSource,
+        DateTime? LastAppliedAt,
+        string? LastStreamReceivedSortableUniqueId,
+        DateTime? LastStreamReceivedAt,
+        string? LastStreamAppliedSortableUniqueId,
+        string? LastCatchUpSortableUniqueId,
+        string? Metadata);
+
+    private sealed record ActivePointerRow(
+        int ActiveVersion,
+        long ActiveGeneration,
+        DateTime ActivatedAt,
+        string SwitchKind,
+        string? SwitchReason,
+        DateTime? SwitchedAtUtc);
 
     private sealed class WeatherProjectionRow
     {

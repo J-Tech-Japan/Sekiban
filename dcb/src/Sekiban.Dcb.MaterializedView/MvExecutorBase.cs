@@ -15,7 +15,7 @@ namespace Sekiban.Dcb.MaterializedView;
 /// Provider executors retain their own event-store factory and perform service validation/source selection
 /// at each public operation boundary before delegating database work here.
 /// </summary>
-public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationExecutor, IMvInitializationVerifier
+public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatchUpExecutor, IMvActivationExecutor, IMvInitializationVerifier
     where TConnection : DbConnection
 {
     private readonly IMvRegistryStore _registryStore;
@@ -185,6 +185,24 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         IMvApplyHost host,
         string? serviceId = null,
         CancellationToken cancellationToken = default);
+
+    async Task<MvCatchUpResult> IMvOrleansCatchUpExecutor.CatchUpOnceForOrleansAsync(
+        IMvApplyHost host,
+        string? serviceId,
+        CancellationToken cancellationToken)
+    {
+        var exactServiceId = ValidateServiceIdAtBoundary(serviceId);
+        EnsureCatchUpIsAllowedAtBoundary(host, exactServiceId);
+        return await CatchUpFromStoreAsync(
+                host,
+                exactServiceId,
+                SelectEventStoreForService(exactServiceId),
+                selectedFromFactory: true,
+                cancellationToken,
+                classifyFailures: true,
+                applyLifecycleOverlay: false)
+            .ConfigureAwait(false);
+    }
 
     protected abstract Task<TConnection> OpenConnectionAsync(CancellationToken cancellationToken);
 
@@ -613,45 +631,164 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         return MvProjectionStatusSnapshot.FromEntries(entries);
     }
 
+    // Keep the original protected signature for derived executors and binary consumers. The typed outcome path is an
+    // additive overload because protected members are part of the published executor surface.
+    protected Task<MvCatchUpResult> CatchUpFromStoreAsync(
+        IMvApplyHost host,
+        string serviceId,
+        IEventStore? eventStore,
+        bool selectedFromFactory,
+        CancellationToken cancellationToken) =>
+        CatchUpFromStoreAsync(
+            host,
+            serviceId,
+            eventStore,
+            selectedFromFactory,
+            cancellationToken,
+            classifyFailures: false,
+            applyLifecycleOverlay: true);
+
     protected async Task<MvCatchUpResult> CatchUpFromStoreAsync(
         IMvApplyHost host,
         string serviceId,
         IEventStore? eventStore,
         bool selectedFromFactory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool classifyFailures,
+        bool applyLifecycleOverlay)
     {
-        var selectedEventStore = RequireSelectedEventStore(eventStore, serviceId, selectedFromFactory);
-        await EnsureTargetCheckpointCapturedAsync(
-                host,
-                serviceId,
-                selectedEventStore,
-                cancellationToken)
-            .ConfigureAwait(false);
-        var currentStatus = await GetCurrentStatusAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
-        // Never use the nullable legacy position for a decisive read boundary. Old rows may contain a position but
-        // have no provenance, so they remain Unknown and are replayed fail-closed from the beginning.
-        var currentPosition = currentStatus.CurrentCheckpointTruth.IsKnown
-            ? currentStatus.CurrentCheckpointTruth.PositionValue
-            : null;
-        var readResult = await selectedEventStore.ReadAllSerializableEventsAsync(
-                SortableUniqueId.NullableValue(currentPosition),
-                _options.BatchSize)
-            .ConfigureAwait(false);
-        var result = await CompleteCatchUpAsync(host, serviceId, readResult, currentStatus, cancellationToken)
-            .ConfigureAwait(false);
-        if (result.AppliedEvents == 0 || result.ReachedUnsafeWindow)
+        try
         {
-            var status = await TryActivateIfEligibleAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
-            result = result with
+            var selectedEventStore = RequireSelectedEventStore(eventStore, serviceId, selectedFromFactory);
+            await EnsureTargetCheckpointCapturedAsync(
+                    host,
+                    serviceId,
+                    selectedEventStore,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var currentStatus = await GetCurrentStatusAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+            // Never use the nullable legacy position for a decisive read boundary. Old rows may contain a position but
+            // have no provenance, so they remain Unknown and are replayed fail-closed from the beginning.
+            var currentPosition = currentStatus.CurrentCheckpointTruth.IsKnown
+                ? currentStatus.CurrentCheckpointTruth.PositionValue
+                : null;
+            var readResult = await selectedEventStore.ReadAllSerializableEventsAsync(
+                    SortableUniqueId.NullableValue(currentPosition),
+                    _options.BatchSize)
+                .ConfigureAwait(false);
+            var result = await CompleteCatchUpAsync(
+                    host,
+                    serviceId,
+                    readResult,
+                    currentStatus,
+                    cancellationToken,
+                    classifyFailures)
+                .ConfigureAwait(false);
+            if (applyLifecycleOverlay &&
+                result.Outcome is MvCatchUpOutcome.Empty or MvCatchUpOutcome.UnsafeWindow)
             {
-                ProjectionStatus = result.ProjectionStatus is { } snapshot
-                    ? snapshot with { Status = status }
-                    : currentStatus with { Status = status }
-            };
-        }
+                var status = await TryActivateIfEligibleAsync(host, serviceId, cancellationToken).ConfigureAwait(false);
+                result = result with
+                {
+                    ProjectionStatus = result.ProjectionStatus is { } snapshot
+                        ? snapshot with { Status = status }
+                        : currentStatus with { Status = status }
+                };
+            }
 
-        return result;
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (NotSupportedException ex)
+        {
+            if (!classifyFailures)
+            {
+                throw;
+            }
+
+            _logger.LogWarning(
+                ex,
+                "Materialized-view catch-up is unsupported for {ViewName}/{ViewVersion}; the operation will halt.",
+                host.ViewName,
+                host.ViewVersion);
+            return CatchUpFailure(
+                MvCatchUpOutcome.PermanentUnsupported,
+                "unsupported",
+                "Catch-up is unsupported by the configured provider or policy.",
+                isRetryable: false);
+        }
+        catch (MvTransitionNotAllowedException ex)
+        {
+            if (!classifyFailures)
+            {
+                throw;
+            }
+
+            _logger.LogWarning(
+                ex,
+                "Materialized-view catch-up policy rejected {ViewName}/{ViewVersion}; the operation will halt.",
+                host.ViewName,
+                host.ViewVersion);
+            return CatchUpFailure(
+                MvCatchUpOutcome.PermanentUnsupported,
+                "transition-not-allowed",
+                "Catch-up is not allowed by the configured lifecycle transition.",
+                isRetryable: false);
+        }
+        catch (MvSqlPolicyRejectedException ex)
+        {
+            if (!classifyFailures)
+            {
+                throw;
+            }
+
+            _logger.LogWarning(
+                ex,
+                "Materialized-view catch-up SQL policy rejected {ViewName}/{ViewVersion}; the operation will halt.",
+                host.ViewName,
+                host.ViewVersion);
+            return CatchUpFailure(
+                MvCatchUpOutcome.PermanentUnsupported,
+                "sql-policy-rejected",
+                "Catch-up SQL was rejected by the configured policy.",
+                isRetryable: false);
+        }
+        catch (Exception ex)
+        {
+            if (!classifyFailures)
+            {
+                throw;
+            }
+
+            _logger.LogWarning(
+                ex,
+                "Materialized-view catch-up failed for {ViewName}/{ViewVersion}; the bounded retry policy will decide whether to continue.",
+                host.ViewName,
+                host.ViewVersion);
+            return CatchUpFailure(
+                MvCatchUpOutcome.RetryableFailure,
+                "catch-up-failed",
+                "Catch-up failed and is eligible for bounded retry.",
+                isRetryable: true);
+        }
     }
+
+    private static MvCatchUpResult CatchUpFailure(
+        MvCatchUpOutcome outcome,
+        string errorCode,
+        string errorMessage,
+        bool isRetryable) =>
+        new(0, false)
+        {
+            Outcome = outcome,
+            ErrorCode = errorCode,
+            ErrorMessage = errorMessage,
+            IsRetryable = isRetryable,
+            ObservedAtUtc = DateTimeOffset.UtcNow
+        };
 
     /// <summary>
     ///     Captures the source head once for a candidate until it has authoritative target provenance. A failed
@@ -716,6 +853,49 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             .ConfigureAwait(false);
         var active = await ReadActiveAsync(serviceId, host.ViewName, cancellationToken).ConfigureAwait(false);
 
+        if (active?.ActiveVersion == host.ViewVersion)
+        {
+            if (entries.Count == 0)
+            {
+                return MvStatus.Initializing;
+            }
+
+            var restoreRequest = MvActiveStatusRestoreRequest.FromEntries(
+                serviceId,
+                host.ViewName,
+                host.ViewVersion,
+                active.Generation,
+                entries);
+            try
+            {
+                var restoration = await _registryStore.TryRestoreActiveStatusAsync(
+                        restoreRequest,
+                        cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+                if (restoration.Succeeded)
+                {
+                    return MvStatus.Active;
+                }
+
+                _logger.LogWarning(
+                    "Serving materialized-view status restoration was rejected for {ViewName}/{ViewVersion}: {Reason} ({Message})",
+                    host.ViewName,
+                    host.ViewVersion,
+                    restoration.FailureReason,
+                    restoration.Message);
+                return StatusAfterUnsuccessfulActiveRestore(entries);
+            }
+            catch (NotSupportedException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Serving materialized-view status restoration is unavailable for {ViewName}/{ViewVersion}; no lifecycle fallback will be attempted.",
+                    host.ViewName,
+                    host.ViewVersion);
+                return StatusAfterUnsuccessfulActiveRestore(entries);
+            }
+        }
+
         // Retired and faulted rows are terminal lifecycle states. Only the normal catch-up/ready transition may be
         // promoted by this automatic initial-activation path.
         if (entries.Count == 0 || entries.Any(entry =>
@@ -775,6 +955,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             : MvStatus.Ready;
     }
 
+    private static MvStatus StatusAfterUnsuccessfulActiveRestore(IReadOnlyList<MvRegistryEntry> entries)
+    {
+        return MvProjectionStatusSnapshot.FromEntries(entries).Status;
+    }
+
     protected Task<int> ApplyStreamEventsAtBoundaryAsync(
         IMvApplyHost host,
         IReadOnlyList<SerializableEvent> events,
@@ -789,12 +974,29 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             cancellationToken);
     }
 
+    // Preserve the pre-prerequisite protected helper shape. New callers that need typed failure classification select
+    // the additive overload below explicitly.
+    protected Task<MvCatchUpResult> CompleteCatchUpAsync(
+        IMvApplyHost host,
+        string serviceId,
+        ResultBox<IEnumerable<SerializableEvent>> readResult,
+        MvProjectionStatusSnapshot currentStatus,
+        CancellationToken cancellationToken) =>
+        CompleteCatchUpAsync(
+            host,
+            serviceId,
+            readResult,
+            currentStatus,
+            cancellationToken,
+            classifyFailures: true);
+
     protected async Task<MvCatchUpResult> CompleteCatchUpAsync(
         IMvApplyHost host,
         string serviceId,
         ResultBox<IEnumerable<SerializableEvent>> readResult,
         MvProjectionStatusSnapshot currentStatus,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool classifyFailures)
     {
         var capabilities = ResolveCapabilities(host, serviceId, MvTransition.CatchUp);
         ThrowIfLifecycleDmlIsNotAllowed(
@@ -805,9 +1007,18 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         if (!readResult.IsSuccess)
         {
             var exception = readResult.GetException();
-            if (exception is NotSupportedException)
+            if (!classifyFailures)
             {
                 throw exception;
+            }
+
+            if (exception is NotSupportedException)
+            {
+                return CatchUpFailure(
+                    MvCatchUpOutcome.PermanentUnsupported,
+                    "unsupported-read",
+                    "The event store does not support the required catch-up read.",
+                    isRetryable: false);
             }
 
             _logger.LogWarning(
@@ -817,13 +1028,30 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
                 host.ViewVersion);
             return new MvCatchUpResult(0, false)
             {
+                Outcome = MvCatchUpOutcome.FailedRead,
+                ErrorCode = "event-read-failed",
+                ErrorMessage = "The event store read failed; the catch-up cycle remains incomplete.",
+                IsRetryable = true,
+                ObservedAtUtc = DateTimeOffset.UtcNow,
                 ProjectionStatus = currentStatus with { Status = MvStatus.Faulted }
             };
         }
 
         var safeThreshold = CreateSafeThreshold(_options.SafeWindowMs);
         var reachedUnsafeWindow = false;
-        var batch = readResult.GetValue().OrderBy(serializable => serializable.SortableUniqueIdValue).ToList();
+        var currentPosition = currentStatus.CurrentCheckpointTruth.IsKnown
+            ? currentStatus.CurrentCheckpointTruth.PositionValue
+            : null;
+        var batch = readResult.GetValue()
+            .Where(serializable =>
+                string.IsNullOrWhiteSpace(currentPosition) ||
+                string.Compare(serializable.SortableUniqueIdValue, currentPosition, StringComparison.Ordinal) > 0)
+            .OrderBy(serializable => serializable.SortableUniqueIdValue, StringComparer.Ordinal)
+            .Take(_options.BatchSize)
+            .ToList();
+        var catchUpStatus = currentStatus.Status is MvStatus.Active or MvStatus.Faulted
+            ? currentStatus.Status
+            : MvStatus.CatchingUp;
 
         if (batch.Count == 0)
         {
@@ -852,10 +1080,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             }
             return new MvCatchUpResult(0, false)
             {
+                Outcome = MvCatchUpOutcome.Empty,
                 ProjectionStatus = currentStatus with
                 {
                     CurrentCheckpointTruth = emptyTruth,
-                    Status = MvStatus.CatchingUp
+                    Status = catchUpStatus
                 }
             };
         }
@@ -876,7 +1105,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
         {
             return new MvCatchUpResult(0, reachedUnsafeWindow)
             {
-                ProjectionStatus = currentStatus with { Status = MvStatus.CatchingUp }
+                Outcome = MvCatchUpOutcome.UnsafeWindow,
+                ProjectionStatus = currentStatus with { Status = catchUpStatus }
             };
         }
 
@@ -891,7 +1121,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             ? safeBatch[appliedEvents - 1].SortableUniqueIdValue
             : null;
 
-        reachedUnsafeWindow |= appliedEvents < safeBatch.Count;
+        var stoppedBeforeBatchEnd = appliedEvents < safeBatch.Count;
         var truth = !string.IsNullOrWhiteSpace(lastAppliedSortableUniqueId)
             ? MvCheckpointTruth.Known(
                 new SortableUniqueId(lastAppliedSortableUniqueId),
@@ -899,10 +1129,15 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvActivationEx
             : currentStatus.CurrentCheckpointTruth;
         return new MvCatchUpResult(appliedEvents, reachedUnsafeWindow, lastAppliedSortableUniqueId)
         {
+            Outcome = stoppedBeforeBatchEnd
+                ? MvCatchUpOutcome.NoProgress
+                : appliedEvents > 0
+                    ? MvCatchUpOutcome.Progressed
+                    : MvCatchUpOutcome.Empty,
             ProjectionStatus = currentStatus with
             {
                 CurrentCheckpointTruth = truth,
-                Status = MvStatus.CatchingUp,
+                Status = catchUpStatus,
                 AppliedEventCount = currentStatus.AppliedEventCount + appliedEvents
             }
         };

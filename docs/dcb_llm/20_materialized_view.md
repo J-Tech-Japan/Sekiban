@@ -459,6 +459,27 @@ WHERE id = @Id
 
 This lets catch-up and live stream delivery converge on the same final state.
 
+### Classic Orleans notification-driven catch-up (SEK-G57)
+
+In classic Orleans mode 1, a stream payload is a durable receipt and wake-up hint, not inline application input. The
+grain records only bounded scalar hint state and then reads the service-scoped event store in strict ascending
+sortable-id order, applying at most one `BatchSize` batch at a time. A single-flight guard prevents overlapping
+catch-up cycles. A legitimate zero-row catch-up result advances the catch-up boundary when appropriate and does not
+stop the durable read from continuing to the next batch; the public caller-sequenced `ApplySerializableEventsAsync`
+boundary and its direct stream zero-row semantics are unchanged.
+
+Catch-up reports explicit progress, empty, unsafe-window, no-progress, failed-read, retryable-failure, and permanent
+unsupported outcomes. Empty/unsafe observations for a newer hint are deferred while the event is inside `SafeWindowMs`.
+Only a safe-eligible, successful empty/unsafe observation consumes `CatchUpStallThreshold`; failed reads and retryable
+failures pause that budget and retain the hint for diagnostics. Retryable failures are bounded by
+`MaxConsecutiveFailuresBeforeStop`; permanent or exhausted failure halts with `CatchUpHalted`, preserving the error,
+hint sortable id, and observation time without fabricating Active or completed lifecycle state. Explicit `RefreshAsync`
+or fresh activation is the retry boundary after a halt. Hint re-entry does not set the lifecycle-settlement flag;
+activation and `RefreshAsync` remain the settlement boundaries.
+
+This notification-driven path does not perform periodic no-hint idle polling, historical repair, cursor rewind, or
+automatic generation repair. Hosted-worker and other materialized-view modes retain their existing contracts.
+
 ## Materialized View Registry
 
 The runtime stores operational metadata per logical table:
@@ -520,6 +541,32 @@ checkpoint freshness/truth. The retained version must exist with the exact servi
 records `switch_kind=forced`, the operator-supplied reason, and timestamp. That metadata is pushed through the existing
 G24 typed and V1 serialized observation surfaces on the lifecycle publication seam; reading it never opens or queries
 the MV target database. There is no forced-forward flag or mode on the ordinary API.
+
+### Active-version refresh and atomic status restoration (SEK-G57)
+
+An already-serving version remains `Active` while it replays events after a refresh or restart. The runtime does not
+persist a generic `CatchingUp` downgrade for the serving version; the provider status update is also guarded against a
+race with an active pointer for the same version. A non-serving candidate may still move through `CatchingUp` and
+`Ready`, and ordinary cutovers, faults, and retirements retain their normal lifecycle transitions. G24 publication is
+independent of this target-registry lifecycle rule.
+
+The additive `IMvRegistryStore.TryRestoreActiveStatusAsync` boundary repairs a serving version without changing its
+active pointer or generation. Its request pins the exact service/view/version, active generation, complete table count,
+logical and physical table identities, allowed lifecycle statuses, a minimum current checkpoint truth, and the exact
+authoritative target truth. Inside one provider transaction the complete registry row set is locked in deterministic
+order before the active pointer is locked. The provider then verifies the pointer generation, exact target truth, and a
+current truth that is Known, non-legacy, monotonic relative to the request, and at or beyond the target. Only
+`CatchingUp` and `Ready` rows are changed to `Active`; existing `Active` rows and every checkpoint, position, count,
+and wire field are preserved. Missing, faulted, unknown, recaptured, regressed, or mismatched rows roll back and do
+not synthesize completion. Older custom stores receive the additive default `NotSupportedException`; the runtime keeps
+the serving lifecycle unchanged and does not fall back to a `Ready` write.
+
+The four providers use their native serialization boundary: PostgreSQL and MySQL use ordered `FOR UPDATE` row locks,
+SQL Server uses `UPDLOCK, HOLDLOCK`, and SQLite uses an ordered registry write fence because it has no row-level lock
+primitive. A local deadlock, serialization, or SQLite busy/locked outcome is retried with a fresh connection and a
+fresh read, up to the finite request bound; exhaustion is returned as a typed retryable result. A caller-owned
+transaction uses a savepoint and rolls back to it on rejection, cancellation, or provider failure. `VerifyOnly` never
+invokes this lifecycle mutation.
 
 ## Querying the Tables
 

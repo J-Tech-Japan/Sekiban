@@ -386,7 +386,15 @@ public sealed partial class SqliteMvRegistryStore : MvForcedReverseRegistryStore
                 last_updated = @Now
             WHERE service_id = @ServiceId
               AND view_name = @ViewName
-              AND view_version = @ViewVersion;
+              AND view_version = @ViewVersion
+              AND (
+                    @Status <> 'catchingup'
+                    OR NOT EXISTS (
+                        SELECT 1
+                        FROM sekiban_mv_active
+                        WHERE service_id = @ServiceId
+                          AND view_name = @ViewName
+                          AND active_version = @ViewVersion));
             """;
 
         await ExecuteAsync(
@@ -583,6 +591,12 @@ public sealed partial class SqliteMvRegistryStore : MvForcedReverseRegistryStore
         MvActivationRequest request,
         CancellationToken cancellationToken)
     {
+        const string lockRegistrySql = """
+            UPDATE sekiban_mv_registry
+            SET last_updated = last_updated
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName;
+            """;
         const string fenceCandidatesSql = """
             UPDATE sekiban_mv_registry
             SET last_updated = last_updated
@@ -613,6 +627,13 @@ public sealed partial class SqliteMvRegistryStore : MvForcedReverseRegistryStore
             request.ExpectedTargetCheckpointTruth,
             ActivatedAt = SerializeDate(DateTimeOffset.UtcNow)
         };
+        await transaction.Connection!.ExecuteAsync(
+                new CommandDefinition(lockRegistrySql, parameters, transaction, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        await MvLifecycleTestHooks.InvokeAfterRegistryLockAsync(
+                MvLifecycleLockPoint.ActivationRegistry,
+                cancellationToken)
+            .ConfigureAwait(false);
         var fencedCandidates = await transaction.Connection!.ExecuteAsync(
                 new CommandDefinition(fenceCandidatesSql, parameters, transaction, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
