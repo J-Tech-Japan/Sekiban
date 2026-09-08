@@ -128,6 +128,47 @@ public sealed class MvCatchUpContractTests
     }
 
     [Fact]
+    public void MaterializedViewGrain_EpochKeyFencesGenerationTargetTruthAndLifecycleStatus()
+    {
+        var target = MvCheckpointTruth.Known(
+            new SortableUniqueId("062135600400000000000000000000"),
+            MvCheckpointProvenance.AuthoritativeTargetCapture());
+        var current = MvCheckpointTruth.Known(
+            new SortableUniqueId("062135600300000000000000000000"),
+            MvCheckpointProvenance.AppliedEvent(MvApplySource.CatchUp));
+        var entry = new MvRegistryEntry
+        {
+            ServiceId = "orders",
+            ViewName = "WeatherForecast",
+            ViewVersion = 1,
+            LogicalTable = "forecasts",
+            PhysicalTable = "weather_forecasts",
+            Status = MvStatus.Active,
+            CurrentCheckpointTruth = current,
+            TargetCheckpointTruth = target
+        };
+        var active = new MvActiveEntry("orders", "WeatherForecast", 1, DateTimeOffset.UnixEpoch)
+        {
+            Generation = 7
+        };
+
+        var baseline = MaterializedViewGrain.CreateEpochKey([entry], active);
+        var generationChanged = MaterializedViewGrain.CreateEpochKey(
+            [entry],
+            active with { Generation = 8 });
+        var targetChanged = MaterializedViewGrain.CreateEpochKey(
+            [entry with { TargetCheckpointTruth = MvCheckpointTruth.KnownZero(MvCheckpointProvenance.AuthoritativeTargetCapture()) }],
+            active);
+        var statusChanged = MaterializedViewGrain.CreateEpochKey(
+            [entry with { Status = MvStatus.Ready }],
+            active);
+
+        Assert.NotEqual(baseline, generationChanged);
+        Assert.NotEqual(baseline, targetChanged);
+        Assert.NotEqual(baseline, statusChanged);
+    }
+
+    [Fact]
     public void MaterializedViewGrainStatus_KeepsPositionalAbiAndAddsHaltedAsInitProperty()
     {
         var constructor = typeof(MaterializedViewGrainStatus).GetConstructors().Single();

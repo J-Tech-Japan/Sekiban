@@ -84,11 +84,14 @@ internal static class MvGenerationSwitchAssertions
             var initial = await coordinator.SwitchAsync(first, ServiceId).ConfigureAwait(false);
             Assert.True(initial.Succeeded, initial.Message);
         }
+        var servingPointerBefore = Assert.IsType<MvActiveEntry>(
+            await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false));
         var servingBefore = await store.GetEntriesAsync(ServiceId, ViewName, 1).ConfigureAwait(false);
 
         await coordinator.PrepareGenerationAsync(new Host(2), ServiceId).ConfigureAwait(false);
 
         var active = Assert.IsType<MvActiveEntry>(await store.GetActiveAsync(ServiceId, ViewName).ConfigureAwait(false));
+        Assert.Equal(servingPointerBefore, active);
         var servingAfter = await store.GetEntriesAsync(ServiceId, ViewName, 1).ConfigureAwait(false);
         var candidate = await store.GetEntriesAsync(ServiceId, ViewName, 2).ConfigureAwait(false);
         Assert.Equal(1, active.ActiveVersion);

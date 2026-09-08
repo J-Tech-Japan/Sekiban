@@ -1121,7 +1121,9 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _settledEpochKey = CreateEpochKey(entries, active);
     }
 
-    private static string CreateEpochKey(
+    // Internal only so the deterministic acceptance tests can exercise the exact epoch fence without waiting for
+    // timer-driven Orleans work. This is not part of the public grain or package surface.
+    internal static string CreateEpochKey(
         IReadOnlyList<MvRegistryEntry> entries,
         MvActiveEntry? active)
     {
