@@ -143,12 +143,12 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(latestAfterStream, registryRow.CurrentPosition);
         Assert.Equal(latestAfterStream, registryRow.LastSortableUniqueId);
         Assert.Equal(3, registryRow.AppliedEventVersion);
-        Assert.Equal("stream", registryRow.LastAppliedSource);
+        Assert.Equal("catchup", registryRow.LastAppliedSource);
         Assert.NotNull(registryRow.LastAppliedAt);
         Assert.Equal(latestAfterStream, registryRow.LastStreamReceivedSortableUniqueId);
         Assert.NotNull(registryRow.LastStreamReceivedAt);
-        Assert.Equal(latestAfterStream, registryRow.LastStreamAppliedSortableUniqueId);
-        Assert.Equal(latestBeforeStream, registryRow.LastCatchUpSortableUniqueId);
+        Assert.Null(registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(latestAfterStream, registryRow.LastCatchUpSortableUniqueId);
         Assert.Equal(latestAfterStream, orderRow.LastSortableUniqueId);
 
         async Task<string> GetLatestSortableUniqueIdAsync()
@@ -438,12 +438,12 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(latestSortableUniqueId, registryRow.CurrentPosition);
         Assert.Equal(latestSortableUniqueId, registryRow.LastSortableUniqueId);
         Assert.Equal(forecastCount * 2, registryRow.AppliedEventVersion);
-        Assert.Equal("stream", registryRow.LastAppliedSource);
+        Assert.Equal("catchup", registryRow.LastAppliedSource);
         Assert.NotNull(registryRow.LastAppliedAt);
         Assert.Equal(latestSortableUniqueId, registryRow.LastStreamReceivedSortableUniqueId);
         Assert.NotNull(registryRow.LastStreamReceivedAt);
-        Assert.Equal(latestSortableUniqueId, registryRow.LastStreamAppliedSortableUniqueId);
-        Assert.Null(registryRow.LastCatchUpSortableUniqueId);
+        Assert.Null(registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(latestSortableUniqueId, registryRow.LastCatchUpSortableUniqueId);
     }
 
     [SkippableFact]
@@ -675,14 +675,18 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             """
             SELECT current_position AS CurrentPosition,
                    applied_event_version AS AppliedEventVersion,
-                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId
+                   last_applied_source AS LastAppliedSource,
+                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                   last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId
             FROM sekiban_mv_registry
             WHERE view_name = 'WeatherForecast' AND logical_table = 'forecasts';
             """);
 
         Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.CurrentPosition);
         Assert.Equal(2, registryRow.AppliedEventVersion);
-        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Equal("catchup", registryRow.LastAppliedSource);
+        Assert.Null(registryRow.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(updateEvent.SortableUniqueIdValue, registryRow.LastCatchUpSortableUniqueId);
     }
 
     [SkippableFact]
@@ -764,17 +768,18 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
 
         await stream.OnNextAsync(advancedCreate);
         await stream.OnNextAsync(delayedUpdate);
-        await Task.Delay(TimeSpan.FromMilliseconds(1300));
 
-        var blockedStatus = await grain.GetStatusAsync();
-        Assert.Equal(advancedCreate.SortableUniqueIdValue, blockedStatus.CurrentPosition);
-
-        await stream.OnNextAsync(delayedCreate);
-
+        // All three events are already durable. The first two notifications must therefore allow the
+        // ordered store catch-up to finish both rows before the older predecessor receipt arrives.
         await WaitUntilAsync(async () =>
         {
             var status = await grain.GetStatusAsync();
-            if (status.CurrentPosition != delayedUpdate.SortableUniqueIdValue)
+            if (status.CurrentPosition != delayedUpdate.SortableUniqueIdValue ||
+                status.CatchUpInProgress ||
+                status.IsCatchUpActive ||
+                status.CatchUpHalted ||
+                status.BufferedEventCount != 0 ||
+                status.LastCatchUpAttemptAt is null)
             {
                 return false;
             }
@@ -805,6 +810,117 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
                    advancedRow is not null &&
                    advancedRow.LastSortableUniqueId == advancedCreate.SortableUniqueIdValue;
         }, timeoutMs: 15000);
+
+        async Task<(RegistryProjectionRow Registry, WeatherProjectionRow? DelayedRow, WeatherProjectionRow? AdvancedRow)> ReadStateAsync()
+        {
+            await using var connection = await fixture.OpenConnectionAsync();
+            var registry = await connection.QuerySingleAsync<RegistryProjectionRow>(
+                """
+                SELECT current_position AS CurrentPosition,
+                       last_sortable_unique_id AS LastSortableUniqueId,
+                       applied_event_version AS AppliedEventVersion,
+                       last_applied_source AS LastAppliedSource,
+                       last_applied_at AS LastAppliedAt,
+                       last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
+                       last_stream_received_at AS LastStreamReceivedAt,
+                       last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                       last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId
+                FROM sekiban_mv_registry
+                WHERE view_name = 'WeatherForecast' AND logical_table = 'forecasts';
+                """);
+            var delayedRow = await connection.QuerySingleOrDefaultAsync<WeatherProjectionRow>(
+                """
+                SELECT forecast_id AS ForecastId,
+                       location AS Location,
+                       _last_sortable_unique_id AS LastSortableUniqueId
+                FROM sekiban_mv_weatherforecast_v1_forecasts
+                WHERE forecast_id = @ForecastId;
+                """,
+                new { ForecastId = delayedForecastId });
+            var advancedRow = await connection.QuerySingleOrDefaultAsync<WeatherProjectionRow>(
+                """
+                SELECT forecast_id AS ForecastId,
+                       location AS Location,
+                       _last_sortable_unique_id AS LastSortableUniqueId
+                FROM sekiban_mv_weatherforecast_v1_forecasts
+                WHERE forecast_id = @ForecastId;
+                """,
+                new { ForecastId = advancedForecastId });
+            return (registry, delayedRow, advancedRow);
+        }
+
+        var baselineStatus = await grain.GetStatusAsync();
+        var baselineCatchUpAttemptAt = baselineStatus.LastCatchUpAttemptAt
+            ?? throw new InvalidOperationException("The initial durable catch-up did not expose a completion attempt.");
+        Assert.False(baselineStatus.CatchUpInProgress);
+        Assert.False(baselineStatus.IsCatchUpActive);
+        Assert.False(baselineStatus.CatchUpHalted);
+        Assert.Equal(0, baselineStatus.BufferedEventCount);
+
+        var beforeDuplicate = await ReadStateAsync();
+        Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.CurrentPosition);
+        Assert.Equal(3, beforeDuplicate.Registry.AppliedEventVersion);
+        Assert.Equal("catchup", beforeDuplicate.Registry.LastAppliedSource);
+        Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId);
+        Assert.Null(beforeDuplicate.Registry.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.LastCatchUpSortableUniqueId);
+        Assert.NotNull(beforeDuplicate.DelayedRow);
+        Assert.Equal("Loc-late-U", beforeDuplicate.DelayedRow.Location);
+        Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.DelayedRow.LastSortableUniqueId);
+        Assert.NotNull(beforeDuplicate.AdvancedRow);
+        Assert.Equal(advancedCreate.SortableUniqueIdValue, beforeDuplicate.AdvancedRow.LastSortableUniqueId);
+
+        // The predecessor notification is an older duplicate receipt: it must be observable as a receipt without
+        // regressing the durable checkpoint, invoking stream DML, or reapplying any event.
+        await stream.OnNextAsync(delayedCreate);
+
+        await WaitUntilAsync(async () =>
+        {
+            var status = await grain.GetStatusAsync();
+            if (status.LastCatchUpAttemptAt is not { } catchUpAttemptAt ||
+                catchUpAttemptAt <= baselineCatchUpAttemptAt ||
+                status.CatchUpInProgress ||
+                status.IsCatchUpActive ||
+                status.CatchUpHalted ||
+                status.BufferedEventCount != 0)
+            {
+                return false;
+            }
+
+            var state = await ReadStateAsync();
+            return state.Registry.CurrentPosition == beforeDuplicate.Registry.CurrentPosition &&
+                   state.Registry.AppliedEventVersion == beforeDuplicate.Registry.AppliedEventVersion &&
+                   state.Registry.LastStreamReceivedSortableUniqueId == beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId &&
+                   state.Registry.LastStreamAppliedSortableUniqueId is null &&
+                   state.Registry.LastCatchUpSortableUniqueId == beforeDuplicate.Registry.LastCatchUpSortableUniqueId &&
+                   state.DelayedRow is not null &&
+                   state.DelayedRow.Location == beforeDuplicate.DelayedRow!.Location &&
+                   state.DelayedRow.LastSortableUniqueId == beforeDuplicate.DelayedRow.LastSortableUniqueId &&
+                   state.AdvancedRow is not null &&
+                   state.AdvancedRow.LastSortableUniqueId == beforeDuplicate.AdvancedRow!.LastSortableUniqueId;
+        }, timeoutMs: 15000);
+
+        var afterDuplicateStatus = await grain.GetStatusAsync();
+        Assert.True(
+            afterDuplicateStatus.LastCatchUpAttemptAt is { } afterCatchUpAttemptAt &&
+            afterCatchUpAttemptAt > baselineCatchUpAttemptAt);
+        Assert.False(afterDuplicateStatus.CatchUpInProgress);
+        Assert.False(afterDuplicateStatus.IsCatchUpActive);
+        Assert.False(afterDuplicateStatus.CatchUpHalted);
+        Assert.Equal(0, afterDuplicateStatus.BufferedEventCount);
+
+        var afterDuplicate = await ReadStateAsync();
+        Assert.Equal(beforeDuplicate.Registry.CurrentPosition, afterDuplicate.Registry.CurrentPosition);
+        Assert.Equal(beforeDuplicate.Registry.AppliedEventVersion, afterDuplicate.Registry.AppliedEventVersion);
+        Assert.Equal("catchup", afterDuplicate.Registry.LastAppliedSource);
+        Assert.Equal(beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId, afterDuplicate.Registry.LastStreamReceivedSortableUniqueId);
+        Assert.Null(afterDuplicate.Registry.LastStreamAppliedSortableUniqueId);
+        Assert.Equal(beforeDuplicate.Registry.LastCatchUpSortableUniqueId, afterDuplicate.Registry.LastCatchUpSortableUniqueId);
+        Assert.NotNull(afterDuplicate.DelayedRow);
+        Assert.Equal(beforeDuplicate.DelayedRow!.Location, afterDuplicate.DelayedRow.Location);
+        Assert.Equal(beforeDuplicate.DelayedRow.LastSortableUniqueId, afterDuplicate.DelayedRow.LastSortableUniqueId);
+        Assert.NotNull(afterDuplicate.AdvancedRow);
+        Assert.Equal(beforeDuplicate.AdvancedRow!.LastSortableUniqueId, afterDuplicate.AdvancedRow.LastSortableUniqueId);
     }
 
     private static async Task WaitUntilAsync(Func<Task<bool>> predicate, int timeoutMs = 10000, int pollMs = 100)
