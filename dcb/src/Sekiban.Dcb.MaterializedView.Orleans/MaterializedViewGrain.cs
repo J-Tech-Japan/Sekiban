@@ -23,6 +23,10 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private static readonly SemaphoreSlim CatchUpBatchSemaphore = new(1);
     private static readonly object s_catchUpSemaphoreSync = new();
     private static int s_catchUpMaxConcurrentBatches = 1;
+    // Test-only scheduler barrier. It is deliberately internal and has no production registration path: acceptance
+    // tests use it to stop the current stream turn immediately after the durable receipt, before a catch-up timer can
+    // apply anything, then let Orleans deactivate and reactivate the grain.
+    private static Func<MaterializedViewGrain, bool>? s_afterStreamReceiptTestHook;
 
     private readonly IMvExecutor _executor;
     private readonly IMvApplyHostFactory _hostFactory;
@@ -132,6 +136,13 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _serviceId = ServiceIdValidator.NormalizeAndValidate(serviceId);
         _viewName = viewName;
         _viewVersion = viewVersion;
+    }
+
+    internal static IDisposable PushAfterStreamReceiptTestHook(Func<MaterializedViewGrain, bool> hook)
+    {
+        ArgumentNullException.ThrowIfNull(hook);
+        var previous = Interlocked.Exchange(ref s_afterStreamReceiptTestHook, hook);
+        return new DelegateDisposable(() => Interlocked.Exchange(ref s_afterStreamReceiptTestHook, previous));
     }
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
@@ -1025,6 +1036,12 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         }
         _lastStreamHintReceivedAt = DateTimeOffset.UtcNow;
 
+        var afterReceiptHook = Volatile.Read(ref s_afterStreamReceiptTestHook);
+        if (afterReceiptHook?.Invoke(this) == true)
+        {
+            return;
+        }
+
         // A receipt is durable even when the stream callback arrives before startup or while a batch is in flight.
         // The next bounded store read discovers events in SUID order. A permanently halted grain remains halted until
         // an explicit RefreshAsync or a fresh activation, so a bad store cannot become a busy loop.
@@ -1232,6 +1249,13 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             s_catchUpMaxConcurrentBatches = target;
             CatchUpBatchSemaphore.Release(delta);
         }
+    }
+
+    private sealed class DelegateDisposable(Action dispose) : IDisposable
+    {
+        private Action? _dispose = dispose;
+
+        public void Dispose() => Interlocked.Exchange(ref _dispose, null)?.Invoke();
     }
 
     private sealed class StreamBatchObserver : IAsyncBatchObserver<SerializableEvent>
