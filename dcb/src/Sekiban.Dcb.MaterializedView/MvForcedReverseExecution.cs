@@ -197,8 +197,8 @@ public static class MvForcedReverseExecution
         IReadOnlyDictionary<string, object?> parameters,
         CancellationToken cancellationToken)
     {
-        await ExecuteNonQueryAsync(transaction, pointerUpsertSql, parameters, cancellationToken).ConfigureAwait(false);
-        if (await ExecuteNonQueryAsync(
+        await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, pointerUpsertSql, parameters, cancellationToken).ConfigureAwait(false);
+        if (await MvDbCommandHelper.ExecuteNonQueryAsync(
                 transaction,
                 LegacySwitchAuditSql,
                 parameters,
@@ -226,7 +226,7 @@ public static class MvForcedReverseExecution
             ["SwitchKind"] = request.SwitchKind.ToString().ToLowerInvariant(),
             ["SwitchedAtUtc"] = switchedAtValue
         };
-        if (await ExecuteNonQueryAsync(
+        if (await MvDbCommandHelper.ExecuteNonQueryAsync(
                 dbTransaction,
                 sql.PersistActiveAuditSql,
                 parameters,
@@ -237,7 +237,7 @@ public static class MvForcedReverseExecution
 
         if (request.ExpectedActiveVersion is not null)
         {
-            await ExecuteNonQueryAsync(
+            await MvDbCommandHelper.ExecuteNonQueryAsync(
                     dbTransaction,
                     sql.MarkPreviousReadySql,
                     parameters,
@@ -301,7 +301,7 @@ public static class MvForcedReverseExecution
         object requestedAtValue,
         CancellationToken cancellationToken)
     {
-        await ExecuteNonQueryAsync(transaction, sql.SavepointSql, null, cancellationToken).ConfigureAwait(false);
+        await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.SavepointSql, null, cancellationToken).ConfigureAwait(false);
         try
         {
             var result = await ExecuteInTransactionAsync(
@@ -313,13 +313,13 @@ public static class MvForcedReverseExecution
                 .ConfigureAwait(false);
             if (!result.Succeeded)
             {
-                await ExecuteNonQueryAsync(transaction, sql.RollbackSavepointSql, null, cancellationToken)
+                await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.RollbackSavepointSql, null, cancellationToken)
                     .ConfigureAwait(false);
             }
 
             if (sql.ReleaseSavepointSql is not null)
             {
-                await ExecuteNonQueryAsync(transaction, sql.ReleaseSavepointSql, null, cancellationToken)
+                await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.ReleaseSavepointSql, null, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -327,11 +327,11 @@ public static class MvForcedReverseExecution
         }
         catch
         {
-            await ExecuteNonQueryAsync(transaction, sql.RollbackSavepointSql, null, cancellationToken)
+            await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.RollbackSavepointSql, null, cancellationToken)
                 .ConfigureAwait(false);
             if (sql.ReleaseSavepointSql is not null)
             {
-                await ExecuteNonQueryAsync(transaction, sql.ReleaseSavepointSql, null, cancellationToken)
+                await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.ReleaseSavepointSql, null, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -351,11 +351,11 @@ public static class MvForcedReverseExecution
         {
             if (sql.RegistryLockReturnsRows)
             {
-                await CountRowsAsync(transaction, sql.RegistryLockSql, parameters, cancellationToken).ConfigureAwait(false);
+                await MvDbCommandHelper.CountRowsAsync(transaction, sql.RegistryLockSql, parameters, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                await ExecuteNonQueryAsync(transaction, sql.RegistryLockSql, parameters, cancellationToken).ConfigureAwait(false);
+                await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.RegistryLockSql, parameters, cancellationToken).ConfigureAwait(false);
             }
 
             await MvLifecycleTestHooks.InvokeAfterRegistryLockAsync(
@@ -365,8 +365,8 @@ public static class MvForcedReverseExecution
         }
 
         var fenced = sql.FenceReturnsRows
-            ? await CountRowsAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false)
-            : await ExecuteNonQueryAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false);
+            ? await MvDbCommandHelper.CountRowsAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false)
+            : await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false);
         var matching = Convert.ToInt32(
             await ExecuteScalarAsync(transaction, sql.CandidateCountSql, parameters, cancellationToken).ConfigureAwait(false),
             System.Globalization.CultureInfo.InvariantCulture);
@@ -375,14 +375,14 @@ public static class MvForcedReverseExecution
             return Conflict();
         }
 
-        if (await ExecuteNonQueryAsync(transaction, sql.PointerCasSql, parameters, cancellationToken).ConfigureAwait(false) != 1)
+        if (await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.PointerCasSql, parameters, cancellationToken).ConfigureAwait(false) != 1)
         {
             return Conflict();
         }
 
-        await ExecuteNonQueryAsync(transaction, sql.MarkPreviousReadySql, parameters, cancellationToken)
+        await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.MarkPreviousReadySql, parameters, cancellationToken)
             .ConfigureAwait(false);
-        var marked = await ExecuteNonQueryAsync(
+        var marked = await MvDbCommandHelper.ExecuteNonQueryAsync(
                 transaction,
                 sql.MarkCandidateActiveSql,
                 parameters,
@@ -393,67 +393,14 @@ public static class MvForcedReverseExecution
             : Conflict();
     }
 
-    private static async Task<int> CountRowsAsync(
-        DbTransaction transaction,
-        string sql,
-        IReadOnlyDictionary<string, object?> parameters,
-        CancellationToken cancellationToken)
-    {
-        await using var command = CreateCommand(transaction, sql, parameters);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        var count = 0;
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            count++;
-        }
-
-        return count;
-    }
-
-    private static async Task<int> ExecuteNonQueryAsync(
-        DbTransaction transaction,
-        string sql,
-        IReadOnlyDictionary<string, object?>? parameters,
-        CancellationToken cancellationToken)
-    {
-        await using var command = CreateCommand(transaction, sql, parameters);
-        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-    }
-
     private static async Task<object?> ExecuteScalarAsync(
         DbTransaction transaction,
         string sql,
         IReadOnlyDictionary<string, object?> parameters,
         CancellationToken cancellationToken)
     {
-        await using var command = CreateCommand(transaction, sql, parameters);
+        await using var command = MvDbCommandHelper.CreateCommand(transaction, sql, parameters);
         return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    private static DbCommand CreateCommand(
-        DbTransaction transaction,
-        string sql,
-        IReadOnlyDictionary<string, object?>? parameters)
-    {
-        var connection = transaction.Connection ??
-            throw new InvalidOperationException("The transaction is not associated with a connection.");
-        var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = sql;
-        if (parameters is null)
-        {
-            return command;
-        }
-
-        foreach (var (name, value) in parameters)
-        {
-            var parameter = command.CreateParameter();
-            parameter.ParameterName = name;
-            parameter.Value = value ?? DBNull.Value;
-            command.Parameters.Add(parameter);
-        }
-
-        return command;
     }
 
     private static IReadOnlyDictionary<string, object?> Parameters(

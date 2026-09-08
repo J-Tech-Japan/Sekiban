@@ -160,7 +160,7 @@ public static class MvActiveStatusRestoreExecution
     {
         try
         {
-            await ExecuteNonQueryAsync(transaction, sql.SavepointSql, null, cancellationToken).ConfigureAwait(false);
+            await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.SavepointSql, null, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -225,7 +225,7 @@ public static class MvActiveStatusRestoreExecution
     {
         try
         {
-            await ExecuteNonQueryAsync(transaction, sql.RollbackSavepointSql, null, CancellationToken.None).ConfigureAwait(false);
+            await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.RollbackSavepointSql, null, CancellationToken.None).ConfigureAwait(false);
             await ReleaseCallerSavepointOrThrowAsync(transaction, sql, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -246,7 +246,7 @@ public static class MvActiveStatusRestoreExecution
 
         try
         {
-            await ExecuteNonQueryAsync(transaction, sql.ReleaseSavepointSql, null, cancellationToken).ConfigureAwait(false);
+            await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.ReleaseSavepointSql, null, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -265,8 +265,8 @@ public static class MvActiveStatusRestoreExecution
         if (sql.CandidateFenceSql is not null)
         {
             var fenced = sql.CandidateFenceReturnsRows
-                ? await CountRowsAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false)
-                : await ExecuteNonQueryAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false);
+                ? await MvDbCommandHelper.CountRowsAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false)
+                : await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.CandidateFenceSql, parameters, cancellationToken).ConfigureAwait(false);
             if (fenced != request.ExpectedTableCount)
             {
                 return MvActivationResult.Rejected(
@@ -301,7 +301,7 @@ public static class MvActiveStatusRestoreExecution
             return MvActivationResult.ActiveStatusRestored(request.ExpectedActiveGeneration);
         }
 
-        var restored = await ExecuteNonQueryAsync(transaction, sql.RestoreStatusesSql, parameters, cancellationToken)
+        var restored = await MvDbCommandHelper.ExecuteNonQueryAsync(transaction, sql.RestoreStatusesSql, parameters, cancellationToken)
             .ConfigureAwait(false);
         if (restored != expectedRestoreCount)
         {
@@ -319,7 +319,7 @@ public static class MvActiveStatusRestoreExecution
         IReadOnlyDictionary<string, object?> parameters,
         CancellationToken cancellationToken)
     {
-        await using var command = CreateCommand(transaction, sql, parameters);
+        await using var command = MvDbCommandHelper.CreateCommand(transaction, sql, parameters);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         var rows = new List<MvActiveStatusRestoreDbRow>();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -349,7 +349,7 @@ public static class MvActiveStatusRestoreExecution
         IReadOnlyDictionary<string, object?> parameters,
         CancellationToken cancellationToken)
     {
-        await using var command = CreateCommand(transaction, sql, parameters);
+        await using var command = MvDbCommandHelper.CreateCommand(transaction, sql, parameters);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -509,59 +509,6 @@ public static class MvActiveStatusRestoreExecution
         ["ExpectedActiveGeneration"] = request.ExpectedActiveGeneration,
         ["Now"] = nowValue
     };
-
-    private static async Task<int> CountRowsAsync(
-        DbTransaction transaction,
-        string sql,
-        IReadOnlyDictionary<string, object?> parameters,
-        CancellationToken cancellationToken)
-    {
-        await using var command = CreateCommand(transaction, sql, parameters);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        var count = 0;
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            count++;
-        }
-
-        return count;
-    }
-
-    private static async Task<int> ExecuteNonQueryAsync(
-        DbTransaction transaction,
-        string sql,
-        IReadOnlyDictionary<string, object?>? parameters,
-        CancellationToken cancellationToken)
-    {
-        await using var command = CreateCommand(transaction, sql, parameters);
-        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    private static DbCommand CreateCommand(
-        DbTransaction transaction,
-        string sql,
-        IReadOnlyDictionary<string, object?>? parameters)
-    {
-        var connection = transaction.Connection ??
-            throw new InvalidOperationException("The transaction is not associated with a connection.");
-        var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = sql;
-        if (parameters is null)
-        {
-            return command;
-        }
-
-        foreach (var (name, value) in parameters)
-        {
-            var parameter = command.CreateParameter();
-            parameter.ParameterName = name;
-            parameter.Value = value ?? DBNull.Value;
-            command.Parameters.Add(parameter);
-        }
-
-        return command;
-    }
 
     private static string RequiredString(DbDataReader reader, int ordinal, string fieldName) =>
         NullableString(reader, ordinal) ??
