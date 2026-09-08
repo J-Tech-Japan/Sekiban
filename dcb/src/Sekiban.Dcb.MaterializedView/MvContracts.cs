@@ -454,7 +454,7 @@ public enum MvCatchUpOutcome
 
 /// <summary>
 ///     Result of one bounded durable catch-up operation. The first three constructor fields are intentionally kept
-///     positional for source and binary compatibility; all G58 diagnostics are additive init-only metadata.
+///     positional for source and binary compatibility; all diagnostics are additive init-only metadata.
 /// </summary>
 public sealed record MvCatchUpResult(int AppliedEvents, bool ReachedUnsafeWindow, string? LastAppliedSortableUniqueId = null)
 {

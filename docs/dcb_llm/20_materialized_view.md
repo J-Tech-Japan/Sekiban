@@ -477,40 +477,28 @@ hint sortable id, and observation time without fabricating Active or completed l
 or fresh activation is the retry boundary after a halt. Hint re-entry does not set the lifecycle-settlement flag;
 activation and `RefreshAsync` remain the settlement boundaries.
 
-The G57 notification-driven baseline does not perform periodic no-hint idle polling, historical repair, cursor rewind, or
-automatic generation repair. G58 adds the separate bounded idle and settled-recovery behavior below; hosted-worker and other
-materialized-view modes retain their existing contracts.
+G58 extends this notification-driven baseline with periodic no-hint idle polling and settled-epoch invalidation.
+Historical repair, cursor rewind and automatic generation switching remain explicit operational actions.
 
-### Classic Orleans bounded store-hint recovery (SEK-G58)
+### Classic Orleans idle recovery and settled epochs (SEK-G58)
 
-In classic Orleans mode 1, a stream payload is only a receipt and wake-up hint. The grain does not retain the payload or
-apply it inline. It records bounded scalar hint state, then reads the durable event store in strict ascending sortable-id
-order and applies at most one batch at a time. A single-flight guard prevents overlapping catch-up cycles. When a hint is
-quiet, durable polling still uses a floor of `max(PollInterval, SafeWindowMs)`; it must not become a tight retry loop.
+After settlement, the grain continues to probe the durable event store without requiring a new stream notification.
+Idle probes run no faster than `max(PollInterval, max(0, SafeWindowMs))`; pending hints and active work use
+`PollInterval`. The default `SafeWindowMs` remains 5000. This adds provider reads while idle and is not an absolute
+latency guarantee. Each tick retains G57's `BatchSize` limit, scalar hint state, single-flight guard and process
+semaphore. Failed reads, unsafe-window waits and permanent or exhausted failures retain their existing distinct
+outcomes and halt diagnostics; an idle probe cannot fabricate successful completion.
 
-Catch-up reports explicit outcomes: progress, empty, unsafe-window, no-progress, failed-read, retryable failure, or
-permanent unsupported failure. A failed or permanently halted cycle keeps its error observable and never fabricates an
-active or completed lifecycle. Retryable failures are bounded; a permanent halt can be restarted by explicit `Refresh`
-or a fresh activation. Only a safe, successful no-progress result contributes to the stall limit. Receipt metadata
-remains distinct from applied-event provenance: events applied by this path are marked as catch-up-applied, while the
-stream marker records receipt only.
+The settled epoch includes the exact serving version, active generation, registry current/target checkpoint truth
+and lifecycle state. Duplicate hints and unchanged idle observations reuse the settled epoch. A changed epoch or
+explicit `RefreshAsync` requires guarded settlement again, preserving G57's registry/pointer locks, eligibility,
+failure and supersession checks.
 
-The existing `BatchSize` limits each store read and the process semaphore plus grain single-flight guard prevent overlap.
-Transient failures stop after `max(1, MaxConsecutiveFailuresBeforeStop)` consecutive failures; safe no-progress stops at
-`CatchUpStallThreshold`. Empty/unsafe idle polling is no faster than `max(PollInterval, max(0, SafeWindowMs))`, while
-an active hint uses `PollInterval`; these are bounds, not an absolute latency guarantee. The design assumes one writer
-per view and a visible safe prefix, not distributed exactly-once delivery.
-
-The settled recovery epoch is keyed by the exact serving version, active generation, and the registry's current/target
-checkpoint truth and lifecycle state. A duplicate hint or unchanged idle observation does not perform another guarded
-restore. A true invalidation, including `RefreshAsync`, establishes a new settlement boundary and permits one guarded
-restore; the G57 locks, eligibility checks, failure distinctions, and no-synthetic-completion rules remain in force.
-
-Receipt-before-apply and commit-before-restart are separate recovery cases: a fresh activation can recover a durable receipt
-once, and a later idle probe can recover a lost notification without a new stream payload. Candidate N+1 preparation repairs
-candidate content while leaving the serving pointer and serving checkpoint unchanged until an explicit, eligible `SwitchAsync`.
-This mode does not perform automatic historical repair, cursor rewind, deletion, or selection of an older event history.
-The public apply API, hosted worker, and other materialized-view modes retain their existing contracts.
+Recovery tests distinguish durable receipt before application from application committed before restart. A new
+activation can discover unapplied durable events without another notification, and already committed events must
+not be replayed. These guarantees assume one writer per view and a visible safe prefix; they do not establish
+distributed exactly-once delivery. Receipt metadata remains separate from CatchUp application provenance. The
+public apply API, hosted worker and other materialized-view modes keep their existing contracts.
 
 ## Materialized View Registry
 
@@ -600,33 +588,16 @@ fresh read, up to the finite request bound; exhaustion is returned as a typed re
 transaction uses a savepoint and rolls back to it on rejection, cancellation, or provider failure. `VerifyOnly` never
 invokes this lifecycle mutation.
 
-### Store-driven catch-up and its boundaries (SEK-G58)
+### Explicit historical recovery (SEK-G58)
 
-Classic Orleans stream notifications are wake-up hints, not application evidence. The grain persists the receipt
-marker and a bounded scalar maximum, then reads the service-scoped event store in ascending sortable-id order. This
-replaces the old approximately one-second stream reorder fast path with the existing `SafeWindowMs` eligibility
-boundary (default 5000 ms). A newly visible event can therefore take at least the safe window plus one bounded poll;
-idle probes are no faster than `max(PollInterval, SafeWindowMs)`, while a pending hint uses `PollInterval`. This is a
-latency and polling-cost change, not a guarantee of immediate visibility.
+Durable reads take the lowest ascending limited prefix strictly after the current cursor. An event becoming visible
+at or below that cursor is not automatically detected or repaired; SUID is not a distributed commit sequence.
 
-An empty read, an unsafe-window deferral, a failed read, and a permanent unsupported/policy refusal are distinct
-outcomes. An empty or unsafe result cannot settle a newer safe-eligible hint. If the same safe-eligible newer hint
-remains without progress through `CatchUpStallThreshold`, recovery halts with the hinted sortable id and observation
-time in the grain error/status; `RefreshAsync` or a fresh activation is the explicit retry boundary. Gate contention,
-pre-eligibility time, and ordinary duplicate/current hints do not consume that budget.
-
-`IMvExecutor.ApplySerializableEventsAsync` remains a public, caller-sequenced boundary: callers must provide an
-ordered, contiguous batch whose predecessor is already represented by the caller's durable checkpoint. It is not an
-arbitrary-order recovery API, and the Orleans grain does not call it for production catch-up. G58 store-driven grain
-applications use the executor's ordered catch-up boundary so checkpoint and projection DML commit together; the
-hosted worker and the mode-2 verified-execution path retain their existing behavior.
-
-Historical correction is explicit rather than automatic. To prepare N+1, register the new projector/version, run
-`PrepareGenerationAsync`, compare the candidate content and checkpoint with durable events, and then call a separately
-authorized `SwitchAsync` after eligibility verification. Preparation does not move the serving pointer. G58 does not
-rewind a cursor, delete/reset a table, automatically select a historical version, or detect/repair newly visible
-events at or below an existing cursor; SUID is not a distributed commit sequence. Existing single-writer and
-visible-safe-prefix assumptions remain operational requirements.
+For historical correction, register the candidate projector/version and run `PrepareGenerationAsync`. Compare the
+candidate content and checkpoint with durable events, then use a separately authorized `SwitchAsync` after eligibility
+verification. Candidate preparation does not move the serving pointer or repair the serving generation in place.
+The N+1 acceptance test checks corrected candidate content while the serving pointer, checkpoint and corruption
+remain unchanged. No cursor rewind, table deletion/reset or automatic version selection is introduced.
 
 ## Querying the Tables
 

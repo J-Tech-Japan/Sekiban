@@ -469,40 +469,27 @@ exhausted failure は `CatchUpHalted` として停止します。このとき er
 lifecycle を捏造しません。halt 後の再試行境界は明示的な `RefreshAsync` または fresh activation です。hint の再入場は lifecycle-settlement
 flag を設定せず、activation と `RefreshAsync` が settlement boundary のままです。
 
-G57 の通知駆動 baseline は、no-hint の periodic idle polling、historical repair、cursor rewind、自動 generation repair を
-行いません。G58 は下記の bounded idle / settled-recovery 機能を別の拡張として追加します。hosted worker と他の
-materialized-view mode の既存契約は維持されます。
+G58 はこの通知駆動 baseline に、通知なしの定期 idle polling と settled epoch の invalidation を追加します。
+historical repair、cursor rewind、generation の自動切り替えは行わず、明示的な運用操作として扱います。
 
-### classic Orleans の bounded store-hint recovery（SEK-G58）
+### classic Orleans の idle recovery と settled epoch（SEK-G58）
 
-classic Orleans mode 1 では、stream payload は receipt と wake-up hint に限られます。grain は payload を保持したり
-inline で適用したりせず、bounded な scalar hint 状態だけを記録します。その後、耐久 event store を sortable id の
-厳密な昇順で読み、1 回につき高々 1 batch だけを適用します。single-flight guard により catch-up の重複実行を防ぎます。
-hint が静かな場合も durable polling の間隔には `max(PollInterval, SafeWindowMs)` の下限があり、tight retry loop には
-なりません。
+settlement 後も、新しい stream 通知なしで耐久 event store を定期的に確認します。idle probe の間隔は
+`max(PollInterval, max(0, SafeWindowMs))` 以上で、pending hint または処理中の work がある間は `PollInterval` を使います。
+`SafeWindowMs` の既定値は 5000 のままです。idle 中の provider read が増えますが、絶対的な latency は保証しません。
+各 tick は G57 の `BatchSize` 上限、scalar hint 状態、single-flight guard、process semaphore を維持します。
+failed read、unsafe-window 待ち、permanent failure、再試行上限到達は既存の異なる outcome と halt 診断を維持し、
+idle probe が成功した completion を捏造することはありません。
 
-catch-up は progress、empty、unsafe-window、no-progress、failed-read、retryable failure、permanent unsupported failure
-を明示的に返します。失敗または permanent halt では error を observable のまま保持し、active や completed の lifecycle を
-捏造しません。retryable failure は bounded に再試行し、permanent halt は明示的な `Refresh` または新しい activation で
-再開できます。safe かつ成功した no-progress だけが stall limit の対象です。receipt の metadata と applied-event の
-provenance は分離され、この経路で適用した event は catch-up-applied、stream marker は receipt のみを示します。
+settled epoch は正確な serving version、active generation、registry の current/target checkpoint truth と lifecycle state
+を含みます。duplicate hint と変更のない idle observation は settled epoch を再利用します。epoch の変更または明示的な
+`RefreshAsync` は再び guarded settlement を必要とし、G57 の registry/pointer lock、eligibility、failure、supersession
+の検査を維持します。
 
-この mode は automatic historical repair、cursor の rewind、削除、古い event history の選択、public apply API の変更を
-行いません。hosted worker と他の materialized-view mode の既存契約は変更しません。既存の `BatchSize` が各 store read
-の上限となり、process semaphore と grain の single-flight guard が重複実行を防ぎます。transient failure は連続
-`max(1, MaxConsecutiveFailuresBeforeStop)` 回で停止し、safe な no-progress は `CatchUpStallThreshold` で停止します。
-empty/unsafe の idle polling は `max(PollInterval, max(0, SafeWindowMs))` より速くならず、active hint がある間は
-`PollInterval` を使います。これは上限であり絶対的な latency 保証ではありません。1 view 1 writer と visible safe prefix を
-仮定し、distributed exactly-once は仮定しません。
-
-settled recovery epoch は、正確な serving version、active generation、registry の current/target checkpoint truth、lifecycle
-state によって識別されます。duplicate hint や変更のない idle observation では guarded restore を追加実行しません。
-`RefreshAsync` を含む実際の invalidation は新しい settlement boundary となり、1 回の guarded restore を許可します。G57 の
-lock、eligibility、failure distinction、synthetic completion を作らない規則はそのまま有効です。
-
-receipt-before-apply と commit-before-restart は別の recovery case です。fresh activation は durable receipt を 1 回だけ回復でき、
-後続の idle probe は新しい stream payload がなくても失われた通知を回復できます。candidate N+1 の準備は serving pointer と
-serving checkpoint を変更せず candidate の内容を修復し、明示的で eligible な `SwitchAsync` の後にだけ切り替えます。
+回復テストでは、適用前の durable receipt と、restart 前に適用が commit 済みの場合を区別します。新しい activation は
+追加通知なしで未適用の durable event を発見でき、commit 済みの event は再適用しません。この保証は 1 view 1 writer と
+visible safe prefix を前提とし、distributed exactly-once を保証しません。receipt metadata と CatchUp 適用の provenance は
+区別します。public apply API、hosted worker、他の materialized-view mode の既存契約は維持します。
 
 ## レジストリで管理するもの
 
@@ -589,31 +576,16 @@ request の有限 bound まで retry し、上限到達時は型付き retryable
 savepoint を作り、reject、cancellation、provider failure ではそこへ rollback します。`VerifyOnly` はこの lifecycle
 mutation を呼びません。
 
-### store 駆動 catch-up と境界（SEK-G58）
+### 明示的な historical recovery（SEK-G58）
 
-Classic Orleans の stream 通知は適用の証拠ではなく wake-up hint です。grain は receipt marker と bounded な scalar
-maximum だけを保存し、その後 service-scoped event store を sortable id の昇順で読みます。これにより、従来の約 1 秒の
-stream reorder fast path は、既存の `SafeWindowMs` の適格性境界（既定値 5000 ms）に置き換わります。新しく見える event の
-可視化には safe window と 1 回の bounded poll 以上かかる可能性があります。idle probe は
-`max(PollInterval, SafeWindowMs)` より速くなく、pending hint がある場合は `PollInterval` を使います。これは latency と
-polling cost の変更であり、即時可視性の保証ではありません。
+durable read は現在の cursor より厳密に後の、昇順で最小の有限 prefix を読みます。cursor 以下で後から visible になった
+イベントは自動的に検出・修復しません。SUID は distributed commit sequence ではありません。
 
-empty read、unsafe-window defer、failed read、permanent unsupported/policy refusal は別々の outcome です。empty または
-unsafe の結果で、新しい safe-eligible hint を settled 扱いにすることはありません。同じ safe-eligible な新しい hint が
-進展しないまま `CatchUpStallThreshold` に到達すると、hint の sortable id と観測時刻を grain の error/status に出して
-recovery を halt します。明示的な `RefreshAsync` または fresh activation が再試行の境界です。gate contention、適格になる前の
-時間、通常の duplicate/current hint はこの budget を消費しません。
-
-`IMvExecutor.ApplySerializableEventsAsync` は public な caller-sequenced boundary のままです。caller は、直前の predecessor
-が durable checkpoint に反映されている ordered/contiguous batch を渡す必要があります。これは arbitrary-order recovery API ではなく、
-Orleans grain の production catch-up から呼び出しません。G58 の grain application は checkpoint と projection DML を同時に commit
-する ordered catch-up boundary を使い、hosted worker と mode-2 verified-execution の既存動作は維持します。
-
-historical correction は自動ではなく明示的に行います。N+1 projector/version を register し、`PrepareGenerationAsync` を実行し、
-candidate の内容と durable event を比較してから、eligibility を検証した別の認可済み `SwitchAsync` を呼びます。prepare だけでは serving
-pointer は動きません。G58 は cursor の rewind、table の delete/reset、historical version の自動選択を行わず、既存 cursor 以下で後から
-visible になった event の検出・修復も行いません。SUID は distributed commit sequence ではありません。既存の single-writer と
-visible-safe-prefix の前提は運用上必要です。
+historical correction では candidate projector/version を register し、`PrepareGenerationAsync` を実行します。candidate の
+内容と checkpoint を durable event と比較し、eligibility を検証してから、別途認可された `SwitchAsync` を使います。
+candidate の準備だけでは serving pointer は動かず、serving generation を直接修復しません。N+1 の acceptance test は、
+serving pointer、checkpoint、破損状態を維持したまま candidate の内容が正しくなることを確認します。
+cursor rewind、table の delete/reset、version の自動選択は追加しません。
 
 ## テーブルのクエリ方法
 
