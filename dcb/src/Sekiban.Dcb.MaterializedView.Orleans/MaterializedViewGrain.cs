@@ -1037,8 +1037,10 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         {
             _isCatchUpActive = true;
             _needsImmediateCatchUp = true;
-            // Hint re-entry does not set _needsLifecycleSettlement. RefreshAsync and activation are the explicit
-            // settlement boundaries; a duplicate/no-work hint must not repeat a guarded lifecycle restore.
+            // Re-entering catch-up because of a stream hint does not itself invalidate the settled lifecycle epoch.
+            // A genuinely newer durable event (or another registry mutation) is detected after the store read by
+            // HasSettledEpochChangedAsync. Keeping this false prevents an already-applied duplicate hint from
+            // repeating TryRestoreActiveStatusAsync while preserving the real invalidation path.
             _consecutiveEmptyBatches = 0;
             _activeStatusRestoreAttempts = 0;
             _lastCatchUpStartedAt ??= DateTimeOffset.UtcNow;

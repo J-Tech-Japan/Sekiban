@@ -1,7 +1,11 @@
+using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
+using Dcb.Domain.WithoutResult.Weather;
 using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Events;
 using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.MaterializedView;
 using Sekiban.Dcb.ServiceId;
@@ -26,6 +30,10 @@ public abstract class MvGenerationSwitchTestsBase(MultiProviderFixtureBase fixtu
     [SkippableFact]
     public Task PreparingNextGeneration_PreservesActiveGenerationAndIndependentProgress() =>
         MvGenerationSwitchAssertions.AssertIndependentPreparationAsync(fixture);
+
+    [SkippableFact]
+    public Task PreparedCandidate_NPlusOneRepairsDurableCheckpointContent_WithoutMovingServingPointer() =>
+        MvGenerationSwitchAssertions.AssertCandidateContentAcceptanceAsync(fixture);
 
     [SkippableFact]
     public Task OrdinaryForwardAndReverse_UseEligibilityAndPersistDirection() =>
@@ -105,6 +113,70 @@ internal static class MvGenerationSwitchAssertions
         Assert.All(candidate, entry => Assert.True(entry.TargetCheckpointTruth.IsKnown));
         Assert.Empty(servingAfter.Select(entry => entry.PhysicalTable).Intersect(
             candidate.Select(entry => entry.PhysicalTable), StringComparer.Ordinal));
+    }
+
+    public static async Task AssertCandidateContentAcceptanceAsync(MultiProviderFixtureBase fixture)
+    {
+        var (store, coordinator) = await PrepareAsync(fixture).ConfigureAwait(false);
+        var databaseType = fixture.Services.GetRequiredService<IMvStorageInfoProvider>().GetStorageInfo().DatabaseType;
+        var firstEvent = CreateCandidateEvent(
+            1,
+            new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+            fixture);
+        var writeFirst = await fixture.EventStore.WriteSerializableEventsAsync([firstEvent]).ConfigureAwait(false);
+        Assert.True(writeFirst.IsSuccess, writeFirst.IsSuccess ? string.Empty : writeFirst.GetException().Message);
+
+        var servingProjector = new FixedAgedInlineLossProjector(1);
+        var servingHost = new NativeMvApplyHost(servingProjector, fixture.DomainTypes.EventTypes, databaseType);
+        await coordinator.PrepareGenerationAsync(servingHost, ServiceId).ConfigureAwait(false);
+        var servingCatchUp = await fixture.Executor.CatchUpOnceAsync(servingHost, ServiceId).ConfigureAwait(false);
+        Assert.Equal(1, servingCatchUp.AppliedEvents);
+        var servingSettlement = await fixture.Executor.CatchUpOnceAsync(servingHost, ServiceId).ConfigureAwait(false);
+        Assert.Equal(MvCatchUpOutcome.Empty, servingSettlement.Outcome);
+        if (await store.GetActiveAsync(ServiceId, servingHost.ViewName).ConfigureAwait(false) is null)
+        {
+            var initialSwitch = await coordinator.SwitchAsync(servingHost, ServiceId).ConfigureAwait(false);
+            Assert.True(initialSwitch.Succeeded, initialSwitch.Message);
+        }
+
+        var servingPointerBefore = Assert.IsType<MvActiveEntry>(
+            await store.GetActiveAsync(ServiceId, servingHost.ViewName).ConfigureAwait(false));
+        var servingEntryBefore = (await store.GetEntriesAsync(ServiceId, servingHost.ViewName, servingHost.ViewVersion)
+            .ConfigureAwait(false)).Single(entry => entry.LogicalTable == "rows");
+
+        var nextEvent = CreateCandidateEvent(
+            2,
+            new DateTime(2024, 1, 2, 3, 4, 6, DateTimeKind.Utc),
+            fixture);
+        var writeNext = await fixture.EventStore.WriteSerializableEventsAsync([nextEvent]).ConfigureAwait(false);
+        Assert.True(writeNext.IsSuccess, writeNext.IsSuccess ? string.Empty : writeNext.GetException().Message);
+
+        var candidateProjector = new FixedAgedInlineLossProjector(2);
+        var candidateHost = new NativeMvApplyHost(candidateProjector, fixture.DomainTypes.EventTypes, databaseType);
+        await coordinator.PrepareGenerationAsync(candidateHost, ServiceId).ConfigureAwait(false);
+        var orleansCatchUp = Assert.IsAssignableFrom<IMvOrleansCatchUpExecutor>(fixture.Executor);
+        var candidateCatchUp = await orleansCatchUp
+            .CatchUpOnceForOrleansAsync(candidateHost, ServiceId)
+            .ConfigureAwait(false);
+
+        Assert.Equal(2, candidateCatchUp.AppliedEvents);
+        var servingPointerAfter = Assert.IsType<MvActiveEntry>(
+            await store.GetActiveAsync(ServiceId, servingHost.ViewName).ConfigureAwait(false));
+        var servingEntryAfter = (await store.GetEntriesAsync(ServiceId, servingHost.ViewName, servingHost.ViewVersion)
+            .ConfigureAwait(false)).Single(entry => entry.LogicalTable == "rows");
+        var candidateEntry = (await store.GetEntriesAsync(ServiceId, candidateHost.ViewName, candidateHost.ViewVersion)
+            .ConfigureAwait(false)).Single(entry => entry.LogicalTable == "rows");
+        await using var connection = await fixture.OpenConnectionAsync().ConfigureAwait(false);
+        var candidateRowCount = await connection.ExecuteScalarAsync<int>(
+                $"SELECT COUNT(*) FROM {candidateProjector.Rows.PhysicalName};")
+            .ConfigureAwait(false);
+
+        Assert.Equal(servingPointerBefore, servingPointerAfter);
+        Assert.Equal(servingEntryBefore.CurrentCheckpointTruth, servingEntryAfter.CurrentCheckpointTruth);
+        Assert.Equal(nextEvent.SortableUniqueIdValue, candidateEntry.CurrentCheckpointTruth.PositionValue);
+        Assert.Equal(nextEvent.SortableUniqueIdValue, candidateEntry.TargetCheckpointTruth.PositionValue);
+        Assert.NotEqual(servingEntryAfter.PhysicalTable, candidateEntry.PhysicalTable);
+        Assert.Equal(2, candidateRowCount);
     }
 
     public static async Task AssertOrdinaryForwardAndReverseAsync(MultiProviderFixtureBase fixture)
@@ -633,6 +705,27 @@ internal static class MvGenerationSwitchAssertions
                 LastUpdated = DateTimeOffset.UtcNow
             }).ConfigureAwait(false);
         }
+    }
+
+    private static SerializableEvent CreateCandidateEvent(
+        int ordinal,
+        DateTime timestamp,
+        MultiProviderFixtureBase fixture)
+    {
+        var eventId = Guid.Parse($"00000000-0000-4000-8000-{ordinal:D12}");
+        var eventValue = new Event(
+            new WeatherForecastCreated(
+                eventId,
+                $"Candidate-{ordinal}",
+                new DateOnly(2024, 1, 2),
+                ordinal,
+                "candidate-proof"),
+            SortableUniqueId.Generate(timestamp, eventId),
+            nameof(WeatherForecastCreated),
+            eventId,
+            new EventMetadata("g58-ac8", "g58-ac8", "candidate-proof"),
+            []);
+        return eventValue.ToSerializableEvent(fixture.DomainTypes.EventTypes);
     }
 
     private sealed class Host(int version) : IMvApplyHost
