@@ -162,6 +162,276 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
     }
 
     [SkippableFact]
+    public async Task Grain_RealPostgres_AC5_ReceiptRestartAndIdleRecovery_AreExactlyOnce()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");
+
+        var grainKey = MvGrainKey.Build(DefaultServiceIdProvider.DefaultServiceId, "OrderSummary", 1);
+        var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        await DeactivateAndAwaitAsync(grain);
+        await fixture.ResetAsync();
+        await grain.RefreshAsync();
+
+        var orderId = Guid.CreateVersion7();
+        var firstItemId = Guid.CreateVersion7();
+        var secondItemId = Guid.CreateVersion7();
+        var durableExecutor = fixture.CreateExecutor(publishToStream: false);
+        var streamNamespace = ServiceIdGrainKey.BuildStreamNamespace("AllEvents", DefaultServiceIdProvider.DefaultServiceId);
+        var stream = fixture.Client
+            .GetStreamProvider("EventStreamProvider")
+            .GetStream<SerializableEvent>(StreamId.Create(streamNamespace, Guid.Empty));
+
+        var catchUpGateReleased = 0;
+        SerializableEvent? receiptEvent = null;
+        var receiptSortableUniqueId = string.Empty;
+        var receiptObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDeactivation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var deactivationObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using (MaterializedViewGrain.PushBeforeCatchUpTestGate(_ => Volatile.Read(ref catchUpGateReleased) == 0))
+        {
+            await durableExecutor.ExecuteAsync(new CreateOrder
+            {
+                OrderId = orderId,
+                CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-2)
+            });
+            await durableExecutor.ExecuteAsync(new AddOrderItem
+            {
+                OrderId = orderId,
+                ItemId = firstItemId,
+                ProductName = "Receipt barrier",
+                Quantity = 1,
+                UnitPrice = 15m,
+                AddedAt = DateTimeOffset.UtcNow.AddMinutes(-1)
+            });
+
+            var durableEvents = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+                .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
+                .ToList();
+            receiptEvent = durableEvents.Single(serializableEvent =>
+                serializableEvent.ToEvent(fixture.DomainTypes.EventTypes).GetValue().Payload is OrderItemAdded added &&
+                added.ItemId == firstItemId);
+            receiptSortableUniqueId = receiptEvent.SortableUniqueIdValue;
+
+            using (MaterializedViewGrain.PushAfterStreamReceiptTestHookAsync(async candidate =>
+                   {
+                       receiptObserved.TrySetResult();
+                       await releaseDeactivation.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                       await candidate.RequestDeactivationAsync();
+                       return true;
+                   }))
+            using (MaterializedViewGrain.PushDeactivationTestHook(_ => deactivationObserved.TrySetResult()))
+            {
+                var publish = stream.OnNextAsync(receiptEvent!);
+                await receiptObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+                var beforeApply = await ReadOrderStateAsync();
+                Assert.Null(beforeApply.Order);
+                Assert.Equal(0, beforeApply.ItemCount);
+                Assert.Equal(receiptSortableUniqueId, beforeApply.Registry.LastStreamReceivedSortableUniqueId);
+                Assert.NotNull(beforeApply.Registry.LastStreamReceivedAt);
+                Assert.Null(beforeApply.Registry.LastStreamAppliedSortableUniqueId);
+                Assert.Null(beforeApply.Registry.LastCatchUpSortableUniqueId);
+
+                releaseDeactivation.TrySetResult();
+                await publish;
+                await deactivationObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            }
+
+            Volatile.Write(ref catchUpGateReleased, 1);
+        }
+
+        var restarted = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        await restarted.EnsureStartedAsync();
+        // OrderSummaryMvV1 applies OrderItemAdded with `total = total + @Delta`; the total is intentionally
+        // non-idempotent, so a replay would change 15 to 30 and cannot hide behind an upsert assertion.
+        await WaitUntilAsync(async () =>
+        {
+            var state = await ReadOrderStateAsync();
+            var status = await restarted.GetStatusAsync();
+            return status.CurrentPosition == receiptSortableUniqueId &&
+                   !status.CatchUpInProgress &&
+                   !status.IsCatchUpActive &&
+                   state.Order?.Total == 15m &&
+                   state.ItemCount == 1 &&
+                   state.Registry.CurrentPosition == receiptSortableUniqueId &&
+                   state.Registry.LastAppliedSource == "catchup";
+        }, timeoutMs: 15000);
+
+        var afterReceiptRestart = await ReadOrderStateAsync();
+        Assert.NotNull(afterReceiptRestart.Order);
+        Assert.Equal(15m, afterReceiptRestart.Order!.Total);
+        Assert.Equal(1, afterReceiptRestart.ItemCount);
+        Assert.Equal(receiptSortableUniqueId, afterReceiptRestart.Registry.CurrentPosition);
+        Assert.Equal(receiptSortableUniqueId, afterReceiptRestart.Registry.LastCatchUpSortableUniqueId);
+        Assert.Equal(receiptSortableUniqueId, afterReceiptRestart.Registry.LastStreamReceivedSortableUniqueId);
+        Assert.Null(afterReceiptRestart.Registry.LastStreamAppliedSortableUniqueId);
+
+        await DeactivateAndAwaitAsync(restarted);
+        var committedRestart = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
+        await committedRestart.EnsureStartedAsync();
+        await WaitUntilAsync(async () =>
+        {
+            var state = await ReadOrderStateAsync();
+            var status = await committedRestart.GetStatusAsync();
+            return status.CurrentPosition == receiptSortableUniqueId &&
+                   !status.CatchUpInProgress &&
+                   !status.IsCatchUpActive &&
+                   state.Order?.Total == 15m &&
+                   state.ItemCount == 1;
+        }, timeoutMs: 15000);
+
+        var beforeDuplicate = await ReadOrderStateAsync();
+        var receiptAtBeforeDuplicate = beforeDuplicate.Registry.LastStreamReceivedAt
+            ?? throw new InvalidOperationException("The committed receipt did not expose a stream receipt timestamp.");
+
+        await stream.OnNextAsync(receiptEvent!);
+        await WaitUntilAsync(async () =>
+        {
+            var state = await ReadOrderStateAsync();
+            return state.Registry.LastStreamReceivedAt is { } receivedAt &&
+                   receivedAt > receiptAtBeforeDuplicate;
+        }, timeoutMs: 15000);
+
+        var duplicateReceiptState = await ReadOrderStateAsync();
+        var duplicateReceiptAt = duplicateReceiptState.Registry.LastStreamReceivedAt
+            ?? throw new InvalidOperationException("The duplicate receipt was not persisted.");
+        var postReceiptCatchUpAttemptAt = (await committedRestart.GetStatusAsync()).LastCatchUpAttemptAt
+            ?? throw new InvalidOperationException("The post-receipt state did not expose a catch-up attempt marker.");
+
+        await WaitUntilAsync(async () =>
+        {
+            var status = await committedRestart.GetStatusAsync();
+            if (status.LastCatchUpAttemptAt is not { } catchUpAttemptAt ||
+                catchUpAttemptAt <= postReceiptCatchUpAttemptAt ||
+                status.LastCatchUpCompletedAt is not { } catchUpCompletedAt ||
+                catchUpCompletedAt <= postReceiptCatchUpAttemptAt ||
+                catchUpCompletedAt < catchUpAttemptAt ||
+                status.CatchUpInProgress ||
+                status.IsCatchUpActive ||
+                status.CatchUpHalted ||
+                status.BufferedEventCount != 0)
+            {
+                return false;
+            }
+
+            var state = await ReadOrderStateAsync();
+            return state.Registry.LastStreamReceivedAt is { } receivedAt &&
+                   receivedAt >= duplicateReceiptAt &&
+                   state.Order?.Total == beforeDuplicate.Order?.Total &&
+                   state.ItemCount == beforeDuplicate.ItemCount &&
+                   state.Registry.CurrentPosition == beforeDuplicate.Registry.CurrentPosition;
+        }, timeoutMs: 15000);
+
+        var afterDuplicateStatus = await committedRestart.GetStatusAsync();
+        Assert.True(
+            afterDuplicateStatus.LastCatchUpAttemptAt is { } afterDuplicateAttemptAt &&
+            afterDuplicateAttemptAt > postReceiptCatchUpAttemptAt);
+        Assert.True(
+            afterDuplicateStatus.LastCatchUpCompletedAt is { } afterDuplicateCompletedAt &&
+            afterDuplicateCompletedAt > postReceiptCatchUpAttemptAt &&
+            afterDuplicateStatus.LastCatchUpAttemptAt <= afterDuplicateCompletedAt);
+        Assert.False(afterDuplicateStatus.CatchUpInProgress);
+        Assert.False(afterDuplicateStatus.IsCatchUpActive);
+        Assert.False(afterDuplicateStatus.CatchUpHalted);
+        Assert.Equal(0, afterDuplicateStatus.BufferedEventCount);
+
+        var afterDuplicate = await ReadOrderStateAsync();
+        Assert.Equal(beforeDuplicate.Registry.CurrentPosition, afterDuplicate.Registry.CurrentPosition);
+        Assert.Equal(beforeDuplicate.Registry.LastCatchUpSortableUniqueId, afterDuplicate.Registry.LastCatchUpSortableUniqueId);
+        Assert.Equal(15m, afterDuplicate.Order?.Total);
+        Assert.Equal(1, afterDuplicate.ItemCount);
+        Assert.True(
+            afterDuplicate.Registry.LastStreamReceivedAt is { } afterDuplicateReceiptAt &&
+            afterDuplicateReceiptAt >= duplicateReceiptAt);
+        Assert.Equal(beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId, afterDuplicate.Registry.LastStreamReceivedSortableUniqueId);
+        Assert.Null(afterDuplicate.Registry.LastStreamAppliedSortableUniqueId);
+
+        var beforeIdle = afterDuplicate;
+        var idleReceiptAt = beforeIdle.Registry.LastStreamReceivedAt;
+        await durableExecutor.ExecuteAsync(new AddOrderItem
+        {
+            OrderId = orderId,
+            ItemId = secondItemId,
+            ProductName = "Idle recovery",
+            Quantity = 1,
+            UnitPrice = 5m,
+            AddedAt = DateTimeOffset.UtcNow
+        });
+        var idleSortableUniqueId = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+            .OrderByDescending(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
+            .First()
+            .SortableUniqueIdValue;
+
+        await WaitUntilAsync(async () =>
+        {
+            var state = await ReadOrderStateAsync();
+            var status = await committedRestart.GetStatusAsync();
+            return status.CurrentPosition == idleSortableUniqueId &&
+                   !status.CatchUpInProgress &&
+                   !status.IsCatchUpActive &&
+                   state.Order?.Total == 20m &&
+                   state.ItemCount == 2 &&
+                   state.Registry.CurrentPosition == idleSortableUniqueId &&
+                   state.Registry.LastCatchUpSortableUniqueId == idleSortableUniqueId &&
+                   state.Registry.LastStreamReceivedSortableUniqueId == receiptSortableUniqueId &&
+                   state.Registry.LastStreamReceivedAt == idleReceiptAt;
+        }, timeoutMs: 15000);
+
+        var afterIdle = await ReadOrderStateAsync();
+        Assert.NotNull(afterIdle.Order);
+        Assert.Equal(20m, afterIdle.Order!.Total);
+        Assert.Equal(2, afterIdle.ItemCount);
+        Assert.Equal(idleSortableUniqueId, afterIdle.Registry.CurrentPosition);
+        Assert.Equal(idleSortableUniqueId, afterIdle.Registry.LastCatchUpSortableUniqueId);
+        Assert.Equal(receiptSortableUniqueId, afterIdle.Registry.LastStreamReceivedSortableUniqueId);
+        Assert.Equal(idleReceiptAt, afterIdle.Registry.LastStreamReceivedAt);
+        Assert.Null(afterIdle.Registry.LastStreamAppliedSortableUniqueId);
+
+        async Task DeactivateAndAwaitAsync(IMaterializedViewGrain target)
+        {
+            var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (MaterializedViewGrain.PushDeactivationTestHook(_ => completed.TrySetResult()))
+            {
+                await target.RequestDeactivationAsync();
+                await completed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            }
+        }
+
+        async Task<(OrderProjectionRow? Order, int ItemCount, RegistryProjectionRow Registry)> ReadOrderStateAsync()
+        {
+            await using var connection = await fixture.OpenConnectionAsync();
+            var order = await connection.QuerySingleOrDefaultAsync<OrderProjectionRow>(
+                """
+                SELECT id,
+                       status,
+                       total,
+                       _last_sortable_unique_id AS LastSortableUniqueId
+                FROM sekiban_mv_ordersummary_v1_orders
+                WHERE id = @OrderId;
+                """,
+                new { OrderId = orderId });
+            var itemCount = await connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM sekiban_mv_ordersummary_v1_items WHERE order_id = @OrderId;",
+                new { OrderId = orderId });
+            var registry = await connection.QuerySingleAsync<RegistryProjectionRow>(
+                """
+                SELECT current_position AS CurrentPosition,
+                       last_sortable_unique_id AS LastSortableUniqueId,
+                       applied_event_version AS AppliedEventVersion,
+                       last_applied_source AS LastAppliedSource,
+                       last_applied_at AS LastAppliedAt,
+                       last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
+                       last_stream_received_at AS LastStreamReceivedAt,
+                       last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                       last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId
+                FROM sekiban_mv_registry
+                WHERE view_name = 'OrderSummary' AND logical_table = 'orders';
+                """);
+            return (order, itemCount, registry);
+        }
+    }
+
+    [SkippableFact]
     public async Task Grain_Reactivation_RestoresMixedLegacyStatuses_WithoutCatchUpDowngrade()
     {
         Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage ?? "Postgres Orleans fixture is unavailable.");

@@ -328,24 +328,34 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         var durableEvent = CreateFixedAgedEvent(
             703,
             new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc));
-        SharedExecutor.InitialEvents.Add(durableEvent);
         SharedExecutor.ExpectAppliedEventCount(1);
 
+        var catchUpGateReleased = 0;
         var receiptObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using (MaterializedViewGrain.PushAfterStreamReceiptTestHook(candidate =>
+        var releaseDeactivation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var deactivationObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using (MaterializedViewGrain.PushBeforeCatchUpTestGate(_ => Volatile.Read(ref catchUpGateReleased) == 0))
+        using (MaterializedViewGrain.PushAfterStreamReceiptTestHookAsync(async candidate =>
                {
                    receiptObserved.TrySetResult();
+                   await releaseDeactivation.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                   await candidate.RequestDeactivationAsync();
                    return true;
                }))
+        using (MaterializedViewGrain.PushDeactivationTestHook(_ => deactivationObserved.TrySetResult()))
         {
-            await GetEventStream().OnNextAsync(durableEvent);
+            SharedExecutor.InitialEvents.Add(durableEvent);
+            var publish = GetEventStream().OnNextAsync(durableEvent);
 
             await receiptObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
             Assert.Equal(1, SharedRegistry.MarkStreamReceivedCalls);
             Assert.Equal(0, SharedExecutor.AppliedEventExecutionCount);
 
-            await grain.RequestDeactivationAsync();
+            releaseDeactivation.TrySetResult();
+            await publish;
+            await deactivationObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Volatile.Write(ref catchUpGateReleased, 1);
         }
 
         SharedExecutor.ExpectTargetCaptureCallCount(2);

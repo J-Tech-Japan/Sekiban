@@ -27,6 +27,9 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     // tests use it to stop the current stream turn immediately after the durable receipt, before a catch-up timer can
     // apply anything, then let Orleans deactivate and reactivate the grain.
     private static Func<MaterializedViewGrain, bool>? s_afterStreamReceiptTestHook;
+    private static Func<MaterializedViewGrain, Task<bool>>? s_afterStreamReceiptAsyncTestHook;
+    private static Func<MaterializedViewGrain, bool>? s_beforeCatchUpTestGate;
+    private static Action<MaterializedViewGrain>? s_deactivationTestHook;
 
     private readonly IMvExecutor _executor;
     private readonly IMvApplyHostFactory _hostFactory;
@@ -145,6 +148,27 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         return new DelegateDisposable(() => Interlocked.Exchange(ref s_afterStreamReceiptTestHook, previous));
     }
 
+    internal static IDisposable PushAfterStreamReceiptTestHookAsync(Func<MaterializedViewGrain, Task<bool>> hook)
+    {
+        ArgumentNullException.ThrowIfNull(hook);
+        var previous = Interlocked.Exchange(ref s_afterStreamReceiptAsyncTestHook, hook);
+        return new DelegateDisposable(() => Interlocked.Exchange(ref s_afterStreamReceiptAsyncTestHook, previous));
+    }
+
+    internal static IDisposable PushBeforeCatchUpTestGate(Func<MaterializedViewGrain, bool> gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        var previous = Interlocked.Exchange(ref s_beforeCatchUpTestGate, gate);
+        return new DelegateDisposable(() => Interlocked.Exchange(ref s_beforeCatchUpTestGate, previous));
+    }
+
+    internal static IDisposable PushDeactivationTestHook(Action<MaterializedViewGrain> hook)
+    {
+        ArgumentNullException.ThrowIfNull(hook);
+        var previous = Interlocked.Exchange(ref s_deactivationTestHook, hook);
+        return new DelegateDisposable(() => Interlocked.Exchange(ref s_deactivationTestHook, previous));
+    }
+
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         ResolveIdentity();
@@ -166,6 +190,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         }
 
         await base.OnDeactivateAsync(reason, cancellationToken);
+        Volatile.Read(ref s_deactivationTestHook)?.Invoke(this);
     }
 
     public async Task EnsureStartedAsync()
@@ -469,6 +494,12 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     {
         try
         {
+            var beforeCatchUpGate = Volatile.Read(ref s_beforeCatchUpTestGate);
+            if (beforeCatchUpGate?.Invoke(this) == true)
+            {
+                return;
+            }
+
             if (_isCatchUpActive)
             {
                 RecoverStaleCatchUpIfNeeded();
@@ -1038,6 +1069,12 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
 
         var afterReceiptHook = Volatile.Read(ref s_afterStreamReceiptTestHook);
         if (afterReceiptHook?.Invoke(this) == true)
+        {
+            return;
+        }
+
+        var afterReceiptAsyncHook = Volatile.Read(ref s_afterStreamReceiptAsyncTestHook);
+        if (afterReceiptAsyncHook is not null && await afterReceiptAsyncHook(this))
         {
             return;
         }
