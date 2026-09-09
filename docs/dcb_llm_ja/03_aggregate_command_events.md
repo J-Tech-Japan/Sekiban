@@ -240,3 +240,12 @@ builder.Services.AddSingleton<IExecutedUserProvider>(sp =>
 
 このように、DCB ではタグを中心にドメインを建て付けます。タグ定義・プロジェクター・コマンドハンドラーを
 組み合わせて一貫した整合性境界を実現してください。
+
+## オプションの executor サイズゲート（SEK-G66）
+
+アプリケーションは `AddSekibanDcbExecutorSizeGate` で `ExecutorSizeGateOptions` を登録し、準備済みイベント集合を
+イベント・タグ・head の永続化前に検査できます。対象はコマンド実行、シリアライズ済み commit、expected-position
+commit、conditional append、シリアライズ済み conditional append の 5 経路で、opt-in でありグローバル既定値は
+ありません。strict policy には実際の論理 UTF-8 測定、または provider が提供する正確な／保守的上限の storage・destination
+測定が必要です。strict の capability 不在は fail-closed、non-strict は診断を付けた場合だけ継続します。Azure Queue の
+wire envelope、batch、retry、および既に受理されたイベントの replication はこのスライスの対象外です。

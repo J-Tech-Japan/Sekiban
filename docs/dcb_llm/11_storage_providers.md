@@ -878,6 +878,14 @@ WRITER and READER is upgraded. On **SQLite**, the legacy `INSERT OR REPLACE` ups
 the row and therefore RESETS the control columns — a pre-G20 writer erases a tombstone. Roll all
 clusters/writers to 10.8.0 before relying on the cross-cluster guarantee.
 
+## Executor size-gate measurement boundary
+
+An executor storage policy is valid only when the provider supplies the actual storage-item encoder or a certified
+conservative upper bound through `IExecutorSizeMeasurement`. The logical serialized-event UTF-8 count is not a row,
+document, item, or Azure Queue wire-envelope count. Strict unavailable measurement rejects before persistence; a
+non-strict policy proceeds with a named diagnostic. The gate covers the current executor operation only; it does not
+split events, change provider retry/recovery, or repair historical oversized data.
+
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).

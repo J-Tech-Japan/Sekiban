@@ -9,6 +9,7 @@ using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Orleans.Serialization;
@@ -43,6 +44,29 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         IEventPublisher? eventPublisher,
         IServiceIdProvider? serviceIdProvider)
         : this(clusterClient, eventStore, domainTypes, eventPublisher, serviceIdProvider, null)
+    {
+    }
+
+    /// <summary>Additive opt-in size-gate constructor; existing Orleans construction remains ungated.</summary>
+    public OrleansDcbExecutor(
+        IClusterClient clusterClient,
+        IEventStore eventStore,
+        DcbDomainTypes domainTypes,
+        ExecutorSizeGateOptions executorSizeGateOptions,
+        IEventPublisher? eventPublisher = null,
+        IServiceIdProvider? serviceIdProvider = null,
+        IExecutedUserProvider? executedUserProvider = null)
+        : this(
+            clusterClient,
+            eventStore,
+            domainTypes,
+            eventPublisher,
+            serviceIdProvider,
+            executedUserProvider,
+            ProcessSharedSortableUniqueIdServices.Generator,
+            ProcessSharedSortableUniqueIdServices.SeedCoordinator,
+            SortableUniqueIdWaitPolicy.System,
+            executorSizeGateOptions)
     {
     }
 
@@ -99,6 +123,31 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         ISortableUniqueIdGenerator sortableUniqueIdGenerator,
         SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
         SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy)
+        : this(
+            clusterClient,
+            eventStore,
+            domainTypes,
+            eventPublisher,
+            serviceIdProvider,
+            executedUserProvider,
+            sortableUniqueIdGenerator,
+            sortableUniqueIdSeedCoordinator,
+            sortableUniqueIdWaitPolicy,
+            null)
+    {
+    }
+
+    internal OrleansDcbExecutor(
+        IClusterClient clusterClient,
+        IEventStore eventStore,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher,
+        IServiceIdProvider? serviceIdProvider,
+        IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
+        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy,
+        ExecutorSizeGateOptions? executorSizeGateOptions)
     {
         _clusterClient = clusterClient ?? throw new ArgumentNullException(nameof(clusterClient));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
@@ -116,7 +165,8 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
             sortableUniqueIdGenerator,
             sortableUniqueIdSeedCoordinator,
             _serviceIdProvider,
-            _sortableUniqueIdWaitPolicy);
+            _sortableUniqueIdWaitPolicy,
+            executorSizeGateOptions);
     }
 
     /// <summary>

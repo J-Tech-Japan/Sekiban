@@ -5,6 +5,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Validation;
@@ -30,6 +31,7 @@ public class CoreGeneralSekibanExecutor
     private readonly ISortableUniqueIdGenerator _sortableUniqueIdGenerator;
     private readonly SortableUniqueIdSeedCoordinator _sortableUniqueIdSeedCoordinator;
     private readonly SortableUniqueIdWaitPolicy _sortableUniqueIdWaitPolicy;
+    private readonly ExecutorSizeGateOptions? _executorSizeGateOptions;
 
     /// <summary>
     ///     Test seam ONLY (never set in production): the EventId / SortableUniqueId generators used by the serialized
@@ -71,7 +73,32 @@ public class CoreGeneralSekibanExecutor
             ProcessSharedSortableUniqueIdServices.Generator,
             ProcessSharedSortableUniqueIdServices.SeedCoordinator,
             new DefaultServiceIdProvider(),
-            SortableUniqueIdWaitPolicy.System)
+            SortableUniqueIdWaitPolicy.System,
+            null)
+    {
+    }
+
+    /// <summary>
+    /// Additive opt-in constructor. Existing constructors remain unchanged and therefore remain ungated.
+    /// </summary>
+    public CoreGeneralSekibanExecutor(
+        IEventStore eventStore,
+        IActorObjectAccessor actorAccessor,
+        DcbDomainTypes domainTypes,
+        ExecutorSizeGateOptions executorSizeGateOptions,
+        IEventPublisher? eventPublisher = null,
+        IExecutedUserProvider? executedUserProvider = null)
+        : this(
+            eventStore,
+            actorAccessor,
+            domainTypes,
+            eventPublisher,
+            executedUserProvider,
+            ProcessSharedSortableUniqueIdServices.Generator,
+            ProcessSharedSortableUniqueIdServices.SeedCoordinator,
+            new DefaultServiceIdProvider(),
+            SortableUniqueIdWaitPolicy.System,
+            executorSizeGateOptions)
     {
     }
 
@@ -94,7 +121,8 @@ public class CoreGeneralSekibanExecutor
             sortableUniqueIdGenerator,
             sortableUniqueIdSeedCoordinator,
             serviceIdProvider,
-            SortableUniqueIdWaitPolicy.System)
+            SortableUniqueIdWaitPolicy.System,
+            null)
     {
     }
 
@@ -108,6 +136,31 @@ public class CoreGeneralSekibanExecutor
         SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
         IServiceIdProvider serviceIdProvider,
         SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy)
+        : this(
+            eventStore,
+            actorAccessor,
+            domainTypes,
+            eventPublisher,
+            executedUserProvider,
+            sortableUniqueIdGenerator,
+            sortableUniqueIdSeedCoordinator,
+            serviceIdProvider,
+            sortableUniqueIdWaitPolicy,
+            null)
+    {
+    }
+
+    internal CoreGeneralSekibanExecutor(
+        IEventStore eventStore,
+        IActorObjectAccessor actorAccessor,
+        DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher,
+        IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
+        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider,
+        SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy,
+        ExecutorSizeGateOptions? executorSizeGateOptions)
     {
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
@@ -121,6 +174,8 @@ public class CoreGeneralSekibanExecutor
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _sortableUniqueIdWaitPolicy = sortableUniqueIdWaitPolicy ??
                                       throw new ArgumentNullException(nameof(sortableUniqueIdWaitPolicy));
+        _executorSizeGateOptions = executorSizeGateOptions;
+        _executorSizeGateOptions?.Validate();
     }
 
     private Task EnsureSortableUniqueIdSeededAsync(CancellationToken cancellationToken)
@@ -133,6 +188,33 @@ public class CoreGeneralSekibanExecutor
     {
         var value = _executedUserProvider?.GetExecutedUser();
         return string.IsNullOrEmpty(value) ? DefaultExecutedUser : value;
+    }
+
+    private async Task PublishPreparedEventsAsync(
+        IReadOnlyList<PreparedExecutorEvent> preparedEvents,
+        ExecutorSizeGateEvaluation sizeEvaluation)
+    {
+        if (_eventPublisher is null)
+        {
+            return;
+        }
+
+        var publishEvents = preparedEvents
+            .Select(e => (e.Event, e.Tags))
+            .ToList()
+            .AsReadOnly();
+
+        if (sizeEvaluation.DestinationPlans.Count > 0 &&
+            _eventPublisher is IExecutorSizeDestinationPublisher plannedPublisher)
+        {
+            await plannedPublisher.PublishAsync(
+                publishEvents,
+                sizeEvaluation.DestinationPlans,
+                CancellationToken.None);
+            return;
+        }
+
+        await _eventPublisher.PublishAsync(publishEvents, CancellationToken.None);
     }
 
     public Task<ResultBox<ExecutionResult>> ExecuteAsync<TCommand>(
@@ -345,11 +427,23 @@ public class CoreGeneralSekibanExecutor
                             e.Tags.Select(t => t.GetTag()).ToList()));
                 }
 
+                var preparedEvents = events
+                    .Select(e => new PreparedExecutorEvent(
+                        e,
+                        e.ToSerializableEvent(_domainTypes.EventTypes),
+                        e.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray()))
+                    .ToList();
+                var sizeEvaluation = ExecutorSizeGateEvaluator.Evaluate(
+                    _executorSizeGateOptions,
+                    preparedEvents,
+                    ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
+                    _eventPublisher);
+
                 IReadOnlyList<Event> writtenEvents;
                 IReadOnlyList<TagWriteResult> tagWriteResults;
                 if (expectedPositionStore is not null && expectedTagPositions is not null)
                 {
-                    var serialized = events.Select(e => e.ToSerializableEvent(_domainTypes.EventTypes)).ToList();
+                    var serialized = preparedEvents.Select(e => e.SerializedEvent).ToList();
                     var writeResult = await expectedPositionStore.WriteSerializableEventsWithExpectedTagPositionsAsync(
                         serialized, expectedTagPositions, cancellationToken);
                     if (!writeResult.IsSuccess)
@@ -385,12 +479,17 @@ public class CoreGeneralSekibanExecutor
 
                 if (_eventPublisher != null)
                 {
-                    var publishEvents = writtenEvents
-                        .Select((we, idx) => (Event: we,
-                            Tags: (IReadOnlyCollection<ITag>)collectedEvents[idx].Tags.AsReadOnly()))
-                        .ToList()
-                        .AsReadOnly();
-                    await _eventPublisher.PublishAsync(publishEvents, CancellationToken.None);
+                    await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
+                }
+
+                var metadata = new Dictionary<string, object>
+                {
+                    ["EventCount"] = writtenEvents.Count,
+                    ["TagCount"] = allTags.Count
+                };
+                if (sizeEvaluation.Diagnostics.Count > 0)
+                {
+                    metadata["SizeGateDiagnostics"] = sizeEvaluation.Diagnostics;
                 }
 
                 // Return success result
@@ -401,11 +500,7 @@ public class CoreGeneralSekibanExecutor
                         tagWriteResults.ToList(),
                         stopwatch.Elapsed,
                         writtenEvents,
-                        new Dictionary<string, object>
-                        {
-                            ["EventCount"] = writtenEvents.Count,
-                            ["TagCount"] = allTags.Count
-                        },
+                        metadata,
                         firstEvent.SortableUniqueIdValue));
             }
             catch (Exception)
@@ -732,6 +827,28 @@ public class CoreGeneralSekibanExecutor
                         candidate.EventPayloadName));
                 }
 
+                var preparedEvents = new List<PreparedExecutorEvent>(serializableEvents.Count);
+                foreach (var serializableEvent in serializableEvents)
+                {
+                    var eventResult = serializableEvent.ToEvent(_domainTypes.EventTypes);
+                    if (!eventResult.IsSuccess)
+                    {
+                        await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                        return ResultBox.Error<SerializedCommitResult>(eventResult.GetException());
+                    }
+
+                    var preparedEvent = eventResult.GetValue();
+                    preparedEvents.Add(new PreparedExecutorEvent(
+                        preparedEvent,
+                        serializableEvent,
+                        serializableEvent.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray()));
+                }
+                var sizeEvaluation = ExecutorSizeGateEvaluator.Evaluate(
+                    _executorSizeGateOptions,
+                    preparedEvents,
+                    ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
+                    _eventPublisher);
+
                 // Step 5: V2 is store-enforced; legacy/V1 keeps the exact old unconditional call and result shape.
                 IReadOnlyList<SerializableEvent> writtenEvents;
                 IReadOnlyList<TagWriteResult> tagWriteResults;
@@ -771,29 +888,17 @@ public class CoreGeneralSekibanExecutor
 
                 if (_eventPublisher != null && writtenEvents.Count > 0)
                 {
-                    var publishEvents = new List<(Event Event, IReadOnlyCollection<ITag> Tags)>(writtenEvents.Count);
-                    foreach (var writtenEvent in writtenEvents)
-                    {
-                        var eventResult = writtenEvent.ToEvent(_domainTypes.EventTypes);
-                        if (!eventResult.IsSuccess)
-                        {
-                            return ResultBox.Error<SerializedCommitResult>(eventResult.GetException());
-                        }
-
-                        List<ITag> eventTags = writtenEvent.Tags
-                            .Select(_domainTypes.TagTypes.GetTag)
-                            .ToList();
-                        publishEvents.Add((eventResult.GetValue(), eventTags.AsReadOnly()));
-                    }
-
-                    await _eventPublisher.PublishAsync(publishEvents.AsReadOnly(), CancellationToken.None);
+                    await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
                 }
 
-                return ResultBox.FromValue(
-                    new SerializedCommitResult(
+                var result = new SerializedCommitResult(
                         writtenEvents,
                         tagWriteResults,
-                        stopwatch.Elapsed));
+                        stopwatch.Elapsed)
+                {
+                    SizeGateDiagnostics = sizeEvaluation.Diagnostics
+                };
+                return ResultBox.FromValue(result);
             }
             catch (Exception)
             {
@@ -1285,15 +1390,27 @@ public class CoreGeneralSekibanExecutor
             var executedUser = GetExecutedUser();
             var eventId = ConditionalEventIdFactory();
             var sortable = _sortableUniqueIdGenerator.GenerateNew();
-            var metadata = new EventMetadata(eventId.ToString(), command.GetType().Name, executedUser);
+            var eventMetadata = new EventMetadata(eventId.ToString(), command.GetType().Name, executedUser);
             var domainEvent = new Event(
                 single.Event,
                 sortable,
                 single.Event.GetType().Name,
                 eventId,
-                metadata,
+                eventMetadata,
                 single.Tags.Select(t => t.GetTag()).ToList());
             var serializable = domainEvent.ToSerializableEvent(_domainTypes.EventTypes);
+            var preparedEvents = new List<PreparedExecutorEvent>
+            {
+                new(
+                    domainEvent,
+                    serializable,
+                    single.Tags.ToArray())
+            };
+            var sizeEvaluation = ExecutorSizeGateEvaluator.Evaluate(
+                _executorSizeGateOptions,
+                preparedEvents,
+                ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
+                _eventPublisher);
 
             var appendResult = await conditionalStore.AppendIfUniqueAsync(
                 new ConditionalAppendRequest(conditional.IdempotencyKey, serializable),
@@ -1309,10 +1426,18 @@ public class CoreGeneralSekibanExecutor
 
             if (_eventPublisher != null && isNewlyAppended)
             {
-                await _eventPublisher.PublishAsync(
-                    new List<(Event Event, IReadOnlyCollection<ITag> Tags)> { (domainEvent, single.Tags.AsReadOnly()) }
-                        .AsReadOnly(),
-                    CancellationToken.None);
+                await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
+            }
+
+            var metadata = new Dictionary<string, object>
+            {
+                ["ConditionalAppendStatus"] = receipt.Status.ToString(),
+                ["OperationFingerprint"] = receipt.OperationFingerprint,
+                ["WasAlreadyCommitted"] = receipt.WasAlreadyCommitted
+            };
+            if (sizeEvaluation.Diagnostics.Count > 0)
+            {
+                metadata["SizeGateDiagnostics"] = sizeEvaluation.Diagnostics;
             }
 
             return ResultBox.FromValue(
@@ -1322,12 +1447,7 @@ public class CoreGeneralSekibanExecutor
                     new List<TagWriteResult>(),
                     stopwatch.Elapsed,
                     writtenEvents,
-                    new Dictionary<string, object>
-                    {
-                        ["ConditionalAppendStatus"] = receipt.Status.ToString(),
-                        ["OperationFingerprint"] = receipt.OperationFingerprint,
-                        ["WasAlreadyCommitted"] = receipt.WasAlreadyCommitted
-                    },
+                    metadata,
                     receipt.WinnerSortableUniqueId));
         }
         catch (Exception ex)
@@ -1381,6 +1501,24 @@ public class CoreGeneralSekibanExecutor
                 metadata,
                 candidate.Tags.ToList(),
                 candidate.EventPayloadName);
+            var eventResult = serializable.ToEvent(_domainTypes.EventTypes);
+            if (!eventResult.IsSuccess)
+            {
+                return ResultBox.Error<SerializedConditionalCommitResult>(eventResult.GetException());
+            }
+
+            var preparedEvents = new List<PreparedExecutorEvent>
+            {
+                new(
+                    eventResult.GetValue(),
+                    serializable,
+                    serializable.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray())
+            };
+            var sizeEvaluation = ExecutorSizeGateEvaluator.Evaluate(
+                _executorSizeGateOptions,
+                preparedEvents,
+                ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
+                _eventPublisher);
 
             var appendResult = await conditionalStore.AppendIfUniqueAsync(
                 new ConditionalAppendRequest(request.IdempotencyKey, serializable),
@@ -1398,26 +1536,21 @@ public class CoreGeneralSekibanExecutor
 
             if (_eventPublisher != null && isNewlyAppended)
             {
-                var eventResult = serializable.ToEvent(_domainTypes.EventTypes);
-                if (eventResult.IsSuccess)
-                {
-                    List<ITag> eventTags = serializable.Tags.Select(_domainTypes.TagTypes.GetTag).ToList();
-                    await _eventPublisher.PublishAsync(
-                        new List<(Event Event, IReadOnlyCollection<ITag> Tags)> { (eventResult.GetValue(), eventTags.AsReadOnly()) }
-                            .AsReadOnly(),
-                        CancellationToken.None);
-                }
+                await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
             }
 
-            return ResultBox.FromValue(
-                new SerializedConditionalCommitResult(
+            var result = new SerializedConditionalCommitResult(
                     SerializedConditionalCommitResult.CurrentVersion,
                     receipt.Status,
                     receipt.WinnerEventId,
                     receipt.WinnerSortableUniqueId,
                     receipt.OperationFingerprint,
                     written,
-                    stopwatch.Elapsed));
+                    stopwatch.Elapsed)
+            {
+                SizeGateDiagnostics = sizeEvaluation.Diagnostics
+            };
+            return ResultBox.FromValue(result);
         }
         catch (Exception ex)
         {

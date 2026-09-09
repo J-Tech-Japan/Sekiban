@@ -180,3 +180,12 @@ Dashboard. Add `app.MapHealthChecks("/health")` for readiness probes.
 
 Use `InMemorySekibanExecutor` (`src/Sekiban.Dcb/InMemory/InMemorySekibanExecutor.cs`) to run commands locally without a
 silo. This executor spins in-process actors and stores events in memory—perfect for unit tests.
+
+## Optional executor size gate on Orleans
+
+Register `AddSekibanDcbExecutorSizeGate` before resolving `OrleansDcbExecutor` when the application wants a strict
+pre-persistence budget. The Orleans publisher captures the resolver's destination plan and service identity once and
+reuses that plan for enqueue, so a strict destination policy is valid only when that capability is available. A
+non-strict unavailable or identity-mismatched destination policy writes an explicit diagnostic. This gate measures
+executor-originated logical events or declared provider capabilities; it does not claim Azure Queue wire-envelope,
+batch, or retry limits and does not change Orleans retry behavior.

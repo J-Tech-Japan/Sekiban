@@ -99,3 +99,23 @@ builder.Services.AddSingleton<IExecutedUserProvider>(sp =>
 
 `IEventPublisher` を登録すると Orleans ストリームや外部キューにイベントを配信できます。
 `OrleansEventPublisher` (`src/Sekiban.Dcb.Orleans/OrleansEventPublisher.cs`) がその例です。
+
+## オプションの executor サイズゲート
+
+`Sekiban.Dcb.SizeGates` の `ExecutorSizeGateOptions` を使うと、executor のサイズ検査を明示的に有効化できます。
+`AddSekibanDcbExecutorSizeGate` で登録し、加算された executor コンストラクターへ渡してください。既存の
+コンストラクターと DI 登録はゲートなしのままです。検査は最終的に準備されたイベント全体に対して 1 回だけ行われ、
+型付きコマンド、シリアライズ済みバッチ、expected-tag-position バッチ、型付き conditional append、
+シリアライズ済み conditional append の 5 つの永続化経路を対象にします。イベント・タグ・head の書き込み前に拒否し、
+生成済みのイベント ID を保持し、ハンドラーを 2 回呼び出すことはありません。
+
+組み込みの `LogicalSerializedEventUtf8` は、シリアライズ済み payload、イベント型、最終的な sortable/id、metadata、
+タグを含む規約化 UTF-8 エンベロープを測定します。storage-item と destination のポリシーには、正確なバイト数または
+保守的な認証済み上限を返す明示的なプロバイダー測定機能が必要です。Orleans の destination 検査はサービス単位の
+resolver 計画を取得し、同じ計画を publish に使うため、resolver の変更で判定を回避できません。Azure Queue の
+wire envelope/batch サイズ、retry、トランスポート固有の保証はこの core 契約の対象外です。
+
+strict ポリシーは、永続化前に型付き capability または limit 例外として失敗します。non-strict ポリシーは、測定不能時に
+成功結果の metadata へ `ExecutorSizeDiagnostic` を明示的に記録しますが、検証済みとは扱いません。ポリシーは executor
+全体に適用されるため、`maxBytesPerOperation` はバッチ全体を合計します。既存の public constructor/interface と直接 API は
+互換性を保ち、サイズゲートは加算的な opt-in です。過去イベントの自動修復や publisher のフォールバック経路は追加しません。

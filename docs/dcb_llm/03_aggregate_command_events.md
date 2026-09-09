@@ -256,3 +256,13 @@ unchanged.
 - Use helper classes such as `ConsistencyTag` when you need to carry a known `SortableUniqueId` across retries.
 - Prefer small, focused tag payloads. Move aggregations into MultiProjection so TagState actors stay lean.
 - Commands should never mutate state directly—always delegate to events recorded through the executor.
+
+## Optional executor size gate (SEK-G66)
+
+Applications may register `ExecutorSizeGateOptions` with `AddSekibanDcbExecutorSizeGate` to reject an oversized
+prepared event set before event, tag, or head persistence. The gate covers command execution, serialized commits,
+expected-position commits, conditional appends, and serialized conditional appends; it is opt-in and has no global
+default. A strict policy must declare an actual logical UTF-8 measurement or a provider-owned exact/certified
+storage or destination measurement. An unavailable strict capability fails closed; non-strict mode proceeds only with
+a diagnostic. Azure Queue wire-envelope, batching, retries, and previously accepted-event replication remain outside
+this slice.

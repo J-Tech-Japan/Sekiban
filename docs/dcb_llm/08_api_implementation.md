@@ -110,3 +110,24 @@ be singleton.
 Register `IEventPublisher` implementations (e.g., `OrleansEventPublisher` in `src/Sekiban.Dcb.Orleans/OrleansEventPublisher.cs`)
 when you need to stream events to Orleans streams or external buses. The API often returns the `SortableUniqueId` so
 clients can follow up with a `waitFor` query.
+
+## Optional executor size gate
+
+The executor has an opt-in `ExecutorSizeGateOptions` policy set in `Sekiban.Dcb.SizeGates`; the default constructors and
+DI registrations remain ungated. Register it with `AddSekibanDcbExecutorSizeGate` and pass the resolved options through
+the additive executor constructor. The gate is evaluated once over the final prepared events for all five durable routes:
+typed commands, serialized batches, expected-tag-position batches, typed conditional append, and serialized conditional
+append. It rejects before the event/tag/head write, keeps the generated event identity, and never invokes a handler twice.
+
+The built-in `LogicalSerializedEventUtf8` representation measures a canonical UTF-8 envelope containing the serialized
+payload, event type, final sortable/id identity, metadata, and tags. Storage-item and destination policies require an
+explicit provider measurement that returns exact bytes or a certified conservative upper bound. Orleans destination
+validation captures the resolver's service-scoped plan and publishes that same plan, so a resolver change cannot bypass
+the decision. Azure Queue wire-envelope/batch bytes, retries, and transport-specific guarantees are intentionally outside
+this core contract.
+
+Strict policies fail with a typed capability or limit exception before durable work. Non-strict policies write an explicit
+`ExecutorSizeDiagnostic` in the successful result metadata when measurement is unavailable; they do not pretend the event
+was validated. The policy is executor-wide, so a `maxBytesPerOperation` limit sums the complete batch. Existing public
+constructors/interfaces and direct APIs remain compatible; the size gate is an additive opt-in and does not perform
+historical repair or add a fallback publisher path.
