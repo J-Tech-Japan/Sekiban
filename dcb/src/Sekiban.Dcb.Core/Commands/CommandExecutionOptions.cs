@@ -22,6 +22,13 @@ public sealed record CommandExecutionOptions
     ///     one explicitly discriminated entry. Unsupported stores fail closed before their write path is invoked.
     /// </summary>
     public ExpectedTagPositionSpecification? ExpectedTagPositions { get; init; }
+
+    /// <summary>
+    ///     Derives the expected position for each consistency tag emitted by this command from the successful state
+    ///     reads made by this one handler invocation. The opt-in is deliberately false by default and cannot be
+    ///     combined with either explicit expected positions or conditional append.
+    /// </summary>
+    public bool DeriveExpectedTagPositionsFromStateReads { get; init; }
 }
 
 /// <summary>

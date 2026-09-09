@@ -786,6 +786,23 @@ reconciliation が検出できるのは `MAX` query 実行時に既に可視な 
 best-effort detection であり、premature mixed-version enablement が安全という主張ではありません。正しさの境界は
 drain-before-epoch です。violation 0 件は monitoring evidence であって clean cutover の証明ではありません。
 
+### state read 由来 CAS は明示的な command protocol (SEK-G65)
+
+`CommandExecutionOptions.DeriveExpectedTagPositionsFromStateReads` は、成功した raw `GetStateAsync` の読み取りから
+同じ durable `AssertEmpty`／`Exact` protocol を導出します。これは opt-in であり、actor cache ではなく実際の store
+capability と service-scoped enablement epoch を使います。導出は正規化した論理タグをキーとする bounded ordinal ledger
+です。同じタグを別 projector から読んでも position が同じなら互換ですが、空／非空の不一致、position の相違、
+malformed 結果、読み取り失敗は型付き fail-closed error です。`TagExistsAsync` と最新タグ位置の読み取りは ledger を
+埋めません。
+
+executor は handler 前に service、capability、epoch を検証し、derived mode と明示的 expected position／
+`ConditionalAppend` の併用を拒否します。出力されたすべての consistency tag にはちょうど1つの derived expectation
+が必要です。未対応 provider、証拠不足、出力したのに未読のタグでは reservation、handler write、store mutation を
+行いません。derived `ExpectedTagPositionConflictException` は reservation を cleanup した後、影響を受けたタグごとに
+1回だけ invalidation を試み、1件が失敗しても残りを続けます。`StateReadRecovery` は全タグ完了／未完了を区別します。
+これは recovery の診断であり、自動 retry や外部副作用の exactly-once 保証ではありません。legacy と明示的な
+expected-position caller の既存動作は維持され、`NotAttempted` を報告します。
+
 <!-- sek-g44:cas-non-default -->
 ## expected tag-position CAS は template の既定値ではない
 

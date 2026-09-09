@@ -1,3 +1,5 @@
+extern alias WithResultFacade;
+
 using System.Text.Json;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
@@ -12,6 +14,7 @@ using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 using Xunit;
+using PublicSimpleMultiProjectorTypes = WithResultFacade::Sekiban.Dcb.Domains.SimpleMultiProjectorTypes;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -169,7 +172,7 @@ public sealed class TaggedStreamParityMatrixTests : PostgresTestBase
             new SimpleTagTypes(),
             tagProjectors,
             payloads,
-            new SimpleMultiProjectorTypes(),
+            new PublicSimpleMultiProjectorTypes(),
             new SimpleQueryTypes(),
             new JsonSerializerOptions());
     }

@@ -125,6 +125,24 @@ and every empty-expected path perform no extra read.
 This is a false-rejection fix, not cross-cluster uniqueness. Storage conditional unique-append (G15/G16) remains the
 authority for preventing duplicate writes across clusters; no API, schema, default, or migration changes in 10.8.2.
 
+### Deriving expected tag positions from state reads (SEK-G65)
+
+`CommandExecutionOptions.DeriveExpectedTagPositionsFromStateReads` is an explicit opt-in for a command whose handler
+reads state and then emits consistency-tagged events. The handler is invoked once. Each successful `GetStateAsync`
+observation contributes at most one bounded ledger entry per logical tag (a `ConsistencyTag` is normalized to its inner
+tag); `TagExistsAsync` and latest-position reads are not evidence. Empty state derives `AssertEmpty`, non-empty state
+derives `Exact(position)`, and an unread, failed, malformed, or emitted-but-unread tag remains untrusted and fails
+closed. The same position may be observed through different projectors; conflicting observations for one tag are
+rejected before reservation or store mutation.
+
+The executor validates the live service identity, provider capability, and PostgreSQL enablement epoch before the
+handler, including for a no-event command. Derived mode cannot be combined with explicit `ExpectedTagPositions` or
+`ConditionalAppend`; unrelated non-consistency tags are ignored, and no-event commands perform no derived write.
+Every emitted consistency tag must have exactly one derived expectation, so an extra read is harmless but a missing
+read is not. A derived durable-head conflict cleans up reservations and then makes one best-effort invalidation attempt
+per affected tag, continuing all tags even when one attempt fails; the typed exception exposes whether recovery was
+completed or incomplete. The caller owns a fresh retry, and the contract does not promise exactly-once external effects.
+
 ## Tag State Payloads
 
 Projectors rebuild tag state into `ITagStatePayload` records. Keep them small and immutable.

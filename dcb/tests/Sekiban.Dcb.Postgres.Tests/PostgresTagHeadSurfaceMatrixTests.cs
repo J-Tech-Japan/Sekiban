@@ -1,4 +1,5 @@
 extern alias WithoutResultFacade;
+extern alias WithResultFacade;
 
 using System.Text.Json;
 using Dcb.Domain.Student;
@@ -15,6 +16,7 @@ using Sekiban.Dcb.Tags;
 using Xunit;
 using WithoutResultExecutor = WithoutResultFacade::Sekiban.Dcb.Actors.GeneralSekibanExecutor;
 using WithoutResultCommandContext = WithoutResultFacade::Sekiban.Dcb.Commands.ICommandContext;
+using WithResultExecutor = WithResultFacade::Sekiban.Dcb.Actors.GeneralSekibanExecutor;
 
 namespace Sekiban.Dcb.Postgres.Tests;
 
@@ -43,7 +45,7 @@ public sealed class PostgresTagHeadSurfaceMatrixTests : PostgresTestBase
     private async Task AssertWithResultCommandMatrixAsync(string serviceId)
     {
         var store = Store(serviceId);
-        var executor = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, Fixture.DomainTypes), Fixture.DomainTypes);
+        var executor = new WithResultExecutor(store, new InMemoryObjectAccessor(store, Fixture.DomainTypes), Fixture.DomainTypes);
         var noEnforcement = await ExecuteWithResultAsync(executor, serviceId, "with-no-enforcement", TagHeadExpectation.NoEnforcement());
 
         Assert.True(noEnforcement.Result.IsSuccess, noEnforcement.Result.IsSuccess ? "" : noEnforcement.Result.GetException().ToString());
@@ -106,7 +108,7 @@ public sealed class PostgresTagHeadSurfaceMatrixTests : PostgresTestBase
     private async Task AssertLegacySerializedOmissionMatrixAsync(string serviceId)
     {
         var store = Store(serviceId);
-        var executor = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, Fixture.DomainTypes), Fixture.DomainTypes);
+        var executor = new WithResultExecutor(store, new InMemoryObjectAccessor(store, Fixture.DomainTypes), Fixture.DomainTypes);
         var studentId = Guid.CreateVersion7();
         var tag = new StudentTag(studentId).GetTag();
         const string name = "legacy-omission";
@@ -128,7 +130,7 @@ public sealed class PostgresTagHeadSurfaceMatrixTests : PostgresTestBase
     private async Task AssertVersionedSerializedV2MatrixAsync(string serviceId)
     {
         var store = Store(serviceId);
-        var executor = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, Fixture.DomainTypes), Fixture.DomainTypes);
+        var executor = new WithResultExecutor(store, new InMemoryObjectAccessor(store, Fixture.DomainTypes), Fixture.DomainTypes);
         var noEnforcement = await ExecuteV2Async(executor, serviceId, "v2-no-enforcement", TagHeadExpectation.NoEnforcement());
 
         AssertV2Request(noEnforcement.Request, noEnforcement.Candidate, serviceId, noEnforcement.Tag,
@@ -167,7 +169,7 @@ public sealed class PostgresTagHeadSurfaceMatrixTests : PostgresTestBase
     }
 
     private async Task<WithResultStep> ExecuteWithResultAsync(
-        GeneralSekibanExecutor executor,
+        WithResultExecutor executor,
         string serviceId,
         string name,
         TagHeadExpectation expected,
@@ -206,7 +208,7 @@ public sealed class PostgresTagHeadSurfaceMatrixTests : PostgresTestBase
     }
 
     private async Task<V2Step> ExecuteV2Async(
-        GeneralSekibanExecutor executor,
+        WithResultExecutor executor,
         string serviceId,
         string name,
         TagHeadExpectation expected,

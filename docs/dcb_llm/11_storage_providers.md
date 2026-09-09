@@ -778,6 +778,24 @@ can escape this particular audit if a newer head later overtakes it. This is del
 claim that premature mixed-version enablement is safe. The drain-before-epoch step is the correctness boundary; a zero
 violation count is monitoring evidence, never clean-cutover proof.
 
+### State-read-derived CAS is an explicit command protocol (SEK-G65)
+
+`CommandExecutionOptions.DeriveExpectedTagPositionsFromStateReads` derives the same durable `AssertEmpty` / `Exact`
+protocol from successful raw `GetStateAsync` reads. It is opt-in and uses the live store capability and service-scoped
+enablement epoch; it does not infer safety from actor cache state. The derivation is a bounded ordinal ledger keyed by the
+normalized logical tag. A second successful read of the same position is compatible, including through a different
+projector; an empty/non-empty mismatch, differing position, malformed result, or failed read is a typed fail-closed
+error. `TagExistsAsync` and latest-tag-position reads do not populate the ledger.
+
+The executor preflights service, capability, and epoch before the handler, rejects derived mode combined with explicit
+expected positions or `ConditionalAppend`, and requires exactly one derived expectation for every emitted consistency
+tag. An unsupported provider, missing evidence, or emitted-but-unread tag performs no reservation, handler write, or
+store mutation. A derived `ExpectedTagPositionConflictException` cleans up reservations and then performs one
+invalidation attempt per affected tag, continuing the remaining tags if one attempt fails; its
+`StateReadRecovery` value distinguishes complete from incomplete invalidation. This is recovery diagnostic evidence,
+not an automatic retry or an exactly-once external-effect guarantee. Legacy and explicit expected-position callers retain
+their existing behavior and report `NotAttempted`.
+
 <!-- sek-g44:cas-non-default -->
 ## Expected tag-position CAS is not a template default
 

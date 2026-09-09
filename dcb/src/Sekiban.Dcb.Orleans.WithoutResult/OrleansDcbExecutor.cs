@@ -19,7 +19,7 @@ namespace Sekiban.Dcb.Orleans;
 ///     Orleans-specific implementation of ISekibanExecutor (exception-based)
 ///     Uses Orleans grains for distributed command execution and queries
 /// </summary>
-public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor,
+public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor, ISerializedSekibanDcbExecutor,
     ISerializedExpectedTagPositionSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider
 {
     /// <summary>Commands are executed by Orleans grains across the cluster.</summary>
@@ -136,6 +136,21 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         Func<TCommand, ICommandContext, Task<EventOrNone>> handlerFunc,
         CancellationToken cancellationToken = default) where TCommand : ICommand =>
         _generalExecutor.ExecuteAsync(command, handlerFunc, cancellationToken);
+
+    /// <summary>Forwards the additive command execution options to the same registered general executor.</summary>
+    public Task<ExecutionResult> ExecuteAsync<TCommand>(
+        TCommand command,
+        CommandExecutionOptions options,
+        CancellationToken cancellationToken = default) where TCommand : ICommandWithHandler<TCommand> =>
+        _generalExecutor.ExecuteAsync(command, options, cancellationToken);
+
+    /// <summary>Forwards the additive command execution options and handler to the same registered general executor.</summary>
+    public Task<ExecutionResult> ExecuteAsync<TCommand>(
+        TCommand command,
+        Func<TCommand, ICommandContext, Task<EventOrNone>> handlerFunc,
+        CommandExecutionOptions options,
+        CancellationToken cancellationToken = default) where TCommand : ICommand =>
+        _generalExecutor.ExecuteAsync(command, handlerFunc, options, cancellationToken);
 
     /// <summary>
     ///     Execute a handler function without an explicit command

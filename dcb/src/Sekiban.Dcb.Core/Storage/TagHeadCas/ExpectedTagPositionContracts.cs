@@ -160,6 +160,20 @@ public sealed class ExpectedTagPositionConflictException : Exception
         : base("One or more expected tag positions do not match the durable PostgreSQL heads.") => Pairs = pairs;
 
     public IReadOnlyList<TagHeadExpectedObserved> Pairs { get; }
+
+    /// <summary>
+    ///     Reports whether derived-mode actor invalidation completed after this durable conflict. Legacy and explicit
+    ///     expected-position paths remain <see cref="StateReadRecoveryStatus.NotAttempted" />.
+    /// </summary>
+    public StateReadRecoveryStatus StateReadRecovery { get; internal set; } = StateReadRecoveryStatus.NotAttempted;
+}
+
+/// <summary>Outcome of the bounded between-attempt actor-head invalidation after a derived-mode conflict.</summary>
+public enum StateReadRecoveryStatus
+{
+    NotAttempted = 0,
+    InvalidationCompleted = 1,
+    InvalidationIncomplete = 2
 }
 
 /// <summary>Typed malformed-request failure raised before a write or lazy head creation.</summary>

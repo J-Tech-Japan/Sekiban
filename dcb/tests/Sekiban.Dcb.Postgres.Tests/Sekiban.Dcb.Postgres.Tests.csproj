@@ -38,6 +38,7 @@
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Sqlite\Sekiban.Dcb.Sqlite.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult\Sekiban.Dcb.WithoutResult.csproj" Aliases="WithoutResultFacade" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.WithoutResult.Model\Sekiban.Dcb.WithoutResult.Model.csproj" Aliases="WithoutResultFacade" />
+        <ProjectReference Include="..\..\src\Sekiban.Dcb.WithResult\Sekiban.Dcb.WithResult.csproj" Aliases="WithResultFacade" />
         <ProjectReference Include="..\..\internalUsages\Dcb.Domain\Dcb.Domain.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.Core.Testing\Sekiban.Dcb.Core.Testing.csproj" />
         <ProjectReference Include="..\Sekiban.Dcb.TestSupport\Sekiban.Dcb.TestSupport.csproj" />

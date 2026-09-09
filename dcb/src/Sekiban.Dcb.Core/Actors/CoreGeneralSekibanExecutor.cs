@@ -40,6 +40,15 @@ public class CoreGeneralSekibanExecutor
     internal Func<Guid> ConditionalEventIdFactory { get; set; } = Guid.CreateVersion7;
     internal Func<string>? ConditionalSortableIdFactory { get; set; }
 
+    /// <summary>
+    ///     Test-only barrier immediately before the attempt-local state-read evidence is frozen. The custom argument
+    ///     type keeps this seam out of the public API and out of the provider seam inventory.
+    /// </summary>
+    internal Func<DerivedExpectedTagPositionFreezeContext, Task>? BeforeDerivedExpectedTagPositionFreeze { get; set; }
+
+    /// <summary>Test-only observation of the exact specification submitted after the freeze barrier.</summary>
+    internal Action<ExpectedTagPositionSpecification>? DerivedExpectedTagPositionFrozen { get; set; }
+
     private const string DefaultExecutedUser = "GeneralSekibanExecutor";
     private const string SerializedExecutedUser = "SerializedSekibanExecutor";
     private readonly IExecutedUserProvider? _executedUserProvider;
@@ -139,7 +148,7 @@ public class CoreGeneralSekibanExecutor
         TCommand command,
         Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
         CancellationToken cancellationToken = default) where TCommand : ICommand =>
-        ExecuteAsyncCore(command, handlerFunc, null, cancellationToken);
+        ExecuteAsyncCore(command, handlerFunc, null, false, cancellationToken);
 
     /// <summary>
     ///     Shared ordinary-batch pipeline. The legacy public call enters with <paramref name="expectedTagPositions" />
@@ -150,6 +159,7 @@ public class CoreGeneralSekibanExecutor
         TCommand command,
         Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
         ExpectedTagPositionSpecification? expectedTagPositions,
+        bool deriveExpectedTagPositionsFromStateReads,
         CancellationToken cancellationToken) where TCommand : ICommand
     {
         var stopwatch = Stopwatch.StartNew();
@@ -166,10 +176,11 @@ public class CoreGeneralSekibanExecutor
             // Expected-position is optional, but never best-effort. Validate its discriminated shape and the live
             // descriptor before the handler can allocate ids, reserve a tag, or reach any provider write method.
             IExpectedTagPositionEventStore? expectedPositionStore = null;
-            if (expectedTagPositions is not null)
+            string? currentServiceId = null;
+            if (expectedTagPositions is not null || deriveExpectedTagPositionsFromStateReads)
             {
-                var currentServiceId = ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId());
-                expectedTagPositions.ValidateEntryShapes(currentServiceId);
+                currentServiceId = ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId());
+                expectedTagPositions?.ValidateEntryShapes(currentServiceId);
 
                 var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(
                     _eventStore, "event store");
@@ -183,7 +194,7 @@ public class CoreGeneralSekibanExecutor
                 }
 
                 expectedPositionStore = resolvedExpectedPositionStore;
-                if (expectedTagPositions.RequiresEnforcement)
+                if (deriveExpectedTagPositionsFromStateReads || expectedTagPositions?.RequiresEnforcement == true)
                 {
                     var enabled = await expectedPositionStore
                         .EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken);
@@ -195,7 +206,9 @@ public class CoreGeneralSekibanExecutor
             }
 
             // Step 1: Create command context
-            var commandContext = new CoreCommandContext(_actorAccessor, _domainTypes);
+            var commandContext = currentServiceId is null
+                ? new CoreCommandContext(_actorAccessor, _domainTypes)
+                : new CoreCommandContext(_actorAccessor, _domainTypes, currentServiceId);
 
             // Step 2: Execute handler function with context
             var handlerResult = await handlerFunc(command, commandContext);
@@ -250,10 +263,25 @@ public class CoreGeneralSekibanExecutor
             // Step 3.1: Validate all tags
             TagValidator.ValidateTagsAndThrow(allTags);
 
+            if (deriveExpectedTagPositionsFromStateReads)
+            {
+                if (BeforeDerivedExpectedTagPositionFreeze is not null)
+                {
+                    await BeforeDerivedExpectedTagPositionFreeze(
+                        new DerivedExpectedTagPositionFreezeContext(commandContext, collectedEvents));
+                }
+
+                expectedTagPositions = DeriveExpectedTagPositions(
+                    commandContext,
+                    allTags,
+                    currentServiceId ?? throw new InvalidOperationException("Derived mode did not resolve a service id."));
+                DerivedExpectedTagPositionFrozen?.Invoke(expectedTagPositions);
+            }
+
             if (expectedTagPositions is not null)
             {
                 expectedTagPositions.ValidateFor(
-                    ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
+                    currentServiceId ?? ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
                     allTags.Where(tag => tag.IsConsistencyTag()).Select(tag => tag.GetTag()));
             }
 
@@ -355,7 +383,14 @@ public class CoreGeneralSekibanExecutor
                     if (!writeResult.IsSuccess)
                     {
                         await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
-                        return ResultBox.Error<ExecutionResult>(writeResult.GetException());
+                        var writeException = writeResult.GetException();
+                        if (deriveExpectedTagPositionsFromStateReads &&
+                            writeException is ExpectedTagPositionConflictException conflict)
+                        {
+                            await RecoverDerivedStateReadConflictAsync(conflict, currentServiceId!);
+                        }
+
+                        return ResultBox.Error<ExecutionResult>(writeException);
                     }
 
                     // The expected-position store receives a lossless serialization of the exact Event instances above;
@@ -408,10 +443,18 @@ public class CoreGeneralSekibanExecutor
                         },
                         firstEvent.SortableUniqueIdValue));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // If anything fails after reservations, cancel them
                 await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+
+                if (deriveExpectedTagPositionsFromStateReads &&
+                    ex is ExpectedTagPositionConflictException conflict &&
+                    conflict.StateReadRecovery == StateReadRecoveryStatus.NotAttempted)
+                {
+                    await RecoverDerivedStateReadConflictAsync(conflict, currentServiceId!);
+                }
+
                 throw;
             }
         }
@@ -419,6 +462,84 @@ public class CoreGeneralSekibanExecutor
         {
             return ResultBox.Error<ExecutionResult>(ex);
         }
+    }
+
+    private static ExpectedTagPositionSpecification DeriveExpectedTagPositions(
+        CoreCommandContext commandContext,
+        IEnumerable<ITag> allTags,
+        string serviceId)
+    {
+        var entries = new List<TagHeadExpectationEntry>();
+        foreach (var tagGroup in allTags
+                     .Where(tag => tag.IsConsistencyTag())
+                     .GroupBy(CommandStateReadLedger.LogicalTag, StringComparer.Ordinal))
+        {
+            var logicalTag = tagGroup.Key;
+            if (!commandContext.StateReadLedger.TryGet(logicalTag, out var evidence) ||
+                !evidence.IsUsable ||
+                !string.Equals(evidence.ServiceId, serviceId, StringComparison.Ordinal))
+            {
+                throw new TagHeadExpectationValidationException(
+                    $"Emitted consistency tag '{logicalTag}' does not have one compatible successful state read in this command attempt.");
+            }
+
+            foreach (var consistencyTag in tagGroup.OfType<ConsistencyTag>())
+            {
+                if (consistencyTag.SortableUniqueId.HasValue &&
+                    !string.Equals(
+                        consistencyTag.SortableUniqueId.GetValue().Value,
+                        evidence.Position,
+                        StringComparison.Ordinal))
+                {
+                    throw new TagHeadExpectationValidationException(
+                        $"Consistency tag '{logicalTag}' carries a sortable unique id that disagrees with its captured state-read position.");
+                }
+            }
+
+            var expectation = string.IsNullOrEmpty(evidence.Position)
+                ? TagHeadExpectation.AssertEmpty()
+                : TagHeadExpectation.Exact(evidence.Position);
+            entries.Add(new TagHeadExpectationEntry(serviceId, logicalTag, expectation));
+        }
+
+        return new ExpectedTagPositionSpecification(entries);
+    }
+
+    private async Task RecoverDerivedStateReadConflictAsync(
+        ExpectedTagPositionConflictException conflict,
+        string serviceId)
+    {
+        var complete = true;
+        var affectedTags = conflict.Pairs
+            .Where(pair => string.Equals(pair.ServiceId, serviceId, StringComparison.Ordinal))
+            .Select(pair => pair.Tag)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var tag in affectedTags)
+        {
+            try
+            {
+                var actorResult = await _actorAccessor.GetActorAsync<ITagConsistentActorCommon>(tag);
+                if (!actorResult.IsSuccess)
+                {
+                    complete = false;
+                    continue;
+                }
+
+                await actorResult.GetValue().NotifyEventWrittenAsync();
+            }
+            catch
+            {
+                // The original expected/observed conflict is authoritative. This bounded recovery signal is
+                // deliberately best-effort per affected tag, but its aggregate outcome is exposed to the caller.
+                complete = false;
+            }
+        }
+
+        conflict.StateReadRecovery = complete
+            ? StateReadRecoveryStatus.InvalidationCompleted
+            : StateReadRecoveryStatus.InvalidationIncomplete;
     }
 
     public Task<ResultBox<TagState>> GetTagStateAsync(TagStateId tagStateId) =>
@@ -1206,16 +1327,29 @@ public class CoreGeneralSekibanExecutor
         // The two independently additive protocols deliberately do not silently compose: conditional append has a
         // single-event idempotency receipt contract while expected positions are a complete multi-tag conflict contract.
         // Reject the ambiguous combination before the handler/provider path rather than dropping the requested fence.
-        if (options?.ConditionalAppend is not null && options.ExpectedTagPositions is not null)
+        if (options?.ConditionalAppend is not null &&
+            (options.ExpectedTagPositions is not null || options.DeriveExpectedTagPositionsFromStateReads))
         {
             return Task.FromResult(ResultBox.Error<ExecutionResult>(
                 new TagHeadExpectationValidationException(
-                    "ConditionalAppend and ExpectedTagPositions cannot be combined in one command. Use one explicit write-condition protocol.")));
+                    "ConditionalAppend cannot be combined with expected tag positions or state-read derivation in one command. Use one explicit write-condition protocol.")));
+        }
+
+        if (options?.DeriveExpectedTagPositionsFromStateReads == true && options.ExpectedTagPositions is not null)
+        {
+            return Task.FromResult(ResultBox.Error<ExecutionResult>(
+                new TagHeadExpectationValidationException(
+                    "DeriveExpectedTagPositionsFromStateReads cannot be combined with explicit ExpectedTagPositions.")));
         }
 
         return options?.ConditionalAppend is { } conditional
             ? ExecuteConditionalAppendAsync(command, handlerFunc, conditional, cancellationToken)
-            : ExecuteAsyncCore(command, handlerFunc, options?.ExpectedTagPositions, cancellationToken);
+            : ExecuteAsyncCore(
+                command,
+                handlerFunc,
+                options?.ExpectedTagPositions,
+                options?.DeriveExpectedTagPositionsFromStateReads == true,
+                cancellationToken);
     }
 
     private async Task<ResultBox<ExecutionResult>> ExecuteConditionalAppendAsync<TCommand>(

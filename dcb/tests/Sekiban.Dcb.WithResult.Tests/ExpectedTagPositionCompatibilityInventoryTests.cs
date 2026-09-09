@@ -76,6 +76,14 @@ public sealed class ExpectedTagPositionCompatibilityInventoryTests
         AssertConstructor(typeof(ExpectedTagPositionConflictException), [typeof(IReadOnlyList<TagHeadExpectedObserved>)]);
         AssertProperty(typeof(ExpectedTagPositionConflictException), nameof(ExpectedTagPositionConflictException.Pairs),
             typeof(IReadOnlyList<TagHeadExpectedObserved>));
+        AssertProperty(typeof(ExpectedTagPositionConflictException), nameof(ExpectedTagPositionConflictException.StateReadRecovery),
+            typeof(StateReadRecoveryStatus));
+        Assert.Equal(
+            [StateReadRecoveryStatus.NotAttempted, StateReadRecoveryStatus.InvalidationCompleted, StateReadRecoveryStatus.InvalidationIncomplete],
+            Enum.GetValues<StateReadRecoveryStatus>());
+        Assert.Equal(0, (int)StateReadRecoveryStatus.NotAttempted);
+        Assert.Equal(1, (int)StateReadRecoveryStatus.InvalidationCompleted);
+        Assert.Equal(2, (int)StateReadRecoveryStatus.InvalidationIncomplete);
         AssertConstructor(typeof(TagHeadExpectationValidationException), [typeof(string)]);
         AssertConstructor(typeof(TagHeadPositionValidationException), [typeof(string)]);
         AssertConstructor(typeof(TagHeadEnforcementNotEnabledException), [typeof(string)]);
@@ -145,24 +153,31 @@ public sealed class ExpectedTagPositionCompatibilityInventoryTests
 
         Assert.True(typeof(ISerializedExpectedTagPositionSekibanDcbExecutor).IsAssignableFrom(typeof(GeneralSekibanExecutor)));
         Assert.True(typeof(IConditionalCommandExecutor).IsAssignableFrom(typeof(GeneralSekibanExecutor)));
+        Assert.True(typeof(IConditionalCommandExecutor).IsAssignableFrom(typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor)));
         AssertWithResultConditionalExecutorSignatures(typeof(IConditionalCommandExecutor));
+        AssertWithResultConditionalExecutorSignatures(typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor));
 
         var optionsProperty = typeof(CommandExecutionOptions).GetProperty(nameof(CommandExecutionOptions.ExpectedTagPositions));
         Assert.NotNull(optionsProperty);
         Assert.Equal(typeof(ExpectedTagPositionSpecification), optionsProperty.PropertyType);
         Assert.True(optionsProperty.SetMethod is not null);
         Assert.Equal(
-            ["ConditionalAppend", "ExpectedTagPositions"],
+            ["ConditionalAppend", "ExpectedTagPositions", "DeriveExpectedTagPositionsFromStateReads"],
             typeof(CommandExecutionOptions).GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
                 .Select(property => property.Name));
         Assert.Equal(typeof(ConditionalAppendSpecification),
             typeof(CommandExecutionOptions).GetProperty(nameof(CommandExecutionOptions.ConditionalAppend))!.PropertyType);
+        Assert.Equal(typeof(bool),
+            typeof(CommandExecutionOptions).GetProperty(nameof(CommandExecutionOptions.DeriveExpectedTagPositionsFromStateReads))!.PropertyType);
         Assert.NotNull(typeof(CommandExecutionOptions).GetConstructor(Type.EmptyTypes));
     }
 
     private static void AssertWithResultConditionalExecutorSignatures(Type surface)
     {
-        var methods = surface.GetMethods().Where(method => method.Name == nameof(IConditionalCommandExecutor.ExecuteAsync)).ToArray();
+        var methods = surface.GetMethods()
+            .Where(method => method.Name == nameof(IConditionalCommandExecutor.ExecuteAsync))
+            .Where(method => method.GetParameters().Any(parameter => parameter.ParameterType == typeof(CommandExecutionOptions)))
+            .ToArray();
         Assert.Equal(2, methods.Length);
 
         var withHandler = Assert.Single(methods, method => method.GetParameters().Length == 4);

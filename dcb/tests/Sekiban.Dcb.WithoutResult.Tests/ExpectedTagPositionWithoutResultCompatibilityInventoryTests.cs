@@ -49,11 +49,24 @@ public sealed class ExpectedTagPositionWithoutResultCompatibilityInventoryTests
         Assert.Contains(typeof(ICommandWithHandler<>).MakeGenericType(selfCommand), selfCommand.GetGenericParameterConstraints());
 
         Assert.True(typeof(IConditionalCommandExecutor).IsAssignableFrom(typeof(GeneralSekibanExecutor)));
+        Assert.True(typeof(IConditionalCommandExecutor).IsAssignableFrom(typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor)));
         Assert.True(typeof(ISerializedExpectedTagPositionSekibanDcbExecutor).IsAssignableFrom(typeof(GeneralSekibanExecutor)));
         Assert.True(typeof(ISerializedExpectedTagPositionSekibanDcbExecutor)
             .IsAssignableFrom(typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor)));
         AssertSerializedSurface(typeof(GeneralSekibanExecutor));
         AssertSerializedSurface(typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor));
+        AssertConditionalSurface(typeof(Sekiban.Dcb.Orleans.OrleansDcbExecutor));
+    }
+
+    private static void AssertConditionalSurface(Type facade)
+    {
+        var methods = facade.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(method => method.Name == nameof(IConditionalCommandExecutor.ExecuteAsync))
+            .Where(method => method.GetParameters().Any(parameter => parameter.ParameterType == typeof(CommandExecutionOptions)))
+            .ToArray();
+        Assert.Equal(2, methods.Length);
+        Assert.Contains(methods, method => method.GetParameters().Length == 4 && method.ReturnType == typeof(Task<ExecutionResult>));
+        Assert.Contains(methods, method => method.GetParameters().Length == 3 && method.ReturnType == typeof(Task<ExecutionResult>));
     }
 
     private static void AssertSerializedSurface(Type facade)

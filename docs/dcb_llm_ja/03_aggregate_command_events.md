@@ -124,6 +124,24 @@ stale な空キャッシュと比較し、正しい更新を誤って拒否し�
 これは誤拒否の修正であり、クラスタ間一意性の追加ではありません。クラスタ間の重複防止は引き続きストレージの条件付き
 ユニーク追加 (G15/G16) が担います。10.8.2 で API・スキーマ・既定値の変更や移行はありません。
 
+### state read からの expected tag position 導出 (SEK-G65)
+
+`CommandExecutionOptions.DeriveExpectedTagPositionsFromStateReads` は、handler が state を読んでから
+consistency tag 付きイベントを出力する command のための明示的な opt-in です。handler は1回だけ呼ばれます。
+成功した `GetStateAsync` の観測だけが、論理タグごとに最大1件の bounded ledger entry を作ります
+（`ConsistencyTag` は inner tag に正規化）。`TagExistsAsync` と最新位置の読み取りは証拠になりません。空状態は
+`AssertEmpty`、非空状態は `Exact(position)` になり、未読・失敗・不正・出力されたのに未読のタグは信頼せず
+fail-closed になります。異なる projector から同じ position を観測することは許容しますが、同一タグで異なる
+観測があれば reservation／store mutation 前に拒否します。
+
+executor は handler 前（イベントが無い command も含む）に、実行時の service identity、provider capability、
+PostgreSQL enablement epoch を検証します。derived mode は明示的な `ExpectedTagPositions` や
+`ConditionalAppend` と併用できません。関係しない non-consistency tag の読み取りは無視されますが、出力した
+consistency tag には必ず1つの derived expectation が必要です。余分な読み取りは問題ありませんが、読み取りの
+無い出力は拒否されます。derived durable-head conflict では reservation を cleanup した後、影響を受けたタグごとに
+1回だけ best-effort invalidation を試み、1件が失敗しても全タグを続けます。型付き例外には recovery 完了／未完了が
+示されます。caller は新しい実行を retry し、外部副作用の exactly-once はこの契約の対象外です。
+
 ## タグ状態ペイロード
 
 タグ状態は `ITagStatePayload` を実装するレコードで表現し、プロジェクターがイベントを適用して更新します。

@@ -1,6 +1,7 @@
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Commands;
 
@@ -16,12 +17,22 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
     private readonly IActorObjectAccessor _actorAccessor;
     private readonly List<EventPayloadWithTags> _appendedEvents = new();
     private readonly DcbDomainTypes _domainTypes;
+    private readonly CommandStateReadLedger _stateReadLedger;
 
     public CoreGeneralCommandContext(IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes)
+        : this(actorAccessor, domainTypes, DefaultServiceIdProvider.DefaultServiceId)
+    {
+    }
+
+    internal CoreGeneralCommandContext(IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes, string serviceId)
     {
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
         _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
+        _stateReadLedger = new CommandStateReadLedger(
+            ServiceIdValidator.NormalizeAndValidate(serviceId));
     }
+
+    internal CommandStateReadLedger StateReadLedger => _stateReadLedger;
 
     public async Task<ResultBox<TagStateTyped<TState>>> GetStateAsync<TState, TProjector>(ITag tag)
         where TState : ITagStatePayload where TProjector : ITagProjector<TProjector>
@@ -41,6 +52,7 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
             var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
             if (!actorResult.IsSuccess)
             {
+                _stateReadLedger.RecordFailure(tag);
                 // If actor doesn't exist, return empty state with EmptyTagStatePayload
                 // We can't cast EmptyTagStatePayload to TState, so we need to handle this differently
                 var emptyPayload = new EmptyTagStatePayload();
@@ -69,6 +81,7 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
 
             if (!payloadResult.IsSuccess)
             {
+                _stateReadLedger.RecordFailure(tag);
                 return ResultBox.Error<TagStateTyped<TState>>(payloadResult.GetException());
             }
 
@@ -88,6 +101,11 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
             // Check if the payload is of the expected type
             if (payload is TState typedPayload)
             {
+                _stateReadLedger.RecordSuccess(
+                    tag,
+                    serializableState,
+                    TProjector.ProjectorName,
+                    TProjector.ProjectorVersion);
                 return ResultBox.FromValue(
                     new TagStateTyped<TState>(
                         tag,
@@ -98,12 +116,14 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
             }
 
             // If payload type doesn't match, return error
+            _stateReadLedger.RecordFailure(tag);
             return ResultBox.Error<TagStateTyped<TState>>(
                 new InvalidCastException(
                     $"Expected state payload of type {typeof(TState).Name} but got {payload.GetType().Name}"));
         }
         catch (Exception ex)
         {
+            _stateReadLedger.RecordFailure(tag);
             return ResultBox.Error<TagStateTyped<TState>>(ex);
         }
     }
@@ -126,6 +146,7 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
             var actorResult = await _actorAccessor.GetActorAsync<ITagStateActorCommon>(tagStateActorId);
             if (!actorResult.IsSuccess)
             {
+                _stateReadLedger.RecordFailure(tag);
                 // If actor doesn't exist, return empty state
                 return ResultBox.FromValue(
                     new TagState(
@@ -148,6 +169,7 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
 
             if (!payloadResult.IsSuccess)
             {
+                _stateReadLedger.RecordFailure(tag);
                 return ResultBox.Error<TagState>(payloadResult.GetException());
             }
 
@@ -166,10 +188,17 @@ public class CoreGeneralCommandContext : ICoreCommandContext, ICommandContextRes
             // Track the accessed state
             _accessedTagStates[tag] = tagState;
 
+            _stateReadLedger.RecordSuccess(
+                tag,
+                serializableState,
+                TProjector.ProjectorName,
+                TProjector.ProjectorVersion);
+
             return ResultBox.FromValue(tagState);
         }
         catch (Exception ex)
         {
+            _stateReadLedger.RecordFailure(tag);
             return ResultBox.Error<TagState>(ex);
         }
     }
