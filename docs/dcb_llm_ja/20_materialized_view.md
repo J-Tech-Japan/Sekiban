@@ -349,6 +349,23 @@ mode 2 は最初の projector DML / registry command より前に apply batch �
 場合は view row、registry checkpoint/status、active pointer が変わりません。将来の実装が authorization より先に実行すると、
 この deny test は red になります。
 
+state を読む projector には、whole-batch の追加境界があります。重複と current-position の filter 後に 2 件以上となる
+`VerifyAndExecute` batch では、`QueryRowsAsync`、`QuerySingleOrDefaultAsync`、`ExecuteScalarJsonAsync` と typed row-mapper
+ extension が型付き `MvStateReadingBatchNotSupportedException` で拒否されます。この exception は観測した
+ `EventCount` を持ち、provider query は実行されません。projector が exception を catch して fallback statement を返しても
+ attempt は latch され、executor は policy authorization、projector DML、registry checkpoint mutation の前に再 throw します。
+single-event の state read と、query-free projector の multi-event fold は引き続き利用できます。executor は batch の分割、retry、
+別 projector 経路への暗黙の fallback を行いません。
+
+Orleans catch-up boundary ではこの条件を permanent unsupported として扱い、安定した error code
+`state-reading-batch-not-supported`、安全な診断文、event count を返します。grain は `CatchUpHalted` を可視化して停止し、
+last error を保持します。synthetic completion や replay は生成しません。
+
+caller は catch-up の `BatchSize = 1` を設定でき、明示的な 1 event の direct call も引き続き利用できます。
+`BatchSize` は executor 全体に適用される `MvOptions` の設定であるため、`1` では event を順番に 1 件ずつ fold し、
+event ごとに transaction を行う性能との trade-off があります。この guard が対象にするのは framework の query port
+経由の read であり、custom user code が行う任意の external effect や external service の read まで検出・制御するものではありません。
+
 verify-only に対応する projector は、format version `1` の追加された `MvSchemaContract` /
 `IMvSchemaRequirementsProvider` 契約で target schema を宣言します。
 

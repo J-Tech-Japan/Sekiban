@@ -348,9 +348,12 @@ public sealed class NativeMvApplyHost : IMvApplyHost
             throw new NotSupportedException("Cross-view reads are not supported by the native MV apply host adapter.");
 
         private Exception RawAccessRejected(string surface) =>
-            _queryPort is MvPolicyEnforcingQueryPort enforcingPort
-                ? enforcingPort.RejectRawAccess($"raw {surface}")
-                : new NotSupportedException($"Native MV apply host does not expose raw {surface}s.");
+            _queryPort switch
+            {
+                MvBatchQueryPortGuard batchGuard => batchGuard.RejectRawAccess($"raw {surface}"),
+                MvPolicyEnforcingQueryPort enforcingPort => enforcingPort.RejectRawAccess($"raw {surface}"),
+                _ => new NotSupportedException($"Native MV apply host does not expose raw {surface}s.")
+            };
     }
 
     private sealed class JsonElementMvRow : IMvRow

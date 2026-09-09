@@ -483,6 +483,9 @@ public sealed record MvCatchUpResult(int AppliedEvents, bool ReachedUnsafeWindow
     /// <summary>Time at which the failure/no-progress observation was recorded.</summary>
     public DateTimeOffset? ObservedAtUtc { get; init; }
 
+    /// <summary>Event count associated with a typed batch-safety failure, when one was observed.</summary>
+    public int? EventCount { get; init; }
+
     public bool IsFailure => Outcome is
         MvCatchUpOutcome.FailedRead or
         MvCatchUpOutcome.PermanentUnsupported or
