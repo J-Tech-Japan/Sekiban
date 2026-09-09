@@ -23,6 +23,13 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private static readonly SemaphoreSlim CatchUpBatchSemaphore = new(1);
     private static readonly object s_catchUpSemaphoreSync = new();
     private static int s_catchUpMaxConcurrentBatches = 1;
+    // Test-only scheduler barrier. It is deliberately internal and has no production registration path: acceptance
+    // tests use it to stop the current stream turn immediately after the durable receipt, before a catch-up timer can
+    // apply anything, then let Orleans deactivate and reactivate the grain.
+    private static Func<MaterializedViewGrain, bool>? s_afterStreamReceiptTestHook;
+    private static Func<MaterializedViewGrain, Task<bool>>? s_afterStreamReceiptAsyncTestHook;
+    private static Func<MaterializedViewGrain, bool>? s_beforeCatchUpTestGate;
+    private static Action<MaterializedViewGrain>? s_deactivationTestHook;
 
     private readonly IMvExecutor _executor;
     private readonly IMvApplyHostFactory _hostFactory;
@@ -70,6 +77,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     private string? _safeNoProgressPosition;
     private bool _catchUpHalted;
     private bool _needsLifecycleSettlement;
+    private string? _settledEpochKey;
     private readonly MvCatchUpStallBudget _missingHintStallBudget;
 
     private MvModeCapabilities ResolveCapabilities(MvTransition transition)
@@ -133,6 +141,34 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _viewVersion = viewVersion;
     }
 
+    internal static IDisposable PushAfterStreamReceiptTestHook(Func<MaterializedViewGrain, bool> hook)
+    {
+        ArgumentNullException.ThrowIfNull(hook);
+        var previous = Interlocked.Exchange(ref s_afterStreamReceiptTestHook, hook);
+        return new DelegateDisposable(() => Interlocked.Exchange(ref s_afterStreamReceiptTestHook, previous));
+    }
+
+    internal static IDisposable PushAfterStreamReceiptTestHookAsync(Func<MaterializedViewGrain, Task<bool>> hook)
+    {
+        ArgumentNullException.ThrowIfNull(hook);
+        var previous = Interlocked.Exchange(ref s_afterStreamReceiptAsyncTestHook, hook);
+        return new DelegateDisposable(() => Interlocked.Exchange(ref s_afterStreamReceiptAsyncTestHook, previous));
+    }
+
+    internal static IDisposable PushBeforeCatchUpTestGate(Func<MaterializedViewGrain, bool> gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        var previous = Interlocked.Exchange(ref s_beforeCatchUpTestGate, gate);
+        return new DelegateDisposable(() => Interlocked.Exchange(ref s_beforeCatchUpTestGate, previous));
+    }
+
+    internal static IDisposable PushDeactivationTestHook(Action<MaterializedViewGrain> hook)
+    {
+        ArgumentNullException.ThrowIfNull(hook);
+        var previous = Interlocked.Exchange(ref s_deactivationTestHook, hook);
+        return new DelegateDisposable(() => Interlocked.Exchange(ref s_deactivationTestHook, previous));
+    }
+
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
         ResolveIdentity();
@@ -154,6 +190,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         }
 
         await base.OnDeactivateAsync(reason, cancellationToken);
+        Volatile.Read(ref s_deactivationTestHook)?.Invoke(this);
     }
 
     public async Task EnsureStartedAsync()
@@ -201,6 +238,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _safeNoProgressPosition = null;
         _catchUpHalted = false;
         _needsLifecycleSettlement = true;
+        _settledEpochKey = null;
         _activeStatusRestoreAttempts = 0;
         _lastError = null;
         _lastCatchUpStartedAt = DateTimeOffset.UtcNow;
@@ -230,6 +268,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _safeNoProgressSince = null;
         _safeNoProgressPosition = null;
         _needsLifecycleSettlement = true;
+        _settledEpochKey = null;
 
         // Activate catch-up for any callers that explicitly request a refresh.
         if (!_isCatchUpActive)
@@ -455,17 +494,24 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
     {
         try
         {
+            var beforeCatchUpGate = Volatile.Read(ref s_beforeCatchUpTestGate);
+            if (beforeCatchUpGate?.Invoke(this) == true)
+            {
+                return;
+            }
+
             if (_isCatchUpActive)
             {
                 RecoverStaleCatchUpIfNeeded();
                 await RunCatchUpTickAsync(ignoreImmediateFlag: false, CancellationToken.None);
             }
-            else if (_pendingStreamHintCount > 0 && !_catchUpHalted && !_batchInFlight)
+            else if (ShouldRunIdleDurableProbe())
             {
-                // Notification-driven recovery has no periodic idle floor in G57. A durable receipt is enough to
-                // wake one ordered store read; G58 owns no-hint idle polling.
+                // A stream notification can be lost after the durable receipt marker is committed. Keep a bounded
+                // provider poll alive after settlement so the store, not the stream payload, is the source of truth.
                 _isCatchUpActive = true;
                 _needsImmediateCatchUp = true;
+                _needsLifecycleSettlement = false;
                 await RunCatchUpTickAsync(ignoreImmediateFlag: true, CancellationToken.None);
             }
         }
@@ -480,8 +526,28 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         }
     }
 
+    private bool ShouldRunIdleDurableProbe()
+    {
+        if (!_started || _catchUpHalted || _batchInFlight)
+        {
+            return false;
+        }
+
+        if (_pendingStreamHintCount > 0)
+        {
+            return true;
+        }
+
+        var pollInterval = _options.PollInterval > TimeSpan.Zero ? _options.PollInterval : TimeSpan.Zero;
+        var safeWindow = _options.SafeWindowMs > 0
+            ? TimeSpan.FromMilliseconds(_options.SafeWindowMs)
+            : TimeSpan.Zero;
+        var minimumInterval = pollInterval > safeWindow ? pollInterval : safeWindow;
+        return _lastCatchUpAttemptAt is null || DateTimeOffset.UtcNow - _lastCatchUpAttemptAt >= minimumInterval;
+    }
+
     /// <summary>
-    ///     Runs at most one catch-up batch. Returns true if the batch made any
+    ///     Runs at most one durable catch-up batch. Returns true if the batch made any
     ///     progress (AppliedEvents &gt; 0), false if the batch was empty, skipped
     ///     due to the global gate, or catch-up is no longer active.
     /// </summary>
@@ -586,6 +652,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             servingActive = servingActive &&
                 activeAfterBatch?.ActiveVersion == _host.ViewVersion &&
                 servingGeneration == activeAfterBatch.Generation;
+            var settlementEpochChanged = _settledEpochKey is not null &&
+                await HasSettledEpochChangedAsync(cancellationToken);
             if (result.ProjectionStatus is { } projectionStatus)
             {
                 _publicationSnapshot = projectionStatus;
@@ -641,6 +709,14 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 _consecutiveEmptyBatches++;
             }
 
+            if (settlementEpochChanged)
+            {
+                // A changed target, current truth, lifecycle status, active version, or generation invalidates the
+                // previous completion epoch. The next empty/unsafe observation must pass through the real settlement
+                // boundary again instead of reusing an unchanged-idle shortcut.
+                _needsLifecycleSettlement = true;
+            }
+
             var newerHintOutstanding = IsNewerThanCurrent(consumedStreamHint, result);
             var hintSafeEligible = MvCatchUpStallBudget.IsSafeEligible(
                 consumedStreamHint,
@@ -680,8 +756,8 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             }
             else if (shouldSettle && _isCatchUpActive)
             {
-                // Hint re-entry is not a lifecycle settlement boundary. A duplicate/no-work hint must not perform a
-                // second guarded restore; RefreshAsync and activation set _needsLifecycleSettlement explicitly.
+                // Neither hint re-entry nor an idle durable probe is a lifecycle settlement boundary. A duplicate or
+                // unchanged store observation must not perform a second guarded restore.
                 _isCatchUpActive = false;
                 _needsImmediateCatchUp = false;
             }
@@ -808,6 +884,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                 _needsLifecycleSettlement = false;
                 _consecutiveEmptyBatches = 0;
                 _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
+                await CaptureSettledEpochAsync(cancellationToken);
                 return;
             }
 
@@ -843,6 +920,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             _needsLifecycleSettlement = false;
             _consecutiveEmptyBatches = 0;
             _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
+            await CaptureSettledEpochAsync(cancellationToken);
             return;
         }
 
@@ -858,6 +936,7 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         _needsLifecycleSettlement = false;
         _consecutiveEmptyBatches = 0;
         _lastCatchUpCompletedAt = DateTimeOffset.UtcNow;
+        await CaptureSettledEpochAsync(cancellationToken);
     }
 
     private static bool IsRetryableActiveStatusRestore(MvActivationResult restoration) =>
@@ -988,6 +1067,18 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         }
         _lastStreamHintReceivedAt = DateTimeOffset.UtcNow;
 
+        var afterReceiptHook = Volatile.Read(ref s_afterStreamReceiptTestHook);
+        if (afterReceiptHook?.Invoke(this) == true)
+        {
+            return;
+        }
+
+        var afterReceiptAsyncHook = Volatile.Read(ref s_afterStreamReceiptAsyncTestHook);
+        if (afterReceiptAsyncHook is not null && await afterReceiptAsyncHook(this))
+        {
+            return;
+        }
+
         // A receipt is durable even when the stream callback arrives before startup or while a batch is in flight.
         // The next bounded store read discovers events in SUID order. A permanently halted grain remains halted until
         // an explicit RefreshAsync or a fresh activation, so a bad store cannot become a busy loop.
@@ -1000,8 +1091,10 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
         {
             _isCatchUpActive = true;
             _needsImmediateCatchUp = true;
-            // Hint re-entry does not set _needsLifecycleSettlement. RefreshAsync and activation are the explicit
-            // settlement boundaries; a duplicate/no-work hint must not repeat a guarded lifecycle restore.
+            // Re-entering catch-up because of a stream hint does not itself invalidate the settled lifecycle epoch.
+            // A genuinely newer durable event (or another registry mutation) is detected after the store read by
+            // HasSettledEpochChangedAsync. Keeping this false prevents an already-applied duplicate hint from
+            // repeating TryRestoreActiveStatusAsync while preserving the real invalidation path.
             _consecutiveEmptyBatches = 0;
             _activeStatusRestoreAttempts = 0;
             _lastCatchUpStartedAt ??= DateTimeOffset.UtcNow;
@@ -1050,6 +1143,60 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             : _lastAppliedSortableUniqueId;
         return string.IsNullOrWhiteSpace(currentPosition) ||
                string.Compare(sortableUniqueId, currentPosition, StringComparison.Ordinal) > 0;
+    }
+
+    private async Task<bool> HasSettledEpochChangedAsync(CancellationToken cancellationToken)
+    {
+        var entries = await _registryStore.GetEntriesAsync(
+                _serviceId!,
+                _host!.ViewName,
+                _host.ViewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var active = await _registryStore.GetActiveAsync(
+                _serviceId!,
+                _host.ViewName,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return !string.Equals(_settledEpochKey, CreateEpochKey(entries, active), StringComparison.Ordinal);
+    }
+
+    private async Task CaptureSettledEpochAsync(CancellationToken cancellationToken)
+    {
+        var entries = await _registryStore.GetEntriesAsync(
+                _serviceId!,
+                _host!.ViewName,
+                _host.ViewVersion,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var active = await _registryStore.GetActiveAsync(
+                _serviceId!,
+                _host.ViewName,
+                cancellationToken)
+            .ConfigureAwait(false);
+        _settledEpochKey = CreateEpochKey(entries, active);
+    }
+
+    // Internal only so the deterministic acceptance tests can exercise the exact epoch fence without waiting for
+    // timer-driven Orleans work. This is not part of the public grain or package surface.
+    internal static string CreateEpochKey(
+        IReadOnlyList<MvRegistryEntry> entries,
+        MvActiveEntry? active)
+    {
+        var activeKey = active is null
+            ? "none"
+            : $"{active.ActiveVersion}:{active.Generation}";
+        var entryKey = string.Join(
+            ";",
+            entries
+                .OrderBy(entry => entry.LogicalTable, StringComparer.Ordinal)
+                .Select(entry => string.Join(
+                    "|",
+                    entry.LogicalTable,
+                    entry.Status,
+                    MvCheckpointTruthCodec.Encode(entry.CurrentCheckpointTruth),
+                    MvCheckpointTruthCodec.Encode(entry.TargetCheckpointTruth))));
+        return $"{activeKey};{entryKey}";
     }
 
     private async Task RefreshPositionFromRegistryAsync(CancellationToken cancellationToken)
@@ -1139,6 +1286,13 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             s_catchUpMaxConcurrentBatches = target;
             CatchUpBatchSemaphore.Release(delta);
         }
+    }
+
+    private sealed class DelegateDisposable(Action dispose) : IDisposable
+    {
+        private Action? _dispose = dispose;
+
+        public void Dispose() => Interlocked.Exchange(ref _dispose, null)?.Invoke();
     }
 
     private sealed class StreamBatchObserver : IAsyncBatchObserver<SerializableEvent>

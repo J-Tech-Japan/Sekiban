@@ -477,8 +477,28 @@ hint sortable id, and observation time without fabricating Active or completed l
 or fresh activation is the retry boundary after a halt. Hint re-entry does not set the lifecycle-settlement flag;
 activation and `RefreshAsync` remain the settlement boundaries.
 
-This notification-driven path does not perform periodic no-hint idle polling, historical repair, cursor rewind, or
-automatic generation repair. Hosted-worker and other materialized-view modes retain their existing contracts.
+G58 extends this notification-driven baseline with periodic no-hint idle polling and settled-epoch invalidation.
+Historical repair, cursor rewind and automatic generation switching remain explicit operational actions.
+
+### Classic Orleans idle recovery and settled epochs (SEK-G58)
+
+After settlement, the grain continues to probe the durable event store without requiring a new stream notification.
+Idle probes run no faster than `max(PollInterval, max(0, SafeWindowMs))`; pending hints and active work use
+`PollInterval`. The default `SafeWindowMs` remains 5000. This adds provider reads while idle and is not an absolute
+latency guarantee. Each tick retains G57's `BatchSize` limit, scalar hint state, single-flight guard and process
+semaphore. Failed reads, unsafe-window waits and permanent or exhausted failures retain their existing distinct
+outcomes and halt diagnostics; an idle probe cannot fabricate successful completion.
+
+The settled epoch includes the exact serving version, active generation, registry current/target checkpoint truth
+and lifecycle state. Duplicate hints and unchanged idle observations reuse the settled epoch. A changed epoch or
+explicit `RefreshAsync` requires guarded settlement again, preserving G57's registry/pointer locks, eligibility,
+failure and supersession checks.
+
+Recovery tests distinguish durable receipt before application from application committed before restart. A new
+activation can discover unapplied durable events without another notification, and already committed events must
+not be replayed. These guarantees assume one writer per view and a visible safe prefix; they do not establish
+distributed exactly-once delivery. Receipt metadata remains separate from CatchUp application provenance. The
+public apply API, hosted worker and other materialized-view modes keep their existing contracts.
 
 ## Materialized View Registry
 
@@ -567,6 +587,17 @@ primitive. A local deadlock, serialization, or SQLite busy/locked outcome is ret
 fresh read, up to the finite request bound; exhaustion is returned as a typed retryable result. A caller-owned
 transaction uses a savepoint and rolls back to it on rejection, cancellation, or provider failure. `VerifyOnly` never
 invokes this lifecycle mutation.
+
+### Explicit historical recovery (SEK-G58)
+
+Durable reads take the lowest ascending limited prefix strictly after the current cursor. An event becoming visible
+at or below that cursor is not automatically detected or repaired; SUID is not a distributed commit sequence.
+
+For historical correction, register the candidate projector/version and run `PrepareGenerationAsync`. Compare the
+candidate content and checkpoint with durable events, then use a separately authorized `SwitchAsync` after eligibility
+verification. Candidate preparation does not move the serving pointer or repair the serving generation in place.
+The N+1 acceptance test checks corrected candidate content while the serving pointer, checkpoint and corruption
+remain unchanged. No cursor rewind, table deletion/reset or automatic version selection is introduced.
 
 ## Querying the Tables
 

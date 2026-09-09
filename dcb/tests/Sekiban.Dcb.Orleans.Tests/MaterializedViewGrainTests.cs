@@ -280,6 +280,179 @@ public class MaterializedViewGrainTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ReceiptBeforeApply_AndCommitBeforeRestart_DoNotReplayNonIdempotentCounter()
+    {
+        SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Success(1);
+        var grain = await StartServingGrainAsync();
+        await SharedRegistry.ActiveStatusRestoreCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var durableEvent = CreateFixedAgedEvent(
+            700,
+            new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc));
+        SharedExecutor.InitialEvents.Add(durableEvent);
+        SharedExecutor.ExpectAppliedEventCount(1);
+        SharedExecutor.BlockNextCatchUp();
+
+        var publish = GetEventStream().OnNextAsync(durableEvent);
+        await SharedExecutor.CatchUpEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, SharedExecutor.AppliedEventExecutionCount);
+
+        SharedExecutor.ReleaseBlockedCatchUp();
+        await publish;
+        await SharedExecutor.AppliedEventCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, SharedExecutor.AppliedEventExecutionCount);
+
+        SharedExecutor.ExpectTargetCaptureCallCount(2);
+        await grain.RequestDeactivationAsync();
+        var restarted = _cluster.Client.GetGrain<IMaterializedViewGrain>(
+            MvGrainKey.Build("orders", TestMaterializedViewProjector.ViewNameConst, 1));
+        await restarted.EnsureStartedAsync();
+        await SharedExecutor.TargetCaptureCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await GetEventStream().OnNextAsync(durableEvent);
+        await GetEventStream().OnNextAsync(durableEvent);
+        await restarted.RefreshAsync();
+
+        Assert.Equal(1, SharedExecutor.AppliedEventExecutionCount);
+        Assert.Equal(durableEvent.SortableUniqueIdValue, (await restarted.GetStatusAsync()).CurrentPosition);
+        Assert.Equal(0, SharedExecutor.ApplySerializableEventsCalls);
+    }
+
+    [Fact]
+    public async Task ReceiptBeforeApply_DeactivationBeforeFirstApply_RestartRecoversExactlyOnce()
+    {
+        SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Success(1);
+        var grain = await StartServingGrainAsync();
+        await SharedRegistry.ActiveStatusRestoreCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var durableEvent = CreateFixedAgedEvent(
+            703,
+            new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc));
+        SharedExecutor.ExpectAppliedEventCount(1);
+
+        var catchUpGateReleased = 0;
+        var receiptObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDeactivation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var deactivationObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using (MaterializedViewGrain.PushBeforeCatchUpTestGate(_ => Volatile.Read(ref catchUpGateReleased) == 0))
+        using (MaterializedViewGrain.PushAfterStreamReceiptTestHookAsync(async candidate =>
+               {
+                   receiptObserved.TrySetResult();
+                   await releaseDeactivation.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                   await candidate.RequestDeactivationAsync();
+                   return true;
+               }))
+        using (MaterializedViewGrain.PushDeactivationTestHook(_ => deactivationObserved.TrySetResult()))
+        {
+            SharedExecutor.InitialEvents.Add(durableEvent);
+            var publish = GetEventStream().OnNextAsync(durableEvent);
+
+            await receiptObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(1, SharedRegistry.MarkStreamReceivedCalls);
+            Assert.Equal(0, SharedExecutor.AppliedEventExecutionCount);
+
+            releaseDeactivation.TrySetResult();
+            await publish;
+            await deactivationObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Volatile.Write(ref catchUpGateReleased, 1);
+        }
+
+        SharedExecutor.ExpectTargetCaptureCallCount(2);
+        var restarted = _cluster.Client.GetGrain<IMaterializedViewGrain>(
+            MvGrainKey.Build("orders", TestMaterializedViewProjector.ViewNameConst, 1));
+        await restarted.EnsureStartedAsync();
+        await SharedExecutor.TargetCaptureCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await SharedExecutor.AppliedEventCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await GetEventStream().OnNextAsync(durableEvent);
+        await restarted.RefreshAsync();
+
+        Assert.Equal(1, SharedExecutor.AppliedEventExecutionCount);
+        Assert.Equal(durableEvent.SortableUniqueIdValue, (await restarted.GetStatusAsync()).CurrentPosition);
+        Assert.Equal(0, SharedExecutor.ApplySerializableEventsCalls);
+    }
+
+    [Fact]
+    public async Task IdleDurableProbe_RecoversAgedEventWithoutHint()
+    {
+        SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Success(1);
+        var grain = await StartServingGrainAsync();
+        await SharedRegistry.ActiveStatusRestoreCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var durableEvent = CreateFixedAgedEvent(
+            701,
+            new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc));
+        SharedExecutor.InitialEvents.Add(durableEvent);
+        SharedExecutor.ExpectAppliedEventCount(1);
+
+        await SharedExecutor.AppliedEventCountReached.Task.WaitAsync(TimeSpan.FromSeconds(12));
+
+        var status = await grain.GetStatusAsync();
+        Assert.Equal(1, SharedExecutor.AppliedEventExecutionCount);
+        Assert.Equal(durableEvent.SortableUniqueIdValue, status.CurrentPosition);
+        Assert.Equal(0, SharedExecutor.ApplySerializableEventsCalls);
+    }
+
+    [Fact]
+    public async Task DuplicateAndIdleObservations_DoNotRepeatActiveStatusRestore()
+    {
+        SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Success(1);
+        var grain = await StartServingGrainAsync();
+        await SharedRegistry.ActiveStatusRestoreCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var durableEvent = CreateFixedAgedEvent(
+            702,
+            new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc));
+        SharedExecutor.InitialEvents.Add(durableEvent);
+        SharedExecutor.ExpectAppliedEventCount(1);
+        SharedRegistry.ExpectActiveStatusRestoreCallCount(SharedRegistry.ActiveStatusRestoreCalls + 1);
+        await GetEventStream().OnNextAsync(durableEvent);
+        await SharedExecutor.AppliedEventCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await SharedRegistry.ActiveStatusRestoreCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
+        var restoreCallsAfterProgress = SharedRegistry.ActiveStatusRestoreCalls;
+
+        SharedExecutor.ExpectCatchUpCallCount(SharedExecutor.CatchUpCalls + 1);
+        await GetEventStream().OnNextAsync(durableEvent);
+        await GetEventStream().OnNextAsync(durableEvent);
+        await SharedExecutor.CatchUpCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
+
+        Assert.Equal(restoreCallsAfterProgress, SharedRegistry.ActiveStatusRestoreCalls);
+        Assert.Equal(1, SharedExecutor.AppliedEventExecutionCount);
+    }
+
+    [Fact]
+    public async Task SettledEpochMutation_TriggersOneGuardedRestore_AndUnchangedIdleDoesNot()
+    {
+        SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Success(1);
+        var grain = await StartServingGrainAsync();
+        await SharedRegistry.ActiveStatusRestoreCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
+        var restoreCallsAtSettlement = SharedRegistry.ActiveStatusRestoreCalls;
+
+        SharedExecutor.ExpectCatchUpCallCount(SharedExecutor.CatchUpCalls + 1);
+        await SharedExecutor.CatchUpCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
+        Assert.Equal(restoreCallsAtSettlement, SharedRegistry.ActiveStatusRestoreCalls);
+
+        SharedRegistry.ExpectActiveStatusRestoreCallCount(restoreCallsAtSettlement + 1);
+        SharedExecutor.ExpectCatchUpCallCount(SharedExecutor.CatchUpCalls + 1);
+        SharedRegistry.MutateActiveGeneration();
+        await SharedExecutor.CatchUpCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await SharedRegistry.ActiveStatusRestoreCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
+        Assert.Equal(restoreCallsAtSettlement + 1, SharedRegistry.ActiveStatusRestoreCalls);
+
+        SharedExecutor.ExpectCatchUpCallCount(SharedExecutor.CatchUpCalls + 1);
+        await SharedExecutor.CatchUpCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
+        Assert.Equal(restoreCallsAtSettlement + 1, SharedRegistry.ActiveStatusRestoreCalls);
+        _ = grain;
+    }
+
+    [Fact]
     public async Task InFlightHintBurst_UsesSingleDurableCatchUpAndCoalescesHints()
     {
         SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Success(1);
@@ -704,12 +877,17 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         public int CatchUpCalls { get; private set; }
         public int ApplySerializableEventsCalls { get; private set; }
         public int InitializeCalls { get; private set; }
+        public int TargetCaptureCalls { get; private set; }
         public int MaxConcurrentCatchUpCalls { get; private set; }
         public TaskCompletionSource AppliedEventCountReached { get; private set; } = NewSignal();
         public TaskCompletionSource CatchUpEntered { get; private set; } = NewSignal();
+        public TaskCompletionSource CatchUpCallCountReached { get; private set; } = NewSignal();
         private TaskCompletionSource BlockedCatchUpRelease { get; set; } = NewSignal();
+        public TaskCompletionSource TargetCaptureCountReached { get; private set; } = NewSignal();
 
         private int _expectedAppliedEventCount = -1;
+        private int _expectedCatchUpCalls = -1;
+        private int _expectedTargetCaptureCalls = -1;
         private int _blockNextCatchUp;
         private int _inFlightCatchUpCalls;
 
@@ -726,11 +904,16 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             CatchUpCalls = 0;
             ApplySerializableEventsCalls = 0;
             InitializeCalls = 0;
+            TargetCaptureCalls = 0;
             MaxConcurrentCatchUpCalls = 0;
             AppliedEventCountReached = NewSignal();
             CatchUpEntered = NewSignal();
+            CatchUpCallCountReached = NewSignal();
             BlockedCatchUpRelease = NewSignal();
+            TargetCaptureCountReached = NewSignal();
             _expectedAppliedEventCount = -1;
+            _expectedCatchUpCalls = -1;
+            _expectedTargetCaptureCalls = -1;
             _blockNextCatchUp = 0;
             _inFlightCatchUpCalls = 0;
         }
@@ -743,6 +926,25 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             if (AppliedEventExecutionCount >= expected)
             {
                 AppliedEventCountReached.TrySetResult();
+            }
+        }
+
+        public void ExpectTargetCaptureCallCount(int expected)
+        {
+            _expectedTargetCaptureCalls = expected;
+            if (TargetCaptureCalls >= expected)
+            {
+                TargetCaptureCountReached.TrySetResult();
+            }
+        }
+
+        public void ExpectCatchUpCallCount(int expected)
+        {
+            _expectedCatchUpCalls = expected;
+            CatchUpCallCountReached = NewSignal();
+            if (CatchUpCalls >= expected)
+            {
+                CatchUpCallCountReached.TrySetResult();
             }
         }
 
@@ -774,6 +976,10 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             serviceId ??= DefaultServiceIdProvider.DefaultServiceId;
             ServiceIds.Add(serviceId);
             CatchUpCalls++;
+            if (_expectedCatchUpCalls >= 0 && CatchUpCalls >= _expectedCatchUpCalls)
+            {
+                CatchUpCallCountReached.TrySetResult();
+            }
             var concurrent = Interlocked.Increment(ref _inFlightCatchUpCalls);
             MaxConcurrentCatchUpCalls = Math.Max(MaxConcurrentCatchUpCalls, concurrent);
             try
@@ -900,6 +1106,11 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             string? serviceId = null,
             CancellationToken cancellationToken = default)
         {
+            TargetCaptureCalls++;
+            if (_expectedTargetCaptureCalls >= 0 && TargetCaptureCalls >= _expectedTargetCaptureCalls)
+            {
+                TargetCaptureCountReached.TrySetResult();
+            }
             serviceId ??= DefaultServiceIdProvider.DefaultServiceId;
             var latest = InitialEvents
                 .Select(serializableEvent => serializableEvent.SortableUniqueIdValue)
@@ -957,10 +1168,12 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         public MvActivationResult? ActiveStatusRestoreResult { get; set; }
         public int ActiveStatusRestoreCalls { get; private set; }
         public TaskCompletionSource ActiveStatusRestoreCompleted { get; private set; } = NewSignal();
+        public TaskCompletionSource ActiveStatusRestoreCallCountReached { get; private set; } = NewSignal();
         public int RegisterCalls { get; private set; }
         public int MarkStreamReceivedCalls { get; private set; }
         public int UpdatePositionCalls { get; private set; }
         public int UpdateStatusCalls { get; private set; }
+        private int _expectedActiveStatusRestoreCalls = -1;
 
         private static TaskCompletionSource NewSignal() =>
             new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -973,10 +1186,12 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             ActiveStatusRestoreResult = null;
             ActiveStatusRestoreCalls = 0;
             ActiveStatusRestoreCompleted = NewSignal();
+            ActiveStatusRestoreCallCountReached = NewSignal();
             RegisterCalls = 0;
             MarkStreamReceivedCalls = 0;
             UpdatePositionCalls = 0;
             UpdateStatusCalls = 0;
+            _expectedActiveStatusRestoreCalls = -1;
         }
 
         public Task EnsureInfrastructureAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -1100,6 +1315,10 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             CancellationToken cancellationToken = default)
         {
             ActiveStatusRestoreCalls++;
+            if (_expectedActiveStatusRestoreCalls >= 0 && ActiveStatusRestoreCalls >= _expectedActiveStatusRestoreCalls)
+            {
+                ActiveStatusRestoreCallCountReached.TrySetResult();
+            }
             if (ActiveStatusRestoreResult is { } result)
             {
                 if (result.Succeeded)
@@ -1111,6 +1330,23 @@ public class MaterializedViewGrainTests : IAsyncLifetime
             }
 
             throw new NotSupportedException("The fake registry does not support atomic serving-status restoration.");
+        }
+
+        public void ExpectActiveStatusRestoreCallCount(int expected)
+        {
+            _expectedActiveStatusRestoreCalls = expected;
+            ActiveStatusRestoreCallCountReached = NewSignal();
+            if (ActiveStatusRestoreCalls >= expected)
+            {
+                ActiveStatusRestoreCallCountReached.TrySetResult();
+            }
+        }
+
+        public void MutateActiveGeneration()
+        {
+            var key = _active.Keys.Single();
+            var active = _active[key];
+            _active[key] = active with { Generation = active.Generation + 1 };
         }
 
         public Task SetActiveAsync(

@@ -469,8 +469,27 @@ exhausted failure は `CatchUpHalted` として停止します。このとき er
 lifecycle を捏造しません。halt 後の再試行境界は明示的な `RefreshAsync` または fresh activation です。hint の再入場は lifecycle-settlement
 flag を設定せず、activation と `RefreshAsync` が settlement boundary のままです。
 
-この通知駆動経路は、no-hint の periodic idle polling、historical repair、cursor rewind、自動 generation repair を行いません。
-hosted worker と他の materialized-view mode の既存契約は維持されます。
+G58 はこの通知駆動 baseline に、通知なしの定期 idle polling と settled epoch の invalidation を追加します。
+historical repair、cursor rewind、generation の自動切り替えは行わず、明示的な運用操作として扱います。
+
+### classic Orleans の idle recovery と settled epoch（SEK-G58）
+
+settlement 後も、新しい stream 通知なしで耐久 event store を定期的に確認します。idle probe の間隔は
+`max(PollInterval, max(0, SafeWindowMs))` 以上で、pending hint または処理中の work がある間は `PollInterval` を使います。
+`SafeWindowMs` の既定値は 5000 のままです。idle 中の provider read が増えますが、絶対的な latency は保証しません。
+各 tick は G57 の `BatchSize` 上限、scalar hint 状態、single-flight guard、process semaphore を維持します。
+failed read、unsafe-window 待ち、permanent failure、再試行上限到達は既存の異なる outcome と halt 診断を維持し、
+idle probe が成功した completion を捏造することはありません。
+
+settled epoch は正確な serving version、active generation、registry の current/target checkpoint truth と lifecycle state
+を含みます。duplicate hint と変更のない idle observation は settled epoch を再利用します。epoch の変更または明示的な
+`RefreshAsync` は再び guarded settlement を必要とし、G57 の registry/pointer lock、eligibility、failure、supersession
+の検査を維持します。
+
+回復テストでは、適用前の durable receipt と、restart 前に適用が commit 済みの場合を区別します。新しい activation は
+追加通知なしで未適用の durable event を発見でき、commit 済みの event は再適用しません。この保証は 1 view 1 writer と
+visible safe prefix を前提とし、distributed exactly-once を保証しません。receipt metadata と CatchUp 適用の provenance は
+区別します。public apply API、hosted worker、他の materialized-view mode の既存契約は維持します。
 
 ## レジストリで管理するもの
 
@@ -556,6 +575,17 @@ local transaction の deadlock、serialization、SQLite の busy/locked は、�
 request の有限 bound まで retry し、上限到達時は型付き retryable result を返します。caller-owned transaction では
 savepoint を作り、reject、cancellation、provider failure ではそこへ rollback します。`VerifyOnly` はこの lifecycle
 mutation を呼びません。
+
+### 明示的な historical recovery（SEK-G58）
+
+durable read は現在の cursor より厳密に後の、昇順で最小の有限 prefix を読みます。cursor 以下で後から visible になった
+イベントは自動的に検出・修復しません。SUID は distributed commit sequence ではありません。
+
+historical correction では candidate projector/version を register し、`PrepareGenerationAsync` を実行します。candidate の
+内容と checkpoint を durable event と比較し、eligibility を検証してから、別途認可された `SwitchAsync` を使います。
+candidate の準備だけでは serving pointer は動かず、serving generation を直接修復しません。N+1 の acceptance test は、
+serving pointer、checkpoint、破損状態を維持したまま candidate の内容が正しくなることを確認します。
+cursor rewind、table の delete/reset、version の自動選択は追加しません。
 
 ## テーブルのクエリ方法
 

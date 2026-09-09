@@ -413,7 +413,7 @@ public interface IMvExecutor
 
 /// <summary>
 ///     Internal Orleans-only catch-up boundary. It keeps the public executor/hosted-worker contract unchanged while
-///     allowing the classic grain to receive typed store outcomes before it performs lifecycle settlement.
+///     allowing the classic grain to receive typed store outcomes before it performs its own epoch-aware settlement.
 /// </summary>
 internal interface IMvOrleansCatchUpExecutor
 {
