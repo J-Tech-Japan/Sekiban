@@ -364,6 +364,11 @@ When the Orleans catch-up boundary observes this condition, it returns the perma
 stable error code `state-reading-batch-not-supported`, the safe diagnostic message, and the event count. The grain
 halts visibly with `CatchUpHalted`, leaves the last error observable, and does not synthesize completion or replay.
 
+Callers can configure catch-up with `BatchSize = 1`, and explicit one-event direct calls remain supported. `BatchSize`
+is an executor-wide `MvOptions` setting, so `1` folds events sequentially one at a time and trades throughput for one
+transaction per event. The guard covers reads made through the framework query ports; it does not detect or control
+arbitrary external effects or external-service reads performed by custom user code.
+
 Projectors that support verify-only initialization describe their target schema with the additive, format-versioned
 `MvSchemaContract`/`IMvSchemaRequirementsProvider` contract (format version `1`):
 

@@ -361,6 +361,11 @@ Orleans catch-up boundary ではこの条件を permanent unsupported として�
 `state-reading-batch-not-supported`、安全な診断文、event count を返します。grain は `CatchUpHalted` を可視化して停止し、
 last error を保持します。synthetic completion や replay は生成しません。
 
+caller は catch-up の `BatchSize = 1` を設定でき、明示的な 1 event の direct call も引き続き利用できます。
+`BatchSize` は executor 全体に適用される `MvOptions` の設定であるため、`1` では event を順番に 1 件ずつ fold し、
+event ごとに transaction を行う性能との trade-off があります。この guard が対象にするのは framework の query port
+経由の read であり、custom user code が行う任意の external effect や external service の read まで検出・制御するものではありません。
+
 verify-only に対応する projector は、format version `1` の追加された `MvSchemaContract` /
 `IMvSchemaRequirementsProvider` 契約で target schema を宣言します。
 
