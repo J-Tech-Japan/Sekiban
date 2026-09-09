@@ -47,22 +47,13 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     }
 
     /// <summary>Additive opt-in size-gate constructor; legacy construction remains ungated.</summary>
-    public GeneralSekibanExecutor(
-        IEventStore eventStore,
-        IActorObjectAccessor actorAccessor,
-        DcbDomainTypes domainTypes,
-        ExecutorSizeGateOptions executorSizeGateOptions,
-        IEventPublisher? eventPublisher = null,
+    public GeneralSekibanExecutor(IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        ExecutorSizeGateOptions executorSizeGateOptions, IEventPublisher? eventPublisher = null,
         IExecutedUserProvider? executedUserProvider = null)
     {
         _actorAccessor = actorAccessor;
-        _core = new CoreGeneralSekibanExecutor(
-            eventStore,
-            actorAccessor,
-            domainTypes,
-            executorSizeGateOptions,
-            eventPublisher,
-            executedUserProvider);
+        _core = CoreGeneralSekibanExecutorFactory.CreateWithGate(
+            eventStore, actorAccessor, domainTypes, executorSizeGateOptions, eventPublisher, executedUserProvider);
     }
 
     /// <summary>Creates an executor using the registered process-wide monotonic id allocator.</summary>
@@ -112,30 +103,16 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     {
     }
 
-    internal GeneralSekibanExecutor(
-        IEventStore eventStore,
-        IActorObjectAccessor actorAccessor,
-        DcbDomainTypes domainTypes,
-        IEventPublisher? eventPublisher,
-        IExecutedUserProvider? executedUserProvider,
-        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
-        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
-        IServiceIdProvider serviceIdProvider,
-        SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy,
+    internal GeneralSekibanExecutor(IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher, IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator, SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider, SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy,
         ExecutorSizeGateOptions? executorSizeGateOptions)
     {
         _actorAccessor = actorAccessor;
-        _core = new CoreGeneralSekibanExecutor(
-            eventStore,
-            actorAccessor,
-            domainTypes,
-            eventPublisher,
-            executedUserProvider,
-            sortableUniqueIdGenerator,
-            sortableUniqueIdSeedCoordinator,
-            serviceIdProvider,
-            sortableUniqueIdWaitPolicy,
-            executorSizeGateOptions);
+        _core = CoreGeneralSekibanExecutorFactory.CreateWithServices(
+            eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider, sortableUniqueIdGenerator,
+            sortableUniqueIdSeedCoordinator, serviceIdProvider, sortableUniqueIdWaitPolicy, executorSizeGateOptions);
     }
 
     /// <summary>

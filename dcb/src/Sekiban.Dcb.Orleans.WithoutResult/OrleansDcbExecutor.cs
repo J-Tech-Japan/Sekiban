@@ -49,25 +49,12 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     }
 
     /// <summary>Additive opt-in size-gate constructor; existing Orleans construction remains ungated.</summary>
-    public OrleansDcbExecutor(
-        IClusterClient clusterClient,
-        IEventStore eventStore,
-        DcbDomainTypes domainTypes,
-        ExecutorSizeGateOptions executorSizeGateOptions,
-        IEventPublisher? eventPublisher = null,
-        IServiceIdProvider? serviceIdProvider = null,
-        IExecutedUserProvider? executedUserProvider = null)
-        : this(
-            clusterClient,
-            eventStore,
-            domainTypes,
-            eventPublisher,
-            serviceIdProvider,
-            executedUserProvider,
-            ProcessSharedSortableUniqueIdServices.Generator,
-            ProcessSharedSortableUniqueIdServices.SeedCoordinator,
-            SortableUniqueIdWaitPolicy.System,
-            executorSizeGateOptions)
+    public OrleansDcbExecutor(IClusterClient clusterClient, IEventStore eventStore, DcbDomainTypes domainTypes,
+        ExecutorSizeGateOptions executorSizeGateOptions, IEventPublisher? eventPublisher = null,
+        IServiceIdProvider? serviceIdProvider = null, IExecutedUserProvider? executedUserProvider = null)
+        : this(clusterClient, eventStore, domainTypes, eventPublisher, serviceIdProvider, executedUserProvider,
+            ProcessSharedSortableUniqueIdServices.Generator, ProcessSharedSortableUniqueIdServices.SeedCoordinator,
+            SortableUniqueIdWaitPolicy.System, executorSizeGateOptions)
     {
     }
 
@@ -138,17 +125,10 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     {
     }
 
-    internal OrleansDcbExecutor(
-        IClusterClient clusterClient,
-        IEventStore eventStore,
-        DcbDomainTypes domainTypes,
-        IEventPublisher? eventPublisher,
-        IServiceIdProvider? serviceIdProvider,
-        IExecutedUserProvider? executedUserProvider,
-        ISortableUniqueIdGenerator sortableUniqueIdGenerator,
-        SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
-        SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy,
-        ExecutorSizeGateOptions? executorSizeGateOptions)
+    internal OrleansDcbExecutor(IClusterClient clusterClient, IEventStore eventStore, DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher, IServiceIdProvider? serviceIdProvider, IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator, SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy, ExecutorSizeGateOptions? executorSizeGateOptions)
     {
         _clusterClient = clusterClient ?? throw new ArgumentNullException(nameof(clusterClient));
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
@@ -157,17 +137,9 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         _sortableUniqueIdWaitPolicy = sortableUniqueIdWaitPolicy ??
                                       throw new ArgumentNullException(nameof(sortableUniqueIdWaitPolicy));
         _actorAccessor = new OrleansActorObjectAccessor(clusterClient, eventStore, domainTypes, _serviceIdProvider);
-        _generalExecutor = new GeneralSekibanExecutor(
-            eventStore,
-            _actorAccessor,
-            domainTypes,
-            eventPublisher,
-            executedUserProvider,
-            sortableUniqueIdGenerator,
-            sortableUniqueIdSeedCoordinator,
-            _serviceIdProvider,
-            _sortableUniqueIdWaitPolicy,
-            executorSizeGateOptions);
+        _generalExecutor = new GeneralSekibanExecutor(eventStore, _actorAccessor, domainTypes, eventPublisher,
+            executedUserProvider, sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator, _serviceIdProvider,
+            _sortableUniqueIdWaitPolicy, executorSizeGateOptions);
     }
 
     /// <summary>
