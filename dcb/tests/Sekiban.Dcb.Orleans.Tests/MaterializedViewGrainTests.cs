@@ -620,8 +620,9 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         SharedExecutor.ScriptedCatchUpResults.Enqueue(new MvCatchUpResult(0, false)
         {
             Outcome = MvCatchUpOutcome.PermanentUnsupported,
-            ErrorCode = "unsupported",
-            ErrorMessage = "Catch-up is unsupported by the configured provider or policy."
+            ErrorCode = MvStateReadingBatchNotSupportedException.CatchUpErrorCode,
+            ErrorMessage = MvStateReadingBatchNotSupportedException.CatchUpErrorMessage,
+            EventCount = 2
         });
 
         var grain = await StartServingGrainAsync();
@@ -631,7 +632,8 @@ public class MaterializedViewGrainTests : IAsyncLifetime
         Assert.True(status.CatchUpHalted);
         Assert.False(status.IsCatchUpActive);
         Assert.Null(status.LastCatchUpCompletedAt);
-        Assert.Equal("Catch-up is unsupported by the configured provider or policy.", status.LastError);
+        Assert.Equal(MvStateReadingBatchNotSupportedException.CatchUpErrorMessage, status.LastError);
+        Assert.Contains("multi-event", status.LastError, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, SharedExecutor.CatchUpCalls);
         Assert.Equal(0, SharedRegistry.ActiveStatusRestoreCalls);
     }

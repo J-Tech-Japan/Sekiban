@@ -351,6 +351,19 @@ In mode 2, the executor collects and authorizes the whole apply batch before its
 command. A policy rejection therefore leaves view rows, registry checkpoint/status, and the active pointer unchanged;
 a deny test is expected to become red if a future implementation executes before authorization.
 
+State-reading projectors have one additional whole-batch boundary. After duplicate and current-position filtering, a
+`VerifyAndExecute` batch containing more than one event rejects `QueryRowsAsync`,
+`QuerySingleOrDefaultAsync`, `ExecuteScalarJsonAsync`, and their typed row-mapper extensions through the typed
+`MvStateReadingBatchNotSupportedException`. The exception exposes the observed `EventCount`; no provider query is
+issued. This guard is latched even when a projector catches the exception and returns fallback statements, and the
+executor rethrows it before policy authorization, projector DML, or registry checkpoint mutation. A single-event
+state read remains supported, as does a query-free multi-event projector. The executor does not split, retry, or
+silently fall back to a different projector path.
+
+When the Orleans catch-up boundary observes this condition, it returns the permanent unsupported outcome with the
+stable error code `state-reading-batch-not-supported`, the safe diagnostic message, and the event count. The grain
+halts visibly with `CatchUpHalted`, leaves the last error observable, and does not synthesize completion or replay.
+
 Projectors that support verify-only initialization describe their target schema with the additive, format-versioned
 `MvSchemaContract`/`IMvSchemaRequirementsProvider` contract (format version `1`):
 

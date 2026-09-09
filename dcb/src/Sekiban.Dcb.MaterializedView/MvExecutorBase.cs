@@ -702,6 +702,24 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
         {
             throw;
         }
+        catch (MvStateReadingBatchNotSupportedException ex)
+        {
+            if (!classifyFailures)
+            {
+                throw;
+            }
+
+            _logger.LogWarning(
+                ex,
+                "Materialized-view catch-up state-reading projector is unsupported for a batch of {EventCount} events; the operation will halt.",
+                ex.EventCount);
+            return CatchUpFailure(
+                MvCatchUpOutcome.PermanentUnsupported,
+                MvStateReadingBatchNotSupportedException.CatchUpErrorCode,
+                MvStateReadingBatchNotSupportedException.CatchUpErrorMessage,
+                isRetryable: false,
+                eventCount: ex.EventCount);
+        }
         catch (NotSupportedException ex)
         {
             if (!classifyFailures)
@@ -780,14 +798,16 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
         MvCatchUpOutcome outcome,
         string errorCode,
         string errorMessage,
-        bool isRetryable) =>
+        bool isRetryable,
+        int? eventCount = null) =>
         new(0, false)
         {
             Outcome = outcome,
             ErrorCode = errorCode,
             ErrorMessage = errorMessage,
             IsRetryable = isRetryable,
-            ObservedAtUtc = DateTimeOffset.UtcNow
+            ObservedAtUtc = DateTimeOffset.UtcNow,
+            EventCount = eventCount
         };
 
     /// <summary>
@@ -1010,6 +1030,16 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
             if (!classifyFailures)
             {
                 throw exception;
+            }
+
+            if (exception is MvStateReadingBatchNotSupportedException batchException)
+            {
+                return CatchUpFailure(
+                    MvCatchUpOutcome.PermanentUnsupported,
+                    MvStateReadingBatchNotSupportedException.CatchUpErrorCode,
+                    MvStateReadingBatchNotSupportedException.CatchUpErrorMessage,
+                    isRetryable: false,
+                    eventCount: batchException.EventCount);
             }
 
             if (exception is NotSupportedException)
@@ -1238,7 +1268,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        var queryPort = new MvPolicyEnforcingQueryPort(
+        var policyQueryPort = new MvPolicyEnforcingQueryPort(
             CreateQueryPort(connection, transaction),
             _options.SqlStatementPolicy,
             serviceId,
@@ -1246,6 +1276,10 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
             host.ViewVersion,
             bindings.Tables,
             DatabaseType);
+        var batchQueryGuard = events.Count > 1
+            ? new MvBatchQueryPortGuard(policyQueryPort, events.Count)
+            : null;
+        IMvApplyQueryPort queryPort = batchQueryGuard is null ? policyQueryPort : batchQueryGuard;
         var prepared = new List<(SerializableEvent Event, IReadOnlyList<MvSqlStatementDto> Statements)>();
 
         try
@@ -1260,6 +1294,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
                         cancellationToken)
                     .ConfigureAwait(false);
                 prepared.Add((serializableEvent, statements));
+            }
+
+            if (batchQueryGuard?.QueryAttempted == true)
+            {
+                throw batchQueryGuard.CreateException();
             }
 
             await AuthorizeStatementsAsync(

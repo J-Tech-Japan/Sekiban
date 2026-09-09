@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace Sekiban.Dcb.MaterializedView;
 
@@ -289,4 +290,62 @@ internal sealed class MvPolicyEnforcingQueryPort : IMvApplyQueryPort
 
     private static IReadOnlyList<MvParam> MetadataOnly(IReadOnlyList<MvParam> parameters) =>
         parameters.Select(parameter => parameter with { ValueJson = null }).ToList();
+}
+
+/// <summary>
+///     Latches every state-reading surface during a verified multi-event preparation pass. The projector may catch
+///     the typed exception and return fallback statements, but the latched attempt is rethrown by the executor before
+///     authorization, DML, or checkpoint mutation can begin.
+/// </summary>
+internal sealed class MvBatchQueryPortGuard : IMvApplyQueryPort
+{
+    private readonly IMvApplyQueryPort _inner;
+    private readonly int _eventCount;
+    private int _queryAttempted;
+
+    public MvBatchQueryPortGuard(IMvApplyQueryPort inner, int eventCount)
+    {
+        _inner = inner;
+        _eventCount = eventCount;
+    }
+
+    public bool QueryAttempted => Volatile.Read(ref _queryAttempted) != 0;
+
+    public Task<IReadOnlyList<JsonElement>> QueryRowsAsync(
+        string sql,
+        IReadOnlyList<MvParam> parameters,
+        CancellationToken ct)
+    {
+        MarkQueryAttempted();
+        return Task.FromException<IReadOnlyList<JsonElement>>(CreateException());
+    }
+
+    public Task<JsonElement?> QuerySingleOrDefaultAsync(
+        string sql,
+        IReadOnlyList<MvParam> parameters,
+        CancellationToken ct)
+    {
+        MarkQueryAttempted();
+        return Task.FromException<JsonElement?>(CreateException());
+    }
+
+    public Task<string?> ExecuteScalarJsonAsync(
+        string sql,
+        IReadOnlyList<MvParam> parameters,
+        CancellationToken ct)
+    {
+        MarkQueryAttempted();
+        return Task.FromException<string?>(CreateException());
+    }
+
+    internal Exception RejectRawAccess(string surface) =>
+        _inner is MvPolicyEnforcingQueryPort enforcingPort
+            ? enforcingPort.RejectRawAccess(surface)
+            : new NotSupportedException($"Native MV apply host does not expose {surface}.");
+
+    public MvStateReadingBatchNotSupportedException CreateException() =>
+        new(_eventCount);
+
+    private void MarkQueryAttempted() =>
+        Interlocked.Exchange(ref _queryAttempted, 1);
 }
