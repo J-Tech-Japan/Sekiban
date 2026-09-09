@@ -267,11 +267,42 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
 
         // Park the activation's background catch-up behind a provider failure, then deliver only the later event through
         // the production stream entry point. The host is safe-empty but its unsafe max equals the durable store head.
-        Store.FailReads = true;
+        var activationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var backgroundEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var hook = CatchUpProductionTestHooks.Register(
+            DefaultServiceIdProvider.DefaultServiceId,
+            DomainTypes.FaultTestProjector.MultiProjectorName,
+            (point, _) =>
+            {
+                if (point == CatchUpProductionHookPoint.ActivationLifecycleStarted)
+                {
+                    activationStarted.TrySetResult();
+                }
+                else if (point == CatchUpProductionHookPoint.BackgroundEnteredGate)
+                {
+                    backgroundEntered.TrySetResult();
+                }
+
+                return Task.CompletedTask;
+            });
+
+        try
+        {
+            Store.FailReads = true;
+            var setupGrain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
+            await setupGrain.AddEventsAsync(new[] { later });
+            await activationStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await backgroundEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Store.FailedStreamReadObserved.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            // A failed setup assertion must not leave the shared provider in failure mode for fixture teardown or
+            // the next test. The production hook observations above prove this was an actual activation/timer path.
+            Store.FailReads = false;
+        }
+
         var grain = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
-        await grain.AddEventsAsync(new[] { later });
-        await Store.FailedStreamReadObserved.WaitAsync(TimeSpan.FromSeconds(5));
-        Store.FailReads = false;
 
         // Raw unsafe metadata would return Count=1 here and permanently miss the earlier poison. The first-query barrier
         // must instead start from the safe beginning, traverse the store, and re-establish the projection fault.
@@ -340,8 +371,10 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
         var releaseBackgroundEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var backgroundRejected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var invocationBefore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseInvocationBefore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var invocationEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseInvocation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var activationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var invocationResults = new List<CatchUpProductionObservation>();
         var observationsSync = new object();
 
@@ -352,6 +385,9 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
             {
                 switch (point)
                 {
+                    case CatchUpProductionHookPoint.ActivationLifecycleStarted:
+                        activationStarted.TrySetResult();
+                        break;
                     case CatchUpProductionHookPoint.BackgroundBeforeGate:
                         backgroundBefore.TrySetResult();
                         if (order == InterleaveOrder.InvocationFirst)
@@ -371,6 +407,10 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
                         break;
                     case CatchUpProductionHookPoint.InvocationBeforeGate:
                         invocationBefore.TrySetResult();
+                        if (order == InterleaveOrder.BackgroundFirst)
+                        {
+                            await releaseInvocationBefore.Task;
+                        }
                         break;
                     case CatchUpProductionHookPoint.InvocationEnteredGate:
                         invocationEntered.TrySetResult();
@@ -389,43 +429,84 @@ public class ProjectionFaultFirstQueryBarrierTests : IAsyncLifetime
             });
 
         var cold = Client.GetGrain<IMultiProjectionGrain>(DomainTypes.FaultTestProjector.MultiProjectorName);
-        var stateTask = cold.GetStateAsync();
-        var snapshotTask = cold.GetSnapshotJsonAsync();
-
-        if (order == InterleaveOrder.BackgroundFirst)
+        Task<ResultBox<MultiProjectionState>>? stateTask = null;
+        Task<ResultBox<string>>? snapshotTask = null;
+        try
         {
-            await backgroundEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            // Start one known first-query owner and prove this is the post-deactivation activation before admitting
+            // the second caller. This removes the old scheduler race where snapshot could own the barrier while the
+            // state task was already complete before the held-gate assertion.
+            stateTask = cold.GetStateAsync();
+            await activationStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await invocationBefore.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.False(stateTask.IsCompleted);
-            releaseBackgroundEntered.TrySetResult();
+            snapshotTask = cold.GetSnapshotJsonAsync();
+
+            if (order == InterleaveOrder.BackgroundFirst)
+            {
+                await backgroundEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                // Hold the first-query invocation at its pre-gate hook until the timer is positively inside the
+                // shared execution gate; then it must contend with that already-held background run.
+                releaseInvocationBefore.TrySetResult();
+                Assert.False(stateTask.IsCompleted);
+                releaseBackgroundEntered.TrySetResult();
+            }
+            else
+            {
+                await backgroundBefore.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                await invocationEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.False(stateTask.IsCompleted);
+                releaseBackgroundBefore.TrySetResult();
+                releaseInvocation.TrySetResult();
+                await backgroundRejected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+
+            var state = await stateTask.WaitAsync(TimeSpan.FromSeconds(5));
+            var snapshot = await snapshotTask.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(state.IsSuccess, state.IsSuccess ? "" : state.GetException().ToString());
+            Assert.True(snapshot.IsSuccess, snapshot.IsSuccess ? "" : snapshot.GetException().ToString());
+            Assert.Equal(durable.SortableUniqueIdValue, state.GetValue().LastSortableUniqueId);
+
+            CatchUpProductionObservation firstInvocation;
+            lock (observationsSync)
+            {
+                firstInvocation = Assert.Single(invocationResults);
+            }
+            Assert.Equal(CatchUpStartPositionSource.RestoredCheckpoint, firstInvocation.Start?.Source);
+            Assert.Null(firstInvocation.Start?.StartPosition);
+            Assert.Equal(durable.SortableUniqueIdValue, firstInvocation.Cursor?.Value);
+
+            // The two first callers shared one production _firstQueryGate invocation. Together with the resolver's
+            // nullable-presence race proof, this demonstrates that the restored-null START is leased exactly once.
         }
-        else
+        finally
         {
-            await backgroundBefore.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await invocationEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.False(stateTask.IsCompleted);
+            // Every held hook gate is released even when an assertion or bounded observation fails. Drain the two
+            // first-call tasks best-effort so a failed test cannot strand Orleans turns or poison fixture teardown.
             releaseBackgroundBefore.TrySetResult();
+            releaseBackgroundEntered.TrySetResult();
+            releaseInvocationBefore.TrySetResult();
             releaseInvocation.TrySetResult();
-            await backgroundRejected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var outstanding = new List<Task>(2);
+            if (stateTask is not null)
+            {
+                outstanding.Add(stateTask);
+            }
+            if (snapshotTask is not null)
+            {
+                outstanding.Add(snapshotTask);
+            }
+            if (outstanding.Count > 0)
+            {
+                try
+                {
+                    await Task.WhenAll(outstanding).WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch
+                {
+                    // Preserve the original assertion or observation failure; cleanup is bounded and best effort.
+                }
+            }
         }
-
-        var state = await stateTask.WaitAsync(TimeSpan.FromSeconds(5));
-        var snapshot = await snapshotTask.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.True(state.IsSuccess, state.IsSuccess ? "" : state.GetException().ToString());
-        Assert.True(snapshot.IsSuccess, snapshot.IsSuccess ? "" : snapshot.GetException().ToString());
-        Assert.Equal(durable.SortableUniqueIdValue, state.GetValue().LastSortableUniqueId);
-
-        CatchUpProductionObservation firstInvocation;
-        lock (observationsSync)
-        {
-            firstInvocation = Assert.Single(invocationResults);
-        }
-        Assert.Equal(CatchUpStartPositionSource.RestoredCheckpoint, firstInvocation.Start?.Source);
-        Assert.Null(firstInvocation.Start?.StartPosition);
-        Assert.Equal(durable.SortableUniqueIdValue, firstInvocation.Cursor?.Value);
-
-        // The two first callers shared one production _firstQueryGate invocation. Together with the resolver's
-        // nullable-presence race proof, this demonstrates that the restored-null START is leased exactly once.
     }
 
     private sealed class SiloConfigurator : ISiloConfigurator

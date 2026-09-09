@@ -189,61 +189,88 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         var deactivationObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using (MaterializedViewGrain.PushBeforeCatchUpTestGate(_ => Volatile.Read(ref catchUpGateReleased) == 0))
         {
-            await durableExecutor.ExecuteAsync(new CreateOrder
+            try
             {
-                OrderId = orderId,
-                CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-2)
-            });
-            await durableExecutor.ExecuteAsync(new AddOrderItem
-            {
-                OrderId = orderId,
-                ItemId = firstItemId,
-                ProductName = "Receipt barrier",
-                Quantity = 1,
-                UnitPrice = 15m,
-                AddedAt = DateTimeOffset.UtcNow.AddMinutes(-1)
-            });
+                await durableExecutor.ExecuteAsync(new CreateOrder
+                {
+                    OrderId = orderId,
+                    CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-2)
+                });
+                await durableExecutor.ExecuteAsync(new AddOrderItem
+                {
+                    OrderId = orderId,
+                    ItemId = firstItemId,
+                    ProductName = "Receipt barrier",
+                    Quantity = 1,
+                    UnitPrice = 15m,
+                    AddedAt = DateTimeOffset.UtcNow.AddMinutes(-1)
+                });
 
-            var durableEvents = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
-                .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
-                .ToList();
-            receiptEvent = durableEvents.Single(serializableEvent =>
-                serializableEvent.ToEvent(fixture.DomainTypes.EventTypes).GetValue().Payload is OrderItemAdded added &&
-                added.ItemId == firstItemId);
-            receiptSortableUniqueId = receiptEvent.SortableUniqueIdValue;
+                var durableEvents = (await fixture.EventStore.ReadAllSerializableEventsAsync()).GetValue()
+                    .OrderBy(serializableEvent => serializableEvent.SortableUniqueIdValue, StringComparer.Ordinal)
+                    .ToList();
+                receiptEvent = durableEvents.Single(serializableEvent =>
+                    serializableEvent.ToEvent(fixture.DomainTypes.EventTypes).GetValue().Payload is OrderItemAdded added &&
+                    added.ItemId == firstItemId);
+                receiptSortableUniqueId = receiptEvent.SortableUniqueIdValue;
 
-            using (MaterializedViewGrain.PushAfterStreamReceiptTestHookAsync(async candidate =>
-                   {
-                       receiptObserved.TrySetResult();
-                       await releaseDeactivation.Task.WaitAsync(TimeSpan.FromSeconds(10));
-                       await candidate.RequestDeactivationAsync();
-                       return true;
-                   }))
-            using (MaterializedViewGrain.PushDeactivationTestHook(_ => deactivationObserved.TrySetResult()))
-            {
-                var publish = stream.OnNextAsync(receiptEvent!);
-                await receiptObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                using (MaterializedViewGrain.PushAfterStreamReceiptTestHookAsync(async candidate =>
+                       {
+                           receiptObserved.TrySetResult();
+                           await releaseDeactivation.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                           await candidate.RequestDeactivationAsync();
+                           return true;
+                       }))
+                using (MaterializedViewGrain.PushDeactivationTestHook(_ => deactivationObserved.TrySetResult()))
+                {
+                    Task? publish = null;
+                    try
+                    {
+                        publish = stream.OnNextAsync(receiptEvent!);
+                        await receiptObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-                var beforeApply = await ReadOrderStateAsync();
-                Assert.Null(beforeApply.Order);
-                Assert.Equal(0, beforeApply.ItemCount);
-                Assert.Equal(receiptSortableUniqueId, beforeApply.Registry.LastStreamReceivedSortableUniqueId);
-                Assert.NotNull(beforeApply.Registry.LastStreamReceivedAt);
-                Assert.Null(beforeApply.Registry.LastStreamAppliedSortableUniqueId);
-                Assert.Null(beforeApply.Registry.LastCatchUpSortableUniqueId);
+                        var beforeApply = await ReadOrderStateAsync();
+                        Assert.Null(beforeApply.Order);
+                        Assert.Equal(0, beforeApply.ItemCount);
+                        Assert.Equal(receiptSortableUniqueId, beforeApply.Registry.LastStreamReceivedSortableUniqueId);
+                        Assert.NotNull(beforeApply.Registry.LastStreamReceivedAt);
+                        Assert.Null(beforeApply.Registry.LastStreamAppliedSortableUniqueId);
+                        Assert.Null(beforeApply.Registry.LastCatchUpSortableUniqueId);
 
-                releaseDeactivation.TrySetResult();
-                await publish;
-                await deactivationObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                        releaseDeactivation.TrySetResult();
+                        await publish;
+                        await deactivationObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                    }
+                    finally
+                    {
+                        // An assertion before the release must not strand the async stream callback or leave a
+                        // catch-up gate closed for fixture teardown and the next test.
+                        releaseDeactivation.TrySetResult();
+                        if (publish is not null)
+                        {
+                            try
+                            {
+                                await publish.WaitAsync(TimeSpan.FromSeconds(10));
+                                await deactivationObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                            }
+                            catch
+                            {
+                                // Preserve the original assertion/failure; cleanup is best effort and bounded.
+                            }
+                        }
+                    }
+                }
             }
-
-            Volatile.Write(ref catchUpGateReleased, 1);
+            finally
+            {
+                Volatile.Write(ref catchUpGateReleased, 1);
+            }
         }
 
         var restarted = fixture.Client.GetGrain<IMaterializedViewGrain>(grainKey);
         await restarted.EnsureStartedAsync();
-        // OrderSummaryMvV1 applies OrderItemAdded with `total = total + @Delta`; the total is intentionally
-        // non-idempotent, so a replay would change 15 to 30 and cannot hide behind an upsert assertion.
+        // OrderSummaryMvV1 applies OrderItemAdded additively. The registry AppliedEventVersion is the durable
+        // application counter, so version 2 together with total 15/items 1 makes a replay observable.
         await WaitUntilAsync(async () =>
         {
             var state = await ReadOrderStateAsync();
@@ -264,6 +291,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(receiptSortableUniqueId, afterReceiptRestart.Registry.CurrentPosition);
         Assert.Equal(receiptSortableUniqueId, afterReceiptRestart.Registry.LastCatchUpSortableUniqueId);
         Assert.Equal(receiptSortableUniqueId, afterReceiptRestart.Registry.LastStreamReceivedSortableUniqueId);
+        Assert.Equal(2, afterReceiptRestart.Registry.AppliedEventVersion);
         Assert.Null(afterReceiptRestart.Registry.LastStreamAppliedSortableUniqueId);
 
         await DeactivateAndAwaitAsync(restarted);
@@ -281,6 +309,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         }, timeoutMs: 15000);
 
         var beforeDuplicate = await ReadOrderStateAsync();
+        Assert.Equal(2, beforeDuplicate.Registry.AppliedEventVersion);
         var receiptAtBeforeDuplicate = beforeDuplicate.Registry.LastStreamReceivedAt
             ?? throw new InvalidOperationException("The committed receipt did not expose a stream receipt timestamp.");
 
@@ -295,17 +324,15 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         var duplicateReceiptState = await ReadOrderStateAsync();
         var duplicateReceiptAt = duplicateReceiptState.Registry.LastStreamReceivedAt
             ?? throw new InvalidOperationException("The duplicate receipt was not persisted.");
-        var postReceiptCatchUpAttemptAt = (await committedRestart.GetStatusAsync()).LastCatchUpAttemptAt
-            ?? throw new InvalidOperationException("The post-receipt state did not expose a catch-up attempt marker.");
+        // This is an application-clock baseline captured only after PostgreSQL positively observed the duplicate
+        // receipt. The next strictly newer attempt is compared only with this same application status clock.
+        var postReceiptCatchUpAttemptAt = (await committedRestart.GetStatusAsync()).LastCatchUpAttemptAt;
 
         await WaitUntilAsync(async () =>
         {
             var status = await committedRestart.GetStatusAsync();
             if (status.LastCatchUpAttemptAt is not { } catchUpAttemptAt ||
-                catchUpAttemptAt <= postReceiptCatchUpAttemptAt ||
-                status.LastCatchUpCompletedAt is not { } catchUpCompletedAt ||
-                catchUpCompletedAt <= postReceiptCatchUpAttemptAt ||
-                catchUpCompletedAt < catchUpAttemptAt ||
+                (postReceiptCatchUpAttemptAt is { } priorAttempt && catchUpAttemptAt <= priorAttempt) ||
                 status.CatchUpInProgress ||
                 status.IsCatchUpActive ||
                 status.CatchUpHalted ||
@@ -325,11 +352,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         var afterDuplicateStatus = await committedRestart.GetStatusAsync();
         Assert.True(
             afterDuplicateStatus.LastCatchUpAttemptAt is { } afterDuplicateAttemptAt &&
-            afterDuplicateAttemptAt > postReceiptCatchUpAttemptAt);
-        Assert.True(
-            afterDuplicateStatus.LastCatchUpCompletedAt is { } afterDuplicateCompletedAt &&
-            afterDuplicateCompletedAt > postReceiptCatchUpAttemptAt &&
-            afterDuplicateStatus.LastCatchUpAttemptAt <= afterDuplicateCompletedAt);
+            (postReceiptCatchUpAttemptAt is not { } priorAttempt || afterDuplicateAttemptAt > priorAttempt));
         Assert.False(afterDuplicateStatus.CatchUpInProgress);
         Assert.False(afterDuplicateStatus.IsCatchUpActive);
         Assert.False(afterDuplicateStatus.CatchUpHalted);
@@ -338,6 +361,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         var afterDuplicate = await ReadOrderStateAsync();
         Assert.Equal(beforeDuplicate.Registry.CurrentPosition, afterDuplicate.Registry.CurrentPosition);
         Assert.Equal(beforeDuplicate.Registry.LastCatchUpSortableUniqueId, afterDuplicate.Registry.LastCatchUpSortableUniqueId);
+        Assert.Equal(2, afterDuplicate.Registry.AppliedEventVersion);
         Assert.Equal(15m, afterDuplicate.Order?.Total);
         Assert.Equal(1, afterDuplicate.ItemCount);
         Assert.True(
@@ -383,6 +407,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(2, afterIdle.ItemCount);
         Assert.Equal(idleSortableUniqueId, afterIdle.Registry.CurrentPosition);
         Assert.Equal(idleSortableUniqueId, afterIdle.Registry.LastCatchUpSortableUniqueId);
+        Assert.Equal(3, afterIdle.Registry.AppliedEventVersion);
         Assert.Equal(receiptSortableUniqueId, afterIdle.Registry.LastStreamReceivedSortableUniqueId);
         Assert.Equal(idleReceiptAt, afterIdle.Registry.LastStreamReceivedAt);
         Assert.Null(afterIdle.Registry.LastStreamAppliedSortableUniqueId);
@@ -1073,12 +1098,21 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
                 WHERE forecast_id = @ForecastId;
                 """,
                 new { ForecastId = advancedForecastId });
+            var receipt = await connection.QuerySingleAsync<RegistryProjectionRow>(
+                """
+                SELECT last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
+                       last_stream_received_at AS LastStreamReceivedAt
+                FROM sekiban_mv_registry
+                WHERE view_name = 'WeatherForecast' AND logical_table = 'forecasts';
+                """);
 
             return delayedRow is not null &&
                    delayedRow.Location == "Loc-late-U" &&
                    delayedRow.LastSortableUniqueId == delayedUpdate.SortableUniqueIdValue &&
                    advancedRow is not null &&
-                   advancedRow.LastSortableUniqueId == advancedCreate.SortableUniqueIdValue;
+                   advancedRow.LastSortableUniqueId == advancedCreate.SortableUniqueIdValue &&
+                   receipt.LastStreamReceivedAt is not null &&
+                   receipt.LastStreamReceivedSortableUniqueId == delayedUpdate.SortableUniqueIdValue;
         }, timeoutMs: 15000);
 
         async Task<(RegistryProjectionRow Registry, WeatherProjectionRow? DelayedRow, WeatherProjectionRow? AdvancedRow)> ReadStateAsync()
@@ -1130,8 +1164,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.CurrentPosition);
         Assert.Equal(3, beforeDuplicate.Registry.AppliedEventVersion);
         Assert.Equal("catchup", beforeDuplicate.Registry.LastAppliedSource);
+        // The initial durable catch-up is allowed to have no stream receipt. The wait above separately proves that
+        // both sent hints reached the durable receipt marker before this duplicate baseline is captured.
         var baselineStreamReceivedAt = beforeDuplicate.Registry.LastStreamReceivedAt
-            ?? throw new InvalidOperationException("The initial durable catch-up did not record a stream receipt timestamp.");
+            ?? throw new InvalidOperationException("The two initial stream hints did not record a receipt timestamp.");
         Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId);
         Assert.Null(beforeDuplicate.Registry.LastStreamAppliedSortableUniqueId);
         Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.Registry.LastCatchUpSortableUniqueId);
