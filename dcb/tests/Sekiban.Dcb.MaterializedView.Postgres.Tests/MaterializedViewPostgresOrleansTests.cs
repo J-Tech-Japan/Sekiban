@@ -659,6 +659,7 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         MaterializedViewGrainStatus? lastStatus = null;
         var lastRowCount = -1;
         var lastUpdatedLocationCount = -1;
+        string? lastStreamReceivedSortableUniqueId = null;
         var deadline = DateTime.UtcNow.AddSeconds(15);
         while (DateTime.UtcNow < deadline)
         {
@@ -673,9 +674,16 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
                 WHERE is_deleted = FALSE
                   AND location LIKE '%-U';
                 """);
+            lastStreamReceivedSortableUniqueId = await connection.ExecuteScalarAsync<string?>(
+                """
+                SELECT last_stream_received_sortable_unique_id
+                FROM sekiban_mv_registry
+                WHERE view_name = 'WeatherForecast' AND logical_table = 'forecasts';
+                """);
             if (lastStatus.CurrentPosition == latestSortableUniqueId &&
                 lastRowCount == forecastCount &&
-                lastUpdatedLocationCount == forecastCount)
+                lastUpdatedLocationCount == forecastCount &&
+                lastStreamReceivedSortableUniqueId == latestSortableUniqueId)
             {
                 break;
             }
@@ -686,8 +694,9 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.True(
             lastStatus?.CurrentPosition == latestSortableUniqueId &&
             lastRowCount == forecastCount &&
-            lastUpdatedLocationCount == forecastCount,
-            $"Expected position={latestSortableUniqueId}, rows={forecastCount}, updatedRows={forecastCount} but got position={lastStatus?.CurrentPosition}, rows={lastRowCount}, updatedRows={lastUpdatedLocationCount}.");
+            lastUpdatedLocationCount == forecastCount &&
+            lastStreamReceivedSortableUniqueId == latestSortableUniqueId,
+            $"Expected position={latestSortableUniqueId}, rows={forecastCount}, updatedRows={forecastCount}, receipt={latestSortableUniqueId} but got position={lastStatus?.CurrentPosition}, rows={lastRowCount}, updatedRows={lastUpdatedLocationCount}, receipt={lastStreamReceivedSortableUniqueId}.");
 
         await using var verifyConnection = await fixture.OpenConnectionAsync();
         var rowCount = await verifyConnection.ExecuteScalarAsync<int>(
