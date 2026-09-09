@@ -1501,24 +1501,32 @@ public class CoreGeneralSekibanExecutor
                 metadata,
                 candidate.Tags.ToList(),
                 candidate.EventPayloadName);
-            var eventResult = serializable.ToEvent(_domainTypes.EventTypes);
-            if (!eventResult.IsSuccess)
+            // The serialized boundary historically lets the conditional store classify its request before any
+            // optional publisher-side payload binding. Keep that ordering when the opt-in gate is not configured;
+            // otherwise a malformed/private test payload could mask the provider's typed in-doubt result.
+            List<PreparedExecutorEvent>? preparedEvents = null;
+            var sizeEvaluation = ExecutorSizeGateEvaluation.Empty;
+            if (_executorSizeGateOptions is { Policies.Count: > 0 })
             {
-                return ResultBox.Error<SerializedConditionalCommitResult>(eventResult.GetException());
-            }
+                var eventResult = serializable.ToEvent(_domainTypes.EventTypes);
+                if (!eventResult.IsSuccess)
+                {
+                    return ResultBox.Error<SerializedConditionalCommitResult>(eventResult.GetException());
+                }
 
-            var preparedEvents = new List<PreparedExecutorEvent>
-            {
-                new(
-                    eventResult.GetValue(),
-                    serializable,
-                    serializable.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray())
-            };
-            var sizeEvaluation = ExecutorSizeGateEvaluator.Evaluate(
-                _executorSizeGateOptions,
-                preparedEvents,
-                ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
-                _eventPublisher);
+                preparedEvents =
+                [
+                    new(
+                        eventResult.GetValue(),
+                        serializable,
+                        serializable.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray())
+                ];
+                sizeEvaluation = ExecutorSizeGateEvaluator.Evaluate(
+                    _executorSizeGateOptions,
+                    preparedEvents,
+                    ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
+                    _eventPublisher);
+            }
 
             var appendResult = await conditionalStore.AppendIfUniqueAsync(
                 new ConditionalAppendRequest(request.IdempotencyKey, serializable),
@@ -1536,7 +1544,28 @@ public class CoreGeneralSekibanExecutor
 
             if (_eventPublisher != null && isNewlyAppended)
             {
-                await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
+                if (preparedEvents is not null)
+                {
+                    await PublishPreparedEventsAsync(preparedEvents, sizeEvaluation);
+                }
+                else
+                {
+                    // Preserve the legacy publisher behavior for an ungated serialized route: binding failure is
+                    // non-fatal after a successful append, and no binding is attempted before the provider call.
+                    var eventResult = serializable.ToEvent(_domainTypes.EventTypes);
+                    if (eventResult.IsSuccess)
+                    {
+                        var eventTags = serializable.Tags
+                            .Select(_domainTypes.TagTypes.GetTag)
+                            .ToList();
+                        await _eventPublisher.PublishAsync(
+                            new List<(Event Event, IReadOnlyCollection<ITag> Tags)>
+                            {
+                                (eventResult.GetValue(), eventTags.AsReadOnly())
+                            }.AsReadOnly(),
+                            CancellationToken.None);
+                    }
+                }
             }
 
             var result = new SerializedConditionalCommitResult(
