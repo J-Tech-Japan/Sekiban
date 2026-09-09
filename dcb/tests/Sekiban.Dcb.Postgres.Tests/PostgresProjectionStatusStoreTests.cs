@@ -119,7 +119,8 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
             {
                 SwitchKind = "candidate",
                 SwitchReason = "g63-proof",
-                SwitchedAtUtc = DateTimeOffset.UtcNow
+                // PostgreSQL timestamp with time zone stores microseconds; this value is exactly representable.
+                SwitchedAtUtc = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero).AddTicks(1_234_560)
             };
 
             var created = await store.UpsertAsync(first, 0);
