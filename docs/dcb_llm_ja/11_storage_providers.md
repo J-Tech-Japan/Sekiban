@@ -266,6 +266,9 @@ PostgreSQL SQLSTATE `42P01` を保持した failed `ResultBox`、必須 column �
 failed `ResultBox` になります。空の成功や false heartbeat には変換しません。expected-sequence CAS、service
 isolation、cancellation、switch/mutation discriminator の列は従来どおり保持され、無効な provisioning mode は
 status operation 開始前に拒否されます。
+将来の status schema version で必須 column が追加された場合、schema owner は upgrade step として
+`ProvisionProjectionStatusSchemaAsync` を実行する必要があり、PostgreSQL の `42703` はその upgrade が適用されていない
+場合に観測される missing-column の症状です。
 
 ### projection-status heartbeat の回復 (SEK-G35 / dcb-v10.16.0)
 

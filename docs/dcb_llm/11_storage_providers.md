@@ -271,6 +271,9 @@ PostgreSQL SQLSTATE `42P01`, and a missing required column remains a failed `Res
 Neither case becomes an empty success or a false heartbeat. Expected-sequence CAS, service isolation, cancellation,
 and the switch/mutation discriminator columns remain unchanged. Invalid provisioning modes are rejected before a
 status operation starts.
+When a future status-schema version adds a required column, the schema owner must run
+`ProvisionProjectionStatusSchemaAsync` as the upgrade step, and PostgreSQL `42703` is the observable missing-column
+symptom when that upgrade has not been applied.
 
 ### Projection-status heartbeat recovery (SEK-G35 / dcb-v10.16.0)
 

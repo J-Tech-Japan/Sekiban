@@ -162,6 +162,52 @@ public sealed class PostgresProjectionStatusStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PreProvisionedOptions_ReachCreateForServiceAndDiStore_WithoutDdl()
+    {
+        await _fixture.DbContextFactory.ProvisionProjectionStatusSchemaAsync();
+        var runtime = await CreateDmlOnlyRuntimePrincipalAsync(includeStatusTable: true);
+        try
+        {
+            var commands = new List<string>();
+            var factory = new OneContextFactory(runtime.ConnectionString, commands);
+            var options = new ProjectionStatusOptions
+            {
+                ProvisioningMode = ProjectionStatusProvisioningMode.PreProvisioned
+            };
+
+            var factoryStore = new PostgresMultiProjectionStateStoreFactory(factory, null, options);
+            var serviceStore = Assert.IsAssignableFrom<IProjectionStatusStore>(
+                factoryStore.CreateForService("factory-service"));
+            var factoryWrite = await serviceStore.UpsertAsync(
+                Heartbeat("factory-activation", 1) with { ServiceId = "factory-service" },
+                0);
+            Assert.True(factoryWrite.IsSuccess, factoryWrite.IsSuccess ? string.Empty : factoryWrite.GetException().ToString());
+            Assert.True(factoryWrite.GetValue().Committed);
+
+            var services = new ServiceCollection();
+            services.AddSingleton(options);
+            services.AddSekibanDcbPostgres(runtime.ConnectionString);
+            services.AddSingleton<IDbContextFactory<SekibanDcbDbContext>>(_ => factory);
+            using var provider = services.BuildServiceProvider();
+            var diStore = provider.GetRequiredService<IProjectionStatusStore>();
+            var diWrite = await diStore.UpsertAsync(
+                Heartbeat("di-activation", 1) with { ServiceId = DefaultServiceIdProvider.DefaultServiceId },
+                0);
+            Assert.True(diWrite.IsSuccess, diWrite.IsSuccess ? string.Empty : diWrite.GetException().ToString());
+            Assert.True(diWrite.GetValue().Committed);
+
+            // If either path drops PreProvisioned while forwarding options, legacy auto-provisioning attempts DDL
+            // under this non-owner role and the write fails; the recording factory also proves no DDL was issued.
+            Assert.NotEmpty(commands);
+            Assert.DoesNotContain(commands, ContainsDdl);
+        }
+        finally
+        {
+            await DropRuntimePrincipalAsync(runtime.Role);
+        }
+    }
+
+    [Fact]
     public async Task PreProvisionedRuntime_MissingTable_Returns42P01WithoutDdlOrFalseSuccess()
     {
         var runtime = await CreateDmlOnlyRuntimePrincipalAsync(includeStatusTable: false);
