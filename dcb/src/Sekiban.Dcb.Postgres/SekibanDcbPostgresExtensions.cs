@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Snapshots;
 using Sekiban.Dcb.Storage;
 using System.Text.Json;
 namespace Sekiban.Dcb.Postgres;
@@ -39,6 +40,27 @@ public static class SekibanDcbPostgresExtensions
 
         return services;
     }
+
+    /// <summary>
+    ///     Provisions the PostgreSQL projection-status registry from an owner-controlled startup or migration step.
+    ///     Runtime stores configured for <see cref="ProjectionStatusProvisioningMode.PreProvisioned" /> never invoke
+    ///     this operation themselves.
+    /// </summary>
+    public static async Task ProvisionProjectionStatusSchemaAsync(
+        this IDbContextFactory<SekibanDcbDbContext> contextFactory,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await PostgresProjectionStatusSchema.ProvisionAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Owner convenience overload for hosts that already have a service provider.</summary>
+    public static Task ProvisionProjectionStatusSchemaAsync(
+        this IServiceProvider serviceProvider,
+        CancellationToken cancellationToken = default) =>
+        serviceProvider.GetRequiredService<IDbContextFactory<SekibanDcbDbContext>>()
+            .ProvisionProjectionStatusSchemaAsync(cancellationToken);
 
     /// <summary>
     ///     Aspire環境でSekiban DCB PostgreSQLを設定し、マイグレーション機能を含める
@@ -105,14 +127,7 @@ public static class SekibanDcbPostgresExtensions
         });
         services.AddSingleton<IEventTypes>(sp => sp.GetRequiredService<DcbDomainTypes>().EventTypes);
 
-        // IEventStore実装を登録
-        services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
-        services.TryAddSingleton<IEventStoreFactory, PostgresEventStoreFactory>();
-        services.AddEventStoreAliases<PostgresEventStore>();
-        services.AddConditionalEventStoreCapabilities();
-        services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
-        services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
-        services.AddSekibanDcbProjectionStatusReader();
+        AddPostgresEventStoreServices(services);
 
         return services;
     }
@@ -329,7 +344,19 @@ public static class SekibanDcbPostgresExtensions
         services.TryAddSingleton<IEventStoreFactory, PostgresEventStoreFactory>();
         services.AddEventStoreAliases<PostgresEventStore>();
         services.AddConditionalEventStoreCapabilities();
-        services.AddSingleton<IMultiProjectionStateStore, PostgresMultiProjectionStateStore>();
+        services.AddSingleton<PostgresMultiProjectionStateStore>(sp =>
+            new PostgresMultiProjectionStateStore(
+                sp.GetRequiredService<IDbContextFactory<SekibanDcbDbContext>>(),
+                sp.GetRequiredService<IServiceIdProvider>(),
+                sp.GetService<IBlobStorageSnapshotAccessor>(),
+                sp.GetRequiredService<ProjectionStatusOptions>()));
+        services.AddSingleton<IMultiProjectionStateStore>(sp =>
+            sp.GetRequiredService<PostgresMultiProjectionStateStore>());
+        services.AddSingleton<IMultiProjectionStateStoreFactory>(sp =>
+            new PostgresMultiProjectionStateStoreFactory(
+                sp.GetRequiredService<IDbContextFactory<SekibanDcbDbContext>>(),
+                sp.GetService<IBlobStorageSnapshotAccessor>(),
+                sp.GetRequiredService<ProjectionStatusOptions>()));
         services.AddSingleton<IProjectionStatusStore>(sp => (sp.GetService<IMultiProjectionStateStore>() as IProjectionStatusStore)!);
         services.AddSekibanDcbProjectionStatusReader();
     }

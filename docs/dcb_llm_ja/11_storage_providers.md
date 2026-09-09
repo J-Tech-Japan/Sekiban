@@ -235,6 +235,41 @@ provider から決まり、ホストの endpoint は既定で deny としてく�
 例えば `RequireAuthorization("ProjectionStatusOperator")` を指定します。`AllowAnonymous` は使わず、既存の
 `ISerializedSekibanDcbExecutor` は変更しません。これは dcb-v10.10.0 の SEK-G24 release note です。
 
+### PostgreSQL projection-status の実行時権限 (SEK-G63)
+
+既存アプリケーションとの互換性のため、PostgreSQL の status storage は従来の `LegacyAutoProvision` を既定値
+として維持します。実行時 principal を DML 専用にする場合は、古い store/factory constructor を変更せずに
+`PreProvisioned` を明示できます。まず schema owner の startup または migration で共有の provision API を一度
+実行し、その後 runtime で mode を登録します。
+
+```csharp
+// schema owner で runtime principal に権限を付与する前に実行:
+await ownerServices.ProvisionProjectionStatusSchemaAsync();
+
+// runtime 側（既定値は LegacyAutoProvision のまま）:
+runtimeServices.AddSingleton(new ProjectionStatusOptions
+{
+    ProvisioningMode = ProjectionStatusProvisioningMode.PreProvisioned
+});
+runtimeServices.AddSekibanDcbPostgres(connectionString);
+```
+
+同じ `ProjectionStatusOptions` は、直接生成する `PostgresMultiProjectionStateStore` と
+`PostgresMultiProjectionStateStoreFactory.CreateForService` にも適用されます。加法的な options-aware overload
+を追加していますが、元の public constructor signature は保持しています。pre-provisioned mode の
+`UpsertAsync` と `ListAsync` は status の DML だけを発行し、`CREATE`、`ALTER`、migration、repair SQL は実行しません。
+runtime principal に必要なのは `CONNECT`、schema の `USAGE`、status table の `SELECT`/`INSERT`/`UPDATE`/`DELETE`
+であり、schema や table の owner 権限ではありません。
+
+pre-provisioned schema が存在しない、または互換性がない場合は fail-closed です。table がない場合は
+PostgreSQL SQLSTATE `42P01` を保持した failed `ResultBox`、必須 column がない場合は SQLSTATE `42703` を保持した
+failed `ResultBox` になります。空の成功や false heartbeat には変換しません。expected-sequence CAS、service
+isolation、cancellation、switch/mutation discriminator の列は従来どおり保持され、無効な provisioning mode は
+status operation 開始前に拒否されます。
+将来の status schema version で必須 column が追加された場合、schema owner は upgrade step として
+`ProvisionProjectionStatusSchemaAsync` を実行する必要があり、PostgreSQL の `42703` はその upgrade が適用されていない
+場合に観測される missing-column の症状です。
+
 ### projection-status heartbeat の回復 (SEK-G35 / dcb-v10.16.0)
 
 projection-status heartbeat は activation 時点で writer identity 全体（service、projector 名、projector version、cluster）を

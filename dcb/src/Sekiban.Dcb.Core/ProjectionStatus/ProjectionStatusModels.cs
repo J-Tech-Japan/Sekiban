@@ -372,6 +372,16 @@ public enum ProjectionStatusVersionMatch
     Mismatch = 2
 }
 
+/// <summary>
+///     Controls who is allowed to create or migrate the PostgreSQL projection-status registry.
+///     The legacy value preserves the historical runtime auto-provisioning behavior.
+/// </summary>
+public enum ProjectionStatusProvisioningMode
+{
+    LegacyAutoProvision = 0,
+    PreProvisioned = 1
+}
+
 /// <summary>Configuration for the passive projection status registry and read-side sampling.</summary>
 public class ProjectionStatusOptions
 {
@@ -409,6 +419,25 @@ public class ProjectionStatusOptions
 
     /// <summary>Allows a host to turn the heartbeat writer off while retaining the read surface.</summary>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    ///     Selects whether PostgreSQL status calls may provision the registry. Hosts using a DML-only runtime principal
+    ///     must select <see cref="ProjectionStatusProvisioningMode.PreProvisioned" /> and provision the schema from an
+    ///     owner-controlled startup or migration step first.
+    /// </summary>
+    public ProjectionStatusProvisioningMode ProvisioningMode { get; set; } = ProjectionStatusProvisioningMode.LegacyAutoProvision;
+
+    /// <summary>Rejects unsupported option values before a status read or write starts.</summary>
+    public void Validate()
+    {
+        if (!Enum.IsDefined(ProvisioningMode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(ProvisioningMode),
+                ProvisioningMode,
+                "The projection-status provisioning mode is not supported.");
+        }
+    }
 }
 
 /// <summary>Descriptive alias used by hosts that call the feature a registry.</summary>

@@ -28,15 +28,31 @@ public partial class PostgresMultiProjectionStateStore :
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
     private readonly IServiceIdProvider _serviceIdProvider;
+    private readonly ProjectionStatusOptions _projectionStatusOptions;
 
     public PostgresMultiProjectionStateStore(
         IDbContextFactory<SekibanDcbDbContext> contextFactory,
         IServiceIdProvider serviceIdProvider,
         IBlobStorageSnapshotAccessor? blobAccessor = null)
+        : this(contextFactory, serviceIdProvider, blobAccessor, new ProjectionStatusOptions())
     {
-        _contextFactory = contextFactory;
+    }
+
+    /// <summary>
+    ///     Additive options-aware constructor. The historical constructor above remains the legacy auto-provisioning
+    ///     default; pre-provisioned hosts pass the options explicitly without changing the public old ABI.
+    /// </summary>
+    public PostgresMultiProjectionStateStore(
+        IDbContextFactory<SekibanDcbDbContext> contextFactory,
+        IServiceIdProvider serviceIdProvider,
+        IBlobStorageSnapshotAccessor? blobAccessor,
+        ProjectionStatusOptions projectionStatusOptions)
+    {
+        _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _blobAccessor = blobAccessor;
+        _projectionStatusOptions = projectionStatusOptions ?? throw new ArgumentNullException(nameof(projectionStatusOptions));
+        _projectionStatusOptions.Validate();
     }
 
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
