@@ -115,8 +115,9 @@ public sealed class ExecutorSizeGateTests
             new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
                 "destination",
                 ExecutorSizeRepresentation.Destination,
-                maxBytesPerEvent: 9,
-                measurement: new DelegateMeasurement(_ => ExecutorSizeMeasurementResult.Exact(10)))),
+                maxBytesPerEvent: 10,
+                measurement: new DelegateMeasurement(context =>
+                    ExecutorSizeMeasurementResult.Exact(context.DestinationKey == "destination-2" ? 11 : 8)))),
             publisher);
 
         var destinationResult = await destinationExecutor.ExecuteAsync(new CreateWeatherForecast
@@ -127,9 +128,174 @@ public sealed class ExecutorSizeGateTests
             TemperatureC = 21
         });
 
-        Assert.IsType<ExecutorSizeLimitExceededException>(destinationResult.GetException());
+        var destinationException = Assert.IsType<ExecutorSizeLimitExceededException>(destinationResult.GetException());
+        Assert.Equal(11, destinationException.MeasuredBytes);
+        Assert.Equal("destination-2", destinationException.DestinationKey);
         Assert.Empty((await destinationStore.ReadAllSerializableEventsAsync()).GetValue());
         Assert.Equal(0, publisher.PlannedPublishCalls);
+    }
+
+    [Fact]
+    public async Task DestinationFanOut_EnforcesEachDestinationIndependently()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var store = new CoreInMemoryEventStore(domain.EventTypes);
+        var publisher = new RecordingDestinationPublisher();
+        var executor = CreateExecutor(
+            domain,
+            store,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                "destination",
+                ExecutorSizeRepresentation.Destination,
+                maxBytesPerEvent: 10,
+                measurement: new DelegateMeasurement(_ => ExecutorSizeMeasurementResult.Exact(10)))),
+            publisher);
+
+        var result = await executor.ExecuteAsync(new CreateWeatherForecast
+        {
+            ForecastId = Guid.NewGuid(),
+            Location = "Tokyo",
+            Date = new DateOnly(2026, 9, 9),
+            TemperatureC = 21
+        });
+
+        Assert.True(result.IsSuccess);
+        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Equal(1, publisher.PlannedPublishCalls);
+    }
+
+    [Fact]
+    public async Task SerializedBatch_PerEventLimitRejectsTheLastEventBeforeAnyWrite()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var store = new CoreInMemoryEventStore(domain.EventTypes);
+        var first = CreateCandidate(domain, Guid.NewGuid());
+        var last = CreateCandidate(domain, Guid.NewGuid(), summary: new string('x', 256));
+        var publisher = new RecordingDestinationPublisher();
+        var executor = CreateExecutor(
+            domain,
+            store,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                "logical-event",
+                ExecutorSizeRepresentation.LogicalSerializedEventUtf8,
+                maxBytesPerEvent: first.Payload.Length,
+                measurement: new DelegateMeasurement(context =>
+                    ExecutorSizeMeasurementResult.Exact(context.SerializedEvent.Payload.Length)))),
+            publisher);
+
+        var result = await executor.CommitSerializableEventsAsync(
+            new SerializedCommitRequest(
+                [first, last],
+                [
+                    new ConsistencyTagEntry(first.Tags[0], ""),
+                    new ConsistencyTagEntry(last.Tags[0], "")
+                ]));
+
+        var exception = Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
+        Assert.False(exception.IsOperationLimit);
+        Assert.Equal(1, exception.EventIndex);
+        Assert.Equal(last.Payload.Length, exception.MeasuredBytes);
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Equal(0, publisher.PlannedPublishCalls);
+    }
+
+    [Fact]
+    public async Task LogicalUtf8MetadataOverheadChangesTheVerdictAtPinnedBytes()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var policy = new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+            "logical-event",
+            ExecutorSizeRepresentation.LogicalSerializedEventUtf8,
+            maxBytesPerEvent: 1));
+
+        var minimalStore = new CoreInMemoryEventStore(domain.EventTypes);
+        var minimalExecutor = CreateExecutor(
+            domain,
+            minimalStore,
+            policy,
+            executedUserProvider: new FixedExecutedUserProvider("u"));
+        var minimalResult = await minimalExecutor.ExecuteAsync(new CreateWeatherForecast
+        {
+            ForecastId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            Location = "Tokyo",
+            Date = new DateOnly(2026, 9, 9),
+            TemperatureC = 21,
+            Summary = "fixed"
+        });
+        var minimalException = Assert.IsType<ExecutorSizeLimitExceededException>(minimalResult.GetException());
+        Assert.Equal(525, minimalException.MeasuredBytes);
+
+        var acceptedStore = new CoreInMemoryEventStore(domain.EventTypes);
+        var acceptedExecutor = CreateExecutor(
+            domain,
+            acceptedStore,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                "logical-event",
+                ExecutorSizeRepresentation.LogicalSerializedEventUtf8,
+                maxBytesPerEvent: minimalException.MeasuredBytes)),
+            executedUserProvider: new FixedExecutedUserProvider("u"));
+        var acceptedResult = await acceptedExecutor.ExecuteAsync(new CreateWeatherForecast
+        {
+            ForecastId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            Location = "Tokyo",
+            Date = new DateOnly(2026, 9, 9),
+            TemperatureC = 21,
+            Summary = "fixed"
+        });
+        Assert.True(acceptedResult.IsSuccess);
+        Assert.Single((await acceptedStore.ReadAllSerializableEventsAsync()).GetValue());
+
+        var richStore = new CoreInMemoryEventStore(domain.EventTypes);
+        var richExecutor = CreateExecutor(
+            domain,
+            richStore,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                "logical-event",
+                ExecutorSizeRepresentation.LogicalSerializedEventUtf8,
+                maxBytesPerEvent: minimalException.MeasuredBytes)),
+            executedUserProvider: new FixedExecutedUserProvider("user-with-metadata-overhead"));
+        var richResult = await richExecutor.ExecuteAsync(new CreateWeatherForecast
+        {
+            ForecastId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            Location = "Tokyo",
+            Date = new DateOnly(2026, 9, 9),
+            TemperatureC = 21,
+            Summary = "fixed"
+        });
+
+        var richException = Assert.IsType<ExecutorSizeLimitExceededException>(richResult.GetException());
+        Assert.True(richException.MeasuredBytes > minimalException.MeasuredBytes);
+        Assert.Empty((await minimalStore.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Empty((await richStore.ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    [Fact]
+    public async Task SizeRejection_CancelsConsistencyReservations()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var store = new CoreInMemoryEventStore(domain.EventTypes);
+        var accessor = new InMemoryObjectAccessor(store, domain);
+        var executor = CreateExecutor(
+            domain,
+            store,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                "logical-event",
+                ExecutorSizeRepresentation.LogicalSerializedEventUtf8,
+                maxBytesPerEvent: 1)),
+            actorAccessor: accessor);
+        var eventId = Guid.NewGuid();
+        var tag = $"WeatherForecast:{eventId}";
+
+        var result = await executor.CommitSerializableEventsAsync(
+            new SerializedCommitRequest(
+                [CreateCandidate(domain, eventId)],
+                [new ConsistencyTagEntry(tag, "")]));
+
+        Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
+        var actorResult = await accessor.GetActorAsync<GeneralTagConsistentActor>(tag);
+        Assert.True(actorResult.IsSuccess);
+        Assert.Empty(await actorResult.GetValue().GetActiveReservationsAsync());
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
     }
 
     [Fact]
@@ -429,8 +595,10 @@ public sealed class ExecutorSizeGateTests
         DcbDomainTypes domain,
         IEventStore store,
         ExecutorSizeGateOptions options,
-        IEventPublisher? publisher = null) =>
-        new(store, new InMemoryObjectAccessor(store, domain), domain, options, publisher, null);
+        IEventPublisher? publisher = null,
+        IActorObjectAccessor? actorAccessor = null,
+        IExecutedUserProvider? executedUserProvider = null) =>
+        new(store, actorAccessor ?? new InMemoryObjectAccessor(store, domain), domain, options, publisher, executedUserProvider);
 
     private static SerializedCommitRequest SingleSerializedRequest(DcbDomainTypes domain, Guid id)
     {
@@ -440,9 +608,12 @@ public sealed class ExecutorSizeGateTests
             [new ConsistencyTagEntry($"WeatherForecast:{id}", "")]);
     }
 
-    private static SerializableEventCandidate CreateCandidate(DcbDomainTypes domain, Guid id)
+    private static SerializableEventCandidate CreateCandidate(
+        DcbDomainTypes domain,
+        Guid id,
+        string summary = "size gate")
     {
-        var payload = new WeatherForecastCreated(id, "Tokyo", new DateOnly(2026, 9, 9), 21, "size gate");
+        var payload = new WeatherForecastCreated(id, "Tokyo", new DateOnly(2026, 9, 9), 21, summary);
         return new SerializableEventCandidate(
             JsonSerializer.SerializeToUtf8Bytes(payload, domain.JsonSerializerOptions),
             nameof(WeatherForecastCreated),
@@ -460,6 +631,11 @@ public sealed class ExecutorSizeGateTests
         : IExecutorSizeMeasurement
     {
         public ExecutorSizeMeasurementResult Measure(ExecutorSizeMeasurementContext context) => measure(context);
+    }
+
+    private sealed class FixedExecutedUserProvider(string value) : IExecutedUserProvider
+    {
+        public string GetExecutedUser() => value;
     }
 
     private sealed class RecordingDestinationPublisher : IEventPublisher, IExecutorSizeDestinationPublisher

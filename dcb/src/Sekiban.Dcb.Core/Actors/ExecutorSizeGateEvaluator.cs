@@ -141,31 +141,38 @@ internal static class ExecutorSizeGateEvaluator
                 continue;
             }
 
-            var eventTotals = measurements
-                .GroupBy(m => m.Index)
-                .Select(group => group.Sum(m => m.Bytes))
-                .ToArray();
-
             if (policy.MaxBytesPerEvent is { } eventLimit)
             {
-                for (var index = 0; index < eventTotals.Length; index++)
+                // Destination event limits apply to each captured destination independently. A cross-destination
+                // operation budget exists only when the caller explicitly configures MaxBytesPerOperation below.
+                if (policy.Representation == ExecutorSizeRepresentation.Destination)
                 {
-                    if (eventTotals[index] <= eventLimit)
+                    foreach (var measurement in measurements)
                     {
-                        continue;
-                    }
+                        if (measurement.Bytes <= eventLimit)
+                        {
+                            continue;
+                        }
 
-                    var offending = measurements.First(m => m.Index == index);
-                    throw new ExecutorSizeLimitExceededException(
-                        policy.Scope,
-                        policy.Representation,
-                        eventLimit,
-                        eventTotals[index],
-                        offending.Prepared.Event.Id,
-                        index,
-                        false,
-                        offending.DestinationKey,
-                        offending.Certified);
+                        ThrowEventLimitExceeded(policy, eventLimit, measurement);
+                    }
+                }
+                else
+                {
+                    var eventTotals = measurements
+                        .GroupBy(m => m.Index)
+                        .Select(group => group.Sum(m => m.Bytes))
+                        .ToArray();
+
+                    for (var index = 0; index < eventTotals.Length; index++)
+                    {
+                        if (eventTotals[index] <= eventLimit)
+                        {
+                            continue;
+                        }
+
+                        ThrowEventLimitExceeded(policy, eventLimit, measurements.First(m => m.Index == index), eventTotals[index]);
+                    }
                 }
             }
 
@@ -200,6 +207,22 @@ internal static class ExecutorSizeGateEvaluator
 
         return new ExecutorSizeGateEvaluation(diagnostics, destinationPlans);
     }
+
+    private static void ThrowEventLimitExceeded(
+        ExecutorSizePolicy policy,
+        long eventLimit,
+        (PreparedExecutorEvent Prepared, int Index, long Bytes, string? DestinationKey, bool Certified) measurement,
+        long? measuredBytes = null) =>
+        throw new ExecutorSizeLimitExceededException(
+            policy.Scope,
+            policy.Representation,
+            eventLimit,
+            measuredBytes ?? measurement.Bytes,
+            measurement.Prepared.Event.Id,
+            measurement.Index,
+            false,
+            measurement.DestinationKey,
+            measurement.Certified);
 
     private static (PreparedExecutorEvent Prepared, int Index, long Bytes, string? DestinationKey, bool Certified)
         ToComparable(

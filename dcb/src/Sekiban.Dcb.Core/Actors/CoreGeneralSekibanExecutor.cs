@@ -190,6 +190,13 @@ public class CoreGeneralSekibanExecutor
         return string.IsNullOrEmpty(value) ? DefaultExecutedUser : value;
     }
 
+    private ExecutorSizeGateEvaluation EvaluateSizeGate(IReadOnlyList<PreparedExecutorEvent> preparedEvents) =>
+        ExecutorSizeGateEvaluator.Evaluate(
+            _executorSizeGateOptions,
+            preparedEvents,
+            ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
+            _eventPublisher);
+
     private async Task PublishPreparedEventsAsync(
         IReadOnlyList<PreparedExecutorEvent> preparedEvents,
         ExecutorSizeGateEvaluation sizeEvaluation)
@@ -433,11 +440,7 @@ public class CoreGeneralSekibanExecutor
                         e.ToSerializableEvent(_domainTypes.EventTypes),
                         e.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray()))
                     .ToList();
-                var sizeEvaluation = ExecutorSizeGateEvaluator.Evaluate(
-                    _executorSizeGateOptions,
-                    preparedEvents,
-                    ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
-                    _eventPublisher);
+                var sizeEvaluation = EvaluateSizeGate(preparedEvents);
 
                 IReadOnlyList<Event> writtenEvents;
                 IReadOnlyList<TagWriteResult> tagWriteResults;
@@ -843,11 +846,7 @@ public class CoreGeneralSekibanExecutor
                         serializableEvent,
                         serializableEvent.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray()));
                 }
-                var sizeEvaluation = ExecutorSizeGateEvaluator.Evaluate(
-                    _executorSizeGateOptions,
-                    preparedEvents,
-                    ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
-                    _eventPublisher);
+                var sizeEvaluation = EvaluateSizeGate(preparedEvents);
 
                 // Step 5: V2 is store-enforced; legacy/V1 keeps the exact old unconditional call and result shape.
                 IReadOnlyList<SerializableEvent> writtenEvents;
@@ -1406,11 +1405,7 @@ public class CoreGeneralSekibanExecutor
                     serializable,
                     single.Tags.ToArray())
             };
-            var sizeEvaluation = ExecutorSizeGateEvaluator.Evaluate(
-                _executorSizeGateOptions,
-                preparedEvents,
-                ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
-                _eventPublisher);
+            var sizeEvaluation = EvaluateSizeGate(preparedEvents);
 
             var appendResult = await conditionalStore.AppendIfUniqueAsync(
                 new ConditionalAppendRequest(conditional.IdempotencyKey, serializable),
@@ -1521,11 +1516,7 @@ public class CoreGeneralSekibanExecutor
                         serializable,
                         serializable.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray())
                 ];
-                sizeEvaluation = ExecutorSizeGateEvaluator.Evaluate(
-                    _executorSizeGateOptions,
-                    preparedEvents,
-                    ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
-                    _eventPublisher);
+                sizeEvaluation = EvaluateSizeGate(preparedEvents);
             }
 
             var appendResult = await conditionalStore.AppendIfUniqueAsync(
