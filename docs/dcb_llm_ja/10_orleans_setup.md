@@ -170,3 +170,12 @@ builder.Services.AddSingleton<ISekibanExecutor, OrleansDcbExecutor>();
 ## Orleans なしでのテスト
 
 `InMemorySekibanExecutor` を使えばサイロ無しでもコマンド処理を試せます。
+
+## Orleans でのオプション executor サイズゲート
+
+厳密な永続化前の予算を使う場合は、`OrleansDcbExecutor` を解決する前に `AddSekibanDcbExecutorSizeGate` を登録します。
+Orleans publisher は resolver の destination plan と service identity を一度キャプチャし、enqueue に同じ plan を再利用するため、
+strict の destination policy はその capability が利用できる場合だけ成立します。利用できない、または identity が一致しない
+destination policy を non-strict で使う場合は明示的な診断を伴って書き込みます。このゲートが測定するのは executor が生成した
+logical event または宣言済み provider capability であり、Azure Queue の wire envelope・batch・retry の上限は主張せず、Orleans の
+retry 動作も変更しません。

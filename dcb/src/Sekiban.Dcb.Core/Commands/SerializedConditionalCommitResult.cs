@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Storage;
 namespace Sekiban.Dcb.Commands;
 
@@ -19,4 +20,7 @@ public record SerializedConditionalCommitResult(
     TimeSpan Duration)
 {
     public const int CurrentVersion = 1;
+
+    /// <summary>Structured non-strict size-gate diagnostics; empty means every configured scope validated.</summary>
+    public IReadOnlyList<ExecutorSizeDiagnostic> SizeGateDiagnostics { get; init; } = Array.Empty<ExecutorSizeDiagnostic>();
 }

@@ -6,6 +6,7 @@ using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Actors;
@@ -45,6 +46,17 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         _core = new CoreGeneralSekibanExecutor(eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider);
     }
 
+    /// <summary>Additive opt-in size-gate constructor; legacy construction remains ungated.</summary>
+    public GeneralSekibanExecutor(IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        ExecutorSizeGateOptions executorSizeGateOptions, IEventPublisher? eventPublisher = null,
+        IExecutedUserProvider? executedUserProvider = null)
+        : this(CreateResultConstruction(
+            actorAccessor,
+            () => CoreGeneralSekibanExecutorFactory.CreateWithGate(
+                eventStore, actorAccessor, domainTypes, executorSizeGateOptions, eventPublisher, executedUserProvider)))
+    {
+    }
+
     /// <summary>Creates an executor using the registered process-wide monotonic id allocator.</summary>
     public GeneralSekibanExecutor(
         IEventStore eventStore,
@@ -78,19 +90,39 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
         IServiceIdProvider serviceIdProvider,
         SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy)
-    {
-        _actorAccessor = actorAccessor;
-        _core = new CoreGeneralSekibanExecutor(
-            eventStore,
+        : this(CreateResultConstruction(
             actorAccessor,
-            domainTypes,
-            eventPublisher,
-            executedUserProvider,
-            sortableUniqueIdGenerator,
-            sortableUniqueIdSeedCoordinator,
-            serviceIdProvider,
-            sortableUniqueIdWaitPolicy);
+            () => CoreGeneralSekibanExecutorFactory.CreateWithServices(
+                eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider,
+                sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator, serviceIdProvider,
+                sortableUniqueIdWaitPolicy, null)))
+    {
     }
+
+    internal GeneralSekibanExecutor(IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher, IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator, SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider, SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy,
+        ExecutorSizeGateOptions? executorSizeGateOptions)
+        : this(CreateResultConstruction(
+            actorAccessor,
+            () => CoreGeneralSekibanExecutorFactory.CreateWithServices(
+                eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider,
+                sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator, serviceIdProvider,
+                sortableUniqueIdWaitPolicy, executorSizeGateOptions)))
+    {
+    }
+
+    private GeneralSekibanExecutor(GeneralSekibanExecutorConstruction construction)
+    {
+        _actorAccessor = construction.ActorAccessor;
+        _core = construction.Core;
+    }
+
+    private static GeneralSekibanExecutorConstruction CreateResultConstruction(
+        IActorObjectAccessor actorAccessor,
+        Func<CoreGeneralSekibanExecutor> createCore) =>
+        new(actorAccessor, createCore());
 
     /// <summary>
     ///     This executor is whatever its accessor is. It has no runtime of its own — commands go wherever the accessor

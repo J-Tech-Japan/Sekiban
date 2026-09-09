@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Commands;
 
@@ -9,4 +10,8 @@ namespace Sekiban.Dcb.Commands;
 public record SerializedCommitResult(
     IReadOnlyList<SerializableEvent> WrittenEvents,
     IReadOnlyList<TagWriteResult> TagWriteResults,
-    TimeSpan Duration);
+    TimeSpan Duration)
+{
+    /// <summary>Structured non-strict size-gate diagnostics; empty means every configured scope validated.</summary>
+    public IReadOnlyList<ExecutorSizeDiagnostic> SizeGateDiagnostics { get; init; } = Array.Empty<ExecutorSizeDiagnostic>();
+}

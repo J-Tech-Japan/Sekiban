@@ -886,6 +886,13 @@ reset 必要)。
 リセットするため、pre-G20 の writer が tombstone を消します。cross-cluster 保証に依存する前に全クラスタ/
 writer を 10.8.0 へ更新してください。
 
+## executor サイズゲートの測定境界
+
+executor の storage policy は、provider が `IExecutorSizeMeasurement` を通じて実際の storage-item encoder または
+保守的上限を提供した場合だけ有効です。logical なシリアライズ済み event の UTF-8 サイズは、row・document・item・Azure Queue
+wire envelope のサイズではありません。strict で測定できない場合は永続化前に拒否し、non-strict は名前付き診断を付けて継続します。
+ゲートは現在の executor operation だけを対象にし、event の分割、provider の retry/recovery の変更、過去の oversized data の修復は行いません。
+
 ## 関連資料
 
 現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。
