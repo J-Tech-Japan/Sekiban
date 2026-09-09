@@ -240,6 +240,38 @@ app.MapGet("/ops/projection-status", async (ISerializedProjectionStatusReader re
 Never use `AllowAnonymous` for this surface. `ISerializedSekibanDcbExecutor` remains untouched. This is the
 dcb-v10.10.0 release-note entry for SEK-G24.
 
+### PostgreSQL projection-status runtime authority (SEK-G63)
+
+PostgreSQL status storage keeps its historical `LegacyAutoProvision` default for existing applications. A deployment
+whose runtime identity is DML-only can opt into `PreProvisioned` without changing the old store or factory
+constructors. An owner-controlled startup or migration step provisions the registry once through the shared schema
+operation, then the runtime registers the explicit mode:
+
+```csharp
+// Run with the schema owner, before granting the runtime principal:
+await ownerServices.ProvisionProjectionStatusSchemaAsync();
+
+// Runtime registration (the default remains LegacyAutoProvision):
+runtimeServices.AddSingleton(new ProjectionStatusOptions
+{
+    ProvisioningMode = ProjectionStatusProvisioningMode.PreProvisioned
+});
+runtimeServices.AddSekibanDcbPostgres(connectionString);
+```
+
+The same `ProjectionStatusOptions` is honored by direct `PostgresMultiProjectionStateStore` construction and by
+`PostgresMultiProjectionStateStoreFactory.CreateForService`. The additive options-aware overloads preserve the
+original public constructor signatures. In pre-provisioned mode `UpsertAsync` and `ListAsync` issue only their
+status DML; they never run `CREATE`, `ALTER`, migration, or repair SQL. The runtime principal needs `CONNECT`,
+schema `USAGE`, and the status table's required `SELECT`/`INSERT`/`UPDATE`/`DELETE` privileges, but not schema or
+table ownership.
+
+Missing or incompatible pre-provisioned schema is fail-closed: a missing table remains a failed `ResultBox` with
+PostgreSQL SQLSTATE `42P01`, and a missing required column remains a failed `ResultBox` with SQLSTATE `42703`.
+Neither case becomes an empty success or a false heartbeat. Expected-sequence CAS, service isolation, cancellation,
+and the switch/mutation discriminator columns remain unchanged. Invalid provisioning modes are rejected before a
+status operation starts.
+
 ### Projection-status heartbeat recovery (SEK-G35 / dcb-v10.16.0)
 
 Projection-status heartbeats now pin the full writer identity at activation: service, projector name, projector

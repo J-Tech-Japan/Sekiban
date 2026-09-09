@@ -17,18 +17,34 @@ public sealed class PostgresMultiProjectionStateStoreFactory : IMultiProjectionS
 
     private readonly IDbContextFactory<SekibanDcbDbContext> _contextFactory;
     private readonly IBlobStorageSnapshotAccessor? _blobAccessor;
+    private readonly ProjectionStatusOptions _projectionStatusOptions;
 
     public PostgresMultiProjectionStateStoreFactory(
         IDbContextFactory<SekibanDcbDbContext> contextFactory,
         IBlobStorageSnapshotAccessor? blobAccessor = null)
+        : this(contextFactory, blobAccessor, new ProjectionStatusOptions())
+    {
+    }
+
+    /// <summary>Additive options-aware constructor for pre-provisioned status deployments.</summary>
+    public PostgresMultiProjectionStateStoreFactory(
+        IDbContextFactory<SekibanDcbDbContext> contextFactory,
+        IBlobStorageSnapshotAccessor? blobAccessor,
+        ProjectionStatusOptions projectionStatusOptions)
     {
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
         _blobAccessor = blobAccessor;
+        _projectionStatusOptions = projectionStatusOptions ?? throw new ArgumentNullException(nameof(projectionStatusOptions));
+        _projectionStatusOptions.Validate();
     }
 
     public IMultiProjectionStateStore CreateForService(string serviceId)
     {
         var provider = new FixedServiceIdProvider(serviceId);
-        return new PostgresMultiProjectionStateStore(_contextFactory, provider, _blobAccessor);
+        return new PostgresMultiProjectionStateStore(
+            _contextFactory,
+            provider,
+            _blobAccessor,
+            _projectionStatusOptions);
     }
 }
