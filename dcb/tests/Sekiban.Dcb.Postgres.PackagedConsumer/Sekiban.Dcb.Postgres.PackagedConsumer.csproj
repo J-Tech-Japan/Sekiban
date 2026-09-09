@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <G62CandidatePackageVersion Condition="'$(G62CandidatePackageVersion)' == ''">0.0.0-g62-unset</G62CandidatePackageVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Sekiban.Dcb.Postgres" Version="$(G62CandidatePackageVersion)" />
+  </ItemGroup>
+</Project>

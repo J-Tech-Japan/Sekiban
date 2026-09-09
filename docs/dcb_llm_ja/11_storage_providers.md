@@ -147,6 +147,19 @@ builder.Services.AddSekibanDcbPostgres("Host=localhost;Database=sekiban_dcb;User
 
 マイグレーションは `Sekiban.Dcb.Postgres.MigrationHost` から実行するか、Aspire の初期化サービスに任せます。
 
+### パッケージ化した PostgreSQL consumer (SEK-G62)
+
+`Sekiban.Dcb.Postgres` は、サポートする各 TFM の EF Core 参照に対応する
+`Microsoft.EntityFrameworkCore.Relational` を通常の runtime dependency として宣言します。`net9.0` は
+`9.0.13`、`net10.0` は `10.0.3` です。そのため、パッケージを利用する consumer が Relational を直接参照したり、
+`Sekiban.Dcb.Postgres` を `ProjectReference` したりする workaround は不要です。`Microsoft.EntityFrameworkCore.Design`
+は provider 内に private として保持され、transitive runtime dependency にはなりません。
+
+`SekibanWasmRuntime` と `SekibanAsAService` の downstream application を publish するときは、application の TFM と
+同じサポート対象の `Sekiban.Dcb.Postgres` package/version line を維持し、対応する Relational runtime を package chain
+から解決してください。既存の Relational 明示 workaround は削除できます。この変更は公開 API、schema、storage semantics
+を変更しません。
+
 ## タグのコールド再構築ストリーミング (SEK-G53)
 
 コールドな tag-state 再構築は、追加専用の `IStreamingTaggedSerializableEventStore` capability を使用できます。

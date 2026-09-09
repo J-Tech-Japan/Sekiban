@@ -48,6 +48,19 @@ builder.Services.AddSekibanDcbPostgres("Host=localhost;Database=sekiban_dcb;User
 
 Run migrations with `Sekiban.Dcb.Postgres.MigrationHost` or let Aspire run the initializer in development.
 
+### Packaged PostgreSQL consumers (SEK-G62)
+
+`Sekiban.Dcb.Postgres` declares `Microsoft.EntityFrameworkCore.Relational` as a normal runtime dependency for each
+supported target: `9.0.13` on `net9.0` and `10.0.3` on `net10.0`, aligned with the provider's EF Core reference.
+Therefore a consumer that references the packaged provider does not need a direct Relational workaround or a
+`Sekiban.Dcb.Postgres` project reference. `Microsoft.EntityFrameworkCore.Design` remains private to the provider and is
+not a transitive runtime dependency.
+
+When publishing a downstream `SekibanWasmRuntime` or `SekibanAsAService` application, keep the `Sekiban.Dcb.Postgres`
+package on the same supported TFM/version line as the application and let the package chain bring its matching
+Relational runtime. These applications should remove any old explicit Relational workaround; this change does not
+alter their public Sekiban API, schema, or storage semantics.
+
 ## Azure: Cosmos DB Event Store
 
 Package: `Sekiban.Dcb.CosmosDb` (`src/Sekiban.Dcb.CosmosDb`). Containers:
