@@ -1,0 +1,37 @@
+name: DCB PostgreSQL packaged consumer regression
+
+on:
+  pull_request:
+    paths:
+      - 'dcb/src/Sekiban.Dcb.Core.Model/**'
+      - 'dcb/src/Sekiban.Dcb.Core/**'
+      - 'dcb/src/Sekiban.Dcb.Postgres/**'
+      - 'dcb/tests/Sekiban.Dcb.Postgres.Tests/run-packaged-consumer.sh'
+      - 'dcb/tests/Sekiban.Dcb.Postgres.PackagedConsumer/**'
+      - '.github/workflows/dcb_postgres_packaged_consumer.yml'
+      - 'docs/dcb_llm/11_storage_providers.md'
+      - 'docs/dcb_llm_ja/11_storage_providers.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  packaged-consumer:
+    name: Pack and run PostgreSQL consumers on net9/net10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Pack local chain and run positive/omission consumers
+        run: dcb/tests/Sekiban.Dcb.Postgres.Tests/run-packaged-consumer.sh --repo-root "$GITHUB_WORKSPACE"
