@@ -1070,6 +1070,10 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             .GetStreamProvider("EventStreamProvider")
             .GetStream<SerializableEvent>(StreamId.Create(streamNamespace, Guid.Empty));
 
+        var holdCatchUpTicks = 0;
+        using var baselineCatchUpGate = MaterializedViewGrain.PushBeforeCatchUpTestGate(
+            _ => Volatile.Read(ref holdCatchUpTicks) != 0);
+
         await stream.OnNextAsync(advancedCreate);
         await stream.OnNextAsync(delayedUpdate);
 
@@ -1122,6 +1126,20 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
                    advancedRow.LastSortableUniqueId == advancedCreate.SortableUniqueIdValue &&
                    receipt.LastStreamReceivedAt is not null &&
                    receipt.LastStreamReceivedSortableUniqueId == delayedUpdate.SortableUniqueIdValue;
+        }, timeoutMs: 15000);
+
+        // The fixture intentionally polls every 50 ms with no safe-window delay. Once the durable rows and receipt
+        // are observed, hold only the scheduler entry point while the current tick drains so the baseline status and
+        // state are one stable observation rather than racing a newly-started idle probe.
+        Volatile.Write(ref holdCatchUpTicks, 1);
+        await WaitUntilAsync(async () =>
+        {
+            var status = await grain.GetStatusAsync();
+            return status.LastCatchUpAttemptAt is not null &&
+                   !status.CatchUpInProgress &&
+                   !status.IsCatchUpActive &&
+                   !status.CatchUpHalted &&
+                   status.BufferedEventCount == 0;
         }, timeoutMs: 15000);
 
         async Task<(RegistryProjectionRow Registry, WeatherProjectionRow? DelayedRow, WeatherProjectionRow? AdvancedRow)> ReadStateAsync()
@@ -1185,6 +1203,8 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(delayedUpdate.SortableUniqueIdValue, beforeDuplicate.DelayedRow.LastSortableUniqueId);
         Assert.NotNull(beforeDuplicate.AdvancedRow);
         Assert.Equal(advancedCreate.SortableUniqueIdValue, beforeDuplicate.AdvancedRow.LastSortableUniqueId);
+
+        Volatile.Write(ref holdCatchUpTicks, 0);
 
         // The predecessor notification is an older duplicate receipt: it must be observable as a receipt without
         // regressing the durable checkpoint, invoking stream DML, or reapplying any event.

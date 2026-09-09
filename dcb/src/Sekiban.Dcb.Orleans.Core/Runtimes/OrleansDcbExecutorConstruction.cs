@@ -61,7 +61,7 @@ internal sealed class OrleansDcbExecutorConstructionInputs
 /// </summary>
 internal sealed class OrleansDcbExecutorConstruction<TGeneralExecutor>
 {
-    private OrleansDcbExecutorConstruction(
+    internal OrleansDcbExecutorConstruction(
         IActorObjectAccessor actorAccessor,
         IClusterClient clusterClient,
         DcbDomainTypes domainTypes,
