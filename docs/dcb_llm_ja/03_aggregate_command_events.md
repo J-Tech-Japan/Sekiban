@@ -249,3 +249,8 @@ commit、conditional append、シリアライズ済み conditional append の 5 
 ありません。strict policy には実際の論理 UTF-8 測定、または provider が提供する正確な／保守的上限の storage・destination
 測定が必要です。strict の capability 不在は fail-closed、non-strict は診断を付けた場合だけ継続します。Azure Queue の
 wire envelope、batch、retry、および既に受理されたイベントの replication はこのスライスの対象外です。
+
+シリアライズ済み conditional 境界では、設定された policy の論理または provider 測定に payload binding capability
+が必要になる場合があります。この binding capability を利用できない場合、strict policy は conditional append
+より前に型付き `ExecutorSizeCapabilityException` を返します。non-strict は明示的な未検証診断を記録したうえで
+provider の conditional 操作に判定を委ね、binding failure で provider の in-doubt や conflict 例外を置き換えません。

@@ -1506,17 +1506,39 @@ public class CoreGeneralSekibanExecutor
                 var eventResult = serializable.ToEvent(_domainTypes.EventTypes);
                 if (!eventResult.IsSuccess)
                 {
-                    return ResultBox.Error<SerializedConditionalCommitResult>(eventResult.GetException());
-                }
+                    const string bindingCapabilityReason =
+                        "serialized event payload binding capability is unavailable; size validation was not performed";
+                    var strictPolicy = _executorSizeGateOptions.Policies
+                        .FirstOrDefault(policy => policy.Strictness == ExecutorSizeStrictness.Strict);
+                    if (strictPolicy is not null)
+                    {
+                        return ResultBox.Error<SerializedConditionalCommitResult>(
+                            new ExecutorSizeCapabilityException(
+                                strictPolicy.Scope,
+                                strictPolicy.Representation,
+                                bindingCapabilityReason));
+                    }
 
-                preparedEvents =
-                [
-                    new(
-                        eventResult.GetValue(),
-                        serializable,
-                        serializable.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray())
-                ];
-                sizeEvaluation = EvaluateSizeGate(preparedEvents);
+                    sizeEvaluation = new ExecutorSizeGateEvaluation(
+                        _executorSizeGateOptions.Policies
+                            .Select(policy => new ExecutorSizeDiagnostic(
+                                policy.Scope,
+                                policy.Representation,
+                                bindingCapabilityReason))
+                            .ToArray(),
+                        new Dictionary<Guid, ExecutorSizeDestinationPlan>());
+                }
+                else
+                {
+                    preparedEvents =
+                    [
+                        new(
+                            eventResult.GetValue(),
+                            serializable,
+                            serializable.Tags.Select(_domainTypes.TagTypes.GetTag).ToArray())
+                    ];
+                    sizeEvaluation = EvaluateSizeGate(preparedEvents);
+                }
             }
 
             var appendResult = await conditionalStore.AppendIfUniqueAsync(

@@ -13,6 +13,7 @@ using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Testing;
+using Sekiban.Dcb.TestSupport;
 using CoreInMemoryEventStore = Sekiban.Dcb.Testing.InMemoryEventStore;
 
 namespace Sekiban.Dcb.Tests;
@@ -392,6 +393,72 @@ public sealed class ExecutorSizeGateTests
     }
 
     [Fact]
+    public async Task SerializedConditional_UnbindablePayload_StrictGateFailsBeforeProviderWrite()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var (executor, store) = CreateSerializedConditionalExecutor(
+            domain,
+            ExecutorSizeStrictness.Strict,
+            _ => throw new InvalidOperationException("conditional provider must not be reached"));
+
+        var result = await ((ISerializedConditionalSekibanDcbExecutor)executor)
+            .CommitSerializableEventConditionallyAsync(CreateUnbindableConditionalRequest());
+
+        var exception = Assert.IsType<ExecutorSizeCapabilityException>(result.GetException());
+        Assert.Equal("serialized-conditional", exception.Scope);
+        Assert.Equal(ExecutorSizeRepresentation.LogicalSerializedEventUtf8, exception.Representation);
+        Assert.Contains("binding capability is unavailable", exception.Reason);
+        Assert.Equal(0, store.AppendAttempts);
+    }
+
+    [Fact]
+    public async Task SerializedConditional_UnbindablePayload_NonStrictGatePreservesProviderInDoubt()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var providerException = ConditionalAppendInDoubtException.Create(
+            "TestProvider",
+            "svc-42",
+            Guid.NewGuid(),
+            ConditionalAppendInDoubtReason.AmbiguousAfterWrite,
+            new InvalidOperationException("provider conflict cause"));
+        var (executor, store) = CreateSerializedConditionalExecutor(
+            domain,
+            ExecutorSizeStrictness.NonStrict,
+            _ => ResultBox.Error<ConditionalAppendReceipt>(providerException));
+
+        var result = await ((ISerializedConditionalSekibanDcbExecutor)executor)
+            .CommitSerializableEventConditionallyAsync(CreateUnbindableConditionalRequest());
+
+        Assert.False(result.IsSuccess);
+        Assert.Same(providerException, result.GetException());
+        Assert.Equal(1, store.AppendAttempts);
+    }
+
+    [Fact]
+    public async Task SerializedConditional_UnbindablePayload_NonStrictGateReturnsUnvalidatedDiagnostic()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var (executor, store) = CreateSerializedConditionalExecutor(
+            domain,
+            ExecutorSizeStrictness.NonStrict,
+            _ => ResultBox.FromValue(new ConditionalAppendReceipt(
+                ConditionalAppendStatus.Appended,
+                Guid.NewGuid(),
+                SortableUniqueId.GenerateNew(),
+                "provider-fingerprint")));
+
+        var result = await ((ISerializedConditionalSekibanDcbExecutor)executor)
+            .CommitSerializableEventConditionallyAsync(CreateUnbindableConditionalRequest());
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, store.AppendAttempts);
+        var diagnostic = Assert.Single(result.GetValue().SizeGateDiagnostics);
+        Assert.Equal("serialized-conditional", diagnostic.Scope);
+        Assert.Equal(ExecutorSizeRepresentation.LogicalSerializedEventUtf8, diagnostic.Representation);
+        Assert.Contains("binding capability is unavailable", diagnostic.Reason);
+    }
+
+    [Fact]
     public async Task DestinationPolicy_UsesCapturedPlanAndDoesNotResolveAgain()
     {
         var domain = DomainType.GetDomainTypes();
@@ -599,6 +666,34 @@ public sealed class ExecutorSizeGateTests
         IActorObjectAccessor? actorAccessor = null,
         IExecutedUserProvider? executedUserProvider = null) =>
         new(store, actorAccessor ?? new InMemoryObjectAccessor(store, domain), domain, options, publisher, executedUserProvider);
+
+    private static (GeneralSekibanExecutor Executor, OutcomeForcingConditionalEventStore Store)
+        CreateSerializedConditionalExecutor(
+            DcbDomainTypes domain,
+            ExecutorSizeStrictness strictness,
+            Func<ConditionalAppendRequest, ResultBox<ConditionalAppendReceipt>> outcome)
+    {
+        var innerStore = new InMemoryConditionalEventStore(domain.EventTypes);
+        var store = new OutcomeForcingConditionalEventStore(innerStore, outcome);
+        var executor = CreateExecutor(
+            domain,
+            store,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                "serialized-conditional",
+                ExecutorSizeRepresentation.LogicalSerializedEventUtf8,
+                maxBytesPerEvent: 1024,
+                strictness: strictness)));
+        return (executor, store);
+    }
+
+    private static SerializedConditionalCommitRequest CreateUnbindableConditionalRequest() =>
+        new(
+            SerializedConditionalCommitRequest.CurrentVersion,
+            new SerializableEventCandidate(
+                JsonSerializer.SerializeToUtf8Bytes(new { Value = "unbound" }),
+                "UnregisteredConditionalPayload",
+                Array.Empty<string>()),
+            $"unbound-conditional-{Guid.NewGuid():N}");
 
     private static SerializedCommitRequest SingleSerializedRequest(DcbDomainTypes domain, Guid id)
     {

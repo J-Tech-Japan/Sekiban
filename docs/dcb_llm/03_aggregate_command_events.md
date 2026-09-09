@@ -266,3 +266,9 @@ default. A strict policy must declare an actual logical UTF-8 measurement or a p
 storage or destination measurement. An unavailable strict capability fails closed; non-strict mode proceeds only with
 a diagnostic. Azure Queue wire-envelope, batching, retries, and previously accepted-event replication remain outside
 this slice.
+
+For the serialized conditional boundary, payload binding is a capability used when a configured policy needs the
+logical or provider measurement. If that binding capability is unavailable, a strict policy returns the typed
+`ExecutorSizeCapabilityException` before the conditional append; non-strict mode records an explicit unvalidated
+diagnostic and lets the provider conditional operation classify the request. This preserves provider in-doubt and
+conflict exceptions instead of replacing them with a binding failure.
