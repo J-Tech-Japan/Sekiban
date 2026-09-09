@@ -4,7 +4,7 @@ using Sekiban.Dcb.Postgres;
 
 var relationalAssembly = Assembly.Load("Microsoft.EntityFrameworkCore.Relational");
 var options = new DbContextOptionsBuilder<SekibanDcbDbContext>()
-    .UseNpgsql("Host=127.0.0.1;Port=1;Database=g62-never-connect;Username=unused;Password=unused;Timeout=1;Command Timeout=1")
+    .UseNpgsql("Host=127.0.0.1;Port=1;Database=g62-never-connect;Username=unused;Timeout=1;Command Timeout=1")
     .Options;
 
 await using var db = new SekibanDcbDbContext(options);
