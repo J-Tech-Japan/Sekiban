@@ -32,6 +32,7 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     private readonly DcbDomainTypes _domainTypes;
     private readonly IEventStore _eventStore;
     private readonly GeneralSekibanExecutor _generalExecutor;
+    private readonly OrleansProjectionQueryExecutor _queryExecutor;
     private readonly IServiceIdProvider _serviceIdProvider;
     private readonly SortableUniqueIdWaitPolicy _sortableUniqueIdWaitPolicy;
 
@@ -137,6 +138,11 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         _sortableUniqueIdWaitPolicy = sortableUniqueIdWaitPolicy ??
                                       throw new ArgumentNullException(nameof(sortableUniqueIdWaitPolicy));
         _actorAccessor = new OrleansActorObjectAccessor(clusterClient, eventStore, domainTypes, _serviceIdProvider);
+        _queryExecutor = new OrleansProjectionQueryExecutor(
+            _clusterClient,
+            _domainTypes,
+            _serviceIdProvider,
+            _sortableUniqueIdWaitPolicy);
         _generalExecutor = new GeneralSekibanExecutor(eventStore, _actorAccessor, domainTypes, eventPublisher,
             executedUserProvider, sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator, _serviceIdProvider,
             _sortableUniqueIdWaitPolicy, executorSizeGateOptions);
@@ -183,21 +189,10 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     {
         var projectorName = ResolveProjectorName(queryCommon);
 
-        // Get the multi-projection grain directly
-        var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), projectorName);
-        var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(grainId);
-
-        // Wait for sortable unique ID if needed
-        await WaitForSortableUniqueIdIfNeeded(
-            grain,
+        var result = await _queryExecutor.ExecuteQueryAsync(
             queryCommon,
+            projectorName,
             SortableUniqueIdWaitSurface.OrleansWithoutResultSingle);
-
-        var serializableQuery = await SerializableQueryParameter.CreateFromAsync(
-            queryCommon,
-            _domainTypes.JsonSerializerOptions);
-
-        var result = await grain.ExecuteQueryAsync(serializableQuery);
 
         return await DeserializeQueryResultAsync<TResult>(result);
     }
@@ -210,77 +205,12 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
     {
         var projectorName = ResolveProjectorName(queryCommon);
 
-        // Get the multi-projection grain directly
-        var grainId = ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), projectorName);
-        var grain = _clusterClient.GetGrain<IMultiProjectionGrain>(grainId);
-
-        // Wait for sortable unique ID if needed
-        await WaitForSortableUniqueIdIfNeeded(
-            grain,
+        var result = await _queryExecutor.ExecuteListQueryAsync(
             queryCommon,
+            projectorName,
             SortableUniqueIdWaitSurface.OrleansWithoutResultList);
 
-        var serializableQuery = await SerializableQueryParameter.CreateFromAsync(
-            queryCommon,
-            _domainTypes.JsonSerializerOptions);
-
-        var result = await grain.ExecuteListQueryAsync(serializableQuery);
-
         return await DeserializeListQueryResultAsync<TResult>(result);
-    }
-
-    /// <summary>
-    ///     Wait for a sortable unique ID to be processed if the query implements IWaitForSortableUniqueId.
-    ///     Strict marker queries fail before serialization when the wait times out; legacy queries keep fail-open.
-    /// </summary>
-    private async Task WaitForSortableUniqueIdIfNeeded(
-        IMultiProjectionGrain grain,
-        object query,
-        SortableUniqueIdWaitSurface surface)
-    {
-        if (query is not IWaitForSortableUniqueId waitForQuery ||
-            string.IsNullOrEmpty(waitForQuery.WaitForSortableUniqueId))
-        {
-            return;
-        }
-
-        var sortableUniqueId = waitForQuery.WaitForSortableUniqueId;
-        var strict = query is IStrictWaitForSortableUniqueId;
-        var wait = await _sortableUniqueIdWaitPolicy.WaitAsync(
-            sortableUniqueId,
-            surface,
-            strict ? SortableUniqueIdWaitMode.Strict : SortableUniqueIdWaitMode.Legacy,
-            cancellationToken => ProbeSortableUniqueIdAsync(grain, sortableUniqueId, cancellationToken),
-            strict
-                ? cancellationToken => ReadCurrentSortableUniqueIdAsync(grain, cancellationToken)
-                : null);
-
-        if (strict && wait.TimedOut)
-        {
-            throw new SortableUniqueIdWaitTimeoutException(
-                sortableUniqueId,
-                wait.Timeout,
-                wait.Elapsed,
-                wait.LastObservedSortableUniqueId);
-        }
-    }
-
-    private static async Task<bool> ProbeSortableUniqueIdAsync(
-        IMultiProjectionGrain grain,
-        string sortableUniqueId,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return await grain.IsSortableUniqueIdReceived(sortableUniqueId).ConfigureAwait(false);
-    }
-
-    private static async Task<string?> ReadCurrentSortableUniqueIdAsync(
-        IMultiProjectionGrain grain,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var status = await grain.GetProjectionHeadStatusAsync().ConfigureAwait(false);
-        return status.CurrentLastSortableUniqueId;
     }
 
     private async Task<TResult> DeserializeQueryResultAsync<TResult>(
