@@ -910,6 +910,18 @@ request size は保証しません。したがって event-item を通過した�
 継続します。Core の policy を直接構築した場合は provider 登録と service ceiling 検証を迂回します。未登録の
 legacy DynamoDB write は変更されません。
 
+たとえば、設定した shard mapping を保ったまま 400 KiB の event-item ゲートを opt-in できます。
+
+```csharp
+services.AddSekibanDcbDynamoDb(dynamoDbClient, options => options.WriteShardCount = 2);
+services.AddSekibanDcbDynamoDbEventItemSizeGate();
+```
+
+設定上限を超える item は `ExecutorSizeLimitExceededException`、利用できない strict capability は永続化前に
+`ExecutorSizeCapabilityException` になります。`MaxBytesPerOperation` は現在の operation に含まれる測定済み
+event-item copy の合計です。これは `Destination` の fan-out policy（各 destination copy を個別に検査）とは異なり、
+DynamoDB の database footprint 保証でも Azure Queue の batch/wire-envelope 保証でもありません。
+
 ## 関連資料
 
 現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。

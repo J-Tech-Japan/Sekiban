@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using Amazon.DynamoDBv2;
@@ -42,7 +41,7 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
             new EventMetadata("因果", "相関", "ユーザー"),
             ["Student:東京😀", "タグ"]);
         var serialized = @event.ToSerializableEvent(domain.EventTypes);
-        var client = DispatchProxy.Create<IAmazonDynamoDB, CapturingDynamoDb>();
+        var client = System.Reflection.DispatchProxy.Create<IAmazonDynamoDB, CapturingDynamoDb>();
         var capture = (CapturingDynamoDb)(object)client;
         var store = NewStore(client, domain, "shape");
 
@@ -81,7 +80,7 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
             new EventMetadata("cause-東京", "correlation", "ユーザー"),
             ["Student:東京", "tag😀"]);
         var serialized = @event.ToSerializableEvent(domain.EventTypes);
-        var client = DispatchProxy.Create<IAmazonDynamoDB, CapturingDynamoDb>();
+        var client = System.Reflection.DispatchProxy.Create<IAmazonDynamoDB, CapturingDynamoDb>();
         var capture = (CapturingDynamoDb)(object)client;
         var store = NewStore(client, domain, "oracle");
         Assert.True((await store.WriteSerializableEventsAsync([serialized])).IsSuccess);
@@ -126,6 +125,34 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
     }
 
     [Fact]
+    public void LogicalPayloadOnlyMutant_FailsTheMappedItemBoundaryOracle()
+    {
+        var empty = new SerializableEvent(
+            [],
+            SortableUniqueId.GenerateNew(),
+            Guid.CreateVersion7(),
+            new EventMetadata("cause", "correlation", "user"),
+            [],
+            nameof(StudentCreated));
+        var measurement = new DynamoDbEventItemSizeMeasurement();
+        var emptyBytes = MeasureSerialized(measurement, empty);
+        var mappedBoundary = empty with
+        {
+            Payload = Enumerable.Repeat(
+                (byte)'x',
+                checked((int)(DynamoDbEventItemSizeMeasurement.MaximumItemBytes + 1 - emptyBytes))).ToArray()
+        };
+
+        var mappedBytes = MeasureSerialized(measurement, mappedBoundary);
+        var logicalPayloadOnlyMutant = mappedBoundary.Payload.Length;
+
+        Assert.Equal(DynamoDbEventItemSizeMeasurement.MaximumItemBytes + 1, mappedBytes);
+        Assert.True(mappedBytes > DynamoDbEventItemSizeMeasurement.MaximumItemBytes);
+        Assert.True(logicalPayloadOnlyMutant <= DynamoDbEventItemSizeMeasurement.MaximumItemBytes);
+        Assert.True(logicalPayloadOnlyMutant < mappedBytes);
+    }
+
+    [Fact]
     public void ProviderRegistrationDefaultsToTheServiceCeilingAndRejectsAnImpossibleQuota()
     {
         var options = new ExecutorSizeGateOptions().AddDynamoDbEventItemPolicy();
@@ -136,6 +163,104 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new ExecutorSizeGateOptions().AddDynamoDbEventItemPolicy(
                 maxBytesPerEvent: DynamoDbEventItemSizeMeasurement.MaximumItemBytes + 1));
+    }
+
+    [Theory]
+    [InlineData(ExecutorSizeRepresentation.LogicalSerializedEventUtf8)]
+    [InlineData(ExecutorSizeRepresentation.Destination)]
+    public void NonStorageRepresentation_IsUnavailable(ExecutorSizeRepresentation representation)
+    {
+        var result = new DynamoDbEventItemSizeMeasurement().Measure(
+            CreateMeasurementContext(representation));
+
+        Assert.False(result.IsAvailable);
+        Assert.Null(result.Bytes);
+        Assert.Contains("only the StorageItem representation", result.Reason);
+    }
+
+    [Fact]
+    public async Task StrictUnavailableDynamoDbCapability_RejectsBeforeAnyStoreWrite()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var store = new CoreInMemoryEventStore(domain.EventTypes);
+        var executor = new GeneralSekibanExecutor(
+            store,
+            new InMemoryObjectAccessor(store, domain),
+            domain,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                DynamoDbEventItemSizeMeasurement.Scope,
+                ExecutorSizeRepresentation.LogicalSerializedEventUtf8,
+                maxBytesPerEvent: 1024,
+                measurement: new DynamoDbEventItemSizeMeasurement())));
+
+        var result = await executor.CommitSerializableEventsAsync(
+            new SerializedCommitRequest([CreateCandidate(domain, Guid.NewGuid())], []));
+
+        var exception = Assert.IsType<ExecutorSizeCapabilityException>(result.GetException());
+        Assert.Equal(DynamoDbEventItemSizeMeasurement.Scope, exception.Scope);
+        Assert.Equal(ExecutorSizeRepresentation.LogicalSerializedEventUtf8, exception.Representation);
+        Assert.Contains("only the StorageItem representation", exception.Reason);
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    [Fact]
+    public async Task NonStrictUnavailableDynamoDbCapability_EmitsNamedUnvalidatedDiagnosticAndContinues()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var store = new CoreInMemoryEventStore(domain.EventTypes);
+        var executor = new GeneralSekibanExecutor(
+            store,
+            new InMemoryObjectAccessor(store, domain),
+            domain,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                DynamoDbEventItemSizeMeasurement.Scope,
+                ExecutorSizeRepresentation.LogicalSerializedEventUtf8,
+                maxBytesPerEvent: 1024,
+                strictness: ExecutorSizeStrictness.NonStrict,
+                measurement: new DynamoDbEventItemSizeMeasurement())));
+
+        var result = await executor.CommitSerializableEventsAsync(
+            new SerializedCommitRequest([CreateCandidate(domain, Guid.NewGuid())], []));
+
+        Assert.True(result.IsSuccess);
+        var diagnostic = Assert.Single(result.GetValue().SizeGateDiagnostics);
+        Assert.Equal(DynamoDbEventItemSizeMeasurement.Scope, diagnostic.Scope);
+        Assert.Equal(ExecutorSizeRepresentation.LogicalSerializedEventUtf8, diagnostic.Representation);
+        Assert.Contains("only the StorageItem representation", diagnostic.Reason);
+        Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    [Theory]
+    [InlineData(409600, true)]
+    [InlineData(409601, false)]
+    public async Task ExecutorGate_UsesTheDynamoDbCeilingAtExactBoundary(long measuredBytes, bool expectedSuccess)
+    {
+        var domain = DomainType.GetDomainTypes();
+        var store = new CoreInMemoryEventStore(domain.EventTypes);
+        var executor = new GeneralSekibanExecutor(
+            store,
+            new InMemoryObjectAccessor(store, domain),
+            domain,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                DynamoDbEventItemSizeMeasurement.Scope,
+                ExecutorSizeRepresentation.StorageItem,
+                maxBytesPerEvent: DynamoDbEventItemSizeMeasurement.MaximumItemBytes,
+                measurement: new FixedMeasurement(measuredBytes))));
+
+        var result = await executor.CommitSerializableEventsAsync(
+            new SerializedCommitRequest([CreateCandidate(domain, Guid.NewGuid())], []));
+
+        Assert.Equal(expectedSuccess, result.IsSuccess);
+        if (expectedSuccess)
+        {
+            Assert.Single((await store.ReadAllSerializableEventsAsync()).GetValue());
+        }
+        else
+        {
+            var exception = Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
+            Assert.Equal(DynamoDbEventItemSizeMeasurement.MaximumItemBytes + 1, exception.MeasuredBytes);
+            Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        }
     }
 
     [Fact]
@@ -167,6 +292,35 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
         Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
     }
 
+    [Fact]
+    public async Task ProviderMeasurementRejectsOversizedLastEventWithoutAnyDynamoDbWriteDispatch()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var client = System.Reflection.DispatchProxy.Create<IAmazonDynamoDB, CapturingDynamoDb>();
+        var capture = (CapturingDynamoDb)(object)client;
+        var store = NewStore(client, domain, "last-event");
+        var executor = new GeneralSekibanExecutor(
+            store,
+            new InMemoryObjectAccessor(store, domain),
+            domain,
+            new ExecutorSizeGateOptions().AddDynamoDbEventItemPolicy());
+        var first = CreateCandidate(domain, Guid.NewGuid(), "small");
+        var last = CreateCandidate(
+            domain,
+            Guid.NewGuid(),
+            new string('x', (int)DynamoDbEventItemSizeMeasurement.MaximumItemBytes));
+
+        var result = await executor.CommitSerializableEventsAsync(
+            new SerializedCommitRequest([first, last], []));
+
+        var exception = Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
+        Assert.Equal(1, exception.EventIndex);
+        Assert.Equal(DynamoDbEventItemSizeMeasurement.Scope, exception.Scope);
+        Assert.Equal(0, capture.WriteDispatches);
+        Assert.Empty(capture.EventItems);
+        Assert.Empty(capture.TagItems);
+    }
+
     private static DynamoDbEventStore NewStore(
         IAmazonDynamoDB client,
         DcbDomainTypes domain,
@@ -183,6 +337,46 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
             new DynamoDbContext(client, options),
             domain.EventTypes,
             new FixedServiceIdProvider(serviceId));
+    }
+
+    private static ExecutorSizeMeasurementContext CreateMeasurementContext(
+        ExecutorSizeRepresentation representation)
+    {
+        var serialized = new SerializableEvent(
+            Encoding.UTF8.GetBytes("{}"),
+            SortableUniqueId.GenerateNew(),
+            Guid.CreateVersion7(),
+            new EventMetadata("cause", "correlation", "user"),
+            [],
+            nameof(StudentCreated));
+        return new ExecutorSizeMeasurementContext(
+            DynamoDbEventItemSizeMeasurement.Scope,
+            representation,
+            new Event(
+                new StudentCreated(Guid.CreateVersion7(), "context", 1),
+                serialized.SortableUniqueIdValue,
+                serialized.EventPayloadName,
+                serialized.Id,
+                serialized.EventMetadata,
+                serialized.Tags),
+            serialized,
+            "context",
+            null,
+            null);
+    }
+
+    private static SerializableEventCandidate CreateCandidate(
+        DcbDomainTypes domain,
+        Guid id,
+        string summary = "size gate")
+    {
+        var payload = JsonSerializer.SerializeToUtf8Bytes(
+            new WeatherForecastCreated(id, "Tokyo", new DateOnly(2026, 9, 9), 21, summary),
+            domain.JsonSerializerOptions);
+        return new SerializableEventCandidate(
+            payload,
+            nameof(WeatherForecastCreated),
+            [$"WeatherForecast:{id}"]);
     }
 
     private static Dictionary<string, string> Normalize(
@@ -256,24 +450,33 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
         public string GetCurrentServiceId() => serviceId;
     }
 
-    public class CapturingDynamoDb : DispatchProxy
+    private sealed class FixedMeasurement(long bytes) : IExecutorSizeMeasurement
+    {
+        public ExecutorSizeMeasurementResult Measure(ExecutorSizeMeasurementContext context) =>
+            ExecutorSizeMeasurementResult.Exact(bytes);
+    }
+
+    public class CapturingDynamoDb : System.Reflection.DispatchProxy
     {
         public List<Dictionary<string, AttributeValue>> EventItems { get; } = [];
         public List<Dictionary<string, AttributeValue>> TagItems { get; } = [];
+        public int WriteDispatches { get; private set; }
 
         public void Clear()
         {
             EventItems.Clear();
             TagItems.Clear();
+            WriteDispatches = 0;
         }
 
-        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        protected override object? Invoke(System.Reflection.MethodInfo? targetMethod, object?[]? args)
         {
             var name = targetMethod?.Name ?? string.Empty;
             var arg0 = args is { Length: > 0 } ? args[0] : null;
 
             if (arg0 is TransactWriteItemsRequest transaction && name == nameof(IAmazonDynamoDB.TransactWriteItemsAsync))
             {
+                WriteDispatches++;
                 foreach (var item in transaction.TransactItems)
                 {
                     if (item.Put is not { } put)
@@ -289,6 +492,7 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
 
             if (arg0 is BatchWriteItemRequest batch && name == nameof(IAmazonDynamoDB.BatchWriteItemAsync))
             {
+                WriteDispatches++;
                 foreach (var writes in batch.RequestItems.Values)
                 {
                     foreach (var write in writes)
@@ -304,6 +508,9 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
 
                 return Task.FromResult(new BatchWriteItemResponse { UnprocessedItems = [] });
             }
+
+            if (arg0 is QueryRequest && name == nameof(IAmazonDynamoDB.QueryAsync))
+                return Task.FromResult(new QueryResponse { Items = [] });
 
             if (name == "Dispose" || name.StartsWith("get_", StringComparison.Ordinal))
                 return null;

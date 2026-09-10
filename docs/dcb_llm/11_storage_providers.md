@@ -903,6 +903,18 @@ request-size guarantee. A strict policy rejects an unavailable measurement befor
 continues with its named unvalidated diagnostic. A hand-constructed core policy bypasses the provider registration and
 its service-ceiling validation, while unregistered legacy DynamoDB writes remain unchanged.
 
+For example, an application can preserve its configured shard mapping while opting into the 400 KiB event-item gate:
+
+```csharp
+services.AddSekibanDcbDynamoDb(dynamoDbClient, options => options.WriteShardCount = 2);
+services.AddSekibanDcbDynamoDbEventItemSizeGate();
+```
+
+An item over the configured limit produces `ExecutorSizeLimitExceededException`; an unavailable strict capability produces
+`ExecutorSizeCapabilityException` before any persistence. `MaxBytesPerOperation` sums the measured event-item copies in
+the current operation. This is distinct from a `Destination` fan-out policy, which checks each destination copy
+independently; neither rule is a DynamoDB database-footprint guarantee or an Azure Queue batch/wire-envelope guarantee.
+
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).

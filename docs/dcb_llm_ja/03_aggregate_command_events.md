@@ -254,3 +254,20 @@ wire envelope、batch、retry、および既に受理されたイベントの re
 が必要になる場合があります。この binding capability を利用できない場合、strict policy は conditional append
 より前に型付き `ExecutorSizeCapabilityException` を返します。non-strict は明示的な未検証診断を記録したうえで
 provider の conditional 操作に判定を委ね、binding failure で provider の in-doubt や conflict 例外を置き換えません。
+
+### DynamoDB event-item ゲート（SEK-G67）
+
+DynamoDB の event-item capability は opt-in で、provider が実際に組み立てる base event item を測定します。既存の
+store 登録に、明示的にゲートを追加します。
+
+```csharp
+services.AddSekibanDcbDynamoDb(dynamoDbClient, options => options.WriteShardCount = 2);
+services.AddSekibanDcbDynamoDbEventItemSizeGate(); // 既定: event ごとに 409600 byte
+```
+
+mapped item が大きすぎる場合は `ExecutorSizeLimitExceededException` を返し、event・tag・head の永続化より前に
+停止します。provider が要求された representation を測定できない場合、strict は
+`ExecutorSizeCapabilityException` を返し、non-strict は名前付きの未検証診断を記録して継続します。
+`MaxBytesPerOperation` は現在の operation に含まれる測定済みコピーの合計です。一方、`Destination` policy は
+捕捉した各 destination copy を個別に検査します。この fan-out の数え方は DynamoDB の database footprint 保証でも、
+Azure Queue の batch/wire-envelope 保証でもありません。

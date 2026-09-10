@@ -272,3 +272,19 @@ logical or provider measurement. If that binding capability is unavailable, a st
 `ExecutorSizeCapabilityException` before the conditional append; non-strict mode records an explicit unvalidated
 diagnostic and lets the provider conditional operation classify the request. This preserves provider in-doubt and
 conflict exceptions instead of replacing them with a binding failure.
+
+### DynamoDB event-item gate (SEK-G67)
+
+The DynamoDB event-item capability is opt-in and measures the provider's mapped base event item. A typical registration
+keeps the existing store setup and adds the gate explicitly:
+
+```csharp
+services.AddSekibanDcbDynamoDb(dynamoDbClient, options => options.WriteShardCount = 2);
+services.AddSekibanDcbDynamoDbEventItemSizeGate(); // default: 409600 bytes per event
+```
+
+An oversized mapped item returns `ExecutorSizeLimitExceededException` before event, tag, or head persistence. If the
+provider cannot measure the requested representation, strict mode returns `ExecutorSizeCapabilityException`; non-strict
+mode records a named unvalidated diagnostic and continues. `MaxBytesPerOperation` is the sum of the measured copies in
+the current operation. A `Destination` policy instead evaluates each captured destination copy independently; that
+fan-out accounting is neither a DynamoDB database-footprint guarantee nor an Azure Queue batch/wire-envelope guarantee.
