@@ -972,6 +972,14 @@ shard 依存 byte を undercount することがあります。Core helper と `
 同方式の再登録は last-wins、provider helper の再登録は policy の蓄積を保ちます。手動の
 `AddSingleton<ExecutorSizeGateOptions>` は guard 外であり、provider helper の検証・測定 parity を保証しません。
 
+DynamoDB の `BatchWriteItem` fallback は、その fallback operation の開始時だけ `MaxBatchWriteItems` を検証します。
+有効値は `1` から `25` です。無効値の場合は、batch write を dispatch する前に、`MaxBatchWriteItems` と取得した値を示す
+`ArgumentOutOfRangeException` を既存の `ResultBox` error として返します。検証済みの値は operation ごとに一度だけ
+snapshot され、event put、tag put、rollback delete のすべてで再利用されます。dispatch 中の設定変更は次の operation
+からだけ反映されます。この batch 専用検証は `MaxBatchGetItems`、`MaxRetryAttempts`、transaction/conditional path、
+およびそれらの retry/rollback 挙動を変更しません。`AutoCreateTables = true` の場合、batch 検証より先に table 初期化が
+行われることがあるため、write dispatch が 0 件でも table 作成 DDL が 0 件とは限りません。
+
 ## 関連資料
 
 現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。

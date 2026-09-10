@@ -931,6 +931,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
 
     private async Task WriteEventsWithBatchAsync(List<DynamoDbEventWriteItem> eventItems)
     {
+        var chunkSize = ResolveBatchWriteChunkSize();
         var eventWrites = eventItems
             .Select(item => new WriteRequest
             {
@@ -946,11 +947,11 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             })
             .ToList();
 
-        await ExecuteBatchWriteWithRetryAsync(_context.EventsTableName, eventWrites).ConfigureAwait(false);
+        await ExecuteBatchWriteWithRetryAsync(_context.EventsTableName, eventWrites, chunkSize).ConfigureAwait(false);
 
         try
         {
-            await ExecuteBatchWriteWithRetryAsync(_context.TagsTableName, tagWrites).ConfigureAwait(false);
+            await ExecuteBatchWriteWithRetryAsync(_context.TagsTableName, tagWrites, chunkSize).ConfigureAwait(false);
         }
         catch
         {
@@ -963,18 +964,35 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                     })
                     .ToList();
 
-                await ExecuteBatchWriteWithRetryAsync(_context.EventsTableName, deleteRequests).ConfigureAwait(false);
+                await ExecuteBatchWriteWithRetryAsync(_context.EventsTableName, deleteRequests, chunkSize).ConfigureAwait(false);
             }
 
             throw;
         }
     }
 
-    private async Task ExecuteBatchWriteWithRetryAsync(string tableName, List<WriteRequest> requests)
+    private int ResolveBatchWriteChunkSize()
     {
-        for (var i = 0; i < requests.Count; i += _options.MaxBatchWriteItems)
+        var chunkSize = _options.MaxBatchWriteItems;
+        if (chunkSize is < 1 or > 25)
         {
-            var batch = requests.Skip(i).Take(_options.MaxBatchWriteItems).ToList();
+            throw new ArgumentOutOfRangeException(
+                nameof(DynamoDbEventStoreOptions.MaxBatchWriteItems),
+                chunkSize,
+                "DynamoDB batch writes require between 1 and 25 items per request.");
+        }
+
+        return chunkSize;
+    }
+
+    private async Task ExecuteBatchWriteWithRetryAsync(
+        string tableName,
+        List<WriteRequest> requests,
+        int chunkSize)
+    {
+        for (var i = 0; i < requests.Count; i += chunkSize)
+        {
+            var batch = requests.Skip(i).Take(chunkSize).ToList();
             var pending = new Dictionary<string, List<WriteRequest>>
             {
                 [tableName] = batch
