@@ -965,6 +965,15 @@ mechanism. Repeated Core registrations retain last-wins behavior, while repeated
 Manual `AddSingleton<ExecutorSizeGateOptions>` registration bypasses this guard and does not claim provider helper
 validation or measurement parity.
 
+The DynamoDB `BatchWriteItem` fallback validates `MaxBatchWriteItems` only when that fallback operation begins; valid
+values are `1` through `25`. An invalid value returns the existing `ResultBox` error with an
+`ArgumentOutOfRangeException` naming `MaxBatchWriteItems` and its captured value before any batch write dispatch. The
+validated value is snapshotted once for the operation and reused for event puts, tag puts, and rollback deletes; a
+configuration change during dispatch is observed only by the next operation. This batch-only validation does not alter
+`MaxBatchGetItems`, `MaxRetryAttempts`, transaction or conditional paths, or their retry/rollback behavior. With
+`AutoCreateTables = true`, table initialization can still occur before the batch validation, so zero write dispatches
+does not mean zero table-creation DDL.
+
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).
