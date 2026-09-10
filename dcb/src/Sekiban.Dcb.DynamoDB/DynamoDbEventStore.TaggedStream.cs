@@ -46,7 +46,7 @@ public partial class DynamoDbEventStore
         {
             cancellationToken.ThrowIfCancellationRequested();
             var pageSize = ValidateTaggedStreamPageSize();
-            var batchSize = ValidateTaggedStreamBatchSize();
+            var batchSize = ResolveBatchGetChunkSize();
             await _context.EnsureTablesAsync(cancellationToken).ConfigureAwait(false);
 
             var serviceId = CurrentServiceId;
@@ -274,17 +274,20 @@ public partial class DynamoDbEventStore
         return _options.QueryPageSize;
     }
 
-    private int ValidateTaggedStreamBatchSize()
+    // Shared by the normal tag readers and the callback stream so every non-empty read invocation
+    // uses one validated MaxBatchGetItems snapshot. The empty normal-read return remains before this resolver.
+    private int ResolveBatchGetChunkSize()
     {
-        if (_options.MaxBatchGetItems is < 1 or > 100)
+        var batchSize = _options.MaxBatchGetItems;
+        if (batchSize is < 1 or > 100)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(_options.MaxBatchGetItems),
-                _options.MaxBatchGetItems,
-                "Native tagged streaming requires MaxBatchGetItems to be between 1 and 100.");
+                batchSize,
+                "DynamoDB batch reads require between 1 and 100 keys per request.");
         }
 
-        return _options.MaxBatchGetItems;
+        return batchSize;
     }
 
     private static string ToExclusiveAfterSortKey(string sortableUniqueId) =>
