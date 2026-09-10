@@ -145,6 +145,28 @@ public sealed class CosmosEventDocumentSizeGateTests
     }
 
     [Fact]
+    public void ProviderSerializer_FromStreamStream_RetainsSdkPassthroughAtPublicContainerBoundary()
+    {
+        var serializer = new CosmosProviderDefaultSerializer();
+        using var client = new CosmosClient(
+            "AccountEndpoint=https://localhost:8081/;AccountKey=" +
+            "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+            new CosmosClientOptions
+            {
+                ConnectionMode = ConnectionMode.Gateway,
+                LimitToEndpoint = true,
+                Serializer = serializer
+            });
+        var container = client.GetContainer("g72-db", "events");
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes("{}"));
+
+        var returned = client.ClientOptions.Serializer!.FromStream<Stream>(stream);
+
+        Assert.Equal("events", container.Id);
+        Assert.Same(stream, returned);
+    }
+
+    [Fact]
     public void ProviderSerializer_FromStream_DisposesTheInputStream()
     {
         var document = new CosmosEvent
@@ -246,6 +268,25 @@ public sealed class CosmosEventDocumentSizeGateTests
     }
 
     [Fact]
+    public void ProviderSerializer_MatchesSdkCamelCaseForExplicitNamesAndDictionaryKeys()
+    {
+        var document = new SerializerNameParityFixture
+        {
+            ExplicitName = "explicit",
+            PlainName = "plain",
+            DictionaryValues = new Dictionary<string, string> { ["KeyOne"] = "value" }
+        };
+
+        var providerBytes = ProviderSerializerBytes(document);
+        var sdkBytes = PreviousSdkCamelCaseSerializerBytes(document);
+
+        Assert.Equal(sdkBytes, providerBytes);
+        var json = Encoding.UTF8.GetString(providerBytes);
+        Assert.Contains("\"explicitName\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"keyOne\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TypedWriterSerializesPayloadExactlyOnce_AndAllWritersUseTheSameDocumentShape()
     {
         var domain = DomainType.GetDomainTypes();
@@ -334,7 +375,6 @@ public sealed class CosmosEventDocumentSizeGateTests
         }
 
         var maxObservedLength = 0L;
-        var minimumSlack = long.MaxValue;
         foreach (var timestamp in new[]
                  {
                      new DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddTicks(fractionalTicks),
@@ -354,7 +394,6 @@ public sealed class CosmosEventDocumentSizeGateTests
             using var stream = new CosmosProviderDefaultSerializer().ToStream(document);
             maxObservedLength = Math.Max(maxObservedLength, stream.Length);
             var slack = bound - stream.Length;
-            minimumSlack = Math.Min(minimumSlack, slack);
             Assert.True(slack >= 0,
                 $"timestamp={timestamp:o}, bound={bound}, actual={stream.Length}, slack={slack}");
         }
@@ -369,8 +408,9 @@ public sealed class CosmosEventDocumentSizeGateTests
             serialized.EventMetadata,
             new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddTicks(fractionalTicks));
         using var expectedMaxStream = new CosmosProviderDefaultSerializer().ToStream(expectedMaxDocument);
+        Assert.True(maxObservedLength <= bound - 8,
+            $"bound={bound}, maxObserved={maxObservedLength}, sentinelSlack=8");
         Assert.Equal(expectedMaxStream.Length, maxObservedLength);
-        Assert.Equal(maxObservedLength, bound - minimumSlack);
     }
 
     [Fact]
@@ -526,6 +566,34 @@ public sealed class CosmosEventDocumentSizeGateTests
     }
 
     [Fact]
+    public async Task ProviderOwnedCertifiedBound_AllowsUnderQuotaAndPublishesOnce()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var store = new Sekiban.Dcb.Testing.InMemoryEventStore(domain.EventTypes);
+        var publisher = new RecordingEventPublisher();
+        var context = NewOwnedContext();
+        var options = new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+            CosmosEventDocumentSizeMeasurement.Scope,
+            ExecutorSizeRepresentation.StorageItem,
+            maxBytesPerEvent: 2_000_000,
+            measurement: new CosmosEventDocumentSizeMeasurement(context)));
+        var executor = new GeneralSekibanExecutor(
+            store,
+            new InMemoryObjectAccessor(store, domain),
+            domain,
+            options,
+            publisher);
+
+        var result = await executor.ExecuteAsync(
+            new GateCommand(Guid.CreateVersion7()),
+            HandleGateCommand);
+
+        Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+        var published = Assert.Single(publisher.PublishedEvents);
+        Assert.IsType<WeatherForecastCreated>(published.Event.Payload);
+    }
+
+    [Fact]
     public async Task ProviderOwnedCertifiedBoundRejectsBeforeRecordedStoreDispatch()
     {
         var domain = DomainType.GetDomainTypes();
@@ -610,6 +678,7 @@ public sealed class CosmosEventDocumentSizeGateTests
             CosmosEvent value => new CosmosProviderDefaultSerializer().ToStream(value),
             CosmosTag value => new CosmosProviderDefaultSerializer().ToStream(value),
             CosmosMultiProjectionState value => new CosmosProviderDefaultSerializer().ToStream(value),
+            SerializerNameParityFixture value => new CosmosProviderDefaultSerializer().ToStream(value),
             _ => throw new ArgumentOutOfRangeException(nameof(document), document.GetType(), "Unsupported document")
         };
         using var copy = new MemoryStream();
@@ -682,6 +751,16 @@ public sealed class CosmosEventDocumentSizeGateTests
         Task.FromResult(EventOrNone.Event(
             new WeatherForecastCreated(command.Id, "Tokyo", new DateOnly(2026, 9, 10), 21, "g72"),
             new WeatherForecastTag(command.Id)));
+
+    private sealed class SerializerNameParityFixture
+    {
+        [JsonProperty("ExplicitName")]
+        public string ExplicitName { get; init; } = string.Empty;
+
+        public string PlainName { get; init; } = string.Empty;
+
+        public Dictionary<string, string> DictionaryValues { get; init; } = [];
+    }
 
     private sealed class FixedServiceIdProvider(string serviceId) : IServiceIdProvider
     {

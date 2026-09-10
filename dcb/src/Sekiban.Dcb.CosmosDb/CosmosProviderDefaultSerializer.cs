@@ -15,7 +15,9 @@ internal sealed class CosmosProviderDefaultSerializer : CosmosSerializer
     {
         ContractResolver = new DefaultContractResolver
         {
-            NamingStrategy = new CamelCaseNamingStrategy()
+            NamingStrategy = new CamelCaseNamingStrategy(
+                processDictionaryKeys: true,
+                overrideSpecifiedNames: true)
         },
         NullValueHandling = NullValueHandling.Include,
         DateTimeZoneHandling = DateTimeZoneHandling.Utc
@@ -32,6 +34,11 @@ internal sealed class CosmosProviderDefaultSerializer : CosmosSerializer
         ArgumentNullException.ThrowIfNull(stream);
         using (stream)
         {
+            if (typeof(Stream).IsAssignableFrom(typeof(T)))
+            {
+                return (T)(object)stream;
+            }
+
             using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             using var jsonReader = new JsonTextReader(reader);
             return JsonSerializer.Create(Settings).Deserialize<T>(jsonReader)!;
