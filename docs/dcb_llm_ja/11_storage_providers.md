@@ -49,6 +49,27 @@ services.AddSekibanDcbCosmosDbWithAspire();
 
 Cosmos の書き込みはベストエフォート トランザクションです。整合性は Executor の予約と Cosmos の設定に依存します。
 
+### Cosmos event document サイズ admission（opt-in）
+
+`AddSekibanDcbCosmosEventDocumentSizeGate()` は、event ごとの既定 quota `2_000_000` byte を持つ strict な
+`StorageItem` policy を追加します。より小さい正の quota も指定できます。connection string から生成した
+`CosmosDbContext` が使う provider-owned の camel-case Cosmos serializer と同じ境界を測定し、固定の
+CertifiedBound timestamp slack を加えます。超過した event は durable dispatch より前に
+`ExecutorSizeLimitExceededException` で拒否されます。strict capability を測定できない場合は dispatch 前に
+`ExecutorSizeCapabilityException`、non-strict では明示的な名前付き未検証診断を付けて継続します。注入された
+`CosmosClient` は serializer 設定を provider 側で観測できないため certified ではありません。この機能は event
+document の admission だけを保証し、tag document、aggregate/head row、transaction/request envelope、他 provider
+は保証しません。gate を登録しなければ既存の write 動作は変わりません。
+
+helper は既存の `CosmosDbContext` singleton を解決し、provider-owned client が最初に作られる時点でその options を
+取得します。明示的な context には additive な policy helper も使えます。
+
+```csharp
+services.AddSingleton(new CosmosDbContext(connectionString, "SekibanDcb"));
+services.AddSekibanDcbCosmosEventDocumentSizeGate(maxBytesPerEvent: 1_500_000);
+// または: options.AddCosmosEventDocumentPolicy(context, 1_500_000);
+```
+
 ### Azure Blob Storage スナップショット
 
 マルチプロジェクションの状態が大きい場合は `Sekiban.Dcb.BlobStorage.AzureStorage` を使用して Blob Storage に退避。

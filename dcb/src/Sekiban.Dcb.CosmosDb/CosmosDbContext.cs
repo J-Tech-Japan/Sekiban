@@ -31,9 +31,12 @@ public class CosmosDbContext : IDisposable
     // consistent container resolution across sequential awaited calls.
     private readonly ConcurrentDictionary<string, Container> _containers = new();
     private CosmosClient? _cosmosClient;
+    private CosmosSerializer? _serializer;
     private Database? _database;
     private bool _disposed;
+    private int _clientCreationCount;
     private readonly bool _ownsCosmosClient;
+    private readonly object _lifecycleLock = new();
     private readonly SemaphoreSlim _containerLock = new(1, 1);
 
     /// <summary>
@@ -96,6 +99,73 @@ public class CosmosDbContext : IDisposable
     public CosmosDbEventStoreOptions Options => _options;
 
     /// <summary>
+    ///     Test-only instrumentation for the provider-owned lazy client path. It is internal so production consumers
+    ///     cannot depend on it; it does not create a client or initialize a database.
+    /// </summary>
+    internal int ClientCreationCount
+    {
+        get
+        {
+            lock (_lifecycleLock)
+            {
+                return _clientCreationCount;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Measures a mapped event document with the exact provider-owned default serializer used by this context.
+    ///     Injected clients are deliberately not certified because their serializer is not observable here.
+    /// </summary>
+    internal bool TryMeasureSupportedDocument(object document, out long bytes, out string? reason)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+
+        lock (_lifecycleLock)
+        {
+            bytes = 0;
+            reason = null;
+
+            if (_disposed)
+            {
+                reason = "CosmosDbContext is disposed";
+                return false;
+            }
+
+            if (!_ownsCosmosClient)
+            {
+                reason = "Cosmos item measurement requires a provider-owned CosmosClient; injected clients are unproven";
+                return false;
+            }
+
+            try
+            {
+                EnsureClientCreatedLocked();
+                if (_serializer is null)
+                {
+                    reason = "provider-owned Cosmos serializer is unavailable";
+                    return false;
+                }
+
+                using var stream = _serializer.ToStream(document);
+                if (!stream.CanSeek)
+                {
+                    reason = "provider serializer returned a non-seekable stream";
+                    return false;
+                }
+
+                bytes = stream.Length;
+                return true;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                reason = $"provider serializer failed with {ex.GetType().Name}";
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
     ///     Gets the events container for the provided settings, initializing if needed.
     /// </summary>
     public Task<Container> GetEventsContainerAsync(CosmosContainerSettings settings) =>
@@ -115,39 +185,31 @@ public class CosmosDbContext : IDisposable
 
     private async Task InitializeAsync()
     {
-        if (_database != null)
-            return;
+        lock (_lifecycleLock)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(CosmosDbContext));
+
+            if (_database != null)
+                return;
+        }
 
         if (_logger != null)
         {
             LogInitializingConnection(_logger, null);
         }
 
-        if (_cosmosClient == null)
-        {
-            if (string.IsNullOrEmpty(_connectionString))
-                throw new InvalidOperationException("No CosmosClient or connection string provided");
-
-            var cosmosClientOptions = new CosmosClientOptions
-            {
-                SerializerOptions = new CosmosSerializationOptions
-                {
-                    PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-                },
-                AllowBulkExecution = true,
-                // Retry settings for Serverless mode (increased from defaults)
-                MaxRetryAttemptsOnRateLimitedRequests = _options.MaxRetryAttemptsOnRateLimited,
-                MaxRetryWaitTimeOnRateLimitedRequests = _options.MaxRetryWaitTime,
-                // Use Direct mode for better read performance (TCP instead of HTTPS)
-                ConnectionMode = _options.UseDirectConnectionMode ? ConnectionMode.Direct : ConnectionMode.Gateway
-            };
-
-            _cosmosClient = new CosmosClient(_connectionString, cosmosClientOptions);
-        }
+        var client = EnsureClientCreated();
 
         // Create database if it doesn't exist
-        var databaseResponse = await _cosmosClient.CreateDatabaseIfNotExistsAsync(_databaseName).ConfigureAwait(false);
-        _database = databaseResponse.Database;
+        var databaseResponse = await client.CreateDatabaseIfNotExistsAsync(_databaseName).ConfigureAwait(false);
+        lock (_lifecycleLock)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(CosmosDbContext));
+
+            _database = databaseResponse.Database;
+        }
 
         if (_logger != null)
         {
@@ -162,10 +224,15 @@ public class CosmosDbContext : IDisposable
         Func<CosmosContainerSettings, ContainerProperties> propertiesFactory)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        Container? cached;
 
-        if (_containers.TryGetValue(settings.Name, out var cached))
+        lock (_lifecycleLock)
         {
-            return cached;
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(CosmosDbContext));
+
+            if (_containers.TryGetValue(settings.Name, out cached))
+                return cached;
         }
 
         await InitializeAsync().ConfigureAwait(false);
@@ -173,9 +240,13 @@ public class CosmosDbContext : IDisposable
         await _containerLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (_containers.TryGetValue(settings.Name, out cached))
+            lock (_lifecycleLock)
             {
-                return cached;
+                if (_disposed)
+                    throw new ObjectDisposedException(nameof(CosmosDbContext));
+
+                if (_containers.TryGetValue(settings.Name, out cached))
+                    return cached;
             }
 
             var properties = propertiesFactory(settings);
@@ -260,21 +331,54 @@ public class CosmosDbContext : IDisposable
     /// </summary>
     protected virtual void Dispose(bool disposing)
     {
+        lock (_lifecycleLock)
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+
+            if (disposing && _ownsCosmosClient)
+                _cosmosClient?.Dispose();
+
+            if (disposing)
+                _containerLock.Dispose();
+        }
+    }
+
+    private CosmosClient EnsureClientCreated()
+    {
+        lock (_lifecycleLock)
+        {
+            EnsureClientCreatedLocked();
+            return _cosmosClient!;
+        }
+    }
+
+    private void EnsureClientCreatedLocked()
+    {
         if (_disposed)
-        {
+            throw new ObjectDisposedException(nameof(CosmosDbContext));
+
+        if (_cosmosClient is not null)
             return;
-        }
 
-        if (disposing && _ownsCosmosClient)
+        if (string.IsNullOrEmpty(_connectionString))
+            throw new InvalidOperationException("No CosmosClient or connection string provided");
+
+        _serializer = new CosmosProviderDefaultSerializer();
+        var cosmosClientOptions = new CosmosClientOptions
         {
-            _cosmosClient?.Dispose();
-        }
+            Serializer = _serializer,
+            AllowBulkExecution = true,
+            // Retry settings for Serverless mode (increased from defaults)
+            MaxRetryAttemptsOnRateLimitedRequests = _options.MaxRetryAttemptsOnRateLimited,
+            MaxRetryWaitTimeOnRateLimitedRequests = _options.MaxRetryWaitTime,
+            // Use Direct mode for better read performance (TCP instead of HTTPS)
+            ConnectionMode = _options.UseDirectConnectionMode ? ConnectionMode.Direct : ConnectionMode.Gateway
+        };
 
-        if (disposing)
-        {
-            _containerLock.Dispose();
-        }
-
-        _disposed = true;
+        _cosmosClient = new CosmosClient(_connectionString, cosmosClientOptions);
+        _clientCreationCount++;
     }
 }

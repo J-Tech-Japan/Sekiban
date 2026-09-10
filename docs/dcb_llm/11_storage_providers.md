@@ -74,6 +74,27 @@ services.AddSekibanDcbCosmosDbWithAspire();
 // falls back to ConnectionStrings:SekibanDcbCosmos if Aspire client not found
 ```
 
+### Cosmos event-document size admission (opt-in)
+
+`AddSekibanDcbCosmosEventDocumentSizeGate()` adds a strict `StorageItem` policy with a default per-event quota of
+`2_000_000` bytes; a smaller positive quota may be supplied. The policy measures the same provider-owned, camel-case
+Cosmos serializer boundary used by the connection-string-created `CosmosDbContext`, adds the fixed CertifiedBound
+timestamp slack, and rejects an oversized event with `ExecutorSizeLimitExceededException` before durable dispatch. A
+strict measurement capability failure returns `ExecutorSizeCapabilityException` before dispatch; non-strict mode continues
+with an explicit named unvalidated diagnostic. An injected `CosmosClient` is not certified because its serializer settings
+are not observable by the provider gate. This is an event-document admission capability only: it does not certify tag
+documents, aggregate/head rows, transaction/request envelopes, or another provider, and it does not change legacy writes
+when the gate is not registered.
+
+The helper resolves the existing `CosmosDbContext` singleton and captures its options when the provider-owned client is
+first created. For an explicit context, use the additive policy helper:
+
+```csharp
+services.AddSingleton(new CosmosDbContext(connectionString, "SekibanDcb"));
+services.AddSekibanDcbCosmosEventDocumentSizeGate(maxBytesPerEvent: 1_500_000);
+// or: options.AddCosmosEventDocumentPolicy(context, 1_500_000);
+```
+
 ## Azure: Blob Storage Snapshots
 
 Package: `Sekiban.Dcb.BlobStorage.AzureStorage` (`src/Sekiban.Dcb.BlobStorage.AzureStorage`)
