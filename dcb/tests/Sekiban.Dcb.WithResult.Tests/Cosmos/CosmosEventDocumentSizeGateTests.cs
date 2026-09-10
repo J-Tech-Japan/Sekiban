@@ -3,7 +3,6 @@ using Dcb.Domain;
 using Dcb.Domain.Student;
 using Dcb.Domain.Weather;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
@@ -107,6 +106,26 @@ public sealed class CosmosEventDocumentSizeGateTests
     }
 
     [Fact]
+    public void EffectiveSerializerObservationUsesOwnedClientAndNeverResurrectsOrBypassesOwnership()
+    {
+        using var owned = NewOwnedContext();
+        var serializer = owned.EffectiveMeasurementSerializer;
+
+        Assert.NotNull(serializer);
+        Assert.NotEqual(typeof(CosmosDbContext).Assembly, serializer!.GetType().Assembly);
+        Assert.Equal(1, owned.ClientCreationCount);
+
+        using var injected = new CosmosDbContext(new InMemoryCosmosClient());
+        Assert.Null(injected.EffectiveMeasurementSerializer);
+        Assert.Equal(0, injected.ClientCreationCount);
+
+        using var disposed = NewOwnedContext();
+        disposed.Dispose();
+        Assert.Null(disposed.EffectiveMeasurementSerializer);
+        Assert.Equal(0, disposed.ClientCreationCount);
+    }
+
+    [Fact]
     public void SdkSerializer_ThroughCosmosClientOptions_DisposesResponseStream()
     {
         var document = new CosmosEvent
@@ -123,11 +142,11 @@ public sealed class CosmosEventDocumentSizeGateTests
             CorrelationId = "correlation",
             ExecutedUser = "user"
         };
-        using var client = NewSdkClient();
-        var serializer = client.ClientOptions.Serializer ?? throw new Xunit.Sdk.XunitException(
+        using var context = NewOwnedContext();
+        var serializer = context.EffectiveMeasurementSerializer ?? throw new Xunit.Sdk.XunitException(
             "The SDK did not expose an effective serializer for the constructed client.");
         using var stream = serializer.ToStream(document);
-        var response = client.ClientOptions.Serializer!.FromStream<CosmosEvent>(stream);
+        var response = serializer.FromStream<CosmosEvent>(stream);
 
         Assert.Equal(document.Id, response.Id);
         Assert.Equal(document.Payload, response.Payload);
@@ -136,15 +155,15 @@ public sealed class CosmosEventDocumentSizeGateTests
     }
 
     [Fact]
-    public void SdkSerializer_FromStreamStream_RetainsPassthroughAtPublicContainerBoundary()
+    public void SdkSerializer_FromStreamStream_RetainsPassthroughAtOwnedContextBoundary()
     {
-        using var client = NewSdkClient();
-        var container = client.GetContainer("g72-db", "events");
+        using var context = NewOwnedContext();
+        var serializer = context.EffectiveMeasurementSerializer ?? throw new Xunit.Sdk.XunitException(
+            "The SDK did not expose an effective serializer for the constructed client.");
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes("{}"));
 
-        var returned = client.ClientOptions.Serializer!.FromStream<Stream>(stream);
+        var returned = serializer.FromStream<Stream>(stream);
 
-        Assert.Equal("events", container.Id);
         Assert.Same(stream, returned);
     }
 
@@ -162,8 +181,8 @@ public sealed class CosmosEventDocumentSizeGateTests
             Tags = ["Student:dispose"],
             Timestamp = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc)
         };
-        using var client = NewSdkClient();
-        var serializer = client.ClientOptions.Serializer ?? throw new Xunit.Sdk.XunitException(
+        using var context = NewOwnedContext();
+        var serializer = context.EffectiveMeasurementSerializer ?? throw new Xunit.Sdk.XunitException(
             "The SDK did not expose an effective serializer for the constructed client.");
         using var stream = serializer.ToStream(document);
 
@@ -176,6 +195,7 @@ public sealed class CosmosEventDocumentSizeGateTests
     [Fact]
     public void SdkSerializer_PreservesUtcBytesForAllCurrentCosmosDocumentWriters()
     {
+        using var context = NewOwnedContext();
         var utc = new DateTime(2042, 3, 4, 5, 6, 7, DateTimeKind.Utc).AddTicks(1_234_567);
         var documents = new object[]
         {
@@ -246,7 +266,7 @@ public sealed class CosmosEventDocumentSizeGateTests
 
         foreach (var document in documents)
         {
-            var sdkBytes = SdkSerializerBytes(document);
+            var sdkBytes = SdkSerializerBytes(context, document);
             var expectedSdkBytes = ExpectedSdkCamelCaseSerializerBytes(document);
             Assert.Equal(expectedSdkBytes, sdkBytes);
         }
@@ -257,6 +277,7 @@ public sealed class CosmosEventDocumentSizeGateTests
     [InlineData(DateTimeKind.Unspecified)]
     public void SdkSerializer_PublicCosmosContainerPreservesNonUtcCompatibility(DateTimeKind kind)
     {
+        using var context = NewOwnedContext();
         var document = new CosmosEvent
         {
             Pk = "g72-test|non-utc",
@@ -271,12 +292,13 @@ public sealed class CosmosEventDocumentSizeGateTests
 
         Assert.Equal(
             ExpectedSdkCamelCaseSerializerBytes(document),
-            SdkSerializerBytes(document));
+            SdkSerializerBytes(context, document));
     }
 
     [Fact]
     public void SdkSerializer_MatchesCamelCaseForExplicitNamesAndDictionaryKeys()
     {
+        using var context = NewOwnedContext();
         var document = new SerializerNameParityFixture
         {
             ExplicitName = "explicit",
@@ -284,7 +306,7 @@ public sealed class CosmosEventDocumentSizeGateTests
             DictionaryValues = new Dictionary<string, string> { ["KeyOne"] = "value" }
         };
 
-        var sdkBytes = SdkSerializerBytes(document);
+        var sdkBytes = SdkSerializerBytes(context, document);
         var expectedSdkBytes = ExpectedSdkCamelCaseSerializerBytes(document);
 
         Assert.Equal(expectedSdkBytes, sdkBytes);
@@ -358,7 +380,7 @@ public sealed class CosmosEventDocumentSizeGateTests
         var domain = DomainType.GetDomainTypes();
         var @event = NewEvent(domain, "ASCII 東京😀 \"quoted\"", ["tag:null", "タグ"]);
         var serialized = @event.ToSerializableEvent(domain.EventTypes);
-        var context = NewOwnedContext();
+        using var context = NewOwnedContext();
         var measurement = new CosmosEventDocumentSizeMeasurement(context);
         var sentinelDocument = CosmosEventDocumentMapper.FromSerializableEvent(
             serialized,
@@ -376,7 +398,7 @@ public sealed class CosmosEventDocumentSizeGateTests
         Assert.True(measured.IsAvailable, measured.Reason);
         Assert.Null(measured.Bytes);
         var bound = Assert.IsType<long>(measured.CertifiedUpperBound);
-        var sentinelBytes = SdkSerializerBytes(sentinelDocument);
+        var sentinelBytes = SdkSerializerBytes(context, sentinelDocument);
         Assert.Equal(sentinelBytes.LongLength, bound);
 
         var maxObservedLength = 0L;
@@ -396,7 +418,7 @@ public sealed class CosmosEventDocumentSizeGateTests
                 serialized.Tags,
                 serialized.EventMetadata,
                 timestamp);
-            var actualBytes = SdkSerializerBytes(document);
+            var actualBytes = SdkSerializerBytes(context, document);
             maxObservedLength = Math.Max(maxObservedLength, actualBytes.LongLength);
             var slack = bound - actualBytes.LongLength;
             Assert.InRange(slack, 0, 8);
@@ -415,7 +437,7 @@ public sealed class CosmosEventDocumentSizeGateTests
             serialized.Tags,
             serialized.EventMetadata,
             new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddTicks(fractionalTicks));
-        var expectedMaxBytes = SdkSerializerBytes(expectedMaxDocument);
+        var expectedMaxBytes = SdkSerializerBytes(context, expectedMaxDocument);
         Assert.Equal(expectedMaxBytes.LongLength, maxObservedLength);
     }
 
@@ -714,26 +736,50 @@ public sealed class CosmosEventDocumentSizeGateTests
         }
     }
 
+    [Theory]
+    [InlineData(ExecutorSizeStrictness.Strict)]
+    [InlineData(ExecutorSizeStrictness.NonStrict)]
+    public async Task NullEffectiveSerializerHasStrictAndNonStrictOutcomes(ExecutorSizeStrictness strictness)
+    {
+        var domain = DomainType.GetDomainTypes();
+        var inner = new Sekiban.Dcb.Testing.InMemoryEventStore(domain.EventTypes);
+        var recording = new RecordingEventStore(inner);
+        using var context = NewOwnedContext();
+        context.ForceMeasurementSerializerUnavailable = true;
+        var executor = new GeneralSekibanExecutor(
+            recording,
+            new InMemoryObjectAccessor(recording, domain),
+            domain,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                CosmosEventDocumentSizeMeasurement.Scope,
+                ExecutorSizeRepresentation.StorageItem,
+                maxBytesPerEvent: 1024,
+                strictness: strictness,
+                measurement: new CosmosEventDocumentSizeMeasurement(context))));
+
+        var result = await executor.CommitSerializableEventsAsync(
+            new SerializedCommitRequest([CreateCandidate(domain)], []));
+
+        if (strictness == ExecutorSizeStrictness.Strict)
+        {
+            Assert.IsType<ExecutorSizeCapabilityException>(result.GetException());
+            Assert.Equal(0, recording.SerializedWriteCalls);
+        }
+        else
+        {
+            Assert.True(result.IsSuccess);
+            Assert.Contains(result.GetValue().SizeGateDiagnostics, diagnostic =>
+                diagnostic.Scope == CosmosEventDocumentSizeMeasurement.Scope &&
+                diagnostic.Reason.Contains("serializer capability is unavailable", StringComparison.Ordinal));
+            Assert.Equal(1, recording.SerializedWriteCalls);
+        }
+    }
+
     private static CosmosDbContext NewOwnedContext() =>
         new(
             "AccountEndpoint=https://localhost:8081/;AccountKey=" +
             "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
             "g72-db");
-
-    private static CosmosClient NewSdkClient() =>
-        new(
-            "AccountEndpoint=https://localhost:8081/;AccountKey=" +
-            "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
-            new CosmosClientOptions
-            {
-                ConnectionMode = ConnectionMode.Gateway,
-                LimitToEndpoint = true,
-                ConsistencyLevel = ConsistencyLevel.Session,
-                SerializerOptions = new CosmosSerializationOptions
-                {
-                    PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
-                }
-            });
 
     private static readonly JsonSerializerSettings PreviousSdkCamelCaseSettings = new()
     {
@@ -742,10 +788,9 @@ public sealed class CosmosEventDocumentSizeGateTests
         DateTimeZoneHandling = DateTimeZoneHandling.RoundtripKind
     };
 
-    private static byte[] SdkSerializerBytes(object document)
+    private static byte[] SdkSerializerBytes(CosmosDbContext context, object document)
     {
-        using var client = NewSdkClient();
-        var serializer = client.ClientOptions.Serializer ?? throw new Xunit.Sdk.XunitException(
+        var serializer = context.EffectiveMeasurementSerializer ?? throw new Xunit.Sdk.XunitException(
             "The SDK did not expose an effective serializer for the constructed client.");
         using var stream = serializer.ToStream(document);
         using var copy = new MemoryStream();

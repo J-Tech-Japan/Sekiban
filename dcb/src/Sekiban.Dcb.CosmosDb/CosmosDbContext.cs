@@ -119,6 +119,26 @@ public class CosmosDbContext : IDisposable
     internal bool ForceMeasurementSerializerUnavailable { get; set; }
 
     /// <summary>
+    ///     Observes the effective serializer on this context's provider-owned client for internal compatibility
+    ///     tests. Injected clients and disposed contexts deliberately report no serializer and never create or
+    ///     replace a client through this observation seam.
+    /// </summary>
+    internal CosmosSerializer? EffectiveMeasurementSerializer
+    {
+        get
+        {
+            lock (_lifecycleLock)
+            {
+                if (_disposed || !_ownsCosmosClient)
+                    return null;
+
+                EnsureClientCreatedLocked();
+                return _cosmosClient!.ClientOptions.Serializer;
+            }
+        }
+    }
+
+    /// <summary>
     ///     Measures a mapped event document with the exact provider-owned SDK serializer used by this context.
     ///     Injected clients are deliberately not certified because their serializer is not observable here.
     /// </summary>
