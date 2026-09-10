@@ -114,7 +114,7 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
     public void LargestTagItemBoundary_IsMeasuredExactly(long expectedBytes)
     {
         var measurement = new DynamoDbMaxWrittenItemSizeMeasurement();
-        var sized = CreateTagLargestBoundary(measurement, expectedBytes, "tag-boundary");
+        var sized = DynamoDbG68TestData.CreateTagLargestBoundary(measurement, expectedBytes, "tag-boundary");
 
         Assert.Equal(expectedBytes, Measure(measurement, sized, "tag-boundary"));
         var mapped = CaptureSerializedWrite(sized, "tag-boundary");
@@ -122,6 +122,9 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
             expectedBytes,
             mapped.EventItems.Concat(mapped.TagItems).Max(IndependentItemBytes));
         Assert.True(mapped.TagItems.Max(IndependentItemBytes) > mapped.EventItems.Max(IndependentItemBytes));
+        Assert.All(
+            mapped.EventItems.Concat(mapped.TagItems),
+            AssertDynamoDbKeyLimits);
     }
 
     [Theory]
@@ -468,35 +471,6 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
         Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
     }
 
-    private static SerializableEvent CreateTagLargestBoundary(
-        DynamoDbMaxWrittenItemSizeMeasurement measurement,
-        long expectedBytes,
-        string serviceId)
-    {
-        for (var typeLength = 1; typeLength <= 256; typeLength++)
-        {
-            var eventType = "T" + new string('e', typeLength - 1);
-            var seed = CreateSerializedEvent([], ["Tag:"], eventType);
-            var low = 0;
-            var high = 500_000;
-            while (low <= high)
-            {
-                var suffixLength = low + ((high - low) / 2);
-                var candidate = seed with { Tags = ["Tag:" + new string('x', suffixLength)] };
-                var measured = Measure(measurement, candidate, serviceId);
-                if (measured == expectedBytes)
-                    return candidate;
-
-                if (measured < expectedBytes)
-                    low = suffixLength + 1;
-                else
-                    high = suffixLength - 1;
-            }
-        }
-
-        throw new Xunit.Sdk.XunitException($"Could not construct a tag boundary of {expectedBytes} bytes.");
-    }
-
     private static List<SerializableEvent> CreateOperationBoundary(
         DynamoDbWriteOperationSizeMeasurement measurement,
         long expectedBytes)
@@ -618,6 +592,16 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
     private static long IndependentItemBytes(IReadOnlyDictionary<string, AttributeValue> item) =>
         item.Sum(pair => Encoding.UTF8.GetByteCount(pair.Key) + IndependentValueBytes(pair.Value));
 
+    private static void AssertDynamoDbKeyLimits(IReadOnlyDictionary<string, AttributeValue> item)
+    {
+        Assert.True(item.TryGetValue("pk", out var partitionKey));
+        Assert.True(item.TryGetValue("sk", out var sortKey));
+        Assert.NotNull(partitionKey.S);
+        Assert.NotNull(sortKey.S);
+        Assert.InRange(Encoding.UTF8.GetByteCount(partitionKey.S!), 1, 2_048);
+        Assert.InRange(Encoding.UTF8.GetByteCount(sortKey.S!), 1, 1_024);
+    }
+
     private static long IndependentValueBytes(AttributeValue value)
     {
         if (value.S is not null)
@@ -663,4 +647,75 @@ public sealed class DynamoDbWriteOperationSizeMeasurementTests
     {
         public const string ExpectedCondition = "attribute_not_exists(pk)";
     }
+}
+
+internal static class DynamoDbG68TestData
+{
+    public static SerializableEvent CreateTagLargestBoundary(
+        DynamoDbMaxWrittenItemSizeMeasurement measurement,
+        long expectedBytes,
+        string serviceId)
+    {
+        const string eventTypePrefix = "TagBoundaryEvent";
+        // The tag is part of the tag-row partition key. Keep it comfortably below DynamoDB's 2,048-byte
+        // UTF-8 partition-key limit and vary the event type, which is stored in both event and tag rows.
+        var legalTag = "Tag:" + new string('x', 1_900);
+        var seed = CreateSerializedEvent([], [legalTag], eventTypePrefix);
+        var low = eventTypePrefix.Length;
+        var high = 500_000;
+        while (low <= high)
+        {
+            var typeLength = low + ((high - low) / 2);
+            var eventType = eventTypePrefix + new string('e', typeLength - eventTypePrefix.Length);
+            var candidate = seed with { EventPayloadName = eventType };
+            var measured = Measure(measurement, candidate, serviceId);
+            if (measured == expectedBytes)
+                return candidate;
+
+            if (measured < expectedBytes)
+                low = typeLength + 1;
+            else
+                high = typeLength - 1;
+        }
+
+        throw new Xunit.Sdk.XunitException($"Could not construct a legal-key tag boundary of {expectedBytes} bytes.");
+    }
+
+    private static long Measure(
+        IExecutorSizeMeasurement measurement,
+        SerializableEvent serialized,
+        string serviceId)
+    {
+        var result = measurement.Measure(new ExecutorSizeMeasurementContext(
+            measurement is DynamoDbMaxWrittenItemSizeMeasurement
+                ? DynamoDbMaxWrittenItemSizeMeasurement.Scope
+                : DynamoDbWriteOperationSizeMeasurement.Scope,
+            ExecutorSizeRepresentation.StorageItem,
+            new Event(
+                new StudentCreated(Guid.CreateVersion7(), "measurement", 1),
+                serialized.SortableUniqueIdValue,
+                serialized.EventPayloadName,
+                serialized.Id,
+                serialized.EventMetadata,
+                serialized.Tags),
+            serialized,
+            serviceId,
+            null,
+            null));
+        if (!result.IsAvailable || result.Bytes is null)
+            throw new Xunit.Sdk.XunitException(result.Reason ?? "DynamoDB test measurement was unavailable.");
+        return result.Bytes.Value;
+    }
+
+    private static SerializableEvent CreateSerializedEvent(
+        byte[] payload,
+        IReadOnlyList<string> tags,
+        string eventType) =>
+        new(
+            payload,
+            SortableUniqueId.GenerateNew(),
+            Guid.CreateVersion7(),
+            new EventMetadata("cause", "correlation", "user"),
+            tags.ToList(),
+            eventType);
 }

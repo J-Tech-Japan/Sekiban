@@ -1,15 +1,21 @@
+using System.Globalization;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Runtime;
 using Dcb.Domain;
 using Dcb.Domain.Student;
+using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Commands;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.DynamoDB;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.SizeGates;
+using Sekiban.Dcb.Testing;
 using Xunit;
 
 namespace Sekiban.Dcb.Tests;
@@ -23,6 +29,7 @@ public sealed class DynamoDbLocalWriteOperationTests
 {
     [Theory]
     [InlineData(4_194_303, true)]
+    [InlineData(4_194_304, true)]
     [InlineData(4_194_305, false)]
     public async Task PinnedLocalCharacterizesUnderAndOverFourMiBOperationContribution(
         long expectedContribution,
@@ -53,7 +60,10 @@ public sealed class DynamoDbLocalWriteOperationTests
             Assert.Equal(expectedSuccess, result.IsSuccess);
             Assert.Equal(expectedSuccess ? events.Count : 0, await CountItemsAsync(client, options.EventsTableName));
             if (!expectedSuccess)
-                Assert.NotNull(result.GetException());
+            {
+                var exception = result.GetException();
+                Assert.Equal(expectedContribution, ReadReportedPayloadSize(exception));
+            }
         }
         finally
         {
@@ -128,6 +138,73 @@ public sealed class DynamoDbLocalWriteOperationTests
         }
     }
 
+    [Fact]
+    public async Task PinnedLocalItemOnlyUndercountMutantAdmitsButServiceRejects()
+    {
+        var endpoint = Environment.GetEnvironmentVariable("SEKIBAN_DYNAMODB_LOCAL_ENDPOINT")
+            ?? "http://127.0.0.1:18000";
+        var suffix = Guid.NewGuid().ToString("N");
+        const string serviceId = "default";
+        var options = CreateOptions(suffix, endpoint);
+        using var client = CreateClient(endpoint);
+        var domain = DomainType.GetDomainTypes();
+        var store = NewStore(client, options, domain, serviceId);
+
+        try
+        {
+            var productionMeasurement = new DynamoDbWriteOperationSizeMeasurement(options);
+            var events = CreateValidExecutorOperationBoundary(productionMeasurement, 4_194_305, serviceId);
+            var productionContribution = events.Sum(serialized => Measure(productionMeasurement, serialized, serviceId));
+            var itemOnlyMeasurement = new ItemOnlyOperationMeasurement(options);
+            var itemOnlyContribution = events.Sum(serialized => Measure(itemOnlyMeasurement, serialized, serviceId));
+            var conditionBytes = Encoding.UTF8.GetByteCount("attribute_not_exists(pk)");
+
+            Assert.Equal(4_194_305, productionContribution);
+            Assert.Equal(productionContribution - (conditionBytes * events.Count), itemOnlyContribution);
+            Assert.InRange(itemOnlyContribution, 1, DynamoDbWriteOperationSizeMeasurement.MaximumTransactionBytes);
+
+            var request = new SerializedCommitRequest(
+                events.Select(e => new SerializableEventCandidate(e.Payload, e.EventPayloadName, e.Tags)).ToArray(),
+                []);
+            var itemOnlyOptions = new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                "dynamodb-item-only-mutant",
+                ExecutorSizeRepresentation.StorageItem,
+                maxBytesPerOperation: DynamoDbWriteOperationSizeMeasurement.MaximumTransactionBytes,
+                measurement: itemOnlyMeasurement));
+            var itemOnlyExecutor = new GeneralSekibanExecutor(
+                store,
+                new InMemoryObjectAccessor(store, domain),
+                domain,
+                itemOnlyOptions);
+
+            // The item-only mutant admits the operation; the actual provider then rejects the same transaction.
+            var serviceResult = await itemOnlyExecutor.CommitSerializableEventsAsync(request);
+            Assert.False(serviceResult.IsSuccess);
+            Assert.IsNotType<ExecutorSizeLimitExceededException>(serviceResult.GetException());
+            Assert.Equal(productionContribution, ReadReportedPayloadSize(serviceResult.GetException()));
+            Assert.Equal(0, await CountItemsAsync(client, options.EventsTableName));
+            Assert.Equal(0, await CountItemsAsync(client, options.TagsTableName));
+
+            var productionExecutor = new GeneralSekibanExecutor(
+                store,
+                new InMemoryObjectAccessor(store, domain),
+                domain,
+                new ExecutorSizeGateOptions().AddDynamoDbWriteOperationPolicy(options));
+            var productionResult = await productionExecutor.CommitSerializableEventsAsync(request);
+            var gateException = Assert.IsType<ExecutorSizeLimitExceededException>(productionResult.GetException());
+            Assert.Equal(DynamoDbWriteOperationSizeMeasurement.Scope, gateException.Scope);
+            Assert.Equal(productionContribution, gateException.MeasuredBytes);
+            Assert.Equal(0, await CountItemsAsync(client, options.EventsTableName));
+            Assert.Equal(0, await CountItemsAsync(client, options.TagsTableName));
+        }
+        finally
+        {
+            await DeleteTableAsync(client, options.EventsTableName);
+            await DeleteTableAsync(client, options.TagsTableName);
+            await DeleteTableAsync(client, options.ProjectionStatesTableName);
+        }
+    }
+
     private static DynamoDbEventStoreOptions CreateOptions(string suffix, string endpoint) =>
         new()
         {
@@ -182,6 +259,55 @@ public sealed class DynamoDbLocalWriteOperationTests
         return events;
     }
 
+    private static List<SerializableEvent> CreateValidExecutorOperationBoundary(
+        DynamoDbWriteOperationSizeMeasurement measurement,
+        long expectedBytes,
+        string serviceId)
+    {
+        const int fixedEventCount = 10;
+        const int fixedNameLength = 380_000;
+        var events = Enumerable.Range(0, fixedEventCount)
+            .Select(_ => CreateStudentEvent(fixedNameLength))
+            .ToList();
+        var used = events.Sum(serialized => Measure(measurement, serialized, serviceId));
+        var low = 0;
+        var high = 500_000;
+        while (low <= high)
+        {
+            var nameLength = low + ((high - low) / 2);
+            var candidate = CreateStudentEvent(nameLength);
+            var total = used + Measure(measurement, candidate, serviceId);
+            if (total == expectedBytes)
+            {
+                events.Add(candidate);
+                return events;
+            }
+
+            if (total < expectedBytes)
+                low = nameLength + 1;
+            else
+                high = nameLength - 1;
+        }
+
+        throw new Xunit.Sdk.XunitException(
+            $"Could not construct a valid executor operation boundary of {expectedBytes} bytes.");
+    }
+
+    private static SerializableEvent CreateStudentEvent(int nameLength)
+    {
+        var id = Guid.CreateVersion7();
+        var payload = JsonSerializer.SerializeToUtf8Bytes(
+            new StudentCreated(id, new string('x', nameLength), 1),
+            DomainType.GetDomainTypes().JsonSerializerOptions);
+        return new SerializableEvent(
+            payload,
+            SortableUniqueId.GenerateNew(),
+            id,
+            new EventMetadata(id.ToString(), "SerializedCommit", "SerializedSekibanExecutor"),
+            [],
+            nameof(StudentCreated));
+    }
+
     private static SerializableEvent CreateSerializedEvent(byte[] payload, string eventType) =>
         new(
             payload,
@@ -192,7 +318,7 @@ public sealed class DynamoDbLocalWriteOperationTests
             eventType);
 
     private static long Measure(
-        DynamoDbWriteOperationSizeMeasurement measurement,
+        IExecutorSizeMeasurement measurement,
         SerializableEvent serialized,
         string serviceId)
     {
@@ -212,6 +338,28 @@ public sealed class DynamoDbLocalWriteOperationTests
             null));
         Assert.True(result.IsAvailable, result.Reason);
         return Assert.IsType<long>(result.Bytes);
+    }
+
+    private static long ReadReportedPayloadSize(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            var match = Regex.Match(
+                current.Message,
+                @"Payload\s+Size:\s*([0-9,]+)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (match.Success && long.TryParse(
+                    match.Groups[1].Value.Replace(",", string.Empty, StringComparison.Ordinal),
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var payloadSize))
+            {
+                return payloadSize;
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException(
+            $"DynamoDB Local did not report a transaction payload size. Exception tree: {exception}");
     }
 
     private static Dictionary<string, AttributeValue> EventKey(string serviceId, Guid eventId) =>
@@ -294,5 +442,21 @@ public sealed class DynamoDbLocalWriteOperationTests
     private sealed class FixedServiceIdProvider(string serviceId) : IServiceIdProvider
     {
         public string GetCurrentServiceId() => serviceId;
+    }
+
+    private sealed class ItemOnlyOperationMeasurement(DynamoDbEventStoreOptions options) : IExecutorSizeMeasurement
+    {
+        private readonly DynamoDbWriteOperationSizeMeasurement _productionMeasurement =
+            new(options);
+
+        public ExecutorSizeMeasurementResult Measure(ExecutorSizeMeasurementContext context)
+        {
+            var result = _productionMeasurement.Measure(context);
+            if (!result.IsAvailable || result.Bytes is not { } bytes)
+                return result;
+
+            return ExecutorSizeMeasurementResult.Exact(
+                bytes - Encoding.UTF8.GetByteCount("attribute_not_exists(pk)"));
+        }
     }
 }
