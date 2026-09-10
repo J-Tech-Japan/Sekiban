@@ -980,6 +980,21 @@ snapshot され、event put、tag put、rollback delete のすべてで再利用
 およびそれらの retry/rollback 挙動を変更しません。`AutoCreateTables = true` の場合、batch 検証より先に table 初期化が
 行われることがあるため、write dispatch が 0 件でも table 作成 DDL が 0 件とは限りません。
 
+## SEK-G70 DynamoDB batch-read snapshot
+
+`MaxBatchGetItems` は、公開されている tag list read と callback-native tag stream の両方で、1 つの shared private
+resolver により検証されます。空でない 1 回の invocation では mutable な option を 1 回だけ読み取り、`1` から
+`100` だけを受け付け、その snapshot をすべての `BatchGetItem` chunk で再利用します。無効値は clamp せず、
+parameter が `MaxBatchGetItems`、取得した `ActualValue` を含む `ArgumentOutOfRangeException` を返します。callback
+stream では query page をまたぐ全 invocation がその snapshot を保持します。
+
+2 つの公開 list method には no-tag-rows の早期 return が残ります。tag query が空なら、`MaxBatchGetItems` を検証せず
+batch read を dispatch せずに成功します。callback stream は cancellation と `QueryPageSize` の検証後、table/query I/O
+より前に eager validation を行います。`MaxRetryAttempts` は各 retry attempt ごとに読み取られ、
+`UseConsistentReads` は各 request chunk に適用され、`QueryPageSize` は引き続き query page を制御し、write path は
+変更されません。これは read invocation ごとの snapshot であり、global option validation や retry 時の再 chunking
+ではありません。
+
 ## 関連資料
 
 現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。

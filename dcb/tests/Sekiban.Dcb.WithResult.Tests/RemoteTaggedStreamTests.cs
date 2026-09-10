@@ -2,6 +2,7 @@ using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Runtime;
 using Dcb.Domain;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
@@ -710,6 +711,329 @@ public sealed class RemoteTaggedStreamTests
         Assert.Empty(client.BatchGetTokens);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public async Task DynamoTagReads_InvalidBatchSizeReturnsCapturedErrorWithoutBatchGet(int invalidSize)
+    {
+        var domain = BuildParityDomain();
+        var client = new NativeTaggedStreamDynamoClient();
+        var options = NewDynamoReadOptions(invalidSize);
+        var store = NewDynamoStore(client, options, domain);
+        var tag = new RemoteParityTag($"dynamo-invalid-{invalidSize}");
+        SeedDynamo(client, tag, ReadFixture(domain, tag, 1));
+
+        var typed = await store.ReadEventsByTagAsync(tag);
+        Assert.False(typed.IsSuccess);
+        AssertInvalidBatchReadOption(typed.GetException(), invalidSize);
+
+        var serialized = await store.ReadSerializableEventsByTagAsync(tag);
+        Assert.False(serialized.IsSuccess);
+        AssertInvalidBatchReadOption(serialized.GetException(), invalidSize);
+
+        Assert.Empty(client.BatchGetRequestSizes);
+    }
+
+    [Theory]
+    [InlineData(100, false)]
+    [InlineData(100, true)]
+    [InlineData(1, false)]
+    [InlineData(1, true)]
+    public async Task DynamoTagReads_UseOneValidSnapshotForTypedAndSerializedEntries(
+        int batchSize,
+        bool serialized)
+    {
+        var domain = BuildParityDomain();
+        var client = new NativeTaggedStreamDynamoClient();
+        var options = NewDynamoReadOptions(batchSize);
+        options.UseConsistentReads = true;
+        var store = NewDynamoStore(client, options, domain);
+        var tag = new RemoteParityTag($"dynamo-valid-{batchSize}-{serialized}");
+        var events = ReadFixture(domain, tag, 250);
+        SeedDynamo(client, tag, events);
+
+        var ids = await ReadTagIdsAsync(store, tag, serialized);
+
+        Assert.Equal(events.Select(@event => @event.SortableUniqueIdValue), ids);
+        Assert.Equal(
+            batchSize == 100
+                ? new[] { 100, 100, 50 }
+                : Enumerable.Repeat(1, 250),
+            client.BatchGetRequestSizes);
+        Assert.All(client.BatchGetConsistentReads, Assert.True);
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(0, true)]
+    [InlineData(101, false)]
+    [InlineData(101, true)]
+    public async Task DynamoTagReads_MutationDuringFirstDispatchDoesNotChangeTheSnapshot(
+        int mutatedSize,
+        bool serialized)
+    {
+        var domain = BuildParityDomain();
+        var client = new NativeTaggedStreamDynamoClient();
+        var options = NewDynamoReadOptions(100);
+        var store = NewDynamoStore(client, options, domain);
+        var tag = new RemoteParityTag($"dynamo-mutate-{mutatedSize}-{serialized}");
+        var events = ReadFixture(domain, tag, 150);
+        SeedDynamo(client, tag, events);
+        client.AfterBatchGet = dispatchNumber =>
+        {
+            if (dispatchNumber == 1)
+                options.MaxBatchGetItems = mutatedSize;
+        };
+
+        var ids = await ReadTagIdsAsync(store, tag, serialized);
+
+        Assert.Equal(events.Select(@event => @event.SortableUniqueIdValue), ids);
+        Assert.Equal(new[] { 100, 50 }, client.BatchGetRequestSizes);
+        Assert.Equal(mutatedSize, options.MaxBatchGetItems);
+        Assert.Equal(events.Count, ids.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DynamoTagReads_NextOperationRereadsTheMutableOption(bool serialized)
+    {
+        var domain = BuildParityDomain();
+        var client = new NativeTaggedStreamDynamoClient();
+        var options = NewDynamoReadOptions(100);
+        var store = NewDynamoStore(client, options, domain);
+        var tag = new RemoteParityTag($"dynamo-next-operation-{serialized}");
+        var events = ReadFixture(domain, tag, 25);
+        SeedDynamo(client, tag, events);
+
+        await ReadTagIdsAsync(store, tag, serialized);
+        client.ClearReadRequests();
+        options.MaxBatchGetItems = 10;
+
+        var ids = await ReadTagIdsAsync(store, tag, serialized);
+
+        Assert.Equal(events.Select(@event => @event.SortableUniqueIdValue), ids);
+        Assert.Equal(new[] { 10, 10, 5 }, client.BatchGetRequestSizes);
+    }
+
+    [Fact]
+    public async Task DynamoTagReads_NoTagRowsRemainNoOpWithAnInvalidBatchSize()
+    {
+        var domain = BuildParityDomain();
+        var client = new NativeTaggedStreamDynamoClient();
+        var options = NewDynamoReadOptions(0);
+        var store = NewDynamoStore(client, options, domain);
+        var tag = new RemoteParityTag("dynamo-no-tag-rows");
+
+        var typed = await store.ReadEventsByTagAsync(tag);
+        var serialized = await store.ReadSerializableEventsByTagAsync(tag);
+
+        Assert.True(typed.IsSuccess, typed.IsSuccess ? string.Empty : typed.GetException().ToString());
+        Assert.True(serialized.IsSuccess, serialized.IsSuccess ? string.Empty : serialized.GetException().ToString());
+        Assert.Empty(typed.GetValue());
+        Assert.Empty(serialized.GetValue());
+        Assert.Empty(client.BatchGetRequestSizes);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public async Task DynamoNativeTaggedStream_InvalidBatchSizeFailsBeforeQuery(int invalidSize)
+    {
+        var client = new NativeTaggedStreamDynamoClient();
+        var options = NewDynamoReadOptions(invalidSize);
+        var store = NewDynamoStore(client, options);
+
+        var result = await store.StreamSerializableEventsByTagAsync(
+            new RemoteParityTag($"dynamo-stream-invalid-{invalidSize}"),
+            null,
+            null,
+            _ => ValueTask.CompletedTask);
+
+        Assert.False(result.IsSuccess);
+        AssertInvalidBatchReadOption(result.GetException(), invalidSize);
+        Assert.Empty(client.Queries);
+        Assert.Empty(client.BatchGetRequestSizes);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(100)]
+    public async Task DynamoNativeTaggedStream_ValidBatchSizesPreserveCallbackOrder(int batchSize)
+    {
+        var domain = BuildParityDomain();
+        var client = new NativeTaggedStreamDynamoClient();
+        var options = NewDynamoReadOptions(batchSize);
+        var store = NewDynamoStore(client, options, domain);
+        var tag = new RemoteParityTag($"dynamo-stream-valid-{batchSize}");
+        var events = ReadFixture(domain, tag, 5);
+        SeedDynamo(client, tag, events);
+        var emitted = new List<string>();
+
+        var result = await store.StreamSerializableEventsByTagAsync(
+            tag,
+            null,
+            null,
+            @event =>
+            {
+                emitted.Add(@event.SortableUniqueIdValue);
+                return ValueTask.CompletedTask;
+            });
+
+        Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+        Assert.Equal(events.Select(@event => @event.SortableUniqueIdValue), emitted);
+        Assert.Equal(batchSize == 100 ? new[] { 5 } : Enumerable.Repeat(1, 5), client.BatchGetRequestSizes);
+    }
+
+    [Fact]
+    public async Task DynamoNativeTaggedStream_MutationDuringFirstDispatchKeepsTheWholeStreamSnapshot()
+    {
+        var domain = BuildParityDomain();
+        var client = new NativeTaggedStreamDynamoClient();
+        var options = NewDynamoReadOptions(2);
+        options.QueryPageSize = 2;
+        var store = NewDynamoStore(client, options, domain);
+        var tag = new RemoteParityTag("dynamo-stream-snapshot");
+        var events = ReadFixture(domain, tag, 5);
+        SeedDynamo(client, tag, events);
+        client.AfterBatchGet = dispatchNumber =>
+        {
+            if (dispatchNumber == 1)
+                options.MaxBatchGetItems = 1;
+        };
+        var emitted = new List<string>();
+
+        var result = await store.StreamSerializableEventsByTagAsync(
+            tag,
+            null,
+            null,
+            @event =>
+            {
+                emitted.Add(@event.SortableUniqueIdValue);
+                return ValueTask.CompletedTask;
+            });
+
+        Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+        Assert.Equal(events.Select(@event => @event.SortableUniqueIdValue), emitted);
+        Assert.Equal(new[] { 2, 2, 1 }, client.BatchGetRequestSizes);
+        Assert.Equal(3, client.Queries.Count);
+        Assert.All(client.Queries, query => Assert.Equal(2, query.Limit));
+        Assert.Equal(1, options.MaxBatchGetItems);
+    }
+
+    [Fact]
+    public async Task DynamoNativeTaggedStream_UnprocessedKeysRetryOnlyTheReturnedKeys()
+    {
+        var domain = BuildParityDomain();
+        var client = new NativeTaggedStreamDynamoClient { ReturnOneUnprocessedKeyOnce = true };
+        var options = NewDynamoReadOptions(2);
+        options.MaxRetryAttempts = 1;
+        var store = NewDynamoStore(client, options, domain);
+        var tag = new RemoteParityTag("dynamo-stream-retry");
+        var events = ReadFixture(domain, tag, 2);
+        SeedDynamo(client, tag, events);
+        var emitted = new List<string>();
+
+        var result = await store.StreamSerializableEventsByTagAsync(
+            tag,
+            null,
+            null,
+            @event =>
+            {
+                emitted.Add(@event.SortableUniqueIdValue);
+                return ValueTask.CompletedTask;
+            });
+
+        Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+        Assert.Equal(events.Select(@event => @event.SortableUniqueIdValue), emitted);
+        Assert.Equal(new[] { 2, 1 }, client.BatchGetRequestSizes);
+        Assert.Single(client.BatchGetRequestEventIds[1]);
+        Assert.Equal(client.BatchGetRequestEventIds[0][1], client.BatchGetRequestEventIds[1][0]);
+    }
+
+    [Fact]
+    public async Task DynamoNativeTaggedStream_RetryLimitRemainsPerAttempt()
+    {
+        var domain = BuildParityDomain();
+        var client = new NativeTaggedStreamDynamoClient { ReturnOneUnprocessedKeyOnce = true };
+        var options = NewDynamoReadOptions(2);
+        options.MaxRetryAttempts = 0;
+        var store = NewDynamoStore(client, options, domain);
+        var tag = new RemoteParityTag("dynamo-stream-retry-limit");
+        SeedDynamo(client, tag, ReadFixture(domain, tag, 2));
+
+        var result = await store.StreamSerializableEventsByTagAsync(
+            tag,
+            null,
+            null,
+            _ => ValueTask.CompletedTask);
+
+        Assert.False(result.IsSuccess);
+        Assert.IsType<InvalidOperationException>(result.GetException());
+        Assert.Equal(new[] { 2 }, client.BatchGetRequestSizes);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(101)]
+    public async Task DynamoTaggedStreamHarnessRejectsServiceInvalidBatchGetShapes(int keyCount)
+    {
+        var client = new NativeTaggedStreamDynamoClient();
+        var request = new BatchGetItemRequest
+        {
+            RequestItems = new Dictionary<string, KeysAndAttributes>
+            {
+                [EventsTable] = new KeysAndAttributes
+                {
+                    Keys = Enumerable.Range(0, keyCount)
+                        .Select(index => new Dictionary<string, AttributeValue>
+                        {
+                            ["pk"] = new() { S = $"pk-{index}" },
+                            ["sk"] = new() { S = $"sk-{index}" }
+                        })
+                        .ToList()
+                }
+            }
+        };
+
+        await Assert.ThrowsAsync<AmazonDynamoDBException>(() => client.BatchGetItemAsync(request));
+    }
+
+    [Fact]
+    public async Task DynamoTagReads_DiResolvedOptionsMutationIsUsedAfterStoreConstruction()
+    {
+        var domain = BuildParityDomain();
+        var client = new NativeTaggedStreamDynamoClient();
+        var tag = new RemoteParityTag("dynamo-di-options");
+        var events = ReadFixture(domain, tag, 25);
+        SeedDynamo(client, tag, events);
+
+        using var provider = new ServiceCollection()
+            .AddSingleton(domain)
+            .AddSingleton<IServiceIdProvider>(new FixedServiceIdProvider(ServiceId))
+            .AddSekibanDcbDynamoDb(client, options =>
+            {
+                options.AutoCreateTables = false;
+                options.EventsTableName = EventsTable;
+                options.TagsTableName = TagsTable;
+                options.ProjectionStatesTableName = "g70-projection";
+            })
+            .BuildServiceProvider();
+
+        var resolvedOptions = provider.GetRequiredService<IOptions<DynamoDbEventStoreOptions>>().Value;
+        var store = provider.GetRequiredService<DynamoDbEventStore>();
+        resolvedOptions.MaxBatchGetItems = 10;
+
+        var result = await store.ReadSerializableEventsByTagAsync(tag);
+
+        Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+        Assert.Equal(events.Select(@event => @event.SortableUniqueIdValue),
+            result.GetValue().Select(@event => @event.SortableUniqueIdValue));
+        Assert.Equal(new[] { 10, 10, 5 }, client.BatchGetRequestSizes);
+    }
+
     [Fact]
     public void TaggedStreamInterfaceSignature_RemainsTheG53FrozenCapabilityContract()
     {
@@ -783,6 +1107,63 @@ public sealed class RemoteTaggedStreamTests
         DcbDomainTypes domain) =>
         new(new DynamoDbContext(client, Options.Create(options)), domain.EventTypes,
             new FixedServiceIdProvider(ServiceId));
+
+    private static DynamoDbEventStoreOptions NewDynamoReadOptions(int maxBatchGetItems) =>
+        new()
+        {
+            AutoCreateTables = false,
+            EventsTableName = EventsTable,
+            TagsTableName = TagsTable,
+            QueryPageSize = 1000,
+            MaxBatchGetItems = maxBatchGetItems
+        };
+
+    private static async Task<IReadOnlyList<string>> ReadTagIdsAsync(
+        DynamoDbEventStore store,
+        ITag tag,
+        bool serialized)
+    {
+        if (serialized)
+        {
+            var result = await store.ReadSerializableEventsByTagAsync(tag);
+            Assert.True(result.IsSuccess, result.IsSuccess ? string.Empty : result.GetException().ToString());
+            return result.GetValue().Select(@event => @event.SortableUniqueIdValue).ToList();
+        }
+
+        var typed = await store.ReadEventsByTagAsync(tag);
+        Assert.True(typed.IsSuccess, typed.IsSuccess ? string.Empty : typed.GetException().ToString());
+        return typed.GetValue().Select(@event => @event.SortableUniqueIdValue).ToList();
+    }
+
+    private static IReadOnlyList<SerializableEvent> ReadFixture(
+        DcbDomainTypes domain,
+        ITag tag,
+        int count)
+    {
+        return Enumerable.Range(0, count)
+            .Select(index =>
+            {
+                var id = Guid.Parse($"00000000-0000-0000-0000-{index + 1000:D12}");
+                return new Event(
+                    new RemoteParityAdded(index),
+                    SortableUniqueId.Generate(BaseTime.AddSeconds(index), id),
+                    nameof(RemoteParityAdded),
+                    id,
+                    new EventMetadata("cause", "correlation", "user"),
+                    [tag.GetTag()])
+                    .ToSerializableEvent(domain.EventTypes);
+            })
+            .ToList();
+    }
+
+    private static void AssertInvalidBatchReadOption(Exception exception, int expectedValue)
+    {
+        var argument = Assert.IsType<ArgumentOutOfRangeException>(exception);
+        Assert.Equal(nameof(DynamoDbEventStoreOptions.MaxBatchGetItems), argument.ParamName);
+        Assert.Equal(expectedValue, argument.ActualValue);
+        Assert.Contains("DynamoDB batch reads require between 1 and 100 keys per request", argument.Message,
+            StringComparison.Ordinal);
+    }
 
     private static async Task<RemoteParityResult> RunParityRoutesAsync(
         IEventStore provider,
@@ -1131,12 +1512,29 @@ public sealed class RemoteTaggedStreamTests
         }
 
         public bool ReverseBatchResponses { get; set; }
+        public bool ReturnOneUnprocessedKeyOnce { get; set; }
         public Action? AfterQuery { get; set; }
+        public Action<int>? AfterBatchGet { get; set; }
         public List<QueryRequest> Queries { get; } = new();
         public List<CancellationToken> QueryTokens { get; } = new();
         public List<CancellationToken> BatchGetTokens { get; } = new();
+        public List<int> BatchGetRequestSizes { get; } = new();
+        public List<bool> BatchGetConsistentReads { get; } = new();
+        public List<IReadOnlyList<string>> BatchGetRequestEventIds { get; } = new();
         public int MaximumQueryRows { get; private set; }
         public int MaximumBatchKeys { get; private set; }
+
+        public void ClearReadRequests()
+        {
+            Queries.Clear();
+            QueryTokens.Clear();
+            BatchGetTokens.Clear();
+            BatchGetRequestSizes.Clear();
+            BatchGetConsistentReads.Clear();
+            BatchGetRequestEventIds.Clear();
+            MaximumQueryRows = 0;
+            MaximumBatchKeys = 0;
+        }
 
         public void Seed(string table, Dictionary<string, AttributeValue> item)
         {
@@ -1169,9 +1567,21 @@ public sealed class RemoteTaggedStreamTests
             lock (_gate)
             {
                 BatchGetTokens.Add(cancellationToken);
-                var keys = request.RequestItems[EventsTable].Keys;
+                var keyRequest = request.RequestItems[EventsTable];
+                var keys = keyRequest.Keys;
+                if (keys.Count is 0 or > 100)
+                    throw new AmazonDynamoDBException(
+                        $"BatchGetItem request contained {keys.Count} keys; DynamoDB permits 1 through 100.");
+
+                var dispatchNumber = BatchGetRequestSizes.Count + 1;
+                BatchGetRequestSizes.Add(keys.Count);
+                BatchGetConsistentReads.Add(keyRequest.ConsistentRead == true);
+                BatchGetRequestEventIds.Add(keys.Select(key => key["sk"].S).ToList());
                 MaximumBatchKeys = Math.Max(MaximumBatchKeys, keys.Count);
-                var rows = keys
+                var responseKeys = ReturnOneUnprocessedKeyOnce && dispatchNumber == 1
+                    ? keys.Take(keys.Count - 1).ToList()
+                    : keys;
+                var rows = responseKeys
                     .Select(key => _items.TryGetValue((EventsTable, key["pk"].S, key["sk"].S), out var item)
                         ? Clone(item)
                         : null)
@@ -1183,13 +1593,25 @@ public sealed class RemoteTaggedStreamTests
                     rows.Reverse();
                 }
 
+                var unprocessed = ReturnOneUnprocessedKeyOnce && dispatchNumber == 1
+                    ? new Dictionary<string, KeysAndAttributes>
+                    {
+                        [EventsTable] = new KeysAndAttributes
+                        {
+                            Keys = [keys[^1]],
+                            ConsistentRead = keyRequest.ConsistentRead
+                        }
+                    }
+                    : new Dictionary<string, KeysAndAttributes>();
+                AfterBatchGet?.Invoke(dispatchNumber);
+
                 return Task.FromResult(new BatchGetItemResponse
                 {
                     Responses = new Dictionary<string, List<Dictionary<string, AttributeValue>>>
                     {
                         [EventsTable] = rows
                     },
-                    UnprocessedKeys = new Dictionary<string, KeysAndAttributes>(),
+                    UnprocessedKeys = unprocessed,
                     ConsumedCapacity = [new ConsumedCapacity { CapacityUnits = 1d }]
                 });
             }

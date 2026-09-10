@@ -974,6 +974,19 @@ configuration change during dispatch is observed only by the next operation. Thi
 `AutoCreateTables = true`, table initialization can still occur before the batch validation, so zero write dispatches
 does not mean zero table-creation DDL.
 
+## SEK-G70 DynamoDB batch-read snapshot
+
+`MaxBatchGetItems` is validated by one shared private resolver for both public tag-list reads and the callback-native tag
+stream. A non-empty invocation reads the mutable option once, accepts only `1` through `100`, and reuses that snapshot for
+every `BatchGetItem` chunk. An invalid value returns `ArgumentOutOfRangeException` with parameter `MaxBatchGetItems` and
+the captured `ActualValue`; it is not clamped. The callback stream retains that snapshot across all query pages.
+
+The two public list methods keep their no-tag-rows early return: an empty tag query succeeds without validating
+`MaxBatchGetItems` or dispatching a batch read. The callback stream keeps eager validation after cancellation and
+`QueryPageSize` validation and before table/query I/O. `MaxRetryAttempts` is still read for each retry attempt,
+`UseConsistentReads` is still applied to each request chunk, `QueryPageSize` still controls query pages, and write paths
+are unchanged. This is a per-read-invocation snapshot, not global options validation or retry rechunking.
+
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).

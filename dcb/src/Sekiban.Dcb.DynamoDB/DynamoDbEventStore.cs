@@ -803,9 +803,10 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
         if (eventIds.Count == 0)
             return results;
 
-        for (var i = 0; i < eventIds.Count; i += _options.MaxBatchGetItems)
+        var batchSize = ResolveBatchGetChunkSize();
+        for (var i = 0; i < eventIds.Count; i += batchSize)
         {
-            var chunk = eventIds.Skip(i).Take(_options.MaxBatchGetItems).ToList();
+            var chunk = eventIds.Skip(i).Take(batchSize).ToList();
             var keys = chunk
                 .Select(id => BuildEventKey(serviceId, id))
                 .ToList();
