@@ -49,6 +49,34 @@ services.AddSekibanDcbCosmosDbWithAspire();
 
 Cosmos の書き込みはベストエフォート トランザクションです。整合性は Executor の予約と Cosmos の設定に依存します。
 
+### Cosmos event document サイズ admission（opt-in）
+
+`AddSekibanDcbCosmosEventDocumentSizeGate()` は、event ごとの既定 quota `2_000_000` byte を持つ strict な
+`StorageItem` policy を追加します。より小さい正の quota も指定できます。connection string から生成した
+`CosmosDbContext` が構築した provider-owned client の `ClientOptions.Serializer` で観測する SDK の camel-case
+serializer 境界を測定します。bound は最大幅 UTC measurement sentinel の UTF-8 byte 数そのものであり、未測定の
+`+8` slack は加えません。現在の event document は、対応する分数幅と年の端点でこの bound から `0..8` byte 以内
+であることを検証します。超過した event は durable dispatch より前に `ExecutorSizeLimitExceededException` で
+拒否されます。strict capability を測定できない場合は dispatch 前に `ExecutorSizeCapabilityException`、
+non-strict では明示的な名前付き未検証診断を付けて継続します。注入された `CosmosClient`、または effective
+serializer が null の owned client は `Unavailable` として扱い、fallback serializer は使いません。この機能は
+event document の admission だけを保証し、tag document、aggregate/head row、transaction/request envelope、他
+provider は保証しません。gate は opt-in であり、未登録の場合は connection-string context の SDK CamelCase
+serializer options と既存の bulk・retry・connection 設定を維持します。現在の `CosmosEvent`、`CosmosTag`、
+`CosmosMultiProjectionState` の UTC writer は、明示的な property 名と dictionary key を含め、実 SDK serializer
+との byte parity をテストしています。mapper の UTC 要件は別の write-document 契約です。public SDK serializer の
+non-UTC 互換性 fixture を mapper 経由にしてはいけません。context の dispose は一般の in-flight Cosmos database
+I/O を crash-safe にはしないため、呼び出し側が未完了の操作と shutdown を調整する必要があります。
+
+helper は既存の `CosmosDbContext` singleton を解決し、provider-owned client が最初に作られる時点でその options を
+取得します。明示的な context には additive な policy helper も使えます。
+
+```csharp
+services.AddSingleton(new CosmosDbContext(connectionString, "SekibanDcb"));
+services.AddSekibanDcbCosmosEventDocumentSizeGate(maxBytesPerEvent: 1_500_000);
+// または: options.AddCosmosEventDocumentPolicy(context, 1_500_000);
+```
+
 ### Azure Blob Storage スナップショット
 
 マルチプロジェクションの状態が大きい場合は `Sekiban.Dcb.BlobStorage.AzureStorage` を使用して Blob Storage に退避。

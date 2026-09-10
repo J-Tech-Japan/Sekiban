@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Sekiban.Dcb.CosmosDb;
 using Sekiban.Dcb.Events;
 using System.Linq;
 namespace Sekiban.Dcb.CosmosDb.Models;
@@ -86,28 +87,7 @@ public class CosmosEvent
     ///     Creates a CosmosDB event document from a domain event.
     /// </summary>
     public static CosmosEvent FromEvent(Event ev, string serializedPayload, string serviceId)
-    {
-        ArgumentNullException.ThrowIfNull(ev);
-        ArgumentNullException.ThrowIfNull(serializedPayload);
-        ArgumentException.ThrowIfNullOrWhiteSpace(serviceId);
-
-        var id = ev.Id.ToString();
-
-        return new CosmosEvent
-        {
-            Pk = $"{serviceId}|{id}",
-            ServiceId = serviceId,
-            Id = id,
-            SortableUniqueId = ev.SortableUniqueIdValue,
-            EventType = ev.EventType,
-            Payload = serializedPayload,
-            Tags = ev.Tags,
-            Timestamp = DateTime.UtcNow,
-            CausationId = ev.EventMetadata.CausationId,
-            CorrelationId = ev.EventMetadata.CorrelationId,
-            ExecutedUser = ev.EventMetadata.ExecutedUser
-        };
-    }
+        => CosmosEventDocumentMapper.FromEvent(ev, serializedPayload, serviceId, DateTime.UtcNow);
 
     /// <summary>
     ///     Converts a CosmosDB document back into a domain event.

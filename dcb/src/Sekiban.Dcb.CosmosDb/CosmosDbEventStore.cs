@@ -61,20 +61,10 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
 
         var id = deterministicId.ToString();
-        var cosmosEvent = new CosmosEvent
-        {
-            Pk = $"{serviceId}|{id}",
-            ServiceId = serviceId,
-            Id = id,
-            SortableUniqueId = claimEvent.SortableUniqueIdValue,
-            EventType = claimEvent.EventPayloadName,
-            Payload = Encoding.UTF8.GetString(claimEvent.Payload),
-            Tags = claimEvent.Tags,
-            Timestamp = DateTime.UtcNow,
-            CausationId = claimEvent.EventMetadata.CausationId,
-            CorrelationId = claimEvent.EventMetadata.CorrelationId,
-            ExecutedUser = claimEvent.EventMetadata.ExecutedUser
-        };
+        var cosmosEvent = CosmosEventDocumentMapper.FromSerializableEvent(
+            claimEvent with { Id = deterministicId },
+            serviceId,
+            DateTime.UtcNow);
         var eventPk = GetEventPartitionKey(id, serviceId);
 
         try
@@ -808,7 +798,11 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             try
             {
                 var serializedPayload = SerializeEventPayload(ev.Payload);
-                var cosmosEvent = CosmosEvent.FromEvent(ev, serializedPayload, serviceId);
+                var cosmosEvent = CosmosEventDocumentMapper.FromEvent(
+                    ev,
+                    serializedPayload,
+                    serviceId,
+                    DateTime.UtcNow);
                 var eventPk = GetEventPartitionKey(cosmosEvent.Id, serviceId);
 
                 await eventsContainer.CreateItemAsync(
@@ -1502,22 +1496,10 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 await semaphore.WaitAsync().ConfigureAwait(false);
                 try
                 {
-                    var serializedPayload = Encoding.UTF8.GetString(se.Payload);
-                    var id = se.Id.ToString();
-                    var cosmosEvent = new CosmosEvent
-                    {
-                        Pk = $"{serviceId}|{id}",
-                        ServiceId = serviceId,
-                        Id = id,
-                        SortableUniqueId = se.SortableUniqueIdValue,
-                        EventType = se.EventPayloadName,
-                        Payload = serializedPayload,
-                        Tags = se.Tags,
-                        Timestamp = DateTime.UtcNow,
-                        CausationId = se.EventMetadata.CausationId,
-                        CorrelationId = se.EventMetadata.CorrelationId,
-                        ExecutedUser = se.EventMetadata.ExecutedUser
-                    };
+                    var cosmosEvent = CosmosEventDocumentMapper.FromSerializableEvent(
+                        se,
+                        serviceId,
+                        DateTime.UtcNow);
                     var eventPk = GetEventPartitionKey(cosmosEvent.Id, serviceId);
 
                     await eventsContainer.CreateItemAsync(
