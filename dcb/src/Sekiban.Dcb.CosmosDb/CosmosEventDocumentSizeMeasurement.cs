@@ -13,7 +13,6 @@ public sealed class CosmosEventDocumentSizeMeasurement : IExecutorSizeMeasuremen
     /// <summary>The executor size-policy scope for a Cosmos event document.</summary>
     public const string Scope = "cosmos-event-document";
 
-    private const int TimestampSlackBytes = 8;
     private readonly CosmosDbContext? _context;
 
     /// <summary>
@@ -30,8 +29,8 @@ public sealed class CosmosEventDocumentSizeMeasurement : IExecutorSizeMeasuremen
     }
 
     /// <summary>
-    ///     Measures the mapped event document with the provider-owned default serializer and returns a conservative
-    ///     bound. The measurement-only timestamp is never written to Cosmos.
+    ///     Measures the mapped event document with the provider-owned SDK serializer and returns its exact
+    ///     maximum-width-UTC bound. The measurement-only timestamp is never written to Cosmos.
     /// </summary>
     public ExecutorSizeMeasurementResult Measure(ExecutorSizeMeasurementContext context)
     {
@@ -74,7 +73,7 @@ public sealed class CosmosEventDocumentSizeMeasurement : IExecutorSizeMeasuremen
                     reason ?? "Cosmos provider serializer capability is unavailable");
             }
 
-            return ExecutorSizeMeasurementResult.CertifiedBound(checked(measuredBytes + TimestampSlackBytes));
+            return ExecutorSizeMeasurementResult.CertifiedBound(measuredBytes);
         }
         catch (Exception ex) when (ex is ArgumentException or FormatException or InvalidOperationException or OverflowException)
         {

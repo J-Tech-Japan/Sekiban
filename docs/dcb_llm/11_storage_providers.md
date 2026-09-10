@@ -78,17 +78,20 @@ services.AddSekibanDcbCosmosDbWithAspire();
 
 `AddSekibanDcbCosmosEventDocumentSizeGate()` adds a strict `StorageItem` policy with a default per-event quota of
 `2_000_000` bytes; a smaller positive quota may be supplied. The policy measures the same provider-owned, camel-case
-Cosmos serializer boundary used by the connection-string-created `CosmosDbContext`, adds the fixed CertifiedBound
-timestamp slack, and rejects an oversized event with `ExecutorSizeLimitExceededException` before durable dispatch. A
-strict measurement capability failure returns `ExecutorSizeCapabilityException` before dispatch; non-strict mode continues
-with an explicit named unvalidated diagnostic. An injected `CosmosClient` is not certified because its serializer settings
-are not observable by the provider gate. This is an event-document admission capability only: it does not certify tag
-documents, aggregate/head rows, transaction/request envelopes, or another provider. Connection-string contexts use this
-explicit provider serializer whether or not the size gate is registered; for the current `CosmosEvent`, `CosmosTag`,
-and `CosmosMultiProjectionState` UTC writers its UTF-8 bytes are byte-identical to the prior SDK CamelCase serializer
-(covered by tests). `DateTimeZoneHandling.Utc` is deliberate for that documented UTC write/read contract; callers
-should not infer a non-UTC compatibility guarantee. The gate itself remains opt-in. Disposing a context does not make
-general in-flight Cosmos database I/O crash-safe, so callers must coordinate shutdown with outstanding operations.
+Cosmos SDK serializer boundary observed from the constructed client's `ClientOptions.Serializer`, and rejects an oversized
+event with `ExecutorSizeLimitExceededException` before durable dispatch. The bound is exactly the UTF-8 bytes of the
+maximum-width UTC measurement sentinel; it adds no unmeasured `+8` slack. Current event documents are proven within
+`0..8` bytes of that bound across the supported fractional-width and year-end cases. A strict measurement capability
+failure returns `ExecutorSizeCapabilityException` before dispatch; non-strict mode continues with an explicit named
+unvalidated diagnostic. An injected `CosmosClient`, or an owned client whose effective serializer is unavailable, is
+named `Unavailable` and is never replaced by a fallback serializer. This is an event-document admission capability only:
+it does not certify tag documents, aggregate/head rows, transaction/request envelopes, or another provider. The gate is
+opt-in; without registration, connection-string contexts retain their restored SDK CamelCase serializer options and the
+existing bulk, retry, and connection settings. The real SDK serializer remains the compatibility boundary for the
+current `CosmosEvent`, `CosmosTag`, and `CosmosMultiProjectionState` UTC writers, including explicit property names
+and dictionary keys. The mapper's UTC requirement is a separate write-document contract; public SDK serializer
+compatibility fixtures must not be routed through that mapper. Disposing a context does not make general in-flight Cosmos
+database I/O crash-safe, so callers must coordinate shutdown with outstanding operations.
 
 The helper resolves the existing `CosmosDbContext` singleton and captures its options when the provider-owned client is
 first created. For an explicit context, use the additive policy helper:

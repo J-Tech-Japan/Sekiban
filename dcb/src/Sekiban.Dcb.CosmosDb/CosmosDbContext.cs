@@ -31,7 +31,6 @@ public class CosmosDbContext : IDisposable
     // consistent container resolution across sequential awaited calls.
     private readonly ConcurrentDictionary<string, Container> _containers = new();
     private CosmosClient? _cosmosClient;
-    private CosmosSerializer? _serializer;
     private Database? _database;
     private bool _disposed;
     private int _clientCreationCount;
@@ -114,7 +113,13 @@ public class CosmosDbContext : IDisposable
     }
 
     /// <summary>
-    ///     Measures a mapped event document with the exact provider-owned default serializer used by this context.
+    ///     Instance-local test control for the provider-owned serializer capability. It simulates an SDK client whose
+    ///     effective serializer is unavailable without allowing tests or callers to install an arbitrary serializer.
+    /// </summary>
+    internal bool ForceMeasurementSerializerUnavailable { get; set; }
+
+    /// <summary>
+    ///     Measures a mapped event document with the exact provider-owned SDK serializer used by this context.
     ///     Injected clients are deliberately not certified because their serializer is not observable here.
     /// </summary>
     internal bool TryMeasureSupportedDocument(object document, out long bytes, out string? reason)
@@ -134,20 +139,23 @@ public class CosmosDbContext : IDisposable
 
             if (!_ownsCosmosClient)
             {
-                reason = "Cosmos item measurement requires a provider-owned CosmosClient; injected clients are unproven";
+                reason = "Cosmos provider serializer capability is unavailable for an injected CosmosClient; injected clients are unproven";
                 return false;
             }
 
             try
             {
                 EnsureClientCreatedLocked();
-                if (_serializer is null)
+                var serializer = ForceMeasurementSerializerUnavailable
+                    ? null
+                    : _cosmosClient!.ClientOptions.Serializer;
+                if (serializer is null)
                 {
-                    reason = "provider-owned Cosmos serializer is unavailable";
+                    reason = "Cosmos provider serializer capability is unavailable";
                     return false;
                 }
 
-                using var stream = _serializer.ToStream(document);
+                using var stream = serializer.ToStream(document);
                 if (!stream.CanSeek)
                 {
                     reason = "provider serializer returned a non-seekable stream";
@@ -367,10 +375,12 @@ public class CosmosDbContext : IDisposable
         if (string.IsNullOrEmpty(_connectionString))
             throw new InvalidOperationException("No CosmosClient or connection string provided");
 
-        _serializer = new CosmosProviderDefaultSerializer();
         var cosmosClientOptions = new CosmosClientOptions
         {
-            Serializer = _serializer,
+            SerializerOptions = new CosmosSerializationOptions
+            {
+                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
+            },
             AllowBulkExecution = true,
             // Retry settings for Serverless mode (increased from defaults)
             MaxRetryAttemptsOnRateLimitedRequests = _options.MaxRetryAttemptsOnRateLimited,
