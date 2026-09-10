@@ -294,3 +294,23 @@ helper quota は拒否されます。上限超過は `ExecutorSizeLimitExceededE
 永続化前に `ExecutorSizeCapabilityException` です。non-strict は名前付きの未検証診断を付けて継続します。
 ゲートは grouping、atomicity、retry、ClientRequestToken、item-count validation、GSI/billing、wire の escaping、
 過去データを変更しません。Destination fan-out のルールでもなく、将来の outbox/head item や他 provider は含みません。
+
+サービスコレクションでは、ゲート登録方式を 1 つだけ選んでください。上記の DynamoDB helper 3 つは provider-
+composable で、繰り返すと scope を蓄積します。もう 1 つの方式は、1 つの Core callback 内で provider policy を
+組み立てる移行方式です。
+
+```csharp
+var storeOptions = new DynamoDbEventStoreOptions { WriteShardCount = 2 };
+services.AddSingleton<IOptions<DynamoDbEventStoreOptions>>(Options.Create(storeOptions));
+services.AddSekibanDcbDynamoDb(dynamoDbClient);
+services.AddSekibanDcbExecutorSizeGate(options =>
+    options.AddDynamoDbEventItemPolicy(storeOptions));
+```
+
+policy に渡す `storeOptions` は store が使う同じ instance でなければなりません。省略すると shard に依存する
+byte を undercount することがあります。Core helper と `AddSekibanDcbDynamoDb*SizeGate` helper をどちらの順で
+登録しても、2 回目の呼び出しは service collection を変更する前に `InvalidOperationException` になります。
+メッセージは `Core convenience gate registration` と `provider-composable gate registration` の混在を示し、
+一方の方式を選ぶよう案内します。Core の繰り返し登録は従来どおり last-wins、provider helper の繰り返しは
+policy を蓄積します。`AddSingleton<ExecutorSizeGateOptions>` を手動で追加する方式はこの guard の対象外で、
+provider helper の検証や測定 parity は caller の責任です。

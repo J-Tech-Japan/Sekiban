@@ -945,6 +945,26 @@ These scopes cover only currently emitted event and tag `Put` items. They do not
 `BatchWriteItem` 25-item/16 MiB request limit, future outbox/head items, or another provider. A `Destination` fan-out
 policy remains separate and checks each captured destination copy independently.
 
+Choose one gate-registration mechanism for a service collection. The three DynamoDB helpers are provider-composable and
+accumulate their scopes. A Core callback is the alternative when the application wants to compose provider policies in
+one validated options object:
+
+```csharp
+var storeOptions = new DynamoDbEventStoreOptions { WriteShardCount = 2 };
+services.AddSingleton<IOptions<DynamoDbEventStoreOptions>>(Options.Create(storeOptions));
+services.AddSekibanDcbDynamoDb(dynamoDbClient);
+services.AddSekibanDcbExecutorSizeGate(options =>
+    options.AddDynamoDbEventItemPolicy(storeOptions));
+```
+
+The policy must receive the same `storeOptions` instance used by the store; an omitted options value can undercount
+shard-dependent bytes. Registering a Core helper and an `AddSekibanDcbDynamoDb*SizeGate` helper in either order throws
+`InvalidOperationException` before the rejected registration mutates the service collection. Its message names
+`Core convenience gate registration` and `provider-composable gate registration` and directs the caller to choose one
+mechanism. Repeated Core registrations retain last-wins behavior, while repeated provider helpers accumulate policies.
+Manual `AddSingleton<ExecutorSizeGateOptions>` registration bypasses this guard and does not claim provider helper
+validation or measurement parity.
+
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).

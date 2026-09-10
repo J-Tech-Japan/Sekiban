@@ -952,6 +952,26 @@ repair は変更されません。
 16 MiB request limit、将来の outbox/head item、他 provider は保証しません。`Destination` fan-out policy は別契約で、
 捕捉した各 destination copy を個別に検査します。
 
+サービスコレクションでは、ゲートの登録方式を 1 つだけ選びます。3 つの DynamoDB helper は provider-composable
+で、繰り返し登録して scope を蓄積できます。Core callback は別の方式で、provider policy を 1 つの options に
+まとめます。
+
+```csharp
+var storeOptions = new DynamoDbEventStoreOptions { WriteShardCount = 2 };
+services.AddSingleton<IOptions<DynamoDbEventStoreOptions>>(Options.Create(storeOptions));
+services.AddSekibanDcbDynamoDb(dynamoDbClient);
+services.AddSekibanDcbExecutorSizeGate(options =>
+    options.AddDynamoDbEventItemPolicy(storeOptions));
+```
+
+policy に渡す `storeOptions` は store が実際に使う同じ instance でなければなりません。省略した options は
+shard 依存 byte を undercount することがあります。Core helper と `AddSekibanDcbDynamoDb*SizeGate` helper を
+どちらの順で混在させても、拒否される呼び出しは service collection を変更する前に
+`InvalidOperationException` になります。例外メッセージは `Core convenience gate registration` と
+`provider-composable gate registration` の衝突を名前で示し、どちらか一方を使うよう案内します。Core の
+同方式の再登録は last-wins、provider helper の再登録は policy の蓄積を保ちます。手動の
+`AddSingleton<ExecutorSizeGateOptions>` は guard 外であり、provider helper の検証・測定 parity を保証しません。
+
 ## 関連資料
 
 現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。

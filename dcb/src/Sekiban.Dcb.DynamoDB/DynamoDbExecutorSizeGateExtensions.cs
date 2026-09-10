@@ -153,6 +153,12 @@ public static class DynamoDbExecutorSizeGateExtensions
         IServiceCollection services,
         Action<ExecutorSizeGateOptions, IServiceProvider> configure)
     {
+        ExecutorSizeGateRegistrationMarker.EnsureCompatible(
+            services,
+            ExecutorSizeGateRegistrationMarker.ProviderComposable);
+        ExecutorSizeGateRegistrationMarker.Declare(
+            services,
+            ExecutorSizeGateRegistrationMarker.ProviderComposable);
         services.AddOptions<ExecutorSizeGateOptions>();
         services.AddSingleton<IConfigureOptions<ExecutorSizeGateOptions>>(serviceProvider =>
             new ConfigureNamedOptions<ExecutorSizeGateOptions>(

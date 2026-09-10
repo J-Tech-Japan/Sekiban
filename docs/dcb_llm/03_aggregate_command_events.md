@@ -312,3 +312,22 @@ An over-limit result is `ExecutorSizeLimitExceededException`; an unavailable str
 The gates do not change grouping, atomicity, retry behavior, ClientRequestToken handling, item-count validation, GSI or
 billing accounting, wire escaping, or historical data. They are not a destination fan-out rule and do not include future
 outbox/head items or other providers.
+
+Use exactly one service-registration mechanism for the gate. The provider-composable helpers above may be repeated to
+accumulate their three DynamoDB scopes. Alternatively, a single Core callback may compose provider policies directly:
+
+```csharp
+var storeOptions = new DynamoDbEventStoreOptions { WriteShardCount = 2 };
+services.AddSingleton<IOptions<DynamoDbEventStoreOptions>>(Options.Create(storeOptions));
+services.AddSekibanDcbDynamoDb(dynamoDbClient);
+services.AddSekibanDcbExecutorSizeGate(options =>
+    options.AddDynamoDbEventItemPolicy(storeOptions));
+```
+
+The `storeOptions` instance supplied to the policy must be the same instance used by the store; omitting it can
+undercount shard-dependent bytes. Mixing a Core helper with any `AddSekibanDcbDynamoDb*SizeGate` helper in either order
+throws `InvalidOperationException` before the rejected call changes the service collection. The exception says that
+`Core convenience gate registration` and `provider-composable gate registration` cannot both configure the executor
+size gate and directs the caller to choose one mechanism. Repeating Core registration keeps its existing last-wins
+behavior; repeating provider helpers keeps their accumulated policies. Manually adding `ExecutorSizeGateOptions` to DI
+does not participate in this guard and makes the provider-helper guarantees the caller's responsibility.
