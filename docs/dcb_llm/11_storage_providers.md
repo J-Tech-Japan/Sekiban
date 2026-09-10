@@ -915,6 +915,36 @@ An item over the configured limit produces `ExecutorSizeLimitExceededException`;
 the current operation. This is distinct from a `Destination` fan-out policy, which checks each destination copy
 independently; neither rule is a DynamoDB database-footprint guarantee or an Azure Queue batch/wire-envelope guarantee.
 
+## SEK-G68 DynamoDB written-item and operation size gates
+
+G68 provides two additive opt-in registrations. They can coexist, but each scope maps the provider payload independently;
+register only the scopes required by the application:
+
+```csharp
+services.AddSekibanDcbDynamoDb(dynamoDbClient, options => options.WriteShardCount = 2);
+services.AddSekibanDcbDynamoDbMaxWrittenItemSizeGate(); // 409600 bytes per event by default
+services.AddSekibanDcbDynamoDbWriteOperationSizeGate(); // 4194304 bytes per executor operation by default
+```
+
+`dynamodb-max-written-item` measures the maximum mapped size of the event item and all tag items emitted for one event.
+`dynamodb-write-operation` measures the sum of every mapped event item and tag item in the executor operation, plus the
+UTF-8 byte contribution of the shared production event-Put condition expression (`attribute_not_exists(pk)`). This is a
+conservative application budget; it also charges that condition contribution when existing provider fallback uses
+`BatchWriteItem`, and it is not an exact transaction-request wire or BatchWrite envelope certification. The measurement
+uses the same provider mapper as typed, serialized, and conditional writes, including service identity, shard mapping,
+payload/type/metadata, tags, and timestamp shape.
+
+The helper ceilings are DynamoDB's 400 KiB item (`409600`) and 4 MiB transaction (`4194304`) values. Smaller caller quotas
+are supported; a helper quota above its ceiling is rejected. A breach raises `ExecutorSizeLimitExceededException`; an
+unavailable strict provider capability raises `ExecutorSizeCapabilityException` before persistence. Non-strict mode keeps
+the write path and adds an explicit named unvalidated diagnostic. The five executor admission routes are checked before
+durable event/tag/head mutation or publication/enqueue. Existing grouping, atomicity, retry, ClientRequestToken behavior,
+item-count validation, GSI/billing footprint, wire escaping, and historical repair are unchanged.
+
+These scopes cover only currently emitted event and tag `Put` items. They do not certify a DynamoDB wire envelope, the
+`BatchWriteItem` 25-item/16 MiB request limit, future outbox/head items, or another provider. A `Destination` fan-out
+policy remains separate and checks each captured destination copy independently.
+
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).

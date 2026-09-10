@@ -288,3 +288,27 @@ provider cannot measure the requested representation, strict mode returns `Execu
 mode records a named unvalidated diagnostic and continues. `MaxBytesPerOperation` is the sum of the measured copies in
 the current operation. A `Destination` policy instead evaluates each captured destination copy independently; that
 fan-out accounting is neither a DynamoDB database-footprint guarantee nor an Azure Queue batch/wire-envelope guarantee.
+
+### DynamoDB written-item and operation gates (SEK-G68)
+
+G68 adds two independent opt-in provider scopes. Register only the scopes the application needs; they may be registered
+together and keep the configured `WriteShardCount` mapping:
+
+```csharp
+services.AddSekibanDcbDynamoDb(dynamoDbClient, options => options.WriteShardCount = 2);
+services.AddSekibanDcbDynamoDbMaxWrittenItemSizeGate(); // default: 409600 bytes per event
+services.AddSekibanDcbDynamoDbWriteOperationSizeGate(); // default: 4194304 bytes per operation
+```
+
+`dynamodb-max-written-item` measures the maximum of the mapped event item and every mapped tag item for each event.
+`dynamodb-write-operation` sums every mapped event and tag item plus the UTF-8 bytes of the production event-Put
+condition expression. The latter is a conservative application budget over the whole executor operation, including the
+condition contribution when the provider falls back to `BatchWriteItem`; it is not an exact transaction-wire or
+BatchWrite envelope certification. Each scope uses the provider's typed, serialized, and conditional mapper independently.
+
+Both helpers default to the respective service ceiling and allow a smaller caller quota, but reject a larger helper quota.
+An over-limit result is `ExecutorSizeLimitExceededException`; an unavailable strict capability is
+`ExecutorSizeCapabilityException` before persistence, while non-strict mode continues with a named unvalidated diagnostic.
+The gates do not change grouping, atomicity, retry behavior, ClientRequestToken handling, item-count validation, GSI or
+billing accounting, wire escaping, or historical data. They are not a destination fan-out rule and do not include future
+outbox/head items or other providers.

@@ -922,6 +922,36 @@ services.AddSekibanDcbDynamoDbEventItemSizeGate();
 event-item copy の合計です。これは `Destination` の fan-out policy（各 destination copy を個別に検査）とは異なり、
 DynamoDB の database footprint 保証でも Azure Queue の batch/wire-envelope 保証でもありません。
 
+## SEK-G68 DynamoDB written-item / operation サイズゲート
+
+G68 は additive な opt-in 登録を 2 つ提供します。両方は共存できますが、各 scope は provider payload を独立に
+mapping するため、アプリケーションで必要な scope だけを登録してください。
+
+```csharp
+services.AddSekibanDcbDynamoDb(dynamoDbClient, options => options.WriteShardCount = 2);
+services.AddSekibanDcbDynamoDbMaxWrittenItemSizeGate(); // 既定: event ごとに 409600 byte
+services.AddSekibanDcbDynamoDbWriteOperationSizeGate(); // 既定: executor operation ごとに 4194304 byte
+```
+
+`dynamodb-max-written-item` は 1 event について provider が出力する event item と全 tag item の mapped size の最大値を
+測定します。`dynamodb-write-operation` は operation 内の全 mapped event/tag item と、共通 production event-Put
+condition expression（`attribute_not_exists(pk)`）の UTF-8 byte を合計します。後者は既存の `BatchWriteItem` fallback
+でも condition contribution を課金する保守的な application budget であり、exact な transaction request wire や
+BatchWrite envelope の保証ではありません。typed・serialized・conditional write で、service identity、shard mapping、
+payload/type/metadata、tag、timestamp の形状を含む同一 mapper を使います。
+
+helper の ceiling は DynamoDB の 400 KiB item（`409600`）と 4 MiB transaction（`4194304`）です。より小さい caller
+quota は指定できますが、ceiling より大きい helper quota は拒否されます。超過は
+`ExecutorSizeLimitExceededException`、利用できない strict provider capability は永続化前に
+`ExecutorSizeCapabilityException` になります。non-strict は write path を維持し、明示的な名前付き未検証診断を追加
+します。5 つの executor admission route は event/tag/head の永続化や publish/enqueue より前に検査されます。
+既存の grouping、atomicity、retry、ClientRequestToken、item-count validation、GSI/billing、wire escaping、過去データの
+repair は変更されません。
+
+対象は現在 mapper が出力する event/tag の `Put` item だけです。DynamoDB の wire envelope、`BatchWriteItem` の 25 item/
+16 MiB request limit、将来の outbox/head item、他 provider は保証しません。`Destination` fan-out policy は別契約で、
+捕捉した各 destination copy を個別に検査します。
+
 ## 関連資料
 
 現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。

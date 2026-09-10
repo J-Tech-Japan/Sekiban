@@ -324,14 +324,16 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
     private static DynamoDbEventStore NewStore(
         IAmazonDynamoDB client,
         DcbDomainTypes domain,
-        string serviceId)
+        string serviceId,
+        int maxTransactionItems = 100)
     {
         var options = Options.Create(new DynamoDbEventStoreOptions
         {
             AutoCreateTables = false,
             EventsTableName = $"events-{serviceId}",
             TagsTableName = $"tags-{serviceId}",
-            ProjectionStatesTableName = $"projection-{serviceId}"
+            ProjectionStatesTableName = $"projection-{serviceId}",
+            MaxTransactionItems = maxTransactionItems
         });
         return new DynamoDbEventStore(
             new DynamoDbContext(client, options),
@@ -460,12 +462,18 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
     {
         public List<Dictionary<string, AttributeValue>> EventItems { get; } = [];
         public List<Dictionary<string, AttributeValue>> TagItems { get; } = [];
+        public List<BatchWriteItemRequest> BatchRequests { get; } = [];
+        public List<string?> ConditionExpressions { get; } = [];
+        public List<string?> ClientRequestTokens { get; } = [];
         public int WriteDispatches { get; private set; }
 
         public void Clear()
         {
             EventItems.Clear();
             TagItems.Clear();
+            BatchRequests.Clear();
+            ConditionExpressions.Clear();
+            ClientRequestTokens.Clear();
             WriteDispatches = 0;
         }
 
@@ -481,11 +489,14 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
                 {
                     if (item.Put is not { } put)
                         continue;
+                    ConditionExpressions.Add(put.ConditionExpression);
                     if (put.TableName.StartsWith("events-", StringComparison.Ordinal))
                         EventItems.Add(put.Item);
                     else
                         TagItems.Add(put.Item);
                 }
+
+                ClientRequestTokens.Add(transaction.ClientRequestToken);
 
                 return Task.FromResult(new TransactWriteItemsResponse());
             }
@@ -493,6 +504,7 @@ public sealed class DynamoDbEventItemSizeMeasurementTests
             if (arg0 is BatchWriteItemRequest batch && name == nameof(IAmazonDynamoDB.BatchWriteItemAsync))
             {
                 WriteDispatches++;
+                BatchRequests.Add(batch);
                 foreach (var writes in batch.RequestItems.Values)
                 {
                     foreach (var write in writes)
