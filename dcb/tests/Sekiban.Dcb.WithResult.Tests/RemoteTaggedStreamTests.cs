@@ -745,7 +745,7 @@ public sealed class RemoteTaggedStreamTests
         bool serialized)
     {
         var domain = BuildParityDomain();
-        var client = new NativeTaggedStreamDynamoClient();
+        var client = new NativeTaggedStreamDynamoClient { ReverseBatchResponses = true };
         var options = NewDynamoReadOptions(batchSize);
         options.UseConsistentReads = true;
         var store = NewDynamoStore(client, options, domain);
@@ -762,6 +762,33 @@ public sealed class RemoteTaggedStreamTests
                 : Enumerable.Repeat(1, 250),
             client.BatchGetRequestSizes);
         Assert.All(client.BatchGetConsistentReads, Assert.True);
+    }
+
+    [Theory]
+    [InlineData(0, 100)]
+    [InlineData(-1, 100)]
+    [InlineData(1000, 0)]
+    [InlineData(1000, -1)]
+    [InlineData(1000, 101)]
+    public async Task DynamoNativeTaggedStream_PreCancelledInvalidOptionsDoNotIssueAProviderRequest(
+        int queryPageSize,
+        int maxBatchGetItems)
+    {
+        var client = new NativeTaggedStreamDynamoClient();
+        var options = NewDynamoReadOptions(maxBatchGetItems);
+        options.QueryPageSize = queryPageSize;
+        var store = NewDynamoStore(client, options);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.StreamSerializableEventsByTagAsync(
+            new NativeTag($"dynamo-precancel-invalid-{queryPageSize}-{maxBatchGetItems}"),
+            null,
+            null,
+            _ => ValueTask.CompletedTask,
+            cancellation.Token));
+        Assert.Empty(client.Queries);
+        Assert.Empty(client.BatchGetTokens);
     }
 
     [Theory]
