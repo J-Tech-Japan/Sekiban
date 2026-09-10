@@ -2,11 +2,14 @@ using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Dcb.Domain;
 using Dcb.Domain.Student;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.DynamoDB;
+using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Storage;
 using Xunit;
 
 namespace Sekiban.Dcb.Tests;
@@ -43,7 +46,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
     [InlineData(25)]
     public async Task ValidBatchWriteSizes_AreUsedForEventAndTagRequests(int chunkSize)
     {
-        var (store, options, client) = NewStore(maxTransactionItems: 1);
+        var (store, options, client) = NewStore(maxTransactionItems: 100);
         options.MaxBatchWriteItems = chunkSize;
 
         var result = await store.WriteSerializableEventsAsync([CreateSerializedEvent(
@@ -75,6 +78,25 @@ public sealed class DynamoDbBatchWriteSnapshotTests
         Assert.Equal([25, 1], RequestSizes(client, options.EventsTableName));
         Assert.Equal([25, 25, 25, 25, 25], RequestSizes(client, options.TagsTableName));
         Assert.Equal(0, options.MaxBatchWriteItems);
+    }
+
+    [Fact]
+    public async Task MidOperationOptionMutationTo26_DoesNotSilentlyDropTheLastEvent()
+    {
+        var (store, options, client) = NewStore(maxTransactionItems: 100);
+        options.MaxBatchWriteItems = 25;
+        client.AfterBatchWrite = (tableName, dispatchNumber) =>
+        {
+            if (dispatchNumber == 1 && tableName == options.EventsTableName)
+                options.MaxBatchWriteItems = 26;
+        };
+
+        var result = await store.WriteSerializableEventsAsync(CreateMultiEventBatch());
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal([25, 1], RequestSizes(client, options.EventsTableName));
+        Assert.Equal([25, 25, 25, 25, 25], RequestSizes(client, options.TagsTableName));
+        Assert.Equal(26, client.PersistedEventKeys.Count);
     }
 
     [Fact]
@@ -119,7 +141,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
     }
 
     [Fact]
-    public async Task InvalidBatchOptionDoesNotAffectTransactionFallbackOrConditionalPaths()
+    public async Task InvalidBatchOptionDoesNotAffectTransactionOrConditionalPaths()
     {
         var (store, options, client) = NewStore(maxTransactionItems: 100);
         options.MaxBatchWriteItems = 0;
@@ -129,6 +151,49 @@ public sealed class DynamoDbBatchWriteSnapshotTests
         Assert.True(result.IsSuccess);
         Assert.Empty(client.BatchRequests);
         Assert.Single(client.TransactionRequests);
+
+        client.ClearRequests();
+        var conditional = await store.AppendIfUniqueAsync(
+            new ConditionalAppendRequest(
+                "g69-conditional",
+                CreateTypedEvent("conditional").ToSerializableEvent(DomainType.GetDomainTypes().EventTypes)));
+
+        Assert.True(
+            conditional.IsSuccess,
+            conditional.IsSuccess ? string.Empty : conditional.GetException().ToString());
+        Assert.Empty(client.BatchRequests);
+        Assert.Single(client.TransactionRequests);
+    }
+
+    [Fact]
+    public async Task DiResolvedOptionsMutationBeforeBatchFallbackIsValidatedWithoutDispatch()
+    {
+        var eventTableName = $"g69-di-events-{Guid.NewGuid():N}";
+        var client = CreateClient();
+        client.EventsTableName = eventTableName;
+
+        using var provider = new ServiceCollection()
+            .AddSingleton(DomainType.GetDomainTypes())
+            .AddSekibanDcbDynamoDb(client.Client, options =>
+            {
+                options.AutoCreateTables = false;
+                options.EventsTableName = eventTableName;
+                options.TagsTableName = $"g69-di-tags-{Guid.NewGuid():N}";
+                options.ProjectionStatesTableName = $"g69-di-projection-{Guid.NewGuid():N}";
+            })
+            .BuildServiceProvider();
+
+        var resolvedOptions = provider.GetRequiredService<IOptions<DynamoDbEventStoreOptions>>().Value;
+        var store = provider.GetRequiredService<DynamoDbEventStore>();
+        resolvedOptions.MaxBatchWriteItems = 0;
+
+        var result = await store.WriteSerializableEventsAsync([
+            CreateSerializedEvent(Enumerable.Range(0, 100).Select(index => $"di-tag-{index}").ToArray())
+        ]);
+
+        AssertInvalidBatchWriteOption(result.GetException(), 0);
+        Assert.Empty(client.BatchRequests);
+        Assert.Empty(client.TransactionRequests);
     }
 
     [Fact]
@@ -171,6 +236,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
             MaxTransactionItems = maxTransactionItems
         };
         var client = CreateClient();
+        client.EventsTableName = options.EventsTableName;
         var domain = DomainType.GetDomainTypes();
         var store = new DynamoDbEventStore(
             new DynamoDbContext(client.Client, Options.Create(options)),
@@ -240,6 +306,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
         public List<BatchWriteItemRequest> BatchRequests { get; } = [];
         public List<TransactWriteItemsRequest> TransactionRequests { get; } = [];
         public HashSet<string> PersistedEventKeys { get; } = [];
+        public string EventsTableName { get; set; } = string.Empty;
         public Action<string, int>? AfterBatchWrite { get; set; }
         public Func<string, int, Exception?>? BatchWriteFailure { get; set; }
         public IAmazonDynamoDB Client => (IAmazonDynamoDB)(object)this;
@@ -272,8 +339,11 @@ public sealed class DynamoDbBatchWriteSnapshotTests
                     foreach (var write in writes)
                     {
                         if (write.PutRequest?.Item is { } put)
-                            PersistedEventKeys.Add(ItemKey(put));
-                        else if (write.DeleteRequest?.Key is { } delete)
+                        {
+                            if (tableName == EventsTableName)
+                                PersistedEventKeys.Add(ItemKey(put));
+                        }
+                        else if (write.DeleteRequest?.Key is { } delete && tableName == EventsTableName)
                             PersistedEventKeys.Remove(ItemKey(delete));
                     }
 
@@ -292,7 +362,7 @@ public sealed class DynamoDbBatchWriteSnapshotTests
                 TransactionRequests.Add(transaction);
                 foreach (var item in transaction.TransactItems)
                 {
-                    if (item.Put?.Item is { } put)
+                    if (item.Put?.Item is { } put && item.Put.TableName == EventsTableName)
                         PersistedEventKeys.Add(ItemKey(put));
                 }
 
