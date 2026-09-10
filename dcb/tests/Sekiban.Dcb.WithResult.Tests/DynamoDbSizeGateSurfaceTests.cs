@@ -30,9 +30,25 @@ public sealed class DynamoDbSizeGateSurfaceTests
         AssertPublicConstructor(
             typeof(DynamoDbEventItemSizeMeasurement),
             typeof(DynamoDbEventStoreOptions));
+        AssertPublicConstructor(
+            typeof(DynamoDbMaxWrittenItemSizeMeasurement),
+            typeof(DynamoDbEventStoreOptions));
+        AssertPublicConstructor(
+            typeof(DynamoDbWriteOperationSizeMeasurement),
+            typeof(DynamoDbEventStoreOptions));
         AssertPublicMethod(
             typeof(DynamoDbEventItemSizeMeasurement),
             nameof(DynamoDbEventItemSizeMeasurement.Measure),
+            typeof(ExecutorSizeMeasurementResult),
+            typeof(ExecutorSizeMeasurementContext));
+        AssertPublicMethod(
+            typeof(DynamoDbMaxWrittenItemSizeMeasurement),
+            nameof(DynamoDbMaxWrittenItemSizeMeasurement.Measure),
+            typeof(ExecutorSizeMeasurementResult),
+            typeof(ExecutorSizeMeasurementContext));
+        AssertPublicMethod(
+            typeof(DynamoDbWriteOperationSizeMeasurement),
+            nameof(DynamoDbWriteOperationSizeMeasurement.Measure),
             typeof(ExecutorSizeMeasurementResult),
             typeof(ExecutorSizeMeasurementContext));
 
@@ -58,6 +74,36 @@ public sealed class DynamoDbSizeGateSurfaceTests
             typeof(IServiceCollection),
             typeof(IServiceCollection),
             typeof(Nullable<long>),
+            typeof(Nullable<long>),
+            typeof(ExecutorSizeStrictness));
+        AssertPublicMethod(
+            typeof(DynamoDbExecutorSizeGateExtensions),
+            nameof(DynamoDbExecutorSizeGateExtensions.AddDynamoDbMaxWrittenItemPolicy),
+            typeof(ExecutorSizeGateOptions),
+            typeof(ExecutorSizeGateOptions),
+            typeof(DynamoDbEventStoreOptions),
+            typeof(Nullable<long>),
+            typeof(ExecutorSizeStrictness));
+        AssertPublicMethod(
+            typeof(DynamoDbExecutorSizeGateExtensions),
+            nameof(DynamoDbExecutorSizeGateExtensions.AddDynamoDbWriteOperationPolicy),
+            typeof(ExecutorSizeGateOptions),
+            typeof(ExecutorSizeGateOptions),
+            typeof(DynamoDbEventStoreOptions),
+            typeof(Nullable<long>),
+            typeof(ExecutorSizeStrictness));
+        AssertPublicMethod(
+            typeof(DynamoDbExecutorSizeGateExtensions),
+            nameof(DynamoDbExecutorSizeGateExtensions.AddSekibanDcbDynamoDbMaxWrittenItemSizeGate),
+            typeof(IServiceCollection),
+            typeof(IServiceCollection),
+            typeof(Nullable<long>),
+            typeof(ExecutorSizeStrictness));
+        AssertPublicMethod(
+            typeof(DynamoDbExecutorSizeGateExtensions),
+            nameof(DynamoDbExecutorSizeGateExtensions.AddSekibanDcbDynamoDbWriteOperationSizeGate),
+            typeof(IServiceCollection),
+            typeof(IServiceCollection),
             typeof(Nullable<long>),
             typeof(ExecutorSizeStrictness));
 

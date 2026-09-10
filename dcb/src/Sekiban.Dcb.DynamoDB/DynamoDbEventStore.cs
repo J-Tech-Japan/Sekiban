@@ -75,7 +75,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                 {
                     TableName = _context.EventsTableName,
                     Item = dynEvent.ToAttributeValues(),
-                    ConditionExpression = "attribute_not_exists(pk)"
+                    ConditionExpression = DynamoDbTransactionSizeAccounting.EventPutConditionExpression
                 }
             }
         };
@@ -902,7 +902,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                     {
                         TableName = _context.EventsTableName,
                         Item = item.DynamoEvent.ToAttributeValues(),
-                        ConditionExpression = "attribute_not_exists(pk)"
+                        ConditionExpression = DynamoDbTransactionSizeAccounting.EventPutConditionExpression
                     }
                 });
                 eventIdsForToken.Add(item.DynamoEvent.EventId);

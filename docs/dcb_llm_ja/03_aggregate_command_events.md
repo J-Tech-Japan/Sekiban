@@ -271,3 +271,46 @@ mapped item が大きすぎる場合は `ExecutorSizeLimitExceededException` を
 `MaxBytesPerOperation` は現在の operation に含まれる測定済みコピーの合計です。一方、`Destination` policy は
 捕捉した各 destination copy を個別に検査します。この fan-out の数え方は DynamoDB の database footprint 保証でも、
 Azure Queue の batch/wire-envelope 保証でもありません。
+
+### DynamoDB の written-item / operation ゲート（SEK-G68）
+
+G68 では、provider 固有の opt-in scope を 2 つ追加します。必要な scope だけを登録してください。両方を同時に
+登録してもよく、設定済みの `WriteShardCount` mapping は維持されます。
+
+```csharp
+services.AddSekibanDcbDynamoDb(dynamoDbClient, options => options.WriteShardCount = 2);
+services.AddSekibanDcbDynamoDbMaxWrittenItemSizeGate(); // 既定: event ごとに 409600 byte
+services.AddSekibanDcbDynamoDbWriteOperationSizeGate(); // 既定: operation ごとに 4194304 byte
+```
+
+`dynamodb-max-written-item` は各 event について、mapped event item と全 mapped tag item の最大値を測定します。
+`dynamodb-write-operation` は、mapped event/tag item の全 byte と production の event-Put condition expression の UTF-8
+byte を合計します。後者は `BatchWriteItem` fallback でも condition contribution を保守的に課金する、executor operation
+全体の application budget です。exact な transaction wire や BatchWrite envelope の保証ではありません。両方の
+scope は typed・serialized・conditional で同じ provider mapper を使いますが、それぞれ独立に測定されます。
+
+両 helper の既定値はそれぞれの service ceiling で、caller はより小さい quota を指定できます。ceiling を超える
+helper quota は拒否されます。上限超過は `ExecutorSizeLimitExceededException`、測定できない strict capability は
+永続化前に `ExecutorSizeCapabilityException` です。non-strict は名前付きの未検証診断を付けて継続します。
+ゲートは grouping、atomicity、retry、ClientRequestToken、item-count validation、GSI/billing、wire の escaping、
+過去データを変更しません。Destination fan-out のルールでもなく、将来の outbox/head item や他 provider は含みません。
+
+サービスコレクションでは、ゲート登録方式を 1 つだけ選んでください。上記の DynamoDB helper 3 つは provider-
+composable で、繰り返すと scope を蓄積します。もう 1 つの方式は、1 つの Core callback 内で provider policy を
+組み立てる移行方式です。
+
+```csharp
+var storeOptions = new DynamoDbEventStoreOptions { WriteShardCount = 2 };
+services.AddSingleton<IOptions<DynamoDbEventStoreOptions>>(Options.Create(storeOptions));
+services.AddSekibanDcbDynamoDb(dynamoDbClient);
+services.AddSekibanDcbExecutorSizeGate(options =>
+    options.AddDynamoDbEventItemPolicy(storeOptions));
+```
+
+policy に渡す `storeOptions` は store が使う同じ instance でなければなりません。省略すると shard に依存する
+byte を undercount することがあります。Core helper と `AddSekibanDcbDynamoDb*SizeGate` helper をどちらの順で
+登録しても、2 回目の呼び出しは service collection を変更する前に `InvalidOperationException` になります。
+メッセージは `Core convenience gate registration` と `provider-composable gate registration` の混在を示し、
+一方の方式を選ぶよう案内します。Core の繰り返し登録は従来どおり last-wins、provider helper の繰り返しは
+policy を蓄積します。`AddSingleton<ExecutorSizeGateOptions>` を手動で追加する方式はこの guard の対象外で、
+provider helper の検証や測定 parity は caller の責任です。
