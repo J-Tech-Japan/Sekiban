@@ -59,7 +59,12 @@ CertifiedBound timestamp slack を加えます。超過した event は durable 
 `ExecutorSizeCapabilityException`、non-strict では明示的な名前付き未検証診断を付けて継続します。注入された
 `CosmosClient` は serializer 設定を provider 側で観測できないため certified ではありません。この機能は event
 document の admission だけを保証し、tag document、aggregate/head row、transaction/request envelope、他 provider
-は保証しません。gate を登録しなければ既存の write 動作は変わりません。
+は保証しません。connection string context では gate の登録有無にかかわらず、この明示的な provider serializer を
+使用します。現在の `CosmosEvent`、`CosmosTag`、`CosmosMultiProjectionState` の UTC writer では、UTF-8 byte 列が
+以前の SDK CamelCase serializer と byte-identical であることをテストしています。`DateTimeZoneHandling.Utc` は
+この UTC write/read 契約のために意図的に設定しており、non-UTC の互換性を意味しません。gate 自体は opt-in
+です。context の dispose は一般の in-flight Cosmos database I/O を crash-safe にはしないため、呼び出し側が
+未完了の操作と shutdown を調整する必要があります。
 
 helper は既存の `CosmosDbContext` singleton を解決し、provider-owned client が最初に作られる時点でその options を
 取得します。明示的な context には additive な policy helper も使えます。

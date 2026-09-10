@@ -327,7 +327,8 @@ public class CosmosDbContext : IDisposable
     }
 
     /// <summary>
-    ///     Protected dispose pattern hook.
+    ///     Protected dispose pattern hook. Disposing the context does not make general in-flight Cosmos database I/O
+    ///     crash-safe; callers must coordinate shutdown with their outstanding operations.
     /// </summary>
     protected virtual void Dispose(bool disposing)
     {

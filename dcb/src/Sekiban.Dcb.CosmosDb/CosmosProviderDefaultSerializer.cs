@@ -30,8 +30,11 @@ internal sealed class CosmosProviderDefaultSerializer : CosmosSerializer
     public override T FromStream<T>(Stream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-        using var jsonReader = new JsonTextReader(reader);
-        return JsonSerializer.Create(Settings).Deserialize<T>(jsonReader)!;
+        using (stream)
+        {
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            using var jsonReader = new JsonTextReader(reader);
+            return JsonSerializer.Create(Settings).Deserialize<T>(jsonReader)!;
+        }
     }
 }

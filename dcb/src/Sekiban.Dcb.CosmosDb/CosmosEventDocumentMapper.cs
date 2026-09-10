@@ -23,8 +23,12 @@ internal static class CosmosEventDocumentMapper
         ArgumentNullException.ThrowIfNull(ev);
         ArgumentNullException.ThrowIfNull(serializedPayload);
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceId);
+        ArgumentNullException.ThrowIfNull(ev.Tags);
 
-        return FromParts(
+        // Keep the public CosmosEvent.FromEvent compatibility contract: do not apply the new
+        // non-whitespace identity/type checks to this legacy public factory. The serialized/internal
+        // routes use FromParts below and retain their stricter identity/type validation.
+        return FromPartsCore(
             serviceId,
             ev.Id,
             ev.SortableUniqueIdValue,
@@ -67,6 +71,29 @@ internal static class CosmosEventDocumentMapper
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(sortableUniqueId);
         ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
+        ArgumentNullException.ThrowIfNull(serializedPayload);
+        ArgumentNullException.ThrowIfNull(tags);
+        return FromPartsCore(
+            serviceId,
+            documentId,
+            sortableUniqueId,
+            eventType,
+            serializedPayload,
+            tags,
+            metadata,
+            utcTimestamp);
+    }
+
+    private static CosmosEvent FromPartsCore(
+        string serviceId,
+        Guid documentId,
+        string sortableUniqueId,
+        string eventType,
+        string serializedPayload,
+        IReadOnlyList<string> tags,
+        EventMetadata metadata,
+        DateTime utcTimestamp)
+    {
         ArgumentNullException.ThrowIfNull(serializedPayload);
         ArgumentNullException.ThrowIfNull(tags);
         if (utcTimestamp.Kind != DateTimeKind.Utc)

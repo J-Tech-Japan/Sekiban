@@ -3,6 +3,9 @@ using Dcb.Domain;
 using Dcb.Domain.Student;
 using Dcb.Domain.Weather;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Azure.Cosmos;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Capabilities;
@@ -68,6 +71,20 @@ public sealed class CosmosEventDocumentSizeGateTests
         Assert.Equal(timestamp, typed.Timestamp);
         Assert.Equal(DateTimeKind.Utc, typed.Timestamp.Kind);
 
+        var compatibilityEvent = new Event(
+            @event.Payload,
+            string.Empty,
+            string.Empty,
+            @event.Id,
+            @event.EventMetadata,
+            @event.Tags);
+        var compatibilityDocument = CosmosEvent.FromEvent(
+            compatibilityEvent,
+            typed.Payload,
+            ServiceId);
+        Assert.Equal(string.Empty, compatibilityDocument.SortableUniqueId);
+        Assert.Equal(string.Empty, compatibilityDocument.EventType);
+
         Assert.Throws<ArgumentException>(() => CosmosEventDocumentMapper.FromParts(
             ServiceId,
             @event.Id,
@@ -86,6 +103,146 @@ public sealed class CosmosEventDocumentSizeGateTests
             typed.Tags,
             @event.EventMetadata,
             new DateTime(2042, 3, 4, 5, 6, 7, DateTimeKind.Unspecified)));
+    }
+
+    [Fact]
+    public void ProviderSerializer_ThroughCosmosClientOptions_DisposesResponseStream()
+    {
+        var document = new CosmosEvent
+        {
+            Pk = "g72-test|boundary",
+            ServiceId = ServiceId,
+            Id = "boundary",
+            SortableUniqueId = "000000000000000000000000000",
+            EventType = nameof(StudentCreated),
+            Payload = "{\"studentId\":\"boundary\"}",
+            Tags = ["Student:boundary"],
+            Timestamp = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+            CausationId = "cause",
+            CorrelationId = "correlation",
+            ExecutedUser = "user"
+        };
+        var serializer = new CosmosProviderDefaultSerializer();
+        using var client = new CosmosClient(
+            "AccountEndpoint=https://localhost:8081/;AccountKey=" +
+            "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+            new CosmosClientOptions
+            {
+                ConnectionMode = ConnectionMode.Gateway,
+                LimitToEndpoint = true,
+                ConsistencyLevel = ConsistencyLevel.Session,
+                Serializer = serializer
+            });
+
+        Assert.Same(serializer, client.ClientOptions.Serializer);
+        using var stream = serializer.ToStream(document);
+        var response = client.ClientOptions.Serializer!.FromStream<CosmosEvent>(stream);
+
+        Assert.Equal(document.Id, response.Id);
+        Assert.Equal(document.Payload, response.Payload);
+        Assert.Equal(document.Timestamp, response.Timestamp);
+        Assert.False(stream.CanRead);
+    }
+
+    [Fact]
+    public void ProviderSerializer_FromStream_DisposesTheInputStream()
+    {
+        var document = new CosmosEvent
+        {
+            Pk = "g72-test|dispose",
+            ServiceId = ServiceId,
+            Id = "dispose",
+            SortableUniqueId = "suid",
+            EventType = nameof(StudentCreated),
+            Payload = "{}",
+            Tags = ["Student:dispose"],
+            Timestamp = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc)
+        };
+        using var stream = new CosmosProviderDefaultSerializer().ToStream(document);
+
+        var restored = new CosmosProviderDefaultSerializer().FromStream<CosmosEvent>(stream);
+
+        Assert.Equal(document.Id, restored.Id);
+        Assert.False(stream.CanRead);
+    }
+
+    [Fact]
+    public void ProviderSerializer_PreservesUtcBytesForAllCurrentCosmosDocumentWriters()
+    {
+        var utc = new DateTime(2042, 3, 4, 5, 6, 7, DateTimeKind.Utc).AddTicks(1_234_567);
+        var documents = new object[]
+        {
+            new CosmosEvent
+            {
+                Pk = "g72-test|event",
+                ServiceId = ServiceId,
+                Id = "event",
+                SortableUniqueId = "000000000000000000000000000",
+                EventType = nameof(StudentCreated),
+                Payload = "{\"studentId\":\"event\"}",
+                Tags = ["Student:event", "タグ"],
+                Timestamp = utc,
+                CausationId = "cause",
+                CorrelationId = "correlation",
+                ExecutedUser = "user"
+            },
+            new CosmosTag
+            {
+                Pk = "g72-test|Student:event",
+                ServiceId = ServiceId,
+                Id = "event-tag",
+                Tag = "Student:event",
+                TagGroup = "Student",
+                EventType = nameof(StudentCreated),
+                SortableUniqueId = "000000000000000000000000000",
+                EventId = "event",
+                CreatedAt = utc
+            },
+            new CosmosMultiProjectionState
+            {
+                DocumentType = "projectionState",
+                Pk = "g72-test|projection",
+                ServiceId = ServiceId,
+                Id = "projection-v1",
+                PartitionKey = "projection",
+                ProjectorName = "projection",
+                ProjectorVersion = "v1",
+                PayloadType = "state",
+                LastSortableUniqueId = "000000000000000000000000000",
+                EventsProcessed = 3,
+                StateData = "AQID",
+                IsOffloaded = false,
+                OriginalSizeBytes = 3,
+                CompressedSizeBytes = 3,
+                SafeWindowThreshold = "000000000000000000000000000",
+                CreatedAt = utc,
+                UpdatedAt = utc,
+                BuildSource = "test",
+                BuildHost = "host",
+                Generation = 1,
+                Lifecycle = 0,
+                ClusterId = "cluster",
+                ActivationId = "activation",
+                Sequence = 2,
+                AppliedEventCount = 3,
+                LastAppliedSortableUniqueId = "000000000000000000000000000",
+                LastTraversedSortableUniqueId = "000000000000000000000000000",
+                RecordedAtUtc = new DateTimeOffset(utc),
+                Phase = "active",
+                LeaseExpiresAtUtc = new DateTimeOffset(utc.AddMinutes(1)),
+                IsFaulted = false,
+                SwitchKind = "ordinary",
+                SwitchReason = "test",
+                SwitchedAtUtc = new DateTimeOffset(utc)
+            }
+        };
+
+        foreach (var document in documents)
+        {
+            var providerBytes = ProviderSerializerBytes(document);
+            var previousSdkBytes = PreviousSdkCamelCaseSerializerBytes(document);
+            Assert.Equal(previousSdkBytes, providerBytes);
+        }
     }
 
     [Fact]
@@ -145,9 +302,9 @@ public sealed class CosmosEventDocumentSizeGateTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(1)]
-    [InlineData(3)]
-    [InlineData(7)]
+    [InlineData(1_000_000)]
+    [InlineData(1_230_000)]
+    [InlineData(1_234_567)]
     public void CertifiedBound_CoversProviderSerializationForFractionAndYearBoundaries(int fractionalTicks)
     {
         var domain = DomainType.GetDomainTypes();
@@ -176,6 +333,8 @@ public sealed class CosmosEventDocumentSizeGateTests
             Assert.Equal(sentinelStream.Length + 8, bound);
         }
 
+        var maxObservedLength = 0L;
+        var minimumSlack = long.MaxValue;
         foreach (var timestamp in new[]
                  {
                      new DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddTicks(fractionalTicks),
@@ -190,13 +349,28 @@ public sealed class CosmosEventDocumentSizeGateTests
                 @event.EventType,
                 Encoding.UTF8.GetString(serialized.Payload),
                 serialized.Tags,
-                new EventMetadata(null!, null!, null!),
+                serialized.EventMetadata,
                 timestamp);
             using var stream = new CosmosProviderDefaultSerializer().ToStream(document);
+            maxObservedLength = Math.Max(maxObservedLength, stream.Length);
             var slack = bound - stream.Length;
+            minimumSlack = Math.Min(minimumSlack, slack);
             Assert.True(slack >= 0,
                 $"timestamp={timestamp:o}, bound={bound}, actual={stream.Length}, slack={slack}");
         }
+
+        var expectedMaxDocument = CosmosEventDocumentMapper.FromParts(
+            ServiceId,
+            @event.Id,
+            @event.SortableUniqueIdValue,
+            @event.EventType,
+            Encoding.UTF8.GetString(serialized.Payload),
+            serialized.Tags,
+            serialized.EventMetadata,
+            new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddTicks(fractionalTicks));
+        using var expectedMaxStream = new CosmosProviderDefaultSerializer().ToStream(expectedMaxDocument);
+        Assert.Equal(expectedMaxStream.Length, maxObservedLength);
+        Assert.Equal(maxObservedLength, bound - minimumSlack);
     }
 
     [Fact]
@@ -299,6 +473,7 @@ public sealed class CosmosEventDocumentSizeGateTests
     {
         var domain = DomainType.GetDomainTypes();
         var store = new CosmosGateOnlyStore();
+        var publisher = new RecordingEventPublisher();
         var context = NewOwnedContext();
         var options = new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
             CosmosEventDocumentSizeMeasurement.Scope,
@@ -309,7 +484,8 @@ public sealed class CosmosEventDocumentSizeGateTests
             store,
             new InMemoryObjectAccessor(store, domain),
             domain,
-            options);
+            options,
+            publisher);
 
         var typed = await executor.ExecuteAsync(
             new GateCommand(Guid.CreateVersion7()),
@@ -345,6 +521,7 @@ public sealed class CosmosEventDocumentSizeGateTests
         Assert.Equal(0, store.WriteCalls);
         Assert.Equal(0, store.ConditionalAppendCalls);
         Assert.Equal(0, store.ExpectedPositionWriteCalls);
+        Assert.Empty(publisher.PublishedEvents);
         Assert.Equal(1, context.ClientCreationCount);
     }
 
@@ -418,6 +595,30 @@ public sealed class CosmosEventDocumentSizeGateTests
             "AccountEndpoint=https://localhost:8081/;AccountKey=" +
             "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
             "g72-db");
+
+    private static readonly JsonSerializerSettings PreviousSdkCamelCaseSettings = new()
+    {
+        ContractResolver = new CamelCasePropertyNamesContractResolver(),
+        NullValueHandling = NullValueHandling.Include,
+        DateTimeZoneHandling = DateTimeZoneHandling.RoundtripKind
+    };
+
+    private static byte[] ProviderSerializerBytes(object document)
+    {
+        using var stream = document switch
+        {
+            CosmosEvent value => new CosmosProviderDefaultSerializer().ToStream(value),
+            CosmosTag value => new CosmosProviderDefaultSerializer().ToStream(value),
+            CosmosMultiProjectionState value => new CosmosProviderDefaultSerializer().ToStream(value),
+            _ => throw new ArgumentOutOfRangeException(nameof(document), document.GetType(), "Unsupported document")
+        };
+        using var copy = new MemoryStream();
+        stream.CopyTo(copy);
+        return copy.ToArray();
+    }
+
+    private static byte[] PreviousSdkCamelCaseSerializerBytes(object document) =>
+        Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(document, PreviousSdkCamelCaseSettings));
 
     private static (CosmosDbEventStore Store, InMemoryCosmosClient Client, CosmosDbEventStoreOptions Options) NewStore(
         IEventTypes eventTypes,
@@ -530,6 +731,19 @@ public sealed class CosmosEventDocumentSizeGateTests
         }
 
         public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
+    }
+
+    private sealed class RecordingEventPublisher : IEventPublisher
+    {
+        public List<(Event Event, IReadOnlyCollection<ITag> Tags)> PublishedEvents { get; } = [];
+
+        public Task PublishAsync(
+            IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events,
+            CancellationToken cancellationToken = default)
+        {
+            PublishedEvents.AddRange(events);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class CosmosGateOnlyStore :
