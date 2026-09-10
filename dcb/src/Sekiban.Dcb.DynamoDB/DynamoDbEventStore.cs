@@ -57,33 +57,13 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
     {
         await _context.EnsureTablesAsync().ConfigureAwait(false);
         var serviceId = CurrentServiceId;
-        var serializedPayload = Encoding.UTF8.GetString(claimEvent.Payload);
-        var helperEvent = new Event(
-            SerializableEventPlaceholder.Instance,
-            claimEvent.SortableUniqueIdValue,
-            claimEvent.EventPayloadName,
-            deterministicId,
-            claimEvent.EventMetadata,
-            claimEvent.Tags);
-        var dynEvent = DynamoEvent.FromEvent(
-            helperEvent,
-            serializedPayload,
-            GetGsiPartitionKey(claimEvent.SortableUniqueIdValue, serviceId),
-            serviceId);
-        var dynamoTags = claimEvent.Tags.Select(tagString =>
-        {
-            var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
-                ? tagString.Split(':')[0]
-                : tagString;
-            var storedTagGroup = BuildStoredTagGroup(serviceId, tagGroup);
-            return DynamoTag.FromEventTag(
-                serviceId,
-                tagString,
-                storedTagGroup,
-                claimEvent.SortableUniqueIdValue,
-                deterministicId,
-                claimEvent.EventPayloadName);
-        }).ToList();
+        var mapped = DynamoDbEventItemMapper.FromSerializableEvent(
+            claimEvent,
+            serviceId,
+            _options.WriteShardCount,
+            deterministicId);
+        var dynEvent = mapped.DynamoEvent;
+        var dynamoTags = mapped.DynamoTags;
 
         // The event Put is ALWAYS index 0 — only its attribute_not_exists(pk) condition is the claim guard, so only a
         // cancellation reason at index 0 classifies as a conflict (see the catch below).
@@ -393,28 +373,14 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                         TagWrites: (IReadOnlyList<TagWriteResult>)Array.Empty<TagWriteResult>()));
             }
 
-            var eventItems = eventsList.Select(ev => new EventWriteItem(
-                ev,
-                DynamoEvent.FromEvent(
+            var eventItems = eventsList
+                .Select(ev => DynamoDbEventItemMapper.FromEvent(
                     ev,
                     SerializeEventPayload(ev.Payload),
-                    GetGsiPartitionKey(ev.SortableUniqueIdValue, serviceId),
-                    serviceId),
-                ev.Tags.Select(tagString =>
-                {
-                    var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
-                        ? tagString.Split(':')[0]
-                        : tagString;
-                    var storedTagGroup = BuildStoredTagGroup(serviceId, tagGroup);
-                    return DynamoTag.FromEventTag(
-                        serviceId,
-                        tagString,
-                        storedTagGroup,
-                        ev.SortableUniqueIdValue,
-                        ev.Id,
-                        ev.EventType);
-                }).ToList()
-            )).ToList();
+                    serviceId,
+                    _options.WriteShardCount,
+                    DateTimeOffset.UtcNow))
+                .ToList();
 
             var batches = BuildTransactionBatches(eventItems);
             if (batches == null)
@@ -892,10 +858,10 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
         throw new InvalidOperationException("BatchGetItem exceeded retry limit.");
     }
 
-    private List<List<EventWriteItem>>? BuildTransactionBatches(List<EventWriteItem> eventItems)
+    private List<List<DynamoDbEventWriteItem>>? BuildTransactionBatches(List<DynamoDbEventWriteItem> eventItems)
     {
-        var batches = new List<List<EventWriteItem>>();
-        var current = new List<EventWriteItem>();
+        var batches = new List<List<DynamoDbEventWriteItem>>();
+        var current = new List<DynamoDbEventWriteItem>();
         var currentCount = 0;
 
         foreach (var item in eventItems)
@@ -907,7 +873,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
             if (currentCount + itemCount > _options.MaxTransactionItems)
             {
                 batches.Add(current);
-                current = new List<EventWriteItem>();
+                current = new List<DynamoDbEventWriteItem>();
                 currentCount = 0;
             }
 
@@ -921,7 +887,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
         return batches;
     }
 
-    private async Task WriteEventsWithTransactionsAsync(List<List<EventWriteItem>> batches)
+    private async Task WriteEventsWithTransactionsAsync(List<List<DynamoDbEventWriteItem>> batches)
     {
         foreach (var batch in batches)
         {
@@ -963,7 +929,7 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
         }
     }
 
-    private async Task WriteEventsWithBatchAsync(List<EventWriteItem> eventItems)
+    private async Task WriteEventsWithBatchAsync(List<DynamoDbEventWriteItem> eventItems)
     {
         var eventWrites = eventItems
             .Select(item => new WriteRequest
@@ -1342,40 +1308,13 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
                         TagWrites: (IReadOnlyList<TagWriteResult>)Array.Empty<TagWriteResult>()));
             }
 
-            var eventItems = eventsList.Select(se =>
-            {
-                var serializedPayload = Encoding.UTF8.GetString(se.Payload);
-                var helperEvent = new Event(
-                    SerializableEventPlaceholder.Instance,
-                    se.SortableUniqueIdValue,
-                    se.EventPayloadName,
-                    se.Id,
-                    se.EventMetadata,
-                    se.Tags);
-
-                var dynEvent = DynamoEvent.FromEvent(
-                    helperEvent,
-                    serializedPayload,
-                    GetGsiPartitionKey(se.SortableUniqueIdValue, serviceId),
-                    serviceId);
-
-                var dynamoTags = se.Tags.Select(tagString =>
-                {
-                    var tagGroup = tagString.Contains(':', StringComparison.Ordinal)
-                        ? tagString.Split(':')[0]
-                        : tagString;
-                    var storedTagGroup = BuildStoredTagGroup(serviceId, tagGroup);
-                    return DynamoTag.FromEventTag(
-                        serviceId,
-                        tagString,
-                        storedTagGroup,
-                        se.SortableUniqueIdValue,
-                        se.Id,
-                        se.EventPayloadName);
-                }).ToList();
-
-                return new EventWriteItem(helperEvent, dynEvent, dynamoTags);
-            }).ToList();
+            var eventItems = eventsList
+                .Select(se => DynamoDbEventItemMapper.FromSerializableEvent(
+                    se,
+                    serviceId,
+                    _options.WriteShardCount,
+                    timestamp: DateTimeOffset.UtcNow))
+                .ToList();
 
             var batches = BuildTransactionBatches(eventItems);
             if (batches == null)
@@ -1465,14 +1404,4 @@ public partial class DynamoDbEventStore : IHotEventStore, IStorageDurabilityDesc
         return events;
     }
 
-    private sealed record EventWriteItem(Event Event, DynamoEvent DynamoEvent, List<DynamoTag> DynamoTags);
-
-    /// <summary>
-    ///     Placeholder payload used when constructing Event objects for serializable event writes.
-    ///     The actual payload is already serialized in the SerializableEvent.
-    /// </summary>
-    private sealed class SerializableEventPlaceholder : IEventPayload
-    {
-        public static readonly SerializableEventPlaceholder Instance = new();
-    }
 }

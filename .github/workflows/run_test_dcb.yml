@@ -48,6 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SEKIBAN_TAG_STREAM_CONTROLLED_CEILING: '1'
+      SEKIBAN_DYNAMODB_LOCAL_ENDPOINT: http://127.0.0.1:18000
     concurrency:
       group: dcb-tests-net9-${{ github.ref }}
       cancel-in-progress: false
@@ -80,6 +81,21 @@ jobs:
         run: |
           dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
 
+      - name: Start pinned DynamoDB Local for G67
+        run: |
+          docker run --rm -d --name sekiban-g67-dynamodb-local -p 18000:8000 \
+            amazon/dynamodb-local:2.6.1@sha256:1856c05cc66a0e49dc1099e483ad2851477eeebe2135250ac11a1d1227db54b1 \
+            -jar DynamoDBLocal.jar -inMemory -sharedDb
+          for attempt in $(seq 1 30); do
+            http_code="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18000/ || true)"
+            if [ "$http_code" != "000" ]; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs sekiban-g67-dynamodb-local
+          exit 1
+
       - name: dotnet test DCB projects sequentially (net9.0)
         run: |
           dotnet test dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
@@ -90,6 +106,10 @@ jobs:
           dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.Postgres.Tests/Sekiban.Dcb.MaterializedView.Postgres.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+
+      - name: Stop pinned DynamoDB Local
+        if: always()
+        run: docker rm -f sekiban-g67-dynamodb-local || true
 
       - name: Verify 10.14.1 materialized-view binary consumer without rebuild
         run: |
@@ -106,6 +126,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SEKIBAN_TAG_STREAM_CONTROLLED_CEILING: '1'
+      SEKIBAN_DYNAMODB_LOCAL_ENDPOINT: http://127.0.0.1:18000
     concurrency:
       group: dcb-tests-net10-${{ github.ref }}
       cancel-in-progress: false
@@ -138,6 +159,21 @@ jobs:
         run: |
           dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
 
+      - name: Start pinned DynamoDB Local for G67
+        run: |
+          docker run --rm -d --name sekiban-g67-dynamodb-local -p 18000:8000 \
+            amazon/dynamodb-local:2.6.1@sha256:1856c05cc66a0e49dc1099e483ad2851477eeebe2135250ac11a1d1227db54b1 \
+            -jar DynamoDBLocal.jar -inMemory -sharedDb
+          for attempt in $(seq 1 30); do
+            http_code="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18000/ || true)"
+            if [ "$http_code" != "000" ]; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs sekiban-g67-dynamodb-local
+          exit 1
+
       - name: dotnet test DCB projects sequentially (net10.0)
         run: |
           dotnet test dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
@@ -148,3 +184,7 @@ jobs:
           dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.Postgres.Tests/Sekiban.Dcb.MaterializedView.Postgres.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+
+      - name: Stop pinned DynamoDB Local
+        if: always()
+        run: docker rm -f sekiban-g67-dynamodb-local || true

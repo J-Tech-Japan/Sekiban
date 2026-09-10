@@ -886,6 +886,23 @@ document, item, or Azure Queue wire-envelope count. Strict unavailable measureme
 non-strict policy proceeds with a named diagnostic. The gate covers the current executor operation only; it does not
 split events, change provider retry/recovery, or repair historical oversized data.
 
+## SEK-G67 DynamoDB event-item size gate
+
+`AddSekibanDcbDynamoDbEventItemSizeGate()` (or
+`ExecutorSizeGateOptions.AddDynamoDbEventItemPolicy(...)`) is an opt-in provider registration for the DynamoDB
+base event item. Its default per-event limit is the DynamoDB 400 KiB service ceiling, `409600` bytes; a configured
+per-event quota may be smaller, but provider registration rejects a quota above that ceiling. An explicit operation
+quota is evaluated by the executor as the sum of the independently measured event items in that operation.
+
+The measurement uses the same provider-owned `AttributeValue` event-item mapper for typed, serialized, and conditional
+writes. It counts UTF-8 bytes for attribute names and string values, binary lengths, and list/map element bytes with
+DynamoDB's collection overhead, including optional event metadata and tags on the base event item. It does not claim
+tag-item fit, key-length validation, GSI projection or billing overhead, the transaction/request envelope, the 4 MiB
+transaction limit, or BatchWrite request sizing. Therefore a passing event-item measurement is not a complete provider
+request-size guarantee. A strict policy rejects an unavailable measurement before persistence; a non-strict policy
+continues with its named unvalidated diagnostic. A hand-constructed core policy bypasses the provider registration and
+its service-ceiling validation, while unregistered legacy DynamoDB writes remain unchanged.
+
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).

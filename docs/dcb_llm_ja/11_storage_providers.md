@@ -893,6 +893,23 @@ executor の storage policy は、provider が `IExecutorSizeMeasurement` を通
 wire envelope のサイズではありません。strict で測定できない場合は永続化前に拒否し、non-strict は名前付き診断を付けて継続します。
 ゲートは現在の executor operation だけを対象にし、event の分割、provider の retry/recovery の変更、過去の oversized data の修復は行いません。
 
+## SEK-G67 DynamoDB event-item サイズゲート
+
+`AddSekibanDcbDynamoDbEventItemSizeGate()`（または
+`ExecutorSizeGateOptions.AddDynamoDbEventItemPolicy(...)`）は、DynamoDB の base event item に対する opt-in の
+provider 登録です。既定の event ごとの上限は DynamoDB service ceiling の 400 KiB、`409600` byte です。
+event ごとの設定値はそれ以下にできますが、provider 登録は ceiling を超える値を拒否します。operation の
+明示的な上限は、executor が各 event item の測定値を個別に測定して合計します。
+
+測定には typed・serialized・conditional write で共通の provider-owned `AttributeValue` event-item mapper を
+使います。attribute 名と string 値の UTF-8 byte、binary の長さ、list/map の要素 byte と DynamoDB の collection
+overhead を数え、optional な event metadata と base event item の tags も含めます。tag item の適合、key 長検証、
+GSI projection または billing overhead、transaction/request envelope、4 MiB transaction limit、BatchWrite の
+request size は保証しません。したがって event-item を通過したことは provider request size 全体の保証では
+ありません。strict policy は測定不能なら永続化前に拒否し、non-strict policy は名前付きの未検証診断を付けて
+継続します。Core の policy を直接構築した場合は provider 登録と service ceiling 検証を迂回します。未登録の
+legacy DynamoDB write は変更されません。
+
 ## 関連資料
 
 現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。
