@@ -640,6 +640,10 @@ apply and concurrent applies do not share aliases. A fresh projector instance ca
 executor still verifies first and requires the configured enforced SQL policy. `VerifyOnly` does not invoke projector
 apply and refuses execution, so it cannot use this capability to perform writes.
 
+Adopting this capability requires updating projector code to read its own apply-time bindings; it does not require a
+stored-data migration. The SQL statement policy can enforce the declared table contract, but this capability does not
+promise arbitrary query SQL safety in custom projector code; hosts must still choose and validate their own policy.
+
 ## Querying the Tables
 
 Applications should not hardcode the physical table name. Use `IMvOrleansQueryAccessor` to resolve it.

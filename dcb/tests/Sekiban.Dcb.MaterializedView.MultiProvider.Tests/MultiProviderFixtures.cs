@@ -34,6 +34,7 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
 
     public MvTable Forecasts { get; private set; } = default!;
     public int InitializeCallCount { get; private set; }
+    public int ApplyCallCount { get; private set; }
 
     public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
         MvDbType databaseType,
@@ -68,6 +69,7 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
         IMvApplyContext ctx,
         CancellationToken cancellationToken = default)
     {
+        ApplyCallCount++;
         if (ctx is not IMvApplyTableBindings bindings ||
             !bindings.TryGetPhysicalName("forecasts", out var physicalName))
         {

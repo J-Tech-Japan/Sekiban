@@ -627,6 +627,10 @@ projector instance は `InitializeAsync` を呼ばずに `VerifyAndExecute` を�
 configured な enforced SQL policy を要求します。`VerifyOnly` は projector apply を呼ばず実行を拒否するため、この
 capability による write も行いません。
 
+この capability を採用するには projector code が apply-time binding を読むよう更新しますが、保存済みデータの migration
+は必要ありません。SQL statement policy は宣言した table contract を検査できますが、custom projector code 内の任意の
+query SQL が安全になることを保証する機能ではありません。host は利用する policy を選択し、引き続き検証してください。
+
 ## テーブルのクエリ方法
 
 物理テーブル名をアプリ側で決め打ちしないでください。`IMvOrleansQueryAccessor` を使って解決します。

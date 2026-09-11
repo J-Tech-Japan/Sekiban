@@ -88,37 +88,22 @@ public sealed class OrderSummaryMvV1 : IMaterializedViewProjector, IMvSchemaRequ
         IMvApplyContext ctx,
         CancellationToken cancellationToken = default)
     {
-        var tables = RequireApplyTables(ctx);
         return ev.Payload switch
         {
-            OrderCreated created => [UpsertOrder(created, tables.Orders, ctx.CurrentSortableUniqueId)],
-            OrderItemAdded added => await ApplyItemAddedAsync(added, tables, ctx, cancellationToken).ConfigureAwait(false),
-            OrderCancelled cancelled => [CancelOrder(cancelled, tables.Orders, ctx.CurrentSortableUniqueId)],
+            OrderCreated created => [UpsertOrder(created, ctx.CurrentSortableUniqueId)],
+            OrderItemAdded added => await ApplyItemAddedAsync(added, ctx, cancellationToken).ConfigureAwait(false),
+            OrderCancelled cancelled => [CancelOrder(cancelled, ctx.CurrentSortableUniqueId)],
             _ => []
         };
     }
 
-    private static ApplyTableNames RequireApplyTables(IMvApplyContext ctx)
-    {
-        if (ctx is not IMvApplyTableBindings bindings ||
-            !bindings.TryGetPhysicalName("orders", out var orders) ||
-            !bindings.TryGetPhysicalName("items", out var items))
-        {
-            throw new InvalidOperationException(
-                "The native apply context did not provide the required own-table bindings for OrderSummary.");
-        }
-
-        return new ApplyTableNames(orders, items);
-    }
-
     private async Task<IReadOnlyList<MvSqlStatement>> ApplyItemAddedAsync(
         OrderItemAdded added,
-        ApplyTableNames tables,
         IMvApplyContext ctx,
         CancellationToken cancellationToken)
     {
         var orderExists = await ctx.ExecuteScalarAsync<int>(
-            $"SELECT COUNT(*) FROM {tables.Orders} WHERE id = @Id",
+            $"SELECT COUNT(*) FROM {Orders.PhysicalName} WHERE id = @Id",
             new { Id = added.OrderId },
             cancellationToken).ConfigureAwait(false);
 
@@ -129,15 +114,15 @@ public sealed class OrderSummaryMvV1 : IMaterializedViewProjector, IMvSchemaRequ
 
         return
         [
-            InsertItem(added, tables.Items, ctx.CurrentSortableUniqueId),
-            UpdateOrderTotal(added.OrderId, tables.Orders, added.Quantity * added.UnitPrice, ctx.CurrentSortableUniqueId)
+            InsertItem(added, ctx.CurrentSortableUniqueId),
+            UpdateOrderTotal(added.OrderId, added.Quantity * added.UnitPrice, ctx.CurrentSortableUniqueId)
         ];
     }
 
-    private MvSqlStatement UpsertOrder(OrderCreated created, string tableName, string sortableUniqueId) =>
+    private MvSqlStatement UpsertOrder(OrderCreated created, string sortableUniqueId) =>
         new(
             $"""
-             INSERT INTO {tableName}
+             INSERT INTO {Orders.PhysicalName}
                  (id, status, total, created_at, _last_sortable_unique_id, _last_applied_at)
              VALUES
                  (@OrderId, @Status, @Total, @CreatedAt, @SortableUniqueId, NOW())
@@ -147,7 +132,7 @@ public sealed class OrderSummaryMvV1 : IMaterializedViewProjector, IMvSchemaRequ
                  created_at = EXCLUDED.created_at,
                  _last_sortable_unique_id = EXCLUDED._last_sortable_unique_id,
                  _last_applied_at = EXCLUDED._last_applied_at
-             WHERE {tableName}._last_sortable_unique_id < EXCLUDED._last_sortable_unique_id;
+             WHERE {Orders.PhysicalName}._last_sortable_unique_id < EXCLUDED._last_sortable_unique_id;
              """,
             new
             {
@@ -158,10 +143,10 @@ public sealed class OrderSummaryMvV1 : IMaterializedViewProjector, IMvSchemaRequ
                 SortableUniqueId = sortableUniqueId
             });
 
-    private MvSqlStatement InsertItem(OrderItemAdded added, string tableName, string sortableUniqueId) =>
+    private MvSqlStatement InsertItem(OrderItemAdded added, string sortableUniqueId) =>
         new(
             $"""
-             INSERT INTO {tableName}
+             INSERT INTO {Items.PhysicalName}
                  (id, order_id, product_name, quantity, unit_price, _last_sortable_unique_id, _last_applied_at)
              VALUES
                  (@ItemId, @OrderId, @ProductName, @Quantity, @UnitPrice, @SortableUniqueId, NOW())
@@ -172,7 +157,7 @@ public sealed class OrderSummaryMvV1 : IMaterializedViewProjector, IMvSchemaRequ
                  unit_price = EXCLUDED.unit_price,
                  _last_sortable_unique_id = EXCLUDED._last_sortable_unique_id,
                  _last_applied_at = EXCLUDED._last_applied_at
-             WHERE {tableName}._last_sortable_unique_id < EXCLUDED._last_sortable_unique_id;
+             WHERE {Items.PhysicalName}._last_sortable_unique_id < EXCLUDED._last_sortable_unique_id;
              """,
             new
             {
@@ -184,10 +169,10 @@ public sealed class OrderSummaryMvV1 : IMaterializedViewProjector, IMvSchemaRequ
                 SortableUniqueId = sortableUniqueId
             });
 
-    private MvSqlStatement UpdateOrderTotal(Guid orderId, string tableName, decimal delta, string sortableUniqueId) =>
+    private MvSqlStatement UpdateOrderTotal(Guid orderId, decimal delta, string sortableUniqueId) =>
         new(
             $"""
-             UPDATE {tableName}
+             UPDATE {Orders.PhysicalName}
              SET total = total + @Delta,
                  _last_sortable_unique_id = @SortableUniqueId,
                  _last_applied_at = NOW()
@@ -201,10 +186,10 @@ public sealed class OrderSummaryMvV1 : IMaterializedViewProjector, IMvSchemaRequ
                 SortableUniqueId = sortableUniqueId
             });
 
-    private MvSqlStatement CancelOrder(OrderCancelled cancelled, string tableName, string sortableUniqueId) =>
+    private MvSqlStatement CancelOrder(OrderCancelled cancelled, string sortableUniqueId) =>
         new(
             $"""
-             UPDATE {tableName}
+             UPDATE {Orders.PhysicalName}
              SET status = @Status,
                  _last_sortable_unique_id = @SortableUniqueId,
                  _last_applied_at = NOW()
@@ -217,8 +202,6 @@ public sealed class OrderSummaryMvV1 : IMaterializedViewProjector, IMvSchemaRequ
                 Status = "Cancelled",
                 SortableUniqueId = sortableUniqueId
             });
-
-    private sealed record ApplyTableNames(string Orders, string Items);
 }
 
 public sealed record OrderRow(

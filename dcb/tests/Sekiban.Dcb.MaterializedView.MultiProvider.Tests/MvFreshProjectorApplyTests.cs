@@ -89,7 +89,9 @@ internal static class FreshProjectorApplyAssertions
             var executionOptions = CreateOptions(scenario);
             executionOptions.InitializationMode = MvInitializationMode.VerifyAndExecute;
             executionOptions.SqlStatementPolicyMode = MvSqlStatementPolicyMode.Enforced;
-            executionOptions.SqlStatementPolicy = PermitAllPolicy.Instance;
+            executionOptions.SqlStatementPolicy = new OwnTablesOnlyPolicy();
+            var executionAudit = new VerifiedBatchExecutionAudit();
+            executionOptions.ExecutionObserver = executionAudit;
             if (fixture.DatabaseTypeForTests == MvDbType.SqlServer)
             {
                 executionOptions.SqlServerInspectionConnectionString =
@@ -105,6 +107,12 @@ internal static class FreshProjectorApplyAssertions
 
             Assert.Equal(1, applied);
             Assert.Equal(0, executionProjector.InitializeCallCount);
+            Assert.Equal(1, executionProjector.ApplyCallCount);
+            Assert.Equal(1, executionAudit.TransactionCommitCount);
+            Assert.NotEmpty(executionAudit.ProjectorCommandExecutionAttempts);
+            Assert.All(
+                executionAudit.ProjectorCommandExecutionAttempts,
+                sql => Assert.Contains(tableName, sql, StringComparison.OrdinalIgnoreCase));
 
             var registryStore = fixture.Services.GetRequiredService<IMvRegistryStore>();
             var entry = Assert.Single(await registryStore.GetEntriesAsync(
@@ -209,13 +217,4 @@ internal static class FreshProjectorApplyAssertions
         public MvStorageInfo GetStorageInfo() => storageInfo;
     }
 
-    private sealed class PermitAllPolicy : IMvSqlStatementPolicy
-    {
-        public static PermitAllPolicy Instance { get; } = new();
-
-        public ValueTask<MvSqlPolicyDecision> EvaluateAsync(
-            MvSqlStatementContext context,
-            CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(MvSqlPolicyDecision.Allow());
-    }
 }

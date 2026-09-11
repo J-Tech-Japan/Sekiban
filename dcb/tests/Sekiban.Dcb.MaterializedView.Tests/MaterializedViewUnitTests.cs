@@ -362,6 +362,29 @@ public class MaterializedViewUnitTests
     }
 
     [Fact]
+    public async Task NativeMvApplyHost_ConcreteBindingsRemainAvailableBeforeInitialization()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        var projector = new BindingProbeProjector();
+        var host = new NativeMvApplyHost(projector, domainTypes.EventTypes);
+        var bindings = new MvTableBindings("BindingProbe", 1, new MvOptions());
+        bindings.RegisterTable("orders", "explicit_orders");
+
+        await host.ApplyEventAsync(
+                CreateBindingProbeEvent(domainTypes),
+                bindings,
+                new FakeApplyQueryPort(),
+                "100",
+                CancellationToken.None)
+            .ConfigureAwait(false);
+
+        var captured = Assert.Single(projector.CapturedBindings);
+        Assert.True(captured.TryGetPhysicalName("orders", out var physicalName));
+        Assert.Equal("explicit_orders", physicalName);
+        Assert.Empty(host.LogicalTables);
+    }
+
+    [Fact]
     public async Task NativeMvApplyHost_SnapshotsConcreteBindingsAtEachApplyBoundary()
     {
         var domainTypes = DomainType.GetDomainTypes();
@@ -565,26 +588,15 @@ public class MaterializedViewUnitTests
         public Task ExecuteAsync(string sql, object? param = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class FakeApplyContext : IMvApplyContext, IMvApplyTableBindings
+    private sealed class FakeApplyContext : IMvApplyContext
     {
         public Dictionary<string, IMvRow> SingleResults { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, object> ScalarResults { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public IReadOnlyDictionary<string, string> OwnTables { get; } =
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["orders"] = "sekiban_mv_ordersummary_v1_orders",
-                ["items"] = "sekiban_mv_ordersummary_v1_items"
-            };
         public MvDbType DatabaseType => MvDbType.Postgres;
         public System.Data.IDbConnection Connection => throw new NotSupportedException();
         public System.Data.IDbTransaction Transaction => throw new NotSupportedException();
         public Event CurrentEvent => throw new NotSupportedException();
         public string CurrentSortableUniqueId => "999";
-
-        public bool TryGetPhysicalName(
-            string logicalName,
-            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? physicalName) =>
-            OwnTables.TryGetValue(logicalName, out physicalName);
 
         public Task<IMvRow?> QuerySingleOrDefaultRowAsync(string sql, object? param = null, CancellationToken cancellationToken = default) =>
             Task.FromResult(SingleResults.TryGetValue(sql, out var row) ? row : null);

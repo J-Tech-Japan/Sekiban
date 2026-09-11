@@ -44,6 +44,7 @@ manifest = Path(sys.argv[2])
 tfm_filter = sys.argv[3]
 failures = []
 audited_cases = 0
+groups = {}
 
 def local_name(tag):
     return tag.rsplit("}", 1)[-1]
@@ -67,23 +68,28 @@ for line_number, raw_line in enumerate(manifest.read_text().splitlines(), 1):
     trx_name, engine, tfm, test_name, expected_count_text = fields
     if tfm_filter and tfm != tfm_filter:
         continue
-    audited_cases += 1
     try:
         expected_count = int(expected_count_text)
     except ValueError:
         failures.append(f"manifest line {line_number}: invalid expected count {expected_count_text!r}")
         continue
 
+    key = (trx_name, engine, tfm)
+    groups.setdefault(key, []).append((line_number, test_name, expected_count))
+
+for (trx_name, engine, tfm), entries in groups.items():
+    audited_cases += 1
     path = trx_dir / trx_name
     if not path.is_file():
         failures.append(f"missing TRX for engine={engine} tfm={tfm}: {path}")
         continue
 
     results = read_results(path)
-    if len(results) != expected_count:
+    expected_total = sum(entry[2] for entry in entries)
+    if len(results) != expected_total:
         failures.append(
             f"unexpected result count engine={engine} tfm={tfm} file={path.name}: "
-            f"expected {expected_count}, found {len(results)}"
+            f"expected {expected_total}, found {len(results)}"
         )
     for result in results:
         outcome = result.attrib.get("outcome")
@@ -92,28 +98,31 @@ for line_number, raw_line in enumerate(manifest.read_text().splitlines(), 1):
                 f"non-passing result engine={engine} tfm={tfm} "
                 f"test={result.attrib.get('testName')} outcome={outcome}"
             )
-    matching = [
-        result for result in results
-        if test_name in result.attrib.get("testName", "")
-    ]
-    if len(matching) != expected_count:
-        failures.append(
-            f"wrong case count engine={engine} tfm={tfm} file={path.name}: "
-            f"expected {expected_count}, found {len(matching)}"
-        )
-    if len({result.attrib.get("testId") for result in matching}) != len(matching):
-        failures.append(f"duplicate test id engine={engine} tfm={tfm} file={path.name}")
-    for result in matching:
-        outcome = result.attrib.get("outcome")
-        if outcome != "Passed":
+    verified = len(results) == expected_total
+    for line_number, test_name, expected_count in entries:
+        matching = [
+            result for result in results
+            if test_name in result.attrib.get("testName", "")
+        ]
+        if len(matching) != expected_count:
             failures.append(
-                f"non-passing required case engine={engine} tfm={tfm} "
-                f"test={result.attrib.get('testName')} outcome={outcome}"
+                f"wrong case count engine={engine} tfm={tfm} file={path.name} manifest line={line_number}: "
+                f"expected {expected_count}, found {len(matching)}"
             )
-    if matching and len(matching) == expected_count and all(
-        result.attrib.get("outcome") == "Passed" for result in matching
-    ):
-        print(f"verified engine={engine} tfm={tfm} file={path.name} cases={len(matching)}")
+            verified = False
+        if len({result.attrib.get("testId") for result in matching}) != len(matching):
+            failures.append(f"duplicate test id engine={engine} tfm={tfm} file={path.name} manifest line={line_number}")
+            verified = False
+        for result in matching:
+            outcome = result.attrib.get("outcome")
+            if outcome != "Passed":
+                failures.append(
+                    f"non-passing required case engine={engine} tfm={tfm} "
+                    f"test={result.attrib.get('testName')} outcome={outcome}"
+                )
+                verified = False
+    if verified and all(result.attrib.get("outcome") == "Passed" for result in results):
+        print(f"verified engine={engine} tfm={tfm} file={path.name} cases={len(results)}")
 
 if failures:
     for failure in failures:
