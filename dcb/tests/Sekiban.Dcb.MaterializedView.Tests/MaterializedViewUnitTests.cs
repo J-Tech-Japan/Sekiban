@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.MaterializedViews;
 using Dcb.Domain.WithoutResult.Order;
@@ -360,6 +361,141 @@ public class MaterializedViewUnitTests
         Assert.Equal(1, host.ViewVersion);
     }
 
+    [Fact]
+    public async Task NativeMvApplyHost_SnapshotsConcreteBindingsAtEachApplyBoundary()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        var projector = new BindingProbeProjector();
+        var host = new NativeMvApplyHost(projector, domainTypes.EventTypes);
+        var bindings = new MvTableBindings("BindingProbe", 1, new MvOptions());
+        await host.InitializeAsync(bindings, CancellationToken.None);
+
+        ((IDictionary<string, string>)bindings.LogicalToPhysical)["map-only"] = "map_only_should_not_escape";
+        await host.ApplyEventAsync(
+                CreateBindingProbeEvent(domainTypes),
+                bindings,
+                new FakeApplyQueryPort(),
+                "100",
+                CancellationToken.None);
+
+        var first = Assert.Single(projector.CapturedBindings);
+        Assert.Equal(
+            ["items", "orders"],
+            first.OwnTables.Keys.Order(StringComparer.Ordinal).ToArray());
+        Assert.False(first.TryGetPhysicalName("map-only", out _));
+        Assert.Throws<NotSupportedException>(() =>
+            ((IDictionary<string, string>)first.OwnTables).Add("escape", "escape"));
+
+        bindings.RegisterTable("after-capture");
+        Assert.False(first.OwnTables.ContainsKey("after-capture"));
+
+        await host.ApplyEventAsync(
+                CreateBindingProbeEvent(domainTypes),
+                bindings,
+                new FakeApplyQueryPort(),
+                "101",
+                CancellationToken.None);
+
+        Assert.Equal(2, projector.CapturedBindings.Count);
+        Assert.True(projector.CapturedBindings[1].TryGetPhysicalName("after-capture", out var physicalName));
+        Assert.Equal("sekiban_mv_bindingprobe_v1_after_capture", physicalName);
+        Assert.False(first.TryGetPhysicalName("missing", out var missing));
+        Assert.Null(missing);
+        Assert.Throws<KeyNotFoundException>(() => _ = first.OwnTables["missing"]);
+    }
+
+    [Fact]
+    public async Task NativeMvApplyHost_ForeignBindingsUseOwnedFallbackAndRejectDuplicateNames()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        var projector = new BindingProbeProjector();
+        var host = new NativeMvApplyHost(projector, domainTypes.EventTypes);
+        var foreign = new ForeignBindings(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["orders"] = "foreign_orders",
+                ["items"] = "foreign_items"
+            });
+
+        await host.ApplyEventAsync(
+                CreateBindingProbeEvent(domainTypes),
+                foreign,
+                new FakeApplyQueryPort(),
+                "100",
+                CancellationToken.None);
+
+        var captured = Assert.Single(projector.CapturedBindings);
+        Assert.Equal("foreign_orders", captured.OwnTables["orders"]);
+        Assert.False(ReferenceEquals(captured.OwnTables, foreign.LogicalToPhysical));
+
+        var duplicateHost = new NativeMvApplyHost(new BindingProbeProjector(), domainTypes.EventTypes);
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => duplicateHost.ApplyEventAsync(
+                CreateBindingProbeEvent(domainTypes),
+                new ForeignBindings(new DuplicateReadOnlyDictionary(
+                [
+                    new KeyValuePair<string, string>("orders", "orders_a"),
+                    new KeyValuePair<string, string>("orders", "orders_b")
+                ])),
+                new FakeApplyQueryPort(),
+                "100",
+                CancellationToken.None));
+
+        Assert.Contains("Duplicate materialized-view logical table binding 'orders'", exception.Message);
+
+        var nullException = await Assert.ThrowsAsync<ArgumentNullException>(() => duplicateHost.ApplyEventAsync(
+                CreateBindingProbeEvent(domainTypes),
+                null!,
+                new FakeApplyQueryPort(),
+                "100",
+                CancellationToken.None));
+        Assert.Equal("bindings", nullException.ParamName);
+    }
+
+    [Fact]
+    public async Task NativeMvApplyHost_ConcurrentApplyCallsKeepDistinctBindingSnapshots()
+    {
+        var domainTypes = DomainType.GetDomainTypes();
+        var projector = new ConcurrentBindingProbeProjector();
+        var host = new NativeMvApplyHost(projector, domainTypes.EventTypes);
+        var queryPort = new FakeApplyQueryPort();
+        var eventValue = CreateBindingProbeEvent(domainTypes);
+        var first = new ForeignBindings(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["orders"] = "orders_first",
+                ["items"] = "items_first"
+            });
+        var second = new ForeignBindings(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["orders"] = "orders_second",
+                ["items"] = "items_second"
+            });
+
+        var firstApply = host.ApplyEventAsync(eventValue, first, queryPort, "100", CancellationToken.None);
+        var secondApply = host.ApplyEventAsync(eventValue, second, queryPort, "101", CancellationToken.None);
+        await projector.BothEntered.WaitAsync(TimeSpan.FromSeconds(1));
+        projector.Release();
+        await Task.WhenAll(firstApply, secondApply);
+
+        Assert.Equal(
+            ["orders_first", "orders_second"],
+            projector.CapturedOrderNames.Order(StringComparer.Ordinal).ToArray());
+    }
+
+    private static SerializableEvent CreateBindingProbeEvent(DcbDomainTypes domainTypes)
+    {
+        var eventId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        return new Event(
+                new OrderCreated(Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), DateTimeOffset.UtcNow),
+                "100",
+                nameof(OrderCreated),
+                eventId,
+                new EventMetadata("native-bindings", "native-bindings", "test"),
+                [])
+            .ToSerializableEvent(domainTypes.EventTypes);
+    }
+
     private sealed record RecordTarget(
         [property: MvColumn("id")] Guid Id,
         [property: MvColumn("name")] string Name,
@@ -429,15 +565,26 @@ public class MaterializedViewUnitTests
         public Task ExecuteAsync(string sql, object? param = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class FakeApplyContext : IMvApplyContext
+    private sealed class FakeApplyContext : IMvApplyContext, IMvApplyTableBindings
     {
         public Dictionary<string, IMvRow> SingleResults { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, object> ScalarResults { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public IReadOnlyDictionary<string, string> OwnTables { get; } =
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["orders"] = "sekiban_mv_ordersummary_v1_orders",
+                ["items"] = "sekiban_mv_ordersummary_v1_items"
+            };
         public MvDbType DatabaseType => MvDbType.Postgres;
         public System.Data.IDbConnection Connection => throw new NotSupportedException();
         public System.Data.IDbTransaction Transaction => throw new NotSupportedException();
         public Event CurrentEvent => throw new NotSupportedException();
         public string CurrentSortableUniqueId => "999";
+
+        public bool TryGetPhysicalName(
+            string logicalName,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? physicalName) =>
+            OwnTables.TryGetValue(logicalName, out physicalName);
 
         public Task<IMvRow?> QuerySingleOrDefaultRowAsync(string sql, object? param = null, CancellationToken cancellationToken = default) =>
             Task.FromResult(SingleResults.TryGetValue(sql, out var row) ? row : null);
@@ -450,6 +597,92 @@ public class MaterializedViewUnitTests
 
         public MvTable GetDependencyViewTable(string viewName, string logicalTable) => throw new NotSupportedException();
         public MvTable GetDependencyViewTable<TView>(string logicalTable) where TView : IMaterializedViewProjector => throw new NotSupportedException();
+    }
+
+    private sealed class BindingProbeProjector : IMaterializedViewProjector
+    {
+        public string ViewName => "BindingProbe";
+        public int ViewVersion => 1;
+        public List<IMvApplyTableBindings> CapturedBindings { get; } = [];
+
+        public Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default)
+        {
+            ctx.RegisterTable("orders");
+            ctx.RegisterTable("items");
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<MvSqlStatement>> ApplyToViewAsync(
+            Event ev,
+            IMvApplyContext ctx,
+            CancellationToken cancellationToken = default)
+        {
+            CapturedBindings.Add(Assert.IsAssignableFrom<IMvApplyTableBindings>(ctx));
+            return Task.FromResult<IReadOnlyList<MvSqlStatement>>([]);
+        }
+    }
+
+    private sealed class ConcurrentBindingProbeProjector : IMaterializedViewProjector
+    {
+        private readonly TaskCompletionSource<bool> _bothEntered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _entered;
+
+        public string ViewName => "ConcurrentBindingProbe";
+        public int ViewVersion => 1;
+        public Task BothEntered => _bothEntered.Task;
+        public ConcurrentQueue<string> CapturedOrderNames { get; } = new();
+
+        public Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public async Task<IReadOnlyList<MvSqlStatement>> ApplyToViewAsync(
+            Event ev,
+            IMvApplyContext ctx,
+            CancellationToken cancellationToken = default)
+        {
+            var bindings = Assert.IsAssignableFrom<IMvApplyTableBindings>(ctx);
+            Assert.True(bindings.TryGetPhysicalName("orders", out var physicalName));
+            CapturedOrderNames.Enqueue(physicalName);
+            if (Interlocked.Increment(ref _entered) == 2)
+            {
+                _bothEntered.TrySetResult(true);
+            }
+
+            await _release.Task.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+            return [];
+        }
+
+        public void Release() => _release.TrySetResult(true);
+    }
+
+    private sealed class ForeignBindings(IReadOnlyDictionary<string, string> map) : IMvTableBindings
+    {
+        public string GetPhysicalName(string logicalName) => map[logicalName];
+        public IReadOnlyDictionary<string, string> LogicalToPhysical => map;
+        public MvTable RegisterTable(string logicalName, string? physicalName = null) =>
+            new(logicalName, physicalName ?? map[logicalName], "BindingProbe", 1);
+    }
+
+    private sealed class DuplicateReadOnlyDictionary(IReadOnlyList<KeyValuePair<string, string>> entries)
+        : IReadOnlyDictionary<string, string>
+    {
+        public IEnumerable<string> Keys => entries.Select(entry => entry.Key);
+        public IEnumerable<string> Values => entries.Select(entry => entry.Value);
+        public int Count => entries.Count;
+        public string this[string key] => entries.First(entry => entry.Key == key).Value;
+        public bool ContainsKey(string key) => entries.Any(entry => entry.Key == key);
+        public bool TryGetValue(string key, out string value)
+        {
+            var match = entries.FirstOrDefault(entry => entry.Key == key);
+            value = match.Value;
+            return ContainsKey(key);
+        }
+
+        public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => entries.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private sealed class FakeMvRowSet(IReadOnlyList<IMvRow> rows) : IMvRowSet

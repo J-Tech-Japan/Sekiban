@@ -617,6 +617,29 @@ verification. Candidate preparation does not move the serving pointer or repair 
 The N+1 acceptance test checks corrected candidate content while the serving pointer, checkpoint and corruption
 remain unchanged. No cursor rewind, table deletion/reset or automatic version selection is introduced.
 
+## Apply-time own-table bindings
+
+The native apply host exposes the additive `IMvApplyTableBindings` capability on each apply context. It is an
+immutable, per-invocation snapshot of the logical-to-physical bindings owned by that host; it is not a second table
+registration API and it does not change `IMvTableBindings`, `IMvApplyContext`, or existing constructors. A projector
+that needs its own physical names can use the optional capability and fail before emitting SQL when a binding is absent:
+
+```csharp
+if (ctx is not IMvApplyTableBindings ownTables ||
+    !ownTables.TryGetPhysicalName("orders", out var ordersTable))
+{
+    throw new InvalidOperationException("The required own-table binding 'orders' is unavailable.");
+}
+
+var sameTable = ownTables.OwnTables["orders"]; // a missing key throws KeyNotFoundException
+```
+
+The host captures the snapshot before projector code runs, so later registration changes do not mutate an in-flight
+apply and concurrent applies do not share aliases. A fresh projector instance can therefore run
+`VerifyAndExecute` against bindings prepared by another projector instance without calling `InitializeAsync`; the
+executor still verifies first and requires the configured enforced SQL policy. `VerifyOnly` does not invoke projector
+apply and refuses execution, so it cannot use this capability to perform writes.
+
 ## Querying the Tables
 
 Applications should not hardcode the physical table name. Use `IMvOrleansQueryAccessor` to resolve it.

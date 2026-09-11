@@ -33,6 +33,7 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
     public int ViewVersion => 1;
 
     public MvTable Forecasts { get; private set; } = default!;
+    public int InitializeCallCount { get; private set; }
 
     public IReadOnlyList<MvSchemaTableRequirement> GetSchemaRequirements(
         MvDbType databaseType,
@@ -56,6 +57,7 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
 
     public async Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default)
     {
+        InitializeCallCount++;
         Forecasts = ctx.RegisterTable("forecasts");
         await ctx.ExecuteAsync(CreateTableSql(ctx.DatabaseType, Forecasts.PhysicalName), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
@@ -64,18 +66,28 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
     public Task<IReadOnlyList<MvSqlStatement>> ApplyToViewAsync(
         Event ev,
         IMvApplyContext ctx,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<MvSqlStatement>>(
+        CancellationToken cancellationToken = default)
+    {
+        if (ctx is not IMvApplyTableBindings bindings ||
+            !bindings.TryGetPhysicalName("forecasts", out var physicalName))
+        {
+            throw new InvalidOperationException(
+                "The native apply context did not provide the required own-table binding 'forecasts'.");
+        }
+
+        return Task.FromResult<IReadOnlyList<MvSqlStatement>>(
             ev.Payload switch
             {
-                WeatherForecastCreated created => [BuildUpsert(ctx.DatabaseType, created.ForecastId, created.Location, created.Date, created.TemperatureC, created.Summary, false, ctx.CurrentSortableUniqueId)],
-                WeatherForecastUpdated updated => [BuildUpsert(ctx.DatabaseType, updated.ForecastId, updated.Location, updated.Date, updated.TemperatureC, updated.Summary, false, ctx.CurrentSortableUniqueId)],
-                WeatherForecastDeleted deleted => [BuildDelete(ctx.DatabaseType, deleted.ForecastId, ctx.CurrentSortableUniqueId)],
+                WeatherForecastCreated created => [BuildUpsert(ctx.DatabaseType, physicalName, created.ForecastId, created.Location, created.Date, created.TemperatureC, created.Summary, false, ctx.CurrentSortableUniqueId)],
+                WeatherForecastUpdated updated => [BuildUpsert(ctx.DatabaseType, physicalName, updated.ForecastId, updated.Location, updated.Date, updated.TemperatureC, updated.Summary, false, ctx.CurrentSortableUniqueId)],
+                WeatherForecastDeleted deleted => [BuildDelete(ctx.DatabaseType, physicalName, deleted.ForecastId, ctx.CurrentSortableUniqueId)],
                 _ => []
             });
+    }
 
     private MvSqlStatement BuildUpsert(
         MvDbType dbType,
+        string tableName,
         Guid forecastId,
         string location,
         DateOnly date,
@@ -98,7 +110,7 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
         return new MvSqlStatement(dbType switch
         {
             MvDbType.Postgres => $"""
-                INSERT INTO {Forecasts.PhysicalName}
+                INSERT INTO {tableName}
                     (forecast_id, location, forecast_date, temperature_c, summary, is_deleted, _last_sortable_unique_id, _last_applied_at)
                 VALUES
                     (@ForecastId, @Location, @ForecastDate, @TemperatureC, @Summary, @IsDeleted, @SortableUniqueId, CURRENT_TIMESTAMP)
@@ -110,10 +122,10 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
                     is_deleted = EXCLUDED.is_deleted,
                     _last_sortable_unique_id = EXCLUDED._last_sortable_unique_id,
                     _last_applied_at = CURRENT_TIMESTAMP
-                WHERE {Forecasts.PhysicalName}._last_sortable_unique_id < EXCLUDED._last_sortable_unique_id;
+                WHERE {tableName}._last_sortable_unique_id < EXCLUDED._last_sortable_unique_id;
                 """,
             MvDbType.SqlServer => $"""
-                MERGE {Forecasts.PhysicalName} AS target
+                MERGE {tableName} AS target
                 USING (
                     SELECT
                         @ForecastId AS forecast_id,
@@ -139,7 +151,7 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
                     VALUES (source.forecast_id, source.location, source.forecast_date, source.temperature_c, source.summary, source.is_deleted, source._last_sortable_unique_id, SYSUTCDATETIME());
                 """,
             MvDbType.MySql => $"""
-                INSERT INTO {Forecasts.PhysicalName}
+                INSERT INTO {tableName}
                     (forecast_id, location, forecast_date, temperature_c, summary, is_deleted, _last_sortable_unique_id, _last_applied_at)
                 VALUES
                     (@ForecastId, @Location, @ForecastDate, @TemperatureC, @Summary, @IsDeleted, @SortableUniqueId, CURRENT_TIMESTAMP(6))
@@ -153,7 +165,7 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
                     _last_applied_at = IF(_last_sortable_unique_id < VALUES(_last_sortable_unique_id), CURRENT_TIMESTAMP(6), _last_applied_at);
                 """,
             MvDbType.Sqlite => $"""
-                INSERT INTO {Forecasts.PhysicalName}
+                INSERT INTO {tableName}
                     (forecast_id, location, forecast_date, temperature_c, summary, is_deleted, _last_sortable_unique_id, _last_applied_at)
                 VALUES
                     (@ForecastId, @Location, @ForecastDate, @TemperatureC, @Summary, @IsDeleted, @SortableUniqueId, CURRENT_TIMESTAMP)
@@ -165,7 +177,7 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
                     is_deleted = excluded.is_deleted,
                     _last_sortable_unique_id = excluded._last_sortable_unique_id,
                     _last_applied_at = CURRENT_TIMESTAMP
-                WHERE {Forecasts.PhysicalName}._last_sortable_unique_id < excluded._last_sortable_unique_id;
+                WHERE {tableName}._last_sortable_unique_id < excluded._last_sortable_unique_id;
                 """,
             _ => throw new NotSupportedException($"Database type '{dbType}' is not supported.")
         }, parameters);
@@ -228,11 +240,11 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
             _ => throw new NotSupportedException($"Database type '{dbType}' is not supported.")
         };
 
-    private MvSqlStatement BuildDelete(MvDbType dbType, Guid forecastId, string sortableUniqueId) =>
+    private MvSqlStatement BuildDelete(MvDbType dbType, string tableName, Guid forecastId, string sortableUniqueId) =>
         new(dbType switch
         {
             MvDbType.Postgres => $"""
-                UPDATE {Forecasts.PhysicalName}
+                UPDATE {tableName}
                 SET is_deleted = TRUE,
                     _last_sortable_unique_id = @SortableUniqueId,
                     _last_applied_at = CURRENT_TIMESTAMP
@@ -240,7 +252,7 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
                   AND _last_sortable_unique_id < @SortableUniqueId;
                 """,
             MvDbType.SqlServer => $"""
-                UPDATE {Forecasts.PhysicalName}
+                UPDATE {tableName}
                 SET is_deleted = 1,
                     _last_sortable_unique_id = @SortableUniqueId,
                     _last_applied_at = SYSUTCDATETIME()
@@ -248,7 +260,7 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
                   AND _last_sortable_unique_id < @SortableUniqueId;
                 """,
             MvDbType.MySql => $"""
-                UPDATE {Forecasts.PhysicalName}
+                UPDATE {tableName}
                 SET is_deleted = TRUE,
                     _last_sortable_unique_id = @SortableUniqueId,
                     _last_applied_at = CURRENT_TIMESTAMP(6)
@@ -256,7 +268,7 @@ public sealed class CrossProviderWeatherForecastMvV1 : IMaterializedViewProjecto
                   AND _last_sortable_unique_id < @SortableUniqueId;
                 """,
             MvDbType.Sqlite => $"""
-                UPDATE {Forecasts.PhysicalName}
+                UPDATE {tableName}
                 SET is_deleted = 1,
                     _last_sortable_unique_id = @SortableUniqueId,
                     _last_applied_at = CURRENT_TIMESTAMP

@@ -1,0 +1,5 @@
+# trx file|provider identity|TFM|required test-name substring|expected theory cases
+mv-postgres-net9.trx|postgres|net9.0|FreshProjector_VerifyAndExecuteUsesApplyTimeOwnTables|4
+mv-sqlserver-net9.trx|sqlserver|net9.0|FreshProjector_VerifyAndExecuteUsesApplyTimeOwnTables|4
+mv-postgres-net10.trx|postgres|net10.0|FreshProjector_VerifyAndExecuteUsesApplyTimeOwnTables|4
+mv-sqlserver-net10.trx|sqlserver|net10.0|FreshProjector_VerifyAndExecuteUsesApplyTimeOwnTables|4
