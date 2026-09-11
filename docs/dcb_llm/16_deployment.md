@@ -153,3 +153,15 @@ cp lib/config/dev.sample.json lib/config/dev.json
 Keeping DCB healthy hinges on monitoring reservation conflicts, watching projection lag, and ensuring storage backends are
 provisioned for peak throughput. With those practices in place you gain the flexibility of dynamic consistency while
 retaining operational confidence.
+
+## Orleans 10.3.1 dependency migration
+
+DCB hosts consuming `Sekiban.Dcb.Orleans.*` must align their direct `Microsoft.Orleans.*` references on 10.3.1 and
+upgrade the whole cluster together. The DCB authority keeps the source, internal-use projects, tests, and five
+generated template families on that same version. The applicable graph includes the `Microsoft.Extensions.*` 10.0.5
+floor and normal Polly transitives; net9 and net10 resolve the corresponding 10.3.1 assets. Do not treat a mixed
+10.0.1/10.3.1 rolling cluster as verified support.
+
+This is a package/runtime alignment only: it requires no stored-data or schema migration, does not make Azure Queue
+rewindable, and does not include #1185 subscriber recovery. Pure and Samples are deliberately outside this DCB
+upgrade boundary.

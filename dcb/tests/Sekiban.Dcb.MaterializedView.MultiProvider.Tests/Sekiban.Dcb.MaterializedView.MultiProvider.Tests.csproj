@@ -12,7 +12,7 @@
     <ItemGroup>
         <PackageReference Include="Dapper" Version="2.1.66" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
-        <PackageReference Include="Microsoft.Orleans.TestingHost" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.TestingHost" Version="$(MicrosoftOrleansVersion)" />
         <PackageReference Include="Testcontainers.PostgreSql" Version="4.10.0" />
         <PackageReference Include="Testcontainers.MsSql" Version="4.10.0" />
         <PackageReference Include="Testcontainers.MySql" Version="4.10.0" />

@@ -22,6 +22,16 @@
 
 DCB supports multiple cloud platforms for event persistence and projection snapshots. This guide covers configuration for both Azure and AWS.
 
+## Orleans dependency alignment (SEK-G74)
+
+Hosts consuming `Sekiban.Dcb.Orleans.*` must use one stable `Microsoft.Orleans.*` version throughout the
+host and cluster. The DCB 10.22 line is aligned to **10.3.1** across the shipped Orleans package, internal
+hosts, tests, and generated DCB templates; the applicable `Microsoft.Extensions.*` floor is **10.0.5** and
+Polly remains a normal transitive dependency. Upgrade all cluster nodes together. A mixed 10.0.1/10.3.1
+rolling cluster is not a verified support mode. This dependency alignment has no stored-data or schema
+migration, does not make Azure Queue rewindable, and does not include #1185 subscriber recovery; Pure and
+Samples remain outside the DCB boundary.
+
 ## Platform Comparison
 
 | Component | Azure | AWS |

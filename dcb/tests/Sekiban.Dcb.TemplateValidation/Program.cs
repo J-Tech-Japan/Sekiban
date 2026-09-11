@@ -42,6 +42,9 @@ internal static class Program
             {
                 case "source":
                     var repoRoot = Required(options, "repo-root");
+                    OrleansVersionVerifier.Validate(
+                        repoRoot,
+                        options.GetValueOrDefault("orleans-version", "10.3.1"));
                     ValidateTemplateTree(
                         Path.Combine(repoRoot, "templates", "Sekiban.Dcb.Templates", "content"),
                         expectedVersion,
@@ -103,6 +106,12 @@ internal static class Program
 
                 case "workflow":
                     ValidateWorkflowSurface(Required(options, "repo-root"));
+                    break;
+
+                case "orleans":
+                    OrleansVersionVerifier.Validate(
+                        Required(options, "repo-root"),
+                        options.GetValueOrDefault("orleans-version", "10.3.1"));
                     break;
 
                 case "mutate":
