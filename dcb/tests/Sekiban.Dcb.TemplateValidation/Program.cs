@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -183,7 +182,7 @@ internal static class Program
             Assert(File.Exists(propsPath), $"Missing explicit template authority: {propsPath}");
             Assert(ReadPropertyValue(propsPath, VersionProperty) == expectedVersion,
                 $"{propsPath} must set {VersionProperty} to {expectedVersion}.");
-            Assert(!Directory.EnumerateFiles(authorityRoot, "Directory.Build.props", SearchOption.AllDirectories).Any(),
+            Assert(!Directory.EnumerateFiles(authorityRoot, ValidationProcessSupport.DirectoryBuildPropsFileName, SearchOption.AllDirectories).Any(),
                 $"{authorityRoot} must not contain Directory.Build.props because generated projects must retain parent props discovery.");
         }
 
@@ -219,7 +218,7 @@ internal static class Program
         if (parentSentinel is not null)
         {
             Assert(EvaluateProperty(csprojPaths[0], "ParentBuildSentinel", parentSentinel),
-                "The generated template blocked the parent Directory.Build.props sentinel.");
+                $"The generated template blocked the parent {ValidationProcessSupport.DirectoryBuildPropsFileName} sentinel.");
         }
 
         if (!requireAllTemplateRoots)
@@ -243,8 +242,8 @@ internal static class Program
         using var archive = ZipFile.OpenRead(packagePath);
         var entries = archive.Entries.Where(entry => !string.IsNullOrEmpty(entry.Name)).ToArray();
 
-        Assert(!entries.Any(entry => entry.FullName.EndsWith("Directory.Build.props", StringComparison.OrdinalIgnoreCase)),
-            "The packed template must not carry Directory.Build.props.");
+        Assert(!entries.Any(entry => entry.FullName.EndsWith(ValidationProcessSupport.DirectoryBuildPropsFileName, StringComparison.OrdinalIgnoreCase)),
+            $"The packed template must not carry {ValidationProcessSupport.DirectoryBuildPropsFileName}.");
 
         var readmeEntries = entries
             .Where(entry => string.Equals(entry.FullName.Replace('\\', '/'), "README.md", StringComparison.Ordinal))
@@ -728,23 +727,10 @@ internal static class Program
             .Where(element => element.Name.LocalName == "Import")
             .Select(element => element.Attribute("Project")?.Value)
             .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => ResolveImportPath(csprojPath, value!))
+            .Select(value => ValidationProcessSupport.ResolveImportPath(csprojPath, value!))
             .ToArray();
         Assert(importPaths.Any(path => string.Equals(path, expectedProps, StringComparison.Ordinal)),
             $"{csprojPath} must explicitly import its nearest {PropsFileName} authority.");
-    }
-
-    private static string ResolveImportPath(string csprojPath, string projectAttribute)
-    {
-        var projectDirectory = Path.GetDirectoryName(csprojPath)! + Path.DirectorySeparatorChar;
-        var expanded = projectAttribute
-            .Replace("$(MSBuildThisFileDirectory)", projectDirectory, StringComparison.Ordinal)
-            .Replace('\\', Path.DirectorySeparatorChar);
-        Assert(!expanded.Contains("$(", StringComparison.Ordinal),
-            $"Import '{projectAttribute}' in {csprojPath} does not resolve without an ambient property.");
-        return Path.GetFullPath(Path.IsPathRooted(expanded)
-            ? expanded
-            : Path.Combine(projectDirectory, expanded));
     }
 
     private static string? ReadPropertyValue(string propsPath, string propertyName) =>
@@ -752,31 +738,11 @@ internal static class Program
 
     private static bool EvaluateProperty(string csprojPath, string property, string expected)
     {
-        var result = RunProcess("dotnet", "msbuild", csprojPath, "-nologo", $"-getProperty:{property}");
+        var result = ValidationProcessSupport.RunProcess("dotnet", "msbuild", csprojPath, "-nologo", $"-getProperty:{property}");
         return result.ExitCode == 0 &&
                (result.Output.Trim() == expected ||
                 Regex.IsMatch(result.Output, $@"\b{Regex.Escape(property)}\b[^\r\n]*{Regex.Escape(expected)}", RegexOptions.CultureInvariant, RegexTimeout) ||
                 result.Output.Contains($"\"{property}\": \"{expected}\"", StringComparison.Ordinal));
-    }
-
-    private static ProcessResult RunProcess(string fileName, params string[] arguments)
-    {
-        var startInfo = new ProcessStartInfo(fileName)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        };
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Could not start {fileName}.");
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        return new ProcessResult(process.ExitCode, stdout + stderr);
     }
 
     private static int FindMatchingBrace(string source, int openingBrace)
@@ -845,5 +811,4 @@ internal static class Program
 
     private sealed record WorkflowStep(string Name, string Body, int Ordinal);
 
-    private sealed record ProcessResult(int ExitCode, string Output);
 }

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -24,7 +23,11 @@ internal static class OrleansVersionVerifier
     {
         repoRoot = Path.GetFullPath(repoRoot);
         Assert(Directory.Exists(repoRoot), $"Repository root does not exist: {repoRoot}");
-        Assert(Regex.IsMatch(expectedVersion, "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"),
+        Assert(Regex.IsMatch(
+                expectedVersion,
+                "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+                RegexOptions.CultureInvariant,
+                RegexTimeout),
             $"The expected Orleans version is not a stable semantic version: {expectedVersion}");
 
         var dcbRoot = Path.Combine(repoRoot, "dcb");
@@ -56,8 +59,8 @@ internal static class OrleansVersionVerifier
                 $"{authorityPath} must declare exactly one {PropertyName} property.");
         }
 
-        var dcbBuildProps = Path.Combine(dcbRoot, "Directory.Build.props");
-        var sourceBuildProps = Path.Combine(sourceRoot, "Directory.Build.props");
+        var dcbBuildProps = Path.Combine(dcbRoot, ValidationProcessSupport.DirectoryBuildPropsFileName);
+        var sourceBuildProps = Path.Combine(sourceRoot, ValidationProcessSupport.DirectoryBuildPropsFileName);
         Assert(File.Exists(dcbBuildProps), "dcb/Directory.Build.props is required.");
         Assert(File.ReadAllText(dcbBuildProps).Contains(
                 "$(MSBuildThisFileDirectory)../Directory.Build.props",
@@ -98,7 +101,7 @@ internal static class OrleansVersionVerifier
             var root = Path.Combine(templateContentRoot, templateRoot);
             var authority = Path.GetFullPath(Path.Combine(root, TemplatePropertyFileName));
             Assert(Directory.Exists(root), $"Template authority root does not exist: {root}");
-            Assert(!Directory.EnumerateFiles(root, "Directory.Build.props", SearchOption.AllDirectories).Any(),
+            Assert(!Directory.EnumerateFiles(root, ValidationProcessSupport.DirectoryBuildPropsFileName, SearchOption.AllDirectories).Any(),
                 $"Template authority {root} contains a Directory.Build.props shadow.");
             ValidateProjectReferences(root, expectedBuildProps: null, authority);
         }
@@ -169,7 +172,7 @@ internal static class OrleansVersionVerifier
                     .Where(element => element.Name.LocalName == "Import")
                     .Select(element => element.Attribute("Project")?.Value)
                     .Where(value => !string.IsNullOrWhiteSpace(value))
-                    .Select(value => ResolveImportPath(csprojPath, value!))
+                    .Select(value => ValidationProcessSupport.ResolveImportPath(csprojPath, value!))
                     .ToArray();
                 Assert(imports.Contains(expectedImport, StringComparer.Ordinal),
                     $"{csprojPath} must explicitly import its template Orleans authority {expectedImport}.");
@@ -183,7 +186,7 @@ internal static class OrleansVersionVerifier
         stopDirectory = Path.GetFullPath(stopDirectory);
         while (current.StartsWith(stopDirectory, StringComparison.Ordinal))
         {
-            var candidate = Path.Combine(current, "Directory.Build.props");
+            var candidate = Path.Combine(current, ValidationProcessSupport.DirectoryBuildPropsFileName);
             if (File.Exists(candidate))
             {
                 return Path.GetFullPath(candidate);
@@ -206,19 +209,6 @@ internal static class OrleansVersionVerifier
         return null;
     }
 
-    private static string ResolveImportPath(string csprojPath, string projectAttribute)
-    {
-        var projectDirectory = Path.GetDirectoryName(csprojPath)! + Path.DirectorySeparatorChar;
-        var expanded = projectAttribute
-            .Replace("$(MSBuildThisFileDirectory)", projectDirectory, StringComparison.Ordinal)
-            .Replace('\\', Path.DirectorySeparatorChar);
-        Assert(!expanded.Contains("$(", StringComparison.Ordinal),
-            $"Import '{projectAttribute}' in {csprojPath} does not resolve without an ambient property.");
-        return Path.GetFullPath(Path.IsPathRooted(expanded)
-            ? expanded
-            : Path.Combine(projectDirectory, expanded));
-    }
-
     private static string? ReadProperty(string propsPath, string propertyName) =>
         XDocument.Load(propsPath).Descendants().SingleOrDefault(element => element.Name.LocalName == propertyName)?.Value.Trim();
 
@@ -230,7 +220,7 @@ internal static class OrleansVersionVerifier
 
     private static string? ReadMsbuildProperty(string projectPath, string propertyName)
     {
-        var result = RunProcess("dotnet", "msbuild", projectPath, "-nologo", $"-getProperty:{propertyName}");
+        var result = ValidationProcessSupport.RunProcess("dotnet", "msbuild", projectPath, "-nologo", $"-getProperty:{propertyName}");
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException($"MSBuild property evaluation failed for {projectPath}: {result.Output}");
@@ -254,33 +244,13 @@ internal static class OrleansVersionVerifier
 
     private static string ReadMsbuildItems(string projectPath, string itemName)
     {
-        var result = RunProcess("dotnet", "msbuild", projectPath, "-nologo", $"-getItem:{itemName}");
+        var result = ValidationProcessSupport.RunProcess("dotnet", "msbuild", projectPath, "-nologo", $"-getItem:{itemName}");
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException($"MSBuild item evaluation failed for {projectPath}: {result.Output}");
         }
 
         return result.Output;
-    }
-
-    private static ProcessResult RunProcess(string fileName, params string[] arguments)
-    {
-        var startInfo = new ProcessStartInfo(fileName)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        };
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Could not start {fileName}.");
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        return new ProcessResult(process.ExitCode, stdout + stderr);
     }
 
     private static void Assert(bool condition, string message)
@@ -291,5 +261,4 @@ internal static class OrleansVersionVerifier
         }
     }
 
-    private sealed record ProcessResult(int ExitCode, string Output);
 }
