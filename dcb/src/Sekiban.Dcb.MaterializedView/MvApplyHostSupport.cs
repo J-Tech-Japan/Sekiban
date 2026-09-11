@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.ObjectModel;
 using System.Reflection;
 using System.Text.Json;
 using Sekiban.Dcb.Domains;
@@ -44,6 +45,55 @@ public sealed class MvTableBindings : IMvTableBindings
         _logicalToPhysical[logicalName] = table.PhysicalName;
         _tableList.Add(table);
         return table;
+    }
+}
+
+internal sealed class MvOwnTableSnapshot : IMvApplyTableBindings
+{
+    private readonly IReadOnlyDictionary<string, string> _ownTables;
+
+    private MvOwnTableSnapshot(Dictionary<string, string> ownTables)
+    {
+        _ownTables = new ReadOnlyDictionary<string, string>(ownTables);
+    }
+
+    public IReadOnlyDictionary<string, string> OwnTables => _ownTables;
+
+    public bool TryGetPhysicalName(
+        string logicalName,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? physicalName) =>
+        _ownTables.TryGetValue(logicalName, out physicalName);
+
+    public static MvOwnTableSnapshot Capture(IMvTableBindings bindings)
+    {
+        ArgumentNullException.ThrowIfNull(bindings);
+
+        var owned = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (bindings is MvTableBindings concreteBindings)
+        {
+            foreach (var table in concreteBindings.Tables)
+            {
+                Add(owned, table.LogicalName, table.PhysicalName);
+            }
+        }
+        else
+        {
+            foreach (var pair in bindings.LogicalToPhysical)
+            {
+                Add(owned, pair.Key, pair.Value);
+            }
+        }
+
+        return new MvOwnTableSnapshot(owned);
+    }
+
+    private static void Add(Dictionary<string, string> owned, string logicalName, string physicalName)
+    {
+        if (!owned.TryAdd(logicalName, physicalName))
+        {
+            throw new InvalidOperationException(
+                $"Duplicate materialized-view logical table binding '{logicalName}'.");
+        }
     }
 }
 
@@ -246,6 +296,7 @@ public sealed class NativeMvApplyHost : IMvApplyHost
         string sortableUniqueId,
         CancellationToken ct)
     {
+        var ownTableSnapshot = MvOwnTableSnapshot.Capture(tables);
         var eventResult = ev.ToEvent(_eventTypes);
         if (!eventResult.IsSuccess)
         {
@@ -256,7 +307,8 @@ public sealed class NativeMvApplyHost : IMvApplyHost
             eventResult.GetValue(),
             sortableUniqueId,
             queryPort,
-            _databaseType);
+            _databaseType,
+            ownTableSnapshot);
         var statements = await _projector.ApplyToViewAsync(eventResult.GetValue(), applyContext, ct).ConfigureAwait(false);
         return statements.Select(statement => new MvSqlStatementDto(statement.Sql, MvParamConverter.FromObject(statement.Parameters))).ToList();
     }
@@ -286,24 +338,32 @@ public sealed class NativeMvApplyHost : IMvApplyHost
         }
     }
 
-    private sealed class NativeMvApplyContextAdapter : IMvApplyContext
+    private sealed class NativeMvApplyContextAdapter : IMvApplyContext, IMvApplyTableBindings
     {
         private readonly MvDbType _databaseType;
         private readonly IMvApplyQueryPort _queryPort;
+        private readonly IMvApplyTableBindings _tableBindings;
 
         public NativeMvApplyContextAdapter(
             Event currentEvent,
             string sortableUniqueId,
             IMvApplyQueryPort queryPort,
-            MvDbType databaseType)
+            MvDbType databaseType,
+            IMvApplyTableBindings tableBindings)
         {
             CurrentEvent = currentEvent;
             CurrentSortableUniqueId = sortableUniqueId;
             _queryPort = queryPort;
             _databaseType = databaseType;
+            _tableBindings = tableBindings;
         }
 
         public MvDbType DatabaseType => _databaseType;
+        public IReadOnlyDictionary<string, string> OwnTables => _tableBindings.OwnTables;
+        public bool TryGetPhysicalName(
+            string logicalName,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? physicalName) =>
+            _tableBindings.TryGetPhysicalName(logicalName, out physicalName);
         public System.Data.IDbConnection Connection =>
             _queryPort is IMvApplyDbConnectionPort dbConnectionPort
                 ? dbConnectionPort.Connection

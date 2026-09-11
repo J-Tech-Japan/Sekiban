@@ -1,0 +1,9 @@
+# trx file|provider identity|TFM|required class/test-name substring|expected cases
+mv-postgres-net9.trx|postgres|net9.0|PostgresMvFreshProjectorApplyTests.FreshProjector_VerifyAndExecuteUsesApplyTimeOwnTables|4
+mv-postgres-net9.trx|postgres|net9.0|PostgresMvG73AcceptanceTests|8
+mv-sqlserver-net9.trx|sqlserver|net9.0|SqlServerMvFreshProjectorApplyTests.FreshProjector_VerifyAndExecuteUsesApplyTimeOwnTables|4
+mv-sqlserver-net9.trx|sqlserver|net9.0|SqlServerMvG73AcceptanceTests|8
+mv-postgres-net10.trx|postgres|net10.0|PostgresMvFreshProjectorApplyTests.FreshProjector_VerifyAndExecuteUsesApplyTimeOwnTables|4
+mv-postgres-net10.trx|postgres|net10.0|PostgresMvG73AcceptanceTests|8
+mv-sqlserver-net10.trx|sqlserver|net10.0|SqlServerMvFreshProjectorApplyTests.FreshProjector_VerifyAndExecuteUsesApplyTimeOwnTables|4
+mv-sqlserver-net10.trx|sqlserver|net10.0|SqlServerMvG73AcceptanceTests|8

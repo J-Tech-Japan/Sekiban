@@ -96,6 +96,25 @@ jobs:
           docker logs sekiban-g67-dynamodb-local
           exit 1
 
+      - name: Audit native apply binding cases on PostgreSQL and SQL Server (net9.0)
+        run: |
+          trx_dir="$RUNNER_TEMP/g73-materialized-view-trx/net9"
+          mkdir -p "$trx_dir"
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net9.0 --filter 'FullyQualifiedName~PostgresMvFreshProjectorApplyTests|FullyQualifiedName~PostgresMvG73AcceptanceTests' --logger 'trx;LogFileName=mv-postgres-net9.trx' --results-directory "$trx_dir" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net9.0 --filter 'FullyQualifiedName~SqlServerMvFreshProjectorApplyTests|FullyQualifiedName~SqlServerMvG73AcceptanceTests' --logger 'trx;LogFileName=mv-sqlserver-net9.trx' --results-directory "$trx_dir" -- RunConfiguration.MaxCpuCount=1
+          ./eng/audit-mv-trx-results.sh --trx-dir "$trx_dir" --manifest eng/materialized-view-required-cases.txt --tfm net9.0
+          swap_dir="$(mktemp -d)"
+          cp "$trx_dir"/* "$swap_dir"/
+          mv "$swap_dir/mv-postgres-net9.trx" "$swap_dir/postgres.tmp.trx"
+          mv "$swap_dir/mv-sqlserver-net9.trx" "$swap_dir/mv-postgres-net9.trx"
+          mv "$swap_dir/postgres.tmp.trx" "$swap_dir/mv-sqlserver-net9.trx"
+          if ./eng/audit-mv-trx-results.sh --trx-dir "$swap_dir" --manifest eng/materialized-view-required-cases.txt --tfm net9.0; then
+            echo 'ERROR: swapped provider TRX unexpectedly passed the class-qualified audit'
+            exit 1
+          else
+            echo 'swapped provider TRX correctly rejected by class-qualified audit'
+          fi
+
       - name: dotnet test DCB projects sequentially (net9.0)
         run: |
           dotnet test dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
@@ -173,6 +192,25 @@ jobs:
           done
           docker logs sekiban-g67-dynamodb-local
           exit 1
+
+      - name: Audit native apply binding cases on PostgreSQL and SQL Server (net10.0)
+        run: |
+          trx_dir="$RUNNER_TEMP/g73-materialized-view-trx/net10"
+          mkdir -p "$trx_dir"
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net10.0 --filter 'FullyQualifiedName~PostgresMvFreshProjectorApplyTests|FullyQualifiedName~PostgresMvG73AcceptanceTests' --logger 'trx;LogFileName=mv-postgres-net10.trx' --results-directory "$trx_dir" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net10.0 --filter 'FullyQualifiedName~SqlServerMvFreshProjectorApplyTests|FullyQualifiedName~SqlServerMvG73AcceptanceTests' --logger 'trx;LogFileName=mv-sqlserver-net10.trx' --results-directory "$trx_dir" -- RunConfiguration.MaxCpuCount=1
+          ./eng/audit-mv-trx-results.sh --trx-dir "$trx_dir" --manifest eng/materialized-view-required-cases.txt --tfm net10.0
+          swap_dir="$(mktemp -d)"
+          cp "$trx_dir"/* "$swap_dir"/
+          mv "$swap_dir/mv-postgres-net10.trx" "$swap_dir/postgres.tmp.trx"
+          mv "$swap_dir/mv-sqlserver-net10.trx" "$swap_dir/mv-postgres-net10.trx"
+          mv "$swap_dir/postgres.tmp.trx" "$swap_dir/mv-sqlserver-net10.trx"
+          if ./eng/audit-mv-trx-results.sh --trx-dir "$swap_dir" --manifest eng/materialized-view-required-cases.txt --tfm net10.0; then
+            echo 'ERROR: swapped provider TRX unexpectedly passed the class-qualified audit'
+            exit 1
+          else
+            echo 'swapped provider TRX correctly rejected by class-qualified audit'
+          fi
 
       - name: dotnet test DCB projects sequentially (net10.0)
         run: |

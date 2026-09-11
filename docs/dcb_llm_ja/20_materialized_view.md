@@ -604,6 +604,33 @@ candidate の準備だけでは serving pointer は動かず、serving generatio
 serving pointer、checkpoint、破損状態を維持したまま candidate の内容が正しくなることを確認します。
 cursor rewind、table の delete/reset、version の自動選択は追加しません。
 
+## apply 時の own-table binding
+
+native apply host は、各 apply context に加法的な `IMvApplyTableBindings` capability を公開します。これは host
+が所有する logical-to-physical binding の、呼び出し単位で不変な snapshot です。第二の table 登録 API ではなく、
+`IMvTableBindings`、`IMvApplyContext`、既存の constructor は変更しません。projector が自分の physical name を必要と
+する場合は optional capability を調べ、binding がない場合は SQL を出力する前に失敗できます。
+
+```csharp
+if (ctx is not IMvApplyTableBindings ownTables ||
+    !ownTables.TryGetPhysicalName("orders", out var ordersTable))
+{
+    throw new InvalidOperationException("The required own-table binding 'orders' is unavailable.");
+}
+
+var sameTable = ownTables.OwnTables["orders"]; // key がなければ KeyNotFoundException
+```
+
+host は projector code の前に snapshot を取得するため、後から行われる登録は実行中の apply を変更せず、並行する
+apply 同士も alias を共有しません。したがって、別の projector instance が provision した binding に対して、新しい
+projector instance は `InitializeAsync` を呼ばずに `VerifyAndExecute` を実行できます。ただし executor は先に検証を行い、
+configured な enforced SQL policy を要求します。`VerifyOnly` は projector apply を呼ばず実行を拒否するため、この
+capability による write も行いません。
+
+この capability を採用するには projector code が apply-time binding を読むよう更新しますが、保存済みデータの migration
+は必要ありません。SQL statement policy は宣言した table contract を検査できますが、custom projector code 内の任意の
+query SQL が安全になることを保証する機能ではありません。host は利用する policy を選択し、引き続き検証してください。
+
 ## テーブルのクエリ方法
 
 物理テーブル名をアプリ側で決め打ちしないでください。`IMvOrleansQueryAccessor` を使って解決します。

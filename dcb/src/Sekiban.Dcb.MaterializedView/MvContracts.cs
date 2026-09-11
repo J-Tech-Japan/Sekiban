@@ -1,4 +1,5 @@
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Sekiban.Dcb.Events;
@@ -179,6 +180,20 @@ public interface IMvTableBindings
     string GetPhysicalName(string logicalName);
     IReadOnlyDictionary<string, string> LogicalToPhysical { get; }
     MvTable RegisterTable(string logicalName, string? physicalName = null);
+}
+
+/// <summary>
+///     Additive apply-time capability exposing the immutable logical-to-physical bindings owned by the current
+///     invocation. Native hosts provide a fresh snapshot for every apply call; existing apply contexts remain valid
+///     without implementing this optional capability.
+/// </summary>
+public interface IMvApplyTableBindings
+{
+    IReadOnlyDictionary<string, string> OwnTables { get; }
+
+    bool TryGetPhysicalName(
+        string logicalName,
+        [NotNullWhen(true)] out string? physicalName);
 }
 
 public interface IMvApplyQueryPort
