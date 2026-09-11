@@ -109,6 +109,7 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
         // in memory, but the read token must be derived only from CoordinatedGrainStateStore.Committed: returning the
         // live descriptor would hand the operator a token that the reset guard correctly refuses.
         await grain.RefreshAsync();
+        await FaultWriteInjectingStorage.WaitForRejectedWriteAsync();
         Assert.True(FaultWriteInjectingStorage.RejectedWrites >= 1);
         Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
 
@@ -161,8 +162,15 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
     {
         private static readonly Dictionary<string, object?> Store = new();
         private static readonly object Gate = new();
+        private static TaskCompletionSource<bool> RejectedWriteSignal = NewSignal();
         public static int RejectedWrites;
         public static int DurableWrites;
+
+        private static TaskCompletionSource<bool> NewSignal() =>
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public static Task WaitForRejectedWriteAsync() =>
+            Volatile.Read(ref RejectedWriteSignal).Task.WaitAsync(TimeSpan.FromSeconds(15));
 
         public static void Reset()
         {
@@ -171,6 +179,7 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
                 Store.Clear();
                 RejectedWrites = 0;
                 DurableWrites = 0;
+                Volatile.Write(ref RejectedWriteSignal, NewSignal());
             }
         }
 
@@ -200,6 +209,7 @@ public class ProjectionFaultPersistFailureTests : IAsyncLifetime
                 if (faultEventId is not null && RejectedWrites == 0)
                 {
                     RejectedWrites++;
+                    Volatile.Read(ref RejectedWriteSignal).TrySetResult(true);
                     throw new InvalidOperationException("injected: first fault-descriptor write failure");
                 }
 

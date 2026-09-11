@@ -19,15 +19,15 @@
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.2" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
-    <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="$(MicrosoftOrleansVersion)" />
+    <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="$(MicrosoftOrleansVersion)" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="$(MicrosoftOrleansVersion)" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.Cosmos" Version="$(MicrosoftOrleansVersion)" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="$(MicrosoftOrleansVersion)" />
+    <PackageReference Include="Microsoft.Orleans.Server" Version="$(MicrosoftOrleansVersion)" />
+    <PackageReference Include="Microsoft.Orleans.Streaming" Version="$(MicrosoftOrleansVersion)" />
+    <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="$(MicrosoftOrleansVersion)" />
+    <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="$(MicrosoftOrleansVersion)" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
     <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="$(SekibanDcbVersion)" />
     <PackageReference Include="Sekiban.Dcb.Orleans.WithResult" Version="$(SekibanDcbVersion)" />

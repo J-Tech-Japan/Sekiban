@@ -179,3 +179,17 @@ strict の destination policy はその capability が利用できる場合だ�
 destination policy を non-strict で使う場合は明示的な診断を伴って書き込みます。このゲートが測定するのは executor が生成した
 logical event または宣言済み provider capability であり、Azure Queue の wire envelope・batch・retry の上限は主張せず、Orleans の
 retry 動作も変更しません。
+
+## DCB Orleans のバージョン権威とクラスタ全体のアップグレード
+
+DCB 製品ラインの `Microsoft.Orleans.*` は **10.3.1** に揃えます。DCB のソース、内部ホスト、テスト、生成
+テンプレートにある直接参照は、DCB 共通の権威ファイル（テンプレートでは各テンプレート固有の権威）で管理し、
+各ホストでは同じ安定した Orleans 10.x のバージョンを使ってください。`Microsoft.Orleans.*` 10.3.1 は
+`net8.0` と `net10.0` のアセットグループだけを公開します。net9 は `net8.0` グループを解決し、適用される
+`Microsoft.Extensions.*` の下限は 8.0.x（例: `Microsoft.Extensions.Hosting` 8.0.1）です。net10 は `net10.0`
+グループを解決し、下限は 10.0.5 です。`Polly` 8.6.4 と `Polly.Extensions` 8.6.5 は両グループの推移依存です。
+
+アップグレードは Orleans クラスタ全体を同時に行ってください。10.0.1 と 10.3.1 を混在させるローリング
+運用は、サポートまたは検証済みの互換性保証ではありません。この変更はランタイム/パッケージの入力を揃える
+だけで、データやスキーマの移行は行わず、Azure Queue を巻き戻し可能にもせず、別スコープの #1185
+subscriber-recovery を実装しません。Pure と Samples は従来の依存ラインを維持します。

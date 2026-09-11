@@ -189,3 +189,18 @@ reuses that plan for enqueue, so a strict destination policy is valid only when 
 non-strict unavailable or identity-mismatched destination policy writes an explicit diagnostic. This gate measures
 executor-originated logical events or declared provider capabilities; it does not claim Azure Queue wire-envelope,
 batch, or retry limits and does not change Orleans retry behavior.
+
+## DCB Orleans version authority and whole-cluster upgrades
+
+The DCB product line is aligned on `Microsoft.Orleans.*` **10.3.1**. Direct Orleans references in DCB source,
+internal hosts, tests, and generated DCB templates are governed by the single DCB authority (or the template's
+self-contained authority); keep every host on one consistent stable Orleans 10.x version. `Microsoft.Orleans.*`
+10.3.1 publishes `net8.0` and `net10.0` asset groups only: a `net9.0` host resolves the `net8.0` group, whose
+applicable `Microsoft.Extensions.*` floors are 8.0.x (for example, `Microsoft.Extensions.Hosting` 8.0.1), while a
+`net10.0` host resolves the `net10.0` group, whose floor is 10.0.5. `Polly` 8.6.4 and `Polly.Extensions` 8.6.5 are
+transitive in both groups.
+
+Upgrade the whole Orleans cluster together. A rolling cluster which mixes 10.0.1 and 10.3.1 is not a supported or
+verified compatibility guarantee. This dependency alignment changes runtime/package inputs only: it does not perform
+a data or schema migration, does not make Azure Queue rewindable, and does not implement the separate #1185
+subscriber-recovery work. Pure and Samples remain on their own supported dependency line.

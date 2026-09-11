@@ -23,13 +23,13 @@
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
 
         <!-- Orleans Core -->
-        <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="10.0.1" />
-        <PackageReference Include="Microsoft.Orleans.Server" Version="10.0.1" />
-        <PackageReference Include="Microsoft.Orleans.Streaming" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.Memory" Version="$(MicrosoftOrleansVersion)" />
+        <PackageReference Include="Microsoft.Orleans.Server" Version="$(MicrosoftOrleansVersion)" />
+        <PackageReference Include="Microsoft.Orleans.Streaming" Version="$(MicrosoftOrleansVersion)" />
         <!-- AWS deployment packages (RDS/AdoNet for Orleans) -->
-        <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="10.0.1" />
-        <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.0.1" />
-        <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Orleans.Clustering.AdoNet" Version="$(MicrosoftOrleansVersion)" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="$(MicrosoftOrleansVersion)" />
+        <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="$(MicrosoftOrleansVersion)" />
         <PackageReference Include="Npgsql" Version="10.0.2" />
 
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />

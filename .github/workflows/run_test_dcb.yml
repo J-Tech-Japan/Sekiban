@@ -10,6 +10,9 @@ on:
       - 'dcb/src/Sekiban.Dcb.WithResult/**'
       - 'dcb/src/Sekiban.Dcb.WithoutResult/**'
       - 'dcb/src/Sekiban.Dcb.Orleans.Core/**'
+      - 'dcb/OrleansVersion.props'
+      - 'dcb/Directory.Build.props'
+      - 'dcb/src/Directory.Build.props'
       - 'dcb/src/Sekiban.Dcb.Orleans.WithResult/**'
       - 'dcb/src/Sekiban.Dcb.Orleans.WithoutResult/**'
       - 'dcb/src/Sekiban.Dcb.MaterializedView/**'
@@ -38,6 +41,8 @@ on:
       - 'dcb/tests/Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture/**'
       - 'dcb/tests/Sekiban.Dcb.ColdEvents.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/**'
+      - 'dcb/tests/Sekiban.Dcb.TemplateValidation/**'
+      - 'templates/Sekiban.Dcb.Templates/content/*/SekibanDcbTemplateVersion.props'
 
 concurrency:
   group: DcbTestWorkflow
@@ -80,6 +85,11 @@ jobs:
       - name: dotnet build
         run: |
           dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
+
+      - name: Verify DCB Orleans version authorities
+        run: |
+          bash dcb/tests/Sekiban.Dcb.TemplateValidation/run-orleans-version-validation.sh \
+            --repo-root "$GITHUB_WORKSPACE" --version 10.3.1
 
       - name: Start pinned DynamoDB Local for G67
         run: |
@@ -177,6 +187,11 @@ jobs:
       - name: dotnet build
         run: |
           dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
+
+      - name: Verify DCB Orleans version authorities
+        run: |
+          bash dcb/tests/Sekiban.Dcb.TemplateValidation/run-orleans-version-validation.sh \
+            --repo-root "$GITHUB_WORKSPACE" --version 10.3.1
 
       - name: Start pinned DynamoDB Local for G67
         run: |

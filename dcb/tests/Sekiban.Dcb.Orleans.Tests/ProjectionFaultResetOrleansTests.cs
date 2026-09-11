@@ -160,7 +160,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
     {
         var writesBeforeDeactivate = TogglableGrainStorage.WriteCount;
         await grain.RequestDeactivationAsync();
-        await PollUntilAsync(() => Task.FromResult(TogglableGrainStorage.WriteCount > writesBeforeDeactivate));
+        await TogglableGrainStorage.WaitForWriteAfterAsync(writesBeforeDeactivate);
         Assert.True(TogglableGrainStorage.TryMutatePersistedState(state => state.ProjectorVersion = persistedVersion));
         var persistedFault = Assert.IsType<MultiProjectionGrainState>(TogglableGrainStorage.GetPersistedState());
         Assert.False(string.IsNullOrWhiteSpace(persistedFault.FaultEventId));
@@ -422,12 +422,14 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
 
         // A second B activation reads the provider state afresh. If the first clear were in-memory only, the old fault
         // would reappear here; instead the real proxy still observes supported+no-fault.
-        var writesBeforeSecondB = TogglableGrainStorage.WriteCount;
         var clearsBeforeSecondB = FaultLogs.Entries.Count(entry => entry.EventId.Name == "ProjectionFaultVersionCleared");
+        var readsBeforeSecondB = TogglableGrainStorage.ReadCount;
         await transition.Replacement.RequestDeactivationAsync();
-        await PollUntilAsync(() => Task.FromResult(TogglableGrainStorage.WriteCount > writesBeforeSecondB));
         var secondB = Client.GetGrain<IMultiProjectionGrain>(ResettableProjector.MultiProjectorName);
-        var secondRead = await secondB.TryGetProjectionFaultAsync();
+        var secondReadTask = secondB.TryGetProjectionFaultAsync();
+        await TogglableGrainStorage.WaitForReadAfterAsync(readsBeforeSecondB);
+        Assert.True(TogglableGrainStorage.ReadCount > readsBeforeSecondB);
+        var secondRead = await secondReadTask;
         Assert.True(secondRead.IsSuccess);
         Assert.False(secondRead.GetValue().HasFault);
         Assert.Null(secondRead.GetValue().Fault);
@@ -1040,8 +1042,48 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
         private static readonly object Sync = new();
         private static readonly Dictionary<string, object?> Store = new();
         private static readonly List<MultiProjectionGrainState> WriteHistory = new();
+        private static TaskCompletionSource<int> ReadSignal = NewSignal();
+        private static TaskCompletionSource<int> WriteSignal = NewSignal();
+        public static int ReadCount;
         public static int WriteCount;
         public static bool FailNextWrite;
+
+        private static TaskCompletionSource<int> NewSignal() =>
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private static void Signal(ref TaskCompletionSource<int> signal, int count)
+        {
+            var completed = Interlocked.Exchange(ref signal, NewSignal());
+            completed.TrySetResult(count);
+        }
+
+        public static async Task WaitForReadAfterAsync(int baseline)
+        {
+            while (Volatile.Read(ref ReadCount) <= baseline)
+            {
+                var signal = Volatile.Read(ref ReadSignal);
+                if (Volatile.Read(ref ReadCount) > baseline)
+                {
+                    return;
+                }
+
+                await signal.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            }
+        }
+
+        public static async Task WaitForWriteAfterAsync(int baseline)
+        {
+            while (Volatile.Read(ref WriteCount) <= baseline)
+            {
+                var signal = Volatile.Read(ref WriteSignal);
+                if (Volatile.Read(ref WriteCount) > baseline)
+                {
+                    return;
+                }
+
+                await signal.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            }
+        }
 
         public static void Reset()
         {
@@ -1049,8 +1091,11 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
             {
                 Store.Clear();
                 WriteHistory.Clear();
+                ReadCount = 0;
                 WriteCount = 0;
                 FailNextWrite = false;
+                Volatile.Write(ref ReadSignal, NewSignal());
+                Volatile.Write(ref WriteSignal, NewSignal());
             }
         }
 
@@ -1074,6 +1119,7 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
 
         public Task ReadStateAsync<T>(string grainType, GrainId grainId, IGrainState<T> grainState)
         {
+            int readCount;
             lock (Sync)
             {
                 if (Store.TryGetValue(grainId.ToString(), out var saved) && saved is T typed)
@@ -1085,13 +1131,18 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
                 {
                     grainState.RecordExists = false;
                 }
+
+                readCount = Interlocked.Increment(ref ReadCount);
             }
+
+            Signal(ref ReadSignal, readCount);
 
             return Task.CompletedTask;
         }
 
         public Task WriteStateAsync<T>(string grainType, GrainId grainId, IGrainState<T> grainState)
         {
+            int writeCount;
             lock (Sync)
             {
                 if (FailNextWrite)
@@ -1105,8 +1156,10 @@ public class ProjectionFaultResetOrleansTests : IAsyncLifetime
                 {
                     WriteHistory.Add(projectionState.Clone());
                 }
-                WriteCount++;
+                writeCount = Interlocked.Increment(ref WriteCount);
             }
+
+            Signal(ref WriteSignal, writeCount);
 
             return Task.CompletedTask;
         }

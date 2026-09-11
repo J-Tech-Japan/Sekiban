@@ -1,0 +1,4 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)../Directory.Build.props" />
+  <Import Project="$(MSBuildThisFileDirectory)OrleansVersion.props" />
+</Project>

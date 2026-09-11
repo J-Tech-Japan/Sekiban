@@ -151,3 +151,15 @@ cp lib/config/dev.sample.json lib/config/dev.json
 
 DCB を安定運用するには、予約衝突・プロジェクション遅延・ストレージ負荷を継続的に観測し、タグ設計と
 インフラ容量を調整することが重要です。
+
+## Orleans 10.3.1 依存関係の移行
+
+`Sekiban.Dcb.Orleans.*` を使う DCB ホストは、直接参照する `Microsoft.Orleans.*` を 10.3.1 に揃え、
+クラスタ全体を同時にアップグレードしてください。DCB の権威ファイルはソース、内部利用プロジェクト、テスト、
+5 種類の生成テンプレートを同じバージョンで管理します。`Microsoft.Orleans.*` 10.3.1 は `net8.0` と `net10.0` の
+アセットグループだけを公開します。net9 は net8 グループ（適用される `Microsoft.Extensions.*` の下限は 8.0.x、例:
+`Microsoft.Extensions.Hosting` 8.0.1）を解決し、net10 は net10 グループ（下限 10.0.5）を解決します。`Polly` 8.6.4 と
+`Polly.Extensions` 8.6.5 は両グループの通常の推移依存です。10.0.1/10.3.1 が混在するローリングクラスタは検証済みサポートとはみなしません。
+
+これはパッケージ/ランタイムの整合だけを行う変更です。保存データやスキーマの移行は不要で、Azure Queue を
+巻き戻し可能にはせず、#1185 subscriber-recovery は含みません。Pure と Samples はこの DCB 更新の対象外です。
