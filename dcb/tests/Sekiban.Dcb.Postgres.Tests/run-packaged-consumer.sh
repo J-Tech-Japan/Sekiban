@@ -44,7 +44,7 @@ run_net10() { (cd "$net10_host" && dotnet "$@"); }
 
 short_head="$(git -C "$repo_root" rev-parse --short=12 HEAD)"
 version="${G62_PACKAGE_VERSION:-10.0.2-g62.${short_head}}"
-mutant_version="${version}.omission"
+mutant_version="${version}-omission"
 feed="$temp_root/candidate-feed"
 mutant_feed="$temp_root/mutant-feed"
 mkdir -p "$feed" "$mutant_feed"
