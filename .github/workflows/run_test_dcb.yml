@@ -41,6 +41,7 @@ on:
       - 'dcb/tests/Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture/**'
       - 'dcb/tests/Sekiban.Dcb.ColdEvents.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/**'
+      - 'dcb/tests/Sekiban.Dcb.TemplateValidation/**'
       - 'templates/Sekiban.Dcb.Templates/content/*/SekibanDcbTemplateVersion.props'
 
 concurrency:

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -85,15 +86,18 @@ internal static class OrleansVersionVerifier
         ValidateProjectReferences(
             sourceRoot,
             Path.GetFullPath(sourceBuildProps),
-            templateAuthority: null);
+            templateAuthority: null,
+            expectedVersion);
         ValidateProjectReferences(
             testsRoot,
             Path.GetFullPath(dcbBuildProps),
-            templateAuthority: null);
+            templateAuthority: null,
+            expectedVersion);
         ValidateProjectReferences(
             internalUsagesRoot,
             Path.GetFullPath(dcbBuildProps),
-            templateAuthority: null);
+            templateAuthority: null,
+            expectedVersion);
 
         var templateContentRoot = Path.Combine(repoRoot, "templates", "Sekiban.Dcb.Templates", "content");
         foreach (var templateRoot in TemplateRoots)
@@ -103,7 +107,7 @@ internal static class OrleansVersionVerifier
             Assert(Directory.Exists(root), $"Template authority root does not exist: {root}");
             Assert(!Directory.EnumerateFiles(root, ValidationProcessSupport.DirectoryBuildPropsFileName, SearchOption.AllDirectories).Any(),
                 $"Template authority {root} contains a Directory.Build.props shadow.");
-            ValidateProjectReferences(root, expectedBuildProps: null, authority);
+            ValidateProjectReferences(root, expectedBuildProps: null, authority, expectedVersion);
         }
 
         var sourceProject = Path.Combine(sourceRoot, "Sekiban.Dcb.Orleans.Core", "Sekiban.Dcb.Orleans.Core.csproj");
@@ -134,15 +138,20 @@ internal static class OrleansVersionVerifier
         Console.WriteLine($"DCB Orleans authority verification passed for {expectedVersion}: six authorities, governed references, and source/test/internal props boundaries.");
     }
 
-    private static void ValidateProjectReferences(string root, string? expectedBuildProps, string? templateAuthority)
+    private static void ValidateProjectReferences(
+        string root,
+        string? expectedBuildProps,
+        string? templateAuthority,
+        string expectedVersion)
     {
         foreach (var csprojPath in Directory.EnumerateFiles(root, "*.csproj", SearchOption.AllDirectories).OrderBy(path => path, StringComparer.Ordinal))
         {
             var document = XDocument.Load(csprojPath, LoadOptions.PreserveWhitespace);
             var references = document.Descendants()
                 .Where(element => element.Name.LocalName == "PackageReference" &&
-                                  element.Attribute("Include")?.Value.StartsWith("Microsoft.Orleans.", StringComparison.Ordinal) == true)
+                                  element.Attribute("Include")?.Value.StartsWith("Microsoft.Orleans.", StringComparison.OrdinalIgnoreCase) == true)
                 .ToArray();
+            ValidateEffectivePackageReferences(csprojPath, expectedVersion, references.Length > 0);
             if (references.Length == 0)
             {
                 continue;
@@ -251,6 +260,58 @@ internal static class OrleansVersionVerifier
         }
 
         return result.Output;
+    }
+
+    private static void ValidateEffectivePackageReferences(
+        string projectPath,
+        string expectedVersion,
+        bool requireOrleansReference)
+    {
+        using var document = JsonDocument.Parse(ReadMsbuildItems(projectPath, "PackageReference"));
+        var references = new List<(string Identity, string? Version)>();
+        CollectEffectiveOrleansReferences(document.RootElement, references);
+        Assert(!requireOrleansReference || references.Count > 0,
+            $"{projectPath} must evaluate at least one Microsoft.Orleans.* PackageReference.");
+
+        foreach (var reference in references)
+        {
+            Assert(string.Equals(reference.Version, expectedVersion, StringComparison.Ordinal),
+                $"{projectPath} must evaluate {reference.Identity} at {expectedVersion}, found {reference.Version ?? "missing"}.");
+        }
+    }
+
+    private static void CollectEffectiveOrleansReferences(
+        JsonElement element,
+        List<(string Identity, string? Version)> references)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty("Identity", out var identityElement) &&
+                identityElement.ValueKind == JsonValueKind.String)
+            {
+                var identity = identityElement.GetString();
+                if (identity?.StartsWith("Microsoft.Orleans.", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    var version = element.TryGetProperty("Version", out var versionElement) &&
+                                  versionElement.ValueKind == JsonValueKind.String
+                        ? versionElement.GetString()
+                        : null;
+                    references.Add((identity, version));
+                }
+            }
+
+            foreach (var property in element.EnumerateObject())
+            {
+                CollectEffectiveOrleansReferences(property.Value, references);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                CollectEffectiveOrleansReferences(item, references);
+            }
+        }
     }
 
     private static void Assert(bool condition, string message)

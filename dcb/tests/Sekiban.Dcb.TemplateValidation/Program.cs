@@ -497,6 +497,7 @@ internal static class Program
     {
         var workflowRoot = Path.Combine(repoRoot, ".github", "workflows");
         var validationWorkflow = Path.Combine(workflowRoot, "dcb_template_validation.yml");
+        var dcbTestWorkflow = Path.Combine(workflowRoot, "run_test_dcb.yml");
         var publishWorkflow = Path.Combine(workflowRoot, "packagesDcbTemplate.yml");
         var packagedConsumerScript = Path.Combine(
             repoRoot,
@@ -505,10 +506,16 @@ internal static class Program
             "Sekiban.Dcb.TemplateValidation",
             "run-packaged-consumer.sh");
         Assert(File.Exists(validationWorkflow), "The DCB template validation workflow is missing.");
+        Assert(File.Exists(dcbTestWorkflow), "The DCB test workflow is missing.");
         Assert(File.Exists(publishWorkflow), "The DCB template publish workflow is missing.");
         Assert(File.Exists(packagedConsumerScript), "The DCB packaged-consumer script is missing.");
         var validation = File.ReadAllText(validationWorkflow);
+        var dcbTest = File.ReadAllText(dcbTestWorkflow);
         var publish = File.ReadAllText(publishWorkflow);
+        Assert(dcbTest.Contains(
+                "dcb/tests/Sekiban.Dcb.TemplateValidation/**",
+                StringComparison.Ordinal),
+            "The DCB test workflow must rerun when template-verifier sources or fixtures change.");
 
         foreach (var required in new[]
                  {

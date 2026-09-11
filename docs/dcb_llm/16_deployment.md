@@ -158,8 +158,10 @@ retaining operational confidence.
 
 DCB hosts consuming `Sekiban.Dcb.Orleans.*` must align their direct `Microsoft.Orleans.*` references on 10.3.1 and
 upgrade the whole cluster together. The DCB authority keeps the source, internal-use projects, tests, and five
-generated template families on that same version. The applicable graph includes the `Microsoft.Extensions.*` 10.0.5
-floor and normal Polly transitives; net9 and net10 resolve the corresponding 10.3.1 assets. Do not treat a mixed
+generated template families on that same version. `Microsoft.Orleans.*` 10.3.1 publishes only `net8.0` and `net10.0`
+groups: net9 resolves the net8 group with applicable `Microsoft.Extensions.*` 8.0.x floors (for example,
+`Microsoft.Extensions.Hosting` 8.0.1), while net10 resolves the net10 group with a 10.0.5 floor. `Polly` 8.6.4
+and `Polly.Extensions` 8.6.5 are normal transitives in both groups. Do not treat a mixed
 10.0.1/10.3.1 rolling cluster as verified support.
 
 This is a package/runtime alignment only: it requires no stored-data or schema migration, does not make Azure Queue

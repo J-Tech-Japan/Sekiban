@@ -80,4 +80,18 @@ copy_fixture "$shadowed_authority"
 printf '%s\n' '<Project />' > "$shadowed_authority/dcb/tests/Directory.Build.props"
 expect_failure shadowed-authority "$shadowed_authority"
 
-echo "DCB Orleans authority verifier and five negative fixtures passed for ${version}."
+update_override="$work_root/update-override"
+copy_fixture "$update_override"
+perl -0pi -e 's{(<PackageReference Include="Microsoft\.Orleans\.Server" Version="\$\(MicrosoftOrleansVersion\)" />)}{$1\n        <PackageReference Update="Microsoft.Orleans.Server" Version="10.0.1" />}' \
+  "$update_override/dcb/src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj"
+expect_failure update-override "$update_override"
+
+lowercase_id="$work_root/lowercase-id"
+copy_fixture "$lowercase_id"
+perl -0pi -e 's{Include="Microsoft\.Orleans\.Server"}{Include="microsoft.orleans.server"}' \
+  "$lowercase_id/dcb/src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj"
+perl -0pi -e 's{Version="\$\(MicrosoftOrleansVersion\)"}{Version="10.0.1"}' \
+  "$lowercase_id/dcb/src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj"
+expect_failure lowercase-id "$lowercase_id"
+
+echo "DCB Orleans authority verifier and seven negative fixtures passed for ${version}."
