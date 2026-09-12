@@ -5,6 +5,8 @@ namespace Sekiban.Dcb.TemplateValidation;
 
 internal static class PackageArtifactValidator
 {
+    private const string AzureQueuePackageId = "Sekiban.Dcb.Orleans.AzureQueue";
+
     internal static void Validate(string directory, string expectedVersion)
     {
         directory = Path.GetFullPath(directory);
@@ -39,10 +41,10 @@ internal static class PackageArtifactValidator
         ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], "net10.0", "Microsoft.EntityFrameworkCore.Relational", "10.0.3");
         Assert(!DependencyIds(nuspecs["Sekiban.Dcb.Orleans.Core"]).Any(IsAzureDependency),
             "Sekiban.Dcb.Orleans.Core must remain Azure-free.");
-        ValidateDependency(nuspecs["Sekiban.Dcb.Orleans.AzureQueue"], "net9.0", "Azure.Storage.Queues", "12.25.0");
-        ValidateDependency(nuspecs["Sekiban.Dcb.Orleans.AzureQueue"], "net10.0", "Azure.Storage.Queues", "12.25.0");
-        ValidateDependency(nuspecs["Sekiban.Dcb.Orleans.AzureQueue"], "net9.0", "Microsoft.Orleans.Streaming.AzureStorage", "10.3.1");
-        ValidateDependency(nuspecs["Sekiban.Dcb.Orleans.AzureQueue"], "net10.0", "Microsoft.Orleans.Streaming.AzureStorage", "10.3.1");
+        ValidateDependency(nuspecs[AzureQueuePackageId], "net9.0", "Azure.Storage.Queues", "12.25.0");
+        ValidateDependency(nuspecs[AzureQueuePackageId], "net10.0", "Azure.Storage.Queues", "12.25.0");
+        ValidateDependency(nuspecs[AzureQueuePackageId], "net9.0", "Microsoft.Orleans.Streaming.AzureStorage", "10.3.1");
+        ValidateDependency(nuspecs[AzureQueuePackageId], "net10.0", "Microsoft.Orleans.Streaming.AzureStorage", "10.3.1");
         Console.WriteLine($"Package artifact validation passed: {ids.Count} packages, PostgreSQL net9/net10 relational closure, Azure-free Core, and Azure Queue groups.");
     }
 

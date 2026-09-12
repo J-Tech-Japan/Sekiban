@@ -6,6 +6,9 @@ namespace Sekiban.Dcb.TemplateValidation;
 
 internal static class Program
 {
+    private const string LibraryKind = "library";
+    private const string JapaneseLanguage = "Japanese";
+
     private const string VersionProperty = "SekibanDcbVersion";
     private const string PropsFileName = "SekibanDcbTemplateVersion.props";
     private const string ExpectedVersion = "10.22.0";
@@ -475,10 +478,10 @@ internal static class Program
         Assert(Directory.Exists(releaseRoot), "docs/releases is required for the staged DCB release inputs.");
         var files = new[]
         {
-            (Path.Combine(releaseRoot, $"dcb-v{expectedVersion}-library.en.md"), "library", "English"),
-            (Path.Combine(releaseRoot, $"dcb-v{expectedVersion}-library.ja.md"), "library", "Japanese"),
+            (Path.Combine(releaseRoot, $"dcb-v{expectedVersion}-library.en.md"), LibraryKind, "English"),
+            (Path.Combine(releaseRoot, $"dcb-v{expectedVersion}-library.ja.md"), LibraryKind, JapaneseLanguage),
             (Path.Combine(releaseRoot, $"dcbTemplates-v{expectedVersion}.en.md"), "template", "English"),
-            (Path.Combine(releaseRoot, $"dcbTemplates-v{expectedVersion}.ja.md"), "template", "Japanese")
+            (Path.Combine(releaseRoot, $"dcbTemplates-v{expectedVersion}.ja.md"), "template", JapaneseLanguage)
         };
 
         foreach (var (path, kind, language) in files)
@@ -489,16 +492,26 @@ internal static class Program
                 $"{path} must name DCB {expectedVersion}.");
             Assert(content.Contains("10.3.1", StringComparison.Ordinal),
                 $"{path} must retain the Orleans 10.3.1 support line.");
-            var scopeMarker = kind == "library"
-                ? "26"
-                : language == "Japanese" ? "テンプレート" : "template";
+            string scopeMarker;
+            if (kind == LibraryKind)
+            {
+                scopeMarker = "26";
+            }
+            else if (language == JapaneseLanguage)
+            {
+                scopeMarker = "テンプレート";
+            }
+            else
+            {
+                scopeMarker = "template";
+            }
             Assert(content.Contains(scopeMarker, StringComparison.OrdinalIgnoreCase),
                 $"{path} must identify its package scope.");
             Assert(content.Contains("prepared", StringComparison.Ordinal) &&
-                   content.Contains(kind == "library" ? "libraries-verified" : "artifacts-verified", StringComparison.Ordinal),
+                   content.Contains(kind == LibraryKind ? "libraries-verified" : "artifacts-verified", StringComparison.Ordinal),
                 $"{path} must describe the staged release state machine.");
-            var retryMarker = language == "Japanese" ? "再試行" : "retry";
-            var recoveryVersionMarker = language == "Japanese" ? "新しいバージョン" : "new version";
+            var retryMarker = language == JapaneseLanguage ? "再試行" : "retry";
+            var recoveryVersionMarker = language == JapaneseLanguage ? "新しいバージョン" : "new version";
             Assert(content.Contains(retryMarker, StringComparison.OrdinalIgnoreCase) &&
                    content.Contains(recoveryVersionMarker, StringComparison.OrdinalIgnoreCase),
                 $"{path} must document immutable-tag retry and new-version recovery.");

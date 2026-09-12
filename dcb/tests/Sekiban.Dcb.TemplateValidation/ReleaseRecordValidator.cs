@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -6,6 +7,15 @@ namespace Sekiban.Dcb.TemplateValidation;
 
 internal static class ReleaseRecordValidator
 {
+    private const string LibraryTagProperty = "library_tag";
+    private const string TemplateTagProperty = "template_tag";
+    private const string TemplateProperty = "template";
+    private const string ReleaseBodiesProperty = "release_bodies";
+    private const string ClosureProperty = "closure";
+    private const string CompletedAtUtcProperty = "completed_at_utc";
+    private const string ReleasesDirectory = "releases";
+    private const string ClosedState = "closed";
+
     private static readonly string[] Stages =
     [
         "prepared",
@@ -46,8 +56,14 @@ internal static class ReleaseRecordValidator
         "Sekiban.Dcb.WithoutResult.Testing"
     ];
 
-    private static readonly Regex Sha256 = new("^[0-9a-fA-F]{64}$", RegexOptions.CultureInvariant);
-    private static readonly Regex Commit = new("^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant);
+    private static readonly Regex Sha256 = new(
+        "^[0-9a-fA-F]{64}$",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
+    private static readonly Regex Commit = new(
+        "^[0-9a-fA-F]{40}$",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     internal static void Validate(
         string recordPath,
@@ -82,37 +98,37 @@ internal static class ReleaseRecordValidator
         switch (Array.IndexOf(Stages, state))
         {
             case 0:
-                AssertAbsent(root, "library_tag", "template_tag", "packages", "template", "release_bodies", "closure");
+                AssertAbsent(root, LibraryTagProperty, TemplateTagProperty, "packages", TemplateProperty, ReleaseBodiesProperty, ClosureProperty);
                 break;
             case 1:
-                ValidateTag(root, "library_tag", $"dcb-v{expectedVersion}", mergedSha);
-                AssertAbsent(root, "template_tag", "packages", "template", "release_bodies", "closure");
+                ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
+                AssertAbsent(root, TemplateTagProperty, "packages", TemplateProperty, ReleaseBodiesProperty, ClosureProperty);
                 break;
             case 2:
-                ValidateTag(root, "library_tag", $"dcb-v{expectedVersion}", mergedSha);
+                ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
                 ValidatePackages(root, expectedVersion);
-                AssertAbsent(root, "template_tag", "template", "release_bodies", "closure");
+                AssertAbsent(root, TemplateTagProperty, TemplateProperty, ReleaseBodiesProperty, ClosureProperty);
                 break;
             case 3:
-                ValidateTag(root, "library_tag", $"dcb-v{expectedVersion}", mergedSha);
+                ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
                 ValidatePackages(root, expectedVersion);
-                ValidateTag(root, "template_tag", $"dcbTemplates-v{expectedVersion}", mergedSha);
+                ValidateTag(root, TemplateTagProperty, $"dcbTemplates-v{expectedVersion}", mergedSha);
                 ValidateTagOrder(root);
-                AssertAbsent(root, "template", "release_bodies", "closure");
+                AssertAbsent(root, TemplateProperty, ReleaseBodiesProperty, ClosureProperty);
                 break;
             case 4:
-                ValidateTag(root, "library_tag", $"dcb-v{expectedVersion}", mergedSha);
+                ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
                 ValidatePackages(root, expectedVersion);
-                ValidateTag(root, "template_tag", $"dcbTemplates-v{expectedVersion}", mergedSha);
+                ValidateTag(root, TemplateTagProperty, $"dcbTemplates-v{expectedVersion}", mergedSha);
                 ValidateTagOrder(root);
                 ValidateTemplate(root, expectedVersion);
                 ValidateBodies(root, expectedVersion, repoRoot);
-                AssertAbsent(root, "closure");
+                AssertAbsent(root, ClosureProperty);
                 break;
             case 5:
-                ValidateTag(root, "library_tag", $"dcb-v{expectedVersion}", mergedSha);
+                ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
                 ValidatePackages(root, expectedVersion);
-                ValidateTag(root, "template_tag", $"dcbTemplates-v{expectedVersion}", mergedSha);
+                ValidateTag(root, TemplateTagProperty, $"dcbTemplates-v{expectedVersion}", mergedSha);
                 ValidateTagOrder(root);
                 ValidateTemplate(root, expectedVersion);
                 ValidateBodies(root, expectedVersion, repoRoot);
@@ -183,11 +199,11 @@ internal static class ReleaseRecordValidator
     private static void ValidateTagOrder(JsonElement root)
     {
         var libraryCreated = ParseTimestamp(
-            GetString(GetObject(root, "library_tag"), "created_at_utc"),
-            "library_tag.created_at_utc");
+            GetString(GetObject(root, LibraryTagProperty), "created_at_utc"),
+            $"{LibraryTagProperty}.created_at_utc");
         var templateCreated = ParseTimestamp(
-            GetString(GetObject(root, "template_tag"), "created_at_utc"),
-            "template_tag.created_at_utc");
+            GetString(GetObject(root, TemplateTagProperty), "created_at_utc"),
+            $"{TemplateTagProperty}.created_at_utc");
         Assert(libraryCreated < templateCreated,
             "The library tag must be created before the template tag.");
     }
@@ -217,7 +233,7 @@ internal static class ReleaseRecordValidator
 
     private static void ValidateTemplate(JsonElement root, string expectedVersion)
     {
-        var template = GetObject(root, "template");
+        var template = GetObject(root, TemplateProperty);
         Assert(GetString(template, "version") == expectedVersion, "Template artifact version is not the release version.");
         var publicUrl = GetString(template, "public_url");
         Assert(Uri.TryCreate(publicUrl, UriKind.Absolute, out _) &&
@@ -229,13 +245,13 @@ internal static class ReleaseRecordValidator
 
     private static void ValidateBodies(JsonElement root, string expectedVersion, string? repoRoot)
     {
-        var bodies = GetObject(root, "release_bodies");
+        var bodies = GetObject(root, ReleaseBodiesProperty);
         var files = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["library_en"] = Path.Combine("docs", "releases", $"dcb-v{expectedVersion}-library.en.md"),
-            ["library_ja"] = Path.Combine("docs", "releases", $"dcb-v{expectedVersion}-library.ja.md"),
-            ["template_en"] = Path.Combine("docs", "releases", $"dcbTemplates-v{expectedVersion}.en.md"),
-            ["template_ja"] = Path.Combine("docs", "releases", $"dcbTemplates-v{expectedVersion}.ja.md")
+            ["library_en"] = Path.Combine("docs", ReleasesDirectory, $"dcb-v{expectedVersion}-library.en.md"),
+            ["library_ja"] = Path.Combine("docs", ReleasesDirectory, $"dcb-v{expectedVersion}-library.ja.md"),
+            ["template_en"] = Path.Combine("docs", ReleasesDirectory, $"dcbTemplates-v{expectedVersion}.en.md"),
+            ["template_ja"] = Path.Combine("docs", ReleasesDirectory, $"dcbTemplates-v{expectedVersion}.ja.md")
         };
         foreach (var suffix in files.Keys)
         {
@@ -256,11 +272,11 @@ internal static class ReleaseRecordValidator
 
     private static void ValidateClosure(JsonElement root)
     {
-        var closure = GetObject(root, "closure");
-        Assert(GetString(closure, "library_issue_state") == "closed", "Library source issue closure is required at complete.");
-        Assert(GetString(closure, "template_issue_state") == "closed", "Template source issue closure is required at complete.");
-        Assert(GetString(closure, "issue_1185_state") == "closed", "Issue #1185 closeout state is required at complete.");
-        Assert(GetString(closure, "issue_1230_state") == "closed", "Issue #1230 closeout state is required at complete.");
+        var closure = GetObject(root, ClosureProperty);
+        Assert(GetString(closure, "library_issue_state") == ClosedState, "Library source issue closure is required at complete.");
+        Assert(GetString(closure, "template_issue_state") == ClosedState, "Template source issue closure is required at complete.");
+        Assert(GetString(closure, "issue_1185_state") == ClosedState, "Issue #1185 closeout state is required at complete.");
+        Assert(GetString(closure, "issue_1230_state") == ClosedState, "Issue #1230 closeout state is required at complete.");
         foreach (var issue in new[] { "library", "template", "issue_1185", "issue_1230" })
         {
             Assert(Uri.TryCreate(GetString(closure, $"{issue}_comment_url"), UriKind.Absolute, out _),
@@ -274,14 +290,14 @@ internal static class ReleaseRecordValidator
         var digests = GetArray(closure, "reply_digests");
         Assert(digests.GetArrayLength() == 2 && digests.EnumerateArray().All(value => Sha256.IsMatch(value.GetString() ?? string.Empty)),
             "Complete release records require two closeout reply SHA-256 digests.");
-        Assert(!string.IsNullOrWhiteSpace(GetString(closure, "completed_at_utc")),
-            "Complete release records require completed_at_utc.");
-        _ = ParseTimestamp(GetString(closure, "completed_at_utc"), "closure.completed_at_utc");
+        Assert(!string.IsNullOrWhiteSpace(GetString(closure, CompletedAtUtcProperty)),
+            $"Complete release records require {CompletedAtUtcProperty}.");
+        _ = ParseTimestamp(GetString(closure, CompletedAtUtcProperty), $"{ClosureProperty}.{CompletedAtUtcProperty}");
     }
 
     private static DateTimeOffset ParseTimestamp(string value, string property)
     {
-        Assert(DateTimeOffset.TryParse(value, out var timestamp),
+        Assert(DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var timestamp),
             $"Release record {property} must be an ISO timestamp.");
         return timestamp;
     }
