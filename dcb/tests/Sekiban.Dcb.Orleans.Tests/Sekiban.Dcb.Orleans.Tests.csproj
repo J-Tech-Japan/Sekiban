@@ -45,6 +45,9 @@
              not participate in this test project's compile-time dependency resolution. -->
         <ProjectReference Include="..\Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture\Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture.csproj"
                           ReferenceOutputAssembly="false" />
+        <!-- The mandatory Orleans test builds compile the isolated legacy constructor consumer on both TFMs. -->
+        <ProjectReference Include="..\Sekiban.Dcb.Orleans.LegacyConsumer\Sekiban.Dcb.Orleans.LegacyConsumer.csproj"
+                          ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <Target Name="CopyTagStateCancellationLegacy1018Fixture"

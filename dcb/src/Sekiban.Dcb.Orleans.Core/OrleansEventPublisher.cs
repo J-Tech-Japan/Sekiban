@@ -261,78 +261,15 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
         if (destinations.Count == 0)
             return null;
 
-        IReadOnlyDictionary<string, object>? requestContext = null;
-        string? contextFailure = null;
-        try
-        {
-            var capture = CaptureRequestContext(requireDeepCopier: true);
-            if (!capture.IsAvailable)
-            {
-                contextFailure = "Orleans request-context capture capability is unavailable";
-            }
-            else
-            {
-                requestContext = capture.Context;
-            }
-        }
-        catch (Exception ex)
-        {
-            contextFailure = $"Orleans request-context capture failed with {ex.GetType().Name}";
-        }
-
-        var destinationStates = new List<OrleansDestinationPlanState>(destinations.Count);
-        foreach (var destination in destinations)
-        {
-            string? failureReason = contextFailure;
-            IOrleansPreparedStreamTarget? preparedTarget = null;
-            if (failureReason is null)
-            {
-                try
-                {
-                    preparedTarget = _sender.PrepareDestination(destination);
-                }
-                catch (Exception ex)
-                {
-                    failureReason = $"Orleans destination preparation failed with {ex.GetType().Name}";
-                }
-            }
-
-            object? providerState = null;
-            if (failureReason is null)
-            {
-                var capture = _measurementCaptures.FirstOrDefault(
-                    candidate => candidate.Matches(destination.ProviderName));
-                if (capture is null)
-                {
-                    failureReason =
-                        $"no destination measurement capability is registered for provider '{destination.ProviderName}'";
-                }
-                else
-                {
-                    providerState = capture.Capture(
-                        destination.ProviderName,
-                        destination.StreamNamespace,
-                        destination.StreamId,
-                        serializedEvent,
-                        requestContext,
-                        out var captureFailure);
-                    failureReason ??= captureFailure;
-                }
-            }
-
-            destinationStates.Add(new OrleansDestinationPlanState(
-                destination.DestinationKey,
-                destination.ProviderName,
-                destination.StreamNamespace,
-                destination.StreamId,
-                providerState,
+        var (requestContext, contextFailure) = CapturePlanRequestContext();
+        var destinationStates = destinations
+            .Select(destination => CapturePlanDestinationState(
+                destination,
+                serializedEvent,
                 requestContext,
-                failureReason)
-            {
-                ServiceId = serviceId,
-                PreparedTarget = preparedTarget
-            });
-        }
+                contextFailure,
+                serviceId))
+            .ToArray();
 
         return new ExecutorSizeDestinationPlan(
             serviceId,
@@ -340,6 +277,82 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             destinationStates)
         {
             PreparedEvent = serializedEvent
+        };
+    }
+
+    private (IReadOnlyDictionary<string, object>? RequestContext, string? FailureReason) CapturePlanRequestContext()
+    {
+        try
+        {
+            var capture = CaptureRequestContext(requireDeepCopier: true);
+            if (!capture.IsAvailable)
+            {
+                return (null, "Orleans request-context capture capability is unavailable");
+            }
+
+            return (capture.Context, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, $"Orleans request-context capture failed with {ex.GetType().Name}");
+        }
+    }
+
+    private OrleansDestinationPlanState CapturePlanDestinationState(
+        OrleansPublishDestination destination,
+        SerializableEvent serializedEvent,
+        IReadOnlyDictionary<string, object>? requestContext,
+        string? contextFailure,
+        string serviceId)
+    {
+        string? failureReason = contextFailure;
+        IOrleansPreparedStreamTarget? preparedTarget = null;
+        if (failureReason is null)
+        {
+            try
+            {
+                preparedTarget = _sender.PrepareDestination(destination);
+            }
+            catch (Exception ex)
+            {
+                failureReason = $"Orleans destination preparation failed with {ex.GetType().Name}";
+            }
+        }
+
+        object? providerState = null;
+        if (failureReason is null)
+        {
+            var capture = _measurementCaptures.FirstOrDefault(
+                candidate => candidate.Matches(destination.ProviderName));
+            if (capture is null)
+            {
+                failureReason =
+                    $"no destination measurement capability is registered for provider '{destination.ProviderName}'";
+            }
+            else
+            {
+                providerState = capture.Capture(
+                    destination.ProviderName,
+                    destination.StreamNamespace,
+                    destination.StreamId,
+                    serializedEvent,
+                    requestContext,
+                    out var captureFailure);
+                failureReason ??= captureFailure;
+            }
+        }
+
+        return new OrleansDestinationPlanState(
+            destination.DestinationKey,
+            destination.ProviderName,
+            destination.StreamNamespace,
+            destination.StreamId,
+            providerState,
+            requestContext,
+            failureReason)
+        {
+            ServiceId = serviceId,
+            PreparedTarget = preparedTarget
         };
     }
 

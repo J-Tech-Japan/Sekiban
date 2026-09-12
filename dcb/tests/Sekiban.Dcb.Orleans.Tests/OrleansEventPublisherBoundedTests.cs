@@ -697,19 +697,48 @@ public sealed class OrleansEventPublisherBoundedTests
             optionsProperties);
 
         var publicConstructors = typeof(OrleansEventPublisher).GetConstructors();
-        var constructorPrefix = new[]
-        {
-            typeof(IClusterClient),
-            typeof(IStreamDestinationResolver),
-            typeof(DcbDomainTypes),
-            typeof(ILogger<OrleansEventPublisher>)
-        };
-        Assert.NotNull(typeof(OrleansEventPublisher).GetConstructor(constructorPrefix));
-        Assert.NotNull(typeof(OrleansEventPublisher).GetConstructor(
-            constructorPrefix.Append(typeof(IServiceIdProvider)).ToArray()));
-        Assert.NotNull(typeof(OrleansEventPublisher).GetConstructor(
-            constructorPrefix.Append(typeof(IServiceIdProvider)).Append(typeof(OrleansEventPublisherOptions)).ToArray()));
-        Assert.DoesNotContain(publicConstructors, constructor => constructor.IsStatic);
+        var orderedConstructors = publicConstructors
+            .OrderBy(constructor => constructor.GetParameters().Length)
+            .ThenBy(constructor => string.Join(",", constructor.GetParameters().Select(parameter => parameter.ParameterType.FullName)))
+            .ToArray();
+        Assert.Collection(
+            orderedConstructors,
+            constructor => AssertConstructorShape(
+                constructor,
+                new[]
+                {
+                    typeof(IClusterClient),
+                    typeof(IStreamDestinationResolver),
+                    typeof(DcbDomainTypes),
+                    typeof(ILogger<OrleansEventPublisher>)
+                },
+                new[] { "clusterClient", "resolver", "domainTypes", "logger" },
+                new[] { false, false, false, false }),
+            constructor => AssertConstructorShape(
+                constructor,
+                new[]
+                {
+                    typeof(IClusterClient),
+                    typeof(IStreamDestinationResolver),
+                    typeof(DcbDomainTypes),
+                    typeof(ILogger<OrleansEventPublisher>),
+                    typeof(IServiceIdProvider)
+                },
+                new[] { "clusterClient", "resolver", "domainTypes", "logger", "serviceIdProvider" },
+                new[] { false, false, false, false, true }),
+            constructor => AssertConstructorShape(
+                constructor,
+                new[]
+                {
+                    typeof(IClusterClient),
+                    typeof(IStreamDestinationResolver),
+                    typeof(DcbDomainTypes),
+                    typeof(ILogger<OrleansEventPublisher>),
+                    typeof(IServiceIdProvider),
+                    typeof(OrleansEventPublisherOptions)
+                },
+                new[] { "clusterClient", "resolver", "domainTypes", "logger", "serviceIdProvider", "options" },
+                new[] { false, false, false, false, false, false }));
 
         Assert.Equal(
             new Dictionary<string, Type>
@@ -790,10 +819,13 @@ public sealed class OrleansEventPublisherBoundedTests
                 [nameof(OrleansPublisherTerminalSample.ReasonCode)] = typeof(string)
             },
             GetPublicPropertyTypes(typeof(OrleansPublisherTerminalSample)));
-        var getSnapshot = typeof(IOrleansPublisherDiagnostics).GetMethod(nameof(IOrleansPublisherDiagnostics.GetSnapshot));
-        Assert.NotNull(getSnapshot);
-        Assert.Empty(getSnapshot!.GetParameters());
-        Assert.Equal(typeof(OrleansPublisherDiagnosticsSnapshot), getSnapshot.ReturnType);
+        Assert.Equal(
+            new[] { $"GetSnapshot():{typeof(OrleansPublisherDiagnosticsSnapshot).FullName}" },
+            GetDeclaredPublicMethodSignatures(typeof(IOrleansPublisherDiagnostics)));
+        Assert.Empty(typeof(IOrleansPublisherDiagnostics).GetProperties(BindingFlags.Public | BindingFlags.Instance));
+        Assert.Empty(GetDeclaredPublicMethodSignatures(typeof(OrleansPublisherDiagnosticsSnapshot)));
+        Assert.Empty(GetDeclaredPublicMethodSignatures(typeof(OrleansPublisherDestinationDiagnostic)));
+        Assert.Empty(GetDeclaredPublicMethodSignatures(typeof(OrleansPublisherTerminalSample)));
 
         var services = new ServiceCollection();
         services.AddSekibanDcbOrleansEventPublisher();
@@ -810,6 +842,27 @@ public sealed class OrleansEventPublisherBoundedTests
     private static Dictionary<string, Type> GetPublicPropertyTypes(Type type) =>
         type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .ToDictionary(property => property.Name, property => property.PropertyType, StringComparer.Ordinal);
+
+    private static void AssertConstructorShape(
+        ConstructorInfo constructor,
+        IReadOnlyList<Type> expectedTypes,
+        IReadOnlyList<string> expectedNames,
+        IReadOnlyList<bool> expectedOptional)
+    {
+        var parameters = constructor.GetParameters();
+        Assert.Equal(expectedTypes, parameters.Select(parameter => parameter.ParameterType).ToArray());
+        Assert.Equal(expectedNames, parameters.Select(parameter => parameter.Name!).ToArray());
+        Assert.Equal(expectedOptional, parameters.Select(parameter => parameter.IsOptional).ToArray());
+        Assert.All(parameters.Where(parameter => parameter.IsOptional), parameter => Assert.Null(parameter.DefaultValue));
+    }
+
+    private static string[] GetDeclaredPublicMethodSignatures(Type type) =>
+        type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(method => !method.IsSpecialName)
+            .Select(method =>
+                $"{method.Name}({string.Join(",", method.GetParameters().Select(parameter => parameter.ParameterType.FullName))}):{method.ReturnType.FullName}")
+            .OrderBy(signature => signature)
+            .ToArray();
 
     [Fact]
     public async Task LegacyOptionsFreeRegistrationResolvesWithDefaultFiveAttemptConfiguration()
@@ -836,7 +889,7 @@ public sealed class OrleansEventPublisherBoundedTests
         services.AddSingleton(domain);
         services.AddSingleton<Microsoft.Extensions.Logging.ILogger<OrleansEventPublisher>>(
             logger);
-        services.AddSekibanDcbOrleansEventPublisher();
+        services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
 
         await using var serviceProvider = services.BuildServiceProvider();
         var publisher = serviceProvider.GetRequiredService<IEventPublisher>();

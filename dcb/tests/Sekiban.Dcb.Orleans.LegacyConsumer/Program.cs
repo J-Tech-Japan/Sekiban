@@ -9,6 +9,7 @@ internal static class Program
 {
     public static void Main()
     {
+        Console.WriteLine("Sekiban.Dcb.Orleans.LegacyConsumer constructor compatibility probe.");
     }
 
     // This method is intentionally not invoked. Its compilation is the isolated source-consumer proof for both
