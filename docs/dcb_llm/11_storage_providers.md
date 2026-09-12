@@ -1030,7 +1030,22 @@ are unchanged. This is a per-read-invocation snapshot, not global options valida
 ## SEK-G76 Orleans Azure Queue V2 stream-message size gate
 
 The optional `Sekiban.Dcb.Orleans.AzureQueue` package measures the provider-owned Azure Queue V2 stream message before
-the executor persists or dispatches an event. Register the provider helper against the named stream provider:
+the executor persists or dispatches an event. It offers an options API for hosts that already compose executor gates
+and a DI API for direct registration:
+
+```csharp
+options.AddOrleansAzureQueueStreamMessagePolicy(
+    "EventStreamProvider",
+    maxBytesPerEvent: 65_536);
+
+services.AddSekibanDcbOrleansAzureQueueStreamMessageSizeGate(
+    "EventStreamProvider",
+    maxBytesPerEvent: 65_536);
+```
+
+Both APIs default to `ExecutorSizeStrictness.NonStrict`, which records an explicit unvalidated capability diagnostic
+and preserves the legacy publication path when the provider cannot be measured. Hosts that have verified the named
+provider may promote the same registration to fail-closed `Strict`:
 
 ```csharp
 services.AddSekibanDcbOrleansAzureQueueStreamMessageSizeGate(
@@ -1047,10 +1062,10 @@ The measurement calls the real V2 adapter's `ToQueueMessage` with the prepared e
 create a queue or send a message. The prepared event and captured destination state are reused for publication, so the
 admitted representation is the one that is dispatched.
 
-The default per-event limit is `65_536` bytes. If the adapter text is `n` UTF-8 bytes and the Azure Queue client encoding
-is `None`, the certified bound is `n`; with `Base64`, it is `4 * ceil(n / 3)`. The gate records both the measured
-adapter bytes and the certified upper bound. `MaxBytesPerOperation` sums the captured destination measurements; an
-event limit checks each destination copy independently. The bound covers the V2 adapter/client message representation,
+The default per-event limit is `65_536` bytes. If the adapter text is `n` UTF-8 bytes, the certified bound is always
+`max(n, 4 * ceil(n / 3))`, because the effective client encoding is not observable at the provider-neutral admission
+boundary. The gate records both the measured adapter bytes and the certified upper bound. `MaxBytesPerOperation`
+sums the captured destination measurements; an event limit checks each destination copy independently. The bound covers the V2 adapter/client message representation,
 not Azure Queue service envelopes, batching, retries, or arbitrary external effects in custom application code.
 Existing Orleans publisher constructors and unconfigured publication remain unchanged.
 

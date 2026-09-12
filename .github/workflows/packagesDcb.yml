@@ -73,6 +73,11 @@ jobs:
           dotnet pack dcb/src/Sekiban.Dcb.DynamoDB/Sekiban.Dcb.DynamoDB.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.BlobStorage.S3/Sekiban.Dcb.BlobStorage.S3.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
 
+      - name: Validate Azure Queue V2 packaged consumer and dependency groups
+        run: |
+          bash dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh \
+            --repo-root "$GITHUB_WORKSPACE" --feed "$GITHUB_WORKSPACE/out" --version "$VERSION"
+
       - name: Push to NuGet.org
         run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 

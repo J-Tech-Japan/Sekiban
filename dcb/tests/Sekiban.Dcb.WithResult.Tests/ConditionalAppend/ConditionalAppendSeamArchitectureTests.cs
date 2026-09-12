@@ -207,9 +207,27 @@ public class ConditionalAppendSeamArchitectureTests
             typeof(IConditionalEventStore).Assembly,
             "Sekiban.Dcb.Postgres", "Sekiban.Dcb.Sqlite", "Sekiban.Dcb.CosmosDb", "Sekiban.Dcb.DynamoDB",
             "Sekiban.Dcb.Orleans.Core", "Sekiban.Dcb.Orleans.WithResult", "Sekiban.Dcb.Orleans.WithoutResult",
+            "Sekiban.Dcb.Orleans.AzureQueue",
             "Sekiban.Dcb.WithResult", "Sekiban.Dcb.WithoutResult",
             "Sekiban.Dcb.SortableUniqueIdWait.Tests",
             "Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests");
+
+        // The Azure Queue package reaches Core only through the internal provider-composable registration marker and
+        // Orleans.Core's opaque capture bridge. Keep both sides non-public so the IVT does not become a public
+        // registration or provider-SDK surface.
+        var marker = typeof(IConditionalEventStore).Assembly.GetType(
+            "Sekiban.Dcb.SizeGates.ExecutorSizeGateRegistrationMarker",
+            throwOnError: true)!;
+        Assert.False(marker.IsPublic);
+        Assert.Empty(marker.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly));
+
+        var bridgeAssembly = Assembly.Load("Sekiban.Dcb.Orleans.Core");
+        var captureBridge = bridgeAssembly.GetType(
+            "Sekiban.Dcb.Orleans.IOrleansDestinationMeasurementCapture",
+            throwOnError: true)!;
+        Assert.False(captureBridge.IsPublic);
+        Assert.All(captureBridge.GetMethods(), method =>
+            Assert.False(method.DeclaringType?.IsPublic ?? true));
     }
 
     [Theory]

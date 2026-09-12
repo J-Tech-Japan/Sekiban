@@ -424,6 +424,27 @@ internal static class Program
                storageJa.Contains("自動", StringComparison.Ordinal),
             "Japanese CAS non-default guidance is incomplete.");
 
+        var azureQueueGuidanceMarkers = new[]
+        {
+            "AddOrleansAzureQueueStreamMessagePolicy",
+            "AddSekibanDcbOrleansAzureQueueStreamMessageSizeGate",
+            "NonStrict",
+            "Strict",
+            "stream-message",
+            "Destination",
+            "49,152",
+            "65,536",
+            "49,156",
+            "65,544"
+        };
+        foreach (var marker in azureQueueGuidanceMarkers)
+        {
+            Assert(storageEn.Contains(marker, StringComparison.Ordinal),
+                $"English Azure Queue V2 guidance is missing '{marker}'.");
+            Assert(storageJa.Contains(marker, StringComparison.Ordinal),
+                $"Japanese Azure Queue V2 guidance is missing '{marker}'.");
+        }
+
         if (requireContributing)
         {
             var contributing = Path.Combine(repoRoot, "CONTRIBUTING.md");
@@ -506,11 +527,18 @@ internal static class Program
             "tests",
             "Sekiban.Dcb.TemplateValidation",
             "run-packaged-consumer.sh");
+        var azureQueueConsumerScript = Path.Combine(
+            repoRoot,
+            "dcb",
+            "tests",
+            "Sekiban.Dcb.Orleans.Tests",
+            "run-packaged-consumer.sh");
         Assert(File.Exists(validationWorkflow), "The DCB template validation workflow is missing.");
         Assert(File.Exists(dcbTestWorkflow), "The DCB test workflow is missing.");
         Assert(File.Exists(dcbPackageWorkflow), "The DCB package workflow is missing.");
         Assert(File.Exists(publishWorkflow), "The DCB template publish workflow is missing.");
         Assert(File.Exists(packagedConsumerScript), "The DCB packaged-consumer script is missing.");
+        Assert(File.Exists(azureQueueConsumerScript), "The Azure Queue packaged-consumer script is missing.");
         var validation = File.ReadAllText(validationWorkflow);
         var dcbTest = File.ReadAllText(dcbTestWorkflow);
         var dcbPackage = File.ReadAllText(dcbPackageWorkflow);
@@ -527,6 +555,34 @@ internal static class Program
                 "dotnet pack dcb/src/Sekiban.Dcb.Orleans.AzureQueue/Sekiban.Dcb.Orleans.AzureQueue.csproj",
                 StringComparison.Ordinal),
             "The DCB package workflow must pack the Azure Queue V2 size-gate package.");
+        Assert(dcbPackage.Contains(
+                "dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh",
+                StringComparison.Ordinal),
+            "The DCB package workflow must run the isolated Azure Queue packaged consumer.");
+
+        var effectivePackableProjects = Directory.EnumerateFiles(
+                Path.Combine(repoRoot, "dcb", "src"),
+                "*.csproj",
+                SearchOption.AllDirectories)
+            .Where(IsEffectivelyPackable)
+            .Select(path => ToRepoPath(repoRoot, path))
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+        var manifestProjects = Regex.Matches(
+                dcbPackage,
+                @"dotnet\s+pack\s+(?<project>dcb/src/[^\s""']+\.csproj)",
+                RegexOptions.CultureInvariant,
+                RegexTimeout)
+            .Cast<Match>()
+            .Select(match => match.Groups["project"].Value.Replace('\\', '/'))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+        Assert(
+            effectivePackableProjects.SequenceEqual(manifestProjects, StringComparer.Ordinal),
+            $"The DCB package manifest must exactly match effective packable dcb/src projects. " +
+            $"Missing: {string.Join(", ", effectivePackableProjects.Except(manifestProjects, StringComparer.Ordinal))}; " +
+            $"Unexpected: {string.Join(", ", manifestProjects.Except(effectivePackableProjects, StringComparer.Ordinal))}.");
 
         foreach (var required in new[]
                  {
@@ -575,6 +631,20 @@ internal static class Program
                sourceStage < docsCurrencyStage && docsCurrencyStage < packageBoundary,
             "The packaged-consumer source phase must run the docs-currency stage after source validation and before packing.");
     }
+
+    private static bool IsEffectivelyPackable(string projectPath)
+    {
+        var document = XDocument.Load(projectPath);
+        var values = document
+            .Descendants()
+            .Where(element => element.Name.LocalName == "IsPackable")
+            .Select(element => element.Value.Trim())
+            .ToArray();
+        return values.All(value => !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string ToRepoPath(string repoRoot, string path) =>
+        Path.GetRelativePath(repoRoot, path).Replace(Path.DirectorySeparatorChar, '/');
 
     private static IReadOnlyList<WorkflowStep> ReadNamedWorkflowSteps(string workflow)
     {

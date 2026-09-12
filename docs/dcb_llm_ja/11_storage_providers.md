@@ -1037,7 +1037,22 @@ batch read を dispatch せずに成功します。callback stream は cancellat
 ## SEK-G76 Orleans Azure Queue V2 stream-message サイズゲート
 
 任意の `Sekiban.Dcb.Orleans.AzureQueue` パッケージは、executor が event を永続化または dispatch する前に、provider が所有する
-Azure Queue V2 stream message を測定します。名前付き stream provider に対して provider helper を登録します。
+Azure Queue V2 stream message を測定します。executor の gate を既に組み立てている場合の options API と、直接登録する DI API の
+2 通りがあります。
+
+```csharp
+options.AddOrleansAzureQueueStreamMessagePolicy(
+    "EventStreamProvider",
+    maxBytesPerEvent: 65_536);
+
+services.AddSekibanDcbOrleansAzureQueueStreamMessageSizeGate(
+    "EventStreamProvider",
+    maxBytesPerEvent: 65_536);
+```
+
+どちらの API も既定値は `ExecutorSizeStrictness.NonStrict` です。provider を測定できない場合は、明示的な未検証 capability 診断を
+記録し、従来の publish path を維持します。名前付き provider の capability を確認できた host は、同じ登録の strictness を明示的に
+`Strict` に昇格して fail-closed にできます。
 
 ```csharp
 services.AddSekibanDcbOrleansAzureQueueStreamMessageSizeGate(
@@ -1054,9 +1069,9 @@ Azure Queue の測定値として扱うことはありません。測定では�
 `ToQueueMessage` を呼びますが、queue の作成や message の送信は行いません。準備済み event と destination state は publish
 にも再利用されるため、admission された representation と dispatch される representation は同じです。
 
-event ごとの既定上限は `65_536` byte です。adapter text が UTF-8 で `n` byte のとき、Azure Queue client encoding が
-`None` なら certified bound は `n`、`Base64` なら `4 * ceil(n / 3)` です。ゲートは測定した adapter byte と certified upper
-bound の両方を記録します。`MaxBytesPerOperation` は捕捉した destination の測定値を合計し、event limit は各 destination
+event ごとの既定上限は `65_536` byte です。adapter text が UTF-8 で `n` byte のとき、provider-neutral な admission 境界では
+実効 client encoding を観測できないため、certified bound は常に `max(n, 4 * ceil(n / 3))` です。ゲートは測定した adapter byte と
+certified upper bound の両方を記録します。`MaxBytesPerOperation` は捕捉した destination の測定値を合計し、event limit は各 destination
 copy を個別に検査します。この bound が保証するのは V2 adapter/client の message representation であり、Azure Queue の
 service envelope、batch、retry、custom application code の任意の外部効果は保証しません。既存の Orleans publisher constructor
 と、未登録時の publish 挙動は変更されません。

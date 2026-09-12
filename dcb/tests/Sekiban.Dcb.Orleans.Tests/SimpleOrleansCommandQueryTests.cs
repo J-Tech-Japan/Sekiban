@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Orleans;
+using Orleans.Providers.Streams.AzureQueue;
+using Orleans.Serialization;
 using Orleans.Streams;
 using Orleans.TestingHost;
 using ResultBoxes;
@@ -13,9 +16,11 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Streams;
+using Sekiban.Dcb.Orleans.AzureQueue;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
+using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Testing;
 using System.Text.Json;
@@ -248,6 +253,107 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
 
         // Cleanup
         await subscriptionHandle.UnsubscribeAsync();
+    }
+
+    [Fact]
+    public async Task OrleansPublisher_CapturesAzureState_SendsIdentity_AndRestoresRequestContext()
+    {
+        await EnsureInitializedAsync();
+
+        var provider = _cluster.Client.GetStreamProvider("EventStreamProvider");
+        var streamId = Guid.NewGuid();
+        var stream = provider.GetStream<SerializableEvent>(StreamId.Create("G76Publisher", streamId));
+        var received = new TaskCompletionSource<(SerializableEvent Event, object? Context)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var subscription = await stream.SubscribeAsync((serializable, _) =>
+        {
+            received.TrySetResult((serializable, RequestContext.Get("g76-context")));
+            return Task.CompletedTask;
+        });
+
+        var resolver = new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "G76Publisher", streamId);
+        var publisher = new OrleansEventPublisher(
+            _cluster.Client,
+            resolver,
+            _domainTypes,
+            new NullLogger<OrleansEventPublisher>());
+        var payload = new TestEntityCreatedEvent { AggregateId = Guid.NewGuid(), Name = "Captured" };
+        var @event = new Event(
+            payload,
+            SortableUniqueId.GenerateNew(),
+            nameof(TestEntityCreatedEvent),
+            Guid.NewGuid(),
+            new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
+            []);
+
+        RequestContext.Set("g76-context", "captured");
+        var plan = publisher.CaptureDestinationPlan(@event, [], "default");
+        Assert.NotNull(plan);
+        Assert.Equal(@event.Id, plan.PreparedEvent!.Id);
+        var destination = Assert.Single((IReadOnlyList<OrleansDestinationPlanState>)plan.ProviderState!);
+        Assert.IsType<AzureQueueDestinationMeasurementState>(destination.MeasurementState);
+        Assert.Null(destination.FailureReason);
+
+        RequestContext.Set("g76-context", "after");
+        await ((IExecutorSizeDestinationPublisher)publisher).PublishAsync(
+            new[] { (@event, (IReadOnlyCollection<ITag>)[]) },
+            new Dictionary<Guid, ExecutorSizeDestinationPlan> { [@event.Id] = plan });
+
+        var observed = await received.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(@event.Id, observed.Event.Id);
+        Assert.Equal(@event.SortableUniqueIdValue, observed.Event.SortableUniqueIdValue);
+        Assert.Equal("captured", observed.Context);
+        Assert.Equal("after", RequestContext.Get("g76-context"));
+
+        await subscription.UnsubscribeAsync();
+    }
+
+    [Fact]
+    public async Task OrleansPublisher_RetryRetainsCapturedIdentityAndContext()
+    {
+        await EnsureInitializedAsync();
+
+        var provider = _cluster.Client.GetStreamProvider("EventStreamProvider");
+        var streamId = Guid.NewGuid();
+        var stream = provider.GetStream<SerializableEvent>(StreamId.Create("G76PublisherRetry", streamId));
+        var attempts = 0;
+        var received = new TaskCompletionSource<(SerializableEvent Event, object? Context)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var subscription = await stream.SubscribeAsync((serializable, _) =>
+        {
+            if (Interlocked.Increment(ref attempts) == 1)
+                throw new InvalidOperationException("deterministic first delivery failure");
+
+            received.TrySetResult((serializable, RequestContext.Get("g76-context")));
+            return Task.CompletedTask;
+        });
+
+        var resolver = new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "G76PublisherRetry", streamId);
+        var publisher = new OrleansEventPublisher(
+            _cluster.Client,
+            resolver,
+            _domainTypes,
+            new NullLogger<OrleansEventPublisher>());
+        var payload = new TestEntityCreatedEvent { AggregateId = Guid.NewGuid(), Name = "Retry" };
+        var @event = new Event(
+            payload,
+            SortableUniqueId.GenerateNew(),
+            nameof(TestEntityCreatedEvent),
+            Guid.NewGuid(),
+            new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
+            []);
+
+        RequestContext.Set("g76-context", "retry-context");
+        await publisher.PublishAsync(new[] { (@event, (IReadOnlyCollection<ITag>)[]) });
+
+        var observed = await received.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(@event.Id, observed.Event.Id);
+        Assert.Equal(@event.SortableUniqueIdValue, observed.Event.SortableUniqueIdValue);
+        Assert.Equal("retry-context", observed.Context);
+        Assert.Equal("retry-context", RequestContext.Get("g76-context"));
+        Assert.True(attempts >= 2, $"Expected a retry after the forced first delivery failure, observed {attempts} attempt(s).");
+
+        await subscription.UnsubscribeAsync();
     }
 
     [Fact]
@@ -556,7 +662,18 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
     {
         public void Configure(IConfiguration configuration, IClientBuilder clientBuilder)
         {
-            clientBuilder.AddMemoryStreams("EventStreamProvider");
+            clientBuilder
+                .AddMemoryStreams("EventStreamProvider")
+                .ConfigureServices(services =>
+                {
+                    services.AddSerializer();
+                    services.AddKeyedSingleton<IQueueDataAdapter<string, IBatchContainer>>(
+                        "EventStreamProvider",
+                        (serviceProvider, _) => new AzureQueueDataAdapterV2(
+                            serviceProvider.GetRequiredService<Serializer>()));
+                    services.AddSingleton<IOrleansDestinationMeasurementCapture>(serviceProvider =>
+                        new OrleansAzureQueueDestinationMeasurementCapture(serviceProvider, "EventStreamProvider"));
+                });
         }
     }
 

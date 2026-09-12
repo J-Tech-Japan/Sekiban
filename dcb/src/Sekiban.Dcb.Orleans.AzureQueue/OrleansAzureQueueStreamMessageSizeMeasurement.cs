@@ -1,7 +1,5 @@
 using System.Text;
-using Azure.Storage.Queues;
 using Microsoft.Extensions.DependencyInjection;
-using Orleans.Configuration;
 using Orleans.Providers.Streams.AzureQueue;
 using Orleans.Providers.Streams.Common;
 using Orleans.Runtime;
@@ -86,9 +84,10 @@ public sealed class OrleansAzureQueueStreamMessageSizeMeasurement : IExecutorSiz
                 token: null,
                 requestContext);
             var measured = Encoding.UTF8.GetByteCount(adapterText);
-            var certifiedUpperBound = state.MessageEncoding == QueueMessageEncoding.Base64
-                ? checked(4L * ((measured + 2L) / 3L))
-                : measured;
+            // The effective QueueServiceClient encoding is not observable at this provider-neutral capture point.
+            // Always retain the conservative bound for the possible second Base64 transform; a named options value
+            // is not evidence about the client that owns the adapter.
+            var certifiedUpperBound = checked(4L * ((measured + 2L) / 3L));
 
             return ExecutorSizeMeasurementResult.CertifiedBound(
                 measured,
@@ -111,8 +110,7 @@ internal sealed record AzureQueueDestinationMeasurementState(
     IQueueDataAdapter<string, IBatchContainer> Adapter,
     StreamId StreamId,
     SerializableEvent SerializedEvent,
-    IReadOnlyDictionary<string, object>? RequestContext,
-    QueueMessageEncoding MessageEncoding);
+    IReadOnlyDictionary<string, object>? RequestContext);
 
 internal sealed class OrleansAzureQueueDestinationMeasurementCapture : IOrleansDestinationMeasurementCapture
 {
@@ -149,12 +147,10 @@ internal sealed class OrleansAzureQueueDestinationMeasurementCapture : IOrleansD
             return null;
         }
 
-        var options = NamedOptionExtensions.GetOptionsByName<AzureQueueOptions>(_services, providerName);
         return new AzureQueueDestinationMeasurementState(
             adapter,
             StreamId.Create(streamNamespace, streamId),
             serializedEvent,
-            requestContext,
-            options.ClientOptions.MessageEncoding);
+            requestContext);
     }
 }
