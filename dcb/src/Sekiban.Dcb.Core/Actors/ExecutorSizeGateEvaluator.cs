@@ -34,8 +34,9 @@ internal static class ExecutorSizeGateEvaluator
 
     private sealed record OperationTotals(
         long ComparableBytes,
-        long MeasuredRepresentationBytes,
-        long CertifiedUpperBoundBytes);
+        long? MeasuredRepresentationBytes,
+        long? CertifiedUpperBoundBytes,
+        bool IsCertifiedUpperBound);
 
     public static ExecutorSizeGateEvaluation Evaluate(
         ExecutorSizeGateOptions? options,
@@ -215,7 +216,7 @@ internal static class ExecutorSizeGateEvaluator
                         offending.Index,
                         true,
                         offending.DestinationKey,
-                        offending.Certified,
+                        operationTotals.IsCertifiedUpperBound,
                         operationTotals.MeasuredRepresentationBytes,
                         operationTotals.CertifiedUpperBoundBytes);
                 }
@@ -236,10 +237,14 @@ internal static class ExecutorSizeGateEvaluator
         IReadOnlyList<ComparableMeasurement> measurements) =>
         new(
             SaturatingSum(measurements.Select(measurement => measurement.Bytes)),
-            SaturatingSum(measurements.Select(measurement =>
-                measurement.MeasuredRepresentationBytes ?? measurement.Bytes)),
-            SaturatingSum(measurements.Select(measurement =>
-                measurement.CertifiedUpperBoundBytes ?? measurement.Bytes)));
+            measurements.All(measurement => measurement.MeasuredRepresentationBytes.HasValue)
+                ? SaturatingSum(measurements.Select(measurement => measurement.MeasuredRepresentationBytes!.Value))
+                : null,
+            measurements.Any(measurement => measurement.Certified)
+                ? SaturatingSum(measurements.Select(measurement =>
+                    measurement.CertifiedUpperBoundBytes ?? measurement.Bytes))
+                : null,
+            measurements.Any(measurement => measurement.Certified));
 
     private static long SaturatingSum(IEnumerable<long> values)
     {
@@ -303,7 +308,7 @@ internal static class ExecutorSizeGateEvaluator
             bytes.Value,
             destinationKey,
             result.Bytes is null,
-            result.MeasuredRepresentationBytes ?? result.Bytes ?? bytes,
+            result.MeasuredRepresentationBytes,
             result.CertifiedUpperBoundBytes ?? result.CertifiedUpperBound);
     }
 

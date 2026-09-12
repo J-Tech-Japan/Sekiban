@@ -41,6 +41,11 @@ jobs:
           dotnet restore dcb/Sekiban.Dcb.slnx -p:NuGetAudit=false
           dotnet build dcb/Sekiban.Dcb.slnx -c Release --no-restore --nologo
 
+      - name: Restore and build TemplateValidation
+        run: |
+          dotnet restore dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -p:NuGetAudit=false
+          dotnet build dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release --no-restore --nologo
+
       - name: Pack exhaustive DCB local feed
         env:
           VERSION: 10.0.2-pr.${{ github.run_id }}
@@ -80,6 +85,18 @@ jobs:
         env:
           VERSION: 10.0.2-pr.${{ github.run_id }}
         run: |
-          dotnet run --project dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release --no-restore -- workflow --repo-root "$GITHUB_WORKSPACE"
+          dotnet run --project dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release --no-build --no-restore -- workflow --repo-root "$GITHUB_WORKSPACE"
           bash dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh \
             --repo-root "$GITHUB_WORKSPACE" --feed "$GITHUB_WORKSPACE/out" --version "$VERSION"
+
+      - name: Prove packaged-consumer failures are propagated
+        env:
+          VERSION: 10.0.2-pr.${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if SEKIBAN_G76_FORCE_CONSUMER_THROW=1 bash dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh \
+            --repo-root "$GITHUB_WORKSPACE" --feed "$GITHUB_WORKSPACE/out" --version "$VERSION"; then
+            echo 'The unconditional consumer-throw probe unexpectedly passed.' >&2
+            exit 1
+          fi
+          echo 'The unconditional consumer-throw probe correctly failed the consumer command.'

@@ -576,6 +576,18 @@ internal static class Program
             "The Azure Queue pull-request workflow must use a disposable local-feed pack.");
         Assert(azureQueueConsumer.Contains("--no-build", StringComparison.Ordinal),
             "The Azure Queue pull-request workflow must validate the already-built packages.");
+        Assert(azureQueueConsumer.Contains(
+                "dotnet restore dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj",
+                StringComparison.Ordinal),
+            "The Azure Queue pull-request workflow must restore TemplateValidation on a clean runner.");
+        Assert(azureQueueConsumer.Contains(
+                "dotnet build dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release --no-restore",
+                StringComparison.Ordinal),
+            "The Azure Queue pull-request workflow must build TemplateValidation before --no-restore validation.");
+        Assert(azureQueueConsumer.Contains(
+                "dotnet run --project dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release --no-build --no-restore -- workflow",
+                StringComparison.Ordinal),
+            "The Azure Queue pull-request workflow must execute the built validator without a clean-runner asset gap.");
         Assert(azureQueueConsumer.Contains("--feed \"$GITHUB_WORKSPACE/out\"", StringComparison.Ordinal),
             "The Azure Queue pull-request workflow must pass its local feed to the consumer.");
         Assert(azureQueueConsumer.Contains("10.0.2-pr.${{ github.run_id }}", StringComparison.Ordinal),
@@ -583,6 +595,9 @@ internal static class Program
         Assert(!azureQueueConsumer.Contains("nuget push", StringComparison.Ordinal) &&
                !azureQueueConsumer.Contains("action-gh-release", StringComparison.Ordinal),
             "The Azure Queue pull-request workflow must not publish or release packages.");
+        Assert(azureQueueConsumer.Contains("SEKIBAN_G76_FORCE_CONSUMER_THROW=1", StringComparison.Ordinal) &&
+               azureQueueConsumer.Contains("unconditional consumer-throw probe", StringComparison.Ordinal),
+            "The Azure Queue pull-request workflow must prove that a consumer runtime failure is propagated.");
 
         var effectivePackableProjects = Directory.EnumerateFiles(
                 Path.Combine(repoRoot, "dcb", "src"),
@@ -667,6 +682,9 @@ internal static class Program
                 "dotnet run --project \"$project/consumer.csproj\"",
                 StringComparison.Ordinal),
             "The Azure Queue packaged-consumer path must execute each built consumer, not only compile it.");
+        Assert(azureQueueScript.Contains("SEKIBAN_G76_FORCE_CONSUMER_THROW", StringComparison.Ordinal) &&
+               azureQueueScript.Contains("deterministic packaged-consumer failure probe", StringComparison.Ordinal),
+            "The Azure Queue packaged-consumer must expose an unconditional failure probe.");
         var sourceStage = script.IndexOf("\"$validator\" source", StringComparison.Ordinal);
         var docsCurrencyStage = script.IndexOf("\"$validator\" docs-currency", StringComparison.Ordinal);
         var packageBoundary = script.IndexOf("if [[ -z \"$package_path\" ]]; then", StringComparison.Ordinal);

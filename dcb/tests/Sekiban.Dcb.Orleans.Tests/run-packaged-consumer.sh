@@ -94,6 +94,11 @@ if (provider.GetRequiredService<ExecutorSizeGateOptions>().Policies.Count != 1)
 
 Console.WriteLine("G76 Azure Queue package consumer passed.");
 EOF
+  if [[ "${SEKIBAN_G76_FORCE_CONSUMER_THROW:-0}" == "1" ]]; then
+    cat >> "$project/Program.cs" <<'EOF'
+throw new InvalidOperationException("deterministic packaged-consumer failure probe");
+EOF
+  fi
   dotnet restore "$project/consumer.csproj" --configfile "$config" --no-http-cache --nologo -p:NuGetAudit=false
   dotnet build "$project/consumer.csproj" -c Release --no-restore --nologo -p:NuGetAudit=false
   dotnet run --project "$project/consumer.csproj" -c Release --no-build --no-restore --nologo -p:NuGetAudit=false

@@ -161,7 +161,7 @@ public sealed class AzureQueueSizeGateTests
     }
 
     [Fact]
-    public async Task OperationEvidence_SaturatesAllTotalsInsteadOfThrowingOverflow()
+    public async Task OperationEvidence_ExactTotalsSaturateWithoutCertifiedEvidence()
     {
         var domain = DomainType.GetDomainTypes();
         var store = new InMemoryEventStore(domain.EventTypes);
@@ -192,12 +192,43 @@ public sealed class AzureQueueSizeGateTests
 
         var exception = Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
         Assert.True(exception.IsOperationLimit);
+        Assert.False(exception.IsCertifiedUpperBound);
         Assert.Equal(long.MaxValue, exception.MeasuredBytes);
         Assert.Equal(long.MaxValue, exception.MeasuredRepresentationBytes);
-        Assert.Equal(long.MaxValue, exception.CertifiedUpperBoundBytes);
+        Assert.Null(exception.CertifiedUpperBoundBytes);
         Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
         Assert.Equal(0, publisher.PlannedPublishCalls);
         Assert.Equal(0, publisher.LegacyPublishCalls);
+    }
+
+    [Fact]
+    public async Task OperationEvidence_LegacyCertifiedBoundsPreserveCertifiedOnlyEvidence()
+    {
+        var exception = await ExecuteOperationLimitAsync(
+            long.MaxValue - 1,
+            ExecutorSizeMeasurementResult.CertifiedBound(long.MaxValue / 2 + 1),
+            ExecutorSizeMeasurementResult.CertifiedBound(long.MaxValue / 2 + 1));
+
+        Assert.True(exception.IsOperationLimit);
+        Assert.True(exception.IsCertifiedUpperBound);
+        Assert.Equal(long.MaxValue, exception.MeasuredBytes);
+        Assert.Null(exception.MeasuredRepresentationBytes);
+        Assert.Equal(long.MaxValue, exception.CertifiedUpperBoundBytes);
+    }
+
+    [Fact]
+    public async Task OperationEvidence_MixedExactAndCertifiedBoundsPreserveEachAvailableTotal()
+    {
+        var exception = await ExecuteOperationLimitAsync(
+            35,
+            ExecutorSizeMeasurementResult.Exact(10),
+            ExecutorSizeMeasurementResult.CertifiedBound(20, 30));
+
+        Assert.True(exception.IsOperationLimit);
+        Assert.True(exception.IsCertifiedUpperBound);
+        Assert.Equal(40, exception.MeasuredBytes);
+        Assert.Equal(30, exception.MeasuredRepresentationBytes);
+        Assert.Equal(40, exception.CertifiedUpperBoundBytes);
     }
 
     [Fact]
@@ -804,6 +835,45 @@ public sealed class AzureQueueSizeGateTests
             Encoding.UTF8.GetBytes(domain.EventTypes.SerializeEventPayload(payload)),
             nameof(WeatherForecastCreated),
             [$"WeatherForecast:{id}"]);
+    }
+
+    private static async Task<ExecutorSizeLimitExceededException> ExecuteOperationLimitAsync(
+        long operationLimit,
+        params ExecutorSizeMeasurementResult[] measurementResults)
+    {
+        var domain = DomainType.GetDomainTypes();
+        var store = new InMemoryEventStore(domain.EventTypes);
+        var publisher = new FailingDestinationPublisher(failOnCapture: int.MaxValue);
+        var remaining = new Queue<ExecutorSizeMeasurementResult>(measurementResults);
+        var measurement = new DelegateMeasurement(_ => remaining.Dequeue());
+        var executor = new GeneralSekibanExecutor(
+            store,
+            new InMemoryObjectAccessor(store, domain),
+            domain,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                OrleansAzureQueueStreamMessageSizeMeasurement.Scope,
+                ExecutorSizeRepresentation.Destination,
+                maxBytesPerOperation: operationLimit,
+                strictness: ExecutorSizeStrictness.Strict,
+                measurement: measurement)),
+            publisher);
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+
+        var result = await executor.CommitSerializableEventsAsync(
+            new SerializedCommitRequest(
+                [CreateCandidate(domain, first), CreateCandidate(domain, second)],
+                [
+                    new ConsistencyTagEntry($"WeatherForecast:{first}", ""),
+                    new ConsistencyTagEntry($"WeatherForecast:{second}", "")
+                ]));
+
+        var exception = Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
+        Assert.Empty(remaining);
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Equal(0, publisher.PlannedPublishCalls);
+        Assert.Equal(0, publisher.LegacyPublishCalls);
+        return exception;
     }
 
     private sealed class CapturingDestinationPublisher(
