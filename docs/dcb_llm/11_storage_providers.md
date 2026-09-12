@@ -1079,3 +1079,26 @@ the conservative `CertifiedBound` tier.
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).
+
+## SEK-G77 Orleans event-publisher retries and diagnostics
+
+`OrleansEventPublisher` provides bounded, in-process delivery attempts for Orleans stream notifications. Its defaults are five
+publish attempts, a 100 ms base retry delay capped at 5 seconds, 1,024 queued items per destination, 16,384 queued items in
+total, 20 terminal samples, and 1,024 diagnostic destinations. Options are validated before the hosted publisher starts; the
+queue limits are admission limits, so an item already accepted is never evicted to make room for a new item.
+
+Destination order is FIFO for the full key `(serviceId, provider, namespace, streamId)`. A retry backs off only that destination;
+other destinations can continue. A terminal item is not replayed by this publisher, and `IOrleansPublisherDiagnostics` exposes
+bounded counts, reason codes, destination samples, and attempts without exposing event payloads. The publisher captures the
+serialized event, resolved destination, and request context once per publication plan; retries reuse that captured payload and
+context. Shared payload ownership is released on success, terminal failure, rejected admission, pump failure, and disposal.
+
+This publisher is an in-process notification path, not a durable cursor or outbox. It does not promise recovery of notifications
+lost after a terminal failure or process crash. For durable restart/takeover recovery, use the opt-in PostgreSQL durable Orleans
+subscription described in [Durable Orleans subscriptions](23_durable_orleans_subscriptions.md); its cursor is authoritative,
+and legacy callbacks do not advance that cursor. Registering both mechanisms can independently invoke application handling, so
+application handlers must remain idempotent.
+
+The retry and queue settings are delivery controls, not an arbitrary byte ceiling. This publisher does not certify an Orleans
+provider envelope, queue-service limit, batch limit, or custom application side effect. If a provider-specific size gate is
+configured, its separate capability contract applies; otherwise no provider byte limit is implied by these publisher options.
