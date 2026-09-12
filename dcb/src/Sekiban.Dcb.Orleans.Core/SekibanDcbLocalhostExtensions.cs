@@ -4,6 +4,7 @@ using Orleans.Configuration;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Streams;
+using Sekiban.Dcb.Subscriptions;
 namespace Sekiban.Dcb.Orleans;
 
 /// <summary>
@@ -65,6 +66,7 @@ public static class SekibanDcbLocalhostExtensions
         {
             services.TryAddSingleton<IEventSubscriptionResolver>(
                 new DefaultOrleansEventSubscriptionResolver(streamProviderName, "AllEvents", Guid.Empty));
+            services.TryAddSingleton<IDurableSubscriptionNudgeFactory, Subscriptions.OrleansDurableSubscriptionNudgeFactory>();
             services.TryAddSingleton<IActorObjectAccessor, OrleansActorObjectAccessor>();
             services.TryAddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
             services.TryAddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = safeWindowMs });

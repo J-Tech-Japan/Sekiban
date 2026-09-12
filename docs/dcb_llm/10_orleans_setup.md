@@ -17,6 +17,7 @@
 > - [ResultBox](14_result_box.md)
 > - [Value Objects](15_value_object.md)
 > - [Deployment Guide](16_deployment.md)
+> - [Durable Orleans Subscriptions](23_durable_orleans_subscriptions.md)
 
 DCB uses Orleans grains to implement TagConsistent actors, TagState caches, and MultiProjections. The sample AppHost
 configures everything via `.UseOrleans` (`internalUsages/DcbOrleans.ApiService/Program.cs`).

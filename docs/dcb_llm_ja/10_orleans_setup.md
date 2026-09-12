@@ -17,6 +17,7 @@
 > - [ResultBox](14_result_box.md)
 > - [バリューオブジェクト](15_value_object.md)
 > - [デプロイガイド](16_deployment.md)
+> - [永続 Orleans サブスクリプション](23_durable_orleans_subscriptions.md)
 
 DCB のアクター実装は Orleans 上で動作します。テンプレートの AppHost は `UseOrleans` を通じてクラスタ設定を構築
 します (`internalUsages/DcbOrleans.ApiService/Program.cs`)。
