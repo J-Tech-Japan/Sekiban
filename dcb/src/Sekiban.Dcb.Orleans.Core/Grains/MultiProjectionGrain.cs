@@ -1490,6 +1490,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 return ResultBox.FromValue(false);
             }
 
+            if (!snapshotWriteResult.GetValue())
+            {
+                _lastError = "Snapshot write returned no durable result";
+                _logger.LogWarning("[{ProjectorName}] {LastError}", projectorName, _lastError);
+                _lastPersistOutcome = PersistOutcomeNoDurableWrite;
+                return ResultBox.FromValue(false);
+            }
+
             var envelopeSize = snapshotStream.Length;
 
             // Get metadata via host
@@ -1682,6 +1690,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 if (!writeResult.IsSuccess)
                 {
                     _lastError = writeResult.GetException().Message;
+                    _logger.LogWarning("[{ProjectorName}] Streaming snapshot write failed: {Error}", projectorName, _lastError);
+                    _lastPersistOutcome = PersistOutcomeNoDurableWrite;
+                    return ResultBox.FromValue(false);
+                }
+
+                if (!writeResult.GetValue())
+                {
+                    _lastError = "Streaming snapshot write returned no durable result";
                     _logger.LogWarning("[{ProjectorName}] Streaming snapshot write failed: {Error}", projectorName, _lastError);
                     _lastPersistOutcome = PersistOutcomeNoDurableWrite;
                     return ResultBox.FromValue(false);
@@ -4838,26 +4854,49 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _catchUpTimer?.Dispose();
             _catchUpTimer = null;
 
-            // Process all buffered events first
-            await FlushEventBufferAsync();
+            // Process all buffered events first. Event-bearing work stays in an in-progress host state; the single
+            // empty completion pulse below is the only operation that marks this catch-up complete.
+            await FlushEventBufferAsync(failOnSafePromotion: true);
 
             if (shouldPersist)
             {
                 // Force promotion of any events that are now safe
                 var safePromotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                await TriggerSafePromotion();
+                await TriggerSafePromotion(failOnFailure: true);
                 safePromotionStopwatch.Stop();
                 safePromotionElapsedMs = safePromotionStopwatch.ElapsedMilliseconds;
 
                 // Final persistence
                 var persistStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                await PersistStateAsync();
+                var persistResult = await PersistStateAsync();
+                if (!persistResult.IsSuccess)
+                {
+                    throw new InvalidOperationException(
+                        $"Catch-up final persistence failed for projector '{projectorName}'.",
+                        persistResult.GetException());
+                }
+
+                if (!persistResult.GetValue())
+                {
+                    throw new InvalidOperationException(
+                        $"Catch-up final persistence failed for projector '{projectorName}': no durable result.");
+                }
+
                 persistStopwatch.Stop();
                 persistElapsedMs = persistStopwatch.ElapsedMilliseconds;
             }
 
             // Process any pending stream events
             await ProcessPendingStreamEvents();
+
+            // Only a successful completion may clear the host's catch-up flag. Keep this pulse empty so it cannot
+            // mutate event counts, ordering, positions, or persistence; event-bearing calls above deliberately use
+            // finishedCatchUp:false.
+            if (_host is not null)
+            {
+                await _host.AddSerializableEventsAsync([], finishedCatchUp: true);
+            }
+
             CompactRetainedCollections();
 
             _catchUpProgress.IsActive = false;
@@ -4889,7 +4928,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
     }
 
-    private async Task TriggerSafePromotion()
+    private async Task TriggerSafePromotion(bool failOnFailure = false)
     {
         try
         {
@@ -4910,9 +4949,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         projectorName,
                         state.Version);
                 }
+                else if (failOnFailure)
+                {
+                    throw new InvalidOperationException(
+                        $"Catch-up safe promotion failed for projector '{projectorName}'.",
+                        safeState.GetException());
+                }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!failOnFailure)
         {
             _logger.LogError(ex, "[{ProjectorName}] Error during safe promotion", GetProjectorName());
         }
@@ -4949,7 +4994,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var allEvents = events.OrderBy(e => e.SortableUniqueIdValue).ToList();
         if (allEvents.Count > 0 && _host != null)
         {
-            await _host.AddSerializableEventsAsync(allEvents, true);
+            await _host.AddSerializableEventsAsync(allEvents, finishedCatchUp: false);
             _eventsProcessed += allEvents.Count;
             foreach (var ev in allEvents)
             {
@@ -5233,7 +5278,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     /// <summary>
     ///     Process buffered events - called by timer
     /// </summary>
-    private async Task FlushEventBufferAsync()
+    private async Task FlushEventBufferAsync(bool failOnSafePromotion = false)
     {
         if (_catchUpProgress.IsActive)
         {
@@ -5260,19 +5305,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         if (eventsToProcess.Count > 0)
         {
-            await ProcessBufferedSerializableEvents(eventsToProcess);
+            await ProcessBufferedSerializableEvents(
+                eventsToProcess,
+                finishedCatchUp: !failOnSafePromotion,
+                failOnFailure: failOnSafePromotion);
         }
         else
         {
             // Even if no events to process, trigger safe promotion
-            await TriggerSafePromotion();
+            await TriggerSafePromotion(failOnFailure: failOnSafePromotion);
         }
     }
 
     /// <summary>
     ///     Process buffered serializable events via host
     /// </summary>
-    private async Task ProcessBufferedSerializableEvents(List<SerializableEvent> events)
+    private async Task ProcessBufferedSerializableEvents(
+        List<SerializableEvent> events,
+        bool finishedCatchUp = true,
+        bool failOnFailure = false)
     {
         if (_host == null || events.Count == 0) return;
 
@@ -5285,7 +5336,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 "[{ProjectorName}] Processing {EventCount} buffered events",
                 projectorName,
                 events.Count);
-            await _host.AddSerializableEventsAsync(events, true);
+            await _host.AddSerializableEventsAsync(events, finishedCatchUp);
             _eventsProcessed += events.Count;
 
             foreach (var ev in events)
@@ -5321,7 +5372,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 await TriggerSafePromotion();
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!failOnFailure)
         {
             await CaptureAndPersistProjectionFaultIfAnyAsync();
             _lastError = $"Failed to process buffered events: {ex.Message}";

@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using ResultBoxes;
+using Sekiban.Dcb;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.ColdEvents;
 using Sekiban.Dcb.Common;
@@ -468,6 +469,216 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         AssertWindowReset(completedGrain, completedTime);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Empty_or_duplicate_only_completion_sends_one_empty_finished_pulse_without_mutation(
+        bool streaming,
+        bool duplicateOnly)
+    {
+        var batchSizes = duplicateOnly ? new[] { 3 } : Array.Empty<int>();
+        ProductionCatchUpEventStore store = streaming
+            ? new ProductionStreamingCatchUpEventStore(batchSizes)
+            : new ProductionCatchUpEventStore(batchSizes);
+        var host = new ProductionCatchUpProjectionHost();
+        var grain = CreateGrain(store, host);
+
+        await grain.RefreshAsync();
+
+        Assert.Equal(new[] { (EventCount: 0, FinishedCatchUp: true) }, host.AddCalls);
+        Assert.Empty(host.AppliedEventIds);
+        Assert.Equal(0, store.PersistentState.WriteCalls);
+        Assert.Equal(0, host.SnapshotWriteCalls);
+        Assert.False((await grain.GetCatchUpStatusAsync()).IsActive);
+
+        var head = await grain.GetProjectionHeadStatusAsync();
+        Assert.False(head.IsCatchUpInProgress);
+        Assert.Equal(0, head.CurrentEventVersion);
+        if (duplicateOnly)
+        {
+            Assert.Equal(store.Events[^1].SortableUniqueIdValue, head.CurrentLastSortableUniqueId);
+        }
+        else
+        {
+            Assert.Null(head.CurrentLastSortableUniqueId);
+        }
+        Assert.Equal(0, head.PendingStreamEventCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task New_events_are_applied_before_one_separate_empty_completion_pulse(bool streaming)
+    {
+        ProductionCatchUpEventStore store = streaming
+            ? new ProductionStreamingCatchUpEventStore([1])
+            : new ProductionCatchUpEventStore([1]);
+        var host = new ProductionCatchUpProjectionHost { AllowApply = true };
+        var grain = CreateGrain(store, host, processedEvents: Array.Empty<SerializableEvent>());
+
+        await grain.RefreshAsync();
+
+        Assert.Equal(
+            new[] { (EventCount: 1, FinishedCatchUp: false), (EventCount: 0, FinishedCatchUp: true) },
+            host.AddCalls);
+        Assert.Equal(new[] { store.Events[0].Id }, host.AppliedEventIds);
+        Assert.False((await grain.GetProjectionHeadStatusAsync()).IsCatchUpInProgress);
+    }
+
+    [Fact]
+    public async Task Pending_events_are_sorted_and_duplicate_receipts_are_not_reapplied_before_one_completion_pulse()
+    {
+        var store = new ProductionCatchUpEventStore([3]);
+        var host = new ProductionCatchUpProjectionHost { AllowApply = true, FailInitialStateRead = false };
+        var grain = CreateGrain(store, host, processedEvents: Array.Empty<SerializableEvent>());
+        var processedIds = GetPrivateField<HashSet<Guid>>(grain, "_processedEventIds");
+        processedIds.Add(store.Events[1].Id);
+        var pending = GetPrivateField<Queue<SerializableEvent>>(grain, "_pendingStreamEvents");
+        pending.Enqueue(store.Events[2]);
+        pending.Enqueue(store.Events[1]); // already applied: duplicate receipt must be ignored.
+        pending.Enqueue(store.Events[0]);
+        await InvokePrivateTaskAsync(grain, "CompleteCatchUp");
+
+        Assert.Equal(
+            new[] { (EventCount: 2, FinishedCatchUp: false), (EventCount: 0, FinishedCatchUp: true) },
+            host.AddCalls);
+        Assert.Equal(new[] { store.Events[0].Id, store.Events[2].Id }, host.AppliedEventIds);
+        Assert.Equal(store.Events[2].SortableUniqueIdValue, host.LastAppliedPosition);
+        Assert.False((await grain.GetProjectionHeadStatusAsync()).IsCatchUpInProgress);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Replay_apply_failure_from_each_reader_never_emits_completion_pulse(bool streaming)
+    {
+        ProductionCatchUpEventStore store = streaming
+            ? new ProductionStreamingCatchUpEventStore([1])
+            : new ProductionCatchUpEventStore([1]);
+        var host = new ProductionCatchUpProjectionHost { FailInitialStateRead = false };
+        var grain = CreateGrain(store, host, processedEvents: Array.Empty<SerializableEvent>());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => grain.RefreshAsync());
+
+        Assert.Equal("pending event application failed", exception.Message);
+        Assert.Equal(new[] { (EventCount: 1, FinishedCatchUp: false) }, host.AddCalls);
+        Assert.DoesNotContain(host.AddCalls, call => call.FinishedCatchUp);
+        Assert.True((await grain.GetProjectionHeadStatusAsync()).IsCatchUpInProgress);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Safe_promotion_failure_never_emits_completion_pulse(
+        bool resultFailure,
+        bool throwFailure)
+    {
+        var store = new ProductionCatchUpEventStore([1]);
+        var host = new ProductionCatchUpProjectionHost
+        {
+            AllowApply = true,
+            FailInitialStateRead = false,
+            FailSafePromotionWithResult = resultFailure,
+            ThrowSafePromotion = throwFailure
+        };
+        var grain = CreateGrain(store, host, processedEvents: Array.Empty<SerializableEvent>());
+        SetActiveCatchUp(grain, new CatchUpStartPositionLease(
+            new SortableUniqueId(store.Events[0].SortableUniqueIdValue),
+            CatchUpStartPositionSource.RestoredCheckpoint),
+            hadNewEvents: true);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => InvokePrivateTaskAsync(grain, "CompleteCatchUp"));
+
+        if (throwFailure)
+        {
+            Assert.Equal("safe promotion failed by throw", exception.Message);
+        }
+        else
+        {
+            Assert.Contains("Catch-up safe promotion failed", exception.Message);
+        }
+        Assert.Empty(host.AddCalls);
+        Assert.DoesNotContain(host.AddCalls, call => call.FinishedCatchUp);
+        Assert.True((await grain.GetProjectionHeadStatusAsync()).IsCatchUpInProgress);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Final_persistence_failure_never_emits_completion_pulse(
+        bool throwFailure,
+        bool returnFalse)
+    {
+        var store = new ProductionCatchUpEventStore([1]);
+        var host = new ProductionCatchUpProjectionHost
+        {
+            AllowApply = true,
+            FailInitialStateRead = false,
+            ThrowSnapshotWrite = throwFailure,
+            FailSnapshotWrite = !throwFailure && !returnFalse,
+            ReturnFalseSnapshotWrite = returnFalse,
+            SafeVersion = 1,
+            SafePosition = store.Events[0].SortableUniqueIdValue
+        };
+        var grain = CreateGrain(store, host, processedEvents: Array.Empty<SerializableEvent>());
+        SetActiveCatchUp(grain, new CatchUpStartPositionLease(
+            new SortableUniqueId(store.Events[0].SortableUniqueIdValue),
+            CatchUpStartPositionSource.RestoredCheckpoint),
+            hadNewEvents: true);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => InvokePrivateTaskAsync(grain, "CompleteCatchUp"));
+
+        Assert.Contains("Catch-up final persistence failed", exception.Message);
+        Assert.Empty(host.AddCalls);
+        Assert.DoesNotContain(host.AddCalls, call => call.FinishedCatchUp);
+        Assert.True((await grain.GetProjectionHeadStatusAsync()).IsCatchUpInProgress);
+    }
+
+    [Fact]
+    public async Task Pending_application_failure_never_emits_completion_pulse()
+    {
+        var store = new ProductionCatchUpEventStore([1]);
+        var host = new ProductionCatchUpProjectionHost
+        {
+            AllowApply = true,
+            ThrowOnApply = true,
+            FailInitialStateRead = false
+        };
+        var grain = CreateGrain(store, host, processedEvents: Array.Empty<SerializableEvent>());
+        GetPrivateField<Queue<SerializableEvent>>(grain, "_pendingStreamEvents").Enqueue(store.Events[0]);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => InvokePrivateTaskAsync(grain, "CompleteCatchUp"));
+
+        Assert.Equal("pending event application failed", exception.Message);
+        Assert.Equal(new[] { (EventCount: 1, FinishedCatchUp: false) }, host.AddCalls);
+        Assert.DoesNotContain(host.AddCalls, call => call.FinishedCatchUp);
+        Assert.True((await grain.GetProjectionHeadStatusAsync()).IsCatchUpInProgress);
+    }
+
+    [Fact]
+    public async Task Buffered_application_failure_never_emits_completion_pulse()
+    {
+        var store = new ProductionCatchUpEventStore([1]);
+        var host = new ProductionCatchUpProjectionHost
+        {
+            AllowApply = true,
+            ThrowOnApply = true,
+            FailInitialStateRead = false
+        };
+        var grain = CreateGrain(store, host, processedEvents: Array.Empty<SerializableEvent>());
+        GetPrivateField<List<SerializableEvent>>(grain, "_eventBuffer").Add(store.Events[0]);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => InvokePrivateTaskAsync(grain, "CompleteCatchUp"));
+
+        Assert.Equal("pending event application failed", exception.Message);
+        Assert.Equal(new[] { (EventCount: 1, FinishedCatchUp: false) }, host.AddCalls);
+        Assert.DoesNotContain(host.AddCalls, call => call.FinishedCatchUp);
+        Assert.True((await grain.GetProjectionHeadStatusAsync()).IsCatchUpInProgress);
+    }
+
     private static async Task InvokeProgressUpdateAsync(
         MultiProjectionGrain grain,
         int batchNumber,
@@ -608,7 +819,8 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
 
     private static void SetActiveCatchUp(
         MultiProjectionGrain grain,
-        CatchUpStartPositionLease? startLease)
+        CatchUpStartPositionLease? startLease,
+        bool hadNewEvents = false)
     {
         var progressType = grain.GetType().GetNestedType("CatchUpProgress", BindingFlags.NonPublic);
         Assert.NotNull(progressType);
@@ -616,7 +828,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         Assert.NotNull(progress);
         SetPrivateProperty(progress!, "StartLease", startLease);
         SetPrivateProperty(progress!, "IsActive", startLease is not null);
-        SetPrivateProperty(progress!, "HadNewEvents", false);
+        SetPrivateProperty(progress!, "HadNewEvents", hadNewEvents);
         SetPrivateProperty(progress!, "StartTime", DateTime.UtcNow);
         SetPrivateProperty(progress!, "LastAttempt", DateTime.UtcNow);
         SetPrivateField(grain, "_catchUpProgress", progress);
@@ -709,16 +921,28 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         }
     }
 
+    private sealed class TestProjectionPayload : IMultiProjectionPayload
+    {
+    }
+
     private sealed class ProductionCatchUpProjectionHost : IProjectionActorHost
     {
         public bool FailSnapshotWrite { get; init; }
+        public bool ThrowSnapshotWrite { get; init; }
+        public bool ReturnFalseSnapshotWrite { get; init; }
         public bool AllowApply { get; init; }
+        public bool FailSafePromotionWithResult { get; init; }
+        public bool ThrowSafePromotion { get; init; }
+        public bool ThrowOnApply { get; init; }
+        public bool FailInitialStateRead { get; init; } = true;
         public string? ProjectionStartPosition { get; init; }
         public int SafeVersion { get; init; }
         public string? SafePosition { get; init; }
         public int StateMetadataCalls { get; private set; }
+        public int StateCalls { get; private set; }
         public int SafeCheckpointCalls { get; private set; }
         public int SnapshotWriteCalls { get; private set; }
+        public List<(int EventCount, bool FinishedCatchUp)> AddCalls { get; } = [];
         public IReadOnlyList<Guid> AppliedEventIds => _appliedEventIds;
         public int AppliedEventCount => _appliedEventIds.Count;
         public string? LastAppliedPosition { get; private set; }
@@ -729,13 +953,18 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
 
         public Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
         {
-            if (!AllowApply)
+            AddCalls.Add((events.Count, finishedCatchUp));
+            if (events.Count > 0 && (!AllowApply || ThrowOnApply))
             {
-                throw new Xunit.Sdk.XunitException("The zero-applied production test unexpectedly applied an event.");
+                throw new InvalidOperationException("pending event application failed");
             }
 
-            _appliedEventIds.AddRange(events.Select(ev => ev.Id));
-            LastAppliedPosition = events[^1].SortableUniqueIdValue;
+            if (events.Count > 0)
+            {
+                _appliedEventIds.AddRange(events.Select(ev => ev.Id));
+                LastAppliedPosition = events[^1].SortableUniqueIdValue;
+            }
+
             return Task.CompletedTask;
         }
 
@@ -753,11 +982,51 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
                     SafeLastSortableUniqueId: SafePosition)));
         }
 
-        public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true) =>
-            Task.FromResult(ResultBox.Error<MultiProjectionState>(new InvalidOperationException("no state payload")));
+        public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
+        {
+            StateCalls++;
+            if (StateCalls == 1 && FailInitialStateRead)
+            {
+                return Task.FromResult(ResultBox.Error<MultiProjectionState>(new InvalidOperationException("no state payload")));
+            }
 
-        public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync() =>
-            throw new NotSupportedException();
+            if (ThrowSafePromotion)
+            {
+                throw new InvalidOperationException("safe promotion failed by throw");
+            }
+
+            if (FailSafePromotionWithResult)
+            {
+                return Task.FromResult(ResultBox.Error<MultiProjectionState>(new InvalidOperationException("safe promotion failed by result")));
+            }
+
+            return Task.FromResult(ResultBox.FromValue<MultiProjectionState>(new MultiProjectionState(
+                new TestProjectionPayload(),
+                "production-catch-up",
+                "v1",
+                SafePosition ?? string.Empty,
+                Guid.Empty,
+                SafeVersion)));
+        }
+
+        public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync()
+        {
+            var completed = AddCalls.Any(call => call is { EventCount: 0, FinishedCatchUp: true });
+            var position = LastAppliedPosition ?? SafePosition;
+            var current = new ProjectionPosition(_appliedEventIds.Count, position);
+            var consistent = new ProjectionPosition(_appliedEventIds.Count, position);
+            var catchUp = new ProjectionCatchUpStatus(
+                IsInProgress: !completed,
+                CurrentSortableUniqueId: position,
+                TargetSortableUniqueId: position,
+                PendingStreamEventCount: 0);
+            return Task.FromResult(new ProjectionHeadStatus(
+                "production-catch-up",
+                "v1",
+                current,
+                consistent,
+                catchUp));
+        }
 
         public Task<ResultBox<bool>> WriteSnapshotToStreamAsync(
             Stream target,
@@ -773,9 +1042,19 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         private async Task<ResultBox<bool>> WriteSnapshotAsync(Stream target)
         {
             SnapshotWriteCalls++;
+            if (ThrowSnapshotWrite)
+            {
+                throw new InvalidOperationException("snapshot write threw");
+            }
+
             if (FailSnapshotWrite)
             {
                 return ResultBox.Error<bool>(new InvalidOperationException("snapshot write failed"));
+            }
+
+            if (ReturnFalseSnapshotWrite)
+            {
+                return ResultBox.FromValue(false);
             }
 
             await target.WriteAsync(new byte[] { 1 });
