@@ -116,13 +116,41 @@ public sealed record ExecutorSizeMeasurementResult(
     long? CertifiedUpperBound,
     string? Reason)
 {
-    public long? ComparableBytes => Bytes ?? CertifiedUpperBound;
+    /// <summary>
+    /// The bytes measured at the provider-owned representation boundary. For a certified result this is the value
+    /// which was measured before the conservative transport bound was applied.
+    /// </summary>
+    public long? MeasuredRepresentationBytes { get; init; }
+
+    /// <summary>The certified upper bound used for admission, when the result is not exact.</summary>
+    public long? CertifiedUpperBoundBytes { get; init; }
+
+    public long? ComparableBytes => Bytes ?? CertifiedUpperBoundBytes ?? CertifiedUpperBound;
 
     public static ExecutorSizeMeasurementResult Exact(long bytes) =>
-        new(true, bytes, null, null);
+        new(true, bytes, null, null)
+        {
+            MeasuredRepresentationBytes = bytes
+        };
 
     public static ExecutorSizeMeasurementResult CertifiedBound(long bytes) =>
-        new(true, null, bytes, null);
+        CertifiedBound(bytes, bytes);
+
+    public static ExecutorSizeMeasurementResult CertifiedBound(
+        long measuredRepresentationBytes,
+        long certifiedUpperBoundBytes)
+    {
+        if (measuredRepresentationBytes < 0)
+            throw new ArgumentOutOfRangeException(nameof(measuredRepresentationBytes));
+        if (certifiedUpperBoundBytes < measuredRepresentationBytes)
+            throw new ArgumentOutOfRangeException(nameof(certifiedUpperBoundBytes));
+
+        return new ExecutorSizeMeasurementResult(true, null, certifiedUpperBoundBytes, null)
+        {
+            MeasuredRepresentationBytes = measuredRepresentationBytes,
+            CertifiedUpperBoundBytes = certifiedUpperBoundBytes
+        };
+    }
 
     public static ExecutorSizeMeasurementResult Unavailable(string reason) =>
         new(false, null, null, reason);
@@ -135,7 +163,14 @@ public sealed record ExecutorSizeMeasurementResult(
 public sealed record ExecutorSizeDestinationPlan(
     string ServiceId,
     IReadOnlyList<string> DestinationKeys,
-    object? ProviderState = null);
+    object? ProviderState = null)
+{
+    /// <summary>
+    /// The already prepared serialized event handed from the executor to a destination publisher. This additive
+    /// property lets a provider reuse the event which was admitted instead of binding it a second time.
+    /// </summary>
+    public SerializableEvent? PreparedEvent { get; init; }
+}
 
 /// <summary>
 /// Optional additive publisher capability used by destination policies. It both captures the publication plan and
@@ -154,10 +189,27 @@ public interface IExecutorSizeDestinationPublisher
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Additive prepared-event capture seam. Implementations which support it receive the exact serialized event which
+/// the executor is about to persist, while the original destination-publisher interface remains ABI compatible.
+/// </summary>
+internal interface IExecutorSizePreparedDestinationPublisher : IExecutorSizeDestinationPublisher
+{
+    ExecutorSizeDestinationPlan? CaptureDestinationPlan(
+        Event @event,
+        SerializableEvent serializedEvent,
+        IReadOnlyCollection<ITag> tags,
+        string serviceId);
+}
+
 public sealed record ExecutorSizeDiagnostic(
     string Scope,
     ExecutorSizeRepresentation Representation,
-    string Reason);
+    string Reason)
+{
+    public long? MeasuredRepresentationBytes { get; init; }
+    public long? CertifiedUpperBoundBytes { get; init; }
+}
 
 public sealed class ExecutorSizeLimitExceededException : Exception
 {
@@ -171,6 +223,33 @@ public sealed class ExecutorSizeLimitExceededException : Exception
         bool operationLimit,
         string? destinationKey = null,
         bool certifiedUpperBound = false)
+        : this(
+            scope,
+            representation,
+            limitBytes,
+            measuredBytes,
+            eventId,
+            eventIndex,
+            operationLimit,
+            destinationKey,
+            certifiedUpperBound,
+            null,
+            null)
+    {
+    }
+
+    public ExecutorSizeLimitExceededException(
+        string scope,
+        ExecutorSizeRepresentation representation,
+        long limitBytes,
+        long measuredBytes,
+        Guid eventId,
+        int eventIndex,
+        bool operationLimit,
+        string? destinationKey,
+        bool certifiedUpperBound,
+        long? measuredRepresentationBytes,
+        long? certifiedUpperBoundBytes)
         : base(
             $"Executor size policy '{scope}' rejected event {eventId} at index {eventIndex}: " +
             $"{representation} {(operationLimit ? "operation" : "event")} size {measuredBytes} bytes " +
@@ -185,6 +264,8 @@ public sealed class ExecutorSizeLimitExceededException : Exception
         IsOperationLimit = operationLimit;
         DestinationKey = destinationKey;
         IsCertifiedUpperBound = certifiedUpperBound;
+        MeasuredRepresentationBytes = measuredRepresentationBytes;
+        CertifiedUpperBoundBytes = certifiedUpperBoundBytes;
     }
 
     public string Scope { get; }
@@ -196,6 +277,8 @@ public sealed class ExecutorSizeLimitExceededException : Exception
     public bool IsOperationLimit { get; }
     public string? DestinationKey { get; }
     public bool IsCertifiedUpperBound { get; }
+    public long? MeasuredRepresentationBytes { get; }
+    public long? CertifiedUpperBoundBytes { get; }
 }
 
 public sealed class ExecutorSizeCapabilityException : Exception

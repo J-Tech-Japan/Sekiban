@@ -498,6 +498,7 @@ internal static class Program
         var workflowRoot = Path.Combine(repoRoot, ".github", "workflows");
         var validationWorkflow = Path.Combine(workflowRoot, "dcb_template_validation.yml");
         var dcbTestWorkflow = Path.Combine(workflowRoot, "run_test_dcb.yml");
+        var dcbPackageWorkflow = Path.Combine(workflowRoot, "packagesDcb.yml");
         var publishWorkflow = Path.Combine(workflowRoot, "packagesDcbTemplate.yml");
         var packagedConsumerScript = Path.Combine(
             repoRoot,
@@ -507,15 +508,25 @@ internal static class Program
             "run-packaged-consumer.sh");
         Assert(File.Exists(validationWorkflow), "The DCB template validation workflow is missing.");
         Assert(File.Exists(dcbTestWorkflow), "The DCB test workflow is missing.");
+        Assert(File.Exists(dcbPackageWorkflow), "The DCB package workflow is missing.");
         Assert(File.Exists(publishWorkflow), "The DCB template publish workflow is missing.");
         Assert(File.Exists(packagedConsumerScript), "The DCB packaged-consumer script is missing.");
         var validation = File.ReadAllText(validationWorkflow);
         var dcbTest = File.ReadAllText(dcbTestWorkflow);
+        var dcbPackage = File.ReadAllText(dcbPackageWorkflow);
         var publish = File.ReadAllText(publishWorkflow);
         Assert(dcbTest.Contains(
                 "dcb/tests/Sekiban.Dcb.TemplateValidation/**",
                 StringComparison.Ordinal),
             "The DCB test workflow must rerun when template-verifier sources or fixtures change.");
+        Assert(dcbTest.Contains(
+                "dcb/src/Sekiban.Dcb.Orleans.AzureQueue/**",
+                StringComparison.Ordinal),
+            "The DCB test workflow must rerun when the Azure Queue V2 size-gate package changes.");
+        Assert(dcbPackage.Contains(
+                "dotnet pack dcb/src/Sekiban.Dcb.Orleans.AzureQueue/Sekiban.Dcb.Orleans.AzureQueue.csproj",
+                StringComparison.Ordinal),
+            "The DCB package workflow must pack the Azure Queue V2 size-gate package.");
 
         foreach (var required in new[]
                  {

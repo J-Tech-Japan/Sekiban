@@ -21,6 +21,7 @@
     <Project Path="src/Sekiban.Dcb.MaterializedView.Sqlite/Sekiban.Dcb.MaterializedView.Sqlite.csproj" />
     <Project Path="src/Sekiban.Dcb.MaterializedView/Sekiban.Dcb.MaterializedView.csproj" />
     <Project Path="src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj" />
+    <Project Path="src/Sekiban.Dcb.Orleans.AzureQueue/Sekiban.Dcb.Orleans.AzureQueue.csproj" />
     <Project Path="src/Sekiban.Dcb.Orleans.WithResult/Sekiban.Dcb.Orleans.WithResult.csproj" />
     <Project Path="src/Sekiban.Dcb.Orleans.WithoutResult/Sekiban.Dcb.Orleans.WithoutResult.csproj" />
     <Project Path="src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj" />

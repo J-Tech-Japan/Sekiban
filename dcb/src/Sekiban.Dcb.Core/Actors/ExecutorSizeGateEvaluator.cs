@@ -23,6 +23,15 @@ internal static class ExecutorSizeGateEvaluator
 {
     private const string LogicalRepresentation = "logical serialized event UTF-8";
 
+    private sealed record ComparableMeasurement(
+        PreparedExecutorEvent Prepared,
+        int Index,
+        long Bytes,
+        string? DestinationKey,
+        bool Certified,
+        long? MeasuredRepresentationBytes,
+        long? CertifiedUpperBoundBytes);
+
     public static ExecutorSizeGateEvaluation Evaluate(
         ExecutorSizeGateOptions? options,
         IReadOnlyList<PreparedExecutorEvent> events,
@@ -37,10 +46,11 @@ internal static class ExecutorSizeGateEvaluator
         options.Validate();
         var diagnostics = new List<ExecutorSizeDiagnostic>();
         var destinationPlans = new Dictionary<Guid, ExecutorSizeDestinationPlan>();
+        var hadCapabilityFailure = false;
 
         foreach (var policy in options.Policies)
         {
-            var measurements = new List<(PreparedExecutorEvent Prepared, int Index, long Bytes, string? DestinationKey, bool Certified)>();
+            var measurements = new List<ComparableMeasurement>();
             var capabilityFailure = default(string);
 
             for (var index = 0; index < events.Count; index++)
@@ -60,12 +70,19 @@ internal static class ExecutorSizeGateEvaluator
                     {
                         if (!destinationPlans.TryGetValue(prepared.Event.Id, out plan))
                         {
-                            plan = destinationPublisher.CaptureDestinationPlan(
-                                prepared.Event,
-                                prepared.Tags,
-                                serviceId);
+                            plan = publisher is IExecutorSizePreparedDestinationPublisher preparedPublisher
+                                ? preparedPublisher.CaptureDestinationPlan(
+                                    prepared.Event,
+                                    prepared.SerializedEvent,
+                                    prepared.Tags,
+                                    serviceId)
+                                : destinationPublisher.CaptureDestinationPlan(
+                                    prepared.Event,
+                                    prepared.Tags,
+                                    serviceId);
                             if (plan is not null)
                             {
+                                plan = plan with { PreparedEvent = prepared.SerializedEvent };
                                 destinationPlans[prepared.Event.Id] = plan;
                             }
                         }
@@ -138,6 +155,7 @@ internal static class ExecutorSizeGateEvaluator
                     policy.Scope,
                     policy.Representation,
                     capabilityFailure));
+                hadCapabilityFailure = true;
                 continue;
             }
 
@@ -200,9 +218,18 @@ internal static class ExecutorSizeGateEvaluator
                         offending.Index,
                         true,
                         offending.DestinationKey,
-                        offending.Certified);
+                        offending.Certified,
+                        measurements.Sum(m => m.MeasuredRepresentationBytes ?? m.Bytes),
+                        measurements.Sum(m => m.CertifiedUpperBoundBytes ?? m.Bytes));
                 }
             }
+        }
+
+        if (hadCapabilityFailure)
+        {
+            // A NonStrict capability miss must select the legacy direct publisher for the entire operation. A partial
+            // dictionary would make only the prefix planned and could fail after the store has committed.
+            destinationPlans.Clear();
         }
 
         return new ExecutorSizeGateEvaluation(diagnostics, destinationPlans);
@@ -211,7 +238,7 @@ internal static class ExecutorSizeGateEvaluator
     private static void ThrowEventLimitExceeded(
         ExecutorSizePolicy policy,
         long eventLimit,
-        (PreparedExecutorEvent Prepared, int Index, long Bytes, string? DestinationKey, bool Certified) measurement,
+        ComparableMeasurement measurement,
         long? measuredBytes = null) =>
         throw new ExecutorSizeLimitExceededException(
             policy.Scope,
@@ -222,9 +249,11 @@ internal static class ExecutorSizeGateEvaluator
             measurement.Index,
             false,
             measurement.DestinationKey,
-            measurement.Certified);
+            measurement.Certified,
+            measurement.MeasuredRepresentationBytes,
+            measurement.CertifiedUpperBoundBytes);
 
-    private static (PreparedExecutorEvent Prepared, int Index, long Bytes, string? DestinationKey, bool Certified)
+    private static ComparableMeasurement
         ToComparable(
             ExecutorSizePolicy policy,
             PreparedExecutorEvent prepared,
@@ -241,7 +270,14 @@ internal static class ExecutorSizeGateEvaluator
                 "measurement returned neither a non-negative exact size nor a certified upper bound");
         }
 
-        return (prepared, index, bytes.Value, destinationKey, result.Bytes is null);
+        return new ComparableMeasurement(
+            prepared,
+            index,
+            bytes.Value,
+            destinationKey,
+            result.Bytes is null,
+            result.MeasuredRepresentationBytes ?? result.Bytes ?? bytes,
+            result.CertifiedUpperBoundBytes ?? result.CertifiedUpperBound);
     }
 
     private static ExecutorSizeMeasurementResult Measure(

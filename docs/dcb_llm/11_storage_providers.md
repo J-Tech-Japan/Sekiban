@@ -1027,6 +1027,40 @@ The two public list methods keep their no-tag-rows early return: an empty tag qu
 `UseConsistentReads` is still applied to each request chunk, `QueryPageSize` still controls query pages, and write paths
 are unchanged. This is a per-read-invocation snapshot, not global options validation or retry rechunking.
 
+## SEK-G76 Orleans Azure Queue V2 stream-message size gate
+
+The optional `Sekiban.Dcb.Orleans.AzureQueue` package measures the provider-owned Azure Queue V2 stream message before
+the executor persists or dispatches an event. Register the provider helper against the named stream provider:
+
+```csharp
+services.AddSekibanDcbOrleansAzureQueueStreamMessageSizeGate(
+    "EventStreamProvider",
+    maxBytesPerEvent: 65_536,
+    strictness: ExecutorSizeStrictness.Strict);
+```
+
+The helper accepts only the actual named-keyed, then unkeyed fallback `AzureQueueDataAdapterV2`; a missing provider,
+custom adapter, V1 adapter, or JSON adapter is an unavailable capability. Strict mode fails closed with
+`ExecutorSizeCapabilityException` before durable persistence. Non-strict mode keeps the existing publication path and
+adds one named unvalidated diagnostic; it never treats the logical event UTF-8 size as an Azure Queue measurement.
+The measurement calls the real V2 adapter's `ToQueueMessage` with the prepared event and request context, but does not
+create a queue or send a message. The prepared event and captured destination state are reused for publication, so the
+admitted representation is the one that is dispatched.
+
+The default per-event limit is `65_536` bytes. If the adapter text is `n` UTF-8 bytes and the Azure Queue client encoding
+is `None`, the certified bound is `n`; with `Base64`, it is `4 * ceil(n / 3)`. The gate records both the measured
+adapter bytes and the certified upper bound. `MaxBytesPerOperation` sums the captured destination measurements; an
+event limit checks each destination copy independently. The bound covers the V2 adapter/client message representation,
+not Azure Queue service envelopes, batching, retries, or arbitrary external effects in custom application code.
+Existing Orleans publisher constructors and unconfigured publication remain unchanged.
+
+For a limit `L = 65_536`, the conservative adapter-text payload ceiling is
+`n_max = 3 * floor(L / 4) = 49,152` bytes. At that boundary `n = 49,152` produces a certified bound of `65,536`
+and passes an equal quota; `n = 49,156` produces `65,544` and is rejected before persistence. The payload count is
+not an event-envelope budget: event metadata and other message overhead are included in the actual V2 adapter text,
+so applications must leave room for them. An `Exact` measurement tier is deferred; this package intentionally ships
+the conservative `CertifiedBound` tier.
+
 ## Related
 
 For the current internal-use cold event export, hybrid read, and catch-up worker setup, see [Cold Events and Catch-up](19_cold_events.md).

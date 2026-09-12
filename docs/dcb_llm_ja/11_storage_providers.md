@@ -1034,6 +1034,40 @@ batch read を dispatch せずに成功します。callback stream は cancellat
 変更されません。これは read invocation ごとの snapshot であり、global option validation や retry 時の再 chunking
 ではありません。
 
+## SEK-G76 Orleans Azure Queue V2 stream-message サイズゲート
+
+任意の `Sekiban.Dcb.Orleans.AzureQueue` パッケージは、executor が event を永続化または dispatch する前に、provider が所有する
+Azure Queue V2 stream message を測定します。名前付き stream provider に対して provider helper を登録します。
+
+```csharp
+services.AddSekibanDcbOrleansAzureQueueStreamMessageSizeGate(
+    "EventStreamProvider",
+    maxBytesPerEvent: 65_536,
+    strictness: ExecutorSizeStrictness.Strict);
+```
+
+helper が受け付けるのは、名前付き keyed 解決、続く unkeyed fallback で得られる実際の
+`AzureQueueDataAdapterV2` だけです。provider がない場合、custom adapter、V1 adapter、JSON adapter は capability unavailable
+です。strict mode は `ExecutorSizeCapabilityException` で durable persistence より前に fail closed します。
+non-strict mode は既存の publish path を維持し、名前付きの未検証診断を 1 件追加します。logical event の UTF-8 byte を
+Azure Queue の測定値として扱うことはありません。測定では準備済み event と request context を使って実 V2 adapter の
+`ToQueueMessage` を呼びますが、queue の作成や message の送信は行いません。準備済み event と destination state は publish
+にも再利用されるため、admission された representation と dispatch される representation は同じです。
+
+event ごとの既定上限は `65_536` byte です。adapter text が UTF-8 で `n` byte のとき、Azure Queue client encoding が
+`None` なら certified bound は `n`、`Base64` なら `4 * ceil(n / 3)` です。ゲートは測定した adapter byte と certified upper
+bound の両方を記録します。`MaxBytesPerOperation` は捕捉した destination の測定値を合計し、event limit は各 destination
+copy を個別に検査します。この bound が保証するのは V2 adapter/client の message representation であり、Azure Queue の
+service envelope、batch、retry、custom application code の任意の外部効果は保証しません。既存の Orleans publisher constructor
+と、未登録時の publish 挙動は変更されません。
+
+上限 `L = 65,536` のとき、保守的な adapter-text payload の上限は
+`n_max = 3 * floor(L / 4) = 49,152` byte です。この境界では `n = 49,152` の certified bound は `65,536` となり、
+同じ quota を通過します。一方 `n = 49,156` では `65,544` となり、永続化より前に拒否されます。payload の byte 数だけを
+event envelope の予算と解釈してはいけません。event metadata などの message overhead は実際の V2 adapter text に含まれるため、
+アプリケーションはその分の余裕を残す必要があります。`Exact` measurement tier は将来に延期しており、この package が提供するのは
+保守的な `CertifiedBound` tier です。
+
 ## 関連資料
 
 現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。

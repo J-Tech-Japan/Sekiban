@@ -62,6 +62,7 @@
     <Project Path="dcb/src/Sekiban.Dcb.WithResult.Testing/Sekiban.Dcb.WithResult.Testing.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.WithoutResult.Testing/Sekiban.Dcb.WithoutResult.Testing.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj" />
+    <Project Path="dcb/src/Sekiban.Dcb.Orleans.AzureQueue/Sekiban.Dcb.Orleans.AzureQueue.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.Orleans.WithResult/Sekiban.Dcb.Orleans.WithResult.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.Orleans.WithoutResult/Sekiban.Dcb.Orleans.WithoutResult.csproj" />
     <Project Path="dcb/src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj" />

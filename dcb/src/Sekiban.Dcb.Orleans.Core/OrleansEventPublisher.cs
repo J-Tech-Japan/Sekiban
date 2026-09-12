@@ -1,4 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Orleans.Runtime;
+using Orleans.Serialization;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Orleans.Streams;
@@ -12,17 +15,24 @@ namespace Sekiban.Dcb.Orleans;
 /// <summary>
 ///     Publishes Sekiban Dcb events to Orleans streams using an Orleans cluster client.
 /// </summary>
-public class OrleansEventPublisher : IEventPublisher, IExecutorSizeDestinationPublisher
+public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDestinationPublisher
 {
     private readonly IClusterClient _clusterClient;
     private readonly ILogger<OrleansEventPublisher> _logger;
     private readonly IStreamDestinationResolver _resolver;
     private readonly DcbDomainTypes _domainTypes;
     private readonly IServiceIdProvider _serviceIdProvider;
+    private readonly DeepCopier? _deepCopier;
     private readonly Channel<PublishItem> _channel;
     private readonly Task _processor;
 
-    private record PublishItem(string Provider, string Namespace, Guid StreamId, SerializableEvent Event, int Attempt);
+    private record PublishItem(
+        string Provider,
+        string Namespace,
+        Guid StreamId,
+        SerializableEvent Event,
+        int Attempt,
+        Dictionary<string, object>? RequestContext = null);
 
     public OrleansEventPublisher(
         IClusterClient clusterClient,
@@ -51,6 +61,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizeDestinationPu
         _domainTypes = domainTypes;
         _logger = logger;
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
+        _deepCopier = _clusterClient.ServiceProvider.GetService<DeepCopier>();
         // Unbounded channel for simplicity; projection side is idempotent
         _channel = Channel.CreateUnbounded<PublishItem>(new UnboundedChannelOptions
         {
@@ -104,6 +115,23 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizeDestinationPu
         IReadOnlyCollection<ITag> tags,
         string serviceId)
     {
+        var serializableEvent = @event.ToSerializableEvent(_domainTypes.EventTypes);
+        return CaptureDestinationPlanCore(@event, serializableEvent, tags, serviceId);
+    }
+
+    ExecutorSizeDestinationPlan? IExecutorSizePreparedDestinationPublisher.CaptureDestinationPlan(
+        Event @event,
+        SerializableEvent serializedEvent,
+        IReadOnlyCollection<ITag> tags,
+        string serviceId)
+        => CaptureDestinationPlanCore(@event, serializedEvent, tags, serviceId);
+
+    private ExecutorSizeDestinationPlan? CaptureDestinationPlanCore(
+        Event @event,
+        SerializableEvent serializedEvent,
+        IReadOnlyCollection<ITag> tags,
+        string serviceId)
+    {
         var destinations = (_resolver.Resolve(@event, tags) ?? Enumerable.Empty<ISekibanStream>())
             .OfType<OrleansSekibanStream>()
             .Select(stream => new OrleansDestination(
@@ -117,19 +145,77 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizeDestinationPu
             return null;
         }
 
+        var captures = _clusterClient.ServiceProvider
+            .GetServices<IOrleansDestinationMeasurementCapture>()
+            .ToArray();
+        var destinationStates = new List<OrleansDestinationPlanState>(destinations.Length);
+        foreach (var destination in destinations)
+        {
+            string? failureReason = null;
+            Dictionary<string, object>? requestContext = null;
+            if (_deepCopier is null)
+            {
+                failureReason = "Orleans request-context deep-copy capability is unavailable";
+            }
+            else
+            {
+                try
+                {
+                    requestContext = RequestContextExtensions.Export(_deepCopier);
+                }
+                catch (Exception ex)
+                {
+                    failureReason = $"Orleans request-context capture failed with {ex.GetType().Name}";
+                }
+            }
+
+            var capture = captures.FirstOrDefault(candidate => candidate.Matches(destination.ProviderName));
+            object? providerState = null;
+            if (capture is null)
+            {
+                failureReason ??= $"no destination measurement capability is registered for provider '{destination.ProviderName}'";
+            }
+            else
+            {
+                providerState = capture.Capture(
+                    destination.ProviderName,
+                    destination.StreamNamespace,
+                    destination.StreamId,
+                    serializedEvent,
+                    requestContext,
+                    out var captureFailure);
+                failureReason ??= captureFailure;
+            }
+
+            destinationStates.Add(new OrleansDestinationPlanState(
+                GetDestinationKey(destination),
+                destination.ProviderName,
+                destination.StreamNamespace,
+                destination.StreamId,
+                providerState,
+                requestContext,
+                failureReason));
+        }
+
         var resolverServiceId = _serviceIdProvider.GetCurrentServiceId();
         if (!string.Equals(resolverServiceId, serviceId, StringComparison.Ordinal))
         {
             return new ExecutorSizeDestinationPlan(
                 resolverServiceId,
                 destinations.Select(GetDestinationKey).ToArray(),
-                destinations);
+                destinationStates)
+            {
+                PreparedEvent = serializedEvent
+            };
         }
 
         return new ExecutorSizeDestinationPlan(
             serviceId,
             destinations.Select(GetDestinationKey).ToArray(),
-            destinations);
+            destinationStates)
+        {
+            PreparedEvent = serializedEvent
+        };
     }
 
     public async Task PublishAsync(
@@ -140,13 +226,13 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizeDestinationPu
         foreach (var (evt, _) in events)
         {
             if (!destinationPlans.TryGetValue(evt.Id, out var plan) ||
-                plan.ProviderState is not IReadOnlyList<OrleansDestination> destinations)
+                plan.ProviderState is not IReadOnlyList<OrleansDestinationPlanState> destinations)
             {
                 throw new InvalidOperationException(
                     $"The captured destination plan for event {evt.Id} is unavailable.");
             }
 
-            var serializableEvent = evt.ToSerializableEvent(_domainTypes.EventTypes);
+            var serializableEvent = plan.PreparedEvent ?? evt.ToSerializableEvent(_domainTypes.EventTypes);
             foreach (var destination in destinations)
             {
                 _channel.Writer.TryWrite(new PublishItem(
@@ -154,7 +240,13 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizeDestinationPu
                     destination.StreamNamespace,
                     destination.StreamId,
                     serializableEvent,
-                    0));
+                    0,
+                    destination.RequestContext is null
+                        ? null
+                        : destination.RequestContext.ToDictionary(
+                            pair => pair.Key,
+                            pair => pair.Value,
+                            StringComparer.Ordinal)));
             }
         }
 
@@ -180,7 +272,27 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizeDestinationPu
             {
                 var provider = _clusterClient.GetStreamProvider(item.Provider);
                 var stream = provider.GetStream<SerializableEvent>(StreamId.Create(item.Namespace, item.StreamId));
-                await stream.OnNextAsync(item.Event);
+                var priorContext = _deepCopier is null ? null : RequestContextExtensions.Export(_deepCopier);
+                try
+                {
+                    if (item.RequestContext is not null)
+                    {
+                        RequestContextExtensions.Import(item.RequestContext);
+                    }
+
+                    await stream.OnNextAsync(item.Event);
+                }
+                finally
+                {
+                    if (priorContext is not null)
+                    {
+                        RequestContextExtensions.Import(priorContext);
+                    }
+                    else
+                    {
+                        RequestContext.Clear();
+                    }
+                }
                 if (_logger.IsEnabled(LogLevel.Trace))
                 {
                     _logger.LogTrace("Published event {EventId} to {Provider}/{Namespace}/{StreamId}",

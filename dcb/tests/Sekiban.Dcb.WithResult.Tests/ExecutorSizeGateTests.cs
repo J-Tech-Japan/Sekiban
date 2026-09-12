@@ -555,7 +555,8 @@ public sealed class ExecutorSizeGateTests
         var diagnosticList = Assert.IsAssignableFrom<IReadOnlyList<ExecutorSizeDiagnostic>>(diagnostics!);
         Assert.Contains(diagnosticList, diagnostic => diagnostic.Scope == "destination");
         Assert.Single((await nonStrictStore.ReadAllSerializableEventsAsync()).GetValue());
-        Assert.Equal(1, nonStrictPublisher.PlannedPublishCalls);
+        Assert.Equal(0, nonStrictPublisher.PlannedPublishCalls);
+        Assert.Equal(1, nonStrictPublisher.LegacyPublishCalls);
     }
 
     [Fact]
