@@ -27,7 +27,12 @@ builder.Services.AddSekibanDcbPostgresDurableSubscription(
 
 既定値の `FromNow` は現在の安全な末尾から開始し、`FromBeginning` は null カーソルから開始します。同一
 サービスコンテナー内の名前は一意であり、重複登録は hosted runner が追加される前に拒否されます。既存の
-`IEventSubscription` コールバック経路は変更されず、Durable subscription へ暗黙変換されません。
+`IEventSubscription` コールバック経路は変更されず、Durable subscription へ暗黙変換されません。Durable
+subscription の名前は legacy コールバックに対して予約・排他されません。両経路には共有の宣言レジストリが
+ないため、ライブラリは重複する名前を検出して拒否できません。同じ論理サブスクリプションに両方を登録すると、
+アプリケーションの処理がそれぞれ独立して呼び出されて二重に実行される可能性があるため、ハンドラーはあらかじめ
+冪等でなければなりません。ただし durable cursor を読み取り進めるのは Durable runner だけであり、legacy
+コールバックがそのカーソルを進めることはありません。
 
 ## PostgreSQL のデプロイ
 

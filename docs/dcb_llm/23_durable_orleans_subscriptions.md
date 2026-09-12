@@ -26,7 +26,11 @@ builder.Services.AddSekibanDcbPostgresDurableSubscription(
 
 `FromNow` is the default and starts at the current safe tail; `FromBeginning` starts with a null cursor. Names are
 unique within a service container and duplicate registrations are rejected before the hosted runner is added. The
-legacy `IEventSubscription` callback path is unchanged and is not converted into a durable subscription.
+legacy `IEventSubscription` callback path is unchanged and is not converted into a durable subscription. A durable
+subscription name is not reserved against legacy callbacks because the two paths have no shared declaration registry,
+so the library cannot detect or reject an overlapping name. If an application registers both for the same logical
+subscription, application handling may be invoked twice independently and handlers must already be idempotent; only
+the durable runner reads and advances the durable cursor, and the legacy callback cannot move it.
 
 ## PostgreSQL deployment
 
