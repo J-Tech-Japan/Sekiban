@@ -374,7 +374,7 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
         Assert.Equal(destination.ProviderName, plannedObservation.Provider);
         Assert.Equal(destination.StreamNamespace, plannedObservation.Namespace);
         Assert.Equal(destination.StreamId, plannedObservation.StreamId);
-        Assert.NotSame(capturedContext, plannedObservation.Context);
+        Assert.Same(capturedContext, plannedObservation.Context);
         Assert.Equal("retry-context", plannedObservation.Context!["g76-context"]);
         Assert.Equal(@event.Id, observed.Event.Id);
         Assert.Equal(@event.SortableUniqueIdValue, observed.Event.SortableUniqueIdValue);

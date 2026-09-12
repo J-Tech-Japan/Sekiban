@@ -1,12 +1,16 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Orleans;
+using Orleans.Runtime;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Tags;
 using Xunit;
 
@@ -31,8 +35,20 @@ public sealed class OrleansEventPublisherBoundedTests
         Assert.Equal(1024, defaults.MaxDiagnosticDestinations);
         defaults.Validate();
 
+        new OrleansEventPublisherOptions
+        {
+            MaxPublishAttempts = 64,
+            MaxRetryDelay = TimeSpan.FromMinutes(5),
+            MaxQueuedItemsPerDestination = 65_536,
+            MaxQueuedItemsTotal = 1_048_576,
+            TerminalSampleCount = 1_000,
+            MaxDiagnosticDestinations = 65_536
+        }.Validate();
+
         AssertInvalid(nameof(OrleansEventPublisherOptions.MaxPublishAttempts), () =>
             new OrleansEventPublisherOptions { MaxPublishAttempts = 0 }.Validate());
+        AssertInvalid(nameof(OrleansEventPublisherOptions.MaxPublishAttempts), () =>
+            new OrleansEventPublisherOptions { MaxPublishAttempts = 65 }.Validate());
         AssertInvalid(nameof(OrleansEventPublisherOptions.BaseRetryDelay), () =>
             new OrleansEventPublisherOptions { BaseRetryDelay = TimeSpan.Zero }.Validate());
         AssertInvalid(nameof(OrleansEventPublisherOptions.MaxRetryDelay), () =>
@@ -41,18 +57,28 @@ public sealed class OrleansEventPublisherBoundedTests
                 BaseRetryDelay = TimeSpan.FromSeconds(2),
                 MaxRetryDelay = TimeSpan.FromSeconds(1)
             }.Validate());
+        AssertInvalid(nameof(OrleansEventPublisherOptions.MaxRetryDelay), () =>
+            new OrleansEventPublisherOptions { MaxRetryDelay = TimeSpan.FromMinutes(5) + TimeSpan.FromMilliseconds(1) }.Validate());
         AssertInvalid(nameof(OrleansEventPublisherOptions.MaxQueuedItemsPerDestination), () =>
             new OrleansEventPublisherOptions { MaxQueuedItemsPerDestination = 0 }.Validate());
+        AssertInvalid(nameof(OrleansEventPublisherOptions.MaxQueuedItemsPerDestination), () =>
+            new OrleansEventPublisherOptions { MaxQueuedItemsPerDestination = 65_537 }.Validate());
         AssertInvalid(nameof(OrleansEventPublisherOptions.MaxQueuedItemsTotal), () =>
             new OrleansEventPublisherOptions
             {
                 MaxQueuedItemsPerDestination = 2,
                 MaxQueuedItemsTotal = 1
             }.Validate());
+        AssertInvalid(nameof(OrleansEventPublisherOptions.MaxQueuedItemsTotal), () =>
+            new OrleansEventPublisherOptions { MaxQueuedItemsTotal = 1_048_577 }.Validate());
         AssertInvalid(nameof(OrleansEventPublisherOptions.TerminalSampleCount), () =>
             new OrleansEventPublisherOptions { TerminalSampleCount = 0 }.Validate());
+        AssertInvalid(nameof(OrleansEventPublisherOptions.TerminalSampleCount), () =>
+            new OrleansEventPublisherOptions { TerminalSampleCount = 1_001 }.Validate());
         AssertInvalid(nameof(OrleansEventPublisherOptions.MaxDiagnosticDestinations), () =>
             new OrleansEventPublisherOptions { MaxDiagnosticDestinations = 0 }.Validate());
+        AssertInvalid(nameof(OrleansEventPublisherOptions.MaxDiagnosticDestinations), () =>
+            new OrleansEventPublisherOptions { MaxDiagnosticDestinations = 65_537 }.Validate());
     }
 
     [Fact]
@@ -110,6 +136,182 @@ public sealed class OrleansEventPublisherBoundedTests
         Assert.Same(sender.ReceivedPayloads[0], sender.ReceivedPayloads[1]);
         Assert.Same(sender.ReceivedPayloadObjects[0], sender.ReceivedPayloadObjects[1]);
         Assert.Equal("writer-completed", Assert.Single(publisher.GetSnapshot().Destinations).Samples[0].ReasonCode);
+    }
+
+    [Fact]
+    public async Task PlannedPublication_UsesOneCompletePlanPerDestination_AndNeverReSerializes()
+    {
+        var baseDomain = DcbDomainTypesExtensions.Simple(builder =>
+            builder.EventTypes.RegisterEventType<PublisherEvent>());
+        var countingTypes = new CountingEventTypes(baseDomain.EventTypes);
+        var domain = baseDomain with { EventTypes = countingTypes };
+        var capture = new RecordingMeasurementCapture();
+        var sender = new RecordingSender
+        {
+            FailAttempt = (destination, attempt) =>
+                destination.StreamNamespace == "planned-a" && attempt == 1,
+            ObserveRequestContext = true
+        };
+        var capturedContext = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["g77-context"] = "captured-once"
+        };
+        await using var publisher = CreatePublisher(
+            sender,
+            new OrleansEventPublisherOptions
+            {
+                MaxPublishAttempts = 2,
+                BaseRetryDelay = TimeSpan.FromMilliseconds(1),
+                MaxRetryDelay = TimeSpan.FromMilliseconds(1)
+            },
+            new SequenceResolver(
+                new OrleansSekibanStream("provider", "planned-a", Guid.Parse("00000000-0000-0000-0000-0000000000a1")),
+                new OrleansSekibanStream("provider", "planned-b", Guid.Parse("00000000-0000-0000-0000-0000000000b1"))),
+            domainTypes: domain,
+            captureRequestContext: () => capturedContext,
+            measurementCaptures: [capture]);
+
+        var publication = CreatePublication("planned");
+        RequestContext.Set("g77-context", "caller-sentinel");
+        var plan = publisher.CaptureDestinationPlan(publication.Event, publication.Tags, "service-77");
+
+        Assert.NotNull(plan);
+        Assert.Equal(1, countingTypes.SerializeCalls);
+        var states = Assert.IsAssignableFrom<IReadOnlyList<OrleansDestinationPlanState>>(plan.ProviderState);
+        Assert.Equal(2, states.Count);
+        Assert.All(states, state =>
+        {
+            Assert.Same(capturedContext, state.RequestContext);
+            Assert.NotNull(state.PreparedTarget);
+            Assert.NotNull(state.MeasurementState);
+            Assert.Equal("service-77", state.ServiceId);
+        });
+        Assert.Equal(2, sender.PrepareCalls);
+        Assert.Equal(2, capture.CaptureCalls);
+
+        RequestContext.Set("g77-context", "caller-sentinel");
+        await ((IExecutorSizeDestinationPublisher)publisher).PublishAsync(
+            new[] { publication },
+            new Dictionary<Guid, ExecutorSizeDestinationPlan> { [publication.Event.Id] = plan! });
+        await WaitUntilAsync(() => sender.Successes == 2);
+
+        Assert.Equal(1, countingTypes.SerializeCalls);
+        Assert.Equal(2, sender.PrepareCalls);
+        Assert.Equal(3, sender.Attempts);
+        Assert.Single(sender.ReceivedPayloadObjects.Distinct());
+        Assert.Equal(2, sender.ReceivedTargets.Distinct().Count());
+        Assert.Equal(3, sender.ObservedRequestContexts.Count);
+        Assert.All(sender.ObservedRequestContexts, value => Assert.Equal("captured-once", value));
+        Assert.Equal("caller-sentinel", RequestContext.Get("g77-context"));
+        Assert.Equal(0, sender.LastPayload!.ReferenceCount);
+
+        var incompletePlan = plan! with { PreparedEvent = null };
+        var beforeIncomplete = countingTypes.SerializeCalls;
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ((IExecutorSizeDestinationPublisher)publisher).PublishAsync(
+                new[] { publication },
+                new Dictionary<Guid, ExecutorSizeDestinationPlan>
+                {
+                    [publication.Event.Id] = incompletePlan
+                }));
+        Assert.Equal(beforeIncomplete, countingTypes.SerializeCalls);
+        Assert.Equal(3, sender.Attempts);
+    }
+
+    [Fact]
+    public async Task RetryScheduler_IsolatesBackoffAndPreservesSameDestinationFifo()
+    {
+        var a1 = CreatePublication("A1");
+        var a2 = CreatePublication("A2");
+        var b1 = CreatePublication("B1");
+        var aFirst = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var delayEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDelay = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sender = new RecordingSender
+        {
+            FailFirstEventId = a1.Event.Id,
+            BeforeSend = (destination, attempt, _) =>
+            {
+                if (destination.StreamNamespace == "capacity-a" && attempt == 1)
+                    aFirst.TrySetResult(true);
+                return Task.CompletedTask;
+            }
+        };
+        await using var publisher = CreatePublisher(
+            sender,
+            new OrleansEventPublisherOptions
+            {
+                MaxPublishAttempts = 2,
+                BaseRetryDelay = TimeSpan.FromMilliseconds(1),
+                MaxRetryDelay = TimeSpan.FromMilliseconds(1)
+            },
+            new RouteResolver(),
+            delayAsync: (_, cancellationToken) =>
+            {
+                delayEntered.TrySetResult(true);
+                return releaseDelay.Task.WaitAsync(cancellationToken);
+            });
+
+        await publisher.PublishAsync(new[] { a1 });
+        await aFirst.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await delayEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await publisher.PublishAsync(new[] { a2, b1 });
+        await WaitUntilAsync(() => sender.SuccessfulEventIds.Contains(b1.Event.Id));
+        Assert.DoesNotContain(a2.Event.Id, sender.AttemptRecords.Select(record => record.EventId));
+
+        releaseDelay.TrySetResult(true);
+        await WaitUntilAsync(() => sender.Successes == 3);
+        var aAttempts = sender.AttemptRecords
+            .Where(record => record.Destination == "capacity-a")
+            .Select(record => record.EventId)
+            .ToArray();
+        Assert.Equal(new[] { a1.Event.Id, a1.Event.Id, a2.Event.Id }, aAttempts);
+        Assert.True(
+            sender.AttemptRecords.FindIndex(record => record.EventId == b1.Event.Id) <
+            sender.AttemptRecords.FindIndex(record => record.EventId == a1.Event.Id && record.Attempt > 1));
+    }
+
+    [Fact]
+    public async Task GlobalAdmissionCapacityRejectsNewWorkWithoutPerDestinationSaturation()
+    {
+        var firstEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sender = new RecordingSender
+        {
+            BeforeSend = (destination, attempt, _) =>
+            {
+                if (destination.StreamNamespace == "capacity-a" && attempt == 1)
+                {
+                    firstEntered.TrySetResult(true);
+                    return releaseFirst.Task;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
+        await using var publisher = CreatePublisher(
+            sender,
+            new OrleansEventPublisherOptions
+            {
+                MaxQueuedItemsPerDestination = 2,
+                MaxQueuedItemsTotal = 2,
+                MaxPublishAttempts = 1
+            },
+            new RouteResolver());
+
+        var a1 = CreatePublication("A-global-1");
+        var b1 = CreatePublication("B-global-1");
+        var a2 = CreatePublication("A-global-2");
+        await publisher.PublishAsync(new[] { a1 });
+        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await publisher.PublishAsync(new[] { b1, a2 });
+        Assert.Equal(1, publisher.GetSnapshot().ReasonCounts["admission-capacity"]);
+        Assert.DoesNotContain(a2.Event.Id, sender.SuccessfulEventIds);
+
+        releaseFirst.TrySetResult(true);
+        await WaitUntilAsync(() => sender.Successes == 2);
+        Assert.Contains(a1.Event.Id, sender.SuccessfulEventIds);
+        Assert.Contains(b1.Event.Id, sender.SuccessfulEventIds);
     }
 
     [Fact]
@@ -212,7 +414,19 @@ public sealed class OrleansEventPublisherBoundedTests
     [Fact]
     public async Task FanOut_UsesOneSharedPayloadUntilEveryDestinationSettles()
     {
-        var sender = new RecordingSender();
+        var aEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var bEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseA = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseB = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sender = new RecordingSender
+        {
+            BeforeSend = (destination, _, cancellationToken) => destination.StreamNamespace switch
+            {
+                "fanout-a" => WaitAndSignalAsync(aEntered, releaseA, cancellationToken),
+                "fanout-b" => WaitAndSignalAsync(bEntered, releaseB, cancellationToken),
+                _ => Task.CompletedTask
+            }
+        };
         await using var publisher = CreatePublisher(
             sender,
             new OrleansEventPublisherOptions { MaxPublishAttempts = 1 },
@@ -222,9 +436,20 @@ public sealed class OrleansEventPublisherBoundedTests
 
         var publication = CreatePublication("fanout");
         await publisher.PublishAsync(new[] { publication });
-        await WaitUntilAsync(() => sender.Successes == 2);
+        await Task.WhenAll(
+            aEntered.Task.WaitAsync(TimeSpan.FromSeconds(2)),
+            bEntered.Task.WaitAsync(TimeSpan.FromSeconds(2)));
         Assert.Equal(2, sender.ReceivedPayloadObjects.Count);
         Assert.Same(sender.ReceivedPayloadObjects[0], sender.ReceivedPayloadObjects[1]);
+        Assert.Equal(2, sender.ReceivedPayloadObjects[0].ReferenceCount);
+
+        releaseA.TrySetResult(true);
+        await WaitUntilAsync(() => sender.ReceivedPayloadObjects[0].ReferenceCount == 1);
+        Assert.Equal(1, sender.ReceivedPayloadObjects[0].ReferenceCount);
+        Assert.Equal(1, sender.Successes);
+
+        releaseB.TrySetResult(true);
+        await WaitUntilAsync(() => sender.Successes == 2);
         Assert.Equal(0, sender.LastPayload!.ReferenceCount);
     }
 
@@ -308,10 +533,23 @@ public sealed class OrleansEventPublisherBoundedTests
             optionsProperties);
 
         var publicConstructors = typeof(OrleansEventPublisher).GetConstructors();
-        Assert.Contains(publicConstructors, constructor => constructor.GetParameters().Length == 4);
-        Assert.Contains(publicConstructors, constructor => constructor.GetParameters().Length == 5);
-        Assert.Contains(publicConstructors, constructor =>
-            constructor.GetParameters().Any(parameter => parameter.ParameterType == typeof(OrleansEventPublisherOptions)));
+        var constructorPrefix = new[]
+        {
+            typeof(IClusterClient),
+            typeof(IStreamDestinationResolver),
+            typeof(DcbDomainTypes),
+            typeof(ILogger<OrleansEventPublisher>)
+        };
+        Assert.NotNull(typeof(OrleansEventPublisher).GetConstructor(constructorPrefix));
+        Assert.NotNull(typeof(OrleansEventPublisher).GetConstructor(
+            constructorPrefix.Append(typeof(IServiceIdProvider)).ToArray()));
+        Assert.NotNull(typeof(OrleansEventPublisher).GetConstructor(
+            constructorPrefix.Append(typeof(OrleansEventPublisherOptions)).Append(typeof(IServiceIdProvider)).ToArray()));
+        Assert.DoesNotContain(publicConstructors, constructor => constructor.IsStatic);
+
+        Assert.Equal(typeof(int), typeof(OrleansEventPublisherOptions).GetProperty(nameof(OrleansEventPublisherOptions.MaxPublishAttempts))!.PropertyType);
+        Assert.Equal(typeof(TimeSpan), typeof(OrleansEventPublisherOptions).GetProperty(nameof(OrleansEventPublisherOptions.BaseRetryDelay))!.PropertyType);
+        Assert.Equal(typeof(TimeSpan), typeof(OrleansEventPublisherOptions).GetProperty(nameof(OrleansEventPublisherOptions.MaxRetryDelay))!.PropertyType);
 
         Assert.Equal(
             new[]
@@ -328,6 +566,23 @@ public sealed class OrleansEventPublisherBoundedTests
                 .OrderBy(name => name)
                 .ToArray());
 
+        Assert.Equal(typeof(IReadOnlyList<OrleansPublisherDestinationDiagnostic>),
+            typeof(OrleansPublisherDiagnosticsSnapshot).GetProperty(nameof(OrleansPublisherDiagnosticsSnapshot.Destinations))!.PropertyType);
+        Assert.Equal(typeof(IReadOnlyDictionary<string, long>),
+            typeof(OrleansPublisherDiagnosticsSnapshot).GetProperty(nameof(OrleansPublisherDiagnosticsSnapshot.ReasonCounts))!.PropertyType);
+        Assert.Equal(
+            new[]
+            {
+                "AttemptCount", "DestinationKey", "Namespace", "Provider", "ReasonCounts", "Samples", "ServiceId",
+                "StreamId", "TerminalCount"
+            },
+            typeof(OrleansPublisherDestinationDiagnostic).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Select(property => property.Name).OrderBy(name => name).ToArray());
+        Assert.Equal(
+            new[] { "Attempts", "EventId", "OccurredAtUtc", "ReasonCode" },
+            typeof(OrleansPublisherTerminalSample).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Select(property => property.Name).OrderBy(name => name).ToArray());
+
         var services = new ServiceCollection();
         services.AddSekibanDcbOrleansEventPublisher();
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(OrleansEventPublisher));
@@ -338,6 +593,26 @@ public sealed class OrleansEventPublisherBoundedTests
             Assert.IsType<OrleansEventPublisherOptions>(
                 Assert.Single(services.Where(descriptor => descriptor.ServiceType == typeof(OrleansEventPublisherOptions)))
                     .ImplementationInstance).MaxPublishAttempts);
+    }
+
+    [Fact]
+    public async Task LegacyOptionsFreeRegistrationResolvesWithDefaultFiveAttemptConfiguration()
+    {
+        var domain = DcbDomainTypesExtensions.Simple(builder =>
+            builder.EventTypes.RegisterEventType<PublisherEvent>());
+        var services = new ServiceCollection();
+        services.AddSingleton<IClusterClient>(DispatchProxy.Create<IClusterClient, ServiceProviderClusterClientProxy>());
+        services.AddSingleton<IStreamDestinationResolver>(
+            new SequenceResolver(new OrleansSekibanStream("provider", "legacy", Guid.NewGuid())));
+        services.AddSingleton(domain);
+        services.AddSingleton<Microsoft.Extensions.Logging.ILogger<OrleansEventPublisher>>(
+            NullLogger<OrleansEventPublisher>.Instance);
+        services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
+
+        await using var provider = services.BuildServiceProvider();
+        var publisher = provider.GetRequiredService<IEventPublisher>();
+        Assert.IsType<OrleansEventPublisher>(publisher);
+        Assert.Equal(5, new OrleansEventPublisherOptions().MaxPublishAttempts);
     }
 
     [Fact]
@@ -379,12 +654,86 @@ public sealed class OrleansEventPublisherBoundedTests
         Assert.Equal(0, sender.LastPayload!.ReferenceCount);
     }
 
+    [Fact]
+    public async Task Disposal_RaceAfterAdmissionStartsOwnedWorkerWithNoneAndReleasesQueuedPayload()
+    {
+        var workerGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var payloadReleased = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var observedStartToken = default(CancellationToken);
+        var sender = new RecordingSender();
+        await using var publisher = CreatePublisher(
+            sender,
+            new OrleansEventPublisherOptions { MaxPublishAttempts = 1 },
+            startWorkerAsync: (work, cancellationToken) =>
+            {
+                observedStartToken = cancellationToken;
+                return Task.Run(
+                    async () =>
+                    {
+                        await workerGate.Task;
+                        if (!cancellationToken.IsCancellationRequested)
+                            await work();
+                    },
+                    CancellationToken.None);
+            },
+            payloadReleased: () => payloadReleased.TrySetResult(true));
+
+        await publisher.PublishAsync(new[] { CreatePublication("start-dispose-race") });
+        var disposeTask = publisher.DisposeAsync().AsTask();
+        await Task.Delay(20);
+        Assert.False(disposeTask.IsCompleted);
+        Assert.False(observedStartToken.IsCancellationRequested);
+
+        workerGate.TrySetResult(true);
+        await disposeTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await payloadReleased.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Null(sender.LastPayload);
+    }
+
+    [Fact]
+    public async Task Disposal_DrainsInFlightQueuedAndRetryDelayWorkWithoutDetachedFaults()
+    {
+        var delayEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseCount = 0;
+        var first = CreatePublication("dispose-delay-1");
+        var second = CreatePublication("dispose-delay-2");
+        var sender = new RecordingSender { FailFirstEventId = first.Event.Id };
+        await using var publisher = CreatePublisher(
+            sender,
+            new OrleansEventPublisherOptions
+            {
+                MaxPublishAttempts = 3,
+                MaxQueuedItemsPerDestination = 10,
+                MaxQueuedItemsTotal = 10,
+                BaseRetryDelay = TimeSpan.FromSeconds(1),
+                MaxRetryDelay = TimeSpan.FromSeconds(1)
+            },
+            delayAsync: (_, cancellationToken) =>
+            {
+                delayEntered.TrySetResult(true);
+                return Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            },
+            payloadReleased: () => Interlocked.Increment(ref releaseCount));
+
+        await publisher.PublishAsync(new[] { first });
+        await delayEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await publisher.PublishAsync(new[] { second });
+        await publisher.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(2, releaseCount);
+        Assert.Equal(0, publisher.GetSnapshot().ReasonCounts.GetValueOrDefault("pump-faulted"));
+    }
+
     private static OrleansEventPublisher CreatePublisher(
         RecordingSender sender,
         OrleansEventPublisherOptions options,
         IStreamDestinationResolver? resolver = null,
         Func<TimeSpan, CancellationToken, Task>? delayAsync = null,
-        DcbDomainTypes? domainTypes = null)
+        DcbDomainTypes? domainTypes = null,
+        Func<Func<Task>, CancellationToken, Task>? startWorkerAsync = null,
+        Func<Dictionary<string, object>?>? captureRequestContext = null,
+        IReadOnlyList<IOrleansDestinationMeasurementCapture>? measurementCaptures = null,
+        Action? payloadReleased = null)
     {
         return new OrleansEventPublisher(
             clusterClient: null!,
@@ -395,7 +744,11 @@ public sealed class OrleansEventPublisherBoundedTests
             options,
             new DefaultServiceIdProvider(),
             sender,
-            delayAsync);
+            delayAsync,
+            startWorkerAsync: startWorkerAsync,
+            captureRequestContext: captureRequestContext,
+            measurementCaptures: measurementCaptures,
+            payloadReleased: payloadReleased);
     }
 
     private static (Event Event, IReadOnlyCollection<ITag> Tags) CreatePublication(string value, Guid? eventId = null)
@@ -422,6 +775,15 @@ public sealed class OrleansEventPublisherBoundedTests
         }
 
         Assert.True(predicate(), "Timed out waiting for the deterministic publisher observation.");
+    }
+
+    private static async Task WaitAndSignalAsync(
+        TaskCompletionSource<bool> entered,
+        TaskCompletionSource<bool> release,
+        CancellationToken cancellationToken)
+    {
+        entered.TrySetResult(true);
+        await release.Task.WaitAsync(cancellationToken);
     }
 
     private static void AssertInvalid(string property, Action action)
@@ -484,39 +846,173 @@ public sealed class OrleansEventPublisherBoundedTests
         public Type? GetEventType(string eventTypeName) => null;
     }
 
+    private sealed class CountingEventTypes(IEventTypes inner) : IEventTypes
+    {
+        public int SerializeCalls { get; private set; }
+
+        public string SerializeEventPayload(IEventPayload payload)
+        {
+            SerializeCalls++;
+            return inner.SerializeEventPayload(payload);
+        }
+
+        public IEventPayload? DeserializeEventPayload(string eventTypeName, string json) =>
+            inner.DeserializeEventPayload(eventTypeName, json);
+
+        public Type? GetEventType(string eventTypeName) => inner.GetEventType(eventTypeName);
+    }
+
+    private sealed class RecordingMeasurementCapture : IOrleansDestinationMeasurementCapture
+    {
+        public int CaptureCalls { get; private set; }
+        public List<object> States { get; } = [];
+
+        public bool Matches(string providerName) => providerName == "provider";
+
+        public object? Capture(
+            string providerName,
+            string streamNamespace,
+            Guid streamId,
+            SerializableEvent serializedEvent,
+            IReadOnlyDictionary<string, object>? requestContext,
+            out string? failureReason)
+        {
+            failureReason = null;
+            CaptureCalls++;
+            var state = new object();
+            States.Add(state);
+            return state;
+        }
+    }
+
+    private class ServiceProviderClusterClientProxy : DispatchProxy
+    {
+        private readonly IServiceProvider _serviceProvider = new ServiceCollection().BuildServiceProvider();
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
+            targetMethod?.Name == "get_ServiceProvider"
+                ? _serviceProvider
+                : throw new InvalidOperationException($"Unexpected Orleans client call: {targetMethod?.Name}");
+    }
+
     private sealed class RecordingSender : IOrleansStreamSender
     {
+        private readonly object _gate = new();
+        private readonly Dictionary<RecordingTarget, int> _attemptsByTarget = [];
         private int _attempts;
         private int _successes;
         public int FailuresBeforeSuccess { get; set; }
+        public Guid? FailFirstEventId { get; set; }
+        public Func<OrleansPublishDestination, int, bool>? FailAttempt { get; set; }
         public Func<OrleansPublishDestination, int, CancellationToken, Task>? BeforeSend { get; set; }
+        public bool ObserveRequestContext { get; set; }
+        public int PrepareCalls { get; private set; }
         public int Attempts => Volatile.Read(ref _attempts);
         public int Successes => Volatile.Read(ref _successes);
         public SharedPublishPayload? LastPayload { get; private set; }
         public List<SerializableEvent> ReceivedPayloads { get; } = [];
         public List<SharedPublishPayload> ReceivedPayloadObjects { get; } = [];
+        public List<IOrleansPreparedStreamTarget> ReceivedTargets { get; } = [];
         public List<Guid> SuccessfulEventIds { get; } = [];
+        public List<AttemptRecord> AttemptRecords { get; } = [];
+        public List<string?> ObservedRequestContexts { get; } = [];
 
-        public async Task SendAsync(
-            OrleansPublishDestination destination,
+        public IOrleansPreparedStreamTarget PrepareDestination(OrleansPublishDestination destination)
+        {
+            var target = new RecordingTarget(this, destination);
+            lock (_gate)
+            {
+                PrepareCalls++;
+                _attemptsByTarget[target] = 0;
+            }
+
+            return target;
+        }
+
+        private async Task SendAsync(
+            RecordingTarget target,
             SharedPublishPayload payload,
             CancellationToken cancellationToken)
         {
-            var attempt = Interlocked.Increment(ref _attempts);
+            int attempt;
+            lock (_gate)
+            {
+                attempt = ++_attemptsByTarget[target];
+                _attempts++;
+            }
+
             LastPayload = payload;
             lock (ReceivedPayloads)
             {
                 ReceivedPayloads.Add(payload.Event);
                 ReceivedPayloadObjects.Add(payload);
+                ReceivedTargets.Add(target);
+                AttemptRecords.Add(new AttemptRecord(
+                    payload.Event.Id,
+                    target.Destination.StreamNamespace,
+                    attempt,
+                    target));
             }
+
+            if (ObserveRequestContext)
+            {
+                var prior = RequestContext.Get("g77-context");
+                var captured = payload.RequestContext is not null &&
+                               payload.RequestContext.TryGetValue("g77-context", out var value)
+                    ? value as string
+                    : null;
+                lock (ReceivedPayloads)
+                    ObservedRequestContexts.Add(captured);
+                RequestContext.Set("g77-context", captured);
+                try
+                {
+                    await SendCoreAsync(target, payload, attempt, cancellationToken);
+                }
+                finally
+                {
+                    if (prior is null)
+                        RequestContext.Clear();
+                    else
+                        RequestContext.Set("g77-context", prior);
+                }
+                return;
+            }
+
+            await SendCoreAsync(target, payload, attempt, cancellationToken);
+        }
+
+        private async Task SendCoreAsync(
+            RecordingTarget target,
+            SharedPublishPayload payload,
+            int attempt,
+            CancellationToken cancellationToken)
+        {
             if (BeforeSend is not null)
-                await BeforeSend(destination, attempt, cancellationToken);
+                await BeforeSend(target.Destination, attempt, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            if (attempt <= FailuresBeforeSuccess)
+            if ((FailAttempt?.Invoke(target.Destination, attempt) ?? false) ||
+                (FailFirstEventId == payload.Event.Id && attempt == 1) ||
+                attempt <= FailuresBeforeSuccess)
                 throw new InvalidOperationException("deterministic sender failure");
             lock (ReceivedPayloads)
                 SuccessfulEventIds.Add(payload.Event.Id);
             Interlocked.Increment(ref _successes);
         }
+
+        private sealed class RecordingTarget(
+            RecordingSender owner,
+            OrleansPublishDestination destination) : IOrleansPreparedStreamTarget
+        {
+            public OrleansPublishDestination Destination { get; } = destination;
+
+            public Task SendAsync(SharedPublishPayload payload, CancellationToken cancellationToken) =>
+                owner.SendAsync(this, payload, cancellationToken);
+        }
+
+        public sealed record AttemptRecord(
+            Guid EventId,
+            string Destination,
+            int Attempt,
+            IOrleansPreparedStreamTarget Target);
     }
 }

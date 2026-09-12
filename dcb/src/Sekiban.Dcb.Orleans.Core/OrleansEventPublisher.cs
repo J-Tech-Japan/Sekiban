@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Orleans;
 using Orleans.Runtime;
 using Orleans.Serialization;
+using Orleans.Streams;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Orleans.Streams;
@@ -26,11 +27,15 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
     private readonly IOrleansStreamSender _sender;
     private readonly OrleansEventPublisherOptions _options;
     private readonly OrleansPublisherDiagnosticsRecorder _diagnostics;
+    private readonly IReadOnlyList<IOrleansDestinationMeasurementCapture> _measurementCaptures;
     private readonly object _queueGate = new();
     private readonly Dictionary<string, DestinationState> _destinations = new(StringComparer.Ordinal);
     private readonly HashSet<Task> _activeWorkers = [];
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
+    private readonly Func<Func<Task>, CancellationToken, Task> _startWorkerAsync;
+    private readonly Func<Dictionary<string, object>?>? _captureRequestContext;
+    private readonly Action? _payloadReleased;
     private Task? _disposeTask;
     private int _totalLiveItems;
     private bool _disposed;
@@ -102,7 +107,11 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
         IServiceIdProvider serviceIdProvider,
         IOrleansStreamSender? sender,
         Func<TimeSpan, CancellationToken, Task>? delayAsync,
-        OrleansPublisherDiagnosticsRecorder? diagnostics = null)
+        OrleansPublisherDiagnosticsRecorder? diagnostics = null,
+        Func<Func<Task>, CancellationToken, Task>? startWorkerAsync = null,
+        Func<Dictionary<string, object>?>? captureRequestContext = null,
+        IReadOnlyList<IOrleansDestinationMeasurementCapture>? measurementCaptures = null,
+        Action? payloadReleased = null)
     {
         if (sender is null)
             ArgumentNullException.ThrowIfNull(clusterClient);
@@ -119,7 +128,14 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
         _diagnostics = diagnostics ?? new OrleansPublisherDiagnosticsRecorder(_options);
         var deepCopier = sender is null ? clusterClient!.ServiceProvider.GetService<DeepCopier>() : null;
         _sender = sender ?? new ClusterOrleansStreamSender(clusterClient!, deepCopier);
+        _measurementCaptures = measurementCaptures ??
+            (_sender is ClusterOrleansStreamSender clusterSender
+                ? clusterSender.Captures
+                : Array.Empty<IOrleansDestinationMeasurementCapture>());
         _delayAsync = delayAsync ?? Task.Delay;
+        _startWorkerAsync = startWorkerAsync ?? ((work, cancellationToken) => Task.Run(work, cancellationToken));
+        _captureRequestContext = captureRequestContext;
+        _payloadReleased = payloadReleased;
     }
 
     public async Task PublishAsync(
@@ -154,14 +170,35 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             }
 
             var context = CaptureRequestContext();
-            var payload = new SharedPublishPayload(serializableEvent, context);
+            var payload = new SharedPublishPayload(serializableEvent, context, _payloadReleased);
             try
             {
                 foreach (var destination in destinations)
                 {
                     if (cancellationToken.IsCancellationRequested)
                         break;
-                    TryEnqueue(new OrleansPublishItem(destination, payload));
+                    OrleansDestinationPlanState planState;
+                    try
+                    {
+                        planState = PrepareDestinationPlanState(destination, context);
+                    }
+                    catch (Exception ex)
+                    {
+                        RecordAdmissionFailure(destination, evt.Id, "admission-resolve-failed", ex);
+                        continue;
+                    }
+
+                    if (planState.FailureReason is not null)
+                    {
+                        RecordAdmissionFailure(
+                            destination,
+                            evt.Id,
+                            "admission-resolve-failed",
+                            new InvalidOperationException(planState.FailureReason));
+                        continue;
+                    }
+
+                    TryEnqueue(new OrleansPublishItem(planState, payload));
                 }
             }
             finally
@@ -199,58 +236,71 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
         if (destinations.Count == 0)
             return null;
 
-        var captures = _sender is ClusterOrleansStreamSender clusterSender
-            ? clusterSender.Captures
-            : Array.Empty<IOrleansDestinationMeasurementCapture>();
+        IReadOnlyDictionary<string, object>? requestContext = null;
+        string? contextFailure = null;
+        try
+        {
+            requestContext = CaptureRequestContext();
+        }
+        catch (Exception ex)
+        {
+            contextFailure = $"Orleans request-context capture failed with {ex.GetType().Name}";
+        }
+
         var destinationStates = new List<OrleansDestinationPlanState>(destinations.Count);
         foreach (var destination in destinations)
         {
-            string? failureReason = null;
-            Dictionary<string, object>? requestContext = null;
+            string? failureReason = contextFailure;
+            IOrleansPreparedStreamTarget? preparedTarget = null;
             try
             {
-                requestContext = CaptureRequestContext()?.ToDictionary(
-                    pair => pair.Key,
-                    pair => pair.Value,
-                    StringComparer.Ordinal);
+                preparedTarget = _sender.PrepareDestination(destination);
             }
             catch (Exception ex)
             {
-                failureReason = $"Orleans request-context capture failed with {ex.GetType().Name}";
+                failureReason ??= $"Orleans destination preparation failed with {ex.GetType().Name}";
             }
 
-            var capture = captures.FirstOrDefault(candidate => candidate.Matches(destination.ProviderName));
             object? providerState = null;
-            if (capture is null)
+            if (failureReason is null)
             {
-                failureReason ??=
-                    $"no destination measurement capability is registered for provider '{destination.ProviderName}'";
-            }
-            else
-            {
-                providerState = capture.Capture(
-                    destination.ProviderName,
-                    destination.StreamNamespace,
-                    destination.StreamId,
-                    serializedEvent,
-                    requestContext,
-                    out var captureFailure);
-                failureReason ??= captureFailure;
+                var capture = _measurementCaptures.FirstOrDefault(
+                    candidate => candidate.Matches(destination.ProviderName));
+                if (capture is null)
+                {
+                    failureReason =
+                        $"no destination measurement capability is registered for provider '{destination.ProviderName}'";
+                }
+                else
+                {
+                    providerState = capture.Capture(
+                        destination.ProviderName,
+                        destination.StreamNamespace,
+                        destination.StreamId,
+                        serializedEvent,
+                        requestContext,
+                        out var captureFailure);
+                    failureReason ??= captureFailure;
+                }
             }
 
             destinationStates.Add(new OrleansDestinationPlanState(
-                GetLegacyDestinationKey(destination),
+                destination.DestinationKey,
                 destination.ProviderName,
                 destination.StreamNamespace,
                 destination.StreamId,
                 providerState,
                 requestContext,
-                failureReason));
+                failureReason)
+            {
+                ServiceId = serviceId,
+                PreparedTarget = preparedTarget
+            });
         }
 
         return new ExecutorSizeDestinationPlan(
             serviceId,
-            destinations.Select(GetLegacyDestinationKey).ToArray(),
+            destinations.Select(destination => destination.DestinationKey).ToArray(),
             destinationStates)
         {
             PreparedEvent = serializedEvent
@@ -273,9 +323,14 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                     $"The captured destination plan for event {evt.Id} is unavailable.");
             }
 
-            var serializableEvent = plan.PreparedEvent ?? evt.ToSerializableEvent(_domainTypes.EventTypes);
+            if (plan.PreparedEvent is not { } serializableEvent)
+            {
+                throw new InvalidOperationException(
+                    $"The captured destination plan for event {evt.Id} does not contain its prepared serialized event.");
+            }
+
             var context = destinations.FirstOrDefault()?.RequestContext;
-            var payload = new SharedPublishPayload(serializableEvent, context);
+            var payload = new SharedPublishPayload(serializableEvent, context, _payloadReleased);
             try
             {
                 foreach (var destination in destinations)
@@ -296,29 +351,19 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                         continue;
                     }
 
-                    var requestContext = destination.RequestContext is null
-                        ? null
-                        : destination.RequestContext.ToDictionary(
-                            pair => pair.Key,
-                            pair => pair.Value,
-                            StringComparer.Ordinal);
-                    var plannedDestination = new OrleansPublishDestination(
-                        plan.ServiceId,
-                        destination.ProviderName,
-                        destination.StreamNamespace,
-                        destination.StreamId);
+                    if (destination.PreparedTarget is null)
+                    {
+                        throw new InvalidOperationException(
+                            $"The captured destination plan for '{destination.DestinationKey}' does not contain its prepared target.");
+                    }
+
                     PlannedPublishObserver?.Invoke(
                         serializableEvent,
                         destination.ProviderName,
                         destination.StreamNamespace,
                         destination.StreamId,
-                        requestContext);
-                    var destinationPayload = ReferenceEquals(context, destination.RequestContext)
-                        ? payload
-                        : new SharedPublishPayload(serializableEvent, requestContext);
-                    TryEnqueue(new OrleansPublishItem(plannedDestination, destinationPayload));
-                    if (!ReferenceEquals(destinationPayload, payload))
-                        destinationPayload.Release();
+                        destination.RequestContext);
+                    TryEnqueue(new OrleansPublishItem(destination, payload));
                 }
             }
             finally
@@ -382,11 +427,32 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             .ToArray();
     }
 
-    private IReadOnlyDictionary<string, object>? CaptureRequestContext()
+    private Dictionary<string, object>? CaptureRequestContext()
     {
+        if (_captureRequestContext is not null)
+            return _captureRequestContext();
         if (_sender is not ClusterOrleansStreamSender clusterSender || clusterSender.DeepCopier is null)
             return null;
         return RequestContextExtensions.Export(clusterSender.DeepCopier);
+    }
+
+    private OrleansDestinationPlanState PrepareDestinationPlanState(
+        OrleansPublishDestination destination,
+        IReadOnlyDictionary<string, object>? requestContext)
+    {
+        var preparedTarget = _sender.PrepareDestination(destination);
+        return new OrleansDestinationPlanState(
+            destination.DestinationKey,
+            destination.ProviderName,
+            destination.StreamNamespace,
+            destination.StreamId,
+            MeasurementState: null,
+            requestContext,
+            FailureReason: null)
+        {
+            ServiceId = destination.ServiceId,
+            PreparedTarget = preparedTarget
+        };
     }
 
     private bool TryEnqueue(OrleansPublishItem item)
@@ -395,7 +461,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
         {
             if (_disposed || _pumpFaulted)
             {
-                _diagnostics.Terminal(item.Destination, item.Payload.Event.Id, "pump-faulted", 0);
+                _diagnostics.Terminal(ToPublishDestination(item.Destination), item.Payload.Event.Id, "pump-faulted", 0);
                 return false;
             }
 
@@ -416,7 +482,11 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             if (state.LiveCount >= _options.MaxQueuedItemsPerDestination ||
                 _totalLiveItems >= _options.MaxQueuedItemsTotal)
             {
-                _diagnostics.Terminal(item.Destination, item.Payload.Event.Id, "admission-capacity", 0);
+                _diagnostics.Terminal(
+                    ToPublishDestination(item.Destination),
+                    item.Payload.Event.Id,
+                    "admission-capacity",
+                    0);
                 return false;
             }
 
@@ -428,13 +498,19 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                 state.LiveCount--;
                 _totalLiveItems--;
                 item.Payload.Release();
-                _diagnostics.Terminal(item.Destination, item.Payload.Event.Id, "admission-capacity", 0);
+                _diagnostics.Terminal(
+                    ToPublishDestination(item.Destination),
+                    item.Payload.Event.Id,
+                    "admission-capacity",
+                    0);
                 return false;
             }
 
             if (state.Worker is null || state.Worker.IsCompleted)
             {
-                state.Worker = Task.Run(() => ProcessDestinationAsync(item.Destination.DestinationKey, state));
+                state.Worker = _startWorkerAsync(
+                    () => ProcessDestinationAsync(item.Destination.DestinationKey, state),
+                    CancellationToken.None);
                 _activeWorkers.Add(state.Worker);
                 _ = state.Worker.ContinueWith(
                     completed =>
@@ -498,11 +574,23 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             for (var attempt = 1; attempt <= _options.MaxPublishAttempts; attempt++)
             {
                 attempts = attempt;
-                _diagnostics.Attempt(item.Destination);
+                _diagnostics.Attempt(ToPublishDestination(item.Destination));
                 try
                 {
-                    await _sender.SendAsync(item.Destination, item.Payload, _shutdown.Token).ConfigureAwait(false);
-                    _diagnostics.Terminal(item.Destination, item.Payload.Event.Id, "writer-completed", attempts);
+                    if (item.Destination.PreparedTarget is null)
+                    {
+                        throw new InvalidOperationException(
+                            $"The destination plan for '{item.Destination.DestinationKey}' has no prepared target.");
+                    }
+
+                    await item.Destination.PreparedTarget
+                        .SendAsync(item.Payload, _shutdown.Token)
+                        .ConfigureAwait(false);
+                    _diagnostics.Terminal(
+                        ToPublishDestination(item.Destination),
+                        item.Payload.Event.Id,
+                        "writer-completed",
+                        attempts);
                     return;
                 }
                 catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
@@ -519,7 +607,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                             item.Payload.Event.Id,
                             item.Destination.DestinationKey);
                         _diagnostics.Terminal(
-                            item.Destination,
+                            ToPublishDestination(item.Destination),
                             item.Payload.Event.Id,
                             "transport-attempts-exhausted",
                             attempts);
@@ -537,7 +625,11 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
         }
         catch
         {
-            _diagnostics.Terminal(item.Destination, item.Payload.Event.Id, "pump-faulted", attempts);
+            _diagnostics.Terminal(
+                ToPublishDestination(item.Destination),
+                item.Payload.Event.Id,
+                "pump-faulted",
+                attempts);
             throw;
         }
         finally
@@ -568,7 +660,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
         {
             item.Payload.Release();
             if (reason is not null)
-                _diagnostics.Terminal(item.Destination, item.Payload.Event.Id, reason, 0);
+                _diagnostics.Terminal(ToPublishDestination(item.Destination), item.Payload.Event.Id, reason, 0);
             ReleaseLive(destinationKey, state);
         }
     }
@@ -592,8 +684,8 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
         _diagnostics.Terminal(destination, eventId, reason, 0);
     }
 
-    private static string GetLegacyDestinationKey(OrleansPublishDestination destination) =>
-        $"{destination.ProviderName}|{destination.StreamNamespace}|{destination.StreamId:D}";
+    private static OrleansPublishDestination ToPublishDestination(OrleansDestinationPlanState state) =>
+        new(state.ServiceId, state.ProviderName, state.StreamNamespace, state.StreamId);
 
     private sealed class DestinationState(Channel<OrleansPublishItem> queue)
     {
@@ -617,19 +709,28 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                 .ToArray();
         }
 
-        public async Task SendAsync(
-            OrleansPublishDestination destination,
-            SharedPublishPayload payload,
-            CancellationToken cancellationToken)
+        public IOrleansPreparedStreamTarget PrepareDestination(OrleansPublishDestination destination)
         {
             var provider = _clusterClient.GetStreamProvider(destination.ProviderName);
             var stream = provider.GetStream<SerializableEvent>(
                 StreamId.Create(destination.StreamNamespace, destination.StreamId));
-            var priorContext = DeepCopier is null ? null : RequestContextExtensions.Export(DeepCopier);
+            return new ClusterOrleansPreparedStreamTarget(stream, DeepCopier);
+        }
+    }
+
+    private sealed class ClusterOrleansPreparedStreamTarget(
+        IAsyncStream<SerializableEvent> stream,
+        DeepCopier? deepCopier) : IOrleansPreparedStreamTarget
+    {
+        public async Task SendAsync(SharedPublishPayload payload, CancellationToken cancellationToken)
+        {
+            var priorContext = deepCopier is null ? null : RequestContextExtensions.Export(deepCopier);
             try
             {
                 if (payload.RequestContext is not null)
                     RequestContextExtensions.Import(payload.RequestContext);
+                else
+                    RequestContext.Clear();
                 await stream.OnNextAsync(payload.Event).WaitAsync(cancellationToken).ConfigureAwait(false);
             }
             finally

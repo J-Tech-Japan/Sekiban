@@ -136,7 +136,8 @@ internal sealed class SharedPublishPayload
         Event = @event;
         RequestContext = requestContext is null
             ? null
-            : new Dictionary<string, object>(requestContext, StringComparer.Ordinal);
+            : requestContext as Dictionary<string, object> ??
+              new Dictionary<string, object>(requestContext, StringComparer.Ordinal);
         _released = released;
     }
 
@@ -167,13 +168,19 @@ internal sealed class SharedPublishPayload
 }
 
 internal sealed record OrleansPublishItem(
-    OrleansPublishDestination Destination,
+    OrleansDestinationPlanState Destination,
     SharedPublishPayload Payload);
 
-/// <summary>Internal sender seam; the production implementation is the Orleans stream adapter.</summary>
+/// <summary>Prepared provider/stream target retained by one immutable destination plan state.</summary>
+internal interface IOrleansPreparedStreamTarget
+{
+    Task SendAsync(SharedPublishPayload payload, CancellationToken cancellationToken);
+}
+
+/// <summary>Internal sender seam; the production implementation prepares the Orleans stream adapter once.</summary>
 internal interface IOrleansStreamSender
 {
-    Task SendAsync(OrleansPublishDestination destination, SharedPublishPayload payload, CancellationToken cancellationToken);
+    IOrleansPreparedStreamTarget PrepareDestination(OrleansPublishDestination destination);
 }
 
 internal sealed class OrleansPublisherDiagnosticsRecorder
