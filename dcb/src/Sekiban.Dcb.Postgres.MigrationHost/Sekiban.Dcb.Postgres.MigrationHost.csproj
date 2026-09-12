@@ -5,6 +5,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <LangVersion>latest</LangVersion>
+        <!-- This executable is a deployment-time EF migration host, not a distributable DCB package. -->
+        <IsPackable>false</IsPackable>
         <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
         <NoWarn>$(NoWarn);MSB3277</NoWarn>
     </PropertyGroup>

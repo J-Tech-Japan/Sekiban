@@ -23,6 +23,21 @@ internal static class ExecutorSizeGateEvaluator
 {
     private const string LogicalRepresentation = "logical serialized event UTF-8";
 
+    private sealed record ComparableMeasurement(
+        PreparedExecutorEvent Prepared,
+        int Index,
+        long Bytes,
+        string? DestinationKey,
+        bool Certified,
+        long? MeasuredRepresentationBytes,
+        long? CertifiedUpperBoundBytes);
+
+    private sealed record OperationTotals(
+        long ComparableBytes,
+        long? MeasuredRepresentationBytes,
+        long? CertifiedUpperBoundBytes,
+        bool IsCertifiedUpperBound);
+
     public static ExecutorSizeGateEvaluation Evaluate(
         ExecutorSizeGateOptions? options,
         IReadOnlyList<PreparedExecutorEvent> events,
@@ -37,10 +52,11 @@ internal static class ExecutorSizeGateEvaluator
         options.Validate();
         var diagnostics = new List<ExecutorSizeDiagnostic>();
         var destinationPlans = new Dictionary<Guid, ExecutorSizeDestinationPlan>();
+        var hadCapabilityFailure = false;
 
         foreach (var policy in options.Policies)
         {
-            var measurements = new List<(PreparedExecutorEvent Prepared, int Index, long Bytes, string? DestinationKey, bool Certified)>();
+            var measurements = new List<ComparableMeasurement>();
             var capabilityFailure = default(string);
 
             for (var index = 0; index < events.Count; index++)
@@ -60,12 +76,19 @@ internal static class ExecutorSizeGateEvaluator
                     {
                         if (!destinationPlans.TryGetValue(prepared.Event.Id, out plan))
                         {
-                            plan = destinationPublisher.CaptureDestinationPlan(
-                                prepared.Event,
-                                prepared.Tags,
-                                serviceId);
+                            plan = publisher is IExecutorSizePreparedDestinationPublisher preparedPublisher
+                                ? preparedPublisher.CaptureDestinationPlan(
+                                    prepared.Event,
+                                    prepared.SerializedEvent,
+                                    prepared.Tags,
+                                    serviceId)
+                                : destinationPublisher.CaptureDestinationPlan(
+                                    prepared.Event,
+                                    prepared.Tags,
+                                    serviceId);
                             if (plan is not null)
                             {
+                                plan = plan with { PreparedEvent = prepared.SerializedEvent };
                                 destinationPlans[prepared.Event.Id] = plan;
                             }
                         }
@@ -134,84 +157,119 @@ internal static class ExecutorSizeGateEvaluator
                         capabilityFailure);
                 }
 
+                ValidateMeasurementLimits(policy, measurements);
                 diagnostics.Add(new ExecutorSizeDiagnostic(
                     policy.Scope,
                     policy.Representation,
                     capabilityFailure));
+                hadCapabilityFailure = true;
                 continue;
             }
 
-            if (policy.MaxBytesPerEvent is { } eventLimit)
-            {
-                // Destination event limits apply to each captured destination independently. A cross-destination
-                // operation budget exists only when the caller explicitly configures MaxBytesPerOperation below.
-                if (policy.Representation == ExecutorSizeRepresentation.Destination)
-                {
-                    foreach (var measurement in measurements)
-                    {
-                        if (measurement.Bytes <= eventLimit)
-                        {
-                            continue;
-                        }
+            ValidateMeasurementLimits(policy, measurements);
+        }
 
-                        ThrowEventLimitExceeded(policy, eventLimit, measurement);
-                    }
-                }
-                else
-                {
-                    var eventTotals = measurements
-                        .GroupBy(m => m.Index)
-                        .Select(group => group.Sum(m => m.Bytes))
-                        .ToArray();
-
-                    for (var index = 0; index < eventTotals.Length; index++)
-                    {
-                        if (eventTotals[index] <= eventLimit)
-                        {
-                            continue;
-                        }
-
-                        ThrowEventLimitExceeded(policy, eventLimit, measurements.First(m => m.Index == index), eventTotals[index]);
-                    }
-                }
-            }
-
-            if (policy.MaxBytesPerOperation is { } operationLimit)
-            {
-                long operationBytes;
-                try
-                {
-                    operationBytes = checked(measurements.Sum(m => m.Bytes));
-                }
-                catch (OverflowException)
-                {
-                    operationBytes = long.MaxValue;
-                }
-
-                if (operationBytes > operationLimit)
-                {
-                    var offending = measurements.First();
-                    throw new ExecutorSizeLimitExceededException(
-                        policy.Scope,
-                        policy.Representation,
-                        operationLimit,
-                        operationBytes,
-                        offending.Prepared.Event.Id,
-                        offending.Index,
-                        true,
-                        offending.DestinationKey,
-                        offending.Certified);
-                }
-            }
+        if (hadCapabilityFailure)
+        {
+            // A NonStrict capability miss must select the legacy direct publisher for the entire operation. A partial
+            // dictionary would make only the prefix planned and could fail after the store has committed.
+            destinationPlans.Clear();
         }
 
         return new ExecutorSizeGateEvaluation(diagnostics, destinationPlans);
     }
 
+    private static void ValidateMeasurementLimits(
+        ExecutorSizePolicy policy,
+        IReadOnlyList<ComparableMeasurement> measurements)
+    {
+        if (policy.MaxBytesPerEvent is { } eventLimit)
+        {
+            // Destination event limits apply to each captured destination independently. A cross-destination
+            // operation budget exists only when the caller explicitly configures MaxBytesPerOperation below.
+            if (policy.Representation == ExecutorSizeRepresentation.Destination)
+            {
+                foreach (var measurement in measurements)
+                {
+                    if (measurement.Bytes <= eventLimit)
+                    {
+                        continue;
+                    }
+
+                    ThrowEventLimitExceeded(policy, eventLimit, measurement);
+                }
+            }
+            else
+            {
+                var eventTotals = measurements
+                    .GroupBy(m => m.Index)
+                    .Select(group => SaturatingSum(group.Select(m => m.Bytes)))
+                    .ToArray();
+
+                for (var index = 0; index < eventTotals.Length; index++)
+                {
+                    if (eventTotals[index] <= eventLimit)
+                    {
+                        continue;
+                    }
+
+                    ThrowEventLimitExceeded(policy, eventLimit, measurements.First(m => m.Index == index), eventTotals[index]);
+                }
+            }
+        }
+
+        if (policy.MaxBytesPerOperation is { } operationLimit)
+        {
+            var operationTotals = AggregateOperationTotals(measurements);
+
+            // The partial total is already conclusive when it is non-negative and above the configured limit;
+            // an unavailable later measurement cannot turn a measured excess into a benign fallback.
+            if (operationTotals.ComparableBytes >= 0 && operationTotals.ComparableBytes > operationLimit)
+            {
+                var offending = measurements.First();
+                ThrowOperationLimitExceeded(policy, operationLimit, operationTotals, offending);
+            }
+        }
+    }
+
+    private static OperationTotals AggregateOperationTotals(
+        IReadOnlyList<ComparableMeasurement> measurements) =>
+        new(
+            SaturatingSum(measurements.Select(measurement => measurement.Bytes)),
+            measurements.All(measurement => measurement.MeasuredRepresentationBytes.HasValue)
+                ? SaturatingSum(measurements.Select(measurement => measurement.MeasuredRepresentationBytes!.Value))
+                : null,
+            measurements.Any(measurement => measurement.Certified)
+                ? SaturatingSum(measurements.Select(measurement =>
+                    measurement.CertifiedUpperBoundBytes ?? measurement.Bytes))
+                : null,
+            measurements.Any(measurement => measurement.Certified));
+
+    private static long SaturatingSum(IEnumerable<long> values)
+    {
+        var total = 0L;
+        foreach (var value in values)
+        {
+            if (value > 0 && total > long.MaxValue - value)
+            {
+                return long.MaxValue;
+            }
+
+            if (value < 0 && total < long.MinValue - value)
+            {
+                return long.MinValue;
+            }
+
+            total += value;
+        }
+
+        return total;
+    }
+
     private static void ThrowEventLimitExceeded(
         ExecutorSizePolicy policy,
         long eventLimit,
-        (PreparedExecutorEvent Prepared, int Index, long Bytes, string? DestinationKey, bool Certified) measurement,
+        ComparableMeasurement measurement,
         long? measuredBytes = null) =>
         throw new ExecutorSizeLimitExceededException(
             policy.Scope,
@@ -222,9 +280,29 @@ internal static class ExecutorSizeGateEvaluator
             measurement.Index,
             false,
             measurement.DestinationKey,
-            measurement.Certified);
+            measurement.Certified,
+            measurement.MeasuredRepresentationBytes,
+            measurement.CertifiedUpperBoundBytes);
 
-    private static (PreparedExecutorEvent Prepared, int Index, long Bytes, string? DestinationKey, bool Certified)
+    private static void ThrowOperationLimitExceeded(
+        ExecutorSizePolicy policy,
+        long operationLimit,
+        OperationTotals operationTotals,
+        ComparableMeasurement offending) =>
+        throw new ExecutorSizeLimitExceededException(
+            policy.Scope,
+            policy.Representation,
+            operationLimit,
+            operationTotals.ComparableBytes,
+            offending.Prepared.Event.Id,
+            offending.Index,
+            true,
+            offending.DestinationKey,
+            operationTotals.IsCertifiedUpperBound,
+            operationTotals.MeasuredRepresentationBytes,
+            operationTotals.CertifiedUpperBoundBytes);
+
+    private static ComparableMeasurement
         ToComparable(
             ExecutorSizePolicy policy,
             PreparedExecutorEvent prepared,
@@ -241,7 +319,14 @@ internal static class ExecutorSizeGateEvaluator
                 "measurement returned neither a non-negative exact size nor a certified upper bound");
         }
 
-        return (prepared, index, bytes.Value, destinationKey, result.Bytes is null);
+        return new ComparableMeasurement(
+            prepared,
+            index,
+            bytes.Value,
+            destinationKey,
+            result.Bytes is null,
+            result.MeasuredRepresentationBytes,
+            result.CertifiedUpperBoundBytes ?? result.CertifiedUpperBound);
     }
 
     private static ExecutorSizeMeasurementResult Measure(

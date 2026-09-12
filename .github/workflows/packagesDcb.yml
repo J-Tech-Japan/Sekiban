@@ -63,6 +63,7 @@ jobs:
           dotnet pack dcb/src/Sekiban.Dcb.MaterializedView.Sqlite/Sekiban.Dcb.MaterializedView.Sqlite.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.MaterializedView.Orleans/Sekiban.Dcb.MaterializedView.Orleans.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.Orleans.AzureQueue/Sekiban.Dcb.Orleans.AzureQueue.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.Orleans.WithResult/Sekiban.Dcb.Orleans.WithResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.Orleans.WithoutResult/Sekiban.Dcb.Orleans.WithoutResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
@@ -71,6 +72,11 @@ jobs:
           dotnet pack dcb/src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.DynamoDB/Sekiban.Dcb.DynamoDB.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.BlobStorage.S3/Sekiban.Dcb.BlobStorage.S3.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+
+      - name: Validate Azure Queue V2 packaged consumer and dependency groups
+        run: |
+          bash dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh \
+            --repo-root "$GITHUB_WORKSPACE" --feed "$GITHUB_WORKSPACE/out" --version "$VERSION"
 
       - name: Push to NuGet.org
         run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

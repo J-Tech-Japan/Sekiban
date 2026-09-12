@@ -10,6 +10,7 @@ on:
       - 'dcb/src/Sekiban.Dcb.WithResult/**'
       - 'dcb/src/Sekiban.Dcb.WithoutResult/**'
       - 'dcb/src/Sekiban.Dcb.Orleans.Core/**'
+      - 'dcb/src/Sekiban.Dcb.Orleans.AzureQueue/**'
       - 'dcb/OrleansVersion.props'
       - 'dcb/Directory.Build.props'
       - 'dcb/src/Directory.Build.props'
