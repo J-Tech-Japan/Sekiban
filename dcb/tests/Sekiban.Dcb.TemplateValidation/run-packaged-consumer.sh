@@ -4,10 +4,11 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../../.." && pwd)"
 package_path=""
-version="10.19.0"
+feed=""
+version="10.22.0"
 
 usage() {
-  echo "Usage: $0 [--repo-root <path>] [--package <nupkg>] [--version <stable-version>]" >&2
+  echo "Usage: $0 [--repo-root <path>] [--package <nupkg>] [--feed <directory>] [--version <stable-version>]" >&2
   exit 2
 }
 
@@ -15,6 +16,7 @@ while (( $# > 0 )); do
   case "$1" in
     --repo-root) repo_root="$(cd "$2" && pwd)"; shift 2 ;;
     --package) package_path="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift 2 ;;
+    --feed) feed="$(cd "$2" && pwd)"; shift 2 ;;
     --version) version="$2"; shift 2 ;;
     *) usage ;;
   esac
@@ -46,6 +48,7 @@ printf '%s\n' \
   '<configuration>' \
   '  <packageSources>' \
   '    <clear />' \
+  ${feed:+"    <add key=\"dcb-local\" value=\"$feed\" />"} \
   '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />' \
   '  </packageSources>' \
   '</configuration>' > "$nuget_config"
@@ -210,14 +213,36 @@ run_net10 "$validator" mutate --source "$negative_output" --destination "$mv_mut
 expect_failure run_net10 "$validator" mv --template-root "$mv_mutant" --repo-root "$repo_root"
 
 docs_mutant="$work_root/docs-mutant"
-mkdir -p "$docs_mutant/docs/dcb_llm" "$docs_mutant/docs/dcb_llm_ja"
+mkdir -p "$docs_mutant/docs/dcb_llm" "$docs_mutant/docs/dcb_llm_ja" "$docs_mutant/docs/releases"
 cp "$repo_root/docs/dcb_llm/20_materialized_view.md" "$docs_mutant/docs/dcb_llm/20_materialized_view.md"
 cp "$repo_root/docs/dcb_llm_ja/20_materialized_view.md" "$docs_mutant/docs/dcb_llm_ja/20_materialized_view.md"
 cp "$repo_root/docs/dcb_llm/11_storage_providers.md" "$docs_mutant/docs/dcb_llm/11_storage_providers.md"
 cp "$repo_root/docs/dcb_llm_ja/11_storage_providers.md" "$docs_mutant/docs/dcb_llm_ja/11_storage_providers.md"
 cp "$repo_root/CONTRIBUTING.md" "$docs_mutant/CONTRIBUTING.md"
+cp -R "$repo_root/docs/releases/." "$docs_mutant/docs/releases/"
 perl -0pi -e 's/<!-- sek-g44:cas-non-default -->//' "$docs_mutant/docs/dcb_llm_ja/11_storage_providers.md"
 expect_failure run_net10 "$validator" docs --repo-root "$docs_mutant"
+
+copy_release_docs_fixture() {
+  local destination="$1"
+  mkdir -p "$destination/docs/dcb_llm" "$destination/docs/dcb_llm_ja" "$destination/docs/releases"
+  cp "$repo_root/docs/dcb_llm/20_materialized_view.md" "$destination/docs/dcb_llm/20_materialized_view.md"
+  cp "$repo_root/docs/dcb_llm_ja/20_materialized_view.md" "$destination/docs/dcb_llm_ja/20_materialized_view.md"
+  cp "$repo_root/docs/dcb_llm/11_storage_providers.md" "$destination/docs/dcb_llm/11_storage_providers.md"
+  cp "$repo_root/docs/dcb_llm_ja/11_storage_providers.md" "$destination/docs/dcb_llm_ja/11_storage_providers.md"
+  cp "$repo_root/CONTRIBUTING.md" "$destination/CONTRIBUTING.md"
+  cp -R "$repo_root/docs/releases/." "$destination/docs/releases/"
+}
+
+missing_release_body="$work_root/docs-missing-release-body"
+copy_release_docs_fixture "$missing_release_body"
+rm "$missing_release_body/docs/releases/dcbTemplates-v${version}.ja.md"
+expect_failure run_net10 "$validator" docs --repo-root "$missing_release_body"
+
+blank_release_body="$work_root/docs-blank-release-body"
+copy_release_docs_fixture "$blank_release_body"
+: > "$blank_release_body/docs/releases/dcb-v${version}-library.en.md"
+expect_failure run_net10 "$validator" docs --repo-root "$blank_release_body"
 
 make_minimal_currency_docs_fixture() {
   local destination="$1"
@@ -244,44 +269,45 @@ printf '%s\n' \
   '' \
   'Azure VNet CIDR: 10.0.0.0/16.' \
   'RFC URL: https://www.rfc-editor.org/rfc/rfc1918.' \
-  'Release tag: dcb-v10.19.0.' \
+  'Release tag: dcb-v10.22.0.' \
   '本番ガード (10.4.0 以降、既定で有効)。' \
   >> "$false_positive_fixture/templates/Sekiban.Dcb.Templates/README.md"
 run_net10 "$validator" docs-currency --repo-root "$false_positive_fixture" --expected-version "$version"
 
 # SEK-G47 fixture family 2: invalid whole-token boundaries and leading-zero components cannot pass.
 invalid_versions=(
-  '10.19.0.1'
-  '10.19.0-preview'
-  '10.19.0x'
-  '010.19.0'
+  '10.22.0.1'
+  '10.22.0-preview'
+  '10.22.0x'
+  '010.22.0'
   '10.01.0'
-  '10.19.00'
+  '10.22.00'
 )
 for invalid_version in "${invalid_versions[@]}"; do
   invalid_fixture="$work_root/docs-invalid-${invalid_version//[^0-9A-Za-z]/-}"
   make_minimal_currency_docs_fixture "$invalid_fixture"
-  perl -0pi -e "s/Sekiban\\.Dcb 10\\.19\\.0/Sekiban.Dcb ${invalid_version}/" \
+  perl -0pi -e "s/Sekiban\\.Dcb ${version}/Sekiban.Dcb ${invalid_version}/" \
     "$invalid_fixture/templates/Sekiban.Dcb.Templates/README.md"
   expect_failure run_net10 "$validator" docs-currency --repo-root "$invalid_fixture" --expected-version "$version"
 done
 
 newline_fixture="$work_root/docs-invalid-newline"
 make_minimal_currency_docs_fixture "$newline_fixture"
-perl -0pi -e 's/Sekiban\.Dcb 10\.19\.0/Sekiban.Dcb\n10.19.0/' \
+perl -0pi -e "s/Sekiban\\.Dcb ${version}/Sekiban.Dcb\\n${version}/" \
   "$newline_fixture/templates/Sekiban.Dcb.Templates/README.md"
 expect_failure run_net10 "$validator" docs-currency --repo-root "$newline_fixture" --expected-version "$version"
 
 # SEK-G47 fixture family 3: only the new stage rejects stale, deleted, and duplicate README claims.
 stale_currency_fixture="$work_root/docs-stale-currency"
-mkdir -p "$stale_currency_fixture/templates" "$stale_currency_fixture/docs/dcb_llm" "$stale_currency_fixture/docs/dcb_llm_ja"
+mkdir -p "$stale_currency_fixture/templates" "$stale_currency_fixture/docs/dcb_llm" "$stale_currency_fixture/docs/dcb_llm_ja" "$stale_currency_fixture/docs/releases"
 cp -R "$repo_root/templates/Sekiban.Dcb.Templates" "$stale_currency_fixture/templates/Sekiban.Dcb.Templates"
 cp "$repo_root/docs/dcb_llm/20_materialized_view.md" "$stale_currency_fixture/docs/dcb_llm/20_materialized_view.md"
 cp "$repo_root/docs/dcb_llm_ja/20_materialized_view.md" "$stale_currency_fixture/docs/dcb_llm_ja/20_materialized_view.md"
 cp "$repo_root/docs/dcb_llm/11_storage_providers.md" "$stale_currency_fixture/docs/dcb_llm/11_storage_providers.md"
 cp "$repo_root/docs/dcb_llm_ja/11_storage_providers.md" "$stale_currency_fixture/docs/dcb_llm_ja/11_storage_providers.md"
 cp "$repo_root/CONTRIBUTING.md" "$stale_currency_fixture/CONTRIBUTING.md"
-perl -0pi -e 's/Sekiban\.Dcb 10\.19\.0/Sekiban.Dcb 10.8.2/' \
+cp -R "$repo_root/docs/releases/." "$stale_currency_fixture/docs/releases/"
+perl -0pi -e "s/Sekiban\\.Dcb ${version}/Sekiban.Dcb 10.8.2/" \
   "$stale_currency_fixture/templates/Sekiban.Dcb.Templates/README.md"
 run_net10 "$validator" authorities --repo-root "$stale_currency_fixture" --expected-version "$version"
 run_net10 "$validator" docs --repo-root "$stale_currency_fixture"
@@ -289,13 +315,13 @@ expect_failure run_net10 "$validator" docs-currency --repo-root "$stale_currency
 
 deleted_currency_fixture="$work_root/docs-deleted-currency"
 make_minimal_currency_docs_fixture "$deleted_currency_fixture"
-perl -0pi -e 's/Sekiban\.Dcb 10\.19\.0//' \
+perl -0pi -e "s/Sekiban\\.Dcb ${version}//" \
   "$deleted_currency_fixture/templates/Sekiban.Dcb.Templates/README.md"
 expect_failure run_net10 "$validator" docs-currency --repo-root "$deleted_currency_fixture" --expected-version "$version"
 
 duplicate_currency_fixture="$work_root/docs-duplicate-currency"
 make_minimal_currency_docs_fixture "$duplicate_currency_fixture"
-printf '%s\n' 'Duplicate package statement: **Sekiban.Dcb 10.19.0**.' \
+printf '%s\n' 'Duplicate package statement: **Sekiban.Dcb 10.22.0**.' \
   >> "$duplicate_currency_fixture/templates/Sekiban.Dcb.Templates/README.md"
 expect_failure run_net10 "$validator" docs-currency --repo-root "$duplicate_currency_fixture" --expected-version "$version"
 
@@ -343,6 +369,95 @@ perl -0pi -e 's/^.*validate-release-tags\.sh --check-publish-parity.*\n//m' "$pu
 expect_failure run_net10 "$validator" workflow --repo-root "$publish_workflow_mutant"
 
 "$script_dir/validate-release-tags.sh" --self-test --repo-root "$repo_root"
-"$script_dir/run-status-composition.sh" --repo-root "$repo_root" --version "$version"
+status_composition_args=(--repo-root "$repo_root" --version "$version")
+if [[ -n "$feed" ]]; then
+  status_composition_args+=(--feed "$feed")
+fi
+"$script_dir/run-status-composition.sh" "${status_composition_args[@]}"
 
-echo "Pack -> isolated install -> five generated outputs -> nuget.org-only restore -> build -> 11 bundled test projects passed."
+# SEK-G79: the host-owned release record is read-only here. Exercise every valid
+# state prefix and deterministic identity/package/early-closure mutants locally.
+release_record="$script_dir/fixtures/release-record/valid-complete.json"
+run_net10 "$validator" release-record --record "$release_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+prepared_record="$work_root/release-prepared.json"
+jq '.stage = "prepared" | .history = ["prepared"] | del(.library_tag, .template_tag, .packages, .template, .release_bodies, .closure)' \
+  "$release_record" > "$prepared_record"
+run_net10 "$validator" release-record --record "$prepared_record" --repo-root "$repo_root" --expected-version "$version" --state prepared
+
+library_tagged_record="$work_root/release-library-tagged.json"
+jq '.stage = "library-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete"] | del(.template_tag, .packages, .template, .release_bodies, .closure)' \
+  "$release_record" > "$library_tagged_record"
+run_net10 "$validator" release-record --record "$library_tagged_record" --repo-root "$repo_root" --expected-version "$version" --state 'library-tagged/incomplete'
+
+libraries_verified_record="$work_root/release-libraries-verified.json"
+jq '.stage = "libraries-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified"] | del(.template_tag, .template, .release_bodies, .closure)' \
+  "$release_record" > "$libraries_verified_record"
+run_net10 "$validator" release-record --record "$libraries_verified_record" --repo-root "$repo_root" --expected-version "$version" --state libraries-verified
+
+template_tagged_record="$work_root/release-template-tagged.json"
+jq '.stage = "template-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete"] | del(.template, .release_bodies, .closure)' \
+  "$release_record" > "$template_tagged_record"
+run_net10 "$validator" release-record --record "$template_tagged_record" --repo-root "$repo_root" --expected-version "$version" --state 'template-tagged/incomplete'
+
+artifacts_verified_record="$work_root/release-artifacts-verified.json"
+jq '.stage = "artifacts-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete", "artifacts-verified"] | del(.closure)' \
+  "$release_record" > "$artifacts_verified_record"
+run_net10 "$validator" release-record --record "$artifacts_verified_record" --repo-root "$repo_root" --expected-version "$version" --state artifacts-verified
+
+stale_ci_record="$work_root/release-stale-ci.json"
+jq '.checks[0].head_sha = "9999999999999999999999999999999999999999"' "$release_record" > "$stale_ci_record"
+expect_failure run_net10 "$validator" release-record --record "$stale_ci_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+# Every CI identity/time field is required for a non-prepared state.
+for check_field in name run_id job_id attempt event started_at_utc completed_at_utc head_sha conclusion; do
+  missing_check="$work_root/release-missing-check-${check_field}.json"
+  jq "del(.checks[0].${check_field})" "$release_record" > "$missing_check"
+  expect_failure run_net10 "$validator" release-record --record "$missing_check" --repo-root "$repo_root" --expected-version "$version" --state complete
+done
+
+missing_tag_identity="$work_root/release-missing-tag-identity.json"
+jq 'del(.library_tag.object_id)' "$release_record" > "$missing_tag_identity"
+expect_failure run_net10 "$validator" release-record --record "$missing_tag_identity" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+tag_order_mutant="$work_root/release-tag-order.json"
+jq '.template_tag.created_at_utc = "2026-09-12T10:10:00Z"' "$release_record" > "$tag_order_mutant"
+expect_failure run_net10 "$validator" release-record --record "$tag_order_mutant" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+missing_package_evidence="$work_root/release-missing-package-evidence.json"
+jq 'del(.packages[0].public_url)' "$release_record" > "$missing_package_evidence"
+expect_failure run_net10 "$validator" release-record --record "$missing_package_evidence" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+missing_package_asset="$work_root/release-missing-package-asset.json"
+jq '.packages[0].asset_count = 0' "$release_record" > "$missing_package_asset"
+expect_failure run_net10 "$validator" release-record --record "$missing_package_asset" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+missing_template_proof="$work_root/release-missing-template-proof.json"
+jq 'del(.template.public_url)' "$release_record" > "$missing_template_proof"
+expect_failure run_net10 "$validator" release-record --record "$missing_template_proof" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+missing_body_digest="$work_root/release-missing-body-digest.json"
+jq 'del(.release_bodies.library_en_sha256)' "$release_record" > "$missing_body_digest"
+expect_failure run_net10 "$validator" release-record --record "$missing_body_digest" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+missing_closeout_comment="$work_root/release-missing-1185-comment.json"
+jq 'del(.closure.issue_1185_comment_url)' "$release_record" > "$missing_closeout_comment"
+expect_failure run_net10 "$validator" release-record --record "$missing_closeout_comment" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+missing_closeout_time="$work_root/release-missing-completed-at.json"
+jq 'del(.closure.completed_at_utc)' "$release_record" > "$missing_closeout_time"
+expect_failure run_net10 "$validator" release-record --record "$missing_closeout_time" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+duplicate_package_record="$work_root/release-duplicate-package.json"
+jq '.packages[1].id = .packages[0].id' "$release_record" > "$duplicate_package_record"
+expect_failure run_net10 "$validator" release-record --record "$duplicate_package_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+partial_package_record="$work_root/release-partial-packages.json"
+jq '.packages = .packages[:-1]' "$release_record" > "$partial_package_record"
+expect_failure run_net10 "$validator" release-record --record "$partial_package_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+early_closure_record="$work_root/release-early-closure.json"
+jq '.stage = "artifacts-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete", "artifacts-verified"]' "$release_record" > "$early_closure_record"
+expect_failure run_net10 "$validator" release-record --record "$early_closure_record" --repo-root "$repo_root" --expected-version "$version" --state artifacts-verified
+
+echo "Pack -> isolated install -> five generated outputs -> local-feed restore -> build -> 11 bundled test projects passed."

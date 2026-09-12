@@ -6,25 +6,34 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dcb_package_ids=(
   Sekiban.Dcb.BlobStorage.AzureStorage
   Sekiban.Dcb.BlobStorage.S3
+  Sekiban.Dcb.ColdStorage
+  Sekiban.Dcb.Core
   Sekiban.Dcb.Core.Model
   Sekiban.Dcb.Core.Testing
   Sekiban.Dcb.CosmosDb
   Sekiban.Dcb.DynamoDB
   Sekiban.Dcb.MaterializedView
+  Sekiban.Dcb.MaterializedView.MySql
   Sekiban.Dcb.MaterializedView.Orleans
   Sekiban.Dcb.MaterializedView.Postgres
+  Sekiban.Dcb.MaterializedView.SqlServer
+  Sekiban.Dcb.MaterializedView.Sqlite
+  Sekiban.Dcb.Orleans.AzureQueue
+  Sekiban.Dcb.Orleans.Core
   Sekiban.Dcb.Orleans.WithResult
   Sekiban.Dcb.Orleans.WithoutResult
   Sekiban.Dcb.Postgres
   Sekiban.Dcb.Sqlite
   Sekiban.Dcb.WithResult
+  Sekiban.Dcb.WithResult.Model
   Sekiban.Dcb.WithResult.Testing
   Sekiban.Dcb.WithoutResult
+  Sekiban.Dcb.WithoutResult.Model
   Sekiban.Dcb.WithoutResult.Testing
 )
 
 usage() {
-  echo "Usage: $0 --check-publish-parity|--check-drift|--wait-for-published-packages|--self-test [options]" >&2
+  echo "Usage: $0 --check-package-manifest|--check-publish-parity|--check-drift|--wait-for-published-packages|--wait-for-published-template|--self-test [options]" >&2
   exit 2
 }
 
@@ -197,6 +206,43 @@ check_drift() {
   echo "Stable DCB/template tags are aligned at ${library_version}."
 }
 
+check_package_manifest() {
+  local repo_root="$1"
+  local workflow_file="$2"
+  require_value repo-root "$repo_root"
+  require_value workflow-file "$workflow_file"
+  [[ -f "$workflow_file" ]] || {
+    echo "Package workflow does not exist: ${workflow_file}" >&2
+    return 1
+  }
+
+  local effective_projects=()
+  local project
+  while IFS= read -r project; do
+    if ! grep -Eiq '<IsPackable>[[:space:]]*false[[:space:]]*</IsPackable>' "$project"; then
+      effective_projects+=("${project#"$repo_root/"}")
+    fi
+  done < <(find "$repo_root/dcb/src" -type f -name '*.csproj' | sort)
+
+  local manifest_projects=()
+  while IFS= read -r project; do
+    [[ -n "$project" ]] && manifest_projects+=("$project")
+  done < <(grep -E '^[[:space:]]*dotnet[[:space:]]+pack[[:space:]]+dcb/src/' "$workflow_file" |
+    grep -Eo 'dcb/src/[A-Za-z0-9._/-]+\.csproj' | sort -u)
+
+  if [[ "${#effective_projects[@]}" -ne "${#dcb_package_ids[@]}" ]]; then
+    echo "Expected ${#dcb_package_ids[@]} effective packable DCB projects, found ${#effective_projects[@]}." >&2
+    return 1
+  fi
+  if [[ "${effective_projects[*]}" != "${manifest_projects[*]}" ]]; then
+    echo "The DCB pack workflow does not exactly enumerate effective dcb/src packable projects." >&2
+    echo "Expected: ${effective_projects[*]}" >&2
+    echo "Actual:   ${manifest_projects[*]}" >&2
+    return 1
+  fi
+  echo "Exact DCB package manifest passed: ${#effective_projects[@]} effective projects and package IDs."
+}
+
 wait_for_published_packages() {
   local version="$1"
   local timeout_seconds="$2"
@@ -236,6 +282,38 @@ wait_for_published_packages() {
   done
 }
 
+wait_for_published_template() {
+  local version="$1"
+  local timeout_seconds="$2"
+  local interval_seconds="$3"
+  require_value version "$version"
+  if (( timeout_seconds <= 0 || interval_seconds <= 0 || interval_seconds > 60 )); then
+    echo "timeout must be positive and interval must be in 1..60 seconds." >&2
+    return 2
+  fi
+
+  local package="sekiban.dcb.templates"
+  local started
+  started="$(date +%s)"
+  while true; do
+    if curl --fail --silent --show-error --head --max-time 20 \
+      "https://api.nuget.org/v3-flatcontainer/${package}/${version}/${package}.${version}.nupkg" >/dev/null; then
+      echo "Template package is available on nuget.org at ${version}."
+      return 0
+    fi
+
+    local now elapsed
+    now="$(date +%s)"
+    elapsed=$((now - started))
+    if (( elapsed >= timeout_seconds )); then
+      echo "Timed out after ${elapsed}s waiting for the template package at ${version}." >&2
+      return 1
+    fi
+    echo "Waiting for the template package at ${version}." >&2
+    sleep "$interval_seconds"
+  done
+}
+
 expect_failure() {
   if "$@"; then
     echo "Expected command to fail: $*" >&2
@@ -246,24 +324,25 @@ expect_failure() {
 self_test() {
   local repo_root="$1"
   local fixture_root="$script_dir/fixtures/tags"
-  check_publish_parity "$repo_root" "10.19.0" "dcbTemplates-v10.19.0" \
-    "$fixture_root/library-10.19.0.txt" "$fixture_root/authorities-matching.txt"
-  expect_failure check_publish_parity "$repo_root" "10.19.0" "dcbTemplates-v10.19.0" \
-    "$fixture_root/library-10.19.0.txt" "$fixture_root/authorities-one-mismatch.txt"
-  expect_failure check_publish_parity "$repo_root" "10.19.0" "dcbTemplates-v10.18.0" \
-    "$fixture_root/library-10.19.0.txt" "$fixture_root/authorities-matching.txt"
-  expect_failure check_drift "$repo_root" "$fixture_root/library-10.20.0.txt" "$fixture_root/template-10.19.0.txt"
+  check_package_manifest "$repo_root" "$repo_root/.github/workflows/packagesDcb.yml"
+  check_publish_parity "$repo_root" "10.22.0" "dcbTemplates-v10.22.0" \
+    "$fixture_root/library-10.22.0.txt" "$fixture_root/authorities-matching-10.22.0.txt"
+  expect_failure check_publish_parity "$repo_root" "10.22.0" "dcbTemplates-v10.22.0" \
+    "$fixture_root/library-10.22.0.txt" "$fixture_root/authorities-one-mismatch-10.22.0.txt"
+  expect_failure check_publish_parity "$repo_root" "10.22.0" "dcbTemplates-v10.21.0" \
+    "$fixture_root/library-10.22.0.txt" "$fixture_root/authorities-matching-10.22.0.txt"
+  expect_failure check_drift "$repo_root" "$fixture_root/library-10.23.0.txt" "$fixture_root/template-10.22.0.txt"
 
   local exclusion_output
-  exclusion_output="$(check_drift "$repo_root" "$fixture_root/library-10.19.0-with-exclusions.txt" "$fixture_root/template-10.19.0-with-exclusions.txt" 2>&1)"
-  if [[ "$exclusion_output" != *"Excluded library tag 'dcb-v10.20.0-preview.1'"* ]] ||
+  exclusion_output="$(check_drift "$repo_root" "$fixture_root/library-10.22.0-with-exclusions.txt" "$fixture_root/template-10.22.0-with-exclusions.txt" 2>&1)"
+  if [[ "$exclusion_output" != *"Excluded library tag 'dcb-v10.23.0-preview.1'"* ]] ||
      [[ "$exclusion_output" != *"Excluded library tag 'dcb-v10.1.06': leading-zero numeric component is not valid strict SemVer."* ]] ||
      [[ "$exclusion_output" != *"Excluded template tag 'dcbTemplates-v10.1.06': leading-zero numeric component is not valid strict SemVer."* ]] ||
      [[ "$exclusion_output" != *"Excluded template tag 'dcbTemplates-vnot-a-version'"* ]]; then
     echo "Stable-semver exclusion logging was not observed." >&2
     return 1
   fi
-  echo "Release-gate fixtures passed, including stale-but-valid library-ahead drift."
+  echo "Release-gate fixtures passed, including stale-but-valid library-ahead drift and the exact DCB manifest."
 }
 
 mode="${1:-}"
@@ -274,6 +353,7 @@ template_tag=""
 library_tags_file=""
 template_tags_file=""
 authorities_file=""
+workflow_file=""
 timeout_seconds=900
 interval_seconds=15
 
@@ -285,6 +365,7 @@ while (( $# > 0 )); do
     --library-tags-file) library_tags_file="$2"; shift 2 ;;
     --template-tags-file) template_tags_file="$2"; shift 2 ;;
     --authorities-file) authorities_file="$2"; shift 2 ;;
+    --workflow-file) workflow_file="$2"; shift 2 ;;
     --timeout-seconds) timeout_seconds="$2"; shift 2 ;;
     --interval-seconds) interval_seconds="$2"; shift 2 ;;
     *) usage ;;
@@ -292,6 +373,13 @@ while (( $# > 0 )); do
 done
 
 case "$mode" in
+  --check-package-manifest)
+    [[ -n "$workflow_file" ]] || workflow_file="${repo_root:-.}/.github/workflows/packagesDcb.yml"
+    check_package_manifest "$repo_root" "$workflow_file"
+    ;;
+  --wait-for-published-template)
+    wait_for_published_template "$version" "$timeout_seconds" "$interval_seconds"
+    ;;
   --check-publish-parity)
     check_publish_parity "$repo_root" "$version" "$template_tag" "$library_tags_file" "$authorities_file"
     ;;

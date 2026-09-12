@@ -36,6 +36,11 @@ jobs:
       - name: Verify published library/template parity before pack
         run: |
           git fetch --force --tags
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --check-package-manifest --repo-root "$GITHUB_WORKSPACE" \
+            --workflow-file "$GITHUB_WORKSPACE/.github/workflows/packagesDcb.yml"
+          test "$(git rev-list -n 1 "dcb-v${VERSION}")" = "$(git rev-parse HEAD)"
+          test "$(git rev-list -n 1 "$GITHUB_REF_NAME")" = "$(git rev-parse HEAD)"
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh --check-publish-parity --repo-root "$GITHUB_WORKSPACE" --version "$VERSION" --template-tag "$GITHUB_REF_NAME"
 
       - name: Wait for all published DCB packages
@@ -50,12 +55,29 @@ jobs:
         run: |
           dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh --repo-root "$GITHUB_WORKSPACE" --package "$GITHUB_WORKSPACE/out/Sekiban.Dcb.Templates.$VERSION.nupkg" --version "$VERSION"
 
+      - name: Verify reviewed template release body input
+        run: |
+          test -s "docs/releases/dcbTemplates-v${VERSION}.en.md"
+          test -s "docs/releases/dcbTemplates-v${VERSION}.ja.md"
+
+      - name: Assemble reviewed template release body
+        run: |
+          cat "docs/releases/dcbTemplates-v${VERSION}.en.md" \
+            "docs/releases/dcbTemplates-v${VERSION}.ja.md" > out/template-release-body.md
+
       - name: Push Template
         run: |
           dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json
+
+      - name: Wait for exact public template visibility
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --wait-for-published-template --version "$VERSION" --timeout-seconds 900 --interval-seconds 15
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           files: out/*.nupkg
+          body_path: out/template-release-body.md
+          draft: false

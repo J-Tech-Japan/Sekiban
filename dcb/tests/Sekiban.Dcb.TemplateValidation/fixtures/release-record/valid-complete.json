@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "version": "10.22.0",
+  "integration_pr": "https://github.com/J-Tech-Japan/Sekiban/pull/1235",
+  "merged_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "stage": "complete",
+  "history": ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete", "artifacts-verified", "complete"],
+  "checks": [{
+    "name": "dcbTestsNet10",
+    "run_id": "1001",
+    "job_id": "2001",
+    "attempt": 1,
+    "event": "pull_request",
+    "started_at_utc": "2026-09-12T10:00:00Z",
+    "completed_at_utc": "2026-09-12T10:10:00Z",
+    "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "conclusion": "success"
+  }],
+  "library_tag": {
+    "name": "dcb-v10.22.0",
+    "object_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "peeled_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "created_at_utc": "2026-09-12T10:20:00Z"
+  },
+  "packages": [
+    {"id":"Sekiban.Dcb.BlobStorage.AzureStorage","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.blobstorage.azurestorage/10.22.0/x.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.BlobStorage.S3","version":"10.22.0","public_url":"https://example.invalid/10.22.0/2","asset_count":1},
+    {"id":"Sekiban.Dcb.ColdStorage","version":"10.22.0","public_url":"https://example.invalid/10.22.0/3","asset_count":1},
+    {"id":"Sekiban.Dcb.Core","version":"10.22.0","public_url":"https://example.invalid/10.22.0/4","asset_count":1},
+    {"id":"Sekiban.Dcb.Core.Model","version":"10.22.0","public_url":"https://example.invalid/10.22.0/5","asset_count":1},
+    {"id":"Sekiban.Dcb.Core.Testing","version":"10.22.0","public_url":"https://example.invalid/10.22.0/6","asset_count":1},
+    {"id":"Sekiban.Dcb.CosmosDb","version":"10.22.0","public_url":"https://example.invalid/10.22.0/7","asset_count":1},
+    {"id":"Sekiban.Dcb.DynamoDB","version":"10.22.0","public_url":"https://example.invalid/10.22.0/8","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView","version":"10.22.0","public_url":"https://example.invalid/10.22.0/9","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView.MySql","version":"10.22.0","public_url":"https://example.invalid/10.22.0/10","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView.Orleans","version":"10.22.0","public_url":"https://example.invalid/10.22.0/11","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView.Postgres","version":"10.22.0","public_url":"https://example.invalid/10.22.0/12","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView.SqlServer","version":"10.22.0","public_url":"https://example.invalid/10.22.0/13","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView.Sqlite","version":"10.22.0","public_url":"https://example.invalid/10.22.0/14","asset_count":1},
+    {"id":"Sekiban.Dcb.Orleans.AzureQueue","version":"10.22.0","public_url":"https://example.invalid/10.22.0/15","asset_count":1},
+    {"id":"Sekiban.Dcb.Orleans.Core","version":"10.22.0","public_url":"https://example.invalid/10.22.0/16","asset_count":1},
+    {"id":"Sekiban.Dcb.Orleans.WithResult","version":"10.22.0","public_url":"https://example.invalid/10.22.0/17","asset_count":1},
+    {"id":"Sekiban.Dcb.Orleans.WithoutResult","version":"10.22.0","public_url":"https://example.invalid/10.22.0/18","asset_count":1},
+    {"id":"Sekiban.Dcb.Postgres","version":"10.22.0","public_url":"https://example.invalid/10.22.0/19","asset_count":1},
+    {"id":"Sekiban.Dcb.Sqlite","version":"10.22.0","public_url":"https://example.invalid/10.22.0/20","asset_count":1},
+    {"id":"Sekiban.Dcb.WithResult","version":"10.22.0","public_url":"https://example.invalid/10.22.0/21","asset_count":1},
+    {"id":"Sekiban.Dcb.WithResult.Model","version":"10.22.0","public_url":"https://example.invalid/10.22.0/22","asset_count":1},
+    {"id":"Sekiban.Dcb.WithResult.Testing","version":"10.22.0","public_url":"https://example.invalid/10.22.0/23","asset_count":1},
+    {"id":"Sekiban.Dcb.WithoutResult","version":"10.22.0","public_url":"https://example.invalid/10.22.0/24","asset_count":1},
+    {"id":"Sekiban.Dcb.WithoutResult.Model","version":"10.22.0","public_url":"https://example.invalid/10.22.0/25","asset_count":1},
+    {"id":"Sekiban.Dcb.WithoutResult.Testing","version":"10.22.0","public_url":"https://example.invalid/10.22.0/26","asset_count":1}
+  ],
+  "template_tag": {
+    "name": "dcbTemplates-v10.22.0",
+    "object_id": "cccccccccccccccccccccccccccccccccccccccc",
+    "peeled_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "created_at_utc": "2026-09-12T10:50:00Z"
+  },
+  "template": {
+    "package_id": "Sekiban.Dcb.Templates",
+    "version": "10.22.0",
+    "public_url": "https://example.invalid/10.22.0/template",
+    "asset_count": 1
+  },
+  "release_bodies": {
+    "library_en_sha256": "64a540fdeaae5712aa9eee9b2d51690788282af15427a77670054aa21179935d",
+    "library_en_version": "10.22.0",
+    "library_ja_sha256": "efa02d4d910fdbe5604ac227f2cc8d13015a0195d38dcb59090d1cc8bf7b4e73",
+    "library_ja_version": "10.22.0",
+    "template_en_sha256": "a1c53073877174f0df11ad9bbebb3bdf1d2f262e33afd50cd3a911434990ea7f",
+    "template_en_version": "10.22.0",
+    "template_ja_sha256": "9526ac8ad7d329be64da5d0a57595bd4269359408accd77d4df0cc1d76161d8d",
+    "template_ja_version": "10.22.0"
+  },
+  "closure": {
+    "library_issue_state": "closed",
+    "template_issue_state": "closed",
+    "issue_1185_state": "closed",
+    "issue_1230_state": "closed",
+    "library_comment_url": "https://github.com/J-Tech-Japan/Sekiban/issues/1234#issuecomment-1",
+    "template_comment_url": "https://github.com/J-Tech-Japan/Sekiban/issues/1234#issuecomment-2",
+    "issue_1185_comment_url": "https://github.com/J-Tech-Japan/Sekiban/issues/1185#issuecomment-3",
+    "issue_1230_comment_url": "https://github.com/J-Tech-Japan/Sekiban/issues/1230#issuecomment-4",
+    "library_closed_at_utc": "2026-09-12T11:00:00Z",
+    "template_closed_at_utc": "2026-09-12T11:01:00Z",
+    "issue_1185_closed_at_utc": "2026-09-12T11:02:00Z",
+    "issue_1230_closed_at_utc": "2026-09-12T11:03:00Z",
+    "required_link": "https://github.com/J-Tech-Japan/Sekiban/issues/1234",
+    "caveat": "Publication and closeout remain host-owned and are not certified by the child PR.",
+    "reply_digests": ["2222222222222222222222222222222222222222222222222222222222222222", "3333333333333333333333333333333333333333333333333333333333333333"],
+    "completed_at_utc": "2026-09-12T11:00:00Z"
+  }
+}

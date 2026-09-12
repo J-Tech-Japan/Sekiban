@@ -3,14 +3,16 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../../.." && pwd)"
-version="10.19.0"
+version="10.22.0"
+feed=""
 
 while (( $# > 0 )); do
   case "$1" in
     --repo-root) repo_root="$(cd "$2" && pwd)"; shift 2 ;;
     --version) version="$2"; shift 2 ;;
+    --feed) feed="$(cd "$2" && pwd)"; shift 2 ;;
     *)
-      echo "Usage: $0 [--repo-root <path>] [--version <version>]" >&2
+      echo "Usage: $0 [--repo-root <path>] [--version <version>] [--feed <directory>]" >&2
       exit 2
       ;;
   esac
@@ -39,9 +41,19 @@ printf '%s\n' \
   '<configuration>' \
   '  <packageSources>' \
   '    <clear />' \
+  ${feed:+"    <add key=\"dcb-local\" value=\"$feed\" />"} \
   '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />' \
   '  </packageSources>' \
   '</configuration>' > "$nuget_config"
+
+legacy_nuget_config="$work_root/Legacy.NuGet.Config"
+printf '%s\n' \
+  '<configuration>' \
+  '  <packageSources>' \
+  '    <clear />' \
+  '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />' \
+  '  </packageSources>' \
+  '</configuration>' > "$legacy_nuget_config"
 
 composition_project="$script_dir/Sekiban.Dcb.TemplateComposition.csproj"
 run_net10 restore "$composition_project" --configfile "$nuget_config" --no-http-cache -p:DcbVersion="$version" --nologo
@@ -49,7 +61,7 @@ run_net10 build "$composition_project" -c Release --no-restore -p:DcbVersion="$v
 run_net10 "$script_dir/bin/Release/net10.0/Sekiban.Dcb.TemplateComposition.dll"
 
 legacy_project="$script_dir/Sekiban.Dcb.TemplateLegacyComposition.csproj"
-run_legacy_net10 restore "$legacy_project" --configfile "$nuget_config" --no-http-cache -p:DcbVersion=10.8.2 --nologo
+run_legacy_net10 restore "$legacy_project" --configfile "$legacy_nuget_config" --no-http-cache -p:DcbVersion=10.8.2 --nologo
 run_legacy_net10 build "$legacy_project" -c Release --no-restore -p:DcbVersion=10.8.2 --nologo
 
 legacy_output=""
