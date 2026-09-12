@@ -157,6 +157,7 @@ internal static class ExecutorSizeGateEvaluator
                         capabilityFailure);
                 }
 
+                ValidateMeasurementLimits(policy, measurements);
                 diagnostics.Add(new ExecutorSizeDiagnostic(
                     policy.Scope,
                     policy.Representation,
@@ -165,62 +166,7 @@ internal static class ExecutorSizeGateEvaluator
                 continue;
             }
 
-            if (policy.MaxBytesPerEvent is { } eventLimit)
-            {
-                // Destination event limits apply to each captured destination independently. A cross-destination
-                // operation budget exists only when the caller explicitly configures MaxBytesPerOperation below.
-                if (policy.Representation == ExecutorSizeRepresentation.Destination)
-                {
-                    foreach (var measurement in measurements)
-                    {
-                        if (measurement.Bytes <= eventLimit)
-                        {
-                            continue;
-                        }
-
-                        ThrowEventLimitExceeded(policy, eventLimit, measurement);
-                    }
-                }
-                else
-                {
-                    var eventTotals = measurements
-                        .GroupBy(m => m.Index)
-                        .Select(group => group.Sum(m => m.Bytes))
-                        .ToArray();
-
-                    for (var index = 0; index < eventTotals.Length; index++)
-                    {
-                        if (eventTotals[index] <= eventLimit)
-                        {
-                            continue;
-                        }
-
-                        ThrowEventLimitExceeded(policy, eventLimit, measurements.First(m => m.Index == index), eventTotals[index]);
-                    }
-                }
-            }
-
-            if (policy.MaxBytesPerOperation is { } operationLimit)
-            {
-                var operationTotals = AggregateOperationTotals(measurements);
-
-                if (operationTotals.ComparableBytes > operationLimit)
-                {
-                    var offending = measurements.First();
-                    throw new ExecutorSizeLimitExceededException(
-                        policy.Scope,
-                        policy.Representation,
-                        operationLimit,
-                        operationTotals.ComparableBytes,
-                        offending.Prepared.Event.Id,
-                        offending.Index,
-                        true,
-                        offending.DestinationKey,
-                        operationTotals.IsCertifiedUpperBound,
-                        operationTotals.MeasuredRepresentationBytes,
-                        operationTotals.CertifiedUpperBoundBytes);
-                }
-            }
+            ValidateMeasurementLimits(policy, measurements);
         }
 
         if (hadCapabilityFailure)
@@ -231,6 +177,59 @@ internal static class ExecutorSizeGateEvaluator
         }
 
         return new ExecutorSizeGateEvaluation(diagnostics, destinationPlans);
+    }
+
+    private static void ValidateMeasurementLimits(
+        ExecutorSizePolicy policy,
+        IReadOnlyList<ComparableMeasurement> measurements)
+    {
+        if (policy.MaxBytesPerEvent is { } eventLimit)
+        {
+            // Destination event limits apply to each captured destination independently. A cross-destination
+            // operation budget exists only when the caller explicitly configures MaxBytesPerOperation below.
+            if (policy.Representation == ExecutorSizeRepresentation.Destination)
+            {
+                foreach (var measurement in measurements)
+                {
+                    if (measurement.Bytes <= eventLimit)
+                    {
+                        continue;
+                    }
+
+                    ThrowEventLimitExceeded(policy, eventLimit, measurement);
+                }
+            }
+            else
+            {
+                var eventTotals = measurements
+                    .GroupBy(m => m.Index)
+                    .Select(group => SaturatingSum(group.Select(m => m.Bytes)))
+                    .ToArray();
+
+                for (var index = 0; index < eventTotals.Length; index++)
+                {
+                    if (eventTotals[index] <= eventLimit)
+                    {
+                        continue;
+                    }
+
+                    ThrowEventLimitExceeded(policy, eventLimit, measurements.First(m => m.Index == index), eventTotals[index]);
+                }
+            }
+        }
+
+        if (policy.MaxBytesPerOperation is { } operationLimit)
+        {
+            var operationTotals = AggregateOperationTotals(measurements);
+
+            // The partial total is already conclusive when it is non-negative and above the configured limit;
+            // an unavailable later measurement cannot turn a measured excess into a benign fallback.
+            if (operationTotals.ComparableBytes >= 0 && operationTotals.ComparableBytes > operationLimit)
+            {
+                var offending = measurements.First();
+                ThrowOperationLimitExceeded(policy, operationLimit, operationTotals, offending);
+            }
+        }
     }
 
     private static OperationTotals AggregateOperationTotals(
@@ -284,6 +283,24 @@ internal static class ExecutorSizeGateEvaluator
             measurement.Certified,
             measurement.MeasuredRepresentationBytes,
             measurement.CertifiedUpperBoundBytes);
+
+    private static void ThrowOperationLimitExceeded(
+        ExecutorSizePolicy policy,
+        long operationLimit,
+        OperationTotals operationTotals,
+        ComparableMeasurement offending) =>
+        throw new ExecutorSizeLimitExceededException(
+            policy.Scope,
+            policy.Representation,
+            operationLimit,
+            operationTotals.ComparableBytes,
+            offending.Prepared.Event.Id,
+            offending.Index,
+            true,
+            offending.DestinationKey,
+            operationTotals.IsCertifiedUpperBound,
+            operationTotals.MeasuredRepresentationBytes,
+            operationTotals.CertifiedUpperBoundBytes);
 
     private static ComparableMeasurement
         ToComparable(

@@ -375,6 +375,46 @@ public sealed class AzureQueueSizeGateTests
         Assert.Equal(2, (await store.ReadAllSerializableEventsAsync()).GetValue().Count());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProductionExecutor_NonStrictSecondCaptureFailureAfterEventExcessRejectsBeforeWrite(
+        bool certified)
+    {
+        var execution = await ExecuteNonStrictPartialFailureAsync(
+            maxBytesPerEvent: 10,
+            maxBytesPerOperation: null,
+            CreatePartialMeasurement(certified, 11));
+
+        await AssertPartialFailureRejectedBeforeWriteAsync(
+            execution,
+            isOperationLimit: false,
+            certified,
+            measuredBytes: 11,
+            measuredRepresentationBytes: certified ? null : 11,
+            certifiedUpperBoundBytes: certified ? 11 : null);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProductionExecutor_NonStrictSecondCaptureFailureAfterOperationExcessRejectsBeforeWrite(
+        bool certified)
+    {
+        var execution = await ExecuteNonStrictPartialFailureAsync(
+            maxBytesPerEvent: null,
+            maxBytesPerOperation: 10,
+            CreatePartialMeasurement(certified, 11));
+
+        await AssertPartialFailureRejectedBeforeWriteAsync(
+            execution,
+            isOperationLimit: true,
+            certified,
+            measuredBytes: 11,
+            measuredRepresentationBytes: certified ? null : 11,
+            certifiedUpperBoundBytes: certified ? 11 : null);
+    }
+
     [Fact]
     public async Task ProductionExecutor_StrictCaptureFailure_RejectsOrdinaryRouteBeforeWrite()
     {
@@ -875,6 +915,72 @@ public sealed class AzureQueueSizeGateTests
         Assert.Equal(0, publisher.LegacyPublishCalls);
         return exception;
     }
+
+    private static async Task<NonStrictPartialFailureResult> ExecuteNonStrictPartialFailureAsync(
+        long? maxBytesPerEvent,
+        long? maxBytesPerOperation,
+        ExecutorSizeMeasurementResult firstMeasurement)
+    {
+        var domain = DomainType.GetDomainTypes();
+        var store = new InMemoryEventStore(domain.EventTypes);
+        var publisher = new FailingDestinationPublisher(failOnCapture: 2);
+        var executor = new GeneralSekibanExecutor(
+            store,
+            new InMemoryObjectAccessor(store, domain),
+            domain,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                OrleansAzureQueueStreamMessageSizeMeasurement.Scope,
+                ExecutorSizeRepresentation.Destination,
+                maxBytesPerEvent,
+                maxBytesPerOperation,
+                ExecutorSizeStrictness.NonStrict,
+                new DelegateMeasurement(_ => firstMeasurement))),
+            publisher);
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+
+        var result = await executor.CommitSerializableEventsAsync(
+            new SerializedCommitRequest(
+                [CreateCandidate(domain, first), CreateCandidate(domain, second)],
+                [
+                    new ConsistencyTagEntry($"WeatherForecast:{first}", ""),
+                    new ConsistencyTagEntry($"WeatherForecast:{second}", "")
+                ]));
+
+        return new(
+            Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException()),
+            store,
+            publisher);
+    }
+
+    private static async Task AssertPartialFailureRejectedBeforeWriteAsync(
+        NonStrictPartialFailureResult execution,
+        bool isOperationLimit,
+        bool certified,
+        long measuredBytes,
+        long? measuredRepresentationBytes,
+        long? certifiedUpperBoundBytes)
+    {
+        Assert.Equal(isOperationLimit, execution.Exception.IsOperationLimit);
+        Assert.Equal(certified, execution.Exception.IsCertifiedUpperBound);
+        Assert.Equal(measuredBytes, execution.Exception.MeasuredBytes);
+        Assert.Equal(measuredRepresentationBytes, execution.Exception.MeasuredRepresentationBytes);
+        Assert.Equal(certifiedUpperBoundBytes, execution.Exception.CertifiedUpperBoundBytes);
+        Assert.Empty((await execution.Store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Equal(2, execution.Publisher.CaptureCalls);
+        Assert.Equal(0, execution.Publisher.PlannedPublishCalls);
+        Assert.Equal(0, execution.Publisher.LegacyPublishCalls);
+    }
+
+    private static ExecutorSizeMeasurementResult CreatePartialMeasurement(bool certified, long bytes) =>
+        certified
+            ? ExecutorSizeMeasurementResult.CertifiedBound(bytes)
+            : ExecutorSizeMeasurementResult.Exact(bytes);
+
+    private sealed record NonStrictPartialFailureResult(
+        ExecutorSizeLimitExceededException Exception,
+        InMemoryEventStore Store,
+        FailingDestinationPublisher Publisher);
 
     private sealed class CapturingDestinationPublisher(
         DcbDomainTypes domain,
