@@ -32,6 +32,11 @@ internal static class ExecutorSizeGateEvaluator
         long? MeasuredRepresentationBytes,
         long? CertifiedUpperBoundBytes);
 
+    private sealed record OperationTotals(
+        long ComparableBytes,
+        long MeasuredRepresentationBytes,
+        long CertifiedUpperBoundBytes);
+
     public static ExecutorSizeGateEvaluation Evaluate(
         ExecutorSizeGateOptions? options,
         IReadOnlyList<PreparedExecutorEvent> events,
@@ -196,31 +201,23 @@ internal static class ExecutorSizeGateEvaluator
 
             if (policy.MaxBytesPerOperation is { } operationLimit)
             {
-                long operationBytes;
-                try
-                {
-                    operationBytes = checked(measurements.Sum(m => m.Bytes));
-                }
-                catch (OverflowException)
-                {
-                    operationBytes = long.MaxValue;
-                }
+                var operationTotals = AggregateOperationTotals(measurements);
 
-                if (operationBytes > operationLimit)
+                if (operationTotals.ComparableBytes > operationLimit)
                 {
                     var offending = measurements.First();
                     throw new ExecutorSizeLimitExceededException(
                         policy.Scope,
                         policy.Representation,
                         operationLimit,
-                        operationBytes,
+                        operationTotals.ComparableBytes,
                         offending.Prepared.Event.Id,
                         offending.Index,
                         true,
                         offending.DestinationKey,
                         offending.Certified,
-                        measurements.Sum(m => m.MeasuredRepresentationBytes ?? m.Bytes),
-                        measurements.Sum(m => m.CertifiedUpperBoundBytes ?? m.Bytes));
+                        operationTotals.MeasuredRepresentationBytes,
+                        operationTotals.CertifiedUpperBoundBytes);
                 }
             }
         }
@@ -233,6 +230,36 @@ internal static class ExecutorSizeGateEvaluator
         }
 
         return new ExecutorSizeGateEvaluation(diagnostics, destinationPlans);
+    }
+
+    private static OperationTotals AggregateOperationTotals(
+        IReadOnlyList<ComparableMeasurement> measurements) =>
+        new(
+            SaturatingSum(measurements.Select(measurement => measurement.Bytes)),
+            SaturatingSum(measurements.Select(measurement =>
+                measurement.MeasuredRepresentationBytes ?? measurement.Bytes)),
+            SaturatingSum(measurements.Select(measurement =>
+                measurement.CertifiedUpperBoundBytes ?? measurement.Bytes)));
+
+    private static long SaturatingSum(IEnumerable<long> values)
+    {
+        var total = 0L;
+        foreach (var value in values)
+        {
+            if (value > 0 && total > long.MaxValue - value)
+            {
+                return long.MaxValue;
+            }
+
+            if (value < 0 && total < long.MinValue - value)
+            {
+                return long.MinValue;
+            }
+
+            total += value;
+        }
+
+        return total;
     }
 
     private static void ThrowEventLimitExceeded(

@@ -43,6 +43,8 @@ public sealed class AzureQueueSizeGateTests
         Assert.Equal(
             ["options", "streamProviderName", "maxBytesPerEvent", "maxBytesPerOperation", "strictness"],
             optionsMethod.GetParameters().Select(parameter => parameter.Name ?? string.Empty).ToArray());
+        Assert.Null(optionsMethod.GetParameters()[2].DefaultValue);
+        Assert.Null(optionsMethod.GetParameters()[3].DefaultValue);
         Assert.Equal(ExecutorSizeStrictness.NonStrict, optionsMethod.GetParameters()[4].DefaultValue);
 
         var servicesMethod = typeof(OrleansAzureQueueExecutorSizeGateExtensions).GetMethod(
@@ -62,6 +64,8 @@ public sealed class AzureQueueSizeGateTests
         Assert.Equal(
             ["services", "streamProviderName", "maxBytesPerEvent", "maxBytesPerOperation", "strictness"],
             servicesMethod.GetParameters().Select(parameter => parameter.Name ?? string.Empty).ToArray());
+        Assert.Null(servicesMethod.GetParameters()[2].DefaultValue);
+        Assert.Null(servicesMethod.GetParameters()[3].DefaultValue);
         Assert.Equal(ExecutorSizeStrictness.NonStrict, servicesMethod.GetParameters()[4].DefaultValue);
     }
 
@@ -131,7 +135,20 @@ public sealed class AzureQueueSizeGateTests
     }
 
     [Fact]
-    public void CertifiedBound_ReportsBothBytesAndUsesTheConservativeBase64Formula()
+    public void CertifiedBound_OneArgumentIsBoundOnlyWithoutMeasuredRepresentation()
+    {
+        var result = ExecutorSizeMeasurementResult.CertifiedBound(123);
+
+        Assert.True(result.IsAvailable);
+        Assert.Null(result.Bytes);
+        Assert.Null(result.MeasuredRepresentationBytes);
+        Assert.Equal(123, result.CertifiedUpperBound);
+        Assert.Equal(123, result.CertifiedUpperBoundBytes);
+        Assert.Equal(123, result.ComparableBytes);
+    }
+
+    [Fact]
+    public void CertifiedBound_TwoArgumentsReportsMeasuredAndCertifiedBytes()
     {
         var result = ExecutorSizeMeasurementResult.CertifiedBound(49_152, 65_536);
 
@@ -141,6 +158,46 @@ public sealed class AzureQueueSizeGateTests
         Assert.Equal(65_536, result.CertifiedUpperBoundBytes);
         Assert.Equal(65_536, result.ComparableBytes);
         Assert.Throws<ArgumentOutOfRangeException>(() => ExecutorSizeMeasurementResult.CertifiedBound(4, 3));
+    }
+
+    [Fact]
+    public async Task OperationEvidence_SaturatesAllTotalsInsteadOfThrowingOverflow()
+    {
+        var domain = DomainType.GetDomainTypes();
+        var store = new InMemoryEventStore(domain.EventTypes);
+        var publisher = new FailingDestinationPublisher(failOnCapture: int.MaxValue);
+        var measurement = new DelegateMeasurement(_ =>
+            ExecutorSizeMeasurementResult.Exact(long.MaxValue / 2 + 1));
+        var executor = new GeneralSekibanExecutor(
+            store,
+            new InMemoryObjectAccessor(store, domain),
+            domain,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                OrleansAzureQueueStreamMessageSizeMeasurement.Scope,
+                ExecutorSizeRepresentation.Destination,
+                maxBytesPerOperation: long.MaxValue - 1,
+                strictness: ExecutorSizeStrictness.Strict,
+                measurement: measurement)),
+            publisher);
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+
+        var result = await executor.CommitSerializableEventsAsync(
+            new SerializedCommitRequest(
+                [CreateCandidate(domain, first), CreateCandidate(domain, second)],
+                [
+                    new ConsistencyTagEntry($"WeatherForecast:{first}", ""),
+                    new ConsistencyTagEntry($"WeatherForecast:{second}", "")
+                ]));
+
+        var exception = Assert.IsType<ExecutorSizeLimitExceededException>(result.GetException());
+        Assert.True(exception.IsOperationLimit);
+        Assert.Equal(long.MaxValue, exception.MeasuredBytes);
+        Assert.Equal(long.MaxValue, exception.MeasuredRepresentationBytes);
+        Assert.Equal(long.MaxValue, exception.CertifiedUpperBoundBytes);
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+        Assert.Equal(0, publisher.PlannedPublishCalls);
+        Assert.Equal(0, publisher.LegacyPublishCalls);
     }
 
     [Fact]

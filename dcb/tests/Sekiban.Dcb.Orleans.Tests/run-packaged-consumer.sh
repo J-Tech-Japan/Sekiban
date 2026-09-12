@@ -96,5 +96,6 @@ Console.WriteLine("G76 Azure Queue package consumer passed.");
 EOF
   dotnet restore "$project/consumer.csproj" --configfile "$config" --no-http-cache --nologo -p:NuGetAudit=false
   dotnet build "$project/consumer.csproj" -c Release --no-restore --nologo -p:NuGetAudit=false
+  dotnet run --project "$project/consumer.csproj" -c Release --no-build --no-restore --nologo -p:NuGetAudit=false
   echo "Azure Queue packaged consumer passed for $tfm."
 done

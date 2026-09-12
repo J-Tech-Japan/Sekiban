@@ -134,7 +134,10 @@ public sealed record ExecutorSizeMeasurementResult(
         };
 
     public static ExecutorSizeMeasurementResult CertifiedBound(long bytes) =>
-        CertifiedBound(bytes, bytes);
+        new(true, null, bytes, null)
+        {
+            CertifiedUpperBoundBytes = bytes
+        };
 
     public static ExecutorSizeMeasurementResult CertifiedBound(
         long measuredRepresentationBytes,

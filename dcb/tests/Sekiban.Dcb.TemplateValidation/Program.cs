@@ -520,6 +520,9 @@ internal static class Program
         var validationWorkflow = Path.Combine(workflowRoot, "dcb_template_validation.yml");
         var dcbTestWorkflow = Path.Combine(workflowRoot, "run_test_dcb.yml");
         var dcbPackageWorkflow = Path.Combine(workflowRoot, "packagesDcb.yml");
+        var azureQueueConsumerWorkflow = Path.Combine(
+            workflowRoot,
+            "dcb_azure_queue_packaged_consumer.yml");
         var publishWorkflow = Path.Combine(workflowRoot, "packagesDcbTemplate.yml");
         var packagedConsumerScript = Path.Combine(
             repoRoot,
@@ -536,12 +539,14 @@ internal static class Program
         Assert(File.Exists(validationWorkflow), "The DCB template validation workflow is missing.");
         Assert(File.Exists(dcbTestWorkflow), "The DCB test workflow is missing.");
         Assert(File.Exists(dcbPackageWorkflow), "The DCB package workflow is missing.");
+        Assert(File.Exists(azureQueueConsumerWorkflow), "The Azure Queue PR packaged-consumer workflow is missing.");
         Assert(File.Exists(publishWorkflow), "The DCB template publish workflow is missing.");
         Assert(File.Exists(packagedConsumerScript), "The DCB packaged-consumer script is missing.");
         Assert(File.Exists(azureQueueConsumerScript), "The Azure Queue packaged-consumer script is missing.");
         var validation = File.ReadAllText(validationWorkflow);
         var dcbTest = File.ReadAllText(dcbTestWorkflow);
         var dcbPackage = File.ReadAllText(dcbPackageWorkflow);
+        var azureQueueConsumer = File.ReadAllText(azureQueueConsumerWorkflow);
         var publish = File.ReadAllText(publishWorkflow);
         Assert(dcbTest.Contains(
                 "dcb/tests/Sekiban.Dcb.TemplateValidation/**",
@@ -559,6 +564,25 @@ internal static class Program
                 "dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh",
                 StringComparison.Ordinal),
             "The DCB package workflow must run the isolated Azure Queue packaged consumer.");
+        Assert(azureQueueConsumer.Contains("pull_request:", StringComparison.Ordinal),
+            "The Azure Queue packaged-consumer workflow must run for pull requests.");
+        Assert(azureQueueConsumer.Contains("workflow_dispatch:", StringComparison.Ordinal),
+            "The Azure Queue packaged-consumer workflow must support explicit review execution.");
+        Assert(azureQueueConsumer.Contains(
+                "dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh",
+                StringComparison.Ordinal),
+            "The Azure Queue pull-request workflow must execute the isolated consumer script.");
+        Assert(azureQueueConsumer.Contains("-p:GenerateSBOM=false", StringComparison.Ordinal),
+            "The Azure Queue pull-request workflow must use a disposable local-feed pack.");
+        Assert(azureQueueConsumer.Contains("--no-build", StringComparison.Ordinal),
+            "The Azure Queue pull-request workflow must validate the already-built packages.");
+        Assert(azureQueueConsumer.Contains("--feed \"$GITHUB_WORKSPACE/out\"", StringComparison.Ordinal),
+            "The Azure Queue pull-request workflow must pass its local feed to the consumer.");
+        Assert(azureQueueConsumer.Contains("10.0.2-pr.${{ github.run_id }}", StringComparison.Ordinal),
+            "The Azure Queue pull-request workflow must use an isolated review-only package version.");
+        Assert(!azureQueueConsumer.Contains("nuget push", StringComparison.Ordinal) &&
+               !azureQueueConsumer.Contains("action-gh-release", StringComparison.Ordinal),
+            "The Azure Queue pull-request workflow must not publish or release packages.");
 
         var effectivePackableProjects = Directory.EnumerateFiles(
                 Path.Combine(repoRoot, "dcb", "src"),
@@ -583,6 +607,20 @@ internal static class Program
             $"The DCB package manifest must exactly match effective packable dcb/src projects. " +
             $"Missing: {string.Join(", ", effectivePackableProjects.Except(manifestProjects, StringComparer.Ordinal))}; " +
             $"Unexpected: {string.Join(", ", manifestProjects.Except(effectivePackableProjects, StringComparer.Ordinal))}.");
+
+        var pullRequestManifestProjects = Regex.Matches(
+                azureQueueConsumer,
+                @"dotnet\s+pack\s+(?<project>dcb/src/[^\s""']+\.csproj)",
+                RegexOptions.CultureInvariant,
+                RegexTimeout)
+            .Cast<Match>()
+            .Select(match => match.Groups["project"].Value.Replace('\\', '/'))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+        Assert(
+            effectivePackableProjects.SequenceEqual(pullRequestManifestProjects, StringComparer.Ordinal),
+            "The Azure Queue pull-request workflow must pack the exact effective DCB packable project set.");
 
         foreach (var required in new[]
                  {
@@ -624,6 +662,11 @@ internal static class Program
             "The publish workflow must run the packaged-consumer/docs path before Push Template.");
 
         var script = File.ReadAllText(packagedConsumerScript);
+        var azureQueueScript = File.ReadAllText(azureQueueConsumerScript);
+        Assert(azureQueueScript.Contains(
+                "dotnet run --project \"$project/consumer.csproj\"",
+                StringComparison.Ordinal),
+            "The Azure Queue packaged-consumer path must execute each built consumer, not only compile it.");
         var sourceStage = script.IndexOf("\"$validator\" source", StringComparison.Ordinal);
         var docsCurrencyStage = script.IndexOf("\"$validator\" docs-currency", StringComparison.Ordinal);
         var packageBoundary = script.IndexOf("if [[ -z \"$package_path\" ]]; then", StringComparison.Ordinal);

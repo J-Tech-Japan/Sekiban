@@ -26,6 +26,17 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
     private readonly Channel<PublishItem> _channel;
     private readonly Task _processor;
 
+    /// <summary>
+    /// Test-only observation of the planned enqueue boundary. This stays internal so production callers cannot
+    /// replace the publisher's retry or context behavior; Orleans tests use it to assert plan identity.
+    /// </summary>
+    internal Action<
+        SerializableEvent,
+        string,
+        string,
+        Guid,
+        IReadOnlyDictionary<string, object>?>? PlannedPublishObserver { get; set; }
+
     private record PublishItem(
         string Provider,
         string Namespace,
@@ -235,18 +246,25 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             var serializableEvent = plan.PreparedEvent ?? evt.ToSerializableEvent(_domainTypes.EventTypes);
             foreach (var destination in destinations)
             {
+                var requestContext = destination.RequestContext is null
+                    ? null
+                    : destination.RequestContext.ToDictionary(
+                        pair => pair.Key,
+                        pair => pair.Value,
+                        StringComparer.Ordinal);
+                PlannedPublishObserver?.Invoke(
+                    serializableEvent,
+                    destination.ProviderName,
+                    destination.StreamNamespace,
+                    destination.StreamId,
+                    requestContext);
                 _channel.Writer.TryWrite(new PublishItem(
                     destination.ProviderName,
                     destination.StreamNamespace,
                     destination.StreamId,
                     serializableEvent,
                     0,
-                    destination.RequestContext is null
-                        ? null
-                        : destination.RequestContext.ToDictionary(
-                            pair => pair.Key,
-                            pair => pair.Value,
-                            StringComparer.Ordinal)));
+                    requestContext));
             }
         }
 

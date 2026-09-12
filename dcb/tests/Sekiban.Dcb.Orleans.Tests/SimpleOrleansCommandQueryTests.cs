@@ -23,6 +23,7 @@ using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Testing;
+using System.Text;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Dcb.Orleans.Tests;
@@ -343,17 +344,99 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
             new EventMetadata(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), "test"),
             []);
 
+        var planned = new TaskCompletionSource<(
+            SerializableEvent Event,
+            string Provider,
+            string Namespace,
+            Guid StreamId,
+            IReadOnlyDictionary<string, object>? Context)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        publisher.PlannedPublishObserver = (serializable, providerName, streamNamespace, destinationId, context) =>
+            planned.TrySetResult((serializable, providerName, streamNamespace, destinationId, context));
+
         RequestContext.Set("g76-context", "retry-context");
-        await publisher.PublishAsync(new[] { (@event, (IReadOnlyCollection<ITag>)[]) });
+        var plan = publisher.CaptureDestinationPlan(@event, [], "default");
+        Assert.NotNull(plan);
+        var destination = Assert.Single((IReadOnlyList<OrleansDestinationPlanState>)plan.ProviderState!);
+        var capturedEvent = plan.PreparedEvent;
+        Assert.NotNull(capturedEvent);
+        var capturedContext = destination.RequestContext;
+        Assert.NotNull(capturedContext);
+
+        RequestContext.Set("g76-context", "caller-sentinel");
+        await ((IExecutorSizeDestinationPublisher)publisher).PublishAsync(
+            new[] { (@event, (IReadOnlyCollection<ITag>)[]) },
+            new Dictionary<Guid, ExecutorSizeDestinationPlan> { [@event.Id] = plan });
 
         var observed = await received.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var plannedObservation = await planned.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Same(capturedEvent, plannedObservation.Event);
+        Assert.Equal(destination.ProviderName, plannedObservation.Provider);
+        Assert.Equal(destination.StreamNamespace, plannedObservation.Namespace);
+        Assert.Equal(destination.StreamId, plannedObservation.StreamId);
+        Assert.NotSame(capturedContext, plannedObservation.Context);
+        Assert.Equal("retry-context", plannedObservation.Context!["g76-context"]);
         Assert.Equal(@event.Id, observed.Event.Id);
         Assert.Equal(@event.SortableUniqueIdValue, observed.Event.SortableUniqueIdValue);
         Assert.Equal("retry-context", observed.Context);
-        Assert.Equal("retry-context", RequestContext.Get("g76-context"));
+        Assert.Equal("caller-sentinel", RequestContext.Get("g76-context"));
         Assert.True(attempts >= 2, $"Expected a retry after the forced first delivery failure, observed {attempts} attempt(s).");
 
         await subscription.UnsubscribeAsync();
+    }
+
+    [Fact]
+    public async Task OrleansExecutor_UsesPreparedEventForCaptureAndPlannedSend()
+    {
+        await EnsureInitializedAsync();
+
+        var capture = Assert.Single(
+            _cluster.Client.ServiceProvider
+                .GetServices<IOrleansDestinationMeasurementCapture>()
+                .OfType<RecordingDestinationMeasurementCapture>());
+        capture.Reset();
+        var planned = new TaskCompletionSource<SerializableEvent>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var streamId = Guid.NewGuid();
+        var publisher = new OrleansEventPublisher(
+            _cluster.Client,
+            new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "G76Prepared", streamId),
+            _domainTypes,
+            new NullLogger<OrleansEventPublisher>());
+        publisher.PlannedPublishObserver = (serializable, _, _, _, _) => planned.TrySetResult(serializable);
+
+        var executor = new OrleansDcbExecutor(
+            _client,
+            _eventStore,
+            _domainTypes,
+            new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                OrleansAzureQueueStreamMessageSizeMeasurement.Scope,
+                ExecutorSizeRepresentation.Destination,
+                maxBytesPerEvent: 65_536,
+                strictness: ExecutorSizeStrictness.Strict,
+                measurement: new OrleansAzureQueueStreamMessageSizeMeasurement("EventStreamProvider"))),
+            publisher);
+        var id = Guid.NewGuid();
+        var payload = new TestEntityCreatedEvent { AggregateId = id, Name = "Prepared" };
+        var candidate = new SerializableEventCandidate(
+            Encoding.UTF8.GetBytes(_domainTypes.EventTypes.SerializeEventPayload(payload)),
+            nameof(TestEntityCreatedEvent),
+            []);
+
+        RequestContext.Set("g76-context", "prepared-context");
+        var result = await executor.CommitSerializableEventsAsync(
+            new SerializedCommitRequest([candidate], []));
+
+        Assert.True(result.IsSuccess, result.IsSuccess ? null : result.GetException().ToString());
+        var captured = Assert.Single(capture.CapturedEvents);
+        var sent = await planned.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Same(captured, sent);
+        Assert.Equal(candidate.EventPayloadName, sent.EventPayloadName);
+        Assert.Equal(candidate.Payload, sent.Payload);
+        var capturedContext = Assert.Single(capture.CapturedContexts);
+        Assert.NotNull(capturedContext);
+        Assert.Equal("prepared-context", capturedContext["g76-context"]);
+        Assert.Equal("prepared-context", RequestContext.Get("g76-context"));
     }
 
     [Fact]
@@ -672,8 +755,46 @@ public class SimpleOrleansCommandQueryTests : IAsyncLifetime
                         (serviceProvider, _) => new AzureQueueDataAdapterV2(
                             serviceProvider.GetRequiredService<Serializer>()));
                     services.AddSingleton<IOrleansDestinationMeasurementCapture>(serviceProvider =>
-                        new OrleansAzureQueueDestinationMeasurementCapture(serviceProvider, "EventStreamProvider"));
+                        new RecordingDestinationMeasurementCapture(serviceProvider, "EventStreamProvider"));
                 });
+        }
+    }
+
+    private sealed class RecordingDestinationMeasurementCapture(
+        IServiceProvider services,
+        string streamProviderName) : IOrleansDestinationMeasurementCapture
+    {
+        private readonly OrleansAzureQueueDestinationMeasurementCapture _inner =
+            new(services, streamProviderName);
+
+        public List<SerializableEvent> CapturedEvents { get; } = [];
+        public List<IReadOnlyDictionary<string, object>?> CapturedContexts { get; } = [];
+
+        public void Reset()
+        {
+            CapturedEvents.Clear();
+            CapturedContexts.Clear();
+        }
+
+        public bool Matches(string providerName) => _inner.Matches(providerName);
+
+        public object? Capture(
+            string providerName,
+            string streamNamespace,
+            Guid streamId,
+            SerializableEvent serializedEvent,
+            IReadOnlyDictionary<string, object>? requestContext,
+            out string? failureReason)
+        {
+            CapturedEvents.Add(serializedEvent);
+            CapturedContexts.Add(requestContext);
+            return _inner.Capture(
+                providerName,
+                streamNamespace,
+                streamId,
+                serializedEvent,
+                requestContext,
+                out failureReason);
         }
     }
 
