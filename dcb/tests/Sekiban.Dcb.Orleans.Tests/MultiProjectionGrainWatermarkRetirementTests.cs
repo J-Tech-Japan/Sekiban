@@ -561,6 +561,10 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         state.LastGoodOriginalSizeBytes == 0 &&
         state.LastGoodEventsProcessed == 0;
 
+    private sealed class TestProjectionPayload : IMultiProjectionPayload
+    {
+    }
+
     private static IReadOnlyList<SerializableEvent> BuildEvents(int count)
     {
         return Enumerable.Range(0, count)
@@ -973,7 +977,13 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         }
 
         public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true) =>
-            Task.FromResult(ResultBox.Error<MultiProjectionState>(new InvalidOperationException("test host state unavailable")));
+            Task.FromResult(ResultBox.FromValue<MultiProjectionState>(new MultiProjectionState(
+                new TestProjectionPayload(),
+                ProjectorName,
+                "v1",
+                _safePosition ?? string.Empty,
+                Guid.Empty,
+                _forcedSafeVersion >= 0 ? _forcedSafeVersion : _appliedEventIds.Count)));
 
         public Task<ProjectionHeadStatus> GetProjectionHeadStatusAsync() => throw new NotSupportedException();
 
