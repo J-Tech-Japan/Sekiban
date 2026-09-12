@@ -40,9 +40,9 @@ public sealed class DurableSubscriptionRunnerTests
                 ServiceId = "runner-service",
                 Name = "runner",
                 StartPolicy = DurableSubscriptionStartPolicy.FromBeginning,
-                PollInterval = TimeSpan.FromMilliseconds(10),
+                PollInterval = TimeSpan.FromSeconds(60),
                 RetryDelay = TimeSpan.FromMilliseconds(10),
-                LeaseDuration = TimeSpan.FromSeconds(1)
+                LeaseDuration = TimeSpan.FromSeconds(30)
             },
             (eventRecord, _) =>
             {

@@ -2,6 +2,7 @@ using Npgsql;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
+using ResultBoxes;
 using Dcb.Domain.Weather;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
@@ -618,7 +619,8 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 }
 
                 return Task.CompletedTask;
-            });
+            },
+            pollInterval: TimeSpan.FromSeconds(60));
         using var cancellation = new CancellationTokenSource();
         await runner.StartAsync(cancellation.Token);
         Assert.Equal(firstPosition, await firstHandled.Task.WaitAsync(TimeSpan.FromSeconds(5)));
@@ -633,7 +635,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
             return observed.IsSuccess
                 && observed.GetValue().Phase == DurableSubscriptionPhase.Idle
                 && observed.GetValue().UpdatedAtUtc > before.UpdatedAtUtc;
-        });
+        }, TimeSpan.FromSeconds(3));
         Assert.Equal(1, calls);
 
         secondPosition = await AppendEventAsync("idle-second", "idle-service");
@@ -652,6 +654,127 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
 
         cancellation.Cancel();
         await runner.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task LostNudgeFallsBackToFinitePollingAndAcknowledges()
+    {
+        var store = CreateStore();
+        var identity = new DurableSubscriptionIdentity("lost-nudge-service", "orders");
+        var nudge = new RecordingNudgeFactory();
+        var handled = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runner = CreateRunner(
+            store,
+            identity,
+            nudge,
+            (eventRecord, _) =>
+            {
+                handled.TrySetResult(eventRecord.SortableUniqueIdValue);
+                return Task.CompletedTask;
+            },
+            pollInterval: TimeSpan.FromMilliseconds(250));
+        using var cancellation = new CancellationTokenSource();
+        try
+        {
+            await runner.StartAsync(cancellation.Token);
+            await WaitUntilAsync(async () =>
+            {
+                var state = await store.ReadAsync(identity);
+                return state.IsSuccess && state.GetValue().Phase == DurableSubscriptionPhase.Idle;
+            });
+
+            var position = await AppendEventAsync("lost-nudge", identity.ServiceId);
+            Assert.Equal(position, await handled.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+            await WaitUntilAsync(async () =>
+            {
+                var state = await store.ReadAsync(identity);
+                return state.IsSuccess && state.GetValue().AcknowledgedPosition == position;
+            });
+            Assert.Equal(0, nudge.TriggerCount);
+        }
+        finally
+        {
+            cancellation.Cancel();
+            await runner.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task CrashAfterHandlerBeforeAcknowledgement_ReinvokesSamePositionAndAdvancesCursorOnce()
+    {
+        var position = await AppendEventAsync("crash-boundary", "crash-service");
+        var store = CreateStore();
+        var identity = new DurableSubscriptionIdentity("crash-service", "orders");
+        var crashStore = new FirstAcknowledgeBlockedStore(store);
+        var firstHandled = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstRunner = CreateRunner(
+            crashStore,
+            identity,
+            new RecordingNudgeFactory(),
+            (eventRecord, _) =>
+            {
+                firstHandled.TrySetResult(eventRecord.SortableUniqueIdValue);
+                return Task.CompletedTask;
+            });
+        using var firstCancellation = new CancellationTokenSource();
+        try
+        {
+            await firstRunner.StartAsync(firstCancellation.Token);
+            Assert.Equal(position, await firstHandled.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+            await crashStore.FirstAcknowledgeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var beforeCancellation = await store.ReadAsync(identity);
+            Assert.True(beforeCancellation.IsSuccess);
+            Assert.Null(beforeCancellation.GetValue().AcknowledgedPosition);
+        }
+        finally
+        {
+            firstCancellation.Cancel();
+            await firstRunner.StopAsync(CancellationToken.None);
+        }
+
+        var afterCrash = await store.ReadAsync(identity);
+        Assert.True(afterCrash.IsSuccess);
+        Assert.Null(afterCrash.GetValue().AcknowledgedPosition);
+
+        await using (var connection = new NpgsqlConnection(Fixture.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await ExecuteAsync(connection,
+                "UPDATE dcb_durable_subscriptions SET lease_expires_at_utc = CURRENT_TIMESTAMP - INTERVAL '1 second' "
+                + "WHERE service_id = 'crash-service' AND subscription_name = 'orders'");
+        }
+
+        var secondHandled = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondRunner = CreateRunner(
+            crashStore,
+            identity,
+            new RecordingNudgeFactory(),
+            (eventRecord, _) =>
+            {
+                secondHandled.TrySetResult(eventRecord.SortableUniqueIdValue);
+                return Task.CompletedTask;
+            });
+        using var secondCancellation = new CancellationTokenSource();
+        try
+        {
+            await secondRunner.StartAsync(secondCancellation.Token);
+            Assert.Equal(position, await secondHandled.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+            await WaitUntilAsync(async () =>
+            {
+                var state = await store.ReadAsync(identity);
+                return state.IsSuccess && state.GetValue().AcknowledgedPosition == position;
+            });
+
+            var final = await store.ReadAsync(identity);
+            Assert.True(final.IsSuccess);
+            Assert.Equal(position, final.GetValue().AcknowledgedPosition);
+            Assert.Equal(1, crashStore.SuccessfulAcknowledgementCount);
+        }
+        finally
+        {
+            secondCancellation.Cancel();
+            await secondRunner.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
@@ -712,7 +835,8 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
         DurableSubscriptionIdentity identity,
         RecordingNudgeFactory nudge,
         DurableSubscriptionHandler handler,
-        TimeSpan? leaseDuration = null)
+        TimeSpan? leaseDuration = null,
+        TimeSpan? pollInterval = null)
     {
         var registration = new DurableSubscriptionRegistration(
             new DurableSubscriptionOptions
@@ -721,7 +845,7 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
                 Name = identity.Name,
                 StartPolicy = DurableSubscriptionStartPolicy.FromBeginning,
                 SafeWindow = TimeSpan.Zero,
-                PollInterval = TimeSpan.FromMilliseconds(25),
+                PollInterval = pollInterval ?? TimeSpan.FromMilliseconds(25),
                 RetryDelay = TimeSpan.FromMilliseconds(25),
                 LeaseDuration = leaseDuration ?? TimeSpan.FromSeconds(30),
                 MaxHandlerAttempts = 4
@@ -776,18 +900,148 @@ public sealed class PostgresDurableSubscriptionTests : PostgresTestBase
     {
         private Func<ValueTask>? _onNudge;
 
+        public int TriggerCount { get; private set; }
+
         public IDurableSubscriptionNudge Create(DurableSubscriptionIdentity identity, Func<ValueTask> onNudge)
         {
             _onNudge = onNudge;
             return new RecordingNudge();
         }
 
-        public ValueTask TriggerAsync() => _onNudge?.Invoke() ?? ValueTask.CompletedTask;
+        public ValueTask TriggerAsync()
+        {
+            TriggerCount++;
+            return _onNudge?.Invoke() ?? ValueTask.CompletedTask;
+        }
     }
 
     private sealed class RecordingNudge : IDurableSubscriptionNudge
     {
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class FirstAcknowledgeBlockedStore : IDurableSubscriptionStore
+    {
+        private readonly IDurableSubscriptionStore _inner;
+        private int _firstAcknowledge;
+        private int _successfulAcknowledgementCount;
+
+        public FirstAcknowledgeBlockedStore(IDurableSubscriptionStore inner) => _inner = inner;
+
+        public TaskCompletionSource<bool> FirstAcknowledgeStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int SuccessfulAcknowledgementCount => Volatile.Read(ref _successfulAcknowledgementCount);
+
+        public Task<ResultBox<DurableSubscriptionState>> InitializeOrGetAsync(
+            DurableSubscriptionIdentity identity,
+            DurableSubscriptionStartPolicy startPolicy,
+            string safeTail,
+            CancellationToken cancellationToken = default) =>
+            _inner.InitializeOrGetAsync(identity, startPolicy, safeTail, cancellationToken);
+
+        public Task<ResultBox<DurableSubscriptionState>> ReadAsync(
+            DurableSubscriptionIdentity identity,
+            CancellationToken cancellationToken = default) =>
+            _inner.ReadAsync(identity, cancellationToken);
+
+        public Task<ResultBox<DurableSubscriptionLease>> TryAcquireAsync(
+            DurableSubscriptionIdentity identity,
+            string ownerId,
+            TimeSpan leaseDuration,
+            CancellationToken cancellationToken = default) =>
+            _inner.TryAcquireAsync(identity, ownerId, leaseDuration, cancellationToken);
+
+        public Task<ResultBox<bool>> RenewAsync(
+            DurableSubscriptionIdentity identity,
+            string ownerId,
+            long ownerGeneration,
+            TimeSpan leaseDuration,
+            CancellationToken cancellationToken = default) =>
+            _inner.RenewAsync(identity, ownerId, ownerGeneration, leaseDuration, cancellationToken);
+
+        public Task<ResultBox<bool>> IsRetryDueAsync(
+            DurableSubscriptionIdentity identity,
+            string ownerId,
+            long ownerGeneration,
+            CancellationToken cancellationToken = default) =>
+            _inner.IsRetryDueAsync(identity, ownerId, ownerGeneration, cancellationToken);
+
+        public async Task<ResultBox<DurableSubscriptionState>> AcknowledgeAsync(
+            DurableSubscriptionIdentity identity,
+            string ownerId,
+            long ownerGeneration,
+            string position,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Exchange(ref _firstAcknowledge, 1) == 0)
+            {
+                FirstAcknowledgeStarted.TrySetResult(true);
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return ResultBox.Error<DurableSubscriptionState>(
+                        new OperationCanceledException("The test stopped before the first acknowledgement.", cancellationToken));
+                }
+            }
+
+            var result = await _inner.AcknowledgeAsync(
+                identity,
+                ownerId,
+                ownerGeneration,
+                position,
+                cancellationToken);
+            if (result.IsSuccess)
+            {
+                Interlocked.Increment(ref _successfulAcknowledgementCount);
+            }
+
+            return result;
+        }
+
+        public Task<ResultBox<DurableSubscriptionState>> RecordFailureAsync(
+            DurableSubscriptionIdentity identity,
+            string ownerId,
+            long ownerGeneration,
+            string position,
+            string reason,
+            bool conversionFailure,
+            int maxHandlerAttempts,
+            TimeSpan retryDelay,
+            CancellationToken cancellationToken = default) =>
+            _inner.RecordFailureAsync(
+                identity,
+                ownerId,
+                ownerGeneration,
+                position,
+                reason,
+                conversionFailure,
+                maxHandlerAttempts,
+                retryDelay,
+                cancellationToken);
+
+        public Task<ResultBox<DurableSubscriptionState>> ResumeAsync(
+            DurableSubscriptionIdentity identity,
+            CancellationToken cancellationToken = default) =>
+            _inner.ResumeAsync(identity, cancellationToken);
+
+        public Task<ResultBox<DurableSubscriptionState>> HaltAsync(
+            DurableSubscriptionIdentity identity,
+            string ownerId,
+            long ownerGeneration,
+            string reason,
+            CancellationToken cancellationToken = default) =>
+            _inner.HaltAsync(identity, ownerId, ownerGeneration, reason, cancellationToken);
+
+        public Task<ResultBox<DurableSubscriptionState>> MarkIdleAsync(
+            DurableSubscriptionIdentity identity,
+            string ownerId,
+            long ownerGeneration,
+            CancellationToken cancellationToken = default) =>
+            _inner.MarkIdleAsync(identity, ownerId, ownerGeneration, cancellationToken);
     }
 
     private static async Task ExecuteAsync(NpgsqlConnection connection, string sql)
