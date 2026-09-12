@@ -5,6 +5,8 @@ using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Orleans;
 using Sekiban.Dcb.ServiceId;
 
+namespace Sekiban.Dcb.Orleans.LegacyConsumer;
+
 internal static class Program
 {
     public static void Main()

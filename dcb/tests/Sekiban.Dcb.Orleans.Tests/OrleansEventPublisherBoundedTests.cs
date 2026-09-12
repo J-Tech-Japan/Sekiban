@@ -630,9 +630,7 @@ public sealed class OrleansEventPublisherBoundedTests
             domain,
             NullLogger<OrleansEventPublisher>.Instance,
             new OrleansEventPublisherOptions { MaxPublishAttempts = 1 },
-            new DefaultServiceIdProvider(),
-            sender: null,
-            delayAsync: null);
+            new DefaultServiceIdProvider());
 
         var publication = CreatePublication("missing-deep-copier");
         var plan = publisher.CaptureDestinationPlan(publication.Event, publication.Tags, "default");
@@ -1075,12 +1073,15 @@ public sealed class OrleansEventPublisherBoundedTests
             NullLogger<OrleansEventPublisher>.Instance,
             options,
             new DefaultServiceIdProvider(),
-            sender,
-            delayAsync,
-            startWorkerAsync: startWorkerAsync,
-            captureRequestContext: captureRequestContext,
-            measurementCaptures: measurementCaptures,
-            payloadReleased: payloadReleased);
+            new OrleansEventPublisherTestHooks
+            {
+                Sender = sender,
+                DelayAsync = delayAsync,
+                StartWorkerAsync = startWorkerAsync,
+                CaptureRequestContext = captureRequestContext,
+                MeasurementCaptures = measurementCaptures,
+                PayloadReleased = payloadReleased
+            });
     }
 
     private static (Event Event, IReadOnlyCollection<ITag> Tags) CreatePublication(string value, Guid? eventId = null)

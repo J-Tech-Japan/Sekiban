@@ -16,20 +16,23 @@ public sealed class OrleansEventPublisherOptions
     public void Validate()
     {
         if (MaxPublishAttempts is < 1 or > 64)
-            throw new ArgumentOutOfRangeException(nameof(MaxPublishAttempts));
+            ThrowInvalidOption(nameof(MaxPublishAttempts));
         if (BaseRetryDelay <= TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(nameof(BaseRetryDelay));
+            ThrowInvalidOption(nameof(BaseRetryDelay));
         if (MaxRetryDelay < BaseRetryDelay || MaxRetryDelay > TimeSpan.FromMinutes(5))
-            throw new ArgumentOutOfRangeException(nameof(MaxRetryDelay));
+            ThrowInvalidOption(nameof(MaxRetryDelay));
         if (MaxQueuedItemsPerDestination is < 1 or > 65_536)
-            throw new ArgumentOutOfRangeException(nameof(MaxQueuedItemsPerDestination));
+            ThrowInvalidOption(nameof(MaxQueuedItemsPerDestination));
         if (MaxQueuedItemsTotal < MaxQueuedItemsPerDestination || MaxQueuedItemsTotal > 1_048_576)
-            throw new ArgumentOutOfRangeException(nameof(MaxQueuedItemsTotal));
+            ThrowInvalidOption(nameof(MaxQueuedItemsTotal));
         if (TerminalSampleCount is < 1 or > 1_000)
-            throw new ArgumentOutOfRangeException(nameof(TerminalSampleCount));
+            ThrowInvalidOption(nameof(TerminalSampleCount));
         if (MaxDiagnosticDestinations is < 1 or > 65_536)
-            throw new ArgumentOutOfRangeException(nameof(MaxDiagnosticDestinations));
+            ThrowInvalidOption(nameof(MaxDiagnosticDestinations));
     }
+
+    private static void ThrowInvalidOption(string optionName) =>
+        throw new ArgumentOutOfRangeException(optionName);
 }
 
 /// <summary>Bounded, payload-free diagnostics for notifications that were attempted or rejected.</summary>
@@ -63,26 +66,17 @@ public sealed class OrleansPublisherDiagnosticsSnapshot
 
 public sealed class OrleansPublisherDestinationDiagnostic
 {
-    internal OrleansPublisherDestinationDiagnostic(
-        string destinationKey,
-        string serviceId,
-        string provider,
-        string @namespace,
-        Guid streamId,
-        long terminalCount,
-        long attemptCount,
-        IReadOnlyDictionary<string, long> reasonCounts,
-        IReadOnlyList<OrleansPublisherTerminalSample> samples)
+    internal OrleansPublisherDestinationDiagnostic(OrleansPublisherDestinationDiagnosticData data)
     {
-        DestinationKey = destinationKey;
-        ServiceId = serviceId;
-        Provider = provider;
-        Namespace = @namespace;
-        StreamId = streamId;
-        TerminalCount = terminalCount;
-        AttemptCount = attemptCount;
-        ReasonCounts = reasonCounts;
-        Samples = samples;
+        DestinationKey = data.DestinationKey;
+        ServiceId = data.ServiceId;
+        Provider = data.Provider;
+        Namespace = data.Namespace;
+        StreamId = data.StreamId;
+        TerminalCount = data.TerminalCount;
+        AttemptCount = data.AttemptCount;
+        ReasonCounts = data.ReasonCounts;
+        Samples = data.Samples;
     }
 
     public string DestinationKey { get; }
@@ -94,6 +88,20 @@ public sealed class OrleansPublisherDestinationDiagnostic
     public long AttemptCount { get; }
     public IReadOnlyDictionary<string, long> ReasonCounts { get; }
     public IReadOnlyList<OrleansPublisherTerminalSample> Samples { get; }
+}
+
+internal sealed class OrleansPublisherDestinationDiagnosticData
+{
+    internal string DestinationKey { get; init; } = string.Empty;
+    internal string ServiceId { get; init; } = string.Empty;
+    internal string Provider { get; init; } = string.Empty;
+    internal string Namespace { get; init; } = string.Empty;
+    internal Guid StreamId { get; init; }
+    internal long TerminalCount { get; init; }
+    internal long AttemptCount { get; init; }
+    internal IReadOnlyDictionary<string, long> ReasonCounts { get; init; } =
+        new Dictionary<string, long>(StringComparer.Ordinal);
+    internal IReadOnlyList<OrleansPublisherTerminalSample> Samples { get; init; } = [];
 }
 
 public sealed class OrleansPublisherTerminalSample
@@ -243,15 +251,18 @@ internal sealed class OrleansPublisherDiagnosticsRecorder
             var destinations = _destinations.Values
                 .OrderBy(value => value.DestinationKey, StringComparer.Ordinal)
                 .Select(value => new OrleansPublisherDestinationDiagnostic(
-                    value.DestinationKey,
-                    value.ServiceId,
-                    value.Provider,
-                    value.Namespace,
-                    value.StreamId,
-                    value.TerminalCount,
-                    value.AttemptCount,
-                    new Dictionary<string, long>(value.ReasonCounts, StringComparer.Ordinal),
-                    value.Samples.ToArray()))
+                    new OrleansPublisherDestinationDiagnosticData
+                    {
+                        DestinationKey = value.DestinationKey,
+                        ServiceId = value.ServiceId,
+                        Provider = value.Provider,
+                        Namespace = value.Namespace,
+                        StreamId = value.StreamId,
+                        TerminalCount = value.TerminalCount,
+                        AttemptCount = value.AttemptCount,
+                        ReasonCounts = new Dictionary<string, long>(value.ReasonCounts, StringComparer.Ordinal),
+                        Samples = value.Samples.ToArray()
+                    }))
                 .ToArray();
             return new OrleansPublisherDiagnosticsSnapshot(
                 _totalTerminalCount,

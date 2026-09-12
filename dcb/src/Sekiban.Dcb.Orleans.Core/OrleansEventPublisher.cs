@@ -20,6 +20,7 @@ namespace Sekiban.Dcb.Orleans;
 public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDestinationPublisher, IAsyncDisposable,
     IOrleansPublisherDiagnostics
 {
+    private const string AdmissionResolveFailedReason = "admission-resolve-failed";
     private readonly IStreamDestinationResolver _resolver;
     private readonly DcbDomainTypes _domainTypes;
     private readonly IServiceIdProvider _serviceIdProvider;
@@ -63,9 +64,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             domainTypes,
             logger,
             options: new OrleansEventPublisherOptions(),
-            serviceIdProvider: new DefaultServiceIdProvider(),
-            sender: null,
-            delayAsync: null)
+            serviceIdProvider: new DefaultServiceIdProvider())
     {
     }
 
@@ -83,9 +82,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             domainTypes,
             logger,
             options: new OrleansEventPublisherOptions(),
-            serviceIdProvider: serviceIdProvider ?? new DefaultServiceIdProvider(),
-            sender: null,
-            delayAsync: null)
+            serviceIdProvider: serviceIdProvider ?? new DefaultServiceIdProvider())
     {
     }
 
@@ -106,10 +103,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             domainTypes,
             logger,
             options,
-            serviceIdProvider ?? new DefaultServiceIdProvider(),
-            sender: null,
-            delayAsync: null,
-            diagnostics: null)
+            serviceIdProvider ?? new DefaultServiceIdProvider())
     {
     }
 
@@ -121,14 +115,9 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
         ILogger<OrleansEventPublisher> logger,
         OrleansEventPublisherOptions options,
         IServiceIdProvider serviceIdProvider,
-        IOrleansStreamSender? sender,
-        Func<TimeSpan, CancellationToken, Task>? delayAsync,
-        OrleansPublisherDiagnosticsRecorder? diagnostics = null,
-        Func<Func<Task>, CancellationToken, Task>? startWorkerAsync = null,
-        Func<Dictionary<string, object>?>? captureRequestContext = null,
-        IReadOnlyList<IOrleansDestinationMeasurementCapture>? measurementCaptures = null,
-        Action? payloadReleased = null)
+        OrleansEventPublisherTestHooks? testHooks = null)
     {
+        var sender = testHooks?.Sender;
         if (sender is null)
             ArgumentNullException.ThrowIfNull(clusterClient);
         ArgumentNullException.ThrowIfNull(resolver);
@@ -141,17 +130,17 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
         _domainTypes = domainTypes;
         _logger = logger;
         _serviceIdProvider = serviceIdProvider;
-        _diagnostics = diagnostics ?? new OrleansPublisherDiagnosticsRecorder(_options);
-        var deepCopier = sender is null ? clusterClient!.ServiceProvider.GetService<DeepCopier>() : null;
-        _sender = sender ?? new ClusterOrleansStreamSender(clusterClient!, deepCopier);
-        _measurementCaptures = measurementCaptures ??
+        _diagnostics = testHooks?.Diagnostics ?? new OrleansPublisherDiagnosticsRecorder(_options);
+        var deepCopier = sender is null ? clusterClient.ServiceProvider.GetService<DeepCopier>() : null;
+        _sender = sender ?? new ClusterOrleansStreamSender(clusterClient, deepCopier);
+        _measurementCaptures = testHooks?.MeasurementCaptures ??
             (_sender is ClusterOrleansStreamSender clusterSender
                 ? clusterSender.Captures
                 : Array.Empty<IOrleansDestinationMeasurementCapture>());
-        _delayAsync = delayAsync ?? Task.Delay;
-        _startWorkerAsync = startWorkerAsync ?? ((work, cancellationToken) => Task.Run(work, cancellationToken));
-        _captureRequestContext = captureRequestContext;
-        _payloadReleased = payloadReleased;
+        _delayAsync = testHooks?.DelayAsync ?? Task.Delay;
+        _startWorkerAsync = testHooks?.StartWorkerAsync ?? ((work, cancellationToken) => Task.Run(work, cancellationToken));
+        _captureRequestContext = testHooks?.CaptureRequestContext;
+        _payloadReleased = testHooks?.PayloadReleased;
     }
 
     public async Task PublishAsync(
@@ -181,7 +170,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             }
             catch (Exception ex)
             {
-                RecordAdmissionFailure(null, evt.Id, "admission-resolve-failed", ex);
+                RecordAdmissionFailure(null, evt.Id, AdmissionResolveFailedReason, ex);
                 continue;
             }
 
@@ -192,7 +181,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             }
             catch (Exception ex)
             {
-                RecordAdmissionFailure(null, evt.Id, "admission-resolve-failed", ex);
+                RecordAdmissionFailure(null, evt.Id, AdmissionResolveFailedReason, ex);
                 continue;
             }
             var payload = new SharedPublishPayload(serializableEvent, context, _payloadReleased);
@@ -209,7 +198,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                     }
                     catch (Exception ex)
                     {
-                        RecordAdmissionFailure(destination, evt.Id, "admission-resolve-failed", ex);
+                        RecordAdmissionFailure(destination, evt.Id, AdmissionResolveFailedReason, ex);
                         continue;
                     }
 
@@ -218,7 +207,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                         RecordAdmissionFailure(
                             destination,
                             evt.Id,
-                            "admission-resolve-failed",
+                            AdmissionResolveFailedReason,
                             new InvalidOperationException(planState.FailureReason));
                         continue;
                     }
@@ -338,7 +327,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                     serializedEvent,
                     requestContext,
                     out var captureFailure);
-                failureReason ??= captureFailure;
+                failureReason = captureFailure;
             }
         }
 
@@ -395,7 +384,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                                 destination.StreamNamespace,
                                 destination.StreamId),
                             evt.Id,
-                            "admission-resolve-failed",
+                            AdmissionResolveFailedReason,
                             new InvalidOperationException(destination.FailureReason));
                         continue;
                     }
@@ -542,14 +531,14 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
         };
     }
 
-    private bool TryEnqueue(OrleansPublishItem item)
+    private void TryEnqueue(OrleansPublishItem item)
     {
         lock (_queueGate)
         {
             if (_disposed || _pumpFaulted)
             {
                 _diagnostics.Terminal(ToPublishDestination(item.Destination), item.Payload.Event.Id, "pump-faulted", 0);
-                return false;
+                return;
             }
 
             if (_totalLiveItems >= _options.MaxQueuedItemsTotal)
@@ -559,7 +548,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                     item.Payload.Event.Id,
                     "admission-capacity",
                     0);
-                return false;
+                return;
             }
 
             if (!_destinations.TryGetValue(item.Destination.DestinationKey, out var state))
@@ -583,7 +572,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                     item.Payload.Event.Id,
                     "admission-capacity",
                     0);
-                return false;
+                return;
             }
 
             item.Payload.Retain();
@@ -605,7 +594,7 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                     item.Payload.Event.Id,
                     "writer-completed",
                     0);
-                return false;
+                return;
             }
 
             if (state.Worker is null || state.Worker.IsCompleted)
@@ -625,7 +614,6 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
                     TaskScheduler.Default);
             }
 
-            return true;
         }
     }
 
@@ -845,4 +833,16 @@ public class OrleansEventPublisher : IEventPublisher, IExecutorSizePreparedDesti
             }
         }
     }
+}
+
+/// <summary>Internal deterministic hooks used only by Orleans publisher tests.</summary>
+internal sealed class OrleansEventPublisherTestHooks
+{
+    public IOrleansStreamSender? Sender { get; init; }
+    public Func<TimeSpan, CancellationToken, Task>? DelayAsync { get; init; }
+    public OrleansPublisherDiagnosticsRecorder? Diagnostics { get; init; }
+    public Func<Func<Task>, CancellationToken, Task>? StartWorkerAsync { get; init; }
+    public Func<Dictionary<string, object>?>? CaptureRequestContext { get; init; }
+    public IReadOnlyList<IOrleansDestinationMeasurementCapture>? MeasurementCaptures { get; init; }
+    public Action? PayloadReleased { get; init; }
 }
