@@ -1086,3 +1086,25 @@ event envelope の予算と解釈してはいけません。event metadata な�
 ## 関連資料
 
 現在のインターナルユースで使っているコールドイベントの書き出し、ハイブリッドリード、キャッチアップワーカー構成については [コールドイベントとキャッチアップ](19_cold_events.md) を参照してください。
+
+## SEK-G77 Orleans event publisher の retry と診断
+
+`OrleansEventPublisher` は Orleans stream 通知に対して、プロセス内で上限付きの配信試行を行います。既定値は、publish
+試行 5 回、初回 retry 待機 100 ms、retry 待機の上限 5 秒、destination ごとの待機キュー 1,024 件、全 destination 合計
+16,384 件、terminal sample 20 件、診断対象 destination 1,024 件です。options は hosted publisher の起動前に検証されます。
+キュー上限は admission 上限であり、すでに受け付けた item を追い出して新しい item の場所を作ることはありません。
+
+destination の完全なキー `(serviceId, provider, namespace, streamId)` ごとに FIFO を保ちます。ある destination の retry が
+backoff 中でも、他の destination は進行できます。terminal になった item をこの publisher が再配信することはありません。
+`IOrleansPublisherDiagnostics` から、payload を公開せずに、上限付きの件数、reason code、destination sample、試行回数を確認できます。
+publisher は publication plan ごとに serialized event、解決済み destination、request context を一度捕捉し、retry では同じ payload と
+context を再利用します。共有 payload の所有権は、成功、terminal failure、admission 拒否、pump failure、dispose の各経路で解放されます。
+
+この publisher はプロセス内の通知経路であり、durable cursor や outbox ではありません。terminal failure やプロセス crash 後に
+失われた通知を復旧する保証はありません。再起動や takeover 後の durable recovery が必要な場合は、[永続 Orleans サブスクリプション](23_durable_orleans_subscriptions.md)
+を使用してください。そこでは PostgreSQL の cursor が authoritative であり、legacy callback はその cursor を進めません。両方を登録すると
+application handler が独立して呼び出される可能性があるため、handler は idempotent に保つ必要があります。
+
+retry と queue の options は配信制御であり、任意の byte 上限ではありません。この publisher は Orleans provider の envelope、queue service
+limit、batch limit、または custom application side effect を保証しません。provider 固有の size gate を設定した場合は、その capability
+契約が別途適用されます。未設定の場合、この publisher options から provider byte limit を推測してはいけません。

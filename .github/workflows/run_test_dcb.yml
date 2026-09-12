@@ -30,6 +30,7 @@ on:
       - 'dcb/src/Sekiban.Dcb.Sqlite/**'
       - 'dcb/src/Sekiban.Dcb.ColdStorage/**'
       - 'dcb/tests/Sekiban.Dcb.Orleans.Tests/**'
+      - 'dcb/tests/Sekiban.Dcb.Orleans.LegacyConsumer/**'
       - 'dcb/tests/Sekiban.Dcb.Postgres.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/**'
       - 'dcb/tests/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier/**'

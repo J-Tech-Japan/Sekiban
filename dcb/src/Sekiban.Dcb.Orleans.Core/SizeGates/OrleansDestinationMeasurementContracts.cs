@@ -27,4 +27,14 @@ internal sealed record OrleansDestinationPlanState(
     Guid StreamId,
     object? MeasurementState,
     IReadOnlyDictionary<string, object>? RequestContext,
-    string? FailureReason);
+    string? FailureReason)
+{
+    /// <summary>The service identity used in the destination key for the prepared publication.</summary>
+    public string ServiceId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// The provider/stream target prepared before admission. Retries use this opaque target directly and never
+    /// resolve the provider or stream again.
+    /// </summary>
+    public IOrleansPreparedStreamTarget? PreparedTarget { get; init; }
+}
