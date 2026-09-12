@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Orleans;
 using Orleans.Runtime;
+using Orleans.Streams;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
@@ -135,7 +136,14 @@ public sealed class OrleansEventPublisherBoundedTests
         Assert.Equal(2, sender.ReceivedPayloads.Count);
         Assert.Same(sender.ReceivedPayloads[0], sender.ReceivedPayloads[1]);
         Assert.Same(sender.ReceivedPayloadObjects[0], sender.ReceivedPayloadObjects[1]);
-        Assert.Equal("writer-completed", Assert.Single(publisher.GetSnapshot().Destinations).Samples[0].ReasonCode);
+        var snapshot = publisher.GetSnapshot();
+        Assert.Equal(2, snapshot.TotalAttemptCount);
+        Assert.Equal(0, snapshot.TotalTerminalCount);
+        Assert.Empty(snapshot.ReasonCounts);
+        var destination = Assert.Single(snapshot.Destinations);
+        Assert.Equal(2, destination.AttemptCount);
+        Assert.Equal(0, destination.TerminalCount);
+        Assert.Empty(destination.ReasonCounts);
     }
 
     [Fact]
@@ -193,7 +201,7 @@ public sealed class OrleansEventPublisherBoundedTests
         await ((IExecutorSizeDestinationPublisher)publisher).PublishAsync(
             new[] { publication },
             new Dictionary<Guid, ExecutorSizeDestinationPlan> { [publication.Event.Id] = plan! });
-        await WaitUntilAsync(() => sender.Successes == 2);
+        await WaitUntilAsync(() => sender.Successes == 2 && sender.LastPayload?.ReferenceCount == 0);
 
         Assert.Equal(1, countingTypes.SerializeCalls);
         Assert.Equal(2, sender.PrepareCalls);
@@ -224,6 +232,7 @@ public sealed class OrleansEventPublisherBoundedTests
         var a1 = CreatePublication("A1");
         var a2 = CreatePublication("A2");
         var b1 = CreatePublication("B1");
+        var b2 = CreatePublication("B2");
         var aFirst = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var delayEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseDelay = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -255,19 +264,29 @@ public sealed class OrleansEventPublisherBoundedTests
         await publisher.PublishAsync(new[] { a1 });
         await aFirst.Task.WaitAsync(TimeSpan.FromSeconds(2));
         await delayEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        await publisher.PublishAsync(new[] { a2, b1 });
-        await WaitUntilAsync(() => sender.SuccessfulEventIds.Contains(b1.Event.Id));
+        await publisher.PublishAsync(new[] { a2, b1, b2 });
+        await WaitUntilAsync(() =>
+            sender.SuccessfulEventIds.Contains(b1.Event.Id) &&
+            sender.SuccessfulEventIds.Contains(b2.Event.Id));
         Assert.DoesNotContain(a2.Event.Id, sender.AttemptRecords.Select(record => record.EventId));
 
         releaseDelay.TrySetResult(true);
-        await WaitUntilAsync(() => sender.Successes == 3);
+        await WaitUntilAsync(() => sender.Successes == 4);
         var aAttempts = sender.AttemptRecords
             .Where(record => record.Destination == "capacity-a")
             .Select(record => record.EventId)
             .ToArray();
         Assert.Equal(new[] { a1.Event.Id, a1.Event.Id, a2.Event.Id }, aAttempts);
+        Assert.Equal(
+            new[] { b1.Event.Id, b2.Event.Id },
+            sender.AttemptRecords
+                .Where(record => record.Destination == "capacity-b")
+                .Select(record => record.EventId));
         Assert.True(
             sender.AttemptRecords.FindIndex(record => record.EventId == b1.Event.Id) <
+            sender.AttemptRecords.FindIndex(record => record.EventId == a1.Event.Id && record.Attempt > 1));
+        Assert.True(
+            sender.AttemptRecords.FindIndex(record => record.EventId == b2.Event.Id) <
             sender.AttemptRecords.FindIndex(record => record.EventId == a1.Event.Id && record.Attempt > 1));
     }
 
@@ -275,7 +294,9 @@ public sealed class OrleansEventPublisherBoundedTests
     public async Task GlobalAdmissionCapacityRejectsNewWorkWithoutPerDestinationSaturation()
     {
         var firstEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseFirst = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSecond = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var sender = new RecordingSender
         {
             BeforeSend = (destination, attempt, _) =>
@@ -284,6 +305,12 @@ public sealed class OrleansEventPublisherBoundedTests
                 {
                     firstEntered.TrySetResult(true);
                     return releaseFirst.Task;
+                }
+
+                if (destination.StreamNamespace == "capacity-b" && attempt == 1)
+                {
+                    secondEntered.TrySetResult(true);
+                    return releaseSecond.Task;
                 }
 
                 return Task.CompletedTask;
@@ -304,14 +331,60 @@ public sealed class OrleansEventPublisherBoundedTests
         var a2 = CreatePublication("A-global-2");
         await publisher.PublishAsync(new[] { a1 });
         await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        await publisher.PublishAsync(new[] { b1, a2 });
+        await publisher.PublishAsync(new[] { b1 });
+        await secondEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await publisher.PublishAsync(new[] { a2 });
         Assert.Equal(1, publisher.GetSnapshot().ReasonCounts["admission-capacity"]);
         Assert.DoesNotContain(a2.Event.Id, sender.SuccessfulEventIds);
 
         releaseFirst.TrySetResult(true);
-        await WaitUntilAsync(() => sender.Successes == 2);
+        releaseSecond.TrySetResult(true);
+        await WaitUntilAsync(() => sender.Successes == 2 && publisher.DestinationStateCount == 0);
         Assert.Contains(a1.Event.Id, sender.SuccessfulEventIds);
         Assert.Contains(b1.Event.Id, sender.SuccessfulEventIds);
+    }
+
+    [Fact]
+    public async Task GlobalCapacityRejectsTenThousandUniqueDestinationsWithoutRetainingEmptyStates()
+    {
+        var firstEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sender = new RecordingSender
+        {
+            BeforeSend = (_, attempt, _) =>
+            {
+                if (attempt == 1)
+                {
+                    firstEntered.TrySetResult(true);
+                    return releaseFirst.Task;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
+        await using var publisher = CreatePublisher(
+            sender,
+            new OrleansEventPublisherOptions
+            {
+                MaxQueuedItemsPerDestination = 1,
+                MaxQueuedItemsTotal = 1,
+                MaxPublishAttempts = 1
+            },
+            new ManyDestinationResolver());
+
+        await publisher.PublishAsync(new[] { CreatePublication("state-anchor") });
+        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var rejected = Enumerable.Range(0, 10_000)
+            .Select(value => CreatePublication($"unique-rejection-{value}"))
+            .ToArray();
+        await publisher.PublishAsync(rejected);
+
+        Assert.Equal(10_000, publisher.GetSnapshot().ReasonCounts["admission-capacity"]);
+        Assert.Equal(1, publisher.DestinationStateCount);
+
+        releaseFirst.TrySetResult(true);
+        await WaitUntilAsync(() => sender.Successes == 1 && publisher.DestinationStateCount == 0);
     }
 
     [Fact]
@@ -353,8 +426,39 @@ public sealed class OrleansEventPublisherBoundedTests
 
         var snapshot = publisher.GetSnapshot();
         Assert.Equal(2, snapshot.ReasonCounts["admission-capacity"]);
-        Assert.Equal(1, snapshot.ReasonCounts["writer-completed"]);
+        Assert.DoesNotContain("writer-completed", snapshot.ReasonCounts.Keys);
         Assert.Equal(1, sender.Successes);
+    }
+
+    [Fact]
+    public async Task CompletedWriterRejectsWithoutSendingAndRecordsWriterCompleted()
+    {
+        var streamId = Guid.Parse("00000000-0000-0000-0000-000000000021");
+        var payloadReleased = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sender = new RecordingSender();
+        await using var publisher = CreatePublisher(
+            sender,
+            new OrleansEventPublisherOptions { MaxPublishAttempts = 1 },
+            new SequenceResolver(new OrleansSekibanStream("provider", "completed-writer", streamId)),
+            payloadReleased: () => payloadReleased.TrySetResult(true));
+
+        var destination = new OrleansPublishDestination(
+            "default",
+            "provider",
+            "completed-writer",
+            streamId);
+        publisher.CompleteDestinationWriterForTesting(destination.DestinationKey);
+
+        await publisher.PublishAsync(new[] { CreatePublication("completed-writer") });
+
+        await WaitUntilAsync(() => publisher.GetSnapshot().ReasonCounts.ContainsKey("writer-completed"));
+        await payloadReleased.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var snapshot = publisher.GetSnapshot();
+        Assert.Equal(1, snapshot.ReasonCounts["writer-completed"]);
+        Assert.Equal(1, snapshot.TotalTerminalCount);
+        Assert.DoesNotContain(snapshot.ReasonCounts.Keys, reason => reason == "admission-capacity");
+        Assert.Equal(0, sender.Attempts);
+        Assert.Equal(0, publisher.DestinationStateCount);
     }
 
     [Fact]
@@ -449,7 +553,7 @@ public sealed class OrleansEventPublisherBoundedTests
         Assert.Equal(1, sender.Successes);
 
         releaseB.TrySetResult(true);
-        await WaitUntilAsync(() => sender.Successes == 2);
+        await WaitUntilAsync(() => sender.Successes == 2 && sender.LastPayload?.ReferenceCount == 0);
         Assert.Equal(0, sender.LastPayload!.ReferenceCount);
     }
 
@@ -512,6 +616,66 @@ public sealed class OrleansEventPublisherBoundedTests
     }
 
     [Fact]
+    public async Task PlannedCaptureWithoutDeepCopierFailsClosedBeforeAdmission()
+    {
+        var domain = DcbDomainTypesExtensions.Simple(builder =>
+            builder.EventTypes.RegisterEventType<PublisherEvent>());
+        var cluster = DispatchProxy.Create<IClusterClient, ServiceProviderClusterClientProxy>();
+        await using var publisher = new OrleansEventPublisher(
+            cluster,
+            new SequenceResolver(new OrleansSekibanStream(
+                "provider",
+                "missing-deep-copier",
+                Guid.Parse("00000000-0000-0000-0000-000000000031"))),
+            domain,
+            NullLogger<OrleansEventPublisher>.Instance,
+            new OrleansEventPublisherOptions { MaxPublishAttempts = 1 },
+            new DefaultServiceIdProvider(),
+            sender: null,
+            delayAsync: null);
+
+        var publication = CreatePublication("missing-deep-copier");
+        var plan = publisher.CaptureDestinationPlan(publication.Event, publication.Tags, "default");
+        var state = Assert.Single((IReadOnlyList<OrleansDestinationPlanState>)plan!.ProviderState!);
+        Assert.Contains("capability is unavailable", state.FailureReason, StringComparison.Ordinal);
+        Assert.Null(state.PreparedTarget);
+
+        await ((IExecutorSizeDestinationPublisher)publisher).PublishAsync(
+            new[] { publication },
+            new Dictionary<Guid, ExecutorSizeDestinationPlan> { [publication.Event.Id] = plan });
+
+        Assert.Equal(1, publisher.GetSnapshot().ReasonCounts["admission-resolve-failed"]);
+        Assert.Equal(0, publisher.GetSnapshot().TotalAttemptCount);
+    }
+
+    [Fact]
+    public async Task DirectContextCaptureFailureIsAnAdmissionFailureAndLaterEventsContinue()
+    {
+        var first = CreatePublication("context-failure-first");
+        var second = CreatePublication("context-failure-second");
+        var sender = new RecordingSender();
+        var captureAttempts = 0;
+        await using var publisher = CreatePublisher(
+            sender,
+            new OrleansEventPublisherOptions { MaxPublishAttempts = 1 },
+            captureRequestContext: () =>
+            {
+                if (Interlocked.Increment(ref captureAttempts) == 1)
+                    throw new InvalidOperationException("deterministic context export failure");
+                return new Dictionary<string, object>();
+            });
+
+        await publisher.PublishAsync(new[] { first, second });
+        await WaitUntilAsync(() => sender.Successes == 1);
+
+        var snapshot = publisher.GetSnapshot();
+        Assert.Equal(1, snapshot.ReasonCounts["admission-resolve-failed"]);
+        Assert.DoesNotContain(first.Event.Id, sender.SuccessfulEventIds);
+        Assert.Contains(second.Event.Id, sender.SuccessfulEventIds);
+        Assert.Equal(1, snapshot.TotalTerminalCount);
+    }
+
+    [Fact]
     public void PublicSurfaceAndOptionsRegistration_AreAdditiveAndExact()
     {
         var optionsProperties = typeof(OrleansEventPublisherOptions)
@@ -544,12 +708,21 @@ public sealed class OrleansEventPublisherBoundedTests
         Assert.NotNull(typeof(OrleansEventPublisher).GetConstructor(
             constructorPrefix.Append(typeof(IServiceIdProvider)).ToArray()));
         Assert.NotNull(typeof(OrleansEventPublisher).GetConstructor(
-            constructorPrefix.Append(typeof(OrleansEventPublisherOptions)).Append(typeof(IServiceIdProvider)).ToArray()));
+            constructorPrefix.Append(typeof(IServiceIdProvider)).Append(typeof(OrleansEventPublisherOptions)).ToArray()));
         Assert.DoesNotContain(publicConstructors, constructor => constructor.IsStatic);
 
-        Assert.Equal(typeof(int), typeof(OrleansEventPublisherOptions).GetProperty(nameof(OrleansEventPublisherOptions.MaxPublishAttempts))!.PropertyType);
-        Assert.Equal(typeof(TimeSpan), typeof(OrleansEventPublisherOptions).GetProperty(nameof(OrleansEventPublisherOptions.BaseRetryDelay))!.PropertyType);
-        Assert.Equal(typeof(TimeSpan), typeof(OrleansEventPublisherOptions).GetProperty(nameof(OrleansEventPublisherOptions.MaxRetryDelay))!.PropertyType);
+        Assert.Equal(
+            new Dictionary<string, Type>
+            {
+                [nameof(OrleansEventPublisherOptions.MaxPublishAttempts)] = typeof(int),
+                [nameof(OrleansEventPublisherOptions.BaseRetryDelay)] = typeof(TimeSpan),
+                [nameof(OrleansEventPublisherOptions.MaxRetryDelay)] = typeof(TimeSpan),
+                [nameof(OrleansEventPublisherOptions.MaxQueuedItemsPerDestination)] = typeof(int),
+                [nameof(OrleansEventPublisherOptions.MaxQueuedItemsTotal)] = typeof(int),
+                [nameof(OrleansEventPublisherOptions.TerminalSampleCount)] = typeof(int),
+                [nameof(OrleansEventPublisherOptions.MaxDiagnosticDestinations)] = typeof(int)
+            },
+            GetPublicPropertyTypes(typeof(OrleansEventPublisherOptions)));
 
         Assert.Equal(
             new[]
@@ -571,6 +744,17 @@ public sealed class OrleansEventPublisherBoundedTests
         Assert.Equal(typeof(IReadOnlyDictionary<string, long>),
             typeof(OrleansPublisherDiagnosticsSnapshot).GetProperty(nameof(OrleansPublisherDiagnosticsSnapshot.ReasonCounts))!.PropertyType);
         Assert.Equal(
+            new Dictionary<string, Type>
+            {
+                [nameof(OrleansPublisherDiagnosticsSnapshot.Destinations)] =
+                    typeof(IReadOnlyList<OrleansPublisherDestinationDiagnostic>),
+                [nameof(OrleansPublisherDiagnosticsSnapshot.EvictedDestinationCount)] = typeof(long),
+                [nameof(OrleansPublisherDiagnosticsSnapshot.ReasonCounts)] = typeof(IReadOnlyDictionary<string, long>),
+                [nameof(OrleansPublisherDiagnosticsSnapshot.TotalAttemptCount)] = typeof(long),
+                [nameof(OrleansPublisherDiagnosticsSnapshot.TotalTerminalCount)] = typeof(long)
+            },
+            GetPublicPropertyTypes(typeof(OrleansPublisherDiagnosticsSnapshot)));
+        Assert.Equal(
             new[]
             {
                 "AttemptCount", "DestinationKey", "Namespace", "Provider", "ReasonCounts", "Samples", "ServiceId",
@@ -582,6 +766,34 @@ public sealed class OrleansEventPublisherBoundedTests
             new[] { "Attempts", "EventId", "OccurredAtUtc", "ReasonCode" },
             typeof(OrleansPublisherTerminalSample).GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Select(property => property.Name).OrderBy(name => name).ToArray());
+
+        Assert.Equal(
+            new Dictionary<string, Type>
+            {
+                [nameof(OrleansPublisherDestinationDiagnostic.AttemptCount)] = typeof(long),
+                [nameof(OrleansPublisherDestinationDiagnostic.DestinationKey)] = typeof(string),
+                [nameof(OrleansPublisherDestinationDiagnostic.Namespace)] = typeof(string),
+                [nameof(OrleansPublisherDestinationDiagnostic.Provider)] = typeof(string),
+                [nameof(OrleansPublisherDestinationDiagnostic.ReasonCounts)] = typeof(IReadOnlyDictionary<string, long>),
+                [nameof(OrleansPublisherDestinationDiagnostic.Samples)] = typeof(IReadOnlyList<OrleansPublisherTerminalSample>),
+                [nameof(OrleansPublisherDestinationDiagnostic.ServiceId)] = typeof(string),
+                [nameof(OrleansPublisherDestinationDiagnostic.StreamId)] = typeof(Guid),
+                [nameof(OrleansPublisherDestinationDiagnostic.TerminalCount)] = typeof(long)
+            },
+            GetPublicPropertyTypes(typeof(OrleansPublisherDestinationDiagnostic)));
+        Assert.Equal(
+            new Dictionary<string, Type>
+            {
+                [nameof(OrleansPublisherTerminalSample.Attempts)] = typeof(int),
+                [nameof(OrleansPublisherTerminalSample.EventId)] = typeof(Guid),
+                [nameof(OrleansPublisherTerminalSample.OccurredAtUtc)] = typeof(DateTimeOffset),
+                [nameof(OrleansPublisherTerminalSample.ReasonCode)] = typeof(string)
+            },
+            GetPublicPropertyTypes(typeof(OrleansPublisherTerminalSample)));
+        var getSnapshot = typeof(IOrleansPublisherDiagnostics).GetMethod(nameof(IOrleansPublisherDiagnostics.GetSnapshot));
+        Assert.NotNull(getSnapshot);
+        Assert.Empty(getSnapshot!.GetParameters());
+        Assert.Equal(typeof(OrleansPublisherDiagnosticsSnapshot), getSnapshot.ReturnType);
 
         var services = new ServiceCollection();
         services.AddSekibanDcbOrleansEventPublisher();
@@ -595,24 +807,57 @@ public sealed class OrleansEventPublisherBoundedTests
                     .ImplementationInstance).MaxPublishAttempts);
     }
 
+    private static Dictionary<string, Type> GetPublicPropertyTypes(Type type) =>
+        type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .ToDictionary(property => property.Name, property => property.PropertyType, StringComparer.Ordinal);
+
     [Fact]
     public async Task LegacyOptionsFreeRegistrationResolvesWithDefaultFiveAttemptConfiguration()
     {
         var domain = DcbDomainTypesExtensions.Simple(builder =>
             builder.EventTypes.RegisterEventType<PublisherEvent>());
+        var stream = DispatchProxy.Create<IAsyncStream<SerializableEvent>, FailingStreamProxy>();
+        var streamControl = (FailingStreamProxy)(object)stream;
+        var streamProvider = DispatchProxy.Create<IStreamProvider, FailingStreamProviderProxy>();
+        var streamProviderControl = (FailingStreamProviderProxy)(object)streamProvider;
+        streamProviderControl.Stream = stream;
+        var cluster = DispatchProxy.Create<IClusterClient, FailingClusterClientProxy>();
+        var clusterControl = (FailingClusterClientProxy)(object)cluster;
+        clusterControl.StreamProvider = streamProvider;
+        using var clusterServiceProvider = new ServiceCollection()
+            .AddKeyedSingleton<IStreamProvider>("provider", streamProvider)
+            .BuildServiceProvider();
+        clusterControl.ServiceProviderOverride = clusterServiceProvider;
+        var logger = new RecordingLogger();
         var services = new ServiceCollection();
-        services.AddSingleton<IClusterClient>(DispatchProxy.Create<IClusterClient, ServiceProviderClusterClientProxy>());
+        services.AddSingleton<IClusterClient>(cluster);
         services.AddSingleton<IStreamDestinationResolver>(
             new SequenceResolver(new OrleansSekibanStream("provider", "legacy", Guid.NewGuid())));
         services.AddSingleton(domain);
         services.AddSingleton<Microsoft.Extensions.Logging.ILogger<OrleansEventPublisher>>(
-            NullLogger<OrleansEventPublisher>.Instance);
-        services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
+            logger);
+        services.AddSekibanDcbOrleansEventPublisher();
 
-        await using var provider = services.BuildServiceProvider();
-        var publisher = provider.GetRequiredService<IEventPublisher>();
+        await using var serviceProvider = services.BuildServiceProvider();
+        var publisher = serviceProvider.GetRequiredService<IEventPublisher>();
         Assert.IsType<OrleansEventPublisher>(publisher);
         Assert.Equal(5, new OrleansEventPublisherOptions().MaxPublishAttempts);
+
+        await publisher.PublishAsync(new[] { CreatePublication("legacy-options-free") });
+        var diagnostics = ((IOrleansPublisherDiagnostics)publisher).GetSnapshot();
+        await WaitUntilAsync(
+            () =>
+                streamControl.Attempts == 5 &&
+                ((IOrleansPublisherDiagnostics)publisher).GetSnapshot().TotalTerminalCount == 1,
+            () =>
+                $"stream attempts={streamControl.Attempts}, diagnostics attempts={diagnostics.TotalAttemptCount}, " +
+                $"reasons={string.Join(",", diagnostics.ReasonCounts.Select(pair => $"{pair.Key}:{pair.Value}"))}, " +
+                $"clusterCalls={string.Join("|", clusterControl.Calls)}, " +
+                $"providerCalls={string.Join("|", streamProviderControl.Calls)}, " +
+                $"logs={string.Join("|", logger.Messages)}");
+        diagnostics = ((IOrleansPublisherDiagnostics)publisher).GetSnapshot();
+        Assert.Equal(5, diagnostics.TotalAttemptCount);
+        Assert.Equal(1, diagnostics.ReasonCounts["transport-attempts-exhausted"]);
     }
 
     [Fact]
@@ -691,6 +936,40 @@ public sealed class OrleansEventPublisherBoundedTests
     }
 
     [Fact]
+    public async Task Disposal_AwaitsTheRealNonCancellableTransportTask_AndObservesFaults()
+    {
+        await AssertTransportSettlesBeforeDisposeAsync(completeSuccessfully: true);
+        await AssertTransportSettlesBeforeDisposeAsync(completeSuccessfully: false);
+    }
+
+    private static async Task AssertTransportSettlesBeforeDisposeAsync(bool completeSuccessfully)
+    {
+        var stream = DispatchProxy.Create<IAsyncStream<SerializableEvent>, ControlledStreamProxy>();
+        var streamControl = (ControlledStreamProxy)(object)stream;
+        var target = OrleansEventPublisher.CreatePreparedStreamTargetForTesting(stream);
+        var payloadReleased = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sender = new FixedTargetSender(target);
+        await using var publisher = CreatePublisher(
+            sender,
+            new OrleansEventPublisherOptions { MaxPublishAttempts = 1 },
+            payloadReleased: () => payloadReleased.TrySetResult(true));
+
+        await publisher.PublishAsync(new[] { CreatePublication(completeSuccessfully ? "transport-complete" : "transport-fault") });
+        await streamControl.SendStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var disposeTask = publisher.DisposeAsync().AsTask();
+        Assert.False(disposeTask.IsCompleted);
+
+        if (completeSuccessfully)
+            streamControl.SendCompletion.TrySetResult(true);
+        else
+            streamControl.SendCompletion.TrySetException(new InvalidOperationException("deterministic transport fault"));
+
+        await disposeTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await payloadReleased.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
     public async Task Disposal_DrainsInFlightQueuedAndRetryDelayWorkWithoutDetachedFaults()
     {
         var delayEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -725,7 +1004,7 @@ public sealed class OrleansEventPublisherBoundedTests
     }
 
     private static OrleansEventPublisher CreatePublisher(
-        RecordingSender sender,
+        IOrleansStreamSender sender,
         OrleansEventPublisherOptions options,
         IStreamDestinationResolver? resolver = null,
         Func<TimeSpan, CancellationToken, Task>? delayAsync = null,
@@ -765,7 +1044,7 @@ public sealed class OrleansEventPublisherBoundedTests
             Array.Empty<ITag>());
     }
 
-    private static async Task WaitUntilAsync(Func<bool> predicate)
+    private static async Task WaitUntilAsync(Func<bool> predicate, Func<string>? diagnostic = null)
     {
         for (var i = 0; i < 200; i++)
         {
@@ -774,7 +1053,9 @@ public sealed class OrleansEventPublisherBoundedTests
             await Task.Delay(10);
         }
 
-        Assert.True(predicate(), "Timed out waiting for the deterministic publisher observation.");
+        Assert.True(
+            predicate(),
+            diagnostic?.Invoke() ?? "Timed out waiting for the deterministic publisher observation.");
     }
 
     private static async Task WaitAndSignalAsync(
@@ -893,6 +1174,100 @@ public sealed class OrleansEventPublisherBoundedTests
             targetMethod?.Name == "get_ServiceProvider"
                 ? _serviceProvider
                 : throw new InvalidOperationException($"Unexpected Orleans client call: {targetMethod?.Name}");
+    }
+
+    private sealed class RecordingLogger : ILogger<OrleansEventPublisher>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception) + (exception is null ? string.Empty : $" [{exception.GetType().Name}: {exception.Message}]"));
+        }
+    }
+
+    private class FailingClusterClientProxy : DispatchProxy
+    {
+        private readonly IServiceProvider _serviceProvider = new ServiceCollection().BuildServiceProvider();
+        public IStreamProvider? StreamProvider { get; set; }
+        public IServiceProvider? ServiceProviderOverride { get; set; }
+        public List<string> Calls { get; } = [];
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            Calls.Add(targetMethod?.Name ?? "<null>");
+            return targetMethod?.Name switch
+            {
+                "get_ServiceProvider" => ServiceProviderOverride ?? _serviceProvider,
+                "GetStreamProvider" => StreamProvider,
+                _ => throw new InvalidOperationException($"Unexpected Orleans client call: {targetMethod?.Name}")
+            };
+        }
+    }
+
+    private class FailingStreamProviderProxy : DispatchProxy
+    {
+        public IAsyncStream<SerializableEvent>? Stream { get; set; }
+        public List<string> Calls { get; } = [];
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            Calls.Add(targetMethod?.Name ?? "<null>");
+            return targetMethod?.Name == "GetStream"
+                ? Stream
+                : throw new InvalidOperationException($"Unexpected stream provider call: {targetMethod?.Name}");
+        }
+    }
+
+    private class FailingStreamProxy : DispatchProxy
+    {
+        private int _attempts;
+        public int Attempts => Volatile.Read(ref _attempts);
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod?.Name == nameof(IAsyncStream<SerializableEvent>.OnNextAsync))
+            {
+                Interlocked.Increment(ref _attempts);
+                return Task.FromException(new InvalidOperationException("deterministic legacy transport failure"));
+            }
+
+            throw new InvalidOperationException($"Unexpected async stream call: {targetMethod?.Name}");
+        }
+    }
+
+    private class ControlledStreamProxy : DispatchProxy
+    {
+        public TaskCompletionSource<bool> SendStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> SendCompletion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod?.Name == nameof(IAsyncStream<SerializableEvent>.OnNextAsync))
+            {
+                SendStarted.TrySetResult(true);
+                return SendCompletion.Task;
+            }
+
+            throw new InvalidOperationException($"Unexpected async stream call: {targetMethod?.Name}");
+        }
+    }
+
+    private sealed class FixedTargetSender(IOrleansPreparedStreamTarget target) : IOrleansStreamSender
+    {
+        public IOrleansPreparedStreamTarget PrepareDestination(OrleansPublishDestination destination) => target;
     }
 
     private sealed class RecordingSender : IOrleansStreamSender

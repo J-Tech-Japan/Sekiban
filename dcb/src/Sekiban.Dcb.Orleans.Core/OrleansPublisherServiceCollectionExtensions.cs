@@ -22,8 +22,8 @@ public static class OrleansPublisherServiceCollectionExtensions
                 sp.GetRequiredService<Sekiban.Dcb.Actors.IStreamDestinationResolver>(),
                 sp.GetRequiredService<Sekiban.Dcb.DcbDomainTypes>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<OrleansEventPublisher>>(),
-                sp.GetRequiredService<OrleansEventPublisherOptions>(),
-                sp.GetService<Sekiban.Dcb.ServiceId.IServiceIdProvider>()));
+                sp.GetService<Sekiban.Dcb.ServiceId.IServiceIdProvider>(),
+                sp.GetRequiredService<OrleansEventPublisherOptions>()));
         services.AddSingleton<IEventPublisher>(sp => sp.GetRequiredService<OrleansEventPublisher>());
         services.TryAddSingleton<IOrleansPublisherDiagnostics>(sp =>
             sp.GetRequiredService<OrleansEventPublisher>());
