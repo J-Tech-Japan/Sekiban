@@ -29,8 +29,17 @@ public enum DurableSubscriptionPhase
     CatchingUp,
     Idle,
     Retrying,
-    Standby,
     Halted
+}
+
+/// <summary>Process-local runner status; this is never persisted as durable subscription state.</summary>
+public enum DurableSubscriptionRunnerStatus
+{
+    Starting,
+    Owner,
+    Standby,
+    Halted,
+    Stopped
 }
 
 /// <summary>Normalized service/name identity for a durable subscriber.</summary>
@@ -132,7 +141,12 @@ public sealed record DurableSubscriptionState(
 /// <summary>Lease acquisition result; non-owners receive a state instead of a false healthy result.</summary>
 public sealed record DurableSubscriptionLease(
     bool Acquired,
-    DurableSubscriptionState State);
+    DurableSubscriptionState State)
+{
+    /// <summary>Process-local ownership status associated with this acquisition attempt.</summary>
+    public DurableSubscriptionRunnerStatus Status { get; init; } =
+        Acquired ? DurableSubscriptionRunnerStatus.Owner : DurableSubscriptionRunnerStatus.Standby;
+}
 
 /// <summary>Provider-owned state boundary for a durable subscription.</summary>
 public interface IDurableSubscriptionStore
@@ -160,6 +174,12 @@ public interface IDurableSubscriptionStore
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default);
 
+    Task<ResultBox<bool>> IsRetryDueAsync(
+        DurableSubscriptionIdentity identity,
+        string ownerId,
+        long ownerGeneration,
+        CancellationToken cancellationToken = default);
+
     Task<ResultBox<DurableSubscriptionState>> AcknowledgeAsync(
         DurableSubscriptionIdentity identity,
         string ownerId,
@@ -184,6 +204,8 @@ public interface IDurableSubscriptionStore
 
     Task<ResultBox<DurableSubscriptionState>> HaltAsync(
         DurableSubscriptionIdentity identity,
+        string ownerId,
+        long ownerGeneration,
         string reason,
         CancellationToken cancellationToken = default);
 
@@ -217,6 +239,7 @@ public sealed record DurableSubscriptionRegistration(
 public interface IDurableSubscriptionHandle : IAsyncDisposable
 {
     DurableSubscriptionIdentity Identity { get; }
+    DurableSubscriptionRunnerStatus Status { get; }
     Task<DurableSubscriptionState> GetStateAsync(CancellationToken cancellationToken = default);
     Task ResumeAsync(CancellationToken cancellationToken = default);
     Task HaltAsync(string reason, CancellationToken cancellationToken = default);

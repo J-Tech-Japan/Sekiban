@@ -5,6 +5,8 @@ using Sekiban.Dcb.Subscriptions;
 
 namespace Sekiban.Dcb.Postgres;
 
+internal sealed record DurableSubscriptionProvisioningRegistration(bool PreProvisioned);
+
 /// <summary>PostgreSQL registration and owner provisioning for durable Orleans subscribers.</summary>
 public static class SekibanDcbPostgresDurableSubscriptionExtensions
 {
@@ -17,10 +19,26 @@ public static class SekibanDcbPostgresDurableSubscriptionExtensions
         this IServiceCollection services,
         bool preProvisioned = false)
     {
+        var existingMode = services
+            .Where(descriptor => descriptor.ServiceType == typeof(DurableSubscriptionProvisioningRegistration))
+            .Select(descriptor => descriptor.ImplementationInstance)
+            .OfType<DurableSubscriptionProvisioningRegistration>()
+            .SingleOrDefault();
+        if (existingMode is not null && existingMode.PreProvisioned != preProvisioned)
+        {
+            throw new InvalidOperationException(
+                "All durable subscriptions in a service container must use the same PostgreSQL provisioning mode; mixed LegacyAutoProvisioned and PreProvisioned registration is rejected.");
+        }
+
+        if (existingMode is null)
+        {
+            services.AddSingleton(new DurableSubscriptionProvisioningRegistration(preProvisioned));
+        }
+
         services.TryAddSingleton<IDurableSubscriptionStore>(sp =>
             new PostgresDurableSubscriptionStore(
                 sp.GetRequiredService<IDbContextFactory<SekibanDcbDbContext>>(),
-                legacyAutoProvision: !preProvisioned));
+                legacyAutoProvision: !sp.GetRequiredService<DurableSubscriptionProvisioningRegistration>().PreProvisioned));
         services.TryAddSingleton<IDurableSubscriptionNudgeFactory, NoOpDurableSubscriptionNudgeFactory>();
         return services;
     }

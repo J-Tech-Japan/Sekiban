@@ -58,6 +58,16 @@ out-of-order Orleans nudge cannot advance the cursor, and a process restart resu
 durable delivery/catch-up boundary, not an exactly-once guarantee for external side effects; handlers should remain
 idempotent.
 
+Lease ownership, expiry, retry eligibility, and halt fencing are evaluated by PostgreSQL time, not by a client clock.
+The persisted `DurableSubscriptionPhase` is deliberately separate from the process-local
+`DurableSubscriptionRunnerStatus` exposed by the handle (`Starting`, `Owner`, `Standby`, `Halted`, or `Stopped`). A
+same-owner nudge or fallback poll retains the lease and generation, and an empty/idle observation does not release it;
+the runner can therefore catch up promptly without waiting for lease expiry or manufacturing a new generation. Retry
+attempts are admitted only when the durable `next_attempt_at_utc` is due in PostgreSQL, including after restart or
+takeover. A stale owner cannot overwrite the first durable halt position, reason, or timestamp. Registration also fails
+closed when `PreProvisioned` and `LegacyAutoProvision` are mixed, regardless of registration order; no partial provider
+registration is left to silently change the provisioning mode.
+
 The Orleans integration follows the DCB-supported `Microsoft.Orleans.*` **10.3.1** line. Upgrade the whole cluster
 together; mixing Orleans versions is not a supported compatibility guarantee. This subscriber is the durable
 store-driven catch-up boundary only. It does not provide a relay/outbox, replay arbitrary external subscriber effects,

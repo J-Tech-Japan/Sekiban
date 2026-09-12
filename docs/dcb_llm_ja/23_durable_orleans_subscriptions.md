@@ -57,6 +57,15 @@ halt はサービス/名前/owner/generation の組み合わせで保護され�
 重複または順序が前後した Orleans ヒントがカーソルを進めることはなく、プロセス再起動後は PostgreSQL の行から
 再開します。これは外部副作用に対する exactly-once を保証する境界ではないため、ハンドラーは冪等にしてください。
 
+lease の所有、期限、再試行可能時刻、halt のフェンシングはクライアント時計ではなく PostgreSQL の時刻で判定します。
+永続化される `DurableSubscriptionPhase` と、handle から見えるプロセスローカルな
+`DurableSubscriptionRunnerStatus`（`Starting`、`Owner`、`Standby`、`Halted`、`Stopped`）は分離されています。
+同じ owner からの nudge や fallback poll は lease と generation を保持し、empty/idle の観測でも lease を解放しません。
+そのため lease の期限切れや新しい generation を待たずに速やかに catch-up できます。再試行は、再起動や takeover の後も、
+永続化された `next_attempt_at_utc` が PostgreSQL 上で期限に達した場合だけ許可されます。古い owner は最初に記録された halt の
+位置、理由、時刻を上書きできません。`PreProvisioned` と `LegacyAutoProvision` を混在させた登録は登録順にかかわらず
+fail-closed となり、provider 登録が一部だけ残って provisioning mode が暗黙に変わることもありません。
+
 Orleans 統合は DCB がサポートする `Microsoft.Orleans.*` **10.3.1** 系列に従います。クラスタ全体を同時に更新し、
 Orleans バージョンを混在させないでください。これは durable store を正とする catch-up 境界だけを提供します。
 relay/outbox、任意の外部 subscriber 副作用の replay、または自動的な過去イベント修復は提供しません。これらは

@@ -196,6 +196,13 @@ public sealed class DurableSubscriptionRunnerTests
             Task.FromResult(ResultBox.FromValue(
                 string.Equals(ownerId, _owner, StringComparison.Ordinal) && ownerGeneration == _generation));
 
+        public Task<ResultBox<bool>> IsRetryDueAsync(
+            DurableSubscriptionIdentity identity,
+            string ownerId,
+            long ownerGeneration,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(ResultBox.FromValue(true));
+
         public Task<ResultBox<DurableSubscriptionState>> AcknowledgeAsync(
             DurableSubscriptionIdentity identity,
             string ownerId,
@@ -237,6 +244,8 @@ public sealed class DurableSubscriptionRunnerTests
 
         public Task<ResultBox<DurableSubscriptionState>> HaltAsync(
             DurableSubscriptionIdentity identity,
+            string ownerId,
+            long ownerGeneration,
             string reason,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(ResultBox.FromValue(State with { Phase = DurableSubscriptionPhase.Halted }));
