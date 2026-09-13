@@ -368,7 +368,8 @@ internal static class ClosedReleaseRecordValidator
     {
         _ = authorities;
         var reachable = new HashSet<string>(StringComparer.Ordinal);
-        var queue = new Queue<string>();
+        var preparedReference = GetString(envelope, "prepared_approval_ref");
+        var queue = new Queue<string>([preparedReference]);
         void Enqueue(string reference)
         {
             if (ImmutableReference.IsMatch(reference)) queue.Enqueue(reference);
@@ -404,8 +405,7 @@ internal static class ClosedReleaseRecordValidator
             Enqueue(recordEntry.ImmutableRef);
         }
         foreach (var node in graph.Nodes.Keys) Enqueue(node);
-        Enqueue(GetString(envelope, "prepared_approval_ref"));
-        if (envelope.TryGetProperty("artifact_approval_ref", out var artifactRef)) Enqueue(GetString(envelope, "artifact_approval_ref"));
+        if (envelope.TryGetProperty("artifact_approval_ref", out _)) Enqueue(GetString(envelope, "artifact_approval_ref"));
 
         while (queue.Count > 0)
         {
