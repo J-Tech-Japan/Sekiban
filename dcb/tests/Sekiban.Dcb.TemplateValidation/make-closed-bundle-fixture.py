@@ -470,7 +470,9 @@ No material implementation finding remains at this reviewed exact head.
             commit, object_path = reference.split("@", 1)[1].split(":", 1)
             host_contents.setdefault(commit, []).append((object_path.removeprefix("contents/"), Path(path).read_bytes()))
     for commit, content_files in host_contents.items():
-        tree_sha = host_tree if commit == host_ref else hashlib.sha1(f"tree:{commit}".encode()).hexdigest()
+        tree_sha = host_tree if commit == host_ref else hashlib.sha1(
+            f"tree:{commit}".encode(), usedforsecurity=False
+        ).hexdigest()
         commit_ref = immutable(host_repository, commit, f"commits/{commit}")
         tree_ref = immutable(host_repository, commit, f"git/trees/{tree_sha}")
         add_api(commit_ref, {"sha": commit, "commit": {"tree": {"sha": tree_sha}}})

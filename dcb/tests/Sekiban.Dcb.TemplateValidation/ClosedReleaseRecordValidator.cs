@@ -994,7 +994,8 @@ internal static class ClosedReleaseRecordValidator
     private static string ParseSemanticVerdict(byte[] body)
     {
         var text = Encoding.UTF8.GetString(body);
-        var matches = Regex.Matches(text, @"(?im)^\s*[-*]?\s*Verdict\s*:\s*\*\*(APPROVE|REQUEST-UPDATE)\*\*\s*$");
+        var matches = Regex.Matches(text, @"(?im)^\s*[-*]?\s*Verdict\s*:\s*\*\*(APPROVE|REQUEST-UPDATE)\*\*\s*$",
+            RegexOptions.IgnoreCase | RegexOptions.Multiline, TimeSpan.FromSeconds(1));
         Assert(matches.Count == 1 && matches[0].Groups[1].Value == "APPROVE",
             "Review body must contain exactly one canonical semantic verdict of APPROVE.");
         return "APPROVE";
