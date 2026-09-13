@@ -454,6 +454,15 @@ SHIM
       --repo-root "$repo_root" --expected-version "$version" --state "$early_state"
   done
 
+  # A legal graph uses successive earlier immutable host commits for payload,
+  # authorities, and the canonical pointer.  Keep this positive control next
+  # to the self-containing negative below.
+  external_bundle="$work_root/closed-external-commit"
+  python3 "$script_dir/mutate-closed-bundle.py" "$output" "$external_bundle" external-commit
+  run_net10 "$validator" release-record --bundle "$external_bundle" \
+    --manifest "$external_bundle/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+
   # Production bundle mutations exercise the pointer-only reader/validator,
   # not the fixture-only flattened --record compatibility adapter.  Each
   # helper rewrites the immutable envelope and graph joins so the validator
@@ -469,7 +478,12 @@ SHIM
       noncanonical-closeout closure-before-authority closeout-equal-authority artifact-before-release artifact-equal-release \
       library-closeout-before-authority template-closeout-before-authority issue1185-closeout-before-authority \
       issue1230-closeout-before-authority library-closeout-equal-authority template-closeout-equal-authority \
-      issue1185-closeout-equal-authority issue1230-closeout-equal-authority early-future-authority; do
+      issue1185-closeout-equal-authority issue1230-closeout-equal-authority early-future-authority \
+      current-object-self-commit missing-merge-strategy wrong-merge-strategy candidate-parent-count-1 \
+      candidate-parent-count-3 candidate-parent-reversed candidate-parent-unrelated missing-reviewed-commit \
+      unequal-reviewed-merged-trees origin-candidate-substitution semantic-negated prepared-completion-late \
+      prepared-completion-equal artifact-completion-late artifact-completion-equal manifest-listed-unreachable \
+      manifest-same-file-alias; do
     mutant_bundle="$work_root/closed-mutant-${closed_mutant//\//-}"
     python3 "$script_dir/mutate-closed-bundle.py" "$output" "$mutant_bundle" "$closed_mutant"
     mutant_state=complete
@@ -481,7 +495,7 @@ SHIM
 
   sibling_bundle="$work_root/closed-unreferenced-sibling"
   python3 "$script_dir/mutate-closed-bundle.py" "$output" "$sibling_bundle" unreferenced-sibling
-  run_net10 "$validator" release-record --bundle "$sibling_bundle" \
+  expect_failure run_net10 "$validator" release-record --bundle "$sibling_bundle" \
     --manifest "$sibling_bundle/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
 
@@ -541,29 +555,7 @@ SHIM
     --expected-version "$version" --state complete
 
   bundle_self_commit_mutant="$work_root/bundle-self-commit-mutant"
-  cp -R "$output" "$bundle_self_commit_mutant"
-  self_commit_record_relative_path="$(jq -r '.record_relative_path' "$bundle_self_commit_mutant/bundle.json")"
-  self_commit_host_ref="$(jq -r '.host_ref' "$bundle_self_commit_mutant/bundle.json")"
-  self_commit_record="$work_root/self-commit-record.json"
-  self_commit_envelope="$work_root/self-commit-envelope.json"
-  jq -r '.content' "$bundle_self_commit_mutant/$self_commit_record_relative_path" |
-    tr -d '\n' | base64 --decode > "$work_root/self-commit-original-record.json"
-  jq --arg self_commit_host_ref "$self_commit_host_ref" \
-    '.record_source.commit_sha = $self_commit_host_ref' \
-    "$work_root/self-commit-original-record.json" > "$self_commit_record"
-  self_commit_content="$(base64 < "$self_commit_record" | tr -d '\n')"
-  self_commit_blob_sha="$(git hash-object "$self_commit_record")"
-  jq --arg content "$self_commit_content" --arg blob_sha "$self_commit_blob_sha" \
-    '.content = $content | .sha = $blob_sha' \
-    "$bundle_self_commit_mutant/$self_commit_record_relative_path" > "$self_commit_envelope"
-  self_commit_digest="$(sha256sum "$self_commit_envelope" | cut -d' ' -f1)"
-  cp "$self_commit_envelope" "$bundle_self_commit_mutant/objects/$self_commit_digest.json"
-  jq --arg old_path "$self_commit_record_relative_path" --arg new_path "objects/$self_commit_digest.json" \
-     --arg new_digest "$self_commit_digest" \
-     '.record_relative_path = $new_path | .entries |= map(if .kind == "record" then .relative_path = $new_path | .sha256 = $new_digest else . end)' \
-     "$bundle_self_commit_mutant/bundle.json" > "$bundle_self_commit_mutant/bundle.json.tmp"
-  mv "$bundle_self_commit_mutant/bundle.json.tmp" "$bundle_self_commit_mutant/bundle.json"
-  rm "$bundle_self_commit_mutant/$self_commit_record_relative_path"
+  python3 "$script_dir/mutate-closed-bundle.py" "$output" "$bundle_self_commit_mutant" current-object-self-commit
   expect_failure run_net10 "$validator" release-record --bundle "$bundle_self_commit_mutant" \
     --manifest "$bundle_self_commit_mutant/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
@@ -914,15 +906,15 @@ approval_rebind_record="$work_root/release-approval-rebind.json"
 jq '.pointer.artifact_approval_id = .pointer.prepared_approval_id' "$release_record" > "$approval_rebind_record"
 expect_failure run_net10 "$validator" release-record --record "$approval_rebind_record" --repo-root "$repo_root" --expected-version "$version" --state complete
 
-unreferenced_sibling_record="$work_root/release-unreferenced-sibling.json"
+legacy_unreferenced_sibling_record="$work_root/release-unreferenced-sibling.json"
 jq '.deltas += [{"id":"unreferenced-sibling","stage":"sibling","previous_id":"unreachable","payload_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","payload_ref":"J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/sibling.json","payload":{}}]' \
-  "$release_record" > "$unreferenced_sibling_record"
-run_net10 "$validator" release-record --record "$unreferenced_sibling_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+  "$release_record" > "$legacy_unreferenced_sibling_record"
+run_net10 "$validator" release-record --record "$legacy_unreferenced_sibling_record" --repo-root "$repo_root" --expected-version "$version" --state complete
 
 reachable_splice_record="$work_root/release-reachable-splice.json"
 jq '.deltas[1].previous_id = .base.id' "$release_record" > "$reachable_splice_record"
 expect_failure run_net10 "$validator" release-record --record "$reachable_splice_record" --repo-root "$repo_root" --expected-version "$version" --state complete
-echo "Schema-v2 origin/candidate, approval-carry/rebind, unreferenced-sibling/reachable-splice, and external/current-host-commit discriminators passed."
+echo "Legacy flattened adapter controls passed; production --bundle origin/candidate, approval-carry/rebind, external/self-host-commit, reachability, alias, semantic, and chronology discriminators are exercised above."
 
 prepared_record="$work_root/release-prepared.json"
 jq '.stage = "prepared" | .history = ["prepared"] | .pointer.payload_id = "base-prepared" | del(.library_tag, .template_tag, .packages, .template, .library_release, .template_release, .closure)' \
@@ -1018,6 +1010,8 @@ wrong_integration_pr="$work_root/release-wrong-integration-pr.json"
 jq '.integration_pr = "https://github.com/J-Tech-Japan/Sekiban/pull/9999"' "$release_record" > "$wrong_integration_pr"
 expect_failure run_net10 "$validator" release-record --record "$wrong_integration_pr" --repo-root "$repo_root" --expected-version "$version" --state complete
 
+# This record_source mutation remains fixture-only coverage for the legacy
+# --record adapter; closed production bundles reject that vocabulary by shape.
 wrong_record_source="$work_root/release-wrong-record-source.json"
 jq '.record_source.repository = "example/forged"' "$release_record" > "$wrong_record_source"
 expect_failure run_net10 "$validator" release-record --record "$wrong_record_source" --repo-root "$repo_root" --expected-version "$version" --state complete

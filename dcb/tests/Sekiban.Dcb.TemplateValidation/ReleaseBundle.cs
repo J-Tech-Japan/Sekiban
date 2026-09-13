@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -103,14 +104,13 @@ internal sealed class ReleaseBundle
                 $"Bundle entry {relativePath} endpoint does not match its immutable reference.");
             Assert(Sha256.IsMatch(digest), $"Bundle entry {relativePath} must have a SHA-256 digest.");
             Assert(IsSafeRelativePath(relativePath), $"Bundle entry path '{relativePath}' is unsafe.");
+            Assert(paths.Add(relativePath),
+                $"Bundle aliases multiple immutable references to the same local path {relativePath}.");
+            var expectedPathDigest = Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes($"{immutableRef}\n{digest}"))).ToLowerInvariant();
             Assert(relativePath.StartsWith("objects/", StringComparison.Ordinal) &&
-                   Path.GetFileNameWithoutExtension(relativePath) == digest,
-                $"Bundle entry {relativePath} must be digest-named.");
-            if (!paths.Add(relativePath))
-            {
-                Assert(loaded.Values.Any(existing => existing.RelativePath == relativePath && existing.Sha256 == digest),
-                    $"Bundle reuses local path {relativePath} with different bytes.");
-            }
+                   Path.GetFileNameWithoutExtension(relativePath) == expectedPathDigest,
+                $"Bundle entry {relativePath} must be deterministically named by its immutable reference and content digest.");
             Assert(refs.Add(immutableRef),
                 $"Bundle contains duplicate immutable reference {immutableRef}.");
 

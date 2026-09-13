@@ -64,7 +64,7 @@ def main() -> None:
         envelope["content"] = base64.b64encode(content).decode("ascii")
         envelope["sha"] = git_blob_sha(content)
         raw = dump(envelope)
-        new_relative = f"objects/{sha256(raw)}.json"
+        new_relative = f"objects/{sha256((reference + chr(10) + sha256(raw)).encode()).lower()}.json"
         (destination / new_relative).write_bytes(raw)
         if new_relative != entry["relative_path"]:
             old_path.unlink()
@@ -78,7 +78,7 @@ def main() -> None:
         entry = find_entry(lambda item: item["immutable_ref"] == reference)
         old_path = destination / entry["relative_path"]
         raw = dump(value)
-        new_relative = f"objects/{sha256(raw)}.json"
+        new_relative = f"objects/{sha256((reference + chr(10) + sha256(raw)).encode()).lower()}.json"
         (destination / new_relative).write_bytes(raw)
         if new_relative != entry["relative_path"]:
             old_path.unlink()
@@ -127,13 +127,23 @@ def main() -> None:
         write_raw(reference, value)
 
     def mutate_approval(stage: str, mutate: Callable[[dict[str, object]], None]) -> None:
-        approval_ref = record["prepared_approval_ref"] if stage == "prepared" else record["artifacts_verified_approval_ref"]
+        approval_ref = record["prepared_approval_ref"] if stage == "prepared" else record["artifact_approval_ref"]
         _, approval = read_json_content(approval_ref)
         mutate(approval)
         write_content(approval_ref, dump(approval))
 
+    def mutate_completion(stage: str, mutate: Callable[[dict[str, object]], None]) -> None:
+        approval_ref = record["prepared_approval_ref"] if stage == "prepared" else record["artifact_approval_ref"]
+        _, approval = read_json_content(approval_ref)
+        completion_ref = approval["completion_ref"]
+        _, completion = read_json_content(completion_ref)
+        mutate(completion)
+        write_content(completion_ref, dump(completion))
+        approval["completion_sha256"] = sha256(dump(completion))
+        write_content(approval_ref, dump(approval))
+
     def refresh_approval_payload_digests() -> None:
-        for key in ("prepared_approval_ref", "artifacts_verified_approval_ref"):
+        for key in ("prepared_approval_ref", "artifact_approval_ref"):
             approval_ref = record.get(key)
             if not approval_ref:
                 continue
@@ -190,6 +200,90 @@ def main() -> None:
         mutate_payload("prepared", lambda payload: payload["changes"]["implementation_review"].update({"review_url": "https://github.com/J-Tech-Japan/Sekiban/pull/1236#pullrequestreview-9999999999"}))
     elif kind == "review-id":
         mutate_payload("prepared", lambda payload: payload["changes"]["implementation_review"].update({"review_id": "6000000002"}))
+    elif kind == "external-commit":
+        pass
+    elif kind == "current-object-self-commit":
+        current_ref = record["current_payload_ref"]
+        entry = find_entry(lambda item: item["immutable_ref"] == current_ref)
+        object_path = current_ref.split(":", 1)[1]
+        self_ref = f"J-Tech-Japan/SekibanIntentHost@{manifest['host_ref']}:{object_path}"
+        entry["immutable_ref"] = self_ref
+        entry["endpoint"] = f"repos/J-Tech-Japan/SekibanIntentHost/{object_path}?ref={manifest['host_ref']}"
+        record["current_payload_ref"] = self_ref
+    elif kind in {
+        "missing-merge-strategy", "wrong-merge-strategy", "candidate-parent-count-1",
+        "candidate-parent-count-3", "candidate-parent-reversed", "candidate-parent-unrelated",
+        "missing-reviewed-commit", "unequal-reviewed-merged-trees", "origin-candidate-substitution"
+    }:
+        def mutate_candidate(payload: dict[str, object]) -> None:
+            candidate = payload["changes"]["candidate"]
+            if kind == "missing-merge-strategy":
+                candidate.pop("merge_strategy", None)
+            elif kind == "wrong-merge-strategy":
+                candidate["merge_strategy"] = "squash"
+            elif kind == "candidate-parent-count-1":
+                candidate["parent_shas"] = [candidate["base_sha"]]
+            elif kind == "candidate-parent-count-3":
+                candidate["parent_shas"] = [candidate["base_sha"], candidate["reviewed_head_sha"], "9" * 40]
+            elif kind == "candidate-parent-reversed":
+                candidate["parent_shas"] = [candidate["reviewed_head_sha"], candidate["base_sha"]]
+            elif kind == "candidate-parent-unrelated":
+                candidate["parent_shas"] = ["8" * 40, "9" * 40]
+            elif kind == "missing-reviewed-commit":
+                candidate.pop("reviewed_commit_evidence_ref", None)
+            elif kind == "unequal-reviewed-merged-trees":
+                candidate["merged_tree_sha"] = "7" * 40
+        if kind == "origin-candidate-substitution":
+            mutate_payload("prepared", lambda payload: payload["changes"]["origin_delivery"].update({"reviewed_head_sha": payload["changes"]["candidate"]["reviewed_head_sha"]}))
+        else:
+            mutate_payload("prepared", mutate_candidate)
+    elif kind == "semantic-negated":
+        body = b"REQUEST-UPDATE - DO NOT APPROVE\n"
+        reference, payload = payload_at("prepared")
+        review = payload["changes"]["implementation_review"]
+        body_ref = review["body_evidence_ref"]
+        review["body_sha256"] = write_content(body_ref, body)
+        completion_ref = review["intent_completion_evidence_ref"]
+        _, completion = read_json_content(completion_ref)
+        completion["body_sha256"] = review["body_sha256"]
+        write_content(completion_ref, dump(completion))
+        review["intent_completion_sha256"] = sha256(dump(completion))
+        mutate_api(":pulls/1236/reviews/6000000001", lambda value: value.update({"body": body.decode()}))
+        write_content(reference, dump(payload))
+    elif kind in {"prepared-completion-late", "prepared-completion-equal", "artifact-completion-late", "artifact-completion-equal"}:
+        authority_stage = "prepared" if kind.startswith("prepared") else "artifacts-verified"
+        timestamp = {
+            "prepared-completion-late": "2026-09-12T10:20:00Z",
+            "prepared-completion-equal": "2026-09-12T09:20:00Z",
+            "artifact-completion-late": "2026-09-12T12:00:00Z",
+            "artifact-completion-equal": "2026-09-12T11:00:00Z",
+        }[kind]
+        mutate_completion(authority_stage, lambda completion: completion.update({"completed_at_utc": timestamp}))
+    elif kind == "manifest-listed-unreachable":
+        original_ref, original_payload = chain[1]
+        repository_commit, _ = original_ref.split(":", 1)
+        sibling_path = "intents/sekiban/releases/dcb-v10.22.0/unreachable.json"
+        sibling_ref = f"{repository_commit}:contents/{sibling_path}"
+        content = dump({"unreachable": True})
+        envelope = {
+            "type": "file", "encoding": "base64", "path": sibling_path,
+            "sha": git_blob_sha(content), "content": base64.b64encode(content).decode(),
+        }
+        raw = dump(envelope)
+        path_digest = sha256((sibling_ref + chr(10) + sha256(raw)).encode())
+        relative = f"objects/{path_digest}.json"
+        (destination / relative).write_bytes(raw)
+        manifest["entries"].append({
+            "kind": "host-response", "immutable_ref": sibling_ref,
+            "endpoint": f"repos/J-Tech-Japan/SekibanIntentHost/contents/{sibling_path}?ref={repository_commit.split('@', 1)[1]}",
+            "relative_path": relative, "sha256": sha256(raw),
+        })
+    elif kind == "manifest-same-file-alias":
+        first = manifest["entries"][1]
+        alias = dict(first)
+        alias["immutable_ref"] = "J-Tech-Japan/Sekiban@" + ("a" * 40) + ":pulls/9999"
+        alias["endpoint"] = "repos/J-Tech-Japan/Sekiban/pulls/9999"
+        manifest["entries"].append(alias)
     elif kind == "completion-arbitrary":
         _, approval = read_json_content(record["prepared_approval_ref"])
         write_content(approval["completion_ref"], b"not-json\n")
@@ -245,7 +339,7 @@ def main() -> None:
             value["assets"][0]["name"] = "forged.nupkg"
         write_raw(reference, value)
     elif kind == "missing-artifact-authority":
-        record.pop("artifacts_verified_approval_ref", None)
+        record.pop("artifact_approval_ref", None)
     elif kind == "authority-version":
         mutate_approval("prepared", lambda value: value.update({"version": "10.21.0"}))
     elif kind == "authority-verdict":
@@ -300,7 +394,7 @@ def main() -> None:
             "sha": git_blob_sha(content), "content": base64.b64encode(content).decode("ascii"),
         }
         raw = dump(envelope)
-        relative = f"objects/{sha256(raw)}.json"
+        relative = f"objects/{sha256((sibling_ref + chr(10) + sha256(raw)).encode())}.json"
         (destination / relative).write_bytes(raw)
         manifest["entries"].append({
             "kind": "host-response", "immutable_ref": sibling_ref,
@@ -321,6 +415,9 @@ def main() -> None:
         "issue1185-closeout-before-authority", "issue1230-closeout-before-authority",
         "library-closeout-equal-authority", "template-closeout-equal-authority",
         "issue1185-closeout-equal-authority", "issue1230-closeout-equal-authority",
+        "missing-merge-strategy", "wrong-merge-strategy", "candidate-parent-count-1", "candidate-parent-count-3", "candidate-parent-reversed",
+        "candidate-parent-unrelated", "missing-reviewed-commit", "unequal-reviewed-merged-trees",
+        "origin-candidate-substitution", "semantic-negated",
     }:
         refresh_approval_payload_digests()
 

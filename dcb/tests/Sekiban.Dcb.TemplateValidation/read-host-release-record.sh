@@ -88,7 +88,7 @@ jq -e --arg version "$version" --arg state "$state" \
    (.current_payload_ref | type == "string") and
    (.prepared_approval_ref | type == "string") and
    (if (.stage == "artifacts-verified" or .stage == "complete")
-    then (.artifacts_verified_approval_ref | type == "string") else true end)' "$decoded" >/dev/null || {
+    then (.artifact_approval_ref | type == "string") else true end)' "$decoded" >/dev/null || {
   echo "Host release record is not the requested closed schema-v2 version/state/source." >&2
   exit 1
 }
@@ -126,9 +126,10 @@ tree_blob_sha="$(jq -r --arg path "$record_path" '.tree[] | select(.path == $pat
 }
 
 write_entry() {
-  local kind="$1" immutable_ref="$2" endpoint="$3" bytes_file="$4" digest relative_path
+  local kind="$1" immutable_ref="$2" endpoint="$3" bytes_file="$4" digest relative_path path_digest
   digest="$(sha256sum "$bytes_file" | cut -d' ' -f1)"
-  relative_path="objects/${digest}.json"
+  path_digest="$(printf '%s\n%s' "$immutable_ref" "$digest" | sha256sum | cut -d' ' -f1)"
+  relative_path="objects/${path_digest}.json"
   cp "$bytes_file" "$output_dir/$relative_path"
   jq -nc --arg kind "$kind" --arg ref "$immutable_ref" --arg endpoint "$endpoint" \
     --arg path "$relative_path" --arg sha "$digest" \
@@ -140,11 +141,13 @@ write_response_entry() {
   write_entry "$kind" "$immutable_ref" "$endpoint" "$response_file"
 }
 
-record_relative_path="objects/$(sha256sum "$envelope" | cut -d' ' -f1).json"
+record_immutable_ref="${host_repository}@${ref}:${record_path}"
+record_envelope_digest="$(sha256sum "$envelope" | cut -d' ' -f1)"
+record_relative_path="objects/$(printf '%s\n%s' "$record_immutable_ref" "$record_envelope_digest" | sha256sum | cut -d' ' -f1).json"
 cp "$envelope" "$output_dir/$record_relative_path"
-jq -nc --arg ref "${host_repository}@${ref}:${record_path}" \
+jq -nc --arg ref "$record_immutable_ref" \
   --arg endpoint "repos/${host_repository}/contents/${record_path}?ref=${ref}" \
-  --arg path "$record_relative_path" --arg sha "$(sha256sum "$envelope" | cut -d' ' -f1)" \
+  --arg path "$record_relative_path" --arg sha "$record_envelope_digest" \
   '{kind:"record",immutable_ref:$ref,endpoint:$endpoint,relative_path:$path,sha256:$sha}' >> "$entries"
 
 commit_ref="${host_repository}@${ref}:commits/${ref}"
@@ -189,7 +192,7 @@ seen_refs_file="$(mktemp "${TMPDIR:-/tmp}/sek-release-bundle-seen.XXXXXX")"
 cleanup_bundle_queue() { rm -f "$queue_file" "$seen_refs_file"; }
 trap 'cleanup; cleanup_extra; cleanup_bundle_queue' EXIT
 
-jq -r '.current_payload_ref, .prepared_approval_ref, (.artifacts_verified_approval_ref // empty)' "$decoded" > "$queue_file"
+jq -r '.current_payload_ref, .prepared_approval_ref, (.artifact_approval_ref // empty)' "$decoded" > "$queue_file"
 while IFS= read -r immutable_ref; do
   [[ -n "$immutable_ref" ]] || continue
   if grep -Fqx "$immutable_ref" "$seen_refs_file"; then continue; fi
