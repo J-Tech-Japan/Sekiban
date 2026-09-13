@@ -304,7 +304,7 @@ requested_ref="${FAKE_HOST_REF:?}"
 record_path="intents/sekiban/releases/dcb-v10.22.0-release-record.json"
 record_blob="$(tr -d '\n' < "$fixture_root/record-blob-sha")"
 tree_sha="$(tr -d '\n' < "$fixture_root/tree-sha")"
-merged_sha="$(jq -r '.merged_sha' "$record")"
+merged_sha="$(tr -d '\n' < "$fixture_root/merged-sha")"
 content="$(base64 < "$record" | tr -d '\n')"
 
 if [[ "$endpoint" == "repos/J-Tech-Japan/SekibanIntentHost/contents/${record_path}?ref=${requested_ref}" ]]; then
@@ -343,7 +343,11 @@ case "$endpoint" in
     [[ -n "$map_line" ]] || {
       if [[ "$endpoint" == "repos/J-Tech-Japan/Sekiban/git/ref/tags/"* ]]; then
         tag="${endpoint##*/}"
-        object_sha="$(jq -r --arg tag "$tag" 'if .tag_joins.library_tag.name == $tag then .tag_joins.library_tag.object_id else .tag_joins.template_tag.object_id end' "$record")"
+        if [[ "$tag" == dcb-v10.22.0 ]]; then
+          object_sha="$(tr -d '\n' < "$fixture_root/library-tag-object")"
+        else
+          object_sha="$(tr -d '\n' < "$fixture_root/template-tag-object")"
+        fi
         [[ "${FAKE_GH_BAD_TAG_OBJECT:-0}" == 1 ]] && object_sha="6666666666666666666666666666666666666666"
         jq -n --arg sha "$object_sha" '{ref:"refs/tags/tag",object:{sha:$sha,type:"tag"}}'
         exit 0
@@ -454,12 +458,18 @@ SHIM
   # not the fixture-only flattened --record compatibility adapter.  Each
   # helper rewrites the immutable envelope and graph joins so the validator
   # reaches the named semantic rule instead of failing on an unrelated digest.
-  for closed_mutant in root-merged-sha root-extra-cumulative-fact empty-delta skip-delta \
-      wrong-stage wrong-stage-field review-head review-head-and-api review-api-commit wrong-release-url wrong-release-body \
-      wrong-package-url wrong-template-url wrong-library-observed-time equal-template-tag-time \
-      draft-release wrong-release-tag missing-release-asset wrong-release-asset-name \
-      missing-artifact-authority authority-version authority-verdict authority-rebind authority-time \
-      noncanonical-closeout closure-before-authority early-future-authority; do
+  for closed_mutant in root-merged-sha root-extra-cumulative-fact payload-fold id-only-predecessor duplicate-root-fact \
+      unknown-package-member unknown-release-member unknown-release-body-member unknown-tag-member \
+      empty-delta skip-delta wrong-stage wrong-stage-field review-head review-head-and-api review-api-commit \
+      review-api-body review-submitted-at review-url review-id completion-arbitrary completion-task completion-target \
+      completion-nonce completion-status completion-verdict completion-artifact completion-reviewer completion-time \
+      wrong-release-url wrong-release-body release-asset-url wrong-package-url wrong-template-url \
+      wrong-library-observed-time equal-template-tag-time draft-release wrong-release-tag missing-release-asset \
+      wrong-release-asset-name missing-artifact-authority authority-version authority-verdict authority-rebind authority-time \
+      noncanonical-closeout closure-before-authority closeout-equal-authority artifact-before-release artifact-equal-release \
+      library-closeout-before-authority template-closeout-before-authority issue1185-closeout-before-authority \
+      issue1230-closeout-before-authority library-closeout-equal-authority template-closeout-equal-authority \
+      issue1185-closeout-equal-authority issue1230-closeout-equal-authority early-future-authority; do
     mutant_bundle="$work_root/closed-mutant-${closed_mutant//\//-}"
     python3 "$script_dir/mutate-closed-bundle.py" "$output" "$mutant_bundle" "$closed_mutant"
     mutant_state=complete

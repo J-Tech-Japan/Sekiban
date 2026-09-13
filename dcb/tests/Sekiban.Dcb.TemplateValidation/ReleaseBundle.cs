@@ -106,8 +106,11 @@ internal sealed class ReleaseBundle
             Assert(relativePath.StartsWith("objects/", StringComparison.Ordinal) &&
                    Path.GetFileNameWithoutExtension(relativePath) == digest,
                 $"Bundle entry {relativePath} must be digest-named.");
-            Assert(paths.Add(relativePath),
-                $"Bundle contains more than one immutable object at local path {relativePath}.");
+            if (!paths.Add(relativePath))
+            {
+                Assert(loaded.Values.Any(existing => existing.RelativePath == relativePath && existing.Sha256 == digest),
+                    $"Bundle reuses local path {relativePath} with different bytes.");
+            }
             Assert(refs.Add(immutableRef),
                 $"Bundle contains duplicate immutable reference {immutableRef}.");
 
@@ -151,13 +154,6 @@ internal sealed class ReleaseBundle
         Assert(actualFiles.SetEquals(paths),
             "Bundle contains an extra, missing, or unreachable file outside the closed manifest.");
 
-        using var recordDocument = JsonDocument.Parse(recordBytes);
-        var record = recordDocument.RootElement;
-        Assert(record.TryGetProperty("bundle_refs", out var bundleRefs) && bundleRefs.ValueKind == JsonValueKind.Array,
-            "The v2 record must expose the bundle references consumed by the reader boundary.");
-        var recordRefs = bundleRefs.EnumerateArray()
-            .Select(value => value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty)
-            .ToHashSet(StringComparer.Ordinal);
         var readerAnchorRefs = loaded.Keys
             .Where(reference => IsReaderAnchorReference(reference, hostRef))
             .ToHashSet(StringComparer.Ordinal);
@@ -165,11 +161,6 @@ internal sealed class ReleaseBundle
                readerAnchorRefs.Any(reference => reference.Contains($":commits/{hostRef}", StringComparison.OrdinalIgnoreCase)) &&
                readerAnchorRefs.Any(reference => reference.Contains(":git/trees/", StringComparison.OrdinalIgnoreCase)),
             "The closed bundle must contain exactly the immutable host commit/tree anchors fetched by the reader.");
-        var expectedResponseRefs = loaded.Keys
-            .Where(reference => loaded[reference].Kind != "record" && !readerAnchorRefs.Contains(reference))
-            .ToHashSet(StringComparer.Ordinal);
-        Assert(recordRefs.SetEquals(expectedResponseRefs),
-            "bundle_refs must enumerate every and only every non-record release evidence response; reader host anchors are implicit.");
 
         return new ReleaseBundle(recordPath!, hostRef, recordBytes!, loaded);
     }

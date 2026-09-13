@@ -7,11 +7,10 @@ using System.Text.RegularExpressions;
 
 namespace Sekiban.Dcb.TemplateValidation;
 
-// Production release-record validation is deliberately separate from the
-// fixture-only legacy adapter.  A production bundle is a pointer envelope:
-// every byte needed to validate it is fetched by an immutable reference and is
-// joined only through the canonical pointer and the immediate predecessor
-// chain.
+// The production release path consumes a closed schema-v2 envelope. The
+// envelope contains only the current immutable payload and the approvals that
+// are applicable to its stage. All release facts live in the payload chain;
+// detached approvals and every nested owned object are authenticated too.
 internal static class ClosedReleaseRecordValidator
 {
     private const int SchemaVersion = 2;
@@ -19,6 +18,7 @@ internal static class ClosedReleaseRecordValidator
     private const string HostRepository = "J-Tech-Japan/SekibanIntentHost";
     private const string HostRecordPath = "intents/sekiban/releases/dcb-v10.22.0-release-record.json";
     private const string IntegrationPullRequest = "https://github.com/J-Tech-Japan/Sekiban/pull/1235";
+    private const string RequiredCloseoutLink = "https://github.com/J-Tech-Japan/Sekiban/issues/1234";
     private const string DiffDigest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
     private const string DiffCommand = "git diff --check";
     private static readonly string[] Stages =
@@ -37,6 +37,9 @@ internal static class ClosedReleaseRecordValidator
         "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex Sha256 = new(
         "^[0-9a-fA-F]{64}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex ImmutableReference = new(
+        "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-fA-F]{40}:.+$",
+        RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     internal static void Validate(
         JsonElement root,
@@ -45,46 +48,125 @@ internal static class ClosedReleaseRecordValidator
         string? expectedState,
         string? repoRoot)
     {
-        Assert(root.ValueKind == JsonValueKind.Object, "Closed release bundle root must be a JSON object.");
-        RequireMembers(root, "closed release record", new[]
-        {
-            "schema_version", "version", "record_source", "merged_sha", "tag_joins", "stage", "base", "deltas",
-            "pointer", "authorities", "bundle_refs"
-        });
+        Assert(root.ValueKind == JsonValueKind.Object, "Closed release envelope must be a JSON object.");
+        RequireMembers(root, "closed release envelope",
+            ["schema_version", "version", "stage", "current_payload_ref", "prepared_approval_ref"],
+            ["artifacts_verified_approval_ref"]);
         Assert(GetInt(root, "schema_version") == SchemaVersion,
-            "Closed release record schema_version must be 2; v1 cannot be relabelled.");
+            "Closed release envelope schema_version must be 2; v1 cannot be relabelled.");
         Assert(GetString(root, "version") == expectedVersion,
-            $"Closed release record version must be {expectedVersion}.");
+            $"Closed release envelope version must be {expectedVersion}.");
 
         var stage = GetString(root, "stage");
-        var stageIndex = Array.IndexOf(Stages, stage);
-        Assert(stageIndex >= 0, $"Unknown closed release-record stage '{stage}'.");
+        var stageIndex = StageIndex(stage);
         if (!string.IsNullOrWhiteSpace(expectedState))
         {
-            Assert(stage == expectedState, $"Closed release record stage is {stage}, expected {expectedState}.");
+            Assert(stage == expectedState, $"Closed release envelope stage is {stage}, expected {expectedState}.");
         }
 
-        var graph = ValidateGraph(root, bundle, expectedVersion, stage, stageIndex);
+        var graph = ValidateGraph(root, bundle, expectedVersion, stageIndex);
         var effective = FoldEffectiveRecord(root, graph);
-        ValidateTagJoins(root, effective);
         Assert(!effective.TryGetProperty("artifacts_verified", out _) &&
-               !effective.TryGetProperty("candidate_review", out _),
-            "Closed schema-v2 production records cannot use the legacy review-gate members.");
+               !effective.TryGetProperty("candidate_review", out _) &&
+               !effective.TryGetProperty("tag_joins", out _) &&
+               !effective.TryGetProperty("bundle_refs", out _),
+            "Closed schema-v2 payloads cannot reintroduce legacy or root-duplicated evidence members.");
 
-        ValidateRecordSource(effective, expectedVersion, bundle.HostRef);
+        ValidateRecordSource(GetObject(effective, "record_source"), expectedVersion, bundle.HostRef);
         ValidateHistory(effective, stageIndex);
         var mergedSha = GetString(effective, "merged_sha");
         Assert(Commit.IsMatch(mergedSha), "merged_sha must be a 40-character immutable SHA.");
         var mergedAt = ParseTimestamp(GetString(effective, "merged_at_utc"), "merged_at_utc");
-        ValidateOrigin(effective.GetProperty("origin_delivery"), bundle, expectedVersion);
-        ValidateCandidate(effective, bundle, mergedSha, mergedAt);
-        ValidateImplementationReview(effective.GetProperty("implementation_review"), bundle, effective, mergedAt);
-        ValidateChecks(effective.GetProperty("checks"), bundle, mergedSha, mergedAt);
-        ValidateAuthorities(root.GetProperty("authorities"), GetObject(root, "pointer"), bundle, graph, effective, expectedVersion, stageIndex);
-        ValidateBundleReferences(root, bundle);
+        ValidateOrigin(GetObject(effective, "origin_delivery"), bundle, expectedVersion);
+        var checks = GetArray(effective, "checks");
+        ValidateCandidate(GetObject(effective, "candidate"), bundle, checks, mergedSha, mergedAt);
+        ValidateImplementationReview(GetObject(effective, "implementation_review"), bundle, effective, mergedAt);
+        ValidateChecks(checks, bundle, mergedSha, mergedAt);
+        var authorities = ValidateAuthorities(root, bundle, graph, effective, expectedVersion, stageIndex);
+        ValidateBundleReferences(root, bundle, graph, authorities);
         ValidateBodies(effective, expectedVersion, stageIndex, repoRoot);
-        ValidateReleaseStage(effective, bundle, stage, stageIndex, expectedVersion, mergedSha, repoRoot);
+        ValidateReleaseStage(effective, bundle, stage, stageIndex, expectedVersion, mergedSha, repoRoot,
+            authorities.ArtifactsVerifiedApprovedAt);
         Console.WriteLine($"Closed release bundle validation passed: {stage} for DCB {expectedVersion}.");
+    }
+
+    private static GraphState ValidateGraph(
+        JsonElement root,
+        ReleaseBundle bundle,
+        string expectedVersion,
+        int stageIndex)
+    {
+        var currentRef = GetString(root, "current_payload_ref");
+        var chainReverse = new List<Node>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var nextRef = currentRef;
+        var expectedStageIndex = stageIndex;
+
+        while (true)
+        {
+            Assert(seen.Add(nextRef), "Payload predecessor chain contains a cycle.");
+            Assert(ImmutableReference.IsMatch(nextRef),
+                "Every payload reference must be a full immutable repository@SHA:path reference.");
+            Assert(nextRef.StartsWith($"{HostRepository}@{bundle.HostRef}:contents/", StringComparison.OrdinalIgnoreCase),
+                "Payload references must be immutable objects from the requested host revision.");
+
+            var entry = bundle.GetEntry(nextRef);
+            Assert(entry.ContentBytes is not null,
+                $"Payload reference {nextRef} must resolve through a GitHub contents response.");
+            using var document = JsonDocument.Parse(entry.ContentBytes!);
+            var payload = document.RootElement;
+            RequireMembers(payload, $"payload {nextRef}",
+                ["id", "stage", "version", "recorded_at_utc", "previous_payload_ref", "changes"]);
+            var payloadStage = GetString(payload, "stage");
+            Assert(StageIndex(payloadStage) == expectedStageIndex,
+                $"Payload {nextRef} is not the expected stage predecessor.");
+            Assert(GetString(payload, "version") == expectedVersion,
+                $"Payload {nextRef} has the wrong version.");
+            var recordedAt = ParseTimestamp(GetString(payload, "recorded_at_utc"), $"payload {nextRef}.recorded_at_utc");
+            var changes = GetObject(payload, "changes");
+            ValidateStageChanges(changes, payloadStage, $"payload {nextRef}.changes");
+            AssertNoApprovalReferences(changes, $"payload {nextRef}.changes");
+
+            var previousRef = GetNullableString(payload, "previous_payload_ref");
+            chainReverse.Add(new Node(
+                nextRef,
+                GetString(payload, "id"),
+                payloadStage,
+                recordedAt,
+                previousRef,
+                Sha256Bytes(entry.ContentBytes!),
+                changes.Clone()));
+
+            if (previousRef is null)
+            {
+                Assert(expectedStageIndex == 0,
+                    "Only the prepared base payload may terminate the predecessor chain.");
+                break;
+            }
+
+            Assert(expectedStageIndex > 0, "A prepared payload cannot have a predecessor.");
+            Assert(ImmutableReference.IsMatch(previousRef),
+                "Every payload predecessor must be an immutable payload reference, not an ID-only splice.");
+            expectedStageIndex--;
+            nextRef = previousRef;
+        }
+
+        chainReverse.Reverse();
+        Assert(chainReverse.Count == stageIndex + 1,
+            "The canonical pointer must resolve exactly the complete stage prefix.");
+        for (var index = 0; index < chainReverse.Count; index++)
+        {
+            Assert(StageIndex(chainReverse[index].Stage) == index,
+                "Payload chain stages must be contiguous and ordered.");
+            if (index > 0)
+            {
+                Assert(chainReverse[index].PreviousPayloadRef == chainReverse[index - 1].PayloadRef &&
+                       chainReverse[index].RecordedAt > chainReverse[index - 1].RecordedAt,
+                    "Payload predecessor identity or chronology is invalid.");
+            }
+        }
+
+        return new GraphState(chainReverse.ToDictionary(node => node.PayloadRef, StringComparer.Ordinal), chainReverse);
     }
 
     private static JsonElement FoldEffectiveRecord(JsonElement envelope, GraphState graph)
@@ -93,21 +175,20 @@ internal static class ClosedReleaseRecordValidator
         {
             ["schema_version"] = GetInt(envelope, "schema_version"),
             ["version"] = GetString(envelope, "version"),
-            ["merged_sha"] = GetString(envelope, "merged_sha"),
-            ["stage"] = GetString(envelope, "stage"),
-            ["record_source"] = JsonNode.Parse(GetObject(envelope, "record_source").GetRawText())
+            ["stage"] = GetString(envelope, "stage")
         };
-        var reserved = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "schema_version", "version", "record_source", "merged_sha", "stage", "base", "deltas",
-            "tag_joins", "pointer", "authorities", "bundle_refs"
-        };
+        var seenFacts = new HashSet<string>(StringComparer.Ordinal);
         foreach (var node in graph.Chain)
         {
             foreach (var property in node.Changes.EnumerateObject())
             {
-                Assert(!reserved.Contains(property.Name),
-                    $"{node.Id}.changes cannot duplicate a pointer-envelope member '{property.Name}'.");
+                if (property.Name == "history")
+                {
+                    effective[property.Name] = JsonNode.Parse(property.Value.GetRawText());
+                    continue;
+                }
+                Assert(seenFacts.Add(property.Name),
+                    $"Payload stage changes duplicate the owned fact '{property.Name}'.");
                 effective[property.Name] = JsonNode.Parse(property.Value.GetRawText());
             }
         }
@@ -116,94 +197,239 @@ internal static class ClosedReleaseRecordValidator
         return document.RootElement.Clone();
     }
 
-    private static void ValidateTagJoins(JsonElement envelope, JsonElement effective)
+    private static void ValidateStageChanges(JsonElement changes, string stage, string path)
     {
-        var joins = GetObject(envelope, "tag_joins");
-        foreach (var property in new[] { "library_tag", "template_tag" })
+        var expected = stage switch
         {
-            var hasJoin = joins.TryGetProperty(property, out var join);
-            var hasTag = effective.TryGetProperty(property, out var tag);
-            Assert(hasJoin == hasTag, $"tag_joins.{property} must be present exactly when its stage is reachable.");
-            if (!hasJoin)
+            "prepared" => new[]
             {
-                continue;
-            }
-            Assert(GetString(join, "name") == GetString(tag, "name") &&
-                   GetString(join, "object_id") == GetString(tag, "object_id") &&
-                   GetString(join, "peeled_commit") == GetString(tag, "peeled_commit"),
-                $"tag_joins.{property} is not bound to its folded stage payload.");
+                "record_source", "integration_pr", "merged_sha", "merged_at_utc", "origin_delivery", "candidate",
+                "implementation_review", "checks", "release_bodies", "history"
+            },
+            "library-tagged/incomplete" => new[] { "library_tag", "history" },
+            "libraries-verified" => new[] { "packages", "library_release", "history" },
+            "template-tagged/incomplete" => new[] { "template_tag", "history" },
+            "artifacts-verified" => new[] { "template", "template_release", "history" },
+            "complete" => new[] { "closure", "history" },
+            _ => throw new InvalidOperationException($"Unknown stage '{stage}'.")
+        };
+        RequireMembers(changes, path, expected);
+        var history = GetArray(changes, "history");
+        var stageIndex = StageIndex(stage);
+        Assert(history.GetArrayLength() == stageIndex + 1,
+            $"{path}.history must contain the canonical stage prefix.");
+        for (var index = 0; index <= stageIndex; index++)
+        {
+            Assert(history[index].ValueKind == JsonValueKind.String && history[index].GetString() == Stages[index],
+                $"{path}.history entry {index} must be {Stages[index]}.");
         }
     }
 
-    private static void ValidateRecordSource(JsonElement root, string expectedVersion, string hostRef)
+    private static AuthorityState ValidateAuthorities(
+        JsonElement envelope,
+        ReleaseBundle bundle,
+        GraphState graph,
+        JsonElement effective,
+        string expectedVersion,
+        int stageIndex)
     {
-        var source = GetObject(root, "record_source");
-        RequireMembers(source, "record_source", new[] { "repository", "path", "commit_sha", "version" });
+        var preparedRef = GetString(envelope, "prepared_approval_ref");
+        var prepared = ReadApproval(preparedRef, bundle, graph, expectedVersion, "prepared");
+        var checksComplete = GetArray(effective, "checks").EnumerateArray()
+            .Select(check => ParseTimestamp(GetString(check, "completed_at_utc"), "integrated check completion"))
+            .Max();
+        Assert(prepared.ApprovedAt > checksComplete,
+            "Prepared authority must follow the complete integrated-head checks.");
+
+        DateTimeOffset? artifactApprovedAt = null;
+        if (stageIndex >= 4)
+        {
+            var artifactRef = GetString(envelope, "artifacts_verified_approval_ref");
+            var artifacts = ReadApproval(artifactRef, bundle, graph, expectedVersion, "artifacts-verified");
+            Assert(prepared.Id != artifacts.Id && prepared.TaskId != artifacts.TaskId &&
+                   prepared.ResultNonce != artifacts.ResultNonce && prepared.ApprovedAt < artifacts.ApprovedAt,
+                "Prepared and artifacts-verified authorities must have distinct ordered identities.");
+            var templateRelease = ParseTimestamp(
+                GetString(GetObject(effective, "template_release"), "observed_at_utc"),
+                "template_release.observed_at_utc");
+            Assert(artifacts.ApprovedAt > templateRelease,
+                "Artifacts authority must follow template publication evidence.");
+            artifactApprovedAt = artifacts.ApprovedAt;
+        }
+        else
+        {
+            Assert(!envelope.TryGetProperty("artifacts_verified_approval_ref", out _),
+                "Future artifacts authority must not be asserted before artifacts-verified.");
+        }
+
+        return new AuthorityState(prepared, artifactApprovedAt);
+    }
+
+    private static Authority ReadApproval(
+        string approvalRef,
+        ReleaseBundle bundle,
+        GraphState graph,
+        string expectedVersion,
+        string expectedStage)
+    {
+        Assert(ImmutableReference.IsMatch(approvalRef), "Approval references must be immutable.");
+        var bytes = GetContent(bundle, approvalRef, $"{expectedStage} approval");
+        using var document = JsonDocument.Parse(bytes);
+        var approval = document.RootElement;
+        RequireMembers(approval, $"{expectedStage} approval", [
+            "id", "kind", "stage", "version", "verdict", "target_payload_ref", "target_payload_sha256",
+            "reviewer_role", "reviewer_identity", "report_ref", "report_sha256", "artifact_ref",
+            "artifact_sha256", "completion_ref", "completion_sha256", "task_id", "result_nonce", "status",
+            "approved_at_utc"
+        ]);
+        Assert(GetString(approval, "kind") == "host-stage-review" &&
+               GetString(approval, "stage") == expectedStage &&
+               GetString(approval, "version") == expectedVersion &&
+               GetString(approval, "verdict") == "approved" &&
+               GetString(approval, "status") == "completed",
+            $"{expectedStage} approval metadata is invalid.");
+
+        var targetRef = GetString(approval, "target_payload_ref");
+        Assert(graph.Nodes.TryGetValue(targetRef, out var target) && target.Stage == expectedStage,
+            $"{expectedStage} approval is not bound to the applicable payload.");
+        Assert(GetString(approval, "target_payload_sha256") == target!.PayloadSha256,
+            $"{expectedStage} approval payload digest is not bound to immutable bytes.");
+        var reportBytes = GetContent(bundle, GetString(approval, "report_ref"), $"{expectedStage} report");
+        var artifactBytes = GetContent(bundle, GetString(approval, "artifact_ref"), $"{expectedStage} artifact");
+        Assert(Sha256Bytes(reportBytes) == GetString(approval, "report_sha256").ToLowerInvariant() &&
+               Sha256Bytes(artifactBytes) == GetString(approval, "artifact_sha256").ToLowerInvariant(),
+            $"{expectedStage} report/artifact digests are not bound.");
+
+        var completionRef = GetString(approval, "completion_ref");
+        var completionBytes = GetContent(bundle, completionRef, $"{expectedStage} completion");
+        Assert(Sha256Bytes(completionBytes) == GetString(approval, "completion_sha256").ToLowerInvariant(),
+            $"{expectedStage} completion digest is not bound.");
+        var completion = ValidateCompletion(completionBytes, expectedStage, expectedVersion);
+        Assert(completion.TaskId == GetString(approval, "task_id") &&
+               completion.ResultNonce == GetString(approval, "result_nonce") &&
+               completion.TargetPayloadRef == targetRef &&
+               completion.TargetPayloadSha256 == GetString(approval, "target_payload_sha256") &&
+               completion.ReportRef == GetString(approval, "report_ref") &&
+               completion.ReportSha256 == GetString(approval, "report_sha256") &&
+               completion.ArtifactRef == GetString(approval, "artifact_ref") &&
+               completion.ArtifactSha256 == GetString(approval, "artifact_sha256") &&
+               completion.ReviewerRole == GetString(approval, "reviewer_role") &&
+               completion.ReviewerIdentity == GetString(approval, "reviewer_identity") &&
+               completion.Verdict == GetString(approval, "verdict") &&
+               completion.CompletedAt > GetTimestamp(approval, "approved_at_utc"),
+            $"{expectedStage} completion is not bound to its detached approval.");
+
+        return new Authority(
+            GetString(approval, "id"),
+            GetString(approval, "task_id"),
+            GetString(approval, "result_nonce"),
+            GetTimestamp(approval, "approved_at_utc"),
+            completion.CompletedAt);
+    }
+
+    private static Completion ValidateCompletion(byte[] bytes, string expectedStage, string expectedVersion)
+    {
+        using var document = JsonDocument.Parse(bytes);
+        var completion = document.RootElement;
+        RequireMembers(completion, $"{expectedStage} completion", [
+            "schema_version", "kind", "stage", "version", "task_id", "result_nonce", "status", "verdict",
+            "target_payload_ref", "target_payload_sha256", "report_ref", "report_sha256", "artifact_ref",
+            "artifact_sha256", "reviewer_role", "reviewer_identity", "completed_at_utc"
+        ]);
+        Assert(GetInt(completion, "schema_version") == 1 &&
+               GetString(completion, "kind") == "intent-cli-stage-completion" &&
+               GetString(completion, "stage") == expectedStage &&
+               GetString(completion, "version") == expectedVersion &&
+               GetString(completion, "status") == "completed" &&
+               GetString(completion, "verdict") == "approved",
+            $"{expectedStage} completion schema is invalid.");
+        return new Completion(
+            GetString(completion, "task_id"), GetString(completion, "result_nonce"),
+            GetString(completion, "target_payload_ref"), GetString(completion, "target_payload_sha256"),
+            GetString(completion, "report_ref"), GetString(completion, "report_sha256"),
+            GetString(completion, "artifact_ref"), GetString(completion, "artifact_sha256"),
+            GetString(completion, "reviewer_role"), GetString(completion, "reviewer_identity"),
+            GetString(completion, "verdict"), GetTimestamp(completion, "completed_at_utc"));
+    }
+
+    private static void ValidateBundleReferences(
+        JsonElement envelope,
+        ReleaseBundle bundle,
+        GraphState graph,
+        AuthorityState authorities)
+    {
+        _ = authorities;
+        foreach (var reference in graph.Nodes.Keys)
+        {
+            _ = bundle.GetEntry(reference);
+        }
+        _ = bundle.GetEntry(GetString(envelope, "prepared_approval_ref"));
+        if (envelope.TryGetProperty("artifacts_verified_approval_ref", out var artifactRef))
+        {
+            _ = bundle.GetEntry(GetString(envelope, "artifacts_verified_approval_ref"));
+        }
+    }
+
+    private static void ValidateRecordSource(JsonElement source, string expectedVersion, string hostRef)
+    {
+        RequireMembers(source, "record_source", ["repository", "path", "commit_sha", "version"]);
         Assert(GetString(source, "repository") == HostRepository &&
-               GetString(source, "path") == HostRecordPath &&
-               GetString(source, "version") == expectedVersion,
+               GetString(source, "path") == HostRecordPath && GetString(source, "version") == expectedVersion,
             "record_source must identify the fixed private host record and requested version.");
         var commit = GetString(source, "commit_sha");
         Assert(Commit.IsMatch(commit) && !commit.Equals(hostRef, StringComparison.OrdinalIgnoreCase),
             "record_source.commit_sha must be an immutable host revision different from the containing host commit.");
     }
 
-    private static void ValidateHistory(JsonElement root, int stageIndex)
+    private static void ValidateHistory(JsonElement effective, int stageIndex)
     {
-        var history = GetArray(root, "history");
+        var history = GetArray(effective, "history");
         Assert(history.GetArrayLength() == stageIndex + 1,
-            "history must contain exactly the canonical stage prefix.");
+            "Effective release history must contain exactly the canonical stage prefix.");
         for (var index = 0; index <= stageIndex; index++)
         {
             Assert(history[index].ValueKind == JsonValueKind.String && history[index].GetString() == Stages[index],
-                $"history entry {index} must be {Stages[index]}.");
+                $"Effective release history entry {index} must be {Stages[index]}.");
         }
     }
 
-    private static void ValidateOrigin(
-        JsonElement origin,
-        ReleaseBundle bundle,
-        string expectedVersion)
+    private static void ValidateOrigin(JsonElement origin, ReleaseBundle bundle, string expectedVersion)
     {
-        RequireMembers(origin, "origin_delivery", new[]
-        {
+        RequireMembers(origin, "origin_delivery", [
             "repository", "pull_request", "reviewed_head_sha", "tree_sha", "body_sha256", "body_evidence_ref",
             "review", "review_evidence_ref", "checks", "tags"
-        });
-        Assert(GetString(origin, "repository") == Repository &&
-               GetString(origin, "pull_request") == IntegrationPullRequest,
+        ]);
+        Assert(GetString(origin, "repository") == Repository && GetString(origin, "pull_request") == IntegrationPullRequest,
             "origin_delivery must identify the historical G79 delivery PR.");
         var originHead = GetString(origin, "reviewed_head_sha");
         Assert(Commit.IsMatch(originHead) && Commit.IsMatch(GetString(origin, "tree_sha")),
             "origin_delivery commit and tree identities must be immutable.");
         var bodyBytes = GetContent(bundle, GetString(origin, "body_evidence_ref"), "origin body");
         Assert(Sha256Bytes(bodyBytes) == GetString(origin, "body_sha256").ToLowerInvariant(),
-            "origin_delivery.body_sha256 must match the fetched immutable body bytes.");
+            "origin_delivery.body_sha256 must match immutable body bytes.");
 
         var review = GetObject(origin, "review");
-        RequireMembers(review, "origin_delivery.review", new[]
-        {
+        RequireMembers(review, "origin_delivery.review", [
             "review_url", "review_id", "reviewer", "state", "commit_id", "body_sha256", "body_evidence_ref",
-            "review_evidence_ref",
-            "intent_task_id", "intent_result_nonce", "intent_completed_at_utc"
-        });
-        Assert(GetString(review, "state") == "approved" && GetString(review, "commit_id") == originHead,
-            "origin delivery review must be approved for its reviewed source head.");
-        Assert(ulong.TryParse(GetString(review, "review_id"), out var originReviewId) && originReviewId > 0 &&
-               GetString(review, "review_url").EndsWith(originReviewId.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal),
+            "review_evidence_ref", "submitted_at_utc", "intent_task_id", "intent_result_nonce", "intent_completed_at_utc"
+        ]);
+        Assert(GetString(review, "state") == "approved" && GetString(review, "commit_id") == originHead &&
+               IsNumericId(review, "review_id") &&
+               GetString(review, "review_url").EndsWith($"pullrequestreview-{GetString(review, "review_id")}", StringComparison.Ordinal),
             "origin delivery review identity must be numeric and URL-bound.");
-        ValidateReviewEvidence(review, bundle, GetString(review, "review_evidence_ref"), originHead, "APPROVED");
+        ValidateReviewEvidence(review, bundle, originHead, "APPROVED", GetString(review, "review_url"));
         var originReviewAt = ParseTimestamp(GetString(review, "intent_completed_at_utc"), "origin review completion");
+        Assert(GetTimestamp(review, "submitted_at_utc") < originReviewAt,
+            "Origin review intent completion must follow GitHub submission.");
 
         var checks = GetArray(origin, "checks");
         Assert(checks.GetArrayLength() > 0, "origin_delivery must carry historical checks.");
         var latestCheck = DateTimeOffset.MinValue;
         foreach (var check in checks.EnumerateArray())
         {
-            RequireMembers(check, "origin_delivery.check", new[]
-            {
+            RequireMembers(check, "origin_delivery.check", [
                 "name", "run_id", "job_id", "head_sha", "conclusion", "started_at_utc", "completed_at_utc", "evidence_ref"
-            });
+            ]);
             Assert(GetString(check, "head_sha") == originHead && GetString(check, "conclusion") == "success",
                 "origin checks must be successful and bound to the historical reviewed head.");
             var started = ParseTimestamp(GetString(check, "started_at_utc"), "origin check start");
@@ -217,35 +443,30 @@ internal static class ClosedReleaseRecordValidator
 
         foreach (var tag in GetArray(origin, "tags").EnumerateArray())
         {
-            RequireMembers(tag, "origin_delivery.tag", new[]
-            {
+            RequireMembers(tag, "origin_delivery.tag", [
                 "name", "object_id", "peeled_commit", "created_at_utc", "evidence_ref", "peeled_evidence_ref"
-            });
+            ]);
             var created = ParseTimestamp(GetString(tag, "created_at_utc"), "origin tag creation");
             Assert(Commit.IsMatch(GetString(tag, "object_id")) && GetString(tag, "peeled_commit") == originHead &&
-                   created > latestCheck,
-                "origin tag identity or chronology is invalid.");
+                   created > latestCheck, "origin tag identity or chronology is invalid.");
             ValidateTagEvidence(tag, bundle, originHead);
         }
-
         Assert(expectedVersion == "10.22.0", "Origin version must be the approved DCB version.");
     }
 
     private static void ValidateCandidate(
-        JsonElement root,
+        JsonElement candidate,
         ReleaseBundle bundle,
+        JsonElement checks,
         string mergedSha,
         DateTimeOffset mergedAt)
     {
-        var candidate = GetObject(root, "candidate");
-        RequireMembers(candidate, "candidate", new[]
-        {
+        RequireMembers(candidate, "candidate", [
             "repository", "pull_request", "reviewed_head_sha", "merged_sha", "merged_at_utc", "parent_shas",
             "base_sha", "tree_sha", "api_tree_sha", "main_ancestry", "checkout_sha", "pr_evidence_ref",
             "merge_evidence_ref", "tree_evidence_ref", "main_evidence_ref", "checks_evidence_ref"
-        });
-        Assert(GetString(candidate, "repository") == Repository &&
-               GetString(candidate, "pull_request") != IntegrationPullRequest,
+        ]);
+        Assert(GetString(candidate, "repository") == Repository && GetString(candidate, "pull_request") != IntegrationPullRequest,
             "candidate must identify a distinct later repository PR.");
         var candidateHead = GetString(candidate, "reviewed_head_sha");
         Assert(Commit.IsMatch(candidateHead) && GetString(candidate, "merged_sha") == mergedSha &&
@@ -259,25 +480,19 @@ internal static class ClosedReleaseRecordValidator
                GetString(GetObject(pr, "repository"), "full_name") == Repository &&
                GetString(GetObject(pr, "base"), "ref") == "main" &&
                GetString(GetObject(pr, "base"), "sha") == GetString(candidate, "base_sha") &&
-               GetString(GetObject(pr, "head"), "sha") == candidateHead &&
-               GetString(pr, "merge_commit_sha") == mergedSha &&
-               GetBoolean(pr, "merged") &&
-               ParseTimestamp(GetString(pr, "merged_at"), "candidate PR merged_at") == mergedAt,
+               GetString(GetObject(pr, "head"), "sha") == candidateHead && GetString(pr, "merge_commit_sha") == mergedSha &&
+               GetBoolean(pr, "merged") && ParseTimestamp(GetString(pr, "merged_at"), "candidate PR merged_at") == mergedAt,
             "candidate PR API evidence does not match the release record.");
 
         var merge = GetApiObject(bundle, GetString(candidate, "merge_evidence_ref"), "candidate merge commit");
         var mergeCommit = GetObject(merge, "commit");
         var mergeTreeSha = mergeCommit.TryGetProperty("tree_sha", out _)
-            ? GetString(mergeCommit, "tree_sha")
-            : GetString(GetObject(mergeCommit, "tree"), "sha");
-        Assert(GetString(merge, "sha") == mergedSha &&
-               mergeTreeSha == GetString(candidate, "tree_sha"),
+            ? GetString(mergeCommit, "tree_sha") : GetString(GetObject(mergeCommit, "tree"), "sha");
+        Assert(GetString(merge, "sha") == mergedSha && mergeTreeSha == GetString(candidate, "tree_sha"),
             "candidate merge commit API evidence is not bound to the record.");
-        var actualParents = GetArray(merge, "parents").EnumerateArray()
-            .Select(parent => GetString(parent, "sha")).ToArray();
+        var actualParents = GetArray(merge, "parents").EnumerateArray().Select(parent => GetString(parent, "sha")).ToArray();
         var expectedParents = GetArray(candidate, "parent_shas").EnumerateArray().Select(value => value.GetString()!).ToArray();
-        Assert(actualParents.SequenceEqual(expectedParents, StringComparer.Ordinal),
-            "candidate merge parents must preserve exact API order.");
+        Assert(actualParents.SequenceEqual(expectedParents, StringComparer.Ordinal), "Candidate merge parents must preserve API order.");
 
         var tree = GetApiObject(bundle, GetString(candidate, "tree_evidence_ref"), "candidate API tree");
         Assert(GetString(tree, "sha") == GetString(candidate, "api_tree_sha") &&
@@ -287,73 +502,91 @@ internal static class ClosedReleaseRecordValidator
         Assert(GetString(GetObject(main, "object"), "sha") == mergedSha,
             "canonical main evidence does not prove the merged candidate is on main.");
 
-        foreach (var check in GetArray(root, "checks").EnumerateArray())
+        foreach (var check in checks.EnumerateArray())
         {
-            var checkRef = GetString(check, "evidence_ref");
-            var checkApi = GetApiObject(bundle, checkRef, "integrated check");
-            Assert(GetString(checkApi, "head_sha") == mergedSha &&
-                   GetString(checkApi, "name") == GetString(check, "job_name") &&
+            var checkApi = GetApiObject(bundle, GetString(check, "evidence_ref"), "integrated check");
+            Assert(GetString(checkApi, "head_sha") == mergedSha && GetString(checkApi, "name") == GetString(check, "job_name") &&
                    GetString(checkApi, "conclusion") == "success",
-                "integrated check API evidence is not bound to the merged candidate.");
+                "Integrated check API evidence is not bound to the merged candidate.");
         }
-
         var checkSummary = GetApiObject(bundle, GetString(candidate, "checks_evidence_ref"), "candidate checks summary");
-        Assert(GetArray(checkSummary, "checks").GetArrayLength() == GetArray(root, "checks").GetArrayLength(),
-            "candidate checks summary is incomplete.");
+        Assert(GetArray(checkSummary, "checks").GetArrayLength() == checks.GetArrayLength(),
+            "Candidate checks summary is incomplete.");
     }
 
-    private static void ValidateImplementationReview(
-        JsonElement review,
-        ReleaseBundle bundle,
-        JsonElement effective,
-        DateTimeOffset mergedAt)
+    private static void ValidateImplementationReview(JsonElement review, ReleaseBundle bundle, JsonElement effective, DateTimeOffset mergedAt)
     {
-        RequireMembers(review, "implementation_review", new[]
-        {
+        RequireMembers(review, "implementation_review", [
             "review_url", "review_id", "reviewer", "event_state", "semantic_state", "head_sha", "body_sha256",
-            "body_evidence_ref", "artifact_sha256", "artifact_evidence_ref", "intent_task_id",
-            "intent_result_nonce", "approved_at_utc", "evidence_ref"
-        });
-        var head = GetString(review, "head_sha");
-        var candidateHead = GetString(GetObject(effective, "candidate"), "reviewed_head_sha");
-        Assert(Commit.IsMatch(head) && head == candidateHead && GetString(review, "event_state") == "COMMENTED" &&
+            "body_evidence_ref", "artifact_sha256", "artifact_evidence_ref", "intent_task_id", "intent_result_nonce",
+            "submitted_at_utc", "approved_at_utc", "intent_completion_evidence_ref", "intent_completion_sha256", "evidence_ref"
+        ]);
+        var candidate = GetObject(effective, "candidate");
+        var candidateHead = GetString(candidate, "reviewed_head_sha");
+        var reviewId = GetString(review, "review_id");
+        var reviewUrl = GetString(review, "review_url");
+        Assert(IsNumericId(review, "review_id") && reviewUrl == $"{GetString(candidate, "pull_request")}#pullrequestreview-{reviewId}" &&
+               GetString(review, "head_sha") == candidateHead && GetString(review, "event_state") == "COMMENTED" &&
                GetString(review, "semantic_state") == "APPROVE",
-            "implementation review must be a real COMMENTED semantic APPROVE on candidate.reviewed_head_sha.");
+            "Implementation review must be the exact COMMENTED semantic APPROVE for candidate.reviewed_head_sha.");
+        var submittedAt = GetTimestamp(review, "submitted_at_utc");
         var approvedAt = GetTimestamp(review, "approved_at_utc");
-        Assert(approvedAt < mergedAt && !string.IsNullOrWhiteSpace(GetString(review, "reviewer")) &&
-               !string.IsNullOrWhiteSpace(GetString(review, "intent_task_id")) &&
-               !string.IsNullOrWhiteSpace(GetString(review, "intent_result_nonce")),
-            "implementation review identity or chronology is invalid.");
-        ValidateReviewEvidence(review, bundle, GetString(review, "evidence_ref"), candidateHead, "COMMENTED");
+        Assert(submittedAt < approvedAt && approvedAt < mergedAt && !string.IsNullOrWhiteSpace(GetString(review, "reviewer")) &&
+               !string.IsNullOrWhiteSpace(GetString(review, "intent_task_id")) && !string.IsNullOrWhiteSpace(GetString(review, "intent_result_nonce")),
+            "Implementation review identity or chronology is invalid.");
+        ValidateReviewEvidence(review, bundle, candidateHead, "COMMENTED", reviewUrl, "evidence_ref");
+
         var body = GetContent(bundle, GetString(review, "body_evidence_ref"), "implementation review body");
         var artifact = GetContent(bundle, GetString(review, "artifact_evidence_ref"), "implementation review artifact");
         Assert(Sha256Bytes(body) == GetString(review, "body_sha256").ToLowerInvariant() &&
                Sha256Bytes(artifact) == GetString(review, "artifact_sha256").ToLowerInvariant() &&
                Encoding.UTF8.GetString(body).Contains("APPROVE", StringComparison.Ordinal),
-            "implementation review body/artifact bytes are not bound to the semantic approval.");
+            "Implementation review body/artifact bytes are not bound to the semantic approval.");
+
+        var completionBytes = GetContent(bundle, GetString(review, "intent_completion_evidence_ref"), "implementation intent completion");
+        Assert(Sha256Bytes(completionBytes) == GetString(review, "intent_completion_sha256").ToLowerInvariant(),
+            "Implementation intent completion digest is not bound.");
+        using var completionDocument = JsonDocument.Parse(completionBytes);
+        var completion = completionDocument.RootElement;
+        RequireMembers(completion, "implementation intent completion", [
+            "schema_version", "kind", "task_id", "result_nonce", "status", "review_url", "review_id",
+            "head_sha", "body_sha256", "artifact_sha256", "completed_at_utc"
+        ]);
+        Assert(GetInt(completion, "schema_version") == 1 && GetString(completion, "kind") == "intent-worker-completion" &&
+               GetString(completion, "status") == "completed" && GetString(completion, "review_url") == reviewUrl &&
+               GetString(completion, "review_id") == reviewId && GetString(completion, "head_sha") == candidateHead &&
+               GetString(completion, "task_id") == GetString(review, "intent_task_id") &&
+               GetString(completion, "result_nonce") == GetString(review, "intent_result_nonce") &&
+               GetString(completion, "body_sha256") == GetString(review, "body_sha256") &&
+               GetString(completion, "artifact_sha256") == GetString(review, "artifact_sha256") &&
+               GetTimestamp(completion, "completed_at_utc") == approvedAt,
+            "Implementation intent completion is not bound to the reviewed API evidence.");
     }
 
     private static void ValidateReviewEvidence(
         JsonElement recordReview,
         ReleaseBundle bundle,
-        string evidenceRef,
         string expectedHead,
-        string expectedState)
+        string expectedState,
+        string expectedReviewUrl,
+        string evidenceReferenceProperty = "review_evidence_ref")
     {
-        var review = GetApiObject(bundle, evidenceRef, "review API evidence");
-        Assert(GetString(review, "html_url") == GetString(recordReview, "review_url") &&
-               GetString(review, "id") == GetString(recordReview, "review_id") &&
+        var review = GetApiObject(bundle, GetString(recordReview, evidenceReferenceProperty), "review API evidence");
+        Assert(GetString(review, "html_url") == expectedReviewUrl &&
                GetString(GetObject(review, "user"), "login") == GetString(recordReview, "reviewer") &&
                GetString(review, "state").Equals(expectedState, StringComparison.OrdinalIgnoreCase) &&
-               GetString(review, "commit_id") == expectedHead,
-            "review API identity is not bound to the release record.");
+               GetString(review, "commit_id") == expectedHead &&
+               GetTimestamp(review, "submitted_at") == GetTimestamp(recordReview, "submitted_at_utc"),
+            "Review API endpoint, identity, submission time, or head is not bound to the release record.");
+        Assert(IsNumericApiId(review, "id") && ReviewUrlMatchesId(GetString(review, "html_url"), review),
+            "Review API identity must contain a numeric ID bound to its URL.");
+        var apiBody = Encoding.UTF8.GetBytes(GetString(review, "body"));
+        var recordBody = GetContent(bundle, GetString(recordReview, "body_evidence_ref"), "review body");
+        Assert(apiBody.SequenceEqual(recordBody) && Sha256Bytes(apiBody) == GetString(recordReview, "body_sha256").ToLowerInvariant(),
+            "Review API body is not the exact authenticated review body.");
     }
 
-    private static void ValidateChecks(
-        JsonElement checks,
-        ReleaseBundle bundle,
-        string mergedSha,
-        DateTimeOffset mergedAt)
+    private static void ValidateChecks(JsonElement checks, ReleaseBundle bundle, string mergedSha, DateTimeOffset mergedAt)
     {
         var required = new Dictionary<string, (string workflow, string workflowName, string job)>(StringComparer.Ordinal)
         {
@@ -370,349 +603,46 @@ internal static class ClosedReleaseRecordValidator
         foreach (var check in checks.EnumerateArray())
         {
             var name = GetString(check, "name");
-            Assert(required.TryGetValue(name, out var definition) && names.Add(name),
-                "Closed release record CI inventory has an unknown or duplicate entry.");
-            var requiredMembers = new[]
+            Assert(required.TryGetValue(name, out var definition) && names.Add(name), "CI inventory has an unknown or duplicate entry.");
+            var members = new List<string>
             {
                 "name", "workflow_file", "workflow_name", "job_name", "run_id", "job_id", "run_url", "job_url",
-                "attempt", "event", "superseded", "started_at_utc", "completed_at_utc", "head_sha", "conclusion",
-                "evidence_ref"
-            }.ToList();
-            if (name == "diff") requiredMembers.Add("artifact_sha256");
-            RequireMembers(check, $"checks.{name}", requiredMembers);
-            Assert(GetString(check, "workflow_file") == definition.workflow &&
-                   GetString(check, "workflow_name") == definition.workflowName &&
-                   GetString(check, "job_name") == definition.job &&
-                   GetString(check, "head_sha") == mergedSha &&
-                   GetString(check, "conclusion") == "success" &&
-                   GetBoolean(check, "superseded") == false &&
-                   GetInt(check, "attempt") > 0,
-                $"Integrated check {name} has incorrect identity or status.");
+                "attempt", "event", "superseded", "started_at_utc", "completed_at_utc", "head_sha", "conclusion", "evidence_ref"
+            };
+            if (name == "diff") members.Add("artifact_sha256");
+            RequireMembers(check, $"checks.{name}", members);
+            Assert(GetString(check, "workflow_file") == definition.workflow && GetString(check, "workflow_name") == definition.workflowName &&
+                   GetString(check, "job_name") == definition.job && GetString(check, "head_sha") == mergedSha &&
+                   GetString(check, "conclusion") == "success" && GetString(check, "event") is "pull_request" or "workflow_dispatch" or "post-merge" &&
+                   !GetBoolean(check, "superseded") && int.TryParse(GetString(check, "attempt"), out var attempt) && attempt >= 1 &&
+                   ulong.TryParse(GetString(check, "run_id"), out _) && ulong.TryParse(GetString(check, "job_id"), out _),
+                $"Integrated check {name} identity is invalid.");
             var started = ParseTimestamp(GetString(check, "started_at_utc"), $"checks.{name}.started_at_utc");
             var completed = ParseTimestamp(GetString(check, "completed_at_utc"), $"checks.{name}.completed_at_utc");
-            Assert(started > mergedAt && completed > started,
-                $"Integrated check {name} has invalid post-merge chronology.");
-            var api = GetApiObject(bundle, GetString(check, "evidence_ref"), $"check {name}");
-            Assert(GetString(api, "head_sha") == mergedSha && GetString(api, "conclusion") == "success" &&
-                   GetString(api, "name") == definition.job &&
-                   ParseTimestamp(GetString(api, "started_at_utc"), $"API check {name} start") == started &&
-                   ParseTimestamp(GetString(api, "completed_at_utc"), $"API check {name} completion") == completed,
-                $"Integrated check {name} is not bound to the authoritative API response.");
+            Assert(completed > started && started > mergedAt, $"Integrated check {name} is not a fresh post-merge success.");
+            var api = GetApiObject(bundle, GetString(check, "evidence_ref"), $"integrated check {name}");
+            Assert(GetString(api, "head_sha") == mergedSha && GetString(api, "name") == GetString(check, "job_name") && GetString(api, "conclusion") == "success",
+                $"Integrated check API evidence for {name} is not bound to the merged candidate.");
             if (name == "diff")
             {
-                Assert(GetString(check, "workflow_file") == "git" && GetString(check, "workflow_name") == DiffCommand &&
-                       GetString(check, "job_name") == "post-merge" && GetString(check, "event") == "post-merge" &&
-                       GetString(check, "artifact_sha256") == DiffDigest,
-                    "git diff --check evidence is not exact.");
-            }
-            else
-            {
-                Assert(GetString(check, "event") is "push" or "workflow_dispatch" &&
-                       GetString(check, "run_url").Contains($"/actions/runs/{GetString(check, "run_id")}", StringComparison.Ordinal),
-                    $"Integrated check {name} has a non-canonical run identity.");
+                Assert(GetString(check, "artifact_sha256") == DiffDigest && GetString(api, "command") == DiffCommand && GetString(api, "artifact_sha256") == DiffDigest,
+                    "git diff --check evidence is not the canonical durable artifact.");
             }
         }
-        Assert(names.SetEquals(required.Keys), "Closed release record CI inventory is incomplete.");
+        Assert(names.SetEquals(required.Keys), "Integrated check inventory is incomplete.");
     }
 
-    private static GraphState ValidateGraph(
-        JsonElement root,
-        ReleaseBundle bundle,
-        string expectedVersion,
-        string stage,
-        int stageIndex)
+    private static void ValidateReleaseStage(JsonElement root, ReleaseBundle bundle, string stage, int stageIndex, string expectedVersion, string mergedSha, string? repoRoot, DateTimeOffset? artifactApprovedAt)
     {
-        var baseObject = GetObject(root, "base");
-        RequireMembers(baseObject, "base", new[] { "id", "stage", "previous_id", "payload_sha256", "payload_ref", "recorded_at_utc" });
-        Assert(GetString(baseObject, "stage") == "prepared" && baseObject.GetProperty("previous_id").ValueKind == JsonValueKind.Null,
-            "The closed graph must begin with a prepared base and no predecessor.");
-        var nodes = new Dictionary<string, Node>(StringComparer.Ordinal);
-        var baseNode = ReadNode(baseObject, bundle, expectedVersion, null, "base");
-        nodes.Add(baseNode.Id, baseNode);
-
-        var deltas = GetArray(root, "deltas");
-        for (var index = 0; index < deltas.GetArrayLength(); index++)
-        {
-            var delta = deltas[index];
-            var node = ReadNode(delta, bundle, expectedVersion, nodes, $"deltas[{index}]");
-            Assert(!nodes.ContainsKey(node.Id), $"The closed graph contains duplicate revision id {node.Id}.");
-            Assert(node.PreviousId is not null && nodes.ContainsKey(node.PreviousId),
-                $"{node.Id} must point to an earlier existing predecessor.");
-            nodes.Add(node.Id, node);
-        }
-
-        var pointer = GetObject(root, "pointer");
-        RequireMembers(pointer, "pointer", new[] { "payload_id", "prepared_approval_id", "fold_sha256" },
-            new[] { "artifact_approval_id" });
-        var pointerId = GetString(pointer, "payload_id");
-        Assert(nodes.TryGetValue(pointerId, out var current) && current!.Stage == stage,
-            "The canonical pointer must target an existing revision at the current stage.");
-        var chain = new List<Node>();
-        for (var node = current; node is not null; node = node.PreviousId is null ? null : nodes[node.PreviousId])
-        {
-            chain.Add(node);
-        }
-        chain.Reverse();
-        Assert(chain.Count == stageIndex + 1 && chain[0].Id == baseNode.Id,
-            "The canonical pointer must fold exactly the current six-stage prefix.");
-        for (var index = 0; index < chain.Count; index++)
-        {
-            Assert(chain[index].Stage == Stages[index],
-                $"Canonical graph stage {index} must be {Stages[index]}.");
-            if (index > 0)
-            {
-                Assert(chain[index].PreviousId == chain[index - 1].Id,
-                    "Canonical graph predecessor order is not immediate.");
-            }
-        }
-
-        var fold = Fold(null, chain[0].PayloadSha256);
-        for (var index = 1; index < chain.Count; index++)
-        {
-            Assert(chain[index].PreviousFoldSha256 == fold,
-                $"Canonical graph payload {chain[index].Id} has the wrong predecessor fold.");
-            fold = Fold(fold, chain[index].PayloadSha256);
-        }
-        Assert(GetString(pointer, "fold_sha256") == fold,
-            "The canonical pointer fold does not match the exact payload bytes in its reachable prefix.");
-
-        return new GraphState(nodes, chain, fold);
-    }
-
-    private static Node ReadNode(
-        JsonElement element,
-        ReleaseBundle bundle,
-        string expectedVersion,
-        IReadOnlyDictionary<string, Node>? previousNodes,
-        string path)
-    {
-        RequireMembers(element, path, new[] { "id", "stage", "previous_id", "payload_sha256", "payload_ref", "recorded_at_utc" });
-        var id = GetString(element, "id");
-        var stage = GetString(element, "stage");
-        Assert(Stages.Contains(stage, StringComparer.Ordinal), $"{path} has an unknown stage.");
-        var previousId = element.GetProperty("previous_id").ValueKind == JsonValueKind.Null
-            ? null
-            : GetString(element, "previous_id");
-        var payloadRef = GetString(element, "payload_ref");
-        var payloadBytes = GetContent(bundle, payloadRef, $"{path} payload");
-        var payloadSha = Sha256Bytes(payloadBytes);
-        Assert(payloadSha == GetString(element, "payload_sha256").ToLowerInvariant(),
-            $"{path}.payload_sha256 does not match the fetched payload bytes.");
-        using var payloadDocument = JsonDocument.Parse(payloadBytes);
-        var payload = payloadDocument.RootElement;
-        RequireMembers(payload, $"{path}.payload", new[]
-        {
-            "id", "stage", "previous_id", "version", "recorded_at_utc", "previous_fold_sha256", "fold_sha256", "changes"
-        });
-        Assert(GetString(payload, "id") == id && GetString(payload, "stage") == stage &&
-               GetString(payload, "version") == expectedVersion &&
-               NullableString(payload, "previous_id") == previousId &&
-               GetString(payload, "recorded_at_utc") == GetString(element, "recorded_at_utc"),
-            $"{path} payload is not the exact immutable revision described by the pointer envelope.");
-        ParseTimestamp(GetString(element, "recorded_at_utc"), $"{path}.recorded_at_utc");
-        var previousFold = NullableString(payload, "previous_fold_sha256");
-        var fold = GetString(payload, "fold_sha256");
-        Assert(Sha256.IsMatch(fold) && (previousFold is null || Sha256.IsMatch(previousFold)),
-            $"{path} payload fold fields must be SHA-256 values.");
-        var changes = GetObject(payload, "changes");
-        Assert(changes.EnumerateObject().Any(), $"{path}.payload.changes must contain real stage evidence.");
-        AssertNoApprovalReferences(changes, $"{path}.payload.changes");
-        ValidateStageChanges(changes, stage, $"{path}.payload.changes");
-        if (previousNodes is not null && previousId is not null)
-        {
-            Assert(previousNodes.ContainsKey(previousId), $"{path} points to a missing predecessor.");
-        }
-        return new Node(id, stage, previousId, payloadSha, payloadRef, previousFold, fold, changes.Clone());
-    }
-
-    private static void ValidateStageChanges(JsonElement changes, string stage, string path)
-    {
-        var expected = stage switch
-        {
-            "prepared" =>
-                new[] { "integration_pr", "merged_at_utc", "origin_delivery", "candidate",
-                    "implementation_review", "checks", "release_bodies", "history" },
-            "library-tagged/incomplete" => new[] { "library_tag", "history" },
-            "libraries-verified" => new[] { "packages", "library_release", "history" },
-            "template-tagged/incomplete" => new[] { "template_tag", "history" },
-            "artifacts-verified" => new[] { "template", "template_release", "history" },
-            "complete" => new[] { "closure", "history" },
-            _ => throw new InvalidOperationException($"Unknown stage '{stage}'.")
-        };
-        RequireMembers(changes, path, expected);
-        var stageIndex = Array.IndexOf(Stages, stage);
-        var history = GetArray(changes, "history");
-        Assert(history.GetArrayLength() == stageIndex + 1,
-            $"{path}.history must contain the canonical stage prefix.");
-        for (var index = 0; index <= stageIndex; index++)
-        {
-            Assert(history[index].ValueKind == JsonValueKind.String &&
-                   history[index].GetString() == Stages[index],
-                $"{path}.history entry {index} must be {Stages[index]}.");
-        }
-    }
-
-    private static void ValidateAuthorities(
-        JsonElement authorities,
-        JsonElement pointer,
-        ReleaseBundle bundle,
-        GraphState graph,
-        JsonElement effective,
-        string expectedVersion,
-        int stageIndex)
-    {
-        RequireMembers(authorities, "authorities", new[] { "prepared" }, new[] { "artifacts_verified" });
-        var prepared = ReadAuthority(GetObject(authorities, "prepared"), bundle, graph, expectedVersion, "prepared");
-        var checksComplete = GetArray(effective, "checks").EnumerateArray()
-            .Select(check => ParseTimestamp(GetString(check, "completed_at_utc"), "integrated check completion"))
-            .Max();
-        Assert(prepared.ApprovedAt > checksComplete,
-            "Prepared authority must follow the complete integrated-head checks.");
-        Assert(GetString(pointer, "prepared_approval_id") == prepared.Id,
-            "The canonical pointer must name the prepared authority.");
-        if (stageIndex >= 1)
-        {
-            var libraryTag = ParseTimestamp(GetString(GetObject(effective, "library_tag"), "created_at_utc"), "library tag");
-            Assert(libraryTag > prepared.ApprovedAt,
-                "Library tag creation must follow prepared authority approval.");
-        }
-
-        if (stageIndex >= 4)
-        {
-            Assert(authorities.TryGetProperty("artifacts_verified", out var artifactAuthority),
-                "Artifact authority is required at artifacts-verified and complete stages.");
-            var artifacts = ReadAuthority(artifactAuthority, bundle, graph, expectedVersion, "artifacts_verified");
-            Assert(prepared.Id != artifacts.Id && prepared.TaskId != artifacts.TaskId && prepared.ResultNonce != artifacts.ResultNonce &&
-                   prepared.ApprovedAt < artifacts.ApprovedAt,
-                "Prepared and artifact authorities must have distinct identities and ordered approvals.");
-            var templateTag = ParseTimestamp(GetString(GetObject(effective, "template_tag"), "created_at_utc"), "template tag");
-            Assert(artifacts.ApprovedAt > templateTag,
-                "Artifact authority must follow template-tag evidence.");
-            Assert(GetString(pointer, "artifact_approval_id") == artifacts.Id,
-                "The canonical pointer must name the artifact authority.");
-            if (stageIndex == 5)
-            {
-                var closure = GetObject(effective, "closure");
-                var complete = ParseTimestamp(GetString(closure, "completed_at_utc"), "closure.completed_at_utc");
-                Assert(complete > artifacts.ApprovedAt,
-                    "Complete-stage authority must precede the complete closeout chronology.");
-            }
-        }
-        else
-        {
-            Assert(!authorities.TryGetProperty("artifacts_verified", out _) &&
-                   !pointer.TryGetProperty("artifact_approval_id", out _),
-                "Future artifact authority must not be asserted before artifacts-verified.");
-        }
-    }
-
-    private static Authority ReadAuthority(
-        JsonElement authority,
-        ReleaseBundle bundle,
-        GraphState graph,
-        string expectedVersion,
-        string name)
-    {
-        RequireMembers(authority, $"authorities.{name}", new[]
-        {
-            "id", "kind", "stage", "target_payload_id", "target_payload_ref", "target_payload_sha256",
-            "version", "verdict", "reviewer_role", "reviewer_identity", "report_ref", "completion_ref", "report_sha256",
-            "completion_sha256", "artifact_ref", "artifact_sha256", "task_id", "result_nonce", "status",
-            "approved_at_utc", "evidence_ref"
-        });
-        var id = GetString(authority, "id");
-        var stage = GetString(authority, "stage");
-        var targetId = GetString(authority, "target_payload_id");
-        var expectedStage = name == "prepared" ? "prepared" : "artifacts-verified";
-        Assert(GetString(authority, "kind") == "host-stage-review" && !string.IsNullOrWhiteSpace(id) &&
-               GetString(authority, "version") == expectedVersion && GetString(authority, "verdict") == "approved" &&
-               stage == expectedStage && !string.IsNullOrWhiteSpace(GetString(authority, "reviewer_role")) &&
-               !string.IsNullOrWhiteSpace(GetString(authority, "reviewer_identity")) &&
-               !string.IsNullOrWhiteSpace(GetString(authority, "task_id")) &&
-               !string.IsNullOrWhiteSpace(GetString(authority, "result_nonce")) &&
-               GetString(authority, "status") == "completed",
-            $"authorities.{name} is not a complete host-stage approval.");
-        Assert(graph.Nodes.TryGetValue(targetId, out var target) &&
-               target.Stage == expectedStage &&
-               target!.PayloadRef == GetString(authority, "target_payload_ref") &&
-               target.PayloadSha256 == GetString(authority, "target_payload_sha256").ToLowerInvariant(),
-            $"authorities.{name} is not bound to its target payload.");
-        var report = GetContent(bundle, GetString(authority, "report_ref"), $"{name} report");
-        var completion = GetContent(bundle, GetString(authority, "completion_ref"), $"{name} completion");
-        var artifact = GetContent(bundle, GetString(authority, "artifact_ref"), $"{name} artifact");
-        Assert(Sha256Bytes(report) == GetString(authority, "report_sha256").ToLowerInvariant() &&
-               Sha256Bytes(completion) == GetString(authority, "completion_sha256").ToLowerInvariant() &&
-               Sha256Bytes(artifact) == GetString(authority, "artifact_sha256").ToLowerInvariant(),
-            $"authorities.{name} report/completion/artifact bytes are not bound.");
-        var evidence = GetContent(bundle, GetString(authority, "evidence_ref"), $"{name} approval");
-        using var evidenceDocument = JsonDocument.Parse(evidence);
-        var evidenceRoot = evidenceDocument.RootElement;
-        RequireMembers(evidenceRoot, $"{name} approval evidence", new[]
-        {
-            "id", "kind", "stage", "version", "verdict", "target_payload_id", "target_payload_ref",
-            "target_payload_sha256", "reviewer_role", "reviewer_identity", "report_ref",
-            "completion_ref", "report_sha256", "completion_sha256", "artifact_ref", "artifact_sha256",
-            "task_id", "result_nonce", "status", "approved_at_utc"
-        });
-        Assert(GetString(evidenceRoot, "id") == id &&
-               GetString(evidenceRoot, "kind") == GetString(authority, "kind") &&
-               GetString(evidenceRoot, "stage") == GetString(authority, "stage") &&
-               GetString(evidenceRoot, "version") == expectedVersion &&
-               GetString(evidenceRoot, "verdict") == GetString(authority, "verdict") &&
-               GetString(evidenceRoot, "target_payload_id") == targetId &&
-               GetString(evidenceRoot, "target_payload_ref") == GetString(authority, "target_payload_ref") &&
-               GetString(evidenceRoot, "target_payload_sha256") == GetString(authority, "target_payload_sha256") &&
-               GetString(evidenceRoot, "reviewer_role") == GetString(authority, "reviewer_role") &&
-               GetString(evidenceRoot, "reviewer_identity") == GetString(authority, "reviewer_identity") &&
-               GetString(evidenceRoot, "report_ref") == GetString(authority, "report_ref") &&
-               GetString(evidenceRoot, "completion_ref") == GetString(authority, "completion_ref") &&
-               GetString(evidenceRoot, "report_sha256") == GetString(authority, "report_sha256") &&
-               GetString(evidenceRoot, "completion_sha256") == GetString(authority, "completion_sha256") &&
-               GetString(evidenceRoot, "artifact_ref") == GetString(authority, "artifact_ref") &&
-               GetString(evidenceRoot, "artifact_sha256") == GetString(authority, "artifact_sha256") &&
-               GetString(evidenceRoot, "task_id") == GetString(authority, "task_id") &&
-               GetString(evidenceRoot, "result_nonce") == GetString(authority, "result_nonce") &&
-               GetString(evidenceRoot, "status") == GetString(authority, "status") &&
-               GetString(evidenceRoot, "approved_at_utc") == GetString(authority, "approved_at_utc") &&
-               GetString(authority, "verdict") == "approved",
-            $"authorities.{name} is not bound to its immutable approval response.");
-        var approvedAt = ParseTimestamp(GetString(authority, "approved_at_utc"), $"authorities.{name}.approved_at_utc");
-        return new Authority(id, stage, targetId, GetString(authority, "task_id"), GetString(authority, "result_nonce"), approvedAt);
-    }
-
-    private static void ValidateBundleReferences(JsonElement root, ReleaseBundle bundle)
-    {
-        var refs = GetArray(root, "bundle_refs").EnumerateArray()
-            .Select(value => value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty)
-            .ToHashSet(StringComparer.Ordinal);
-        var hostRef = bundle.HostRef;
-        var implicitReaderAnchors = bundle.Entries.Keys
-            .Where(reference => ReleaseBundle.IsReaderAnchorReference(reference, hostRef))
-            .ToHashSet(StringComparer.Ordinal);
-        Assert(refs.Count == GetArray(root, "bundle_refs").GetArrayLength() &&
-               refs.SetEquals(bundle.Entries.Keys.Where(key =>
-                   bundle.Entries[key].Kind != "record" && !implicitReaderAnchors.Contains(key))),
-            "Closed bundle_refs must be a one-to-one complete set of fetched release evidence objects; reader host anchors are implicit.");
-    }
-
-    private static void ValidateReleaseStage(
-        JsonElement root,
-        ReleaseBundle bundle,
-        string stage,
-        int stageIndex,
-        string expectedVersion,
-        string mergedSha,
-        string? repoRoot)
-    {
-        if (stageIndex >= 1) ValidateTag(root, bundle, "library_tag", $"dcb-v{expectedVersion}", mergedSha);
+        if (stageIndex >= 1) ValidateTag(GetObject(root, "library_tag"), bundle, "library_tag", $"dcb-v{expectedVersion}", mergedSha);
         if (stageIndex >= 2)
         {
-            ValidatePackages(root, expectedVersion);
+            ValidatePackages(GetArray(root, "packages"), expectedVersion);
             ValidateReleaseEvidence(root, bundle, "library_release", $"dcb-v{expectedVersion}", expectedVersion, 26, repoRoot);
         }
         if (stageIndex >= 3)
         {
-            ValidateTag(root, bundle, "template_tag", $"dcbTemplates-v{expectedVersion}", mergedSha);
+            ValidateTag(GetObject(root, "template_tag"), bundle, "template_tag", $"dcbTemplates-v{expectedVersion}", mergedSha);
             var libraryTag = ParseTimestamp(GetString(GetObject(root, "library_tag"), "created_at_utc"), "library tag");
             var templateTag = ParseTimestamp(GetString(GetObject(root, "template_tag"), "created_at_utc"), "template tag");
             var libraryRelease = ParseTimestamp(GetString(GetObject(root, "library_release"), "observed_at_utc"), "library release");
@@ -720,47 +650,40 @@ internal static class ClosedReleaseRecordValidator
         }
         if (stageIndex >= 4)
         {
-            ValidateTemplate(root, expectedVersion);
+            ValidateTemplate(GetObject(root, "template"), expectedVersion);
             ValidateReleaseEvidence(root, bundle, "template_release", $"dcbTemplates-v{expectedVersion}", expectedVersion, 1, repoRoot);
+            Assert(artifactApprovedAt is not null, "Artifacts authority is required for template publication.");
+            var templateRelease = ParseTimestamp(GetString(GetObject(root, "template_release"), "observed_at_utc"), "template release");
+            Assert(artifactApprovedAt > templateRelease, "Artifacts authority must follow template release observation.");
         }
-        if (stageIndex == 5)
+        if (stageIndex != 5) return;
+
+        Assert(artifactApprovedAt is not null, "Complete release must have artifacts authority.");
+        var closure = GetObject(root, "closure");
+        RequireMembers(closure, "closure", [
+            "library_issue_state", "template_issue_state", "issue_1185_state", "issue_1230_state",
+            "library_comment_url", "template_comment_url", "issue_1185_comment_url", "issue_1230_comment_url",
+            "library_closed_at_utc", "template_closed_at_utc", "issue_1185_closed_at_utc", "issue_1230_closed_at_utc",
+            "required_link", "caveat", "reply_digests", "completed_at_utc"
+        ]);
+        Assert(new[] { "library_issue_state", "template_issue_state", "issue_1185_state", "issue_1230_state" }
+            .All(property => GetString(closure, property) == "closed"), "All required closeouts must be closed.");
+        var complete = ParseTimestamp(GetString(closure, "completed_at_utc"), "closure.completed_at_utc");
+        Assert(GetArray(closure, "reply_digests").GetArrayLength() == 2 && GetArray(closure, "reply_digests").EnumerateArray().All(value => Sha256.IsMatch(value.GetString() ?? string.Empty)),
+            "Closure must carry two immutable reply digests.");
+        Assert(GetString(closure, "required_link") == RequiredCloseoutLink && !string.IsNullOrWhiteSpace(GetString(closure, "caveat")),
+            "Closure handoff evidence is incomplete.");
+        foreach (var property in new[] { "library_closed_at_utc", "template_closed_at_utc", "issue_1185_closed_at_utc", "issue_1230_closed_at_utc" })
         {
-            var closure = GetObject(root, "closure");
-            RequireMembers(closure, "closure", new[]
-            {
-                "library_issue_state", "template_issue_state", "issue_1185_state", "issue_1230_state",
-                "library_comment_url", "template_comment_url", "issue_1185_comment_url", "issue_1230_comment_url",
-                "library_closed_at_utc", "template_closed_at_utc", "issue_1185_closed_at_utc", "issue_1230_closed_at_utc",
-                "required_link", "caveat", "reply_digests", "completed_at_utc"
-            });
-            Assert(new[] { "library_issue_state", "template_issue_state", "issue_1185_state", "issue_1230_state" }
-                .All(property => GetString(closure, property) == "closed"), "All required closeouts must be closed.");
-            var complete = ParseTimestamp(GetString(closure, "completed_at_utc"), "closure.completed_at_utc");
-            Assert(GetArray(closure, "reply_digests").GetArrayLength() == 2 &&
-                   GetArray(closure, "reply_digests").EnumerateArray().All(value => Sha256.IsMatch(value.GetString() ?? string.Empty)),
-                "Closure must carry two immutable reply digests.");
-            Assert(GetString(closure, "required_link") == "https://github.com/J-Tech-Japan/Sekiban/issues/1234" &&
-                   !string.IsNullOrWhiteSpace(GetString(closure, "caveat")),
-                "Closure handoff evidence is incomplete.");
-            foreach (var property in new[] { "library_closed_at_utc", "template_closed_at_utc", "issue_1185_closed_at_utc", "issue_1230_closed_at_utc" })
-            {
-                Assert(ParseTimestamp(GetString(closure, property), $"closure.{property}") < complete,
-                    "Closure completion must strictly follow every issue closeout.");
-            }
+            var closedAt = ParseTimestamp(GetString(closure, property), $"closure.{property}");
+            Assert(closedAt > artifactApprovedAt && closedAt < complete, $"closure.{property} must follow artifacts authority and precede complete closeout.");
         }
     }
 
-    private static void ValidateTag(
-        JsonElement root,
-        ReleaseBundle bundle,
-        string property,
-        string expectedName,
-        string mergedSha)
+    private static void ValidateTag(JsonElement tag, ReleaseBundle bundle, string property, string expectedName, string mergedSha)
     {
-        var tag = GetObject(root, property);
-        RequireMembers(tag, property, new[] { "name", "object_id", "peeled_commit", "created_at_utc", "evidence_ref", "peeled_evidence_ref" });
-        Assert(GetString(tag, "name") == expectedName && Commit.IsMatch(GetString(tag, "object_id")) &&
-               GetString(tag, "peeled_commit") == mergedSha,
+        RequireMembers(tag, property, ["name", "object_id", "peeled_commit", "created_at_utc", "evidence_ref", "peeled_evidence_ref"]);
+        Assert(GetString(tag, "name") == expectedName && Commit.IsMatch(GetString(tag, "object_id")) && GetString(tag, "peeled_commit") == mergedSha,
             $"{property} is not bound to the merged candidate.");
         ValidateTagEvidence(tag, bundle, mergedSha);
     }
@@ -768,138 +691,105 @@ internal static class ClosedReleaseRecordValidator
     private static void ValidateTagEvidence(JsonElement tag, ReleaseBundle bundle, string peeledCommit)
     {
         var refEvidence = GetApiObject(bundle, GetString(tag, "evidence_ref"), "tag ref");
-        Assert(GetString(GetObject(refEvidence, "object"), "sha") == GetString(tag, "object_id"),
-            "Tag ref object identity is not bound.");
+        Assert(GetString(GetObject(refEvidence, "object"), "sha") == GetString(tag, "object_id"), "Tag ref object identity is not bound.");
         var peeledEvidence = GetApiObject(bundle, GetString(tag, "peeled_evidence_ref"), "tag object");
-        Assert(GetString(GetObject(peeledEvidence, "object"), "sha") == peeledCommit,
-            "Tag peeled commit identity is not bound.");
+        Assert(GetString(GetObject(peeledEvidence, "object"), "sha") == peeledCommit, "Tag peeled commit identity is not bound.");
     }
 
     private static void ValidateOriginCheckEvidence(JsonElement check, ReleaseBundle bundle)
     {
         var evidence = GetApiObject(bundle, GetString(check, "evidence_ref"), "origin check");
-        Assert(GetString(evidence, "head_sha") == GetString(check, "head_sha") &&
-               GetString(evidence, "conclusion") == GetString(check, "conclusion"),
+        Assert(GetString(evidence, "head_sha") == GetString(check, "head_sha") && GetString(evidence, "conclusion") == GetString(check, "conclusion"),
             "Origin check API evidence is not bound.");
     }
 
-    private static void ValidatePackages(JsonElement root, string expectedVersion)
+    private static void ValidatePackages(JsonElement packages, string expectedVersion)
     {
-        var packages = GetArray(root, "packages");
         Assert(packages.GetArrayLength() == PackageIds.Length, "Package evidence must contain all DCB packages.");
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var package in packages.EnumerateArray())
         {
+            RequireMembers(package, "package", ["id", "version", "asset_count", "public_url"]);
             var id = GetString(package, "id");
-            Assert(ids.Add(id) && PackageIds.Contains(id, StringComparer.Ordinal) &&
-                   GetString(package, "version") == expectedVersion && GetInt(package, "asset_count") == 1 &&
-                   GetString(package, "public_url") ==
-                   $"https://api.nuget.org/v3-flatcontainer/{id.ToLowerInvariant()}/{expectedVersion}/{id.ToLowerInvariant()}.{expectedVersion}.nupkg",
+            Assert(ids.Add(id) && PackageIds.Contains(id, StringComparer.Ordinal) && GetString(package, "version") == expectedVersion && GetInt(package, "asset_count") == 1 &&
+                   GetString(package, "public_url") == $"https://api.nuget.org/v3-flatcontainer/{id.ToLowerInvariant()}/{expectedVersion}/{id.ToLowerInvariant()}.{expectedVersion}.nupkg",
                 $"Package evidence is invalid for {id}.");
         }
         Assert(ids.SetEquals(PackageIds), "Package evidence set is incomplete.");
     }
 
-    private static void ValidateTemplate(JsonElement root, string expectedVersion)
+    private static void ValidateTemplate(JsonElement template, string expectedVersion)
     {
-        var template = GetObject(root, "template");
-        Assert(GetString(template, "package_id") == "Sekiban.Dcb.Templates" &&
-               GetString(template, "version") == expectedVersion && GetInt(template, "asset_count") == 1 &&
-               GetString(template, "public_url") ==
-               $"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.templates/{expectedVersion}/sekiban.dcb.templates.{expectedVersion}.nupkg",
+        RequireMembers(template, "template", ["package_id", "version", "asset_count", "public_url"]);
+        Assert(GetString(template, "package_id") == "Sekiban.Dcb.Templates" && GetString(template, "version") == expectedVersion && GetInt(template, "asset_count") == 1 &&
+               GetString(template, "public_url") == $"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.templates/{expectedVersion}/sekiban.dcb.templates.{expectedVersion}.nupkg",
             "Template package evidence is invalid.");
     }
 
-    private static void ValidateReleaseEvidence(
-        JsonElement root,
-        ReleaseBundle bundle,
-        string property,
-        string expectedTag,
-        string expectedVersion,
-        int expectedAssets,
-        string? repoRoot)
+    private static void ValidateReleaseEvidence(JsonElement root, ReleaseBundle bundle, string property, string expectedTag, string expectedVersion, int expectedAssets, string? repoRoot)
     {
         Assert(!string.IsNullOrWhiteSpace(repoRoot), $"{property} requires --repo-root for body verification.");
         var release = GetObject(root, property);
-        Assert(GetString(release, "repository") == Repository && GetString(release, "tag") == expectedTag &&
-               GetString(release, "url") == $"https://github.com/{Repository}/releases/tag/{expectedTag}" &&
-               GetBoolean(release, "draft") == false && GetInt(release, "asset_count") == expectedAssets &&
-               ParseTimestamp(GetString(release, "observed_at_utc"), $"{property}.observed_at_utc") >=
-               ParseTimestamp(GetString(GetObject(root, property == "library_release" ? "library_tag" : "template_tag"), "created_at_utc"), "release tag"),
-            $"{property} identity or asset count is invalid.");
+        RequireMembers(release, property, ["repository", "tag", "url", "draft", "asset_count", "body_sha256", "observed_at_utc", "evidence_ref"]);
+        var tagProperty = property == "library_release" ? "library_tag" : "template_tag";
+        var tagCreated = ParseTimestamp(GetString(GetObject(root, tagProperty), "created_at_utc"), $"{tagProperty}.created_at_utc");
+        var observed = ParseTimestamp(GetString(release, "observed_at_utc"), $"{property}.observed_at_utc");
+        Assert(GetString(release, "repository") == Repository && GetString(release, "tag") == expectedTag && GetString(release, "url") == $"https://github.com/{Repository}/releases/tag/{expectedTag}" &&
+               !GetBoolean(release, "draft") && GetInt(release, "asset_count") == expectedAssets && observed > tagCreated,
+            $"{property} identity, asset count, draft state, or strict tag chronology is invalid.");
+
         var api = GetApiObject(bundle, GetString(release, "evidence_ref"), $"{property} API evidence");
-        Assert(GetString(api, "html_url") == GetString(release, "url") &&
-               GetString(GetObject(api, "repository"), "full_name") == Repository &&
-               GetString(api, "tag_name") == expectedTag && !GetBoolean(api, "draft") &&
+        Assert(GetString(api, "html_url") == GetString(release, "url") && GetString(GetObject(api, "repository"), "full_name") == Repository &&
+               GetString(api, "tag_name") == expectedTag && !GetBoolean(api, "draft") && GetString(api, "published_at") == GetString(release, "observed_at_utc") &&
                Sha256Bytes(Encoding.UTF8.GetBytes(GetString(api, "body"))) == GetString(release, "body_sha256").ToLowerInvariant(),
-            $"{property} is not bound to the authoritative public release response.");
+            $"{property} is not bound to the authoritative public GitHub Release response.");
         var assets = GetArray(api, "assets");
         Assert(assets.GetArrayLength() == expectedAssets, $"{property} public asset response is incomplete.");
         var expectedAssetMap = property == "library_release"
-            ? GetArray(root, "packages").EnumerateArray()
-                .ToDictionary(
-                    package => $"{GetString(package, "id")}.{expectedVersion}.nupkg",
-                    package => GetString(package, "public_url"),
-                    StringComparer.Ordinal)
+            ? GetArray(root, "packages").EnumerateArray().ToDictionary(package => $"{GetString(package, "id")}.{expectedVersion}.nupkg", package => $"https://github.com/{Repository}/releases/download/{expectedTag}/{GetString(package, "id")}.{expectedVersion}.nupkg", StringComparer.Ordinal)
             : new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                [$"Sekiban.Dcb.Templates.{expectedVersion}.nupkg"] =
-                    GetString(GetObject(root, "template"), "public_url")
+                [$"Sekiban.Dcb.Templates.{expectedVersion}.nupkg"] = $"https://github.com/{Repository}/releases/download/{expectedTag}/Sekiban.Dcb.Templates.{expectedVersion}.nupkg"
             };
         foreach (var asset in assets.EnumerateArray())
         {
-            RequireMembers(asset, $"{property}.asset", new[] { "name", "browser_download_url", "state" });
+            RequireMembers(asset, $"{property}.asset", ["name", "browser_download_url", "state"]);
             var assetName = GetString(asset, "name");
             var assetUrl = GetString(asset, "browser_download_url");
-            Assert(GetString(asset, "state") == "uploaded" &&
-                   expectedAssetMap.Remove(assetName, out var expectedUrl) &&
-                   expectedUrl == assetUrl,
-                $"{property} contains an unexpected or unuploaded public asset.");
+            Assert(GetString(asset, "state") == "uploaded" && expectedAssetMap.Remove(assetName, out var expectedUrl) && expectedUrl == assetUrl,
+                $"{property} contains an unexpected or unuploaded GitHub Release asset.");
         }
-        Assert(expectedAssetMap.Count == 0, $"{property} is missing a public package asset.");
+        Assert(expectedAssetMap.Count == 0, $"{property} is missing a GitHub Release package asset.");
+
         var bodies = GetObject(root, "release_bodies");
         var suffix = property == "library_release" ? "library" : "template";
         foreach (var language in new[] { "en", "ja" })
         {
-            var relative = property == "library_release"
-                ? $"docs/releases/dcb-v{expectedVersion}-library.{language}.md"
-                : $"docs/releases/dcbTemplates-v{expectedVersion}.{language}.md";
+            var relative = property == "library_release" ? $"docs/releases/dcb-v{expectedVersion}-library.{language}.md" : $"docs/releases/dcbTemplates-v{expectedVersion}.{language}.md";
             var path = Path.Combine(Path.GetFullPath(repoRoot!), relative);
             Assert(File.Exists(path), $"Release body source is missing: {relative}.");
-            var digest = Sha256Bytes(File.ReadAllBytes(path));
-            Assert(digest == GetString(bodies, $"{suffix}_{language}_sha256").ToLowerInvariant(),
+            Assert(Sha256Bytes(File.ReadAllBytes(path)) == GetString(bodies, $"{suffix}_{language}_sha256").ToLowerInvariant(),
                 $"{property} body digest does not match {relative}.");
         }
     }
 
     private static void ValidateBodies(JsonElement root, string expectedVersion, int stageIndex, string? repoRoot)
     {
-        if (stageIndex < 2)
-        {
-            return;
-        }
-
+        if (stageIndex < 2) return;
         Assert(!string.IsNullOrWhiteSpace(repoRoot), "Release body verification requires --repo-root.");
         var bodies = GetObject(root, "release_bodies");
-        var documents = new[]
+        RequireMembers(bodies, "release_bodies", ["library_en_sha256", "library_en_version", "library_ja_sha256", "library_ja_version", "template_en_sha256", "template_en_version", "template_ja_sha256", "template_ja_version"]);
+        foreach (var (digestProperty, relative) in new[]
         {
             ("library_en_sha256", $"docs/releases/dcb-v{expectedVersion}-library.en.md"),
             ("library_ja_sha256", $"docs/releases/dcb-v{expectedVersion}-library.ja.md")
-        };
-        foreach (var (digestProperty, relative) in documents)
+        })
         {
             var path = Path.Combine(Path.GetFullPath(repoRoot!), relative);
-            Assert(File.Exists(path) && Sha256Bytes(File.ReadAllBytes(path)) == GetString(bodies, digestProperty).ToLowerInvariant(),
-                $"Release body digest does not match {relative}.");
-            Assert(GetString(bodies, digestProperty.Replace("_sha256", "_version")) == expectedVersion,
-                $"Release body version is not {expectedVersion} for {relative}.");
+            Assert(File.Exists(path) && Sha256Bytes(File.ReadAllBytes(path)) == GetString(bodies, digestProperty).ToLowerInvariant(), $"Release body digest does not match {relative}.");
+            Assert(GetString(bodies, digestProperty.Replace("_sha256", "_version")) == expectedVersion, $"Release body version is not {expectedVersion} for {relative}.");
         }
-
-        if (stageIndex < 4)
-        {
-            return;
-        }
-
+        if (stageIndex < 4) return;
         foreach (var (digestProperty, relative) in new[]
         {
             ("template_en_sha256", $"docs/releases/dcbTemplates-v{expectedVersion}.en.md"),
@@ -907,10 +797,8 @@ internal static class ClosedReleaseRecordValidator
         })
         {
             var path = Path.Combine(Path.GetFullPath(repoRoot!), relative);
-            Assert(File.Exists(path) && Sha256Bytes(File.ReadAllBytes(path)) == GetString(bodies, digestProperty).ToLowerInvariant(),
-                $"Template release body digest does not match {relative}.");
-            Assert(GetString(bodies, digestProperty.Replace("_sha256", "_version")) == expectedVersion,
-                $"Template release body version is not {expectedVersion} for {relative}.");
+            Assert(File.Exists(path) && Sha256Bytes(File.ReadAllBytes(path)) == GetString(bodies, digestProperty).ToLowerInvariant(), $"Template release body digest does not match {relative}.");
+            Assert(GetString(bodies, digestProperty.Replace("_sha256", "_version")) == expectedVersion, $"Template release body version is not {expectedVersion} for {relative}.");
         }
     }
 
@@ -930,32 +818,16 @@ internal static class ClosedReleaseRecordValidator
         return entry.ContentBytes!;
     }
 
-    private static string Fold(string? previous, string payloadSha) =>
-        Sha256Bytes(Encoding.UTF8.GetBytes($"{previous ?? "base"}:{payloadSha}"));
-
-    private static string Sha256Bytes(byte[] bytes) =>
-        Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+    private static string Sha256Bytes(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
     private static DateTimeOffset ParseTimestamp(string value, string property)
     {
-        var parsed = DateTimeOffset.TryParseExact(
-            value,
-            ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"],
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-            out var timestamp);
-        Assert(parsed && value.EndsWith('Z') && timestamp.Offset == TimeSpan.Zero,
-            $"{property} must be canonical UTC with a Z suffix.");
+        var parsed = DateTimeOffset.TryParseExact(value, ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var timestamp);
+        Assert(parsed && value.EndsWith('Z') && timestamp.Offset == TimeSpan.Zero, $"{property} must be canonical UTC with a Z suffix.");
         return timestamp;
     }
 
-    private static DateTimeOffset GetTimestamp(JsonElement element, string property) =>
-        ParseTimestamp(GetString(element, property), property);
-
-    private static string? NullableString(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind != JsonValueKind.Null
-            ? GetString(element, property)
-            : null;
+    private static DateTimeOffset GetTimestamp(JsonElement element, string property) => ParseTimestamp(GetString(element, property), property);
 
     private static void AssertNoApprovalReferences(JsonElement element, string path)
     {
@@ -963,56 +835,73 @@ internal static class ClosedReleaseRecordValidator
         {
             foreach (var property in element.EnumerateObject())
             {
-                Assert(!property.Name.Contains("approval", StringComparison.OrdinalIgnoreCase) &&
-                       !property.Name.Contains("authority", StringComparison.OrdinalIgnoreCase),
-                    $"{path} must not contain approval or authority references.");
+                Assert(!property.Name.Contains("approval", StringComparison.OrdinalIgnoreCase) && !property.Name.Contains("authority", StringComparison.OrdinalIgnoreCase), $"{path} must not contain approval or authority references.");
                 AssertNoApprovalReferences(property.Value, $"{path}.{property.Name}");
             }
         }
         else if (element.ValueKind == JsonValueKind.Array)
         {
             var index = 0;
-            foreach (var item in element.EnumerateArray())
-            {
-                AssertNoApprovalReferences(item, $"{path}[{index++}]");
-            }
+            foreach (var item in element.EnumerateArray()) AssertNoApprovalReferences(item, $"{path}[{index++}]");
         }
+    }
+
+    private static int StageIndex(string stage)
+    {
+        var index = Array.IndexOf(Stages, stage);
+        Assert(index >= 0, $"Unknown release stage '{stage}'.");
+        return index;
+    }
+
+    private static bool IsNumericId(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String && ulong.TryParse(value.GetString(), out var id) && id > 0;
+
+    private static bool IsNumericApiId(JsonElement element, string property) => element.TryGetProperty(property, out var value) && ((value.ValueKind == JsonValueKind.Number && value.TryGetUInt64(out var number) && number > 0) || (value.ValueKind == JsonValueKind.String && ulong.TryParse(value.GetString(), out var text) && text > 0));
+
+    private static bool ReviewUrlMatchesId(string url, JsonElement review)
+    {
+        if (!review.TryGetProperty("id", out var value)) return false;
+        var id = value.ValueKind == JsonValueKind.Number ? value.GetUInt64().ToString(CultureInfo.InvariantCulture) : value.GetString();
+        return id is not null && url.EndsWith($"pullrequestreview-{id}", StringComparison.Ordinal);
+    }
+
+    private static string? GetNullableString(JsonElement element, string property)
+    {
+        Assert(element.TryGetProperty(property, out var value), $"Property {property} is required.");
+        if (value.ValueKind == JsonValueKind.Null) return null;
+        Assert(value.ValueKind == JsonValueKind.String, $"Property {property} must be a string or null.");
+        return value.GetString();
     }
 
     private static string GetString(JsonElement element, string property)
     {
-        Assert(element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String,
-            $"Property {property} is required and must be a string.");
+        Assert(element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String, $"Property {property} is required and must be a string.");
         return value.GetString() ?? string.Empty;
     }
 
     private static int GetInt(JsonElement element, string property)
     {
-        var result = 0;
-        Assert(element.TryGetProperty(property, out var value) && value.TryGetInt32(out result),
-            $"Property {property} is required and must be an integer.");
+        if (!element.TryGetProperty(property, out var value) || !value.TryGetInt32(out var result))
+        {
+            throw new InvalidOperationException($"Property {property} is required and must be an integer.");
+        }
         return result;
     }
 
     private static bool GetBoolean(JsonElement element, string property)
     {
-        Assert(element.TryGetProperty(property, out var value) &&
-               value.ValueKind is JsonValueKind.True or JsonValueKind.False,
-            $"Property {property} is required and must be boolean.");
+        Assert(element.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False, $"Property {property} is required and must be boolean.");
         return value.GetBoolean();
     }
 
     private static JsonElement GetObject(JsonElement element, string property)
     {
-        Assert(element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Object,
-            $"Property {property} is required and must be an object.");
+        Assert(element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Object, $"Property {property} is required and must be an object.");
         return value;
     }
 
     private static JsonElement GetArray(JsonElement element, string property)
     {
-        Assert(element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Array,
-            $"Property {property} is required and must be an array.");
+        Assert(element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Array, $"Property {property} is required and must be an array.");
         return value;
     }
 
@@ -1020,45 +909,18 @@ internal static class ClosedReleaseRecordValidator
     {
         var allowed = required.Concat(optional ?? Array.Empty<string>()).ToHashSet(StringComparer.Ordinal);
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var property in element.EnumerateObject())
-        {
-            Assert(allowed.Contains(property.Name) && seen.Add(property.Name),
-                $"{path} contains an unknown or duplicate member '{property.Name}'.");
-        }
-        foreach (var property in required)
-        {
-            Assert(element.TryGetProperty(property, out _), $"{path} is missing required member '{property}'.");
-        }
+        foreach (var property in element.EnumerateObject()) Assert(allowed.Contains(property.Name) && seen.Add(property.Name), $"{path} contains an unknown or duplicate member '{property.Name}'.");
+        foreach (var property in required) Assert(element.TryGetProperty(property, out _), $"{path} is missing required member '{property}'.");
     }
 
     private static void Assert(bool condition, string message)
     {
-        if (!condition)
-        {
-            throw new InvalidOperationException(message);
-        }
+        if (!condition) throw new InvalidOperationException(message);
     }
 
-    private sealed record Node(
-        string Id,
-        string Stage,
-        string? PreviousId,
-        string PayloadSha256,
-        string PayloadRef,
-        string? PreviousFoldSha256,
-        string FoldSha256,
-        JsonElement Changes);
-
-    private sealed record GraphState(
-        IReadOnlyDictionary<string, Node> Nodes,
-        IReadOnlyList<Node> Chain,
-        string Fold);
-
-    private sealed record Authority(
-        string Id,
-        string Stage,
-        string TargetPayloadId,
-        string TaskId,
-        string ResultNonce,
-        DateTimeOffset ApprovedAt);
+    private sealed record Node(string PayloadRef, string Id, string Stage, DateTimeOffset RecordedAt, string? PreviousPayloadRef, string PayloadSha256, JsonElement Changes);
+    private sealed record GraphState(IReadOnlyDictionary<string, Node> Nodes, IReadOnlyList<Node> Chain);
+    private sealed record Completion(string TaskId, string ResultNonce, string TargetPayloadRef, string TargetPayloadSha256, string ReportRef, string ReportSha256, string ArtifactRef, string ArtifactSha256, string ReviewerRole, string ReviewerIdentity, string Verdict, DateTimeOffset CompletedAt);
+    private sealed record Authority(string Id, string TaskId, string ResultNonce, DateTimeOffset ApprovedAt, DateTimeOffset CompletedAt);
+    private sealed record AuthorityState(Authority Prepared, DateTimeOffset? ArtifactsVerifiedApprovedAt);
 }

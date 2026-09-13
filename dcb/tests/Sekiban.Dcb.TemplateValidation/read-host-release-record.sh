@@ -83,10 +83,12 @@ downloaded_blob_sha="$(git hash-object "$decoded")"
   echo "Downloaded release-record bytes do not match the GitHub contents blob identity." >&2
   exit 1
 }
-jq -e --arg version "$version" --arg state "$state" --arg repository "$host_repository" --arg path "$record_path" \
+jq -e --arg version "$version" --arg state "$state" \
   '.schema_version == 2 and .version == $version and .stage == $state and
-   .record_source.repository == $repository and .record_source.path == $path and
-   (.record_source.commit_sha | test("^[0-9a-fA-F]{40}$"))' "$decoded" >/dev/null || {
+   (.current_payload_ref | type == "string") and
+   (.prepared_approval_ref | type == "string") and
+   (if (.stage == "artifacts-verified" or .stage == "complete")
+    then (.artifacts_verified_approval_ref | type == "string") else true end)' "$decoded" >/dev/null || {
   echo "Host release record is not the requested closed schema-v2 version/state/source." >&2
   exit 1
 }
@@ -177,24 +179,57 @@ fetch_bundle_ref() {
   else
     write_response_entry github-response "$immutable_ref" "$endpoint" "$response_file"
   fi
-  rm -f "$response_file"
+  FETCH_RESPONSE_FILE="$response_file"
 }
 
 bundle_refs_file="$(mktemp "${TMPDIR:-/tmp}/sek-release-bundle-refs.XXXXXX")"
-jq -e '.bundle_refs | type == "array" and length >= 4 and all(.[]; type == "string")' "$decoded" >/dev/null || {
-  echo "Schema-v2 record must enumerate at least four string immutable bundle references." >&2
-  exit 1
-}
-jq -r '.bundle_refs[]' "$decoded" > "$bundle_refs_file"
+touch "$bundle_refs_file"
+queue_file="$(mktemp "${TMPDIR:-/tmp}/sek-release-bundle-queue.XXXXXX")"
+seen_refs_file="$(mktemp "${TMPDIR:-/tmp}/sek-release-bundle-seen.XXXXXX")"
+cleanup_bundle_queue() { rm -f "$queue_file" "$seen_refs_file"; }
+trap 'cleanup; cleanup_extra; cleanup_bundle_queue' EXIT
+
+jq -r '.current_payload_ref, .prepared_approval_ref, (.artifacts_verified_approval_ref // empty)' "$decoded" > "$queue_file"
 while IFS= read -r immutable_ref; do
+  [[ -n "$immutable_ref" ]] || continue
+  if grep -Fqx "$immutable_ref" "$seen_refs_file"; then continue; fi
+  printf '%s\n' "$immutable_ref" >> "$seen_refs_file"
+  printf '%s\n' "$immutable_ref" >> "$bundle_refs_file"
   fetch_bundle_ref "$immutable_ref"
-done < "$bundle_refs_file"
+  if [[ "${immutable_ref#*:}" == contents/* ]]; then
+    payload_content="$(jq -r '.content' "$FETCH_RESPONSE_FILE" | tr -d '\n' | base64 --decode)"
+    nested_refs="$(printf '%s\n' "$payload_content" | jq -r '.. | strings | select(test("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-fA-F]{40}:.+$"))' 2>/dev/null || true)"
+    [[ -z "$nested_refs" ]] || printf '%s\n' "$nested_refs" >> "$queue_file"
+  fi
+  rm -f "$FETCH_RESPONSE_FILE"
+done < "$queue_file"
 
 verify_live_tag() {
   local property="$1" tag_name expected_object expected_peeled live_ref_file tag_object_file live_object live_type peeled
-  tag_name="$(jq -r --arg property "$property" '.tag_joins[$property].name' "$decoded")"
-  expected_object="$(jq -r --arg property "$property" '.tag_joins[$property].object_id' "$decoded")"
-  expected_peeled="$(jq -r --arg property "$property" '.tag_joins[$property].peeled_commit' "$decoded")"
+  find_payload_property() {
+    local requested_property="$1" response_file payload_content value
+    while IFS= read -r response_file; do
+      [[ -f "$response_file" ]] || continue
+      jq -e '.content? | type == "string"' "$response_file" >/dev/null 2>&1 || continue
+      payload_content="$(jq -r '.content' "$response_file" | tr -d '\n' | base64 --decode 2>/dev/null || true)"
+      [[ -n "$payload_content" ]] || continue
+      value="$(printf '%s\n' "$payload_content" | jq -c --arg property "$requested_property" 'if (.changes? | type) == "object" and (.changes[$property]? != null) then .changes[$property] else empty end' 2>/dev/null || true)"
+      if [[ -n "$value" ]]; then
+        printf '%s\n' "$value"
+        return 0
+      fi
+    done < <(find "$output_dir/objects" -type f -name '*.json' -print | sort)
+    return 1
+  }
+
+  local tag_json
+  tag_json="$(find_payload_property "$property")" || {
+    echo "Closed payload chain is missing ${property} tag identity." >&2
+    return 1
+  }
+  tag_name="$(jq -r '.name' <<< "$tag_json")"
+  expected_object="$(jq -r '.object_id' <<< "$tag_json")"
+  expected_peeled="$(jq -r '.peeled_commit' <<< "$tag_json")"
   [[ "$tag_name" != "null" && "$expected_object" =~ ^[0-9a-fA-F]{40}$ && "$expected_peeled" =~ ^[0-9a-fA-F]{40}$ ]] || {
     echo "Host release record is missing complete ${property} tag identity." >&2
     return 1
