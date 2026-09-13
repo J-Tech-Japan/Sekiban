@@ -5,71 +5,90 @@
   "merged_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "stage": "complete",
   "history": ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete", "artifacts-verified", "complete"],
-  "checks": [{
-    "name": "dcbTestsNet10",
-    "run_id": "1001",
-    "job_id": "2001",
-    "attempt": 1,
-    "event": "pull_request",
-    "started_at_utc": "2026-09-12T10:00:00Z",
-    "completed_at_utc": "2026-09-12T10:10:00Z",
-    "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "conclusion": "success"
-  }],
+  "checks": [
+    {"name":"dcbTestsNet9","workflow":"run_test_dcb.yml","run_id":"1001","job_id":"2001","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:01:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
+    {"name":"dcbTestsNet10","workflow":"run_test_dcb.yml","run_id":"1002","job_id":"2002","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:02:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
+    {"name":"packagedConsumer","workflow":"dcb_template_validation.yml","run_id":"1003","job_id":"2003","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:03:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
+    {"name":"templateConsumer","workflow":"dcb_template_validation.yml","run_id":"1004","job_id":"2004","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:04:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
+    {"name":"SonarCloud Code Analysis","workflow":"sonar.yml","run_id":"1005","job_id":"2005","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:05:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
+    {"name":"diff","workflow":"diff","run_id":"1006","job_id":"2006","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:06:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
+    {"name":"exact-head-review","workflow":"Review","run_id":"review-1007","job_id":"review-2007","attempt":1,"event":"pull_request_review","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:07:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"}
+  ],
   "library_tag": {
     "name": "dcb-v10.22.0",
     "object_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "peeled_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "created_at_utc": "2026-09-12T10:20:00Z"
   },
+  "library_release": {
+    "repository": "J-Tech-Japan/Sekiban",
+    "tag": "dcb-v10.22.0",
+    "url": "https://github.com/J-Tech-Japan/Sekiban/releases/tag/dcb-v10.22.0",
+    "draft": false,
+    "asset_count": 26,
+    "body_sha256": "42946d4334d981229ed1febfb5cb7a99fac7487c5917c5ddff041272ca966e20"
+  },
   "packages": [
-    {"id":"Sekiban.Dcb.BlobStorage.AzureStorage","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.blobstorage.azurestorage/10.22.0/x.nupkg","asset_count":1},
-    {"id":"Sekiban.Dcb.BlobStorage.S3","version":"10.22.0","public_url":"https://example.invalid/10.22.0/2","asset_count":1},
-    {"id":"Sekiban.Dcb.ColdStorage","version":"10.22.0","public_url":"https://example.invalid/10.22.0/3","asset_count":1},
-    {"id":"Sekiban.Dcb.Core","version":"10.22.0","public_url":"https://example.invalid/10.22.0/4","asset_count":1},
-    {"id":"Sekiban.Dcb.Core.Model","version":"10.22.0","public_url":"https://example.invalid/10.22.0/5","asset_count":1},
-    {"id":"Sekiban.Dcb.Core.Testing","version":"10.22.0","public_url":"https://example.invalid/10.22.0/6","asset_count":1},
-    {"id":"Sekiban.Dcb.CosmosDb","version":"10.22.0","public_url":"https://example.invalid/10.22.0/7","asset_count":1},
-    {"id":"Sekiban.Dcb.DynamoDB","version":"10.22.0","public_url":"https://example.invalid/10.22.0/8","asset_count":1},
-    {"id":"Sekiban.Dcb.MaterializedView","version":"10.22.0","public_url":"https://example.invalid/10.22.0/9","asset_count":1},
-    {"id":"Sekiban.Dcb.MaterializedView.MySql","version":"10.22.0","public_url":"https://example.invalid/10.22.0/10","asset_count":1},
-    {"id":"Sekiban.Dcb.MaterializedView.Orleans","version":"10.22.0","public_url":"https://example.invalid/10.22.0/11","asset_count":1},
-    {"id":"Sekiban.Dcb.MaterializedView.Postgres","version":"10.22.0","public_url":"https://example.invalid/10.22.0/12","asset_count":1},
-    {"id":"Sekiban.Dcb.MaterializedView.SqlServer","version":"10.22.0","public_url":"https://example.invalid/10.22.0/13","asset_count":1},
-    {"id":"Sekiban.Dcb.MaterializedView.Sqlite","version":"10.22.0","public_url":"https://example.invalid/10.22.0/14","asset_count":1},
-    {"id":"Sekiban.Dcb.Orleans.AzureQueue","version":"10.22.0","public_url":"https://example.invalid/10.22.0/15","asset_count":1},
-    {"id":"Sekiban.Dcb.Orleans.Core","version":"10.22.0","public_url":"https://example.invalid/10.22.0/16","asset_count":1},
-    {"id":"Sekiban.Dcb.Orleans.WithResult","version":"10.22.0","public_url":"https://example.invalid/10.22.0/17","asset_count":1},
-    {"id":"Sekiban.Dcb.Orleans.WithoutResult","version":"10.22.0","public_url":"https://example.invalid/10.22.0/18","asset_count":1},
-    {"id":"Sekiban.Dcb.Postgres","version":"10.22.0","public_url":"https://example.invalid/10.22.0/19","asset_count":1},
-    {"id":"Sekiban.Dcb.Sqlite","version":"10.22.0","public_url":"https://example.invalid/10.22.0/20","asset_count":1},
-    {"id":"Sekiban.Dcb.WithResult","version":"10.22.0","public_url":"https://example.invalid/10.22.0/21","asset_count":1},
-    {"id":"Sekiban.Dcb.WithResult.Model","version":"10.22.0","public_url":"https://example.invalid/10.22.0/22","asset_count":1},
-    {"id":"Sekiban.Dcb.WithResult.Testing","version":"10.22.0","public_url":"https://example.invalid/10.22.0/23","asset_count":1},
-    {"id":"Sekiban.Dcb.WithoutResult","version":"10.22.0","public_url":"https://example.invalid/10.22.0/24","asset_count":1},
-    {"id":"Sekiban.Dcb.WithoutResult.Model","version":"10.22.0","public_url":"https://example.invalid/10.22.0/25","asset_count":1},
-    {"id":"Sekiban.Dcb.WithoutResult.Testing","version":"10.22.0","public_url":"https://example.invalid/10.22.0/26","asset_count":1}
+    {"id":"Sekiban.Dcb.BlobStorage.AzureStorage","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.blobstorage.azurestorage/10.22.0/sekiban.dcb.blobstorage.azurestorage.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.BlobStorage.S3","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.blobstorage.s3/10.22.0/sekiban.dcb.blobstorage.s3.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.ColdStorage","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.coldstorage/10.22.0/sekiban.dcb.coldstorage.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.Core","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.core/10.22.0/sekiban.dcb.core.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.Core.Model","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.core.model/10.22.0/sekiban.dcb.core.model.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.Core.Testing","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.core.testing/10.22.0/sekiban.dcb.core.testing.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.CosmosDb","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.cosmosdb/10.22.0/sekiban.dcb.cosmosdb.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.DynamoDB","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.dynamodb/10.22.0/sekiban.dcb.dynamodb.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.materializedview/10.22.0/sekiban.dcb.materializedview.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView.MySql","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.materializedview.mysql/10.22.0/sekiban.dcb.materializedview.mysql.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView.Orleans","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.materializedview.orleans/10.22.0/sekiban.dcb.materializedview.orleans.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView.Postgres","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.materializedview.postgres/10.22.0/sekiban.dcb.materializedview.postgres.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView.SqlServer","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.materializedview.sqlserver/10.22.0/sekiban.dcb.materializedview.sqlserver.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.MaterializedView.Sqlite","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.materializedview.sqlite/10.22.0/sekiban.dcb.materializedview.sqlite.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.Orleans.AzureQueue","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.orleans.azurequeue/10.22.0/sekiban.dcb.orleans.azurequeue.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.Orleans.Core","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.orleans.core/10.22.0/sekiban.dcb.orleans.core.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.Orleans.WithResult","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.orleans.withresult/10.22.0/sekiban.dcb.orleans.withresult.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.Orleans.WithoutResult","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.orleans.withoutresult/10.22.0/sekiban.dcb.orleans.withoutresult.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.Postgres","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.postgres/10.22.0/sekiban.dcb.postgres.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.Sqlite","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.sqlite/10.22.0/sekiban.dcb.sqlite.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.WithResult","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.withresult/10.22.0/sekiban.dcb.withresult.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.WithResult.Model","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.withresult.model/10.22.0/sekiban.dcb.withresult.model.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.WithResult.Testing","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.withresult.testing/10.22.0/sekiban.dcb.withresult.testing.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.WithoutResult","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.withoutresult/10.22.0/sekiban.dcb.withoutresult.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.WithoutResult.Model","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.withoutresult.model/10.22.0/sekiban.dcb.withoutresult.model.10.22.0.nupkg","asset_count":1},
+    {"id":"Sekiban.Dcb.WithoutResult.Testing","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.withoutresult.testing/10.22.0/sekiban.dcb.withoutresult.testing.10.22.0.nupkg","asset_count":1}
   ],
   "template_tag": {
     "name": "dcbTemplates-v10.22.0",
     "object_id": "cccccccccccccccccccccccccccccccccccccccc",
     "peeled_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "created_at_utc": "2026-09-12T10:50:00Z"
+    "created_at_utc": "2026-09-12T10:40:00Z"
+  },
+  "template_release": {
+    "repository": "J-Tech-Japan/Sekiban",
+    "tag": "dcbTemplates-v10.22.0",
+    "url": "https://github.com/J-Tech-Japan/Sekiban/releases/tag/dcbTemplates-v10.22.0",
+    "draft": false,
+    "asset_count": 1,
+    "body_sha256": "5438f24ec6b27b67d6e71a763dd8c20e2e887799acc45f73b618aac346906fc5"
   },
   "template": {
     "package_id": "Sekiban.Dcb.Templates",
     "version": "10.22.0",
-    "public_url": "https://example.invalid/10.22.0/template",
+    "public_url": "https://api.nuget.org/v3-flatcontainer/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg",
     "asset_count": 1
   },
+  "artifacts_verified": {
+    "review_url": "https://github.com/J-Tech-Japan/Sekiban/pull/1235#pullrequestreview-5188648124",
+    "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "approved_at_utc": "2026-09-12T10:50:00Z"
+  },
   "release_bodies": {
-    "library_en_sha256": "64a540fdeaae5712aa9eee9b2d51690788282af15427a77670054aa21179935d",
+    "library_en_sha256": "e97c2f737c0eef6436a360d732ef243c1f35481e382ae31b0be3811da568d947",
     "library_en_version": "10.22.0",
-    "library_ja_sha256": "efa02d4d910fdbe5604ac227f2cc8d13015a0195d38dcb59090d1cc8bf7b4e73",
+    "library_ja_sha256": "ee7cd3aaebb8dceeff978e3b49635a63c153dd8979abe1887f3eba0656c8bd5f",
     "library_ja_version": "10.22.0",
-    "template_en_sha256": "a1c53073877174f0df11ad9bbebb3bdf1d2f262e33afd50cd3a911434990ea7f",
+    "template_en_sha256": "d6bde1c1e7a5f26eb89b0f4cc2757d19ee9cb6857bf75c7c6bf3792423c285d2",
     "template_en_version": "10.22.0",
-    "template_ja_sha256": "9526ac8ad7d329be64da5d0a57595bd4269359408accd77d4df0cc1d76161d8d",
+    "template_ja_sha256": "595a8ff435711d05bcfbde4183ba7b48de4ab87e2e16ada4ed6b2dfd53c137ae",
     "template_ja_version": "10.22.0"
   },
   "closure": {
@@ -88,6 +107,6 @@
     "required_link": "https://github.com/J-Tech-Japan/Sekiban/issues/1234",
     "caveat": "Publication and closeout remain host-owned and are not certified by the child PR.",
     "reply_digests": ["2222222222222222222222222222222222222222222222222222222222222222", "3333333333333333333333333333333333333333333333333333333333333333"],
-    "completed_at_utc": "2026-09-12T11:00:00Z"
+    "completed_at_utc": "2026-09-12T11:05:00Z"
   }
 }

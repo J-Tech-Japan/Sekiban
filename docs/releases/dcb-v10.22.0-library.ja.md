@@ -6,8 +6,8 @@
 
 - バージョン: `10.22.0`。
 - パッケージ範囲: Azure Queue アダプターを含む DCB ライブラリ **26 パッケージ**。
-- Orleans: `Microsoft.Orleans.*` 10.3.1。公開されるアセットグループは net8.0 と net10.0
-  だけで、net9.0 の利用者は net8.0 グループを解決します。
+- Orleans: `Microsoft.Orleans.*` 10.3.1。公開されるアセットグループは net9.0 と net10.0
+  です。
 - PostgreSQL パッケージは relational runtime の依存関係を保持し、Azure-free の Orleans Core
   境界も維持します。
 
@@ -16,3 +16,8 @@ Release の作成、Issue のクローズ、`libraries-verified` 到達を意味
 ライブラリ段階の検証後に、別のレビュー済み本文で実行します。
 一時的な部分公開は、公開可視性を確認した後に同じ不変タグで再試行できます。ソースを変更する
 復旧では、運用担当者が承認した新しいバージョンと新たなレビューが必要です。
+
+この統合で提供される単位は G74、G75、G76、G77、G78 です。既定の Orleans publisher は
+5回の試行を使用し、サイズゲートと durable recovery はオプトインの境界に留まります。
+Orleans クラスター全体は 10.3.1 に揃えています。PostgreSQL スキーマの所有者は明示的なままで、
+このリリースによるデータ書き換えはありません。

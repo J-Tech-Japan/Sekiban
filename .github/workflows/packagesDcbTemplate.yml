@@ -33,12 +33,21 @@ jobs:
           fi
           echo "VERSION=${TAG#dcbTemplates-v}" >> $GITHUB_ENV
 
+      - name: Build release validators
+        run: |
+          dotnet restore dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -p:NuGetAudit=false
+          dotnet build dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release --no-restore --nologo
+
       - name: Verify published library/template parity before pack
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git fetch --force --tags
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
             --check-package-manifest --repo-root "$GITHUB_WORKSPACE" \
             --workflow-file "$GITHUB_WORKSPACE/.github/workflows/packagesDcb.yml"
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --check-library-verified --repo-root "$GITHUB_WORKSPACE" --version "$VERSION"
           test "$(git rev-list -n 1 "dcb-v${VERSION}")" = "$(git rev-parse HEAD)"
           test "$(git rev-list -n 1 "$GITHUB_REF_NAME")" = "$(git rev-parse HEAD)"
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh --check-publish-parity --repo-root "$GITHUB_WORKSPACE" --version "$VERSION" --template-tag "$GITHUB_REF_NAME"
@@ -57,17 +66,23 @@ jobs:
 
       - name: Verify reviewed template release body input
         run: |
-          test -s "docs/releases/dcbTemplates-v${VERSION}.en.md"
-          test -s "docs/releases/dcbTemplates-v${VERSION}.ja.md"
+          dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
+            release-bodies --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" --kind template
 
       - name: Assemble reviewed template release body
         run: |
           cat "docs/releases/dcbTemplates-v${VERSION}.en.md" \
             "docs/releases/dcbTemplates-v${VERSION}.ja.md" > out/template-release-body.md
 
+      - name: Reject changed same-version template before duplicate-safe retry
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --check-template-retry --package "out/Sekiban.Dcb.Templates.${VERSION}.nupkg" \
+            --version "$VERSION" --request-timeout-seconds 20
+
       - name: Push Template
         run: |
-          dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json
+          dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Wait for exact public template visibility
         run: |

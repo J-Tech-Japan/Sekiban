@@ -6,8 +6,8 @@ prepared from the reviewed integration commit and may finalize only after the `p
 
 - Version: `10.22.0`.
 - Package scope: exactly 26 DCB library packages, including the Azure Queue adapter.
-- Orleans support: `Microsoft.Orleans.*` 10.3.1, with the published net8.0 and net10.0 asset
-  groups (a net9.0 consumer resolves the net8.0 group).
+- Orleans support: `Microsoft.Orleans.*` 10.3.1, with the published net9.0 and net10.0 asset
+  groups.
 - The PostgreSQL package retains its relational runtime closure; the Azure-free Orleans Core
   boundary remains Azure-free.
 
@@ -16,3 +16,8 @@ create a tag or release, close an issue, or claim that `libraries-verified` has 
 The template stage must use its separate reviewed body only after the library stage is verified.
 A transient partial push may retry the unchanged immutable tag after public visibility is proven;
 a source-changing recovery requires an operator-approved new version and a fresh review.
+
+The delivered integration units are G74, G75, G76, G77, and G78. The default Orleans publisher
+uses five attempts; size-gate and durable-recovery behavior remain opt-in boundaries. The whole
+Orleans cluster is aligned on 10.3.1. PostgreSQL schema ownership remains explicit and this
+release requires no data rewrite.

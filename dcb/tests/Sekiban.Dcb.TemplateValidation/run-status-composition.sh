@@ -18,6 +18,18 @@ while (( $# > 0 )); do
   esac
 done
 
+dcb_package_ids=(
+  Sekiban.Dcb.BlobStorage.AzureStorage Sekiban.Dcb.BlobStorage.S3 Sekiban.Dcb.ColdStorage
+  Sekiban.Dcb.Core Sekiban.Dcb.Core.Model Sekiban.Dcb.Core.Testing Sekiban.Dcb.CosmosDb
+  Sekiban.Dcb.DynamoDB Sekiban.Dcb.MaterializedView Sekiban.Dcb.MaterializedView.MySql
+  Sekiban.Dcb.MaterializedView.Orleans Sekiban.Dcb.MaterializedView.Postgres
+  Sekiban.Dcb.MaterializedView.SqlServer Sekiban.Dcb.MaterializedView.Sqlite
+  Sekiban.Dcb.Orleans.AzureQueue Sekiban.Dcb.Orleans.Core Sekiban.Dcb.Orleans.WithResult
+  Sekiban.Dcb.Orleans.WithoutResult Sekiban.Dcb.Postgres Sekiban.Dcb.Sqlite
+  Sekiban.Dcb.WithResult Sekiban.Dcb.WithResult.Model Sekiban.Dcb.WithResult.Testing
+  Sekiban.Dcb.WithoutResult Sekiban.Dcb.WithoutResult.Model Sekiban.Dcb.WithoutResult.Testing
+)
+
 temp_root="$(cd -P "${TMPDIR:-/tmp}" && pwd)"
 work_root="$(mktemp -d "${temp_root%/}/sek-g44-status-composition.XXXXXX")"
 trap 'rm -rf "$work_root"' EXIT
@@ -36,15 +48,61 @@ run_legacy_net10() {
   (cd "$net10_host" && NUGET_PACKAGES="$legacy_nuget_packages" NUGET_HTTP_CACHE_PATH="$legacy_nuget_http_cache" dotnet "$@");
 }
 
+write_nuget_config() {
+  local destination="$1"
+  {
+    echo '<configuration>'
+    echo '  <packageSources>'
+    echo '    <clear />'
+    if [[ -n "$feed" ]]; then
+      printf '    <add key="dcb-local" value="%s" />\n' "$feed"
+    fi
+    echo '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />'
+    echo '  </packageSources>'
+    echo '  <packageSourceMapping>'
+    if [[ -n "$feed" ]]; then
+      echo '    <packageSource key="dcb-local">'
+      echo '      <package pattern="Sekiban.Dcb.*" />'
+      echo '    </packageSource>'
+    fi
+    echo '    <packageSource key="nuget.org">'
+    for pattern in \
+      'Microsoft.*' 'Aspire.*' 'Azure.*' 'AWSSDK.*' 'Npgsql*' 'MySqlConnector' \
+      'OpenTelemetry.*' 'CommunityToolkit.*' 'AspNetCore.HealthChecks.*' 'Polly*' \
+      'SQLitePCLRaw.*' 'Grpc.*' 'Google.*' 'JsonPatch.*' 'KubernetesClient' \
+      'ModelContextProtocol' 'Semver' 'StreamJsonRpc' 'Humanizer.*' 'Dapper' 'DuckDB.*' \
+      'Newtonsoft.Json' 'ResultBoxes' 'Scalar.*' \
+      'OpenTelemetry' 'Polly' 'Polly.Core' 'Polly.Extensions' 'Polly.RateLimiting' \
+      'AspNetCore.HealthChecks.Azure.Data.Tables' 'AspNetCore.HealthChecks.Azure.Storage.Blobs' \
+      'AspNetCore.HealthChecks.Azure.Storage.Queues' 'AspNetCore.HealthChecks.Uris' \
+      'AspNetCore.HealthChecks.NpgSql' 'Grpc.AspNetCore' 'Grpc.Net.ClientFactory' 'Grpc.Tools' \
+      'JsonPointer.Net' 'Json.More.Net' 'Fractions' 'YamlDotNet' 'ModelContextProtocol.Core' \
+      'MessagePack' 'MessagePack.Annotations' 'Nerdbank.Streams' 'SQLitePCLRaw.core' \
+      'SQLitePCLRaw.bundle_e_sqlite3' 'SQLitePCLRaw.lib_e_sqlite3' 'SQLitePCLRaw.lib.e_sqlite3' \
+      'System.*' 'runtime.*' 'NETStandard.Library' 'NuGet.*' 'NUnit*' 'xunit*' \
+      'coverlet.*' 'Microsoft.NET.Test.Sdk'; do
+      printf '      <package pattern="%s" />\n' "$pattern"
+    done
+    if [[ -z "$feed" ]]; then
+      echo '      <package pattern="Sekiban.Dcb.*" />'
+    fi
+    echo '    </packageSource>'
+    echo '  </packageSourceMapping>'
+    echo '</configuration>'
+  } > "$destination"
+}
+
+if [[ -n "$feed" ]]; then
+  for package in "${dcb_package_ids[@]}"; do
+    if [[ ! -f "$feed/$package.$version.nupkg" ]]; then
+      echo "The supplied local feed is missing exact DCB artifact $package.$version.nupkg." >&2
+      exit 1
+    fi
+  done
+fi
+
 nuget_config="$work_root/NuGet.Config"
-printf '%s\n' \
-  '<configuration>' \
-  '  <packageSources>' \
-  '    <clear />' \
-  ${feed:+"    <add key=\"dcb-local\" value=\"$feed\" />"} \
-  '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />' \
-  '  </packageSources>' \
-  '</configuration>' > "$nuget_config"
+write_nuget_config "$nuget_config"
 
 legacy_nuget_config="$work_root/Legacy.NuGet.Config"
 printf '%s\n' \

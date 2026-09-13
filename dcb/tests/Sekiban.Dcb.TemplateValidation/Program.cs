@@ -106,6 +106,13 @@ internal static class Program
                     ValidateTemplateDocsCurrency(Required(options, "repo-root"), expectedVersion);
                     break;
 
+                case "release-bodies":
+                    ValidateReleaseBodies(
+                        Required(options, "repo-root"),
+                        expectedVersion,
+                        options.GetValueOrDefault("kind"));
+                    break;
+
                 case "workflow":
                     ValidateWorkflowSurface(Required(options, "repo-root"));
                     break;
@@ -469,10 +476,10 @@ internal static class Program
                    "CONTRIBUTING.md must document the two-stage DCB/template release protocol.");
         }
 
-        ValidateReleaseBodies(repoRoot, expectedVersion);
+        ValidateReleaseBodies(repoRoot, expectedVersion, bodyKind: null);
     }
 
-    private static void ValidateReleaseBodies(string repoRoot, string expectedVersion)
+    private static void ValidateReleaseBodies(string repoRoot, string expectedVersion, string? bodyKind)
     {
         var releaseRoot = Path.Combine(repoRoot, "docs", "releases");
         Assert(Directory.Exists(releaseRoot), "docs/releases is required for the staged DCB release inputs.");
@@ -482,7 +489,8 @@ internal static class Program
             (Path.Combine(releaseRoot, $"dcb-v{expectedVersion}-library.ja.md"), LibraryKind, JapaneseLanguage),
             (Path.Combine(releaseRoot, $"dcbTemplates-v{expectedVersion}.en.md"), "template", "English"),
             (Path.Combine(releaseRoot, $"dcbTemplates-v{expectedVersion}.ja.md"), "template", JapaneseLanguage)
-        };
+        }.Where(file => bodyKind is null || string.Equals(file.Item2, bodyKind, StringComparison.OrdinalIgnoreCase)).ToArray();
+        Assert(files.Length > 0, $"Unknown release-body kind '{bodyKind}'.");
 
         foreach (var (path, kind, language) in files)
         {
@@ -518,6 +526,27 @@ internal static class Program
             Assert(!content.Contains("TODO", StringComparison.OrdinalIgnoreCase) &&
                    !content.Contains("TBD", StringComparison.OrdinalIgnoreCase),
                 $"{path} contains an unresolved release-body placeholder.");
+            ValidateReleaseBodyFacts(content, path, language);
+        }
+    }
+
+    private static void ValidateReleaseBodyFacts(string content, string path, string language)
+    {
+        var required = language == JapaneseLanguage
+            ? new[]
+            {
+                "net9.0", "net10.0", "G74", "G75", "G76", "G77", "G78",
+                "5回", "オプトイン", "10.3.1", "PostgreSQL", "データ書き換え"
+            }
+            : new[]
+            {
+                "net9.0", "net10.0", "G74", "G75", "G76", "G77", "G78",
+                "five attempts", "opt-in", "10.3.1", "PostgreSQL", "no data rewrite"
+            };
+        foreach (var marker in required)
+        {
+            Assert(content.Contains(marker, StringComparison.OrdinalIgnoreCase),
+                $"{path} is missing required release fact '{marker}'.");
         }
     }
 
@@ -638,6 +667,9 @@ internal static class Program
         Assert(dcbPackage.Contains("docs/releases/dcb-v${VERSION}-library.en.md", StringComparison.Ordinal) &&
                dcbPackage.Contains("docs/releases/dcb-v${VERSION}-library.ja.md", StringComparison.Ordinal),
             "The DCB package workflow must require both reviewed library release bodies.");
+        Assert(dcbPackage.Contains("release-bodies --repo-root", StringComparison.Ordinal) &&
+               dcbPackage.Contains("--kind library", StringComparison.Ordinal),
+            "The DCB package workflow must invoke the bilingual library body validator before push.");
         Assert(dcbPackage.Contains("packages --directory", StringComparison.Ordinal) &&
                dcbPackage.Contains("Inspect exact package set and dependency groups before push", StringComparison.Ordinal),
             "The DCB package workflow must inspect the exact package set and dependency groups before push.");
@@ -758,10 +790,13 @@ internal static class Program
             "dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh",
             "The publish workflow must run the packaged-consumer/docs path.");
         var push = RequireNamedStep(publishSteps, "Push Template");
+        var retryGuard = RequireNamedStep(publishSteps, "Reject changed same-version template before duplicate-safe retry");
         var templateVisibility = RequireNamedStep(publishSteps, "Wait for exact public template visibility");
         var templateRelease = RequireNamedStep(publishSteps, "Create GitHub Release");
         Assert(publishParity.Body.Contains("validate-release-tags.sh --check-publish-parity", StringComparison.Ordinal),
             "The publish parity workflow step must run the parity gate.");
+        Assert(publishParity.Body.Contains("--check-library-verified", StringComparison.Ordinal),
+            "The template workflow must require immutable libraries-verified evidence before packing.");
         Assert(publishParity.Body.Contains("git rev-list -n 1", StringComparison.Ordinal) &&
                publishParity.Body.Contains("dcb-v${VERSION}", StringComparison.Ordinal),
             "The template workflow must prove library and template tags share the current peeled commit.");
@@ -776,18 +811,39 @@ internal static class Program
         Assert(publish.Contains("docs/releases/dcbTemplates-v${VERSION}.en.md", StringComparison.Ordinal) &&
                publish.Contains("docs/releases/dcbTemplates-v${VERSION}.ja.md", StringComparison.Ordinal),
             "The template publish workflow must require both reviewed template release bodies.");
+        Assert(publish.Contains("release-bodies --repo-root", StringComparison.Ordinal) &&
+               publish.Contains("--kind template", StringComparison.Ordinal),
+            "The template publish workflow must invoke the bilingual template body validator before push.");
         Assert(publish.Contains("body_path: out/template-release-body.md", StringComparison.Ordinal) &&
                publish.Contains("draft: false", StringComparison.Ordinal),
             "The template release must use the reviewed bilingual body and be explicitly non-draft.");
+        Assert(push.Body.Contains("--skip-duplicate", StringComparison.Ordinal),
+            "The template package push must allow an unchanged-tag transient retry.");
+        Assert(retryGuard.Body.Contains("--check-template-retry", StringComparison.Ordinal) &&
+               retryGuard.Body.Contains("--request-timeout-seconds", StringComparison.Ordinal),
+            "The template workflow must reject changed same-version content before its duplicate-safe retry.");
+        Assert(retryGuard.Ordinal < push.Ordinal,
+            "The immutable same-version guard must run before the duplicate-safe package push.");
         Assert(push.Ordinal < templateVisibility.Ordinal && templateVisibility.Ordinal < templateRelease.Ordinal,
             "The template workflow must wait for exact public visibility before creating its release.");
 
         var script = File.ReadAllText(packagedConsumerScript);
         var azureQueueScript = File.ReadAllText(azureQueueConsumerScript);
+        Assert(script.Contains("packageSourceMapping", StringComparison.Ordinal) &&
+               script.Contains("package pattern=\"Sekiban.Dcb.*\"", StringComparison.Ordinal) &&
+               script.Contains("missing-local-feed", StringComparison.Ordinal),
+            "The template packaged-consumer must isolate DCB packages to the supplied local feed and reject omissions.");
+        Assert(File.ReadAllText(Path.Combine(repoRoot, "dcb", "tests", "Sekiban.Dcb.TemplateValidation", "run-status-composition.sh"))
+                   .Contains("packageSourceMapping", StringComparison.Ordinal),
+            "The status-composition consumer must use the same local-feed source mapping.");
         Assert(azureQueueScript.Contains(
                 "dotnet run --project \"$project/consumer.csproj\"",
                 StringComparison.Ordinal),
             "The Azure Queue packaged-consumer path must execute each built consumer, not only compile it.");
+        Assert(azureQueueScript.Contains("packageSourceMapping", StringComparison.Ordinal) &&
+               azureQueueScript.Contains("package pattern=\"Sekiban.Dcb.*\"", StringComparison.Ordinal) &&
+               azureQueueScript.Contains("missing exact DCB artifact", StringComparison.Ordinal),
+            "The Azure Queue packaged-consumer must isolate DCB packages to its supplied local feed.");
         Assert(azureQueueScript.Contains("SEKIBAN_G76_FORCE_CONSUMER_THROW", StringComparison.Ordinal) &&
                azureQueueScript.Contains("deterministic packaged-consumer failure probe", StringComparison.Ordinal),
             "The Azure Queue packaged-consumer must expose an unconditional failure probe.");

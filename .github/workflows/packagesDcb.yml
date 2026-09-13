@@ -53,6 +53,11 @@ jobs:
       - name: Build release-record and package validators
         run: dotnet build dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release
 
+      - name: Validate reviewed bilingual library release body
+        run: |
+          dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
+            release-bodies --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" --kind library
+
       - name: Pack NuGet packages
         run: |
           dotnet pack dcb/src/Sekiban.Dcb.Core.Model/Sekiban.Dcb.Core.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build

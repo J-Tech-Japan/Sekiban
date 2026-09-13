@@ -12,6 +12,18 @@ usage() {
   exit 2
 }
 
+dcb_package_ids=(
+  Sekiban.Dcb.BlobStorage.AzureStorage Sekiban.Dcb.BlobStorage.S3 Sekiban.Dcb.ColdStorage
+  Sekiban.Dcb.Core Sekiban.Dcb.Core.Model Sekiban.Dcb.Core.Testing Sekiban.Dcb.CosmosDb
+  Sekiban.Dcb.DynamoDB Sekiban.Dcb.MaterializedView Sekiban.Dcb.MaterializedView.MySql
+  Sekiban.Dcb.MaterializedView.Orleans Sekiban.Dcb.MaterializedView.Postgres
+  Sekiban.Dcb.MaterializedView.SqlServer Sekiban.Dcb.MaterializedView.Sqlite
+  Sekiban.Dcb.Orleans.AzureQueue Sekiban.Dcb.Orleans.Core Sekiban.Dcb.Orleans.WithResult
+  Sekiban.Dcb.Orleans.WithoutResult Sekiban.Dcb.Postgres Sekiban.Dcb.Sqlite
+  Sekiban.Dcb.WithResult Sekiban.Dcb.WithResult.Model Sekiban.Dcb.WithResult.Testing
+  Sekiban.Dcb.WithoutResult Sekiban.Dcb.WithoutResult.Model Sekiban.Dcb.WithoutResult.Testing
+)
+
 while (( $# > 0 )); do
   case "$1" in
     --repo-root) repo_root="$(cd "$2" && pwd)"; shift 2 ;;
@@ -43,15 +55,78 @@ printf '%s\n' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allow
 run_net9() { (cd "$net9_host" && dotnet "$@"); }
 run_net10() { (cd "$net10_host" && dotnet "$@"); }
 
+write_nuget_config() {
+  local destination="$1"
+  {
+    echo '<configuration>'
+    echo '  <packageSources>'
+    echo '    <clear />'
+    if [[ -n "$feed" ]]; then
+      printf '    <add key="dcb-local" value="%s" />\n' "$feed"
+    fi
+    echo '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />'
+    echo '  </packageSources>'
+    echo '  <packageSourceMapping>'
+    if [[ -n "$feed" ]]; then
+      echo '    <packageSource key="dcb-local">'
+      echo '      <package pattern="Sekiban.Dcb.*" />'
+      echo '    </packageSource>'
+    fi
+    echo '    <packageSource key="nuget.org">'
+    for pattern in \
+      'Microsoft.*' 'Aspire.*' 'Azure.*' 'AWSSDK.*' 'Npgsql*' 'MySqlConnector' \
+      'OpenTelemetry.*' 'CommunityToolkit.*' 'AspNetCore.HealthChecks.*' 'Polly*' \
+      'SQLitePCLRaw.*' 'Grpc.*' 'Google.*' 'JsonPatch.*' 'KubernetesClient' \
+      'ModelContextProtocol' 'Semver' 'StreamJsonRpc' 'Humanizer.*' 'Dapper' 'DuckDB.*' \
+      'Newtonsoft.Json' 'ResultBoxes' 'Scalar.*' \
+      'OpenTelemetry' 'Polly' 'Polly.Core' 'Polly.Extensions' 'Polly.RateLimiting' \
+      'AspNetCore.HealthChecks.Azure.Data.Tables' 'AspNetCore.HealthChecks.Azure.Storage.Blobs' \
+      'AspNetCore.HealthChecks.Azure.Storage.Queues' 'AspNetCore.HealthChecks.Uris' \
+      'AspNetCore.HealthChecks.NpgSql' 'Grpc.AspNetCore' 'Grpc.Net.ClientFactory' 'Grpc.Tools' \
+      'JsonPointer.Net' 'Json.More.Net' 'Fractions' 'YamlDotNet' 'ModelContextProtocol.Core' \
+      'MessagePack' 'MessagePack.Annotations' 'Nerdbank.Streams' 'SQLitePCLRaw.core' \
+      'SQLitePCLRaw.bundle_e_sqlite3' 'SQLitePCLRaw.lib_e_sqlite3' 'SQLitePCLRaw.lib.e_sqlite3' \
+      'System.*' 'runtime.*' 'NETStandard.Library' 'NuGet.*' 'NUnit*' 'xunit*' \
+      'coverlet.*' 'Microsoft.NET.Test.Sdk'; do
+      printf '      <package pattern="%s" />\n' "$pattern"
+    done
+    if [[ -z "$feed" ]]; then
+      echo '      <package pattern="Sekiban.Dcb.*" />'
+    fi
+    echo '    </packageSource>'
+    echo '  </packageSourceMapping>'
+    echo '</configuration>'
+  } > "$destination"
+}
+
+if [[ -n "$feed" ]]; then
+  for package in "${dcb_package_ids[@]}"; do
+    if [[ ! -f "$feed/$package.$version.nupkg" ]]; then
+      echo "The supplied local feed is missing exact DCB artifact $package.$version.nupkg." >&2
+      exit 1
+    fi
+  done
+fi
+
 nuget_config="$work_root/NuGet.Config"
-printf '%s\n' \
-  '<configuration>' \
-  '  <packageSources>' \
-  '    <clear />' \
-  ${feed:+"    <add key=\"dcb-local\" value=\"$feed\" />"} \
-  '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />' \
-  '  </packageSources>' \
-  '</configuration>' > "$nuget_config"
+write_nuget_config "$nuget_config"
+
+if [[ -n "$feed" ]]; then
+  missing_local_feed="$work_root/missing-local-feed"
+  cp -R "$feed" "$missing_local_feed"
+  rm "$missing_local_feed/Sekiban.Dcb.Core.$version.nupkg"
+  missing_local_output=""
+  if missing_local_output="$(bash "$script_dir/run-packaged-consumer.sh" --repo-root "$repo_root" --feed "$missing_local_feed" --version "$version" 2>&1)"; then
+    printf '%s\n' "$missing_local_output"
+    echo "A packaged consumer with a missing local DCB package unexpectedly passed." >&2
+    exit 1
+  fi
+  printf '%s\n' "$missing_local_output"
+  if [[ "$missing_local_output" != *"Sekiban.Dcb.Core.$version.nupkg"* ]]; then
+    echo "The missing-local-package proof did not name the omitted DCB artifact." >&2
+    exit 1
+  fi
+fi
 
 validator_project="$script_dir/Sekiban.Dcb.TemplateValidation.csproj"
 run_net10 build "$validator_project" -c Release --nologo
@@ -368,6 +443,11 @@ copy_workflow_fixture "$publish_workflow_mutant"
 perl -0pi -e 's/^.*validate-release-tags\.sh --check-publish-parity.*\n//m' "$publish_workflow_mutant/.github/workflows/packagesDcbTemplate.yml"
 expect_failure run_net10 "$validator" workflow --repo-root "$publish_workflow_mutant"
 
+publish_retry_mutant="$work_root/publish-retry-mutant"
+copy_workflow_fixture "$publish_retry_mutant"
+perl -0pi -e 's/ --skip-duplicate//g' "$publish_retry_mutant/.github/workflows/packagesDcbTemplate.yml"
+expect_failure run_net10 "$validator" workflow --repo-root "$publish_retry_mutant"
+
 "$script_dir/validate-release-tags.sh" --self-test --repo-root "$repo_root"
 status_composition_args=(--repo-root "$repo_root" --version "$version")
 if [[ -n "$feed" ]]; then
@@ -381,22 +461,22 @@ release_record="$script_dir/fixtures/release-record/valid-complete.json"
 run_net10 "$validator" release-record --record "$release_record" --repo-root "$repo_root" --expected-version "$version" --state complete
 
 prepared_record="$work_root/release-prepared.json"
-jq '.stage = "prepared" | .history = ["prepared"] | del(.library_tag, .template_tag, .packages, .template, .release_bodies, .closure)' \
+jq '.stage = "prepared" | .history = ["prepared"] | del(.library_tag, .template_tag, .packages, .template, .library_release, .template_release, .artifacts_verified, .release_bodies, .closure)' \
   "$release_record" > "$prepared_record"
 run_net10 "$validator" release-record --record "$prepared_record" --repo-root "$repo_root" --expected-version "$version" --state prepared
 
 library_tagged_record="$work_root/release-library-tagged.json"
-jq '.stage = "library-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete"] | del(.template_tag, .packages, .template, .release_bodies, .closure)' \
+jq '.stage = "library-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete"] | del(.template_tag, .packages, .template, .library_release, .template_release, .artifacts_verified, .release_bodies, .closure)' \
   "$release_record" > "$library_tagged_record"
 run_net10 "$validator" release-record --record "$library_tagged_record" --repo-root "$repo_root" --expected-version "$version" --state 'library-tagged/incomplete'
 
 libraries_verified_record="$work_root/release-libraries-verified.json"
-jq '.stage = "libraries-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified"] | del(.template_tag, .template, .release_bodies, .closure)' \
+jq '.stage = "libraries-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified"] | del(.template_tag, .template, .template_release, .artifacts_verified, .release_bodies, .closure)' \
   "$release_record" > "$libraries_verified_record"
 run_net10 "$validator" release-record --record "$libraries_verified_record" --repo-root "$repo_root" --expected-version "$version" --state libraries-verified
 
 template_tagged_record="$work_root/release-template-tagged.json"
-jq '.stage = "template-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete"] | del(.template, .release_bodies, .closure)' \
+jq '.stage = "template-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete"] | del(.template, .template_release, .artifacts_verified, .release_bodies, .closure)' \
   "$release_record" > "$template_tagged_record"
 run_net10 "$validator" release-record --record "$template_tagged_record" --repo-root "$repo_root" --expected-version "$version" --state 'template-tagged/incomplete'
 
@@ -409,12 +489,28 @@ stale_ci_record="$work_root/release-stale-ci.json"
 jq '.checks[0].head_sha = "9999999999999999999999999999999999999999"' "$release_record" > "$stale_ci_record"
 expect_failure run_net10 "$validator" release-record --record "$stale_ci_record" --repo-root "$repo_root" --expected-version "$version" --state complete
 
-# Every CI identity/time field is required for a non-prepared state.
-for check_field in name run_id job_id attempt event started_at_utc completed_at_utc head_sha conclusion; do
+# Every CI identity/time/workflow field is required for a non-prepared state.
+for check_field in name workflow run_id job_id attempt event superseded started_at_utc completed_at_utc head_sha conclusion; do
   missing_check="$work_root/release-missing-check-${check_field}.json"
   jq "del(.checks[0].${check_field})" "$release_record" > "$missing_check"
   expect_failure run_net10 "$validator" release-record --record "$missing_check" --repo-root "$repo_root" --expected-version "$version" --state complete
 done
+
+renamed_check="$work_root/release-renamed-check.json"
+jq '.checks[0].name = "renamed-check"' "$release_record" > "$renamed_check"
+expect_failure run_net10 "$validator" release-record --record "$renamed_check" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+duplicate_check="$work_root/release-duplicate-check.json"
+jq '.checks[1].name = .checks[0].name' "$release_record" > "$duplicate_check"
+expect_failure run_net10 "$validator" release-record --record "$duplicate_check" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+wrong_event="$work_root/release-wrong-event.json"
+jq '.checks[0].event = "push"' "$release_record" > "$wrong_event"
+expect_failure run_net10 "$validator" release-record --record "$wrong_event" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+superseded_check="$work_root/release-superseded-check.json"
+jq '.checks[0].superseded = true' "$release_record" > "$superseded_check"
+expect_failure run_net10 "$validator" release-record --record "$superseded_check" --repo-root "$repo_root" --expected-version "$version" --state complete
 
 missing_tag_identity="$work_root/release-missing-tag-identity.json"
 jq 'del(.library_tag.object_id)' "$release_record" > "$missing_tag_identity"
@@ -435,6 +531,38 @@ expect_failure run_net10 "$validator" release-record --record "$missing_package_
 missing_template_proof="$work_root/release-missing-template-proof.json"
 jq 'del(.template.public_url)' "$release_record" > "$missing_template_proof"
 expect_failure run_net10 "$validator" release-record --record "$missing_template_proof" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+missing_library_release="$work_root/release-missing-library-release.json"
+jq 'del(.library_release)' "$release_record" > "$missing_library_release"
+expect_failure run_net10 "$validator" release-record --record "$missing_library_release" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+wrong_release_url="$work_root/release-wrong-release-url.json"
+jq '.template_release.url = "https://example.invalid/release"' "$release_record" > "$wrong_release_url"
+expect_failure run_net10 "$validator" release-record --record "$wrong_release_url" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+wrong_package_url="$work_root/release-wrong-package-url.json"
+jq '.packages[0].public_url = .packages[1].public_url' "$release_record" > "$wrong_package_url"
+expect_failure run_net10 "$validator" release-record --record "$wrong_package_url" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+draft_library_release="$work_root/release-draft-library.json"
+jq '.library_release.draft = true' "$release_record" > "$draft_library_release"
+expect_failure run_net10 "$validator" release-record --record "$draft_library_release" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+twenty_five_library_assets="$work_root/release-25-library-assets.json"
+jq '.library_release.asset_count = 25' "$release_record" > "$twenty_five_library_assets"
+expect_failure run_net10 "$validator" release-record --record "$twenty_five_library_assets" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+wrong_release_body="$work_root/release-wrong-release-body.json"
+jq '.library_release.body_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"' "$release_record" > "$wrong_release_body"
+expect_failure run_net10 "$validator" release-record --record "$wrong_release_body" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+missing_repo_root_output=""
+if missing_repo_root_output="$(run_net10 "$validator" release-record --record "$release_record" --expected-version "$version" --state complete 2>&1)"; then
+  printf '%s\n' "$missing_repo_root_output"
+  echo "Evidence-bearing release record unexpectedly passed without --repo-root." >&2
+  exit 1
+fi
+printf '%s\n' "$missing_repo_root_output"
 
 missing_body_digest="$work_root/release-missing-body-digest.json"
 jq 'del(.release_bodies.library_en_sha256)' "$release_record" > "$missing_body_digest"
@@ -459,5 +587,21 @@ expect_failure run_net10 "$validator" release-record --record "$partial_package_
 early_closure_record="$work_root/release-early-closure.json"
 jq '.stage = "artifacts-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete", "artifacts-verified"]' "$release_record" > "$early_closure_record"
 expect_failure run_net10 "$validator" release-record --record "$early_closure_record" --repo-root "$repo_root" --expected-version "$version" --state artifacts-verified
+
+noncanonical_time="$work_root/release-noncanonical-time.json"
+jq '.closure.completed_at_utc = "2026-09-12 20:05:00 +09:00"' "$release_record" > "$noncanonical_time"
+expect_failure run_net10 "$validator" release-record --record "$noncanonical_time" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+equal_closeout="$work_root/release-equal-closeout.json"
+jq '.closure.library_closed_at_utc = .artifacts_verified.approved_at_utc' "$release_record" > "$equal_closeout"
+expect_failure run_net10 "$validator" release-record --record "$equal_closeout" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+complete_before_closeout="$work_root/release-complete-before-closeout.json"
+jq '.closure.completed_at_utc = "2026-09-12T10:59:00Z"' "$release_record" > "$complete_before_closeout"
+expect_failure run_net10 "$validator" release-record --record "$complete_before_closeout" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+missing_review="$work_root/release-missing-review.json"
+jq 'del(.artifacts_verified)' "$release_record" > "$missing_review"
+expect_failure run_net10 "$validator" release-record --record "$missing_review" --repo-root "$repo_root" --expected-version "$version" --state complete
 
 echo "Pack -> isolated install -> five generated outputs -> local-feed restore -> build -> 11 bundled test projects passed."

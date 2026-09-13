@@ -11,10 +11,14 @@ internal static class ReleaseRecordValidator
     private const string TemplateTagProperty = "template_tag";
     private const string TemplateProperty = "template";
     private const string ReleaseBodiesProperty = "release_bodies";
+    private const string LibraryReleaseProperty = "library_release";
+    private const string TemplateReleaseProperty = "template_release";
+    private const string ArtifactsVerifiedProperty = "artifacts_verified";
     private const string ClosureProperty = "closure";
     private const string CompletedAtUtcProperty = "completed_at_utc";
     private const string ReleasesDirectory = "releases";
     private const string ClosedState = "closed";
+    private const string Repository = "J-Tech-Japan/Sekiban";
 
     private static readonly string[] Stages =
     [
@@ -65,6 +69,17 @@ internal static class ReleaseRecordValidator
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1));
 
+    private static readonly RequiredCheck[] RequiredChecks =
+    [
+        new("dcbTestsNet9", "run_test_dcb.yml", "pull_request"),
+        new("dcbTestsNet10", "run_test_dcb.yml", "pull_request"),
+        new("packagedConsumer", "dcb_template_validation.yml", "pull_request"),
+        new("templateConsumer", "dcb_template_validation.yml", "pull_request"),
+        new("SonarCloud Code Analysis", "sonar.yml", "pull_request"),
+        new("diff", "diff", "pull_request"),
+        new("exact-head-review", "Review", "pull_request_review")
+    ];
+
     internal static void Validate(
         string recordPath,
         string expectedVersion,
@@ -98,41 +113,54 @@ internal static class ReleaseRecordValidator
         switch (Array.IndexOf(Stages, state))
         {
             case 0:
-                AssertAbsent(root, LibraryTagProperty, TemplateTagProperty, "packages", TemplateProperty, ReleaseBodiesProperty, ClosureProperty);
+                AssertAbsent(root, LibraryTagProperty, TemplateTagProperty, "packages", TemplateProperty,
+                    ReleaseBodiesProperty, LibraryReleaseProperty, TemplateReleaseProperty,
+                    ArtifactsVerifiedProperty, ClosureProperty);
                 break;
             case 1:
                 ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
-                AssertAbsent(root, TemplateTagProperty, "packages", TemplateProperty, ReleaseBodiesProperty, ClosureProperty);
+                AssertAbsent(root, TemplateTagProperty, "packages", TemplateProperty, ReleaseBodiesProperty,
+                    LibraryReleaseProperty, TemplateReleaseProperty, ArtifactsVerifiedProperty, ClosureProperty);
                 break;
             case 2:
                 ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
                 ValidatePackages(root, expectedVersion);
-                AssertAbsent(root, TemplateTagProperty, TemplateProperty, ReleaseBodiesProperty, ClosureProperty);
+                ValidateReleaseEvidence(root, LibraryReleaseProperty, $"dcb-v{expectedVersion}", expectedVersion, 26, repoRoot);
+                AssertAbsent(root, TemplateTagProperty, TemplateProperty, ReleaseBodiesProperty,
+                    TemplateReleaseProperty, ArtifactsVerifiedProperty, ClosureProperty);
                 break;
             case 3:
                 ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
                 ValidatePackages(root, expectedVersion);
+                ValidateReleaseEvidence(root, LibraryReleaseProperty, $"dcb-v{expectedVersion}", expectedVersion, 26, repoRoot);
                 ValidateTag(root, TemplateTagProperty, $"dcbTemplates-v{expectedVersion}", mergedSha);
                 ValidateTagOrder(root);
-                AssertAbsent(root, TemplateProperty, ReleaseBodiesProperty, ClosureProperty);
+                AssertAbsent(root, TemplateProperty, ReleaseBodiesProperty, TemplateReleaseProperty,
+                    ArtifactsVerifiedProperty, ClosureProperty);
                 break;
             case 4:
                 ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
                 ValidatePackages(root, expectedVersion);
+                ValidateReleaseEvidence(root, LibraryReleaseProperty, $"dcb-v{expectedVersion}", expectedVersion, 26, repoRoot);
                 ValidateTag(root, TemplateTagProperty, $"dcbTemplates-v{expectedVersion}", mergedSha);
                 ValidateTagOrder(root);
                 ValidateTemplate(root, expectedVersion);
+                ValidateReleaseEvidence(root, TemplateReleaseProperty, $"dcbTemplates-v{expectedVersion}", expectedVersion, 1, repoRoot);
+                ValidateArtifactsVerified(root, mergedSha);
                 ValidateBodies(root, expectedVersion, repoRoot);
                 AssertAbsent(root, ClosureProperty);
                 break;
             case 5:
                 ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
                 ValidatePackages(root, expectedVersion);
+                ValidateReleaseEvidence(root, LibraryReleaseProperty, $"dcb-v{expectedVersion}", expectedVersion, 26, repoRoot);
                 ValidateTag(root, TemplateTagProperty, $"dcbTemplates-v{expectedVersion}", mergedSha);
                 ValidateTagOrder(root);
                 ValidateTemplate(root, expectedVersion);
+                ValidateReleaseEvidence(root, TemplateReleaseProperty, $"dcbTemplates-v{expectedVersion}", expectedVersion, 1, repoRoot);
+                ValidateArtifactsVerified(root, mergedSha);
                 ValidateBodies(root, expectedVersion, repoRoot);
-                ValidateClosure(root);
+                ValidateClosure(root, GetTimestamp(GetObject(root, ArtifactsVerifiedProperty), "approved_at_utc"));
                 break;
             default:
                 throw new InvalidOperationException($"Unhandled release-record stage '{state}'.");
@@ -163,16 +191,30 @@ internal static class ReleaseRecordValidator
             return;
         }
 
-        Assert(checks.GetArrayLength() > 0, $"Release record stage {state} requires CI evidence.");
+        Assert(checks.GetArrayLength() == RequiredChecks.Length,
+            $"Release record stage {state} must contain exactly the required CI/review inventory.");
+        var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var check in checks.EnumerateArray())
         {
-            foreach (var property in new[] { "name", "run_id", "job_id", "event", "started_at_utc", "completed_at_utc", "head_sha", "conclusion" })
+            foreach (var property in new[] { "name", "workflow", "run_id", "job_id", "event", "started_at_utc", "completed_at_utc", "head_sha", "conclusion" })
             {
                 Assert(check.TryGetProperty(property, out var value) &&
                       value.ValueKind == JsonValueKind.String &&
                       !string.IsNullOrWhiteSpace(value.GetString()),
                     $"Each release-record check requires non-empty {property}.");
             }
+
+            var name = check.GetProperty("name").GetString()!;
+            var definition = RequiredChecks.SingleOrDefault(required => required.Name == name);
+            Assert(definition is not null, $"Release-record check '{name}' is not in the required inventory.");
+            Assert(names.Add(name), $"Release-record check '{name}' is duplicated.");
+            Assert(check.GetProperty("workflow").GetString() == definition!.Workflow,
+                $"Release-record check '{name}' has the wrong workflow identity.");
+            Assert(check.GetProperty("event").GetString() == definition.Event,
+                $"Release-record check '{name}' has the wrong event.");
+            Assert(check.TryGetProperty("superseded", out var superseded) &&
+                   superseded.ValueKind == JsonValueKind.False,
+                $"Release-record check '{name}' must be the unsuperseded successful attempt.");
 
             Assert(check.TryGetProperty("attempt", out var attempt) && attempt.TryGetInt32(out var attemptNumber) && attemptNumber > 0,
                 "Each release-record check requires a positive attempt.");
@@ -182,8 +224,11 @@ internal static class ReleaseRecordValidator
                 "Release-record CI evidence must conclude success before artifact verification.");
             var started = ParseTimestamp(check.GetProperty("started_at_utc").GetString()!, "check.started_at_utc");
             var completed = ParseTimestamp(check.GetProperty("completed_at_utc").GetString()!, "check.completed_at_utc");
-            Assert(completed >= started, "Release-record check completion must not precede its start.");
+            Assert(completed > started, "Release-record check completion must strictly follow its start.");
         }
+
+        Assert(names.SetEquals(RequiredChecks.Select(required => required.Name)),
+            "Release-record CI/review inventory is incomplete.");
     }
 
     private static void ValidateTag(JsonElement root, string propertyName, string expectedName, string mergedSha)
@@ -222,9 +267,10 @@ internal static class ReleaseRecordValidator
             Assert(GetString(package, "version") == expectedVersion,
                 $"Package {id} must be version {expectedVersion}.");
             var publicUrl = GetString(package, "public_url");
-            Assert(Uri.TryCreate(publicUrl, UriKind.Absolute, out _) &&
-                   publicUrl.Contains(expectedVersion, StringComparison.Ordinal),
-                $"Package {id} is missing versioned public evidence.");
+            var normalizedId = id.ToLowerInvariant();
+            var expectedUrl = $"https://api.nuget.org/v3-flatcontainer/{normalizedId}/{expectedVersion}/{normalizedId}.{expectedVersion}.nupkg";
+            Assert(publicUrl == expectedUrl,
+                $"Package {id} must use exact NuGet flat-container evidence.");
             Assert(GetInt(package, "asset_count") > 0, $"Package {id} is missing a public asset.");
         }
 
@@ -236,15 +282,68 @@ internal static class ReleaseRecordValidator
         var template = GetObject(root, TemplateProperty);
         Assert(GetString(template, "version") == expectedVersion, "Template artifact version is not the release version.");
         var publicUrl = GetString(template, "public_url");
-        Assert(Uri.TryCreate(publicUrl, UriKind.Absolute, out _) &&
-               publicUrl.Contains(expectedVersion, StringComparison.Ordinal),
-            "Template versioned public evidence is required.");
+        Assert(publicUrl == $"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.templates/{expectedVersion}/sekiban.dcb.templates.{expectedVersion}.nupkg",
+            "Template versioned public evidence must use the exact NuGet flat-container URL.");
         Assert(GetInt(template, "asset_count") == 1, "The template release must expose exactly one package asset.");
         Assert(GetString(template, "package_id") == "Sekiban.Dcb.Templates", "Unexpected template package ID.");
     }
 
+    private static void ValidateReleaseEvidence(
+        JsonElement root,
+        string propertyName,
+        string expectedTag,
+        string expectedVersion,
+        int expectedAssetCount,
+        string? repoRoot)
+    {
+        var release = GetObject(root, propertyName);
+        var expectedUrl = $"https://github.com/{Repository}/releases/tag/{expectedTag}";
+        Assert(GetString(release, "repository") == Repository,
+            $"{propertyName}.repository must identify {Repository}.");
+        Assert(GetString(release, "tag") == expectedTag,
+            $"{propertyName}.tag must be {expectedTag}.");
+        Assert(GetString(release, "url") == expectedUrl,
+            $"{propertyName}.url must be the exact GitHub Release URL.");
+        Assert(release.TryGetProperty("draft", out var draft) && draft.ValueKind == JsonValueKind.False,
+            $"{propertyName} must identify a finalized non-draft GitHub Release.");
+        Assert(GetInt(release, "asset_count") == expectedAssetCount,
+            $"{propertyName} must contain exactly {expectedAssetCount} release assets.");
+        var bodyDigest = GetString(release, "body_sha256");
+        Assert(Sha256.IsMatch(bodyDigest), $"{propertyName}.body_sha256 must be a SHA-256 digest.");
+        if (!string.IsNullOrWhiteSpace(repoRoot))
+        {
+            var en = Path.Combine(Path.GetFullPath(repoRoot), "docs", ReleasesDirectory,
+                propertyName == LibraryReleaseProperty ? $"dcb-v{expectedVersion}-library.en.md" : $"dcbTemplates-v{expectedVersion}.en.md");
+            var ja = Path.Combine(Path.GetFullPath(repoRoot), "docs", ReleasesDirectory,
+                propertyName == LibraryReleaseProperty ? $"dcb-v{expectedVersion}-library.ja.md" : $"dcbTemplates-v{expectedVersion}.ja.md");
+            Assert(File.Exists(en) && File.Exists(ja), $"{propertyName} body sources are required.");
+            using var body = new MemoryStream();
+            body.Write(File.ReadAllBytes(en));
+            body.Write(File.ReadAllBytes(ja));
+            var actualDigest = Convert.ToHexString(SHA256.HashData(body.ToArray())).ToLowerInvariant();
+            Assert(actualDigest == bodyDigest, $"{propertyName}.body_sha256 does not match the checked-in EN/JA body bytes.");
+        }
+    }
+
+    private static void ValidateArtifactsVerified(JsonElement root, string mergedSha)
+    {
+        var review = GetObject(root, ArtifactsVerifiedProperty);
+        Assert(Uri.TryCreate(GetString(review, "review_url"), UriKind.Absolute, out _),
+            "artifacts_verified.review_url must identify the independent exact-head Review.");
+        Assert(GetString(review, "head_sha") == mergedSha,
+            "artifacts_verified.head_sha must equal merged_sha.");
+        var approvedAt = GetTimestamp(review, "approved_at_utc");
+        foreach (var check in GetArray(root, "checks").EnumerateArray())
+        {
+            Assert(GetTimestamp(check, "completed_at_utc") < approvedAt,
+                "The independent artifacts-verified approval must follow every required check.");
+        }
+    }
+
     private static void ValidateBodies(JsonElement root, string expectedVersion, string? repoRoot)
     {
+        Assert(!string.IsNullOrWhiteSpace(repoRoot),
+            "Evidence-bearing release-record stages require --repo-root to verify current checked-in bodies.");
         var bodies = GetObject(root, ReleaseBodiesProperty);
         var files = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -259,29 +358,30 @@ internal static class ReleaseRecordValidator
             Assert(Sha256.IsMatch(digest), $"Release body {suffix} must have a SHA-256 digest.");
             Assert(GetString(bodies, $"{suffix}_version") == expectedVersion,
                 $"Release body {suffix} must identify version {expectedVersion}.");
-            if (!string.IsNullOrWhiteSpace(repoRoot))
-            {
-                var path = Path.Combine(Path.GetFullPath(repoRoot), files[suffix]);
-                Assert(File.Exists(path), $"Release body source is missing: {path}.");
-                var actualDigest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
-                Assert(string.Equals(actualDigest, digest, StringComparison.OrdinalIgnoreCase),
-                    $"Release body {suffix} digest does not match {path}.");
-            }
+            var path = Path.Combine(Path.GetFullPath(repoRoot!), files[suffix]);
+            Assert(File.Exists(path), $"Release body source is missing: {path}.");
+            var actualDigest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+            Assert(string.Equals(actualDigest, digest, StringComparison.OrdinalIgnoreCase),
+                $"Release body {suffix} digest does not match {path}.");
         }
     }
 
-    private static void ValidateClosure(JsonElement root)
+    private static void ValidateClosure(JsonElement root, DateTimeOffset approvedAt)
     {
         var closure = GetObject(root, ClosureProperty);
         Assert(GetString(closure, "library_issue_state") == ClosedState, "Library source issue closure is required at complete.");
         Assert(GetString(closure, "template_issue_state") == ClosedState, "Template source issue closure is required at complete.");
         Assert(GetString(closure, "issue_1185_state") == ClosedState, "Issue #1185 closeout state is required at complete.");
         Assert(GetString(closure, "issue_1230_state") == ClosedState, "Issue #1230 closeout state is required at complete.");
+        var closeoutTimes = new List<DateTimeOffset>();
         foreach (var issue in new[] { "library", "template", "issue_1185", "issue_1230" })
         {
             Assert(Uri.TryCreate(GetString(closure, $"{issue}_comment_url"), UriKind.Absolute, out _),
                 $"{issue} closeout comment URL is required at complete.");
-            _ = ParseTimestamp(GetString(closure, $"{issue}_closed_at_utc"), $"closure.{issue}_closed_at_utc");
+            var closedAt = ParseTimestamp(GetString(closure, $"{issue}_closed_at_utc"), $"closure.{issue}_closed_at_utc");
+            Assert(closedAt > approvedAt,
+                $"closure.{issue}_closed_at_utc must follow artifacts_verified.approved_at_utc.");
+            closeoutTimes.Add(closedAt);
         }
         Assert(Uri.TryCreate(GetString(closure, "required_link"), UriKind.Absolute, out _),
             "Complete release records require the reviewed handoff link.");
@@ -292,15 +392,26 @@ internal static class ReleaseRecordValidator
             "Complete release records require two closeout reply SHA-256 digests.");
         Assert(!string.IsNullOrWhiteSpace(GetString(closure, CompletedAtUtcProperty)),
             $"Complete release records require {CompletedAtUtcProperty}.");
-        _ = ParseTimestamp(GetString(closure, CompletedAtUtcProperty), $"{ClosureProperty}.{CompletedAtUtcProperty}");
+        var completedAt = ParseTimestamp(GetString(closure, CompletedAtUtcProperty), $"{ClosureProperty}.{CompletedAtUtcProperty}");
+        Assert(closeoutTimes.All(closeout => completedAt > closeout),
+            "complete.completed_at_utc must strictly follow every source closeout.");
     }
 
     private static DateTimeOffset ParseTimestamp(string value, string property)
     {
-        Assert(DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var timestamp),
-            $"Release record {property} must be an ISO timestamp.");
+        var parsed = DateTimeOffset.TryParseExact(
+            value,
+            ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'"],
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var timestamp);
+        Assert(parsed && value.EndsWith('Z') && timestamp.Offset == TimeSpan.Zero,
+            $"Release record {property} must be canonical UTC with a Z suffix.");
         return timestamp;
     }
+
+    private static DateTimeOffset GetTimestamp(JsonElement objectElement, string property) =>
+        ParseTimestamp(GetString(objectElement, property), property);
 
     private static void AssertAbsent(JsonElement root, params string[] properties)
     {
@@ -347,4 +458,6 @@ internal static class ReleaseRecordValidator
             throw new InvalidOperationException(message);
         }
     }
+
+    private sealed record RequiredCheck(string Name, string Workflow, string Event);
 }
