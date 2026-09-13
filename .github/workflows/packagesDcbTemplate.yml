@@ -81,8 +81,10 @@ jobs:
             --version "$VERSION" --request-timeout-seconds 20
 
       - name: Push Template
+        env:
+          NUGET_APIKEY: ${{ secrets.NUGET_APIKEY }}
         run: |
-          dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+          dotnet nuget push out/*.nupkg --api-key "$NUGET_APIKEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Wait for exact public template visibility
         run: |

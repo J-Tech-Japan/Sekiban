@@ -16,6 +16,7 @@ internal static class ReleaseRecordValidator
     private const string ArtifactsVerifiedProperty = "artifacts_verified";
     private const string ClosureProperty = "closure";
     private const string CompletedAtUtcProperty = "completed_at_utc";
+    private const string PullRequestEvent = "pull_request";
     private const string ReleasesDirectory = "releases";
     private const string ClosedState = "closed";
     private const string Repository = "J-Tech-Japan/Sekiban";
@@ -71,12 +72,12 @@ internal static class ReleaseRecordValidator
 
     private static readonly RequiredCheck[] RequiredChecks =
     [
-        new("dcbTestsNet9", "run_test_dcb.yml", "pull_request"),
-        new("dcbTestsNet10", "run_test_dcb.yml", "pull_request"),
-        new("packagedConsumer", "dcb_template_validation.yml", "pull_request"),
-        new("templateConsumer", "dcb_template_validation.yml", "pull_request"),
-        new("SonarCloud Code Analysis", "sonar.yml", "pull_request"),
-        new("diff", "diff", "pull_request"),
+        new("dcbTestsNet9", "run_test_dcb.yml", PullRequestEvent),
+        new("dcbTestsNet10", "run_test_dcb.yml", PullRequestEvent),
+        new("packagedConsumer", "dcb_template_validation.yml", PullRequestEvent),
+        new("templateConsumer", "dcb_template_validation.yml", PullRequestEvent),
+        new("SonarCloud Code Analysis", "sonar.yml", PullRequestEvent),
+        new("diff", "diff", PullRequestEvent),
         new("exact-head-review", "Review", "pull_request_review")
     ];
 
@@ -196,7 +197,7 @@ internal static class ReleaseRecordValidator
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var check in checks.EnumerateArray())
         {
-            foreach (var property in new[] { "name", "workflow", "run_id", "job_id", "event", "started_at_utc", "completed_at_utc", "head_sha", "conclusion" })
+            foreach (var property in new[] { "name", "workflow", "run_id", "job_id", "event", "started_at_utc", CompletedAtUtcProperty, "head_sha", "conclusion" })
             {
                 Assert(check.TryGetProperty(property, out var value) &&
                       value.ValueKind == JsonValueKind.String &&
@@ -223,7 +224,7 @@ internal static class ReleaseRecordValidator
             Assert(string.Equals(check.GetProperty("conclusion").GetString(), "success", StringComparison.OrdinalIgnoreCase),
                 "Release-record CI evidence must conclude success before artifact verification.");
             var started = ParseTimestamp(check.GetProperty("started_at_utc").GetString()!, "check.started_at_utc");
-            var completed = ParseTimestamp(check.GetProperty("completed_at_utc").GetString()!, "check.completed_at_utc");
+            var completed = ParseTimestamp(check.GetProperty(CompletedAtUtcProperty).GetString()!, $"check.{CompletedAtUtcProperty}");
             Assert(completed > started, "Release-record check completion must strictly follow its start.");
         }
 
@@ -335,7 +336,7 @@ internal static class ReleaseRecordValidator
         var approvedAt = GetTimestamp(review, "approved_at_utc");
         foreach (var check in GetArray(root, "checks").EnumerateArray())
         {
-            Assert(GetTimestamp(check, "completed_at_utc") < approvedAt,
+            Assert(GetTimestamp(check, CompletedAtUtcProperty) < approvedAt,
                 "The independent artifacts-verified approval must follow every required check.");
         }
     }

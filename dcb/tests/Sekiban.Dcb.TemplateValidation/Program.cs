@@ -12,6 +12,7 @@ internal static class Program
     private const string VersionProperty = "SekibanDcbVersion";
     private const string PropsFileName = "SekibanDcbTemplateVersion.props";
     private const string ExpectedVersion = "10.22.0";
+    private const string OrleansVersion = "10.3.1";
     private const string NonexistentPackageVersion = "999.999.999";
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex DcbVersionMention = new(
@@ -46,7 +47,7 @@ internal static class Program
                     var repoRoot = Required(options, "repo-root");
                     OrleansVersionVerifier.Validate(
                         repoRoot,
-                        options.GetValueOrDefault("orleans-version", "10.3.1"));
+                        options.GetValueOrDefault("orleans-version", OrleansVersion));
                     ValidateTemplateTree(
                         Path.Combine(repoRoot, "templates", "Sekiban.Dcb.Templates", "content"),
                         expectedVersion,
@@ -132,7 +133,7 @@ internal static class Program
                 case "orleans":
                     OrleansVersionVerifier.Validate(
                         Required(options, "repo-root"),
-                        options.GetValueOrDefault("orleans-version", "10.3.1"));
+                        options.GetValueOrDefault("orleans-version", OrleansVersion));
                     break;
 
                 case "mutate":
@@ -498,8 +499,8 @@ internal static class Program
             var content = File.ReadAllText(path);
             Assert(content.Contains(expectedVersion, StringComparison.Ordinal),
                 $"{path} must name DCB {expectedVersion}.");
-            Assert(content.Contains("10.3.1", StringComparison.Ordinal),
-                $"{path} must retain the Orleans 10.3.1 support line.");
+            Assert(content.Contains(OrleansVersion, StringComparison.Ordinal),
+                $"{path} must retain the Orleans {OrleansVersion} support line.");
             string scopeMarker;
             if (kind == LibraryKind)
             {
@@ -536,12 +537,12 @@ internal static class Program
             ? new[]
             {
                 "net9.0", "net10.0", "G74", "G75", "G76", "G77", "G78",
-                "5回", "オプトイン", "10.3.1", "PostgreSQL", "データ書き換え"
+                "5回", "オプトイン", OrleansVersion, "PostgreSQL", "データ書き換え"
             }
             : new[]
             {
                 "net9.0", "net10.0", "G74", "G75", "G76", "G77", "G78",
-                "five attempts", "opt-in", "10.3.1", "PostgreSQL", "no data rewrite"
+                "five attempts", "opt-in", OrleansVersion, "PostgreSQL", "no data rewrite"
             };
         foreach (var marker in required)
         {
@@ -730,34 +731,11 @@ internal static class Program
             .Select(path => ToRepoPath(repoRoot, path))
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToArray();
-        var manifestProjects = Regex.Matches(
-                dcbPackage,
-                @"dotnet\s+pack\s+(?<project>dcb/src/[^\s""']+\.csproj)",
-                RegexOptions.CultureInvariant,
-                RegexTimeout)
-            .Cast<Match>()
-            .Select(match => match.Groups["project"].Value.Replace('\\', '/'))
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(path => path, StringComparer.Ordinal)
-            .ToArray();
-        Assert(
-            effectivePackableProjects.SequenceEqual(manifestProjects, StringComparer.Ordinal),
-            $"The DCB package manifest must exactly match effective packable dcb/src projects. " +
-            $"Missing: {string.Join(", ", effectivePackableProjects.Except(manifestProjects, StringComparer.Ordinal))}; " +
-            $"Unexpected: {string.Join(", ", manifestProjects.Except(effectivePackableProjects, StringComparer.Ordinal))}.");
-
-        var pullRequestManifestProjects = Regex.Matches(
-                azureQueueConsumer,
-                @"dotnet\s+pack\s+(?<project>dcb/src/[^\s""']+\.csproj)",
-                RegexOptions.CultureInvariant,
-                RegexTimeout)
-            .Cast<Match>()
-            .Select(match => match.Groups["project"].Value.Replace('\\', '/'))
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(path => path, StringComparer.Ordinal)
-            .ToArray();
-        Assert(
-            effectivePackableProjects.SequenceEqual(pullRequestManifestProjects, StringComparer.Ordinal),
+        var manifestProjects = ExtractPackManifest(dcbPackage);
+        var pullRequestManifestProjects = ExtractPackManifest(azureQueueConsumer);
+        Assert(effectivePackableProjects.SequenceEqual(manifestProjects, StringComparer.Ordinal),
+            "The DCB package manifest must exactly match effective packable dcb/src projects.");
+        Assert(effectivePackableProjects.SequenceEqual(pullRequestManifestProjects, StringComparer.Ordinal),
             "The Azure Queue pull-request workflow must pack the exact effective DCB packable project set.");
 
         foreach (var required in new[]
@@ -776,12 +754,40 @@ internal static class Program
                 $"The validation workflow must include '{required}'.");
         }
 
-        var validationSteps = ReadNamedWorkflowSteps(validation);
-        var publishSteps = ReadNamedWorkflowSteps(publish);
         RequireStepWithRun(
-            validationSteps,
+            ReadNamedWorkflowSteps(validation),
             "dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh",
             "The PR validation workflow must run the packaged-consumer path.");
+        ValidatePublishWorkflow(dcbPackage, publish);
+
+        ValidateConsumerScripts(repoRoot, packagedConsumerScript, azureQueueConsumerScript);
+    }
+
+    private static string[] ExtractPackManifest(string workflow) =>
+        Regex.Matches(
+                workflow,
+                @"dotnet\s+pack\s+(?<project>dcb/src/[^\s""']+\.csproj)",
+                RegexOptions.CultureInvariant,
+                RegexTimeout)
+            .Cast<Match>()
+            .Select(match => match.Groups["project"].Value.Replace('\\', '/'))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+
+    private static void ValidatePublishWorkflow(string dcbPackage, string publish)
+    {
+        var dcbPackageSteps = ReadNamedWorkflowSteps(dcbPackage);
+        var libraryPush = RequireNamedStep(dcbPackageSteps, "Push to NuGet.org");
+        var libraryVisibility = RequireNamedStep(dcbPackageSteps, "Wait for exact public library visibility");
+        var libraryRelease = RequireNamedStep(dcbPackageSteps, "Create GitHub Release");
+        Assert(dcbPackage.Contains("body_path: out/library-release-body.md", StringComparison.Ordinal) &&
+               dcbPackage.Contains("draft: false", StringComparison.Ordinal),
+            "The library release must use the reviewed bilingual body and be explicitly non-draft.");
+        Assert(libraryPush.Ordinal < libraryVisibility.Ordinal && libraryVisibility.Ordinal < libraryRelease.Ordinal,
+            "The library workflow must wait for exact public visibility before creating its release.");
+
+        var publishSteps = ReadNamedWorkflowSteps(publish);
         var publishParity = RequireNamedStep(publishSteps, "Verify published library/template parity before pack");
         var packageAvailability = RequireNamedStep(publishSteps, "Wait for all published DCB packages");
         var pack = RequireNamedStep(publishSteps, "Pack Template");
@@ -826,7 +832,13 @@ internal static class Program
             "The immutable same-version guard must run before the duplicate-safe package push.");
         Assert(push.Ordinal < templateVisibility.Ordinal && templateVisibility.Ordinal < templateRelease.Ordinal,
             "The template workflow must wait for exact public visibility before creating its release.");
+    }
 
+    private static void ValidateConsumerScripts(
+        string repoRoot,
+        string packagedConsumerScript,
+        string azureQueueConsumerScript)
+    {
         var script = File.ReadAllText(packagedConsumerScript);
         var azureQueueScript = File.ReadAllText(azureQueueConsumerScript);
         Assert(script.Contains("packageSourceMapping", StringComparison.Ordinal) &&
