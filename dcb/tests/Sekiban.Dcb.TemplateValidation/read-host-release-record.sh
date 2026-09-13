@@ -37,12 +37,10 @@ done
   echo "SEKIBAN_RELEASE_RECORD_REF must be an immutable 40-character host commit SHA." >&2
   exit 1
 }
-[[ "$state" == "prepared" || "$state" == "library-tagged/incomplete" ||
-   "$state" == "libraries-verified" || "$state" == "template-tagged/incomplete" ||
-   "$state" == "artifacts-verified" || "$state" == "complete" ]] || {
-  echo "Unsupported host release-record state: $state." >&2
-  exit 1
-}
+case "$state" in
+  prepared|library-tagged/incomplete|libraries-verified|template-tagged/incomplete|artifacts-verified|complete) ;;
+  *) echo "Unsupported host release-record state: $state." >&2; exit 1 ;;
+esac
 [[ "$verify_tags" == "none" || "$verify_tags" == "library" || "$verify_tags" == "all" ]] || usage
 
 output_dir="$(mkdir -p "$output_dir" && cd "$output_dir" && pwd)"
@@ -94,28 +92,32 @@ jq -e --arg version "$version" --arg state "$state" --arg repository "$host_repo
 }
 
 commit_endpoint="repos/${host_repository}/commits/${ref}"
-if ! commit_response="$(gh api "$commit_endpoint")"; then
+commit_response="$(mktemp "${TMPDIR:-/tmp}/sek-release-commit.XXXXXX")"
+tree_response="$(mktemp "${TMPDIR:-/tmp}/sek-release-tree.XXXXXX")"
+cleanup_extra() { rm -f "$commit_response" "$tree_response"; }
+trap 'cleanup; cleanup_extra' EXIT
+if ! gh api "$commit_endpoint" > "$commit_response"; then
   echo "Unable to resolve immutable host commit ${host_repository}@${ref}." >&2
   exit 1
 fi
 jq -e --arg ref "$ref" '.sha == $ref and (.commit.tree.sha | test("^[0-9a-fA-F]{40}$"))' \
-  <<<"$commit_response" >/dev/null || {
+  "$commit_response" >/dev/null || {
   echo "Host commit response is not bound to requested immutable ref ${ref}." >&2
   exit 1
 }
-tree_sha="$(jq -r '.commit.tree.sha' <<<"$commit_response")"
+tree_sha="$(jq -r '.commit.tree.sha' "$commit_response")"
 tree_endpoint="repos/${host_repository}/git/trees/${tree_sha}?recursive=1"
-if ! tree_response="$(gh api "$tree_endpoint")"; then
+if ! gh api "$tree_endpoint" > "$tree_response"; then
   echo "Unable to resolve the host tree for immutable commit ${ref}." >&2
   exit 1
 fi
 jq -e --arg path "$record_path" \
   '[.tree[] | select(.path == $path and .type == "blob" and (.sha | test("^[0-9a-fA-F]{40}$")))] | length == 1' \
-  <<<"$tree_response" >/dev/null || {
+  "$tree_response" >/dev/null || {
   echo "Host tree does not contain exactly one release-record blob at ${record_path}." >&2
   exit 1
 }
-tree_blob_sha="$(jq -r --arg path "$record_path" '.tree[] | select(.path == $path and .type == "blob") | .sha' <<<"$tree_response")"
+tree_blob_sha="$(jq -r --arg path "$record_path" '.tree[] | select(.path == $path and .type == "blob") | .sha' "$tree_response")"
 [[ "$tree_blob_sha" == "$record_blob_sha" ]] || {
   echo "Host tree blob identity does not match the returned contents blob." >&2
   exit 1
@@ -132,26 +134,24 @@ write_entry() {
 }
 
 write_response_entry() {
-  local kind="$1" immutable_ref="$2" endpoint="$3" response="$4" response_file
-  response_file="$(mktemp "${TMPDIR:-/tmp}/sek-bundle-response.XXXXXX")"
-  printf '%s' "$response" > "$response_file"
+  local kind="$1" immutable_ref="$2" endpoint="$3" response_file="$4"
   write_entry "$kind" "$immutable_ref" "$endpoint" "$response_file"
-  rm -f "$response_file"
 }
 
-record_file="$output_dir/objects/$(sha256sum "$decoded" | cut -d' ' -f1).json"
-cp "$decoded" "$record_file"
-record_relative_path="${record_file#"$output_dir/"}"
+record_relative_path="objects/$(sha256sum "$envelope" | cut -d' ' -f1).json"
+cp "$envelope" "$output_dir/$record_relative_path"
 jq -nc --arg ref "${host_repository}@${ref}:${record_path}" \
   --arg endpoint "repos/${host_repository}/contents/${record_path}?ref=${ref}" \
-  --arg path "$record_relative_path" --arg sha "$(sha256sum "$decoded" | cut -d' ' -f1)" \
+  --arg path "$record_relative_path" --arg sha "$(sha256sum "$envelope" | cut -d' ' -f1)" \
   '{kind:"record",immutable_ref:$ref,endpoint:$endpoint,relative_path:$path,sha256:$sha}' >> "$entries"
 
-write_response_entry host-response "${host_repository}@${ref}:commits/${ref}" "$commit_endpoint" "$commit_response"
-write_response_entry host-response "${host_repository}@${ref}:git/trees/${tree_sha}" "$tree_endpoint" "$tree_response"
+commit_ref="${host_repository}@${ref}:commits/${ref}"
+tree_ref="${host_repository}@${ref}:git/trees/${tree_sha}"
+write_response_entry host-response "$commit_ref" "$commit_endpoint" "$commit_response"
+write_response_entry host-response "$tree_ref" "$tree_endpoint" "$tree_response"
 
 fetch_bundle_ref() {
-  local immutable_ref="$1" repository commit object_path endpoint response
+  local immutable_ref="$1" repository commit object_path endpoint response_file
   [[ "$immutable_ref" =~ ^([^@]+)@([0-9a-fA-F]{40}):(.+)$ ]] || {
     echo "Record contains a non-immutable bundle reference: ${immutable_ref}." >&2
     return 1
@@ -160,21 +160,24 @@ fetch_bundle_ref() {
   commit="${BASH_REMATCH[2]}"
   object_path="${BASH_REMATCH[3]}"
   case "$object_path" in
-    commits/*) endpoint="repos/${repository}/${object_path}" ;;
-    git/trees/*) endpoint="repos/${repository}/${object_path}?recursive=1" ;;
     contents/*) endpoint="repos/${repository}/${object_path}?ref=${commit}" ;;
-    git/blobs/*) endpoint="repos/${repository}/${object_path}" ;;
+    commits/*|pulls/*|actions/*) endpoint="repos/${repository}/${object_path}" ;;
+    git/trees/*) endpoint="repos/${repository}/${object_path}?recursive=1" ;;
+    git/*) endpoint="repos/${repository}/${object_path}" ;;
     *) endpoint="repos/${repository}/contents/${object_path}?ref=${commit}" ;;
   esac
-  if ! response="$(gh api "$endpoint")"; then
+  response_file="$(mktemp "${TMPDIR:-/tmp}/sek-bundle-response.XXXXXX")"
+  if ! gh api "$endpoint" > "$response_file"; then
+    rm -f "$response_file"
     echo "Unable to read immutable bundle response ${immutable_ref}." >&2
     return 1
   fi
   if [[ "$repository" == "$host_repository" ]]; then
-    write_response_entry host-response "$immutable_ref" "$endpoint" "$response"
+    write_response_entry host-response "$immutable_ref" "$endpoint" "$response_file"
   else
-    write_response_entry github-response "$immutable_ref" "$endpoint" "$response"
+    write_response_entry github-response "$immutable_ref" "$endpoint" "$response_file"
   fi
+  rm -f "$response_file"
 }
 
 bundle_refs_file="$(mktemp "${TMPDIR:-/tmp}/sek-release-bundle-refs.XXXXXX")"
@@ -188,7 +191,7 @@ while IFS= read -r immutable_ref; do
 done < "$bundle_refs_file"
 
 verify_live_tag() {
-  local property="$1" tag_name expected_object expected_peeled live_ref live_object live_type peeled tag_object
+  local property="$1" tag_name expected_object expected_peeled live_ref_file tag_object_file live_object live_type peeled
   tag_name="$(jq -r --arg property "$property" '.[$property].name' "$decoded")"
   expected_object="$(jq -r --arg property "$property" '.[$property].object_id' "$decoded")"
   expected_peeled="$(jq -r --arg property "$property" '.[$property].peeled_commit' "$decoded")"
@@ -196,16 +199,24 @@ verify_live_tag() {
     echo "Host release record is missing complete ${property} tag identity." >&2
     return 1
   }
-  live_ref="$(gh api "repos/${target_repository}/git/ref/tags/${tag_name}")" || {
+  live_ref_file="$(mktemp "${TMPDIR:-/tmp}/sek-live-tag-ref.XXXXXX")"
+  if ! gh api "repos/${target_repository}/git/ref/tags/${tag_name}" > "$live_ref_file"; then
+    rm -f "$live_ref_file"
     echo "Unable to read live ${target_repository} tag ref ${tag_name}." >&2
     return 1
-  }
-  live_object="$(jq -r '.object.sha' <<<"$live_ref")"
-  live_type="$(jq -r '.object.type' <<<"$live_ref")"
+  fi
+  live_object="$(jq -r '.object.sha' "$live_ref_file")"
+  live_type="$(jq -r '.object.type' "$live_ref_file")"
+  rm -f "$live_ref_file"
   [[ "$live_object" == "$expected_object" ]] || { echo "Live tag ${tag_name} object ID does not match the host record." >&2; return 1; }
   if [[ "$live_type" == tag ]]; then
-    tag_object="$(gh api "repos/${target_repository}/git/tags/${live_object}")" || return 1
-    peeled="$(jq -r '.object.sha' <<<"$tag_object")"
+    tag_object_file="$(mktemp "${TMPDIR:-/tmp}/sek-live-tag-object.XXXXXX")"
+    if ! gh api "repos/${target_repository}/git/tags/${live_object}" > "$tag_object_file"; then
+      rm -f "$tag_object_file"
+      return 1
+    fi
+    peeled="$(jq -r '.object.sha' "$tag_object_file")"
+    rm -f "$tag_object_file"
   elif [[ "$live_type" == commit ]]; then
     peeled="$live_object"
   else
@@ -220,6 +231,6 @@ if [[ "$verify_tags" == all ]]; then verify_live_tag template_tag; fi
 
 jq -n --arg host_repository "$host_repository" --arg host_ref "$ref" \
   --arg record_path "$record_relative_path" --slurpfile entries "$entries" \
-  '{schema_version:1,host_repository:$host_repository,host_ref:$host_ref,record_relative_path:$record_path,entries:$entries}' \
+  '{schema_version:2,host_repository:$host_repository,host_ref:$host_ref,record_relative_path:$record_path,entries:$entries}' \
   > "$manifest_path"
 echo "Read closed schema-v2 release bundle ${host_repository}@${ref}:${record_path} into ${output_dir}."

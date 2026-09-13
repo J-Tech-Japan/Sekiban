@@ -282,30 +282,46 @@ expect_failure() {
 
 run_host_record_reader_shim_tests() {
   local reader="$script_dir/read-host-release-record.sh"
-  local record="$script_dir/fixtures/release-record/valid-complete.json"
+  local record_fixture="$script_dir/fixtures/release-record/valid-complete.json"
+  local closed_fixture="$work_root/closed-bundle-fixture"
+  python3 "$script_dir/make-closed-bundle-fixture.py" "$record_fixture" "$closed_fixture"
+  local record="$closed_fixture/record.json"
   local shim_root="$work_root/host-gh-shim"
   local output="$work_root/host-record-bundle"
   local manifest="$output/bundle.json"
-  local fake_ref="9999999999999999999999999999999999999999"
+  local fake_ref
+  fake_ref="$(tr -d '\n' < "$closed_fixture/host-ref")"
   mkdir -p "$shim_root"
   cat > "$shim_root/gh" <<'SHIM'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${1:-}" == "api" ]] && shift
 endpoint="${1:-}"
+printf '%s\n' "$endpoint" >> "${FAKE_ENDPOINT_LOG:-/dev/null}"
 record="${FAKE_HOST_RECORD:?}"
+fixture_root="${FAKE_CLOSED_ROOT:?}"
 requested_ref="${FAKE_HOST_REF:?}"
 record_path="intents/sekiban/releases/dcb-v10.22.0-release-record.json"
-record_blob="$(git hash-object "$record")"
-tree_sha="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+record_blob="$(tr -d '\n' < "$fixture_root/record-blob-sha")"
+tree_sha="$(tr -d '\n' < "$fixture_root/tree-sha")"
 merged_sha="$(jq -r '.merged_sha' "$record")"
 content="$(base64 < "$record" | tr -d '\n')"
 
-  case "$endpoint" in
+if [[ "$endpoint" == "repos/J-Tech-Japan/SekibanIntentHost/contents/${record_path}?ref=${requested_ref}" ]]; then
+  jq -n --arg path "$record_path" --arg sha "$record_blob" --arg content "$content" \
+    '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
+  exit 0
+fi
+case "$endpoint" in
   repos/J-Tech-Japan/SekibanIntentHost/contents/*)
     response_path="${endpoint#repos/J-Tech-Japan/SekibanIntentHost/contents/}"
     response_path="${response_path%%\?*}"
-    jq -n --arg path "$response_path" --arg sha "$record_blob" --arg content "$content" \
+    map_line="$(awk -F '\t' -v reference="J-Tech-Japan/SekibanIntentHost@${requested_ref}:contents/${response_path}" '$1 == reference { print; exit }' "$fixture_root/map.tsv")"
+    [[ -n "$map_line" ]] || { echo "missing host map entry for ${response_path}" >&2; exit 1; }
+    response_file="$(printf '%s\n' "$map_line" | cut -f3)"
+    response_content="$(base64 < "$response_file" | tr -d '\n')"
+    response_sha="$(git hash-object "$response_file")"
+    jq -n --arg path "$response_path" --arg sha "$response_sha" --arg content "$response_content" \
       '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
     ;;
   repos/J-Tech-Japan/SekibanIntentHost/commits/*)
@@ -319,41 +335,33 @@ content="$(base64 < "$record" | tr -d '\n')"
     jq -n --arg tree "$tree_sha" --arg path "$record_path" --arg sha "$tree_blob" \
       '{sha:$tree,tree:[{path:$path,type:"blob",sha:$sha}]}'
     ;;
-  repos/J-Tech-Japan/SekibanIntentHost/contents/*)
-    jq -n --arg path "$record_path" --arg sha "$record_blob" --arg content "$content" \
-      '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
-    ;;
-  repos/J-Tech-Japan/SekibanIntentHost/git/blobs/*)
-    jq -n --arg sha "$record_blob" --arg content "$content" \
-      '{sha:$sha,encoding:"base64",content:$content}'
-    ;;
-  repos/J-Tech-Japan/Sekiban/commits/*)
-    jq -n --arg sha "$merged_sha" --arg tree "5555555555555555555555555555555555555555" \
-      '{sha:$sha,commit:{tree:{sha:$tree}}}'
-    ;;
-  repos/J-Tech-Japan/Sekiban/git/trees/*)
-    jq -n --arg sha "5555555555555555555555555555555555555555" '{sha:$sha,tree:[]}'
-    ;;
-  repos/J-Tech-Japan/Sekiban/git/ref/tags/*)
-    tag="${endpoint##*/}"
-    if [[ "$tag" == "dcb-v10.22.0" ]]; then
-      object_sha="$(jq -r '.library_tag.object_id' "$record")"
-    elif [[ "$tag" == "dcbTemplates-v10.22.0" ]]; then
-      object_sha="$(jq -r '.template_tag.object_id' "$record")"
-    else
-      exit 1
-    fi
-    [[ "${FAKE_GH_BAD_TAG_OBJECT:-0}" == 1 ]] && object_sha="6666666666666666666666666666666666666666"
-    jq -n --arg sha "$object_sha" '{ref:"refs/tags/tag",object:{sha:$sha,type:"tag"}}'
-    ;;
-  repos/J-Tech-Japan/Sekiban/git/tags/*)
-    peeled="$merged_sha"
-    [[ "${FAKE_GH_BAD_PEELED:-0}" == 1 ]] && peeled="5555555555555555555555555555555555555555"
-    jq -n --arg sha "$peeled" '{object:{sha:$sha,type:"commit"}}'
-    ;;
   *)
-    echo "unexpected gh api endpoint" >&2
-    exit 1
+    map_line="$(awk -F '\t' -v endpoint="$endpoint" '$4 == endpoint { print; exit }' "$fixture_root/map.tsv")"
+    [[ -n "$map_line" ]] || {
+      if [[ "$endpoint" == "repos/J-Tech-Japan/Sekiban/git/ref/tags/"* ]]; then
+        tag="${endpoint##*/}"
+        object_sha="$(jq -r --arg tag "$tag" 'if .library_tag.name == $tag then .library_tag.object_id else .template_tag.object_id end' "$record")"
+        [[ "${FAKE_GH_BAD_TAG_OBJECT:-0}" == 1 ]] && object_sha="6666666666666666666666666666666666666666"
+        jq -n --arg sha "$object_sha" '{ref:"refs/tags/tag",object:{sha:$sha,type:"tag"}}'
+        exit 0
+      fi
+      if [[ "$endpoint" == "repos/J-Tech-Japan/Sekiban/git/tags/"* ]]; then
+        peeled="$merged_sha"
+        [[ "${FAKE_GH_BAD_PEELED:-0}" == 1 ]] && peeled="5555555555555555555555555555555555555555"
+        jq -n --arg sha "$peeled" '{object:{sha:$sha,type:"commit"}}'
+        exit 0
+      fi
+      echo "unexpected gh api endpoint: $endpoint" >&2
+      exit 1
+    }
+    response_file="$(printf '%s\n' "$map_line" | cut -f3)"
+    if [[ "$endpoint" == "repos/J-Tech-Japan/Sekiban/git/ref/tags/"* && "${FAKE_GH_BAD_TAG_OBJECT:-0}" == 1 ]]; then
+      jq '.object.sha = "6666666666666666666666666666666666666666"' "$response_file"
+    elif [[ "$endpoint" == "repos/J-Tech-Japan/Sekiban/git/tags/"* && "${FAKE_GH_BAD_PEELED:-0}" == 1 ]]; then
+      jq '.object.sha = "5555555555555555555555555555555555555555"' "$response_file"
+    else
+      cat "$response_file"
+    fi
     ;;
 esac
 SHIM
@@ -363,6 +371,7 @@ SHIM
     rm -rf "$output"
     env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
       SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
+      FAKE_CLOSED_ROOT="$closed_fixture" FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" \
       bash "$reader" "$@"
   }
 
@@ -415,11 +424,19 @@ SHIM
   self_commit_record_relative_path="$(jq -r '.record_relative_path' "$bundle_self_commit_mutant/bundle.json")"
   self_commit_host_ref="$(jq -r '.host_ref' "$bundle_self_commit_mutant/bundle.json")"
   self_commit_record="$work_root/self-commit-record.json"
+  self_commit_envelope="$work_root/self-commit-envelope.json"
+  jq -r '.content' "$bundle_self_commit_mutant/$self_commit_record_relative_path" |
+    tr -d '\n' | base64 --decode > "$work_root/self-commit-original-record.json"
   jq --arg self_commit_host_ref "$self_commit_host_ref" \
     '.record_source.commit_sha = $self_commit_host_ref' \
-    "$bundle_self_commit_mutant/$self_commit_record_relative_path" > "$self_commit_record"
-  self_commit_digest="$(sha256sum "$self_commit_record" | cut -d' ' -f1)"
-  cp "$self_commit_record" "$bundle_self_commit_mutant/objects/$self_commit_digest.json"
+    "$work_root/self-commit-original-record.json" > "$self_commit_record"
+  self_commit_content="$(base64 < "$self_commit_record" | tr -d '\n')"
+  self_commit_blob_sha="$(git hash-object "$self_commit_record")"
+  jq --arg content "$self_commit_content" --arg blob_sha "$self_commit_blob_sha" \
+    '.content = $content | .sha = $blob_sha' \
+    "$bundle_self_commit_mutant/$self_commit_record_relative_path" > "$self_commit_envelope"
+  self_commit_digest="$(sha256sum "$self_commit_envelope" | cut -d' ' -f1)"
+  cp "$self_commit_envelope" "$bundle_self_commit_mutant/objects/$self_commit_digest.json"
   jq --arg old_path "$self_commit_record_relative_path" --arg new_path "objects/$self_commit_digest.json" \
      --arg new_digest "$self_commit_digest" \
      '.record_relative_path = $new_path | .entries |= map(if .kind == "record" then .relative_path = $new_path | .sha256 = $new_digest else . end)' \
@@ -446,7 +463,8 @@ SHIM
   if failure_output="$(env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
       FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" bash "$reader" \
       --version "$version" --state complete --ref main --verify-tags all \
-      --output-dir "$output" --manifest "$manifest" 2>&1)"; then
+      --output-dir "$(mktemp -d "$work_root/mutable-ref.XXXXXX")" \
+      --manifest "$work_root/mutable-ref-manifest.json" 2>&1)"; then
     echo "Host reader unexpectedly accepted a mutable ref." >&2
     return 1
   fi
@@ -454,20 +472,26 @@ SHIM
   local wrong_reader="$work_root/read-host-wrong-repository.sh"
   cp "$reader" "$wrong_reader"
   perl -0pi -e 's/J-Tech-Japan\/SekibanIntentHost/example.invalid\/WrongHost/g' "$wrong_reader"
+  local wrong_output
+  wrong_output="$(mktemp -d "$work_root/wrong-host-output.XXXXXX")"
   expect_failure env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
     SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
     bash "$wrong_reader" --version "$version" --state complete --verify-tags all \
-      --output-dir "$output" --manifest "$manifest"
+      --output-dir "$wrong_output" --manifest "$wrong_output/bundle.json"
 
   for flag in FAKE_GH_BAD_COMMIT FAKE_GH_BAD_BLOB FAKE_GH_BAD_TAG_OBJECT FAKE_GH_BAD_PEELED; do
+    local mutant_output
+    mutant_output="$(mktemp -d "$work_root/${flag}.XXXXXX")"
     expect_failure env "$flag=1" PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
       SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
       bash "$reader" --version "$version" --state complete --verify-tags all \
-        --output-dir "$output" --manifest "$manifest"
+        --output-dir "$mutant_output" --manifest "$mutant_output/bundle.json"
   done
 
+  local prepared_output
+  prepared_output="$(mktemp -d "$work_root/prepared-output.XXXXXX")"
   expect_failure run_reader --version "$version" --state prepared --verify-tags all \
-    --output-dir "$output" --manifest "$manifest"
+    --output-dir "$prepared_output" --manifest "$prepared_output/bundle.json"
   echo "Host release-record reader passed credential/ref, immutable commit/blob, closed bundle, tag-object, peeled-SHA, state, and wrong-host gh-shim mutants."
 
   if [[ -n "${SEKIBAN_RELEASE_RECORD_TOKEN:-}" && -n "${SEKIBAN_RELEASE_RECORD_REF:-}" ]]; then

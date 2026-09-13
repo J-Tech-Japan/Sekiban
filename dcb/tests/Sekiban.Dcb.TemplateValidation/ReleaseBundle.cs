@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -13,15 +14,41 @@ internal sealed class ReleaseBundle
         "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}:.+$",
         RegexOptions.CultureInvariant);
 
-    private ReleaseBundle(string recordPath, string hostRef)
+    private ReleaseBundle(
+        string recordPath,
+        string hostRef,
+        byte[] recordBytes,
+        IReadOnlyDictionary<string, Entry> entries)
     {
         RecordPath = recordPath;
         HostRef = hostRef;
+        RecordBytes = recordBytes;
+        Entries = entries;
     }
+
+    internal sealed record Entry(
+        string Kind,
+        string ImmutableRef,
+        string Endpoint,
+        string RelativePath,
+        string Sha256,
+        byte[] RawBytes,
+        byte[]? ContentBytes);
 
     internal string RecordPath { get; }
 
     internal string HostRef { get; }
+
+    internal byte[] RecordBytes { get; }
+
+    internal IReadOnlyDictionary<string, Entry> Entries { get; }
+
+    internal Entry GetEntry(string immutableRef)
+    {
+        Assert(Entries.TryGetValue(immutableRef, out var entry),
+            $"Closed release bundle does not contain immutable reference {immutableRef}.");
+        return entry!;
+    }
 
     internal static ReleaseBundle Load(string bundleDirectory, string manifestPath)
     {
@@ -40,20 +67,21 @@ internal sealed class ReleaseBundle
         {
             "schema_version", "host_repository", "host_ref", "record_relative_path", "entries"
         });
-        Assert(GetInt(root, "schema_version") == 1, "Bundle manifest schema_version must be 1.");
+        Assert(GetInt(root, "schema_version") == 2, "Bundle manifest schema_version must be 2.");
         Assert(GetString(root, "host_repository") == HostRepository,
             "Bundle manifest host_repository must be the private canonical host.");
-        var hostRef = GetString(root, "host_ref");
+        var hostRef = GetString(root, "host_ref").ToLowerInvariant();
         Assert(Commit.IsMatch(hostRef), "Bundle manifest host_ref must be an immutable 40-character SHA.");
 
         var entries = root.GetProperty("entries");
         Assert(entries.ValueKind == JsonValueKind.Array && entries.GetArrayLength() > 0,
             "Bundle manifest entries must be a non-empty array.");
         var paths = new HashSet<string>(StringComparer.Ordinal);
-        var pathDigests = new Dictionary<string, string>(StringComparer.Ordinal);
         var refs = new HashSet<string>(StringComparer.Ordinal);
-        var responseRefs = new HashSet<string>(StringComparer.Ordinal);
+        var loaded = new Dictionary<string, Entry>(StringComparer.Ordinal);
         string? recordPath = null;
+        byte[]? recordBytes = null;
+
         foreach (var entry in entries.EnumerateArray())
         {
             RequireMembers(entry, "bundle manifest entry", new[]
@@ -76,43 +104,41 @@ internal sealed class ReleaseBundle
             Assert(relativePath.StartsWith("objects/", StringComparison.Ordinal) &&
                    Path.GetFileNameWithoutExtension(relativePath) == digest,
                 $"Bundle entry {relativePath} must be digest-named.");
-            if (pathDigests.TryGetValue(relativePath, out var existingDigest))
-            {
-                Assert(existingDigest == digest,
-                    $"Bundle path {relativePath} is aliased to different content digests.");
-            }
-            else
-            {
-                pathDigests.Add(relativePath, digest);
-                paths.Add(relativePath);
-            }
-            Assert(refs.Add(immutableRef), $"Bundle contains duplicate immutable reference {immutableRef}.");
-            if (kind != "record")
-            {
-                responseRefs.Add(immutableRef);
-            }
+            Assert(paths.Add(relativePath),
+                $"Bundle contains more than one immutable object at local path {relativePath}.");
+            Assert(refs.Add(immutableRef),
+                $"Bundle contains duplicate immutable reference {immutableRef}.");
 
             var fullPath = Path.GetFullPath(Path.Combine(bundleDirectory, relativePath));
             Assert(IsWithin(bundleDirectory, fullPath) && File.Exists(fullPath),
                 $"Bundle entry is missing: {relativePath}.");
             Assert(new FileInfo(fullPath).LinkTarget is null,
                 $"Bundle entry must not be a symbolic link: {relativePath}.");
-            var actualDigest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(fullPath))).ToLowerInvariant();
+            var rawBytes = File.ReadAllBytes(fullPath);
+            var actualDigest = Convert.ToHexString(SHA256.HashData(rawBytes)).ToLowerInvariant();
             Assert(actualDigest == digest, $"Bundle entry digest mismatch: {relativePath}.");
-            if (kind != "record")
-            {
-                ValidateResponseIdentity(File.ReadAllBytes(fullPath), immutableRef, relativePath);
-            }
+
+            byte[]? contentBytes;
             if (kind == "record")
             {
                 Assert(recordPath is null, "Bundle manifest must contain exactly one record entry.");
-                recordPath = fullPath;
                 Assert(immutableRef.Contains($"@{hostRef}:", StringComparison.OrdinalIgnoreCase),
                     "The record entry must be anchored to the requested immutable host commit.");
+                contentBytes = ValidateContentsEnvelope(rawBytes, immutableRef, relativePath);
+                recordPath = fullPath;
+                recordBytes = contentBytes;
             }
+            else
+            {
+                contentBytes = ValidateResponseIdentity(rawBytes, immutableRef, relativePath);
+            }
+
+            loaded.Add(immutableRef, new Entry(
+                kind, immutableRef, endpoint, relativePath, digest, rawBytes, contentBytes));
         }
 
-        Assert(recordPath is not null, "Bundle manifest must contain one record entry.");
+        Assert(recordPath is not null && recordBytes is not null,
+            "Bundle manifest must contain one record entry.");
         Assert(GetString(root, "record_relative_path") == Path.GetRelativePath(bundleDirectory, recordPath!),
             "Bundle record_relative_path must identify the record entry exactly.");
 
@@ -123,47 +149,30 @@ internal sealed class ReleaseBundle
         Assert(actualFiles.SetEquals(paths),
             "Bundle contains an extra, missing, or unreachable file outside the closed manifest.");
 
-        using var recordDocument = JsonDocument.Parse(File.ReadAllBytes(recordPath!));
+        using var recordDocument = JsonDocument.Parse(recordBytes);
         var record = recordDocument.RootElement;
         Assert(record.TryGetProperty("bundle_refs", out var bundleRefs) && bundleRefs.ValueKind == JsonValueKind.Array,
             "The v2 record must expose the bundle references consumed by the reader boundary.");
-        var recordRefs = bundleRefs.EnumerateArray().Select(value => value.GetString() ?? string.Empty).ToHashSet(StringComparer.Ordinal);
-        var automaticRefs = responseRefs.Where(reference =>
-            reference.StartsWith($"{HostRepository}@{hostRef}:commits/", StringComparison.OrdinalIgnoreCase) ||
-            reference.StartsWith($"{HostRepository}@{hostRef}:git/trees/", StringComparison.OrdinalIgnoreCase));
-        Assert(recordRefs.SetEquals(responseRefs.Except(automaticRefs)),
-            "Bundle references must be reachable from the v2 record and cannot be silently added or omitted.");
-        return new ReleaseBundle(recordPath!, hostRef);
+        var recordRefs = bundleRefs.EnumerateArray()
+            .Select(value => value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty)
+            .ToHashSet(StringComparer.Ordinal);
+        var readerAnchorRefs = loaded.Keys
+            .Where(reference => IsReaderAnchorReference(reference, hostRef))
+            .ToHashSet(StringComparer.Ordinal);
+        Assert(readerAnchorRefs.Count == 2 &&
+               readerAnchorRefs.Any(reference => reference.Contains($":commits/{hostRef}", StringComparison.OrdinalIgnoreCase)) &&
+               readerAnchorRefs.Any(reference => reference.Contains(":git/trees/", StringComparison.OrdinalIgnoreCase)),
+            "The closed bundle must contain exactly the immutable host commit/tree anchors fetched by the reader.");
+        var expectedResponseRefs = loaded.Keys
+            .Where(reference => loaded[reference].Kind != "record" && !readerAnchorRefs.Contains(reference))
+            .ToHashSet(StringComparer.Ordinal);
+        Assert(recordRefs.SetEquals(expectedResponseRefs),
+            "bundle_refs must enumerate every and only every non-record release evidence response; reader host anchors are implicit.");
+
+        return new ReleaseBundle(recordPath!, hostRef, recordBytes!, loaded);
     }
 
-    private static bool IsSafeRelativePath(string path) =>
-        !string.IsNullOrWhiteSpace(path) &&
-        !Path.IsPathRooted(path) &&
-        path.Replace('\\', '/').Split('/').All(part => part is not "" and not "." and not "..");
-
-    private static string ExpectedEndpoint(string immutableRef)
-    {
-        var separator = immutableRef.IndexOf(':');
-        var repositoryAndCommit = immutableRef[..separator];
-        var objectPath = immutableRef[(separator + 1)..];
-        var at = repositoryAndCommit.IndexOf('@');
-        var repository = repositoryAndCommit[..at];
-        var commit = repositoryAndCommit[(at + 1)..];
-        return objectPath switch
-        {
-            _ when objectPath.StartsWith("commits/", StringComparison.Ordinal) =>
-                $"repos/{repository}/{objectPath}",
-            _ when objectPath.StartsWith("git/trees/", StringComparison.Ordinal) =>
-                $"repos/{repository}/{objectPath}?recursive=1",
-            _ when objectPath.StartsWith("git/blobs/", StringComparison.Ordinal) =>
-                $"repos/{repository}/{objectPath}",
-            _ when objectPath.StartsWith("contents/", StringComparison.Ordinal) =>
-                $"repos/{repository}/{objectPath}?ref={commit}",
-            _ => $"repos/{repository}/contents/{objectPath}?ref={commit}"
-        };
-    }
-
-    private static void ValidateResponseIdentity(byte[] bytes, string immutableRef, string relativePath)
+    private static byte[]? ValidateResponseIdentity(byte[] bytes, string immutableRef, string relativePath)
     {
         using var document = JsonDocument.Parse(bytes);
         var root = document.RootElement;
@@ -181,9 +190,25 @@ internal sealed class ReleaseBundle
             Assert(root.TryGetProperty("sha", out var sha) && sha.ValueKind == JsonValueKind.String &&
                    sha.GetString() == expectedObjectId,
                 $"Bundle response {relativePath} is not the API object named by {immutableRef}.");
-            return;
+            return null;
         }
 
+        if (objectPath.StartsWith("contents/", StringComparison.Ordinal))
+        {
+            return ValidateContentsEnvelope(bytes, immutableRef, relativePath);
+        }
+
+        Assert(root.ValueKind == JsonValueKind.Object,
+            $"Bundle response {relativePath} must be a JSON API object.");
+        return null;
+    }
+
+    private static byte[] ValidateContentsEnvelope(byte[] bytes, string immutableRef, string relativePath)
+    {
+        using var document = JsonDocument.Parse(bytes);
+        var root = document.RootElement;
+        var separator = immutableRef.IndexOf(':');
+        var objectPath = immutableRef[(separator + 1)..];
         var expectedPath = objectPath.StartsWith("contents/", StringComparison.Ordinal)
             ? objectPath["contents/".Length..]
             : objectPath;
@@ -191,11 +216,65 @@ internal sealed class ReleaseBundle
                root.TryGetProperty("encoding", out var encoding) && encoding.GetString() == "base64" &&
                root.TryGetProperty("path", out var path) && path.GetString() == expectedPath,
             $"Bundle response {relativePath} is not the immutable contents object named by {immutableRef}.");
-        var content = GetString(root, "content").Replace("\n", string.Empty, StringComparison.Ordinal);
-        Assert(Sha256.IsMatch(Convert.ToHexString(Convert.FromBase64String(content)).ToLowerInvariant()) ||
-               content.Length > 0,
-            $"Bundle response {relativePath} does not contain valid base64 contents.");
+        var encoded = GetString(root, "content").Replace("\n", string.Empty, StringComparison.Ordinal)
+            .Replace("\r", string.Empty, StringComparison.Ordinal);
+        byte[] content;
+        try
+        {
+            content = Convert.FromBase64String(encoded);
+        }
+        catch (FormatException exception)
+        {
+            throw new InvalidOperationException($"Bundle response {relativePath} contains invalid base64 content.", exception);
+        }
+
+        Assert(root.TryGetProperty("sha", out var sha) && sha.GetString() == GitBlobSha(content),
+            $"Bundle response {relativePath} does not preserve the exact Git contents blob identity.");
+        return content;
     }
+
+    internal static string GitBlobSha(byte[] content)
+    {
+        var prefix = Encoding.UTF8.GetBytes($"blob {content.Length}\0");
+        var input = new byte[prefix.Length + content.Length];
+        Buffer.BlockCopy(prefix, 0, input, 0, prefix.Length);
+        Buffer.BlockCopy(content, 0, input, prefix.Length, content.Length);
+        return Convert.ToHexString(SHA1.HashData(input)).ToLowerInvariant();
+    }
+
+    private static bool IsSafeRelativePath(string path) =>
+        !string.IsNullOrWhiteSpace(path) &&
+        !Path.IsPathRooted(path) &&
+        path.Replace('\\', '/').Split('/').All(part => part is not "" and not "." and not "..");
+
+    internal static string ExpectedEndpoint(string immutableRef)
+    {
+        var separator = immutableRef.IndexOf(':');
+        var repositoryAndCommit = immutableRef[..separator];
+        var objectPath = immutableRef[(separator + 1)..];
+        var at = repositoryAndCommit.IndexOf('@');
+        var repository = repositoryAndCommit[..at];
+        var commit = repositoryAndCommit[(at + 1)..];
+        return objectPath switch
+        {
+            _ when objectPath.StartsWith("contents/", StringComparison.Ordinal) =>
+                $"repos/{repository}/{objectPath}?ref={commit}",
+            _ when objectPath.StartsWith("commits/", StringComparison.Ordinal) ||
+                   objectPath.StartsWith("pulls/", StringComparison.Ordinal) ||
+                   objectPath.StartsWith("actions/", StringComparison.Ordinal) =>
+                $"repos/{repository}/{objectPath}",
+            _ when objectPath.StartsWith("git/trees/", StringComparison.Ordinal) =>
+                $"repos/{repository}/{objectPath}?recursive=1",
+            _ when objectPath.StartsWith("git/", StringComparison.Ordinal) =>
+                $"repos/{repository}/{objectPath}",
+            _ => $"repos/{repository}/contents/{objectPath}?ref={commit}"
+        };
+    }
+
+    internal static bool IsReaderAnchorReference(string immutableRef, string hostRef) =>
+        immutableRef.StartsWith($"{HostRepository}@{hostRef}:", StringComparison.OrdinalIgnoreCase) &&
+        (immutableRef.Contains(":commits/", StringComparison.OrdinalIgnoreCase) ||
+         immutableRef.Contains(":git/trees/", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsWithin(string root, string path)
     {
@@ -222,7 +301,7 @@ internal sealed class ReleaseBundle
     private static string GetString(JsonElement element, string property)
     {
         Assert(element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String,
-            $"Bundle manifest property {property} is required and must be a string.");
+            $"Bundle property {property} is required and must be a string.");
         return value.GetString() ?? string.Empty;
     }
 
@@ -230,7 +309,7 @@ internal sealed class ReleaseBundle
     {
         var result = 0;
         Assert(element.TryGetProperty(property, out var value) && value.TryGetInt32(out result),
-            $"Bundle manifest property {property} is required and must be an integer.");
+            $"Bundle property {property} is required and must be an integer.");
         return result;
     }
 
