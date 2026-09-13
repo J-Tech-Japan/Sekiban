@@ -152,6 +152,63 @@ fi
 
 run_net10 "$validator" package --package "$package_path" --expected-version "$version"
 
+# G79 F5: compare two clean real packs plus a signed public copy by semantic
+# manifest, not archive bytes.  NuGet signatures and core-properties are
+# intentionally volatile; nuspec identity and every other uncompressed entry
+# remain exact.  A changed same-version payload must still reject, while a
+# missing remote artifact models first publication.
+real_retry_a_dir="$work_root/real-retry-a"
+real_retry_b_dir="$work_root/real-retry-b"
+mkdir -p "$real_retry_a_dir" "$real_retry_b_dir"
+carrier_project="$repo_root/templates/Sekiban.Dcb.Templates/Sekiban.Dcb.Templates.csproj"
+run_net10 restore "$carrier_project" --configfile "$nuget_config" --no-http-cache --nologo
+run_net9 pack "$carrier_project" -c Release --no-restore --nologo \
+  -o "$real_retry_a_dir" -p:PackageVersion="$version"
+run_net9 pack "$carrier_project" -c Release --no-restore --nologo \
+  -o "$real_retry_b_dir" -p:PackageVersion="$version"
+real_retry_a="$(find "$real_retry_a_dir" -maxdepth 1 -name "Sekiban.Dcb.Templates.${version}.nupkg" -print -quit)"
+real_retry_b="$(find "$real_retry_b_dir" -maxdepth 1 -name "Sekiban.Dcb.Templates.${version}.nupkg" -print -quit)"
+[[ -f "$real_retry_a" && -f "$real_retry_b" ]] || {
+  echo "Two clean real template packs were not produced for semantic retry proof." >&2
+  exit 1
+}
+real_retry_feed="$work_root/real-retry-feed"
+mkdir -p "$real_retry_feed/sekiban.dcb.templates/$version"
+real_retry_remote="$real_retry_feed/sekiban.dcb.templates/$version/sekiban.dcb.templates.$version.nupkg"
+cp "$real_retry_b" "$real_retry_remote"
+python3 - "$real_retry_remote" <<'PY'
+from zipfile import ZIP_DEFLATED, ZipFile
+import sys
+
+with ZipFile(sys.argv[1], "a", ZIP_DEFLATED) as archive:
+    archive.writestr(
+        "package/services/digital-signature/repository.signature.p7s",
+        "volatile public signature",
+    )
+PY
+"$script_dir/validate-release-tags.sh" --check-template-retry \
+  --package "$real_retry_a" --version "$version" \
+  --feed-base-url "file://$real_retry_feed" --request-timeout-seconds 2
+real_retry_mutant="$work_root/real-retry-changed.nupkg"
+cp "$real_retry_a" "$real_retry_mutant"
+python3 - "$real_retry_mutant" <<'PY'
+from zipfile import ZIP_DEFLATED, ZipFile
+import sys
+
+with ZipFile(sys.argv[1], "a", ZIP_DEFLATED) as archive:
+    archive.writestr("content/changed-same-version.txt", "changed payload")
+PY
+if "$script_dir/validate-release-tags.sh" --check-template-retry \
+    --package "$real_retry_mutant" --version "$version" \
+    --feed-base-url "file://$real_retry_feed" --request-timeout-seconds 2; then
+  echo "A changed same-version real pack unexpectedly passed the retry guard." >&2
+  exit 1
+fi
+rm "$real_retry_remote"
+"$script_dir/validate-release-tags.sh" --check-template-retry \
+  --package "$real_retry_a" --version "$version" \
+  --feed-base-url "file://$real_retry_feed" --request-timeout-seconds 2
+
 template_hive="$work_root/template-hive"
 run_net9 new install "$package_path" --debug:custom-hive "$template_hive" --force
 
@@ -408,10 +465,20 @@ expect_failure run_net10 "$validator" package --package "$packed_readme_mutant" 
 
 copy_workflow_fixture() {
   local destination="$1"
-  mkdir -p "$destination/.github/workflows" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation"
+  mkdir -p "$destination/.github/workflows" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation" \
+    "$destination/dcb/tests/Sekiban.Dcb.Orleans.Tests" "$destination/dcb/src"
   cp "$repo_root/.github/workflows/dcb_template_validation.yml" "$destination/.github/workflows/dcb_template_validation.yml"
+  cp "$repo_root/.github/workflows/packagesDcb.yml" "$destination/.github/workflows/packagesDcb.yml"
   cp "$repo_root/.github/workflows/packagesDcbTemplate.yml" "$destination/.github/workflows/packagesDcbTemplate.yml"
+  cp "$repo_root/.github/workflows/run_test_dcb.yml" "$destination/.github/workflows/run_test_dcb.yml"
+  cp "$repo_root/.github/workflows/dcb_azure_queue_packaged_consumer.yml" "$destination/.github/workflows/dcb_azure_queue_packaged_consumer.yml"
+  cp "$repo_root/dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh" \
+    "$destination/dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh"
   cp "$script_dir/run-packaged-consumer.sh" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh"
+  cp "$script_dir/run-status-composition.sh" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation/run-status-composition.sh"
+  cp "$script_dir/validate-release-tags.sh" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh"
+  cp "$script_dir/read-host-release-record.sh" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh"
+  cp -R "$repo_root/dcb/src/." "$destination/dcb/src/"
 }
 
 # SEK-G47 fixture family 5: route removal and step reordering must fail structurally.
@@ -423,7 +490,7 @@ expect_failure run_net10 "$validator" workflow --repo-root "$workflow_route_muta
 
 workflow_order_mutant="$work_root/workflow-order-mutant"
 copy_workflow_fixture "$workflow_order_mutant"
-perl -0pi -e 's{(      - name: Validate packed consumer path\n        run: \|\n          dcb/tests/Sekiban\.Dcb\.TemplateValidation/run-packaged-consumer\.sh[^\n]*\n\n)(      - name: Push Template\n        run: \|\n          dotnet nuget push out/\*\.nupkg[^\n]*\n)}{$2$1}s' \
+perl -0pi -e 's{(      - name: Validate packed consumer path\n.*?)(      - name: Push Template\n.*?)(      - name: Wait for exact public template visibility)}{$2$1$3}s' \
   "$workflow_order_mutant/.github/workflows/packagesDcbTemplate.yml"
 expect_failure run_net10 "$validator" workflow --repo-root "$workflow_order_mutant"
 
@@ -443,6 +510,18 @@ copy_workflow_fixture "$publish_workflow_mutant"
 perl -0pi -e 's/^.*validate-release-tags\.sh --check-publish-parity.*\n//m' "$publish_workflow_mutant/.github/workflows/packagesDcbTemplate.yml"
 expect_failure run_net10 "$validator" workflow --repo-root "$publish_workflow_mutant"
 
+library_record_invocation_mutant="$work_root/library-record-invocation-mutant"
+copy_workflow_fixture "$library_record_invocation_mutant"
+perl -0pi -e 's/read-host-release-record\.sh/removed-record-reader.sh/g' \
+  "$library_record_invocation_mutant/.github/workflows/packagesDcb.yml"
+expect_failure run_net10 "$validator" workflow --repo-root "$library_record_invocation_mutant"
+
+template_record_invocation_mutant="$work_root/template-record-invocation-mutant"
+copy_workflow_fixture "$template_record_invocation_mutant"
+perl -0pi -e 's/read-host-release-record\.sh/removed-record-reader.sh/g' \
+  "$template_record_invocation_mutant/.github/workflows/packagesDcbTemplate.yml"
+expect_failure run_net10 "$validator" workflow --repo-root "$template_record_invocation_mutant"
+
 publish_retry_mutant="$work_root/publish-retry-mutant"
 copy_workflow_fixture "$publish_retry_mutant"
 perl -0pi -e 's/ --skip-duplicate//g' "$publish_retry_mutant/.github/workflows/packagesDcbTemplate.yml"
@@ -461,22 +540,22 @@ release_record="$script_dir/fixtures/release-record/valid-complete.json"
 run_net10 "$validator" release-record --record "$release_record" --repo-root "$repo_root" --expected-version "$version" --state complete
 
 prepared_record="$work_root/release-prepared.json"
-jq '.stage = "prepared" | .history = ["prepared"] | del(.library_tag, .template_tag, .packages, .template, .library_release, .template_release, .artifacts_verified, .release_bodies, .closure)' \
+jq '.stage = "prepared" | .history = ["prepared"] | del(.library_tag, .template_tag, .packages, .template, .library_release, .template_release, .closure)' \
   "$release_record" > "$prepared_record"
 run_net10 "$validator" release-record --record "$prepared_record" --repo-root "$repo_root" --expected-version "$version" --state prepared
 
 library_tagged_record="$work_root/release-library-tagged.json"
-jq '.stage = "library-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete"] | del(.template_tag, .packages, .template, .library_release, .template_release, .artifacts_verified, .release_bodies, .closure)' \
+jq '.stage = "library-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete"] | del(.template_tag, .packages, .template, .library_release, .template_release, .closure)' \
   "$release_record" > "$library_tagged_record"
 run_net10 "$validator" release-record --record "$library_tagged_record" --repo-root "$repo_root" --expected-version "$version" --state 'library-tagged/incomplete'
 
 libraries_verified_record="$work_root/release-libraries-verified.json"
-jq '.stage = "libraries-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified"] | del(.template_tag, .template, .template_release, .artifacts_verified, .release_bodies, .closure)' \
+jq '.stage = "libraries-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified"] | del(.template_tag, .template, .template_release, .closure)' \
   "$release_record" > "$libraries_verified_record"
 run_net10 "$validator" release-record --record "$libraries_verified_record" --repo-root "$repo_root" --expected-version "$version" --state libraries-verified
 
 template_tagged_record="$work_root/release-template-tagged.json"
-jq '.stage = "template-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete"] | del(.template, .template_release, .artifacts_verified, .release_bodies, .closure)' \
+jq '.stage = "template-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete"] | del(.template, .template_release, .closure)' \
   "$release_record" > "$template_tagged_record"
 run_net10 "$validator" release-record --record "$template_tagged_record" --repo-root "$repo_root" --expected-version "$version" --state 'template-tagged/incomplete'
 
@@ -489,8 +568,8 @@ stale_ci_record="$work_root/release-stale-ci.json"
 jq '.checks[0].head_sha = "9999999999999999999999999999999999999999"' "$release_record" > "$stale_ci_record"
 expect_failure run_net10 "$validator" release-record --record "$stale_ci_record" --repo-root "$repo_root" --expected-version "$version" --state complete
 
-# Every CI identity/time/workflow field is required for a non-prepared state.
-for check_field in name workflow run_id job_id attempt event superseded started_at_utc completed_at_utc head_sha conclusion; do
+# Every CI identity/time/workflow field is required in every evidence state.
+for check_field in name workflow_file workflow_name job_name run_id job_id run_url job_url attempt event superseded started_at_utc completed_at_utc head_sha conclusion; do
   missing_check="$work_root/release-missing-check-${check_field}.json"
   jq "del(.checks[0].${check_field})" "$release_record" > "$missing_check"
   expect_failure run_net10 "$validator" release-record --record "$missing_check" --repo-root "$repo_root" --expected-version "$version" --state complete
@@ -505,8 +584,26 @@ jq '.checks[1].name = .checks[0].name' "$release_record" > "$duplicate_check"
 expect_failure run_net10 "$validator" release-record --record "$duplicate_check" --repo-root "$repo_root" --expected-version "$version" --state complete
 
 wrong_event="$work_root/release-wrong-event.json"
-jq '.checks[0].event = "push"' "$release_record" > "$wrong_event"
+jq '.checks[0].event = "pull_request"' "$release_record" > "$wrong_event"
 expect_failure run_net10 "$validator" release-record --record "$wrong_event" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+non_numeric_run="$work_root/release-non-numeric-run.json"
+jq '.checks[0].run_id = "run-1001"' "$release_record" > "$non_numeric_run"
+expect_failure run_net10 "$validator" release-record --record "$non_numeric_run" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+for identity_field in workflow_file workflow_name job_name run_url job_url; do
+  wrong_identity="$work_root/release-wrong-${identity_field}.json"
+  jq --arg field "$identity_field" '.checks[0][$field] = "https://example.invalid/wrong"' "$release_record" > "$wrong_identity"
+  expect_failure run_net10 "$validator" release-record --record "$wrong_identity" --repo-root "$repo_root" --expected-version "$version" --state complete
+done
+
+wrong_integration_pr="$work_root/release-wrong-integration-pr.json"
+jq '.integration_pr = "https://github.com/J-Tech-Japan/Sekiban/pull/9999"' "$release_record" > "$wrong_integration_pr"
+expect_failure run_net10 "$validator" release-record --record "$wrong_integration_pr" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+wrong_record_source="$work_root/release-wrong-record-source.json"
+jq '.record_source.repository = "example/forged"' "$release_record" > "$wrong_record_source"
+expect_failure run_net10 "$validator" release-record --record "$wrong_record_source" --repo-root "$repo_root" --expected-version "$version" --state complete
 
 superseded_check="$work_root/release-superseded-check.json"
 jq '.checks[0].superseded = true' "$release_record" > "$superseded_check"
@@ -603,5 +700,21 @@ expect_failure run_net10 "$validator" release-record --record "$complete_before_
 missing_review="$work_root/release-missing-review.json"
 jq 'del(.artifacts_verified)' "$release_record" > "$missing_review"
 expect_failure run_net10 "$validator" release-record --record "$missing_review" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+wrong_review_url="$work_root/release-wrong-review-url.json"
+jq '.artifacts_verified.review_url = "https://github.com/J-Tech-Japan/Sekiban/pull/1235"' "$release_record" > "$wrong_review_url"
+expect_failure run_net10 "$validator" release-record --record "$wrong_review_url" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+wrong_review_id="$work_root/release-wrong-review-id.json"
+jq '.artifacts_verified.review_id = "not-numeric"' "$release_record" > "$wrong_review_id"
+expect_failure run_net10 "$validator" release-record --record "$wrong_review_id" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+prepared_empty_checks="$work_root/release-prepared-empty-checks.json"
+jq '.stage = "prepared" | .history = ["prepared"] | .checks = []' "$release_record" > "$prepared_empty_checks"
+expect_failure run_net10 "$validator" release-record --record "$prepared_empty_checks" --repo-root "$repo_root" --expected-version "$version" --state prepared
+
+prepared_missing_body="$work_root/release-prepared-missing-body.json"
+jq '.stage = "prepared" | .history = ["prepared"] | del(.release_bodies)' "$release_record" > "$prepared_missing_body"
+expect_failure run_net10 "$validator" release-record --record "$prepared_missing_body" --repo-root "$repo_root" --expected-version "$version" --state prepared
 
 echo "Pack -> isolated install -> five generated outputs -> local-feed restore -> build -> 11 bundled test projects passed."

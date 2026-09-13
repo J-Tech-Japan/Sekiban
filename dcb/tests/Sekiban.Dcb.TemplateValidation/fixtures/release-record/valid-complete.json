@@ -1,18 +1,23 @@
 {
   "schema_version": 1,
   "version": "10.22.0",
+  "record_source": {
+    "repository": "J-Tech-Japan/Sekiban-Design",
+    "path": "intents/sekiban/releases/dcb-v10.22.0-release-record.json",
+    "commit_sha": "dddddddddddddddddddddddddddddddddddddddd",
+    "version": "10.22.0"
+  },
   "integration_pr": "https://github.com/J-Tech-Japan/Sekiban/pull/1235",
   "merged_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "merged_at_utc": "2026-09-12T09:00:00Z",
   "stage": "complete",
   "history": ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete", "artifacts-verified", "complete"],
   "checks": [
-    {"name":"dcbTestsNet9","workflow":"run_test_dcb.yml","run_id":"1001","job_id":"2001","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:01:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
-    {"name":"dcbTestsNet10","workflow":"run_test_dcb.yml","run_id":"1002","job_id":"2002","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:02:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
-    {"name":"packagedConsumer","workflow":"dcb_template_validation.yml","run_id":"1003","job_id":"2003","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:03:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
-    {"name":"templateConsumer","workflow":"dcb_template_validation.yml","run_id":"1004","job_id":"2004","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:04:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
-    {"name":"SonarCloud Code Analysis","workflow":"sonar.yml","run_id":"1005","job_id":"2005","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:05:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
-    {"name":"diff","workflow":"diff","run_id":"1006","job_id":"2006","attempt":1,"event":"pull_request","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:06:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
-    {"name":"exact-head-review","workflow":"Review","run_id":"review-1007","job_id":"review-2007","attempt":1,"event":"pull_request_review","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:07:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"}
+    {"name":"dcbTestsNet9","workflow_file":".github/workflows/run_test_dcb.yml","workflow_name":"Run DCB Tests","job_name":"dcbTestsNet9","run_id":"1001","job_id":"2001","run_url":"https://github.com/J-Tech-Japan/Sekiban/actions/runs/1001","job_url":"https://github.com/J-Tech-Japan/Sekiban/actions/runs/1001/job/2001","attempt":1,"event":"workflow_dispatch","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:01:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
+    {"name":"dcbTestsNet10","workflow_file":".github/workflows/run_test_dcb.yml","workflow_name":"Run DCB Tests","job_name":"dcbTestsNet10","run_id":"1002","job_id":"2002","run_url":"https://github.com/J-Tech-Japan/Sekiban/actions/runs/1002","job_url":"https://github.com/J-Tech-Japan/Sekiban/actions/runs/1002/job/2002","attempt":1,"event":"workflow_dispatch","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:02:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
+    {"name":"packagedConsumer","workflow_file":".github/workflows/dcb_azure_queue_packaged_consumer.yml","workflow_name":"DCB Azure Queue packaged-consumer pull-request validation","job_name":"packaged-consumer","run_id":"1003","job_id":"2003","run_url":"https://github.com/J-Tech-Japan/Sekiban/actions/runs/1003","job_url":"https://github.com/J-Tech-Japan/Sekiban/actions/runs/1003/job/2003","attempt":1,"event":"workflow_dispatch","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:03:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
+    {"name":"templateConsumer","workflow_file":".github/workflows/dcb_template_validation.yml","workflow_name":"DCB template packaged-consumer validation","job_name":"packaged-consumer","run_id":"1004","job_id":"2004","run_url":"https://github.com/J-Tech-Japan/Sekiban/actions/runs/1004","job_url":"https://github.com/J-Tech-Japan/Sekiban/actions/runs/1004/job/2004","attempt":1,"event":"workflow_dispatch","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:04:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"},
+    {"name":"SonarCloud Code Analysis","workflow_file":"SonarCloud","workflow_name":"SonarCloud","job_name":"SonarCloud Code Analysis","run_id":"1005","job_id":"1005","run_url":"https://github.com/J-Tech-Japan/Sekiban/runs/1005","job_url":"https://github.com/J-Tech-Japan/Sekiban/runs/1005","attempt":1,"event":"workflow_dispatch","superseded":false,"started_at_utc":"2026-09-12T10:00:00Z","completed_at_utc":"2026-09-12T10:05:00Z","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","conclusion":"success"}
   ],
   "library_tag": {
     "name": "dcb-v10.22.0",
@@ -26,7 +31,8 @@
     "url": "https://github.com/J-Tech-Japan/Sekiban/releases/tag/dcb-v10.22.0",
     "draft": false,
     "asset_count": 26,
-    "body_sha256": "42946d4334d981229ed1febfb5cb7a99fac7487c5917c5ddff041272ca966e20"
+    "body_sha256": "42946d4334d981229ed1febfb5cb7a99fac7487c5917c5ddff041272ca966e20",
+    "observed_at_utc": "2026-09-12T10:30:00Z"
   },
   "packages": [
     {"id":"Sekiban.Dcb.BlobStorage.AzureStorage","version":"10.22.0","public_url":"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.blobstorage.azurestorage/10.22.0/sekiban.dcb.blobstorage.azurestorage.10.22.0.nupkg","asset_count":1},
@@ -68,7 +74,8 @@
     "url": "https://github.com/J-Tech-Japan/Sekiban/releases/tag/dcbTemplates-v10.22.0",
     "draft": false,
     "asset_count": 1,
-    "body_sha256": "5438f24ec6b27b67d6e71a763dd8c20e2e887799acc45f73b618aac346906fc5"
+    "body_sha256": "5438f24ec6b27b67d6e71a763dd8c20e2e887799acc45f73b618aac346906fc5",
+    "observed_at_utc": "2026-09-12T10:45:00Z"
   },
   "template": {
     "package_id": "Sekiban.Dcb.Templates",
@@ -78,8 +85,11 @@
   },
   "artifacts_verified": {
     "review_url": "https://github.com/J-Tech-Japan/Sekiban/pull/1235#pullrequestreview-5188648124",
+    "review_id": "5188648124",
+    "reviewer": "independent-reviewer",
+    "state": "approved",
     "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "approved_at_utc": "2026-09-12T10:50:00Z"
+    "approved_at_utc": "2026-09-12T10:10:00Z"
   },
   "release_bodies": {
     "library_en_sha256": "e97c2f737c0eef6436a360d732ef243c1f35481e382ae31b0be3811da568d947",

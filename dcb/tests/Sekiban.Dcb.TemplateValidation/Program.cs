@@ -632,6 +632,12 @@ internal static class Program
             "tests",
             "Sekiban.Dcb.Orleans.Tests",
             "run-packaged-consumer.sh");
+        var hostRecordReader = Path.Combine(
+            repoRoot,
+            "dcb",
+            "tests",
+            "Sekiban.Dcb.TemplateValidation",
+            "read-host-release-record.sh");
         Assert(File.Exists(validationWorkflow), "The DCB template validation workflow is missing.");
         Assert(File.Exists(dcbTestWorkflow), "The DCB test workflow is missing.");
         Assert(File.Exists(dcbPackageWorkflow), "The DCB package workflow is missing.");
@@ -639,6 +645,7 @@ internal static class Program
         Assert(File.Exists(publishWorkflow), "The DCB template publish workflow is missing.");
         Assert(File.Exists(packagedConsumerScript), "The DCB packaged-consumer script is missing.");
         Assert(File.Exists(azureQueueConsumerScript), "The Azure Queue packaged-consumer script is missing.");
+        Assert(File.Exists(hostRecordReader), "The immutable host release-record reader is missing.");
         var validation = File.ReadAllText(validationWorkflow);
         var dcbTest = File.ReadAllText(dcbTestWorkflow);
         var dcbPackage = File.ReadAllText(dcbPackageWorkflow);
@@ -778,9 +785,20 @@ internal static class Program
     private static void ValidatePublishWorkflow(string dcbPackage, string publish)
     {
         var dcbPackageSteps = ReadNamedWorkflowSteps(dcbPackage);
+        var libraryRecord = RequireNamedStep(dcbPackageSteps, "Read immutable host-owned release record");
+        var libraryRecordValidation = RequireNamedStep(dcbPackageSteps, "Validate canonical library-tagged release state before finalization");
         var libraryPush = RequireNamedStep(dcbPackageSteps, "Push to NuGet.org");
         var libraryVisibility = RequireNamedStep(dcbPackageSteps, "Wait for exact public library visibility");
         var libraryRelease = RequireNamedStep(dcbPackageSteps, "Create GitHub Release");
+        Assert(libraryRecord.Body.Contains("read-host-release-record.sh", StringComparison.Ordinal) &&
+               libraryRecord.Body.Contains("--state 'library-tagged/incomplete'", StringComparison.Ordinal),
+            "The library workflow must read the immutable host record at library-tagged/incomplete.");
+        Assert(libraryRecordValidation.Body.Contains("release-record --record", StringComparison.Ordinal) &&
+               libraryRecordValidation.Body.Contains("--state 'library-tagged/incomplete'", StringComparison.Ordinal),
+            "The library workflow must validate the canonical library-tagged state before finalization.");
+        Assert(libraryRecord.Ordinal < libraryRecordValidation.Ordinal &&
+               libraryRecordValidation.Ordinal < libraryPush.Ordinal,
+            "The library record gate must precede package publication and release finalization.");
         Assert(dcbPackage.Contains("body_path: out/library-release-body.md", StringComparison.Ordinal) &&
                dcbPackage.Contains("draft: false", StringComparison.Ordinal),
             "The library release must use the reviewed bilingual body and be explicitly non-draft.");
@@ -788,6 +806,8 @@ internal static class Program
             "The library workflow must wait for exact public visibility before creating its release.");
 
         var publishSteps = ReadNamedWorkflowSteps(publish);
+        var templateRecord = RequireNamedStep(publishSteps, "Read immutable host-owned release record");
+        var templateRecordValidation = RequireNamedStep(publishSteps, "Validate canonical libraries-verified state before template pack");
         var publishParity = RequireNamedStep(publishSteps, "Verify published library/template parity before pack");
         var packageAvailability = RequireNamedStep(publishSteps, "Wait for all published DCB packages");
         var pack = RequireNamedStep(publishSteps, "Pack Template");
@@ -799,6 +819,15 @@ internal static class Program
         var retryGuard = RequireNamedStep(publishSteps, "Reject changed same-version template before duplicate-safe retry");
         var templateVisibility = RequireNamedStep(publishSteps, "Wait for exact public template visibility");
         var templateRelease = RequireNamedStep(publishSteps, "Create GitHub Release");
+        Assert(templateRecord.Body.Contains("read-host-release-record.sh", StringComparison.Ordinal) &&
+               templateRecord.Body.Contains("--state libraries-verified", StringComparison.Ordinal),
+            "The template workflow must read the immutable host record at libraries-verified.");
+        Assert(templateRecordValidation.Body.Contains("release-record --record", StringComparison.Ordinal) &&
+               templateRecordValidation.Body.Contains("--state libraries-verified", StringComparison.Ordinal),
+            "The template workflow must validate the canonical libraries-verified state before packing.");
+        Assert(templateRecord.Ordinal < templateRecordValidation.Ordinal &&
+               templateRecordValidation.Ordinal < pack.Ordinal,
+            "The template record gate must precede template packing.");
         Assert(publishParity.Body.Contains("validate-release-tags.sh --check-publish-parity", StringComparison.Ordinal),
             "The publish parity workflow step must run the parity gate.");
         Assert(publishParity.Body.Contains("--check-library-verified", StringComparison.Ordinal),

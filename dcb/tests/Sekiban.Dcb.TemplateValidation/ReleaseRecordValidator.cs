@@ -16,10 +16,21 @@ internal static class ReleaseRecordValidator
     private const string ArtifactsVerifiedProperty = "artifacts_verified";
     private const string ClosureProperty = "closure";
     private const string CompletedAtUtcProperty = "completed_at_utc";
-    private const string PullRequestEvent = "pull_request";
+    private const string WorkflowDispatchEvent = "workflow_dispatch";
+    private const string PushEvent = "push";
     private const string ReleasesDirectory = "releases";
     private const string ClosedState = "closed";
     private const string Repository = "J-Tech-Japan/Sekiban";
+    private const string IntegrationPullRequest = "https://github.com/J-Tech-Japan/Sekiban/pull/1235";
+    private const string HostRecordRepository = "J-Tech-Japan/Sekiban-Design";
+    private const string HostRecordPath = "intents/sekiban/releases/dcb-v10.22.0-release-record.json";
+    private const string SourceIssueCommentPattern =
+        "^https://github\\.com/J-Tech-Japan/Sekiban/issues/1234#issuecomment-[0-9]+$";
+    private const string Issue1185CommentPattern =
+        "^https://github\\.com/J-Tech-Japan/Sekiban/issues/1185#issuecomment-[0-9]+$";
+    private const string Issue1230CommentPattern =
+        "^https://github\\.com/J-Tech-Japan/Sekiban/issues/1230#issuecomment-[0-9]+$";
+    private const string RequiredLink = "https://github.com/J-Tech-Japan/Sekiban/issues/1234";
 
     private static readonly string[] Stages =
     [
@@ -72,13 +83,13 @@ internal static class ReleaseRecordValidator
 
     private static readonly RequiredCheck[] RequiredChecks =
     [
-        new("dcbTestsNet9", "run_test_dcb.yml", PullRequestEvent),
-        new("dcbTestsNet10", "run_test_dcb.yml", PullRequestEvent),
-        new("packagedConsumer", "dcb_template_validation.yml", PullRequestEvent),
-        new("templateConsumer", "dcb_template_validation.yml", PullRequestEvent),
-        new("SonarCloud Code Analysis", "sonar.yml", PullRequestEvent),
-        new("diff", "diff", PullRequestEvent),
-        new("exact-head-review", "Review", "pull_request_review")
+        new("dcbTestsNet9", ".github/workflows/run_test_dcb.yml", "Run DCB Tests", "dcbTestsNet9"),
+        new("dcbTestsNet10", ".github/workflows/run_test_dcb.yml", "Run DCB Tests", "dcbTestsNet10"),
+        new("packagedConsumer", ".github/workflows/dcb_azure_queue_packaged_consumer.yml",
+            "DCB Azure Queue packaged-consumer pull-request validation", "packaged-consumer"),
+        new("templateConsumer", ".github/workflows/dcb_template_validation.yml",
+            "DCB template packaged-consumer validation", "packaged-consumer"),
+        new("SonarCloud Code Analysis", "SonarCloud", "SonarCloud", "SonarCloud Code Analysis")
     ];
 
     internal static void Validate(
@@ -106,29 +117,32 @@ internal static class ReleaseRecordValidator
 
         var mergedSha = GetString(root, "merged_sha");
         Assert(Commit.IsMatch(mergedSha), "Release record merged_sha must be a 40-character commit SHA.");
-        Assert(!string.IsNullOrWhiteSpace(GetString(root, "integration_pr")),
-            "Release record integration_pr is required.");
+        Assert(GetString(root, "integration_pr") == IntegrationPullRequest,
+            $"Release record integration_pr must be {IntegrationPullRequest}.");
+        var mergedAt = GetTimestamp(root, "merged_at_utc");
+        ValidateRecordSource(root, expectedVersion);
         ValidateHistory(root, state);
-        ValidateChecks(root, mergedSha, state);
+        ValidateChecks(root, mergedSha, mergedAt);
+        ValidateArtifactsVerified(root, mergedSha);
+        ValidateBodies(root, expectedVersion, repoRoot);
 
         switch (Array.IndexOf(Stages, state))
         {
             case 0:
                 AssertAbsent(root, LibraryTagProperty, TemplateTagProperty, "packages", TemplateProperty,
-                    ReleaseBodiesProperty, LibraryReleaseProperty, TemplateReleaseProperty,
-                    ArtifactsVerifiedProperty, ClosureProperty);
+                    LibraryReleaseProperty, TemplateReleaseProperty, ClosureProperty);
                 break;
             case 1:
                 ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
-                AssertAbsent(root, TemplateTagProperty, "packages", TemplateProperty, ReleaseBodiesProperty,
-                    LibraryReleaseProperty, TemplateReleaseProperty, ArtifactsVerifiedProperty, ClosureProperty);
+                AssertAbsent(root, TemplateTagProperty, "packages", TemplateProperty,
+                    LibraryReleaseProperty, TemplateReleaseProperty, ClosureProperty);
                 break;
             case 2:
                 ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
                 ValidatePackages(root, expectedVersion);
                 ValidateReleaseEvidence(root, LibraryReleaseProperty, $"dcb-v{expectedVersion}", expectedVersion, 26, repoRoot);
-                AssertAbsent(root, TemplateTagProperty, TemplateProperty, ReleaseBodiesProperty,
-                    TemplateReleaseProperty, ArtifactsVerifiedProperty, ClosureProperty);
+                AssertAbsent(root, TemplateTagProperty, TemplateProperty,
+                    TemplateReleaseProperty, ClosureProperty);
                 break;
             case 3:
                 ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
@@ -136,8 +150,7 @@ internal static class ReleaseRecordValidator
                 ValidateReleaseEvidence(root, LibraryReleaseProperty, $"dcb-v{expectedVersion}", expectedVersion, 26, repoRoot);
                 ValidateTag(root, TemplateTagProperty, $"dcbTemplates-v{expectedVersion}", mergedSha);
                 ValidateTagOrder(root);
-                AssertAbsent(root, TemplateProperty, ReleaseBodiesProperty, TemplateReleaseProperty,
-                    ArtifactsVerifiedProperty, ClosureProperty);
+                AssertAbsent(root, TemplateProperty, TemplateReleaseProperty, ClosureProperty);
                 break;
             case 4:
                 ValidateTag(root, LibraryTagProperty, $"dcb-v{expectedVersion}", mergedSha);
@@ -147,8 +160,6 @@ internal static class ReleaseRecordValidator
                 ValidateTagOrder(root);
                 ValidateTemplate(root, expectedVersion);
                 ValidateReleaseEvidence(root, TemplateReleaseProperty, $"dcbTemplates-v{expectedVersion}", expectedVersion, 1, repoRoot);
-                ValidateArtifactsVerified(root, mergedSha);
-                ValidateBodies(root, expectedVersion, repoRoot);
                 AssertAbsent(root, ClosureProperty);
                 break;
             case 5:
@@ -159,8 +170,6 @@ internal static class ReleaseRecordValidator
                 ValidateTagOrder(root);
                 ValidateTemplate(root, expectedVersion);
                 ValidateReleaseEvidence(root, TemplateReleaseProperty, $"dcbTemplates-v{expectedVersion}", expectedVersion, 1, repoRoot);
-                ValidateArtifactsVerified(root, mergedSha);
-                ValidateBodies(root, expectedVersion, repoRoot);
                 ValidateClosure(root, GetTimestamp(GetObject(root, ArtifactsVerifiedProperty), "approved_at_utc"));
                 break;
             default:
@@ -183,21 +192,33 @@ internal static class ReleaseRecordValidator
         }
     }
 
-    private static void ValidateChecks(JsonElement root, string mergedSha, string state)
+    private static void ValidateRecordSource(JsonElement root, string expectedVersion)
+    {
+        var source = GetObject(root, "record_source");
+        Assert(GetString(source, "repository") == HostRecordRepository,
+            $"record_source.repository must be {HostRecordRepository}.");
+        Assert(GetString(source, "path") == HostRecordPath,
+            $"record_source.path must be {HostRecordPath}.");
+        Assert(Commit.IsMatch(GetString(source, "commit_sha")),
+            "record_source.commit_sha must be a 40-character immutable host commit SHA.");
+        Assert(GetString(source, "version") == expectedVersion,
+            "record_source.version must equal the release version.");
+    }
+
+    private static void ValidateChecks(JsonElement root, string mergedSha, DateTimeOffset mergedAt)
     {
         var checks = GetArray(root, "checks");
-        if (state == Stages[0])
-        {
-            _ = checks.GetArrayLength();
-            return;
-        }
-
         Assert(checks.GetArrayLength() == RequiredChecks.Length,
-            $"Release record stage {state} must contain exactly the required CI/review inventory.");
+            "Release record must contain exactly the required integrated-head CI inventory at every state.");
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var check in checks.EnumerateArray())
         {
-            foreach (var property in new[] { "name", "workflow", "run_id", "job_id", "event", "started_at_utc", CompletedAtUtcProperty, "head_sha", "conclusion" })
+            foreach (var property in new[]
+                     {
+                         "name", "workflow_file", "workflow_name", "job_name", "run_id", "job_id",
+                         "run_url", "job_url", "event", "started_at_utc", CompletedAtUtcProperty,
+                         "head_sha", "conclusion"
+                     })
             {
                 Assert(check.TryGetProperty(property, out var value) &&
                       value.ValueKind == JsonValueKind.String &&
@@ -209,10 +230,29 @@ internal static class ReleaseRecordValidator
             var definition = RequiredChecks.SingleOrDefault(required => required.Name == name);
             Assert(definition is not null, $"Release-record check '{name}' is not in the required inventory.");
             Assert(names.Add(name), $"Release-record check '{name}' is duplicated.");
-            Assert(check.GetProperty("workflow").GetString() == definition!.Workflow,
-                $"Release-record check '{name}' has the wrong workflow identity.");
-            Assert(check.GetProperty("event").GetString() == definition.Event,
-                $"Release-record check '{name}' has the wrong event.");
+            Assert(check.GetProperty("workflow_file").GetString() == definition!.WorkflowFile,
+                $"Release-record check '{name}' has the wrong workflow file identity.");
+            Assert(check.GetProperty("workflow_name").GetString() == definition.WorkflowName,
+                $"Release-record check '{name}' has the wrong workflow name identity.");
+            Assert(check.GetProperty("job_name").GetString() == definition.JobName,
+                $"Release-record check '{name}' has the wrong job identity.");
+            Assert(ulong.TryParse(check.GetProperty("run_id").GetString(), out var runId) && runId > 0,
+                $"Release-record check '{name}' requires a numeric run_id.");
+            Assert(ulong.TryParse(check.GetProperty("job_id").GetString(), out var jobId) && jobId > 0,
+                $"Release-record check '{name}' requires a numeric job_id.");
+            var runUrl = name == "SonarCloud Code Analysis"
+                ? $"https://github.com/{Repository}/runs/{runId}"
+                : $"https://github.com/{Repository}/actions/runs/{runId}";
+            var jobUrl = name == "SonarCloud Code Analysis"
+                ? $"https://github.com/{Repository}/runs/{runId}"
+                : $"https://github.com/{Repository}/actions/runs/{runId}/job/{jobId}";
+            Assert(GetString(check, "run_url") == runUrl,
+                $"Release-record check '{name}' has a non-canonical run URL.");
+            Assert(GetString(check, "job_url") == jobUrl,
+                $"Release-record check '{name}' has a non-canonical job URL.");
+            var eventName = GetString(check, "event");
+            Assert(eventName is WorkflowDispatchEvent or PushEvent,
+                $"Release-record check '{name}' must be an integrated-head push or workflow_dispatch run.");
             Assert(check.TryGetProperty("superseded", out var superseded) &&
                    superseded.ValueKind == JsonValueKind.False,
                 $"Release-record check '{name}' must be the unsuperseded successful attempt.");
@@ -225,6 +265,8 @@ internal static class ReleaseRecordValidator
                 "Release-record CI evidence must conclude success before artifact verification.");
             var started = ParseTimestamp(check.GetProperty("started_at_utc").GetString()!, "check.started_at_utc");
             var completed = ParseTimestamp(check.GetProperty(CompletedAtUtcProperty).GetString()!, $"check.{CompletedAtUtcProperty}");
+            Assert(started > mergedAt,
+                $"Release-record check '{name}' must start strictly after the integration merge.");
             Assert(completed > started, "Release-record check completion must strictly follow its start.");
         }
 
@@ -239,7 +281,10 @@ internal static class ReleaseRecordValidator
         Assert(Commit.IsMatch(GetString(tag, "object_id")), $"{propertyName}.object_id must be a tag object ID.");
         Assert(GetString(tag, "peeled_commit") == mergedSha,
             $"{propertyName}.peeled_commit must equal merged_sha.");
-        _ = ParseTimestamp(GetString(tag, "created_at_utc"), $"{propertyName}.created_at_utc");
+        var createdAt = ParseTimestamp(GetString(tag, "created_at_utc"), $"{propertyName}.created_at_utc");
+        var approvedAt = GetTimestamp(GetObject(root, ArtifactsVerifiedProperty), "approved_at_utc");
+        Assert(createdAt > approvedAt,
+            $"{propertyName}.created_at_utc must follow the independent exact-head review.");
     }
 
     private static void ValidateTagOrder(JsonElement root)
@@ -252,6 +297,12 @@ internal static class ReleaseRecordValidator
             $"{TemplateTagProperty}.created_at_utc");
         Assert(libraryCreated < templateCreated,
             "The library tag must be created before the template tag.");
+        if (root.TryGetProperty(LibraryReleaseProperty, out var libraryRelease))
+        {
+            var libraryObserved = GetTimestamp(libraryRelease, "observed_at_utc");
+            Assert(templateCreated > libraryObserved,
+                "The template tag must be observed only after the library release evidence.");
+        }
     }
 
     private static void ValidatePackages(JsonElement root, string expectedVersion)
@@ -297,6 +348,8 @@ internal static class ReleaseRecordValidator
         int expectedAssetCount,
         string? repoRoot)
     {
+        Assert(!string.IsNullOrWhiteSpace(repoRoot),
+            "Release evidence requires --repo-root so the current checked-in bodies can be verified.");
         var release = GetObject(root, propertyName);
         var expectedUrl = $"https://github.com/{Repository}/releases/tag/{expectedTag}";
         Assert(GetString(release, "repository") == Repository,
@@ -305,32 +358,45 @@ internal static class ReleaseRecordValidator
             $"{propertyName}.tag must be {expectedTag}.");
         Assert(GetString(release, "url") == expectedUrl,
             $"{propertyName}.url must be the exact GitHub Release URL.");
+        var tagCreatedAt = GetTimestamp(GetObject(root,
+                propertyName == LibraryReleaseProperty ? LibraryTagProperty : TemplateTagProperty),
+            "created_at_utc");
+        var observedAt = GetTimestamp(release, "observed_at_utc");
+        Assert(observedAt > tagCreatedAt,
+            $"{propertyName}.observed_at_utc must follow its tag observation.");
         Assert(release.TryGetProperty("draft", out var draft) && draft.ValueKind == JsonValueKind.False,
             $"{propertyName} must identify a finalized non-draft GitHub Release.");
         Assert(GetInt(release, "asset_count") == expectedAssetCount,
             $"{propertyName} must contain exactly {expectedAssetCount} release assets.");
         var bodyDigest = GetString(release, "body_sha256");
         Assert(Sha256.IsMatch(bodyDigest), $"{propertyName}.body_sha256 must be a SHA-256 digest.");
-        if (!string.IsNullOrWhiteSpace(repoRoot))
-        {
-            var en = Path.Combine(Path.GetFullPath(repoRoot), "docs", ReleasesDirectory,
-                propertyName == LibraryReleaseProperty ? $"dcb-v{expectedVersion}-library.en.md" : $"dcbTemplates-v{expectedVersion}.en.md");
-            var ja = Path.Combine(Path.GetFullPath(repoRoot), "docs", ReleasesDirectory,
-                propertyName == LibraryReleaseProperty ? $"dcb-v{expectedVersion}-library.ja.md" : $"dcbTemplates-v{expectedVersion}.ja.md");
-            Assert(File.Exists(en) && File.Exists(ja), $"{propertyName} body sources are required.");
-            using var body = new MemoryStream();
-            body.Write(File.ReadAllBytes(en));
-            body.Write(File.ReadAllBytes(ja));
-            var actualDigest = Convert.ToHexString(SHA256.HashData(body.ToArray())).ToLowerInvariant();
-            Assert(actualDigest == bodyDigest, $"{propertyName}.body_sha256 does not match the checked-in EN/JA body bytes.");
-        }
+        var en = Path.Combine(Path.GetFullPath(repoRoot!), "docs", ReleasesDirectory,
+            propertyName == LibraryReleaseProperty ? $"dcb-v{expectedVersion}-library.en.md" : $"dcbTemplates-v{expectedVersion}.en.md");
+        var ja = Path.Combine(Path.GetFullPath(repoRoot!), "docs", ReleasesDirectory,
+            propertyName == LibraryReleaseProperty ? $"dcb-v{expectedVersion}-library.ja.md" : $"dcbTemplates-v{expectedVersion}.ja.md");
+        Assert(File.Exists(en) && File.Exists(ja), $"{propertyName} body sources are required.");
+        using var body = new MemoryStream();
+        body.Write(File.ReadAllBytes(en));
+        body.Write(File.ReadAllBytes(ja));
+        var actualDigest = Convert.ToHexString(SHA256.HashData(body.ToArray())).ToLowerInvariant();
+        Assert(actualDigest == bodyDigest, $"{propertyName}.body_sha256 does not match the checked-in EN/JA body bytes.");
     }
 
     private static void ValidateArtifactsVerified(JsonElement root, string mergedSha)
     {
         var review = GetObject(root, ArtifactsVerifiedProperty);
-        Assert(Uri.TryCreate(GetString(review, "review_url"), UriKind.Absolute, out _),
-            "artifacts_verified.review_url must identify the independent exact-head Review.");
+        var reviewUrl = GetString(review, "review_url");
+        Assert(Regex.IsMatch(reviewUrl,
+                $"^https://github\\.com/{Regex.Escape(Repository)}/pull/1235#pullrequestreview-[0-9]+$",
+                RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)),
+            "artifacts_verified.review_url must be the canonical independent exact-head Review URL.");
+        Assert(ulong.TryParse(GetString(review, "review_id"), out var reviewId) && reviewId > 0 &&
+               reviewUrl.EndsWith(reviewId.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal),
+            "artifacts_verified.review_id must be numeric and match review_url.");
+        Assert(!string.IsNullOrWhiteSpace(GetString(review, "reviewer")),
+            "artifacts_verified.reviewer is required for independent review provenance.");
+        Assert(GetString(review, "state") == "approved",
+            "artifacts_verified.state must be approved.");
         Assert(GetString(review, "head_sha") == mergedSha,
             "artifacts_verified.head_sha must equal merged_sha.");
         var approvedAt = GetTimestamp(review, "approved_at_utc");
@@ -377,15 +443,22 @@ internal static class ReleaseRecordValidator
         var closeoutTimes = new List<DateTimeOffset>();
         foreach (var issue in new[] { "library", "template", "issue_1185", "issue_1230" })
         {
-            Assert(Uri.TryCreate(GetString(closure, $"{issue}_comment_url"), UriKind.Absolute, out _),
-                $"{issue} closeout comment URL is required at complete.");
+            var commentUrl = GetString(closure, $"{issue}_comment_url");
+            var expectedPattern = issue switch
+            {
+                "library" or "template" => SourceIssueCommentPattern,
+                "issue_1185" => Issue1185CommentPattern,
+                _ => Issue1230CommentPattern
+            };
+            Assert(Regex.IsMatch(commentUrl, expectedPattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)),
+                $"{issue} closeout comment URL must be the canonical GitHub issue comment URL.");
             var closedAt = ParseTimestamp(GetString(closure, $"{issue}_closed_at_utc"), $"closure.{issue}_closed_at_utc");
             Assert(closedAt > approvedAt,
                 $"closure.{issue}_closed_at_utc must follow artifacts_verified.approved_at_utc.");
             closeoutTimes.Add(closedAt);
         }
-        Assert(Uri.TryCreate(GetString(closure, "required_link"), UriKind.Absolute, out _),
-            "Complete release records require the reviewed handoff link.");
+        Assert(GetString(closure, "required_link") == RequiredLink,
+            $"Complete release records require the reviewed handoff link {RequiredLink}.");
         Assert(!string.IsNullOrWhiteSpace(GetString(closure, "caveat")),
             "Complete release records require the publication caveat.");
         var digests = GetArray(closure, "reply_digests");
@@ -460,5 +533,5 @@ internal static class ReleaseRecordValidator
         }
     }
 
-    private sealed record RequiredCheck(string Name, string Workflow, string Event);
+    private sealed record RequiredCheck(string Name, string WorkflowFile, string WorkflowName, string JobName);
 }

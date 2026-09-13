@@ -33,10 +33,28 @@ jobs:
           fi
           echo "VERSION=${TAG#dcbTemplates-v}" >> $GITHUB_ENV
 
+      - name: Read immutable host-owned release record
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SEKIBAN_RELEASE_RECORD_REPOSITORY: ${{ vars.SEKIBAN_RELEASE_RECORD_REPOSITORY }}
+          SEKIBAN_RELEASE_RECORD_REF: ${{ vars.SEKIBAN_RELEASE_RECORD_REF }}
+        run: |
+          bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh \
+            --version "$VERSION" --state libraries-verified \
+            --output "$RUNNER_TEMP/dcb-release-record.json"
+
       - name: Build release validators
         run: |
           dotnet restore dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -p:NuGetAudit=false
           dotnet build dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release --no-restore --nologo
+
+      - name: Validate canonical libraries-verified state before template pack
+        run: |
+          dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
+            release-record --record "$RUNNER_TEMP/dcb-release-record.json" \
+            --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
+            --state libraries-verified
+          test "$(jq -r '.merged_sha' "$RUNNER_TEMP/dcb-release-record.json")" = "$(git rev-parse HEAD)"
 
       - name: Verify published library/template parity before pack
         env:

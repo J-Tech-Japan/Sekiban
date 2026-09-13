@@ -191,13 +191,7 @@ check_publish_parity() {
   fi
   if [[ "$verify_release_evidence" == 1 ]]; then
     check_library_release_evidence "$repo_root" "$version" || return 1
-    local library_created template_created
-    library_created="$(git -C "$repo_root" for-each-ref --format='%(creatordate:unix)' "refs/tags/dcb-v${version}")"
-    template_created="$(git -C "$repo_root" for-each-ref --format='%(creatordate:unix)' "refs/tags/${template_tag}")"
-    if [[ -z "$library_created" || -z "$template_created" ]] || (( library_created >= template_created )); then
-      echo "The library tag must be created before the template tag." >&2
-      return 1
-    fi
+    echo "Tag/release chronology is sourced from the immutable host release record, not ref creatordate metadata."
   fi
   echo "Publish parity passed for ${version}."
 }
@@ -337,51 +331,62 @@ check_template_retry() {
 
   local package="Sekiban.Dcb.Templates"
   local package_lower="sekiban.dcb.templates"
-  local artifact="${base_url%/}/${package_lower}/${version}/${package_lower}.${version}.nupkg"
-  local local_digest
-  local_digest="$(shasum -a 256 "$package_path" | awk '{print $1}')"
-
-  if [[ "$base_url" == file://* ]]; then
-    local remote_path="${base_url#file://}/${package_lower}/${version}/${package_lower}.${version}.nupkg"
-    if [[ ! -f "$remote_path" ]]; then
-      echo "No existing template package at ${version}; first publication is allowed."
-      return 0
-    fi
-    local remote_digest
-    remote_digest="$(shasum -a 256 "$remote_path" | awk '{print $1}')"
-    if [[ "$remote_digest" == "$local_digest" ]]; then
-      echo "Existing template package at ${version} is byte-identical; --skip-duplicate retry is allowed."
-      return 0
-    fi
-    echo "Existing template package at ${version} differs; publish a newly reviewed version instead of reusing the immutable tag." >&2
+  local artifact="$base_url/$package_lower/$version/$package_lower.$version.nupkg"
+  if ! verify_nupkg_identity "$package_path" "$package" "$version"; then
+    echo "The local template package does not contain the exact $package/$version nuspec." >&2
     return 1
   fi
 
-  local temporary http_code remote_digest
-  temporary="$(mktemp "${TMPDIR:-/tmp}/sek-template-retry.XXXXXX.nupkg")"
+  if [[ "$base_url" == file://* ]]; then
+    local remote_root
+    remote_root="$(printf '%s' "$base_url" | sed 's#^file://##')"
+    local remote_path="$remote_root/$package_lower/$version/$package_lower.$version.nupkg"
+    if [[ ! -f "$remote_path" ]]; then
+      echo "No existing template package at $version; first publication is allowed."
+      return 0
+    fi
+    if ! verify_nupkg_identity "$remote_path" "$package" "$version"; then
+      echo "Existing template package at $version has a non-canonical nuspec." >&2
+      return 1
+    fi
+    if compare_semantic_package_manifests "$package_path" "$remote_path"; then
+      echo "Existing template package at $version has an equivalent semantic manifest; --skip-duplicate retry is allowed."
+      return 0
+    fi
+    echo "Existing template package at $version has different semantic content; publish a newly reviewed version instead of reusing the immutable tag." >&2
+    return 1
+  fi
+
+  local temporary http_code
+  temporary="$(mktemp /tmp/sek-template-retry.XXXXXX.nupkg)"
   if ! http_code="$(curl --silent --show-error --location --max-time "$request_timeout" \
       --output "$temporary" --write-out '%{http_code}' "$artifact")"; then
     rm -f "$temporary"
-    echo "Unable to inspect existing template package ${artifact}." >&2
+    echo "Unable to inspect existing template package $artifact." >&2
     return 1
   fi
   if [[ "$http_code" == 404 ]]; then
     rm -f "$temporary"
-    echo "No existing template package at ${version}; first publication is allowed."
+    echo "No existing template package at $version; first publication is allowed."
     return 0
   fi
   if [[ "$http_code" != 200 ]]; then
     rm -f "$temporary"
-    echo "Template package inspection returned HTTP ${http_code} for ${artifact}." >&2
+    echo "Template package inspection returned HTTP $http_code for $artifact." >&2
     return 1
   fi
-  remote_digest="$(shasum -a 256 "$temporary" | awk '{print $1}')"
-  rm -f "$temporary"
-  if [[ "$remote_digest" == "$local_digest" ]]; then
-    echo "Existing template package at ${version} is byte-identical; --skip-duplicate retry is allowed."
+  if ! verify_nupkg_identity "$temporary" "$package" "$version"; then
+    rm -f "$temporary"
+    echo "Existing template package at $version has a non-canonical nuspec." >&2
+    return 1
+  fi
+  if compare_semantic_package_manifests "$package_path" "$temporary"; then
+    rm -f "$temporary"
+    echo "Existing template package at $version has an equivalent semantic manifest; --skip-duplicate retry is allowed."
     return 0
   fi
-  echo "Existing template package at ${version} differs; publish a newly reviewed version instead of reusing the immutable tag." >&2
+  rm -f "$temporary"
+  echo "Existing template package at $version has different semantic content; publish a newly reviewed version instead of reusing the immutable tag." >&2
   return 1
 }
 
@@ -493,6 +498,56 @@ with ZipFile(path, "w", ZIP_DEFLATED) as archive:
 PY
 }
 
+canonical_package_manifest() {
+  local package_path="$1"
+  python3 - "$package_path" <<'PY'
+from hashlib import sha256
+from zipfile import ZipFile
+import sys
+
+path = sys.argv[1]
+with ZipFile(path) as archive:
+    entries = []
+    for entry in archive.infolist():
+        name = entry.filename.replace('\\', '/')
+        lowered = name.lower()
+        if not name or name.endswith('/') or lowered == '_rels/.rels' or lowered.endswith('.signature.p7s') or \
+           lowered.startswith('package/services/metadata/core-properties/') or \
+           lowered.endswith('.psmdcp'):
+            continue
+        entries.append((name, sha256(archive.read(entry)).hexdigest()))
+for name, digest in sorted(entries):
+    print(f'{name}\t{digest}')
+PY
+}
+
+verify_nupkg_identity() {
+  local package_path="$1"
+  local package="$2"
+  local version="$3"
+  [[ -f "$package_path" ]] || return 1
+  local nuspec
+  nuspec="$(unzip -p "$package_path" '*.nuspec' 2>/dev/null || true)"
+  [[ "$nuspec" == *"<id>$package</id>"* && "$nuspec" == *"<version>$version</version>"* ]]
+}
+
+compare_semantic_package_manifests() {
+  local left="$1"
+  local right="$2"
+  local left_manifest right_manifest
+  left_manifest="$(mktemp /tmp/sek-manifest-left.XXXXXX)"
+  right_manifest="$(mktemp /tmp/sek-manifest-right.XXXXXX)"
+  canonical_package_manifest "$left" > "$left_manifest"
+  canonical_package_manifest "$right" > "$right_manifest"
+  if ! diff -u "$left_manifest" "$right_manifest" >/dev/null; then
+    echo "Semantic package manifests differ:" >&2
+    diff -u "$left_manifest" "$right_manifest" >&2 || true
+    rm -f "$left_manifest" "$right_manifest"
+    return 1
+  fi
+  rm -f "$left_manifest" "$right_manifest"
+}
+
 self_test() {
   local repo_root="$1"
   local fixture_root="$script_dir/fixtures/tags"
@@ -540,9 +595,10 @@ self_test() {
   printf 'malformed nupkg\n' > "$fake_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg"
   expect_failure check_feed_once "$fake_base" "10.22.0" 2 Sekiban.Dcb.Templates
 
-  local timeout_port timeout_pid
-  timeout_port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
-  python3 - "$timeout_port" >/dev/null 2>&1 <<'PY' &
+  local timeout_port timeout_pid timeout_ready timeout_output
+  timeout_ready="$(mktemp "${TMPDIR:-/tmp}/sek-timeout-ready.XXXXXX")"
+  rm -f "$timeout_ready"
+  python3 - "$timeout_ready" >/dev/null 2>&1 <<'PY' &
 import http.server
 import sys
 import time
@@ -555,12 +611,96 @@ class Slow(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
-http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), Slow).serve_forever()
+server = http.server.HTTPServer(("127.0.0.1", 0), Slow)
+with open(sys.argv[1], "w", encoding="utf-8") as ready:
+    ready.write(str(server.server_port))
+    ready.flush()
+server.serve_forever()
 PY
   timeout_pid=$!
-  expect_failure check_feed_once "http://127.0.0.1:${timeout_port}" "10.22.0" 1 Sekiban.Dcb.Templates
+  for _ in $(seq 1 30); do [[ -s "$timeout_ready" ]] && break; sleep 0.1; done
+  timeout_port="$(cat "$timeout_ready")"
+  if timeout_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-template \
+      --version "10.22.0" --feed-base-url "http://127.0.0.1:${timeout_port}" \
+      --timeout-seconds 2 --interval-seconds 1 --request-timeout-seconds 1 2>&1)"; then
+    printf '%s\n' "$timeout_output"
+    echo "Expected the real template wait loop to time out." >&2
+    return 1
+  fi
+  if [[ "$timeout_output" != *"Timed out after"* || "$timeout_output" != *"waiting for the template package"* ]]; then
+    printf '%s\n' "$timeout_output"
+    echo "The real template wait loop did not report its bounded unresolved diagnostic." >&2
+    return 1
+  fi
   kill "$timeout_pid" 2>/dev/null || true
   wait "$timeout_pid" 2>/dev/null || true
+  rm -f "$timeout_ready"
+
+  local delayed_feed delayed_ready delayed_pid delayed_port delayed_output
+  delayed_feed="$(mktemp -d /tmp/sek-g79-delayed-feed.XXXXXX)"
+  for fake_package in "${dcb_package_ids[@]}" Sekiban.Dcb.Templates; do
+    fake_lower="$(printf '%s' "$fake_package" | tr '[:upper:]' '[:lower:]')"
+    write_fake_nupkg "$delayed_feed/$fake_lower/10.22.0/$fake_lower.10.22.0.nupkg" "$fake_package" "10.22.0"
+  done
+  delayed_ready="$(mktemp /tmp/sek-delayed-ready.XXXXXX)"
+  rm -f "$delayed_ready"
+  python3 - "$delayed_feed" "$delayed_ready" >/dev/null 2>&1 <<'PY' &
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+import sys
+from urllib.parse import unquote
+
+root = Path(sys.argv[1])
+ready_path = Path(sys.argv[2])
+counts = {}
+
+class Delayed(BaseHTTPRequestHandler):
+    def do_GET(self):
+        relative = unquote(self.path.split('?', 1)[0]).lstrip('/')
+        counts[relative] = counts.get(relative, 0) + 1
+        if counts[relative] == 1:
+            self.send_response(404)
+            self.end_headers()
+            return
+        source = root / relative
+        if not source.is_file():
+            self.send_response(404)
+            self.end_headers()
+            return
+        payload = source.read_bytes()
+        self.send_response(200)
+        self.send_header('Content-Length', str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+    def log_message(self, *_):
+        pass
+
+server = HTTPServer(('127.0.0.1', 0), Delayed)
+ready_path.write_text(str(server.server_port), encoding='utf-8')
+server.serve_forever()
+PY
+  delayed_pid=$!
+  for _ in $(seq 1 30); do [[ -s "$delayed_ready" ]] && break; sleep 0.1; done
+  delayed_port="$(cat "$delayed_ready")"
+  delayed_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-packages \
+      --version 10.22.0 --feed-base-url "http://127.0.0.1:$delayed_port" \
+      --timeout-seconds 5 --interval-seconds 1 --request-timeout-seconds 2 2>&1)"
+  if [[ "$delayed_output" != *"All 26 DCB packages are available"* ]]; then
+    echo "$delayed_output"
+    echo "The real package wait loop did not prove delayed success." >&2
+    return 1
+  fi
+  delayed_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-template \
+      --version 10.22.0 --feed-base-url "http://127.0.0.1:$delayed_port" \
+      --timeout-seconds 5 --interval-seconds 1 --request-timeout-seconds 2 2>&1)"
+  if [[ "$delayed_output" != *"Template package is available"* ]]; then
+    echo "$delayed_output"
+    echo "The real template wait loop did not prove delayed success." >&2
+    return 1
+  fi
+  kill "$delayed_pid" 2>/dev/null || true
+  wait "$delayed_pid" 2>/dev/null || true
+  rm -rf "$delayed_feed" "$delayed_ready"
 
   local retry_package retry_feed retry_base
   retry_feed="$(mktemp -d "${TMPDIR:-/tmp}/sek-g79-retry-feed.XXXXXX")"
@@ -569,8 +709,20 @@ PY
   write_fake_nupkg "$retry_package" "Sekiban.Dcb.Templates" "10.22.0"
   mkdir -p "$retry_feed/sekiban.dcb.templates/10.22.0"
   cp "$retry_package" "$retry_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg"
+  python3 - "$retry_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg" <<'PY'
+from zipfile import ZIP_DEFLATED, ZipFile
+import sys
+with ZipFile(sys.argv[1], "a", ZIP_DEFLATED) as archive:
+    archive.writestr("package/services/digital-signature/repository.signature.p7s", "volatile signature")
+PY
   check_template_retry "$retry_package" "10.22.0" "$retry_base" 2
-  printf 'changed same-version bytes\n' >> "$retry_package"
+  python3 - "$retry_package" <<'PY'
+from zipfile import ZIP_DEFLATED, ZipFile
+import sys
+path = sys.argv[1]
+with ZipFile(path, "a", ZIP_DEFLATED) as archive:
+    archive.writestr("content/changed-same-version.txt", "changed payload")
+PY
   expect_failure check_template_retry "$retry_package" "10.22.0" "$retry_base" 2
   rm "$retry_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg"
   check_template_retry "$retry_package" "10.22.0" "$retry_base" 2
