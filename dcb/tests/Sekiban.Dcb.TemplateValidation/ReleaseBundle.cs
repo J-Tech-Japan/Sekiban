@@ -239,7 +239,7 @@ internal sealed class ReleaseBundle
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = "git",
+            FileName = FindGitExecutable(),
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -260,6 +260,17 @@ internal sealed class ReleaseBundle
         var hash = output.Trim();
         Assert(Commit.IsMatch(hash), "git hash-object returned an invalid blob identity.");
         return hash;
+    }
+
+    private static string FindGitExecutable()
+    {
+        var executableName = OperatingSystem.IsWindows() ? "git.exe" : "git";
+        var candidate = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(directory => Path.Combine(directory, executableName))
+            .FirstOrDefault(File.Exists);
+        Assert(candidate is not null, "The git executable is not available on PATH.");
+        return Path.GetFullPath(candidate!);
     }
 
     private static bool IsSafeRelativePath(string path) =>
