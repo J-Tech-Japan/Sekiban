@@ -432,10 +432,13 @@ internal static class ClosedReleaseRecordValidator
         reference.StartsWith($"{HostRepository}@", StringComparison.OrdinalIgnoreCase) &&
         reference.Contains(":contents/", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsReaderAnchorReference(string reference, string hostRef) =>
-        reference.StartsWith($"{HostRepository}@{hostRef}:", StringComparison.OrdinalIgnoreCase) &&
-        (reference.Contains($":commits/{hostRef}", StringComparison.OrdinalIgnoreCase) ||
-         reference.Contains(":git/trees/", StringComparison.OrdinalIgnoreCase));
+    private static bool IsReaderAnchorReference(string reference, string hostRef)
+    {
+        _ = hostRef;
+        return reference.StartsWith($"{HostRepository}@", StringComparison.OrdinalIgnoreCase) &&
+               (reference.Contains(":commits/", StringComparison.OrdinalIgnoreCase) ||
+                reference.Contains(":git/trees/", StringComparison.OrdinalIgnoreCase));
+    }
 
     private static string ReferenceCommit(string reference)
     {
@@ -474,7 +477,9 @@ internal static class ClosedReleaseRecordValidator
         var review = GetObject(origin, "review");
         RequireMembers(review, "origin_delivery.review", [
             "review_url", "review_id", "reviewer", "state", "commit_id", "body_sha256", "body_evidence_ref",
-            "review_evidence_ref", "submitted_at_utc", "semantic_verdict", "intent_task_id", "intent_result_nonce", "intent_completed_at_utc"
+            "review_evidence_ref", "submitted_at_utc", "semantic_verdict", "intent_task_id", "intent_result_nonce",
+            "intent_completed_at_utc", "artifact_sha256", "artifact_evidence_ref", "intent_completion_evidence_ref",
+            "intent_completion_sha256"
         ]);
         Assert(GetString(review, "state") == "COMMENTED" && GetString(review, "commit_id") == originHead &&
                IsNumericId(review, "review_id") &&
@@ -482,9 +487,32 @@ internal static class ClosedReleaseRecordValidator
             "origin delivery review identity must be numeric and URL-bound.");
         ValidateReviewEvidence(review, bundle, originHead, "COMMENTED", GetString(review, "review_url"));
         var originBody = GetContent(bundle, GetString(review, "body_evidence_ref"), "origin review body");
-        Assert(GetString(review, "semantic_verdict") == "APPROVE" && ParseSemanticVerdict(originBody) == "APPROVE",
+        var originArtifact = GetContent(bundle, GetString(review, "artifact_evidence_ref"), "origin review artifact");
+        Assert(GetString(review, "semantic_verdict") == "APPROVE" &&
+               Sha256Bytes(originArtifact) == GetString(review, "artifact_sha256").ToLowerInvariant() &&
+               ParseSemanticVerdict(originBody) == "APPROVE",
             "Origin COMMENTED review must carry the canonical semantic APPROVE verdict.");
+        var originCompletionBytes = GetContent(bundle, GetString(review, "intent_completion_evidence_ref"), "origin intent completion");
+        Assert(Sha256Bytes(originCompletionBytes) == GetString(review, "intent_completion_sha256").ToLowerInvariant(),
+            "Origin intent completion digest is not bound.");
+        using var originCompletionDocument = JsonDocument.Parse(originCompletionBytes);
+        var originCompletion = originCompletionDocument.RootElement;
+        RequireMembers(originCompletion, "origin intent completion", [
+            "schema_version", "kind", "task_id", "result_nonce", "status", "review_url", "review_id",
+            "head_sha", "body_sha256", "artifact_sha256", "semantic_verdict", "completed_at_utc"
+        ]);
         var originReviewAt = ParseTimestamp(GetString(review, "intent_completed_at_utc"), "origin review completion");
+        Assert(GetInt(originCompletion, "schema_version") == 1 && GetString(originCompletion, "kind") == "intent-origin-review-completion" &&
+               GetString(originCompletion, "task_id") == GetString(review, "intent_task_id") &&
+               GetString(originCompletion, "result_nonce") == GetString(review, "intent_result_nonce") &&
+               GetString(originCompletion, "review_url") == GetString(review, "review_url") &&
+               GetString(originCompletion, "review_id") == GetString(review, "review_id") &&
+               GetString(originCompletion, "head_sha") == originHead &&
+               GetString(originCompletion, "body_sha256") == GetString(review, "body_sha256") &&
+               GetString(originCompletion, "artifact_sha256") == GetString(review, "artifact_sha256") &&
+               GetString(originCompletion, "semantic_verdict") == "APPROVE" &&
+               GetTimestamp(originCompletion, "completed_at_utc") == originReviewAt,
+            "Origin completion evidence is not bound to the authenticated review.");
         Assert(GetTimestamp(review, "submitted_at_utc") < originReviewAt,
             "Origin review intent completion must follow GitHub submission.");
 
@@ -494,13 +522,16 @@ internal static class ClosedReleaseRecordValidator
         foreach (var check in checks.EnumerateArray())
         {
             RequireMembers(check, "origin_delivery.check", [
-                "name", "run_id", "job_id", "head_sha", "conclusion", "started_at_utc", "completed_at_utc", "evidence_ref"
+                "repository", "name", "workflow_file", "workflow_name", "job_name", "run_id", "job_id", "run_url", "job_url",
+                "attempt", "event", "superseded", "head_sha", "conclusion", "started_at_utc", "completed_at_utc", "evidence_ref"
             ]);
             Assert(GetString(check, "head_sha") == originHead && GetString(check, "conclusion") == "success",
                 "origin checks must be successful and bound to the historical reviewed head.");
             var started = ParseTimestamp(GetString(check, "started_at_utc"), "origin check start");
             var completed = ParseTimestamp(GetString(check, "completed_at_utc"), "origin check completion");
-            Assert(ulong.TryParse(GetString(check, "run_id"), out _) && ulong.TryParse(GetString(check, "job_id"), out _) &&
+            Assert(GetString(check, "repository") == Repository && int.TryParse(GetString(check, "attempt"), out var attempt) && attempt >= 1 &&
+                   ulong.TryParse(GetString(check, "run_id"), out _) && ulong.TryParse(GetString(check, "job_id"), out _) &&
+                   !GetBoolean(check, "superseded") && GetString(check, "event") == "workflow_dispatch" &&
                    completed > started && started > originReviewAt,
                 "origin check identity and chronology are invalid.");
             ValidateOriginCheckEvidence(check, bundle);
@@ -529,7 +560,7 @@ internal static class ClosedReleaseRecordValidator
     {
         RequireMembers(candidate, "candidate", [
             "repository", "pull_request", "reviewed_head_sha", "merged_sha", "merged_at_utc", "parent_shas",
-            "base_sha", "merge_strategy", "reviewed_tree_sha", "merged_tree_sha", "main_ancestry", "checkout_sha",
+            "base_sha", "merge_strategy", "reviewed_tree_sha", "merged_tree_sha", "main_ancestry", "main_tip_sha", "checkout_sha",
             "pr_evidence_ref", "reviewed_commit_evidence_ref", "merged_commit_evidence_ref",
             "reviewed_tree_evidence_ref", "merged_tree_evidence_ref", "main_evidence_ref", "checks_evidence_ref"
         ]);
@@ -551,7 +582,8 @@ internal static class ClosedReleaseRecordValidator
                GetBoolean(pr, "merged") && ParseTimestamp(GetString(pr, "merged_at"), "candidate PR merged_at") == mergedAt,
             "candidate PR API evidence does not match the release record.");
 
-        Assert(GetString(candidate, "merge_strategy") == "merge-commit",
+        Assert(GetString(candidate, "merge_strategy") == "merge-commit" &&
+               GetString(candidate, "reviewed_tree_sha") == GetString(candidate, "merged_tree_sha"),
             "candidate.merge_strategy must prove the integrated candidate was a merge commit.");
         var reviewedCommit = GetApiObject(bundle, GetString(candidate, "reviewed_commit_evidence_ref"), "candidate reviewed commit");
         Assert(GetString(reviewedCommit, "sha") == candidateHead &&
@@ -572,11 +604,34 @@ internal static class ClosedReleaseRecordValidator
         var reviewedTree = GetApiObject(bundle, GetString(candidate, "reviewed_tree_evidence_ref"), "candidate reviewed API tree");
         var mergedTree = GetApiObject(bundle, GetString(candidate, "merged_tree_evidence_ref"), "candidate merged API tree");
         Assert(GetString(reviewedTree, "sha") == GetString(candidate, "reviewed_tree_sha") &&
-               GetString(mergedTree, "sha") == GetString(candidate, "merged_tree_sha"),
+               GetString(mergedTree, "sha") == GetString(candidate, "merged_tree_sha") &&
+               GetString(reviewedTree, "sha") == GetString(mergedTree, "sha"),
             "Candidate reviewed/merged tree identities must each be API-bound.");
         var main = GetApiObject(bundle, GetString(candidate, "main_evidence_ref"), "canonical main evidence");
-        Assert(GetString(GetObject(main, "object"), "sha") == mergedSha,
-            "canonical main evidence does not prove the merged candidate is on main.");
+        var mainTip = GetString(candidate, "main_tip_sha");
+        Assert(Commit.IsMatch(mainTip) && GetString(GetObject(main, "base_commit"), "sha") == mergedSha &&
+               GetString(GetObject(main, "merge_base_commit"), "sha") == mergedSha &&
+               GetString(GetObject(main, "head_commit"), "sha") == mainTip &&
+               GetString(main, "status") is "ahead" or "identical" &&
+               GetInt(main, "ahead_by") >= 0 && GetInt(main, "behind_by") == 0 &&
+               GetInt(main, "total_commits") == GetInt(main, "ahead_by"),
+            "canonical main compare evidence does not prove the merged candidate is an ancestor of main.");
+        var compareCommits = GetArray(main, "commits");
+        var aheadBy = GetInt(main, "ahead_by");
+        Assert(compareCommits.GetArrayLength() == aheadBy &&
+               (aheadBy == 0 || GetString(compareCommits.EnumerateArray().Last(), "sha") == mainTip),
+            "canonical main compare evidence must enumerate the complete descendant path.");
+        var priorCommit = mergedSha;
+        foreach (var compareCommit in compareCommits.EnumerateArray())
+        {
+            var compareSha = GetString(compareCommit, "sha");
+            var parents = GetArray(compareCommit, "parents");
+            Assert(Commit.IsMatch(compareSha) &&
+                   parents.EnumerateArray().Any(parent => GetString(parent, "sha") == priorCommit),
+                "canonical main compare evidence contains a descendant whose parent path is not bound to the candidate merge.");
+            priorCommit = compareSha;
+        }
+        Assert(priorCommit == mainTip, "canonical main compare evidence does not terminate at main_tip_sha.");
 
         foreach (var check in checks.EnumerateArray())
         {
@@ -683,12 +738,13 @@ internal static class ClosedReleaseRecordValidator
             Assert(required.TryGetValue(name, out var definition) && names.Add(name), "CI inventory has an unknown or duplicate entry.");
             var members = new List<string>
             {
-                "name", "workflow_file", "workflow_name", "job_name", "run_id", "job_id", "run_url", "job_url",
+                "repository", "name", "workflow_file", "workflow_name", "job_name", "run_id", "job_id", "run_url", "job_url",
                 "attempt", "event", "superseded", "started_at_utc", "completed_at_utc", "head_sha", "conclusion", "evidence_ref"
             };
             if (name == "diff") members.Add("artifact_sha256");
             RequireMembers(check, $"checks.{name}", members);
-            Assert(GetString(check, "workflow_file") == definition.workflow && GetString(check, "workflow_name") == definition.workflowName &&
+            Assert(GetString(check, "repository") == Repository &&
+                   GetString(check, "workflow_file") == definition.workflow && GetString(check, "workflow_name") == definition.workflowName &&
                    GetString(check, "job_name") == definition.job && GetString(check, "head_sha") == mergedSha &&
                    GetString(check, "conclusion") == "success" && GetString(check, "event") is "pull_request" or "workflow_dispatch" or "post-merge" &&
                    !GetBoolean(check, "superseded") && int.TryParse(GetString(check, "attempt"), out var attempt) && attempt >= 1 &&
@@ -698,7 +754,22 @@ internal static class ClosedReleaseRecordValidator
             var completed = ParseTimestamp(GetString(check, "completed_at_utc"), $"checks.{name}.completed_at_utc");
             Assert(completed > started && started > mergedAt, $"Integrated check {name} is not a fresh post-merge success.");
             var api = GetApiObject(bundle, GetString(check, "evidence_ref"), $"integrated check {name}");
-            Assert(GetString(api, "head_sha") == mergedSha && GetString(api, "name") == GetString(check, "job_name") && GetString(api, "conclusion") == "success",
+            Assert(GetString(api, "repository") == GetString(check, "repository") &&
+                   GetString(api, "name") == GetString(check, "job_name") &&
+                   GetString(api, "workflow_file") == GetString(check, "workflow_file") &&
+                   GetString(api, "workflow_name") == GetString(check, "workflow_name") &&
+                   GetString(api, "job_name") == GetString(check, "job_name") &&
+                   GetString(api, "run_id") == GetString(check, "run_id") &&
+                   GetString(api, "job_id") == GetString(check, "job_id") &&
+                   GetString(api, "run_url") == GetString(check, "run_url") &&
+                   GetString(api, "job_url") == GetString(check, "job_url") &&
+                   GetString(api, "attempt") == GetString(check, "attempt") &&
+                   GetString(api, "event") == GetString(check, "event") &&
+                   GetBoolean(api, "superseded") == GetBoolean(check, "superseded") &&
+                   GetString(api, "head_sha") == mergedSha && GetString(api, "name") == GetString(check, "job_name") &&
+                   GetString(api, "conclusion") == "success" &&
+                   GetString(api, "started_at_utc") == GetString(check, "started_at_utc") &&
+                   GetString(api, "completed_at_utc") == GetString(check, "completed_at_utc"),
                 $"Integrated check API evidence for {name} is not bound to the merged candidate.");
             if (name == "diff")
             {
@@ -784,7 +855,22 @@ internal static class ClosedReleaseRecordValidator
     private static void ValidateOriginCheckEvidence(JsonElement check, ReleaseBundle bundle)
     {
         var evidence = GetApiObject(bundle, GetString(check, "evidence_ref"), "origin check");
-        Assert(GetString(evidence, "head_sha") == GetString(check, "head_sha") && GetString(evidence, "conclusion") == GetString(check, "conclusion"),
+        Assert(GetString(evidence, "repository") == GetString(check, "repository") &&
+               GetString(evidence, "name") == GetString(check, "name") &&
+               GetString(evidence, "workflow_file") == GetString(check, "workflow_file") &&
+               GetString(evidence, "workflow_name") == GetString(check, "workflow_name") &&
+               GetString(evidence, "job_name") == GetString(check, "job_name") &&
+               GetString(evidence, "run_id") == GetString(check, "run_id") &&
+               GetString(evidence, "job_id") == GetString(check, "job_id") &&
+               GetString(evidence, "run_url") == GetString(check, "run_url") &&
+               GetString(evidence, "job_url") == GetString(check, "job_url") &&
+               GetString(evidence, "attempt") == GetString(check, "attempt") &&
+               GetString(evidence, "event") == GetString(check, "event") &&
+               GetBoolean(evidence, "superseded") == GetBoolean(check, "superseded") &&
+               GetString(evidence, "head_sha") == GetString(check, "head_sha") &&
+               GetString(evidence, "conclusion") == GetString(check, "conclusion") &&
+               GetString(evidence, "started_at_utc") == GetString(check, "started_at_utc") &&
+               GetString(evidence, "completed_at_utc") == GetString(check, "completed_at_utc"),
             "Origin check API evidence is not bound.");
     }
 
@@ -907,9 +993,10 @@ internal static class ClosedReleaseRecordValidator
 
     private static string ParseSemanticVerdict(byte[] body)
     {
-        var text = Encoding.UTF8.GetString(body).TrimEnd('\r', '\n');
-        Assert(text == "SEKIBAN-REVIEW-VERDICT: APPROVE",
-            "Review body must contain exactly the canonical semantic APPROVE verdict.");
+        var text = Encoding.UTF8.GetString(body);
+        var matches = Regex.Matches(text, @"(?im)^\s*[-*]?\s*Verdict\s*:\s*\*\*(APPROVE|REQUEST-UPDATE)\*\*\s*$");
+        Assert(matches.Count == 1 && matches[0].Groups[1].Value == "APPROVE",
+            "Review body must contain exactly one canonical semantic verdict of APPROVE.");
         return "APPROVE";
     }
 

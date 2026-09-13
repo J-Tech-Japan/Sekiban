@@ -38,7 +38,7 @@ def endpoint(reference: str) -> str:
         return f"repos/{repository}/{object_path}?ref={commit}"
     if object_path.startswith("git/trees/"):
         return f"repos/{repository}/{object_path}?recursive=1"
-    if object_path.startswith(("commits/", "git/", "pulls/", "actions/", "releases/")):
+    if object_path.startswith(("commits/", "git/", "pulls/", "actions/", "releases/", "compare/")):
         return f"repos/{repository}/{object_path}"
     return f"repos/{repository}/contents/{object_path}?ref={commit}"
 
@@ -60,13 +60,43 @@ def main() -> None:
     candidate_head = "3" * 40
     candidate_base = "4" * 40
     reviewed_tree = "5" * 40
-    merged_tree = "6" * 40
-    origin_head = "1" * 40
+    merged_tree = reviewed_tree
+    origin_head = "01b3843276fa3bdd828afd484eb2fa0e8a6b63bb"
     origin_tree = "2" * 40
     host_tree = "8" * 40
+    main_tip = "9" * 40
     library_tag_object = "b" * 40
     template_tag_object = "c" * 40
     version = "10.22.0"
+    actual_origin_review_body = """# SEK-G79 PR #1235 final exact-head review
+
+- Review date: 2026-09-13 (America/Los_Angeles)
+- Repository: `J-Tech-Japan/Sekiban`
+- PR: #1235
+- Contract: standalone Issue #1234
+- Reviewed head: `01b3843276fa3bdd828afd484eb2fa0e8a6b63bb`
+- Base at review: `bfb43b98472f184257016868884e65889ccce587`
+- Checkout: isolated clean detached checkout
+- Verdict: **APPROVE**
+
+## Contract and scope
+
+I re-derived AC1-AC10 from Issue #1234 and did not fill gaps from host-only metadata. The review remains release-free and retains the required closeout boundary.
+
+## Verification evidence
+
+- `git diff --check`: passed.
+- TemplateValidation and the required DCB net9/net10 checks passed.
+- The private-host probe remains a mandatory pre-tag operator gate and was not claimed as executed.
+
+## Findings
+
+No material implementation finding remains at this reviewed exact head.
+
+## Verdict
+
+**APPROVE** for `01b3843276fa3bdd828afd484eb2fa0e8a6b63bb` only.
+""".encode()
     stages = [
         ("base-prepared", "prepared", None, "2026-09-12T09:10:00Z", "base.json"),
         ("delta-library-tagged", "library-tagged/incomplete", "base-prepared", "2026-09-12T09:20:00Z", "library.json"),
@@ -92,10 +122,12 @@ def main() -> None:
         mapped.append((reference, "host-response", str(path)))
         return reference
 
-    def add_text(name: str, value: bytes) -> str:
-        return add_content(host_content(f"evidence/{name}.bin"), f"evidence/{name}.bin", value)
+    def add_text(name: str, value: bytes, commit: str = evidence_host_ref) -> str:
+        return add_content(host_content(f"evidence/{name}.bin", commit), f"evidence/{name}.bin", value)
 
     def add_api(reference: str, value: object) -> str:
+        if any(item[0] == reference for item in mapped):
+            return reference
         path = destination / "content" / ("api-" + sha256(reference.encode()) + ".json")
         path.write_bytes(dump(value))
         mapped.append((reference, "github-response", str(path)))
@@ -108,6 +140,7 @@ def main() -> None:
         "merge_strategy": "merge-commit",
         "reviewed_tree_sha": reviewed_tree,
         "merged_tree_sha": merged_tree,
+        "main_tip_sha": main_tip,
         "checkout_sha": merged_sha,
         "main_ancestry": True,
         "pull_request": "https://github.com/J-Tech-Japan/Sekiban/pull/1236",
@@ -125,17 +158,29 @@ def main() -> None:
     record["template_release"]["observed_at_utc"] = "2026-09-12T09:45:00Z"
 
     origin_body = b"G79 origin body\n"
-    origin_review_body = b"SEKIBAN-REVIEW-VERDICT: APPROVE\n"
-    implementation_body = b"SEKIBAN-REVIEW-VERDICT: APPROVE\n"
+    origin_review_body = actual_origin_review_body
+    implementation_body = b"# G80 implementation review\n\n- Verdict: **APPROVE**\n"
     implementation_artifact = b"APPROVE artifact\n"
     record["origin_delivery"]["body_evidence_ref"] = add_text("origin-body", origin_body)
     record["origin_delivery"]["body_sha256"] = sha256(origin_body)
     record["origin_delivery"]["reviewed_head_sha"] = origin_head
     record["origin_delivery"]["tree_sha"] = origin_tree
     for origin_check in record["origin_delivery"]["checks"]:
+        origin_check["repository"] = repository
+        origin_check["workflow_file"] = ".github/workflows/run_test_dcb.yml"
+        origin_check["workflow_name"] = "Run DCB Tests"
+        origin_check["job_name"] = origin_check["name"]
+        origin_check["run_url"] = f"https://github.com/{repository}/actions/runs/{origin_check['run_id']}"
+        origin_check["job_url"] = f"https://github.com/{repository}/actions/runs/{origin_check['run_id']}/job/{origin_check['job_id']}"
+        origin_check["attempt"] = "1"
+        origin_check["event"] = "workflow_dispatch"
+        origin_check["superseded"] = False
         origin_check["head_sha"] = origin_head
+        origin_check["started_at_utc"] = "2026-09-13T05:01:00Z"
+        origin_check["completed_at_utc"] = "2026-09-13T05:02:00Z"
     for origin_tag in record["origin_delivery"]["tags"]:
         origin_tag["peeled_commit"] = origin_head
+        origin_tag["created_at_utc"] = "2026-09-13T05:03:00Z"
     origin_review = record["origin_delivery"]["review"]
     origin_review.update({
         "body_evidence_ref": add_text("origin-review-body", origin_review_body),
@@ -145,9 +190,25 @@ def main() -> None:
         "commit_id": origin_head,
         "review_url": "https://github.com/J-Tech-Japan/Sekiban/pull/1235#pullrequestreview-5189565347",
         "review_id": "5189565347",
-        "submitted_at_utc": "2026-09-11T08:20:00Z",
-        "intent_completed_at_utc": "2026-09-11T08:25:00Z",
+        "reviewer": "tomohisa",
+        "submitted_at_utc": "2026-09-13T04:46:14Z",
+        "intent_completed_at_utc": "2026-09-13T04:50:00Z",
     })
+    origin_artifact = b"sek-g79-pr1235-01b38432-final-review-artifact\n"
+    origin_review["artifact_evidence_ref"] = add_text("origin-review-artifact", origin_artifact)
+    origin_review["artifact_sha256"] = sha256(origin_artifact)
+    origin_completion_ref = host_content("evidence/origin-completion.json", "c" * 40)
+    origin_completion = {
+        "schema_version": 1, "kind": "intent-origin-review-completion",
+        "task_id": origin_review["intent_task_id"], "result_nonce": origin_review["intent_result_nonce"],
+        "status": "completed", "review_url": origin_review["review_url"], "review_id": origin_review["review_id"],
+        "head_sha": origin_head, "body_sha256": origin_review["body_sha256"],
+        "artifact_sha256": origin_review["artifact_sha256"], "semantic_verdict": "APPROVE",
+        "completed_at_utc": origin_review["intent_completed_at_utc"],
+    }
+    origin_review["intent_completion_evidence_ref"] = origin_completion_ref
+    origin_review["intent_completion_sha256"] = sha256(dump(origin_completion))
+    add_content(origin_completion_ref, "evidence/origin-completion.json", dump(origin_completion))
     origin_review["review_evidence_ref"] = github("pulls/1235/reviews/5189565347")
     record["origin_delivery"]["review_evidence_ref"] = origin_review["review_evidence_ref"]
 
@@ -174,6 +235,7 @@ def main() -> None:
     record["implementation_review"] = implementation_review
 
     for index, check in enumerate(record["checks"], start=1):
+        check["repository"] = repository
         if check["name"] == "diff":
             check.pop("command", None)
             check.pop("result", None)
@@ -199,9 +261,9 @@ def main() -> None:
         "pr_evidence_ref": github("pulls/1236"),
         "reviewed_commit_evidence_ref": github(f"commits/{candidate_head}"),
         "merged_commit_evidence_ref": github(f"commits/{merged_sha}"),
-        "reviewed_tree_evidence_ref": github(f"git/trees/{reviewed_tree}"),
-        "merged_tree_evidence_ref": github(f"git/trees/{merged_tree}"),
-        "main_evidence_ref": github("git/ref/heads/main"),
+        "reviewed_tree_evidence_ref": immutable(repository, candidate_head, f"git/trees/{reviewed_tree}"),
+        "merged_tree_evidence_ref": immutable(repository, merged_sha, f"git/trees/{merged_tree}"),
+        "main_evidence_ref": github(f"compare/{merged_sha}...{main_tip}"),
         "checks_evidence_ref": github("actions/summary/1236"),
     })
     for property_name in ("library_tag", "template_tag"):
@@ -234,17 +296,32 @@ def main() -> None:
     })
     add_api(record["candidate"]["reviewed_tree_evidence_ref"], {"sha": reviewed_tree, "tree": []})
     add_api(record["candidate"]["merged_tree_evidence_ref"], {"sha": merged_tree, "tree": []})
-    add_api(record["candidate"]["main_evidence_ref"], {"ref": "refs/heads/main", "object": {"sha": merged_sha}})
+    add_api(record["candidate"]["main_evidence_ref"], {
+        "status": "ahead", "ahead_by": 1, "behind_by": 0, "total_commits": 1,
+        "base_commit": {"sha": merged_sha}, "merge_base_commit": {"sha": merged_sha},
+        "head_commit": {"sha": main_tip}, "commits": [{"sha": main_tip, "parents": [{"sha": merged_sha}]}],
+    })
     add_api(record["candidate"]["checks_evidence_ref"], {"checks": [{"name": check["name"]} for check in record["checks"]]})
 
     for check in record["checks"]:
         add_api(check["evidence_ref"], {
-            "name": check["job_name"], "head_sha": check["head_sha"], "conclusion": check["conclusion"],
+            "repository": check["repository"], "name": check["job_name"], "workflow_file": check["workflow_file"],
+            "workflow_name": check["workflow_name"], "job_name": check["job_name"],
+            "run_id": check["run_id"], "job_id": check["job_id"], "run_url": check["run_url"],
+            "job_url": check["job_url"], "attempt": check["attempt"], "event": check["event"],
+            "superseded": check["superseded"], "head_sha": check["head_sha"], "conclusion": check["conclusion"],
             "started_at_utc": check["started_at_utc"], "completed_at_utc": check["completed_at_utc"],
             **({"command": "git diff --check", "artifact_sha256": check["artifact_sha256"]} if check["name"] == "diff" else {}),
         })
     for check in record["origin_delivery"]["checks"]:
-        add_api(check["evidence_ref"], {"head_sha": check["head_sha"], "conclusion": check["conclusion"]})
+        add_api(check["evidence_ref"], {
+            "repository": check["repository"], "name": check["name"], "workflow_file": check["workflow_file"],
+            "workflow_name": check["workflow_name"], "job_name": check["job_name"], "run_id": check["run_id"],
+            "job_id": check["job_id"], "run_url": check["run_url"], "job_url": check["job_url"],
+            "attempt": check["attempt"], "event": check["event"], "superseded": check["superseded"],
+            "head_sha": check["head_sha"], "conclusion": check["conclusion"],
+            "started_at_utc": check["started_at_utc"], "completed_at_utc": check["completed_at_utc"],
+        })
 
     add_api(origin_review["review_evidence_ref"], {
         "html_url": origin_review["review_url"], "id": int(origin_review["review_id"]), "user": {"login": origin_review["reviewer"]},
@@ -335,11 +412,12 @@ def main() -> None:
         node = payload_refs[node_index]
         report = f"{suffix} host authority report\n".encode()
         artifact = f"{suffix} host authority artifact\n".encode()
-        report_ref = add_text(f"{suffix}-report", report)
-        artifact_ref = add_text(f"{suffix}-artifact", artifact)
-        authority_host_ref = "8" * 40 if name == "prepared" else "9" * 40
-        completion_ref = host_content(f"evidence/{suffix}-completion.json", authority_host_ref)
-        approval_ref = host_content(f"evidence/{suffix}-approval.json", authority_host_ref)
+        report_ref = add_text(f"{suffix}-report", report, "e" * 40)
+        artifact_ref = add_text(f"{suffix}-artifact", artifact, "e" * 40)
+        completion_host_ref = "8" * 40 if name == "prepared" else "a" * 40
+        approval_host_ref = "9" * 40 if name == "prepared" else "b" * 40
+        completion_ref = host_content(f"evidence/{suffix}-completion.json", completion_host_ref)
+        approval_ref = host_content(f"evidence/{suffix}-approval.json", approval_host_ref)
         approval = {
             "id": f"{suffix}-authority", "kind": "host-stage-review", "stage": stage, "version": version,
             "verdict": "approved", "target_payload_ref": node["ref"], "target_payload_sha256": node["payload_sha256"],
@@ -374,13 +452,41 @@ def main() -> None:
         root["artifact_approval_ref"] = authorities["artifacts-verified"][0]
 
     record_path = destination / "record.json"
-    record_path.write_bytes(dump(root))
+    record_bytes = dump(root)
+    record_path.write_bytes(record_bytes)
+
+    sibling_ref = host_content("intents/sekiban/releases/dcb-v10.22.0/unreferenced-sibling.json", "d" * 40)
+    sibling_payload = {
+        "id": "unreferenced-sibling", "stage": "prepared", "version": version,
+        "recorded_at_utc": "2026-09-12T09:11:30Z", "previous_payload_ref": payload_refs[0]["ref"],
+        "changes": changes_by_stage[0],
+    }
+    add_content(sibling_ref, "payloads/unreferenced-sibling.json", dump(sibling_payload))
+
+    record_api_path = f"intents/sekiban/releases/dcb-v{version}-release-record.json"
+    host_contents: dict[str, list[tuple[str, bytes]]] = {host_ref: [(record_api_path, record_bytes)]}
+    for reference, _, path in mapped:
+        if reference.startswith(f"{host_repository}@") and ":contents/" in reference:
+            commit, object_path = reference.split("@", 1)[1].split(":", 1)
+            host_contents.setdefault(commit, []).append((object_path.removeprefix("contents/"), Path(path).read_bytes()))
+    for commit, content_files in host_contents.items():
+        tree_sha = host_tree if commit == host_ref else hashlib.sha1(f"tree:{commit}".encode()).hexdigest()
+        commit_ref = immutable(host_repository, commit, f"commits/{commit}")
+        tree_ref = immutable(host_repository, commit, f"git/trees/{tree_sha}")
+        add_api(commit_ref, {"sha": commit, "commit": {"tree": {"sha": tree_sha}}})
+        add_api(tree_ref, {
+            "sha": tree_sha,
+            "tree": [{"path": path, "type": "blob", "sha": git_blob_sha(value)} for path, value in content_files],
+        })
+
     (destination / "map.tsv").write_text("\n".join(f"{reference}\t{kind}\t{path}\t{endpoint(reference)}" for reference, kind, path in mapped) + "\n")
     (destination / "record-blob-sha").write_text(git_blob_sha(record_path.read_bytes()) + "\n")
     (destination / "host-ref").write_text(host_ref + "\n")
     (destination / "tree-sha").write_text(host_tree + "\n")
     (destination / "record-path").write_text(f"intents/sekiban/releases/dcb-v{version}-release-record.json\n")
     (destination / "merged-sha").write_text(merged_sha + "\n")
+    (destination / "main-tip").write_text(main_tip + "\n")
+    (destination / "sibling-ref").write_text(sibling_ref + "\n")
     (destination / "library-tag-object").write_text(library_tag_object + "\n")
     (destination / "template-tag-object").write_text(template_tag_object + "\n")
 

@@ -60,8 +60,9 @@ envelope="$(mktemp "${TMPDIR:-/tmp}/sek-release-record.XXXXXX")"
 decoded="$(mktemp "${TMPDIR:-/tmp}/sek-release-record.XXXXXX")"
 entries="$(mktemp "${TMPDIR:-/tmp}/sek-release-entries.XXXXXX")"
 bundle_refs_file=""
+anchor_seen_file=""
 cleanup() {
-  rm -f "$envelope" "$decoded" "$entries"
+  rm -f "$envelope" "$decoded" "$entries" "${anchor_seen_file:-}"
   [[ -z "${bundle_refs_file:-}" ]] || rm -f "$bundle_refs_file"
 }
 trap cleanup EXIT
@@ -141,6 +142,64 @@ write_response_entry() {
   write_entry "$kind" "$immutable_ref" "$endpoint" "$response_file"
 }
 
+validate_host_tree() {
+  local immutable_ref="$1" contents_response="$2" tree_response="$3" object_path expected_path blob_sha
+  object_path="${immutable_ref#*:}"
+  expected_path="${object_path#contents/}"
+  blob_sha="$(jq -r '.sha' "$contents_response")"
+  jq -e --arg tree_path "$expected_path" --arg blob_sha "$blob_sha" \
+    '(.sha | test("^[0-9a-fA-F]{40}$")) and
+     ([.tree[] | select(.path == $tree_path and .type == "blob" and .sha == $blob_sha)] | length == 1)' \
+    "$tree_response" >/dev/null || {
+    echo "Host tree is not bound to exactly one contents blob for ${expected_path}." >&2
+    return 1
+  }
+}
+
+register_host_anchor() {
+  local immutable_ref="$1" endpoint="$2" response_file="$3"
+  if ! grep -Fqx "$immutable_ref" "$anchor_seen_file"; then
+    printf '%s\n' "$immutable_ref" >> "$anchor_seen_file"
+    write_response_entry host-response "$immutable_ref" "$endpoint" "$response_file"
+  fi
+}
+
+fetch_host_anchors() {
+  local immutable_ref="$1" contents_response="$2" commit tree object_path commit_endpoint tree_endpoint
+  local commit_response_file tree_response_file commit_ref tree_ref
+  [[ "$immutable_ref" =~ ^${host_repository}@([0-9a-fA-F]{40}):contents/(.+)$ ]] || return 0
+  commit="${BASH_REMATCH[1]}"
+  object_path="${BASH_REMATCH[2]}"
+  commit_endpoint="repos/${host_repository}/commits/${commit}"
+  tree_endpoint=""
+  commit_response_file="$(mktemp "${TMPDIR:-/tmp}/sek-release-commit-anchor.XXXXXX")"
+  tree_response_file="$(mktemp "${TMPDIR:-/tmp}/sek-release-tree-anchor.XXXXXX")"
+  if ! gh api "$commit_endpoint" > "$commit_response_file"; then
+    rm -f "$commit_response_file" "$tree_response_file"
+    echo "Unable to resolve immutable host commit ${host_repository}@${commit}." >&2
+    return 1
+  fi
+  jq -e --arg commit "$commit" '.sha == $commit and (.commit.tree.sha | test("^[0-9a-fA-F]{40}$"))' \
+    "$commit_response_file" >/dev/null || {
+    rm -f "$commit_response_file" "$tree_response_file"
+    echo "Host commit response is not bound to requested immutable ref ${commit}." >&2
+    return 1
+  }
+  tree="$(jq -r '.commit.tree.sha' "$commit_response_file")"
+  tree_endpoint="repos/${host_repository}/git/trees/${tree}?recursive=1"
+  if ! gh api "$tree_endpoint" > "$tree_response_file"; then
+    rm -f "$commit_response_file" "$tree_response_file"
+    echo "Unable to resolve host tree ${tree} for immutable commit ${commit}." >&2
+    return 1
+  fi
+  validate_host_tree "$immutable_ref" "$contents_response" "$tree_response_file"
+  commit_ref="${host_repository}@${commit}:commits/${commit}"
+  tree_ref="${host_repository}@${commit}:git/trees/${tree}"
+  register_host_anchor "$commit_ref" "$commit_endpoint" "$commit_response_file"
+  register_host_anchor "$tree_ref" "$tree_endpoint" "$tree_response_file"
+  rm -f "$commit_response_file" "$tree_response_file"
+}
+
 record_immutable_ref="${host_repository}@${ref}:${record_path}"
 record_envelope_digest="$(sha256sum "$envelope" | cut -d' ' -f1)"
 record_relative_path="objects/$(printf '%s\n%s' "$record_immutable_ref" "$record_envelope_digest" | sha256sum | cut -d' ' -f1).json"
@@ -152,8 +211,10 @@ jq -nc --arg ref "$record_immutable_ref" \
 
 commit_ref="${host_repository}@${ref}:commits/${ref}"
 tree_ref="${host_repository}@${ref}:git/trees/${tree_sha}"
-write_response_entry host-response "$commit_ref" "$commit_endpoint" "$commit_response"
-write_response_entry host-response "$tree_ref" "$tree_endpoint" "$tree_response"
+anchor_seen_file="$(mktemp "${TMPDIR:-/tmp}/sek-release-anchors.XXXXXX")"
+register_host_anchor "$commit_ref" "$commit_endpoint" "$commit_response"
+register_host_anchor "$tree_ref" "$tree_endpoint" "$tree_response"
+validate_host_tree "$record_immutable_ref" "$envelope" "$tree_response"
 
 fetch_bundle_ref() {
   local immutable_ref="$1" repository commit object_path endpoint response_file
@@ -166,7 +227,7 @@ fetch_bundle_ref() {
   object_path="${BASH_REMATCH[3]}"
   case "$object_path" in
     contents/*) endpoint="repos/${repository}/${object_path}?ref=${commit}" ;;
-    commits/*|pulls/*|actions/*|releases/*) endpoint="repos/${repository}/${object_path}" ;;
+    commits/*|pulls/*|actions/*|releases/*|compare/*) endpoint="repos/${repository}/${object_path}" ;;
     git/trees/*) endpoint="repos/${repository}/${object_path}?recursive=1" ;;
     git/*) endpoint="repos/${repository}/${object_path}" ;;
     *) endpoint="repos/${repository}/contents/${object_path}?ref=${commit}" ;;
@@ -179,6 +240,7 @@ fetch_bundle_ref() {
   fi
   if [[ "$repository" == "$host_repository" ]]; then
     write_response_entry host-response "$immutable_ref" "$endpoint" "$response_file"
+    fetch_host_anchors "$immutable_ref" "$response_file"
   else
     write_response_entry github-response "$immutable_ref" "$endpoint" "$response_file"
   fi

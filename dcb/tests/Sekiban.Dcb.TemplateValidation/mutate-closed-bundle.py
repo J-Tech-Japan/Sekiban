@@ -72,6 +72,7 @@ def main() -> None:
         entry["sha256"] = sha256(raw)
         if entry.get("kind") == "record":
             manifest["record_relative_path"] = new_relative
+        refresh_host_tree(reference, envelope["sha"])
         return sha256(content)
 
     def write_raw(reference: str, value: dict[str, object]) -> None:
@@ -84,6 +85,22 @@ def main() -> None:
             old_path.unlink()
         entry["relative_path"] = new_relative
         entry["sha256"] = sha256(raw)
+
+    def refresh_host_tree(reference: str, blob_sha: str) -> None:
+        if not reference.startswith("J-Tech-Japan/SekibanIntentHost@") or ":contents/" not in reference:
+            return
+        repository_commit, object_path = reference.split(":", 1)
+        commit = repository_commit.rsplit("@", 1)[1]
+        tree_entry = find_entry(lambda item: item["immutable_ref"].startswith(
+            f"J-Tech-Japan/SekibanIntentHost@{commit}:git/trees/"))
+        tree_reference = tree_entry["immutable_ref"]
+        tree = json.loads((destination / tree_entry["relative_path"]).read_text())
+        expected_path = object_path.removeprefix("contents/")
+        matches = [item for item in tree.get("tree", []) if item.get("path") == expected_path]
+        if len(matches) != 1:
+            raise ValueError(f"Host tree has no unique path for {reference}")
+        matches[0]["sha"] = blob_sha
+        write_raw(tree_reference, tree)
 
     record_entry = find_entry(lambda item: item["kind"] == "record")
     record_ref = record_entry["immutable_ref"]
@@ -125,6 +142,60 @@ def main() -> None:
         value = json.loads((destination / entry["relative_path"]).read_text())
         mutate(value)
         write_raw(reference, value)
+
+    def remove_entry(reference: str) -> None:
+        entry = find_entry(lambda item: item["immutable_ref"] == reference)
+        (destination / entry["relative_path"]).unlink()
+        manifest["entries"].remove(entry)
+
+    def host_anchor_refs(contents_reference: str) -> tuple[str, str]:
+        repository_commit, _ = contents_reference.split(":", 1)
+        commit = repository_commit.rsplit("@", 1)[1]
+        commit_reference = f"J-Tech-Japan/SekibanIntentHost@{commit}:commits/{commit}"
+        commit_entry = find_entry(lambda item: item["immutable_ref"] == commit_reference)
+        commit_value = json.loads((destination / commit_entry["relative_path"]).read_text())
+        tree = commit_value["commit"]["tree"]["sha"]
+        return commit_reference, f"J-Tech-Japan/SekibanIntentHost@{commit}:git/trees/{tree}"
+
+    def host_contents_reference(stage: str = "prepared") -> str:
+        return payload_at(stage)[0]
+
+    def mutate_origin_review(mutate: Callable[[dict[str, object]], None]) -> None:
+        mutate_payload("prepared", lambda payload: mutate(payload["changes"]["origin_delivery"]["review"]))
+
+    def mutate_origin_completion(mutate: Callable[[dict[str, object]], None]) -> None:
+        prepared_ref, prepared = payload_at("prepared")
+        review = prepared["changes"]["origin_delivery"]["review"]
+        completion_ref = review["intent_completion_evidence_ref"]
+        _, completion = read_json_content(completion_ref)
+        mutate(completion)
+        completion_digest = write_content(completion_ref, dump(completion))
+        review["intent_completion_sha256"] = completion_digest
+        write_content(prepared_ref, dump(prepared))
+
+    def mutate_origin_body(body: bytes) -> None:
+        prepared_ref, prepared = payload_at("prepared")
+        review = prepared["changes"]["origin_delivery"]["review"]
+        body_ref = review["body_evidence_ref"]
+        review["body_sha256"] = write_content(body_ref, body)
+        completion_ref = review["intent_completion_evidence_ref"]
+        _, completion = read_json_content(completion_ref)
+        completion["body_sha256"] = review["body_sha256"]
+        completion_digest = write_content(completion_ref, dump(completion))
+        review["intent_completion_sha256"] = completion_digest
+        write_content(prepared_ref, dump(prepared))
+        mutate_api(":pulls/1235/reviews/5189565347", lambda value: value.update({"body": body.decode()}))
+
+    def mutate_origin_body_record_only(body: bytes) -> None:
+        prepared_ref, prepared = payload_at("prepared")
+        review = prepared["changes"]["origin_delivery"]["review"]
+        review["body_sha256"] = write_content(review["body_evidence_ref"], body)
+        completion_ref = review["intent_completion_evidence_ref"]
+        _, completion = read_json_content(completion_ref)
+        completion["body_sha256"] = review["body_sha256"]
+        completion_digest = write_content(completion_ref, dump(completion))
+        review["intent_completion_sha256"] = completion_digest
+        write_content(prepared_ref, dump(prepared))
 
     def mutate_approval(stage: str, mutate: Callable[[dict[str, object]], None]) -> None:
         approval_ref = record["prepared_approval_ref"] if stage == "prepared" else record["artifact_approval_ref"]
@@ -210,10 +281,73 @@ def main() -> None:
         entry["immutable_ref"] = self_ref
         entry["endpoint"] = f"repos/J-Tech-Japan/SekibanIntentHost/{object_path}?ref={manifest['host_ref']}"
         record["current_payload_ref"] = self_ref
+    elif kind in {"self-containing-approval", "self-containing-completion", "self-containing-payload"}:
+        if kind == "self-containing-payload":
+            reference, payload = payload_at("library-tagged/incomplete")
+            commit = reference.split("@", 1)[1].split(":", 1)[0]
+            payload["previous_payload_ref"] = f"J-Tech-Japan/SekibanIntentHost@{commit}:contents/evidence/self-containing-predecessor.json"
+            write_content(reference, dump(payload))
+        elif kind == "self-containing-approval":
+            approval_ref = record["prepared_approval_ref"]
+            _, approval = read_json_content(approval_ref)
+            commit = approval_ref.split("@", 1)[1].split(":", 1)[0]
+            approval["report_ref"] = f"J-Tech-Japan/SekibanIntentHost@{commit}:contents/evidence/self-containing-report.bin"
+            approval["artifact_ref"] = f"J-Tech-Japan/SekibanIntentHost@{commit}:contents/evidence/self-containing-artifact.bin"
+            write_content(approval_ref, dump(approval))
+        else:
+            approval_ref = record["prepared_approval_ref"]
+            _, approval = read_json_content(approval_ref)
+            completion_ref = approval["completion_ref"]
+            _, completion = read_json_content(completion_ref)
+            commit = completion_ref.split("@", 1)[1].split(":", 1)[0]
+            completion["report_ref"] = f"J-Tech-Japan/SekibanIntentHost@{commit}:contents/evidence/self-containing-report.bin"
+            completion["artifact_ref"] = f"J-Tech-Japan/SekibanIntentHost@{commit}:contents/evidence/self-containing-artifact.bin"
+            completion_digest = write_content(completion_ref, dump(completion))
+            approval["completion_sha256"] = completion_digest
+            write_content(approval_ref, dump(approval))
+    elif kind in {
+        "missing-host-commit-anchor", "missing-host-tree-anchor", "wrong-host-commit-anchor",
+        "wrong-host-tree-anchor", "missing-host-tree-path", "wrong-host-tree-blob", "decoded-host-bytes"
+    }:
+        contents_ref = host_contents_reference()
+        commit_ref, tree_ref = host_anchor_refs(contents_ref)
+        if kind == "missing-host-commit-anchor":
+            remove_entry(commit_ref)
+        elif kind == "missing-host-tree-anchor":
+            remove_entry(tree_ref)
+        elif kind == "wrong-host-commit-anchor":
+            mutate_api(f":commits/{commit_ref.rsplit('/', 1)[1]}", lambda value: value.update({"sha": "8" * 40}))
+        elif kind == "wrong-host-tree-anchor":
+            mutate_api(f":commits/{commit_ref.rsplit('/', 1)[1]}", lambda value: value["commit"]["tree"].update({"sha": "8" * 40}))
+        elif kind in {"missing-host-tree-path", "wrong-host-tree-blob"}:
+            def mutate_tree(value: dict[str, object]) -> None:
+                object_path = contents_ref.split(":", 1)[1].removeprefix("contents/")
+                tree_entries = value["tree"]
+                match = next(item for item in tree_entries if item.get("path") == object_path)
+                if kind == "missing-host-tree-path":
+                    tree_entries.remove(match)
+                else:
+                    match["sha"] = "7" * 40
+            mutate_api(f":git/trees/{tree_ref.split(':git/trees/', 1)[1]}", mutate_tree)
+        else:
+            def mutate_envelope(value: dict[str, object]) -> None:
+                value["content"] = base64.b64encode(b"decoded host bytes were changed").decode("ascii")
+            entry = find_entry(lambda item: item["immutable_ref"] == contents_ref)
+            value = json.loads((destination / entry["relative_path"]).read_text())
+            mutate_envelope(value)
+            write_raw(contents_ref, value)
     elif kind in {
         "missing-merge-strategy", "wrong-merge-strategy", "candidate-parent-count-1",
         "candidate-parent-count-3", "candidate-parent-reversed", "candidate-parent-unrelated",
-        "missing-reviewed-commit", "unequal-reviewed-merged-trees", "origin-candidate-substitution"
+        "missing-reviewed-commit", "unequal-reviewed-merged-trees", "origin-candidate-substitution",
+        "main-unrelated-tip", "candidate-check-time", "candidate-check-event", "candidate-check-run-id",
+        "candidate-check-job-id", "candidate-check-run-url", "candidate-check-job-url", "candidate-check-attempt",
+        "candidate-check-api-time", "candidate-check-api-event", "candidate-check-api-run-id",
+        "candidate-check-api-job-id", "candidate-check-api-run-url", "candidate-check-api-job-url", "candidate-check-api-attempt",
+        "origin-check-time", "origin-check-event", "origin-check-run-id", "origin-check-job-id",
+        "origin-check-run-url", "origin-check-job-url", "origin-check-attempt", "origin-check-api-time",
+        "origin-check-api-event", "origin-check-api-run-id", "origin-check-api-job-id", "origin-check-api-run-url",
+        "origin-check-api-job-url", "origin-check-api-attempt"
     }:
         def mutate_candidate(payload: dict[str, object]) -> None:
             candidate = payload["changes"]["candidate"]
@@ -233,6 +367,72 @@ def main() -> None:
                 candidate.pop("reviewed_commit_evidence_ref", None)
             elif kind == "unequal-reviewed-merged-trees":
                 candidate["merged_tree_sha"] = "7" * 40
+                mutate_api("@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:git/trees/5555555555555555555555555555555555555555",
+                           lambda value: value.update({"sha": "7" * 40}))
+            elif kind == "main-unrelated-tip":
+                candidate["main_tip_sha"] = "8" * 40
+                mutate_api(":compare/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...9999999999999999999999999999999999999999",
+                           lambda value: (value["head_commit"].update({"sha": "8" * 40}), value["commits"][0].update({"sha": "8" * 40, "parents": [{"sha": "7" * 40}]})))
+            elif kind.startswith("candidate-check-"):
+                if kind.startswith("candidate-check-api-"):
+                    api_field = kind.removeprefix("candidate-check-api-")
+                    def mutate_candidate_check_api(value: dict[str, object]) -> None:
+                        if api_field == "time": value["started_at_utc"] = "2026-09-12T12:00:00Z"
+                        elif api_field == "event": value["event"] = "pull_request"
+                        elif api_field == "run-id": value["run_id"] = "999999"
+                        elif api_field == "job-id": value["job_id"] = "999999"
+                        elif api_field == "run-url": value["run_url"] = "https://example.invalid/run"
+                        elif api_field == "job-url": value["job_url"] = "https://example.invalid/job"
+                        else: value["attempt"] = "2"
+                    mutate_api(":actions/runs/1001/jobs/2001", mutate_candidate_check_api)
+                else:
+                    check = payload["changes"]["checks"][0]
+                if not kind.startswith("candidate-check-api-"):
+                    if kind.endswith("time"):
+                        check["started_at_utc"] = "2026-09-12T12:00:00Z"
+                    elif kind.endswith("event"):
+                        check["event"] = "pull_request"
+                    elif kind.endswith("run-id"):
+                        check["run_id"] = "999999"
+                    elif kind.endswith("job-id"):
+                        check["job_id"] = "999999"
+                    elif kind.endswith("run-url"):
+                        check["run_url"] = "https://example.invalid/run"
+                    elif kind.endswith("job-url"):
+                        check["job_url"] = "https://example.invalid/job"
+                    elif kind.endswith("attempt"):
+                        check["attempt"] = "2"
+            elif kind.startswith("origin-check-"):
+                if kind.startswith("origin-check-api-"):
+                    api_field = kind.removeprefix("origin-check-api-")
+                    def mutate_origin_check_api(value: dict[str, object]) -> None:
+                        if api_field == "time": value["completed_at_utc"] = "2026-09-13T12:00:00Z"
+                        elif api_field == "event": value["event"] = "pull_request"
+                        elif api_field == "run-id": value["run_id"] = "999999"
+                        elif api_field == "job-id": value["job_id"] = "999999"
+                        elif api_field == "run-url": value["run_url"] = "https://example.invalid/run"
+                        elif api_field == "job-url": value["job_url"] = "https://example.invalid/job"
+                        else: value["attempt"] = "2"
+                    mutate_api(":actions/runs/9001/jobs/9101", mutate_origin_check_api)
+                else:
+                    check = payload["changes"]["origin_delivery"]["checks"][0]
+                if not kind.startswith("origin-check-api-"):
+                    if kind.endswith("time"):
+                        check["completed_at_utc"] = "2026-09-13T12:00:00Z"
+                    elif kind.endswith("event"):
+                        check["event"] = "pull_request"
+                    elif kind.endswith("run-id"):
+                        check["run_id"] = "999999"
+                    elif kind.endswith("job-id"):
+                        check["job_id"] = "999999"
+                    elif kind.endswith("run-url"):
+                        check["run_url"] = "https://example.invalid/run"
+                    elif kind.endswith("job-url"):
+                        check["job_url"] = "https://example.invalid/job"
+                    elif kind.endswith("attempt"):
+                        check["attempt"] = "2"
+                mutate_api(":commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                           lambda value: value["commit"]["tree"].update({"sha": "7" * 40}))
         if kind == "origin-candidate-substitution":
             mutate_payload("prepared", lambda payload: payload["changes"]["origin_delivery"].update({"reviewed_head_sha": payload["changes"]["candidate"]["reviewed_head_sha"]}))
         else:
@@ -250,6 +450,34 @@ def main() -> None:
         review["intent_completion_sha256"] = sha256(dump(completion))
         mutate_api(":pulls/1236/reviews/6000000001", lambda value: value.update({"body": body.decode()}))
         write_content(reference, dump(payload))
+    elif kind in {
+        "origin-review-api-body", "origin-review-head", "origin-review-submitted-at", "origin-review-reviewer",
+        "origin-review-completion", "origin-review-request-update", "origin-review-negated",
+        "origin-review-missing-verdict", "origin-review-conflicting-verdict", "origin-review-body-byte"
+    }:
+        if kind == "origin-review-api-body":
+            mutate_api(":pulls/1235/reviews/5189565347", lambda value: value.update({"body": "tampered origin body"}))
+        elif kind == "origin-review-head":
+            mutate_origin_review(lambda review: review.update({"commit_id": "9" * 40}))
+        elif kind == "origin-review-submitted-at":
+            mutate_origin_review(lambda review: review.update({"submitted_at_utc": "2026-09-13T04:45:00Z"}))
+        elif kind == "origin-review-reviewer":
+            mutate_origin_review(lambda review: review.update({"reviewer": "forged-reviewer"}))
+        elif kind == "origin-review-completion":
+            mutate_origin_completion(lambda completion: completion.update({"head_sha": "9" * 40}))
+        elif kind == "origin-review-body-byte":
+            _, prepared = payload_at("prepared")
+            review = prepared["changes"]["origin_delivery"]["review"]
+            current_body = read_content(review["body_evidence_ref"])[1]
+            mutate_origin_body_record_only(current_body.replace(b"G79", b"G78", 1))
+        else:
+            body = {
+                "origin-review-request-update": b"# Review\n\n- Verdict: **REQUEST-UPDATE**\n",
+                "origin-review-negated": b"# Review\n\n- Verdict: **APPROVE** -- not approved\n",
+                "origin-review-missing-verdict": b"# Review\n\nNo verdict was issued.\n",
+                "origin-review-conflicting-verdict": b"# Review\n\n- Verdict: **APPROVE**\n- Verdict: **REQUEST-UPDATE**\n",
+            }[kind]
+            mutate_origin_body(body)
     elif kind in {"prepared-completion-late", "prepared-completion-equal", "artifact-completion-late", "artifact-completion-equal"}:
         authority_stage = "prepared" if kind.startswith("prepared") else "artifacts-verified"
         timestamp = {
@@ -417,7 +645,14 @@ def main() -> None:
         "issue1185-closeout-equal-authority", "issue1230-closeout-equal-authority",
         "missing-merge-strategy", "wrong-merge-strategy", "candidate-parent-count-1", "candidate-parent-count-3", "candidate-parent-reversed",
         "candidate-parent-unrelated", "missing-reviewed-commit", "unequal-reviewed-merged-trees",
-        "origin-candidate-substitution", "semantic-negated",
+        "origin-candidate-substitution", "semantic-negated", "self-containing-approval", "self-containing-completion",
+        "self-containing-payload", "main-unrelated-tip", "candidate-check-time", "candidate-check-event",
+        "candidate-check-run-id", "candidate-check-job-id", "candidate-check-run-url", "candidate-check-job-url",
+        "candidate-check-attempt", "origin-check-time", "origin-check-event", "origin-check-run-id",
+        "origin-check-job-id", "origin-check-run-url", "origin-check-job-url", "origin-check-attempt",
+        "origin-review-head", "origin-review-submitted-at", "origin-review-reviewer", "origin-review-completion",
+        "origin-review-request-update", "origin-review-negated", "origin-review-missing-verdict",
+        "origin-review-conflicting-verdict", "origin-review-body-byte",
     }:
         refresh_approval_payload_digests()
 

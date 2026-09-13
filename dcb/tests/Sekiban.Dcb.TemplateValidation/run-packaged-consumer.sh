@@ -315,7 +315,7 @@ if [[ "$endpoint" == "repos/J-Tech-Japan/SekibanIntentHost/contents/${record_pat
   fi
   exit 0
 fi
-case "$endpoint" in
+  case "$endpoint" in
   repos/J-Tech-Japan/SekibanIntentHost/contents/*)
     response_path="${endpoint#repos/J-Tech-Japan/SekibanIntentHost/contents/}"
     response_path="${response_path%%\?*}"
@@ -328,15 +328,25 @@ case "$endpoint" in
       '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
     ;;
   repos/J-Tech-Japan/SekibanIntentHost/commits/*)
-    commit_sha="$requested_ref"
-    [[ "${FAKE_GH_BAD_COMMIT:-0}" == 1 ]] && commit_sha="8888888888888888888888888888888888888888"
-    jq -n --arg sha "$commit_sha" --arg tree "$tree_sha" '{sha:$sha,commit:{tree:{sha:$tree}}}'
+    map_line="$(awk -F '\t' -v endpoint="$endpoint" '$4 == endpoint { print; exit }' "$fixture_root/map.tsv")"
+    [[ -n "$map_line" ]] || { echo "missing host commit map entry for ${endpoint}" >&2; exit 1; }
+    response_file="$(printf '%s\n' "$map_line" | cut -f3)"
+    if [[ "${FAKE_GH_BAD_COMMIT:-0}" == 1 && "$endpoint" == "repos/J-Tech-Japan/SekibanIntentHost/commits/${requested_ref}" ]]; then
+      jq '.sha = "8888888888888888888888888888888888888888"' "$response_file"
+    else
+      cat "$response_file"
+    fi
     ;;
   repos/J-Tech-Japan/SekibanIntentHost/git/trees/*)
-    tree_blob="$record_blob"
-    [[ "${FAKE_GH_BAD_BLOB:-0}" == 1 ]] && tree_blob="7777777777777777777777777777777777777777"
-    jq -n --arg tree "$tree_sha" --arg path "$record_path" --arg sha "$tree_blob" \
-      '{sha:$tree,tree:[{path:$path,type:"blob",sha:$sha}]}'
+    map_line="$(awk -F '\t' -v endpoint="$endpoint" '$4 == endpoint { print; exit }' "$fixture_root/map.tsv")"
+    [[ -n "$map_line" ]] || { echo "missing host tree map entry for ${endpoint}" >&2; exit 1; }
+    response_file="$(printf '%s\n' "$map_line" | cut -f3)"
+    if [[ "${FAKE_GH_BAD_BLOB:-0}" == 1 && "$endpoint" == "repos/J-Tech-Japan/SekibanIntentHost/git/trees/${tree_sha}?recursive=1" ]]; then
+      jq --arg path "$record_path" --arg sha "7777777777777777777777777777777777777777" \
+        '(.tree[] | select(.path == $path)).sha = $sha' "$response_file"
+    else
+      cat "$response_file"
+    fi
     ;;
   *)
     map_line="$(awk -F '\t' -v endpoint="$endpoint" '$4 == endpoint { print; exit }' "$fixture_root/map.tsv")"
@@ -481,7 +491,18 @@ SHIM
       issue1185-closeout-equal-authority issue1230-closeout-equal-authority early-future-authority \
       current-object-self-commit missing-merge-strategy wrong-merge-strategy candidate-parent-count-1 \
       candidate-parent-count-3 candidate-parent-reversed candidate-parent-unrelated missing-reviewed-commit \
-      unequal-reviewed-merged-trees origin-candidate-substitution semantic-negated prepared-completion-late \
+      unequal-reviewed-merged-trees main-unrelated-tip candidate-check-time candidate-check-event candidate-check-run-id \
+      candidate-check-job-id candidate-check-run-url candidate-check-job-url candidate-check-attempt origin-check-time \
+      origin-check-event origin-check-run-id origin-check-job-id origin-check-run-url origin-check-job-url origin-check-attempt \
+      candidate-check-api-time candidate-check-api-event candidate-check-api-run-id candidate-check-api-job-id \
+      candidate-check-api-run-url candidate-check-api-job-url candidate-check-api-attempt origin-check-api-time \
+      origin-check-api-event origin-check-api-run-id origin-check-api-job-id origin-check-api-run-url \
+      origin-check-api-job-url origin-check-api-attempt \
+      origin-candidate-substitution origin-review-api-body origin-review-head origin-review-submitted-at origin-review-reviewer \
+      origin-review-completion origin-review-request-update origin-review-negated origin-review-missing-verdict \
+      origin-review-conflicting-verdict origin-review-body-byte semantic-negated self-containing-approval self-containing-completion \
+      self-containing-payload missing-host-commit-anchor missing-host-tree-anchor wrong-host-commit-anchor \
+      wrong-host-tree-anchor missing-host-tree-path wrong-host-tree-blob decoded-host-bytes prepared-completion-late \
       prepared-completion-equal artifact-completion-late artifact-completion-equal manifest-listed-unreachable \
       manifest-same-file-alias; do
     mutant_bundle="$work_root/closed-mutant-${closed_mutant//\//-}"
@@ -498,6 +519,56 @@ SHIM
   expect_failure run_net10 "$validator" release-record --bundle "$sibling_bundle" \
     --manifest "$sibling_bundle/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
+
+  # The same sibling exists in the fake host repository but is not reachable
+  # from the pointer. The production reader must not fetch/list it, and the
+  # resulting closed bundle remains valid.
+  sibling_ref="$(tr -d '\n' < "$closed_fixture/sibling-ref")"
+  if jq -e --arg ref "$sibling_ref" '.entries[] | select(.immutable_ref == $ref)' "$manifest" >/dev/null; then
+    echo "An unreachable host sibling was unexpectedly included in the reader bundle." >&2
+    return 1
+  fi
+  echo "Production reader unreferenced-sibling control passed: host sibling remained outside the closed graph."
+
+  reachable_fixture="$work_root/reachable-sibling-host"
+  cp -R "$closed_fixture" "$reachable_fixture"
+  python3 - "$reachable_fixture" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+rows = [line.split("\t") for line in (root / "map.tsv").read_text().splitlines() if line]
+sibling = (root / "sibling-ref").read_text().strip()
+target = next(row for row in rows if ":contents/" in row[0] and row[0].endswith("/library.json"))
+content_path = Path(target[2])
+payload = json.loads(content_path.read_text())
+payload["previous_payload_ref"] = sibling
+content_path.write_bytes((json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode())
+object_path = target[0].split(":", 1)[1][len("contents/"):]
+commit = target[0].split("@", 1)[1].split(":", 1)[0]
+tree_row = next(row for row in rows if row[0].startswith(f"J-Tech-Japan/SekibanIntentHost@{commit}:git/trees/"))
+tree_path = Path(tree_row[2])
+tree = json.loads(tree_path.read_text())
+blob = subprocess.run(["git", "hash-object", "--stdin"], input=content_path.read_bytes(), stdout=subprocess.PIPE, check=True).stdout.decode().strip()
+for entry in tree["tree"]:
+    if entry.get("path") == object_path:
+        entry["sha"] = blob
+tree_path.write_text(json.dumps(tree, sort_keys=True, separators=(",", ":")) + "\n")
+PY
+  reachable_output="$work_root/reachable-sibling-output"
+  reachable_manifest="$reachable_output/bundle.json"
+  env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+    SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$reachable_fixture/record.json" \
+    FAKE_HOST_REF="$fake_ref" FAKE_CLOSED_ROOT="$reachable_fixture" \
+    FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" bash "$reader" \
+      --version "$version" --state complete --verify-tags all \
+      --output-dir "$reachable_output" --manifest "$reachable_manifest"
+  expect_failure run_net10 "$validator" release-record --bundle "$reachable_output" \
+    --manifest "$reachable_manifest" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+  echo "Production reader reachable-sibling splice control failed closed."
 
   # Production release-record accepts only the pointer bundle.  The old
   # flattened adapter remains available solely to legacy fixture tests below.

@@ -154,13 +154,17 @@ internal sealed class ReleaseBundle
         Assert(actualFiles.SetEquals(paths),
             "Bundle contains an extra, missing, or unreachable file outside the closed manifest.");
 
+        ValidateHostContentsEvidence(loaded);
+
         var readerAnchorRefs = loaded.Keys
             .Where(reference => IsReaderAnchorReference(reference, hostRef))
             .ToHashSet(StringComparer.Ordinal);
-        Assert(readerAnchorRefs.Count == 2 &&
-               readerAnchorRefs.Any(reference => reference.Contains($":commits/{hostRef}", StringComparison.OrdinalIgnoreCase)) &&
+        Assert(readerAnchorRefs.Count >= 2 &&
+               readerAnchorRefs.Any(reference => reference.Contains(":commits/", StringComparison.OrdinalIgnoreCase)) &&
                readerAnchorRefs.Any(reference => reference.Contains(":git/trees/", StringComparison.OrdinalIgnoreCase)),
-            "The closed bundle must contain exactly the immutable host commit/tree anchors fetched by the reader.");
+            "The closed bundle must contain immutable host commit/tree anchors for every fetched host contents object.");
+
+        ValidateNoSelfContainingHostObjects(loaded);
 
         return new ReleaseBundle(recordPath!, hostRef, recordBytes!, loaded);
     }
@@ -284,7 +288,8 @@ internal sealed class ReleaseBundle
             _ when objectPath.StartsWith("commits/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("pulls/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("actions/", StringComparison.Ordinal) ||
-                   objectPath.StartsWith("releases/", StringComparison.Ordinal) =>
+                   objectPath.StartsWith("releases/", StringComparison.Ordinal) ||
+                   objectPath.StartsWith("compare/", StringComparison.Ordinal) =>
                 $"repos/{repository}/{objectPath}",
             _ when objectPath.StartsWith("git/trees/", StringComparison.Ordinal) =>
                 $"repos/{repository}/{objectPath}?recursive=1",
@@ -294,10 +299,79 @@ internal sealed class ReleaseBundle
         };
     }
 
+    private static string ReferenceCommit(string immutableRef)
+    {
+        var at = immutableRef.LastIndexOf('@');
+        var colon = immutableRef.IndexOf(':', at + 1);
+        Assert(at > 0 && colon > at, $"Immutable reference {immutableRef} has no commit identity.");
+        return immutableRef[(at + 1)..colon];
+    }
+
     internal static bool IsReaderAnchorReference(string immutableRef, string hostRef) =>
-        immutableRef.StartsWith($"{HostRepository}@{hostRef}:", StringComparison.OrdinalIgnoreCase) &&
+        immutableRef.StartsWith($"{HostRepository}@", StringComparison.OrdinalIgnoreCase) &&
         (immutableRef.Contains(":commits/", StringComparison.OrdinalIgnoreCase) ||
          immutableRef.Contains(":git/trees/", StringComparison.OrdinalIgnoreCase));
+
+    private static void ValidateHostContentsEvidence(IReadOnlyDictionary<string, Entry> entries)
+    {
+        foreach (var contentEntry in entries.Values.Where(entry =>
+                     entry.ContentBytes is not null &&
+                     entry.ImmutableRef.Contains(":contents/", StringComparison.OrdinalIgnoreCase) &&
+                     entry.ImmutableRef.StartsWith($"{HostRepository}@", StringComparison.OrdinalIgnoreCase)))
+        {
+            var commit = ReferenceCommit(contentEntry.ImmutableRef);
+            var commitRef = $"{HostRepository}@{commit}:commits/{commit}";
+            Assert(entries.TryGetValue(commitRef, out var commitEntry),
+                $"Host contents object {contentEntry.ImmutableRef} is missing its immutable commit response.");
+            using var commitDocument = JsonDocument.Parse(commitEntry!.RawBytes);
+            var commitObject = commitDocument.RootElement;
+            Assert(GetString(commitObject, "sha") == commit && commitObject.TryGetProperty("commit", out _),
+                $"Host commit response is not bound to {commit}.");
+            var commitDetails = commitObject.GetProperty("commit");
+            var tree = commitDetails.GetProperty("tree");
+            Assert(tree.ValueKind == JsonValueKind.Object, $"Host commit response is not bound to {commit}.");
+            var treeSha = GetString(tree, "sha");
+            var treeRef = $"{HostRepository}@{commit}:git/trees/{treeSha}";
+            Assert(entries.TryGetValue(treeRef, out var treeEntry),
+                $"Host contents object {contentEntry.ImmutableRef} is missing its immutable tree response.");
+            using var treeDocument = JsonDocument.Parse(treeEntry!.RawBytes);
+            var treeObject = treeDocument.RootElement;
+            Assert(GetString(treeObject, "sha") == treeSha && treeObject.TryGetProperty("tree", out _),
+                $"Host tree response is not bound to {treeSha}.");
+            var treeEntries = treeObject.GetProperty("tree");
+            Assert(treeEntries.ValueKind == JsonValueKind.Array, $"Host tree response is not bound to {treeSha}.");
+
+            var separator = contentEntry.ImmutableRef.IndexOf(':');
+            var expectedPath = contentEntry.ImmutableRef[(separator + 1)..]["contents/".Length..];
+            var matches = treeEntries.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.Object &&
+                               item.TryGetProperty("path", out var path) && path.GetString() == expectedPath)
+                .ToArray();
+            Assert(matches.Length == 1 && GetString(matches[0], "type") == "blob" &&
+                   GetString(matches[0], "sha") == GitBlobSha(contentEntry.ContentBytes!),
+                $"Host tree {treeSha} does not bind exactly one blob for {expectedPath}.");
+        }
+    }
+
+    private static void ValidateNoSelfContainingHostObjects(IReadOnlyDictionary<string, Entry> entries)
+    {
+        foreach (var entry in entries.Values.Where(value =>
+                     value.ContentBytes is not null &&
+                     value.ImmutableRef.StartsWith($"{HostRepository}@", StringComparison.OrdinalIgnoreCase)))
+        {
+            var containingCommit = ReferenceCommit(entry.ImmutableRef);
+            var text = Encoding.UTF8.GetString(entry.ContentBytes!);
+            foreach (Match match in ImmutableRef.Matches(text))
+            {
+                var nestedReference = match.Value;
+                if (nestedReference.StartsWith($"{HostRepository}@", StringComparison.OrdinalIgnoreCase))
+                {
+                    Assert(!ReferenceCommit(nestedReference).Equals(containingCommit, StringComparison.OrdinalIgnoreCase),
+                        $"Host object {entry.ImmutableRef} must not reference an object from its containing commit.");
+                }
+            }
+        }
+    }
 
     private static bool IsWithin(string root, string path)
     {
