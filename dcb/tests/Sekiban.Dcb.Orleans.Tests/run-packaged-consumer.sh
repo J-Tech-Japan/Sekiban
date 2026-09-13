@@ -6,6 +6,18 @@ repo_root="$(cd "$script_dir/../../.." && pwd)"
 feed=""
 version=""
 
+dcb_package_ids=(
+  Sekiban.Dcb.BlobStorage.AzureStorage Sekiban.Dcb.BlobStorage.S3 Sekiban.Dcb.ColdStorage
+  Sekiban.Dcb.Core Sekiban.Dcb.Core.Model Sekiban.Dcb.Core.Testing Sekiban.Dcb.CosmosDb
+  Sekiban.Dcb.DynamoDB Sekiban.Dcb.MaterializedView Sekiban.Dcb.MaterializedView.MySql
+  Sekiban.Dcb.MaterializedView.Orleans Sekiban.Dcb.MaterializedView.Postgres
+  Sekiban.Dcb.MaterializedView.SqlServer Sekiban.Dcb.MaterializedView.Sqlite
+  Sekiban.Dcb.Orleans.AzureQueue Sekiban.Dcb.Orleans.Core Sekiban.Dcb.Orleans.WithResult
+  Sekiban.Dcb.Orleans.WithoutResult Sekiban.Dcb.Postgres Sekiban.Dcb.Sqlite
+  Sekiban.Dcb.WithResult Sekiban.Dcb.WithResult.Model Sekiban.Dcb.WithResult.Testing
+  Sekiban.Dcb.WithoutResult Sekiban.Dcb.WithoutResult.Model Sekiban.Dcb.WithoutResult.Testing
+)
+
 while (( $# > 0 )); do
   case "$1" in
     --repo-root) repo_root="$(cd "$2" && pwd)"; shift 2 ;;
@@ -26,6 +38,12 @@ fi
 
 package="$feed/Sekiban.Dcb.Orleans.AzureQueue.$version.nupkg"
 [[ -f "$package" ]] || { echo "Missing package: $package" >&2; exit 1; }
+for dcb_package in "${dcb_package_ids[@]}"; do
+  if [[ ! -f "$feed/$dcb_package.$version.nupkg" ]]; then
+    echo "The supplied local feed is missing exact DCB artifact $dcb_package.$version.nupkg." >&2
+    exit 1
+  fi
+done
 
 nuspec="$(unzip -p "$package" '*.nuspec')"
 for required in \
@@ -57,6 +75,39 @@ cat > "$config" <<EOF
     <add key="g76-local" value="$feed" />
     <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
   </packageSources>
+  <packageSourceMapping>
+    <packageSource key="g76-local">
+      <package pattern="Sekiban.Dcb.*" />
+    </packageSource>
+    <packageSource key="nuget.org">
+      <package pattern="Microsoft.*" />
+      <package pattern="Aspire.*" />
+      <package pattern="Azure.*" />
+      <package pattern="AWSSDK.*" />
+      <package pattern="CommunityToolkit.*" />
+      <package pattern="AspNetCore.HealthChecks.*" />
+      <package pattern="Polly*" />
+      <package pattern="SQLitePCLRaw.*" />
+      <package pattern="Grpc.*" />
+      <package pattern="Google.*" />
+      <package pattern="Json.*" />
+      <package pattern="KubernetesClient" />
+      <package pattern="ModelContextProtocol*" />
+      <package pattern="Semver" />
+      <package pattern="StreamJsonRpc" />
+      <package pattern="Humanizer.*" />
+      <package pattern="Dapper" />
+      <package pattern="DuckDB.*" />
+      <package pattern="OpenTelemetry.*" />
+      <package pattern="Newtonsoft.Json" />
+      <package pattern="System.*" />
+      <package pattern="runtime.*" />
+      <package pattern="Npgsql*" />
+      <package pattern="ResultBoxes" />
+      <package pattern="Scalar.*" />
+      <package pattern="Microsoft.NET.Test.Sdk" />
+    </packageSource>
+  </packageSourceMapping>
 </configuration>
 EOF
 

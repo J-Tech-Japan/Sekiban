@@ -6,9 +6,13 @@ namespace Sekiban.Dcb.TemplateValidation;
 
 internal static class Program
 {
+    private const string LibraryKind = "library";
+    private const string JapaneseLanguage = "Japanese";
+
     private const string VersionProperty = "SekibanDcbVersion";
     private const string PropsFileName = "SekibanDcbTemplateVersion.props";
-    private const string ExpectedVersion = "10.19.0";
+    private const string ExpectedVersion = "10.22.0";
+    private const string OrleansVersion = "10.3.1";
     private const string NonexistentPackageVersion = "999.999.999";
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex DcbVersionMention = new(
@@ -43,7 +47,7 @@ internal static class Program
                     var repoRoot = Required(options, "repo-root");
                     OrleansVersionVerifier.Validate(
                         repoRoot,
-                        options.GetValueOrDefault("orleans-version", "10.3.1"));
+                        options.GetValueOrDefault("orleans-version", OrleansVersion));
                     ValidateTemplateTree(
                         Path.Combine(repoRoot, "templates", "Sekiban.Dcb.Templates", "content"),
                         expectedVersion,
@@ -55,7 +59,7 @@ internal static class Program
                         requireAllTemplateRoots: true);
                     ValidateStatusCompositionSurface(Path.Combine(repoRoot, "templates", "Sekiban.Dcb.Templates", "content"));
                     ValidateCasAbsence(Path.Combine(repoRoot, "templates", "Sekiban.Dcb.Templates", "content"));
-                    ValidateDocs(repoRoot, requireContributing: true);
+                    ValidateDocs(repoRoot, requireContributing: true, expectedVersion);
                     ValidateWorkflowSurface(repoRoot);
                     break;
 
@@ -96,21 +100,40 @@ internal static class Program
                     break;
 
                 case "docs":
-                    ValidateDocs(Required(options, "repo-root"), requireContributing: true);
+                    ValidateDocs(Required(options, "repo-root"), requireContributing: true, expectedVersion);
                     break;
 
                 case "docs-currency":
                     ValidateTemplateDocsCurrency(Required(options, "repo-root"), expectedVersion);
                     break;
 
+                case "release-bodies":
+                    ValidateReleaseBodies(
+                        Required(options, "repo-root"),
+                        expectedVersion,
+                        options.GetValueOrDefault("kind"));
+                    break;
+
                 case "workflow":
                     ValidateWorkflowSurface(Required(options, "repo-root"));
+                    break;
+
+                case "release-record":
+                    ReleaseRecordValidator.Validate(
+                        Required(options, "record"),
+                        expectedVersion,
+                        options.GetValueOrDefault("state"),
+                        options.GetValueOrDefault("repo-root"));
+                    break;
+
+                case "packages":
+                    PackageArtifactValidator.Validate(Required(options, "directory"), expectedVersion);
                     break;
 
                 case "orleans":
                     OrleansVersionVerifier.Validate(
                         Required(options, "repo-root"),
-                        options.GetValueOrDefault("orleans-version", "10.3.1"));
+                        options.GetValueOrDefault("orleans-version", OrleansVersion));
                     break;
 
                 case "mutate":
@@ -389,7 +412,7 @@ internal static class Program
         }
     }
 
-    private static void ValidateDocs(string repoRoot, bool requireContributing)
+    private static void ValidateDocs(string repoRoot, bool requireContributing, string expectedVersion)
     {
         var requiredMarkers = new[]
         {
@@ -451,7 +474,80 @@ internal static class Program
             Assert(File.Exists(contributing) &&
                    File.ReadAllText(contributing).Contains("<!-- sek-g44:two-stage-template-release -->", StringComparison.Ordinal) &&
                    File.ReadAllText(contributing).Contains("outside the EN/JA documentation parity gate", StringComparison.Ordinal),
-                "CONTRIBUTING.md must document the two-stage DCB/template release protocol.");
+                   "CONTRIBUTING.md must document the two-stage DCB/template release protocol.");
+        }
+
+        ValidateReleaseBodies(repoRoot, expectedVersion, bodyKind: null);
+    }
+
+    private static void ValidateReleaseBodies(string repoRoot, string expectedVersion, string? bodyKind)
+    {
+        var releaseRoot = Path.Combine(repoRoot, "docs", "releases");
+        Assert(Directory.Exists(releaseRoot), "docs/releases is required for the staged DCB release inputs.");
+        var files = new[]
+        {
+            (Path.Combine(releaseRoot, $"dcb-v{expectedVersion}-library.en.md"), LibraryKind, "English"),
+            (Path.Combine(releaseRoot, $"dcb-v{expectedVersion}-library.ja.md"), LibraryKind, JapaneseLanguage),
+            (Path.Combine(releaseRoot, $"dcbTemplates-v{expectedVersion}.en.md"), "template", "English"),
+            (Path.Combine(releaseRoot, $"dcbTemplates-v{expectedVersion}.ja.md"), "template", JapaneseLanguage)
+        }.Where(file => bodyKind is null || string.Equals(file.Item2, bodyKind, StringComparison.OrdinalIgnoreCase)).ToArray();
+        Assert(files.Length > 0, $"Unknown release-body kind '{bodyKind}'.");
+
+        foreach (var (path, kind, language) in files)
+        {
+            Assert(File.Exists(path), $"Missing reviewed {language} {kind} release body: {path}");
+            var content = File.ReadAllText(path);
+            Assert(content.Contains(expectedVersion, StringComparison.Ordinal),
+                $"{path} must name DCB {expectedVersion}.");
+            Assert(content.Contains(OrleansVersion, StringComparison.Ordinal),
+                $"{path} must retain the Orleans {OrleansVersion} support line.");
+            string scopeMarker;
+            if (kind == LibraryKind)
+            {
+                scopeMarker = "26";
+            }
+            else if (language == JapaneseLanguage)
+            {
+                scopeMarker = "テンプレート";
+            }
+            else
+            {
+                scopeMarker = "template";
+            }
+            Assert(content.Contains(scopeMarker, StringComparison.OrdinalIgnoreCase),
+                $"{path} must identify its package scope.");
+            Assert(content.Contains("prepared", StringComparison.Ordinal) &&
+                   content.Contains(kind == LibraryKind ? "libraries-verified" : "artifacts-verified", StringComparison.Ordinal),
+                $"{path} must describe the staged release state machine.");
+            var retryMarker = language == JapaneseLanguage ? "再試行" : "retry";
+            var recoveryVersionMarker = language == JapaneseLanguage ? "新しいバージョン" : "new version";
+            Assert(content.Contains(retryMarker, StringComparison.OrdinalIgnoreCase) &&
+                   content.Contains(recoveryVersionMarker, StringComparison.OrdinalIgnoreCase),
+                $"{path} must document immutable-tag retry and new-version recovery.");
+            Assert(!content.Contains("TODO", StringComparison.OrdinalIgnoreCase) &&
+                   !content.Contains("TBD", StringComparison.OrdinalIgnoreCase),
+                $"{path} contains an unresolved release-body placeholder.");
+            ValidateReleaseBodyFacts(content, path, language);
+        }
+    }
+
+    private static void ValidateReleaseBodyFacts(string content, string path, string language)
+    {
+        var required = language == JapaneseLanguage
+            ? new[]
+            {
+                "net9.0", "net10.0", "G74", "G75", "G76", "G77", "G78",
+                "5回", "オプトイン", OrleansVersion, "PostgreSQL", "データ書き換え"
+            }
+            : new[]
+            {
+                "net9.0", "net10.0", "G74", "G75", "G76", "G77", "G78",
+                "five attempts", "opt-in", OrleansVersion, "PostgreSQL", "no data rewrite"
+            };
+        foreach (var marker in required)
+        {
+            Assert(content.Contains(marker, StringComparison.OrdinalIgnoreCase),
+                $"{path} is missing required release fact '{marker}'.");
         }
     }
 
@@ -536,6 +632,12 @@ internal static class Program
             "tests",
             "Sekiban.Dcb.Orleans.Tests",
             "run-packaged-consumer.sh");
+        var hostRecordReader = Path.Combine(
+            repoRoot,
+            "dcb",
+            "tests",
+            "Sekiban.Dcb.TemplateValidation",
+            "read-host-release-record.sh");
         Assert(File.Exists(validationWorkflow), "The DCB template validation workflow is missing.");
         Assert(File.Exists(dcbTestWorkflow), "The DCB test workflow is missing.");
         Assert(File.Exists(dcbPackageWorkflow), "The DCB package workflow is missing.");
@@ -543,11 +645,18 @@ internal static class Program
         Assert(File.Exists(publishWorkflow), "The DCB template publish workflow is missing.");
         Assert(File.Exists(packagedConsumerScript), "The DCB packaged-consumer script is missing.");
         Assert(File.Exists(azureQueueConsumerScript), "The Azure Queue packaged-consumer script is missing.");
+        Assert(File.Exists(hostRecordReader), "The immutable host release-record reader is missing.");
+        var hostRecordReaderText = File.ReadAllText(hostRecordReader);
+        Assert(hostRecordReaderText.Contains("J-Tech-Japan/SekibanIntentHost", StringComparison.Ordinal) &&
+               !hostRecordReaderText.Contains("J-Tech-Japan/Sekiban-Design", StringComparison.Ordinal) &&
+               !hostRecordReaderText.Contains("SEKIBAN_RELEASE_RECORD_REPOSITORY", StringComparison.Ordinal),
+            "The host release-record reader must target the private canonical host without a repository override.");
         var validation = File.ReadAllText(validationWorkflow);
         var dcbTest = File.ReadAllText(dcbTestWorkflow);
         var dcbPackage = File.ReadAllText(dcbPackageWorkflow);
         var azureQueueConsumer = File.ReadAllText(azureQueueConsumerWorkflow);
         var publish = File.ReadAllText(publishWorkflow);
+        var dcbPackageSteps = ReadNamedWorkflowSteps(dcbPackage);
         Assert(dcbTest.Contains(
                 "dcb/tests/Sekiban.Dcb.TemplateValidation/**",
                 StringComparison.Ordinal),
@@ -564,6 +673,27 @@ internal static class Program
                 "dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh",
                 StringComparison.Ordinal),
             "The DCB package workflow must run the isolated Azure Queue packaged consumer.");
+        Assert(dcbPackage.Contains(
+                "validate-release-tags.sh \\\n            --check-package-manifest",
+                StringComparison.Ordinal),
+            "The DCB package workflow must validate the exact source package manifest before packing.");
+        Assert(dcbPackage.Contains("docs/releases/dcb-v${VERSION}-library.en.md", StringComparison.Ordinal) &&
+               dcbPackage.Contains("docs/releases/dcb-v${VERSION}-library.ja.md", StringComparison.Ordinal),
+            "The DCB package workflow must require both reviewed library release bodies.");
+        Assert(dcbPackage.Contains("release-bodies --repo-root", StringComparison.Ordinal) &&
+               dcbPackage.Contains("--kind library", StringComparison.Ordinal),
+            "The DCB package workflow must invoke the bilingual library body validator before push.");
+        Assert(dcbPackage.Contains("packages --directory", StringComparison.Ordinal) &&
+               dcbPackage.Contains("Inspect exact package set and dependency groups before push", StringComparison.Ordinal),
+            "The DCB package workflow must inspect the exact package set and dependency groups before push.");
+        var libraryPush = RequireNamedStep(dcbPackageSteps, "Push to NuGet.org");
+        var libraryVisibility = RequireNamedStep(dcbPackageSteps, "Wait for exact public library visibility");
+        var libraryRelease = RequireNamedStep(dcbPackageSteps, "Create GitHub Release");
+        Assert(dcbPackage.Contains("body_path: out/library-release-body.md", StringComparison.Ordinal) &&
+               dcbPackage.Contains("draft: false", StringComparison.Ordinal),
+            "The library release must use the reviewed bilingual body and be explicitly non-draft.");
+        Assert(libraryPush.Ordinal < libraryVisibility.Ordinal && libraryVisibility.Ordinal < libraryRelease.Ordinal,
+            "The library workflow must wait for exact public visibility before creating its release.");
         Assert(azureQueueConsumer.Contains("pull_request:", StringComparison.Ordinal),
             "The Azure Queue packaged-consumer workflow must run for pull requests.");
         Assert(azureQueueConsumer.Contains("workflow_dispatch:", StringComparison.Ordinal),
@@ -598,6 +728,12 @@ internal static class Program
         Assert(azureQueueConsumer.Contains("SEKIBAN_G76_FORCE_CONSUMER_THROW=1", StringComparison.Ordinal) &&
                azureQueueConsumer.Contains("unconditional consumer-throw probe", StringComparison.Ordinal),
             "The Azure Queue pull-request workflow must prove that a consumer runtime failure is propagated.");
+        Assert(validation.Contains("dcb/tests/Sekiban.Dcb.TemplateValidation/pack-local-dcb.sh", StringComparison.Ordinal) &&
+               validation.Contains("dcb-local-feed", StringComparison.Ordinal) &&
+               validation.Contains("--feed \"$GITHUB_WORKSPACE/dcb-local-feed\"", StringComparison.Ordinal),
+            "The template validation workflow must run consumers against an isolated local 26-package DCB feed.");
+        Assert(validation.Contains("dcb/src/**", StringComparison.Ordinal),
+            "The template validation workflow must rerun when DCB package sources change.");
 
         var effectivePackableProjects = Directory.EnumerateFiles(
                 Path.Combine(repoRoot, "dcb", "src"),
@@ -607,34 +743,11 @@ internal static class Program
             .Select(path => ToRepoPath(repoRoot, path))
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToArray();
-        var manifestProjects = Regex.Matches(
-                dcbPackage,
-                @"dotnet\s+pack\s+(?<project>dcb/src/[^\s""']+\.csproj)",
-                RegexOptions.CultureInvariant,
-                RegexTimeout)
-            .Cast<Match>()
-            .Select(match => match.Groups["project"].Value.Replace('\\', '/'))
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(path => path, StringComparer.Ordinal)
-            .ToArray();
-        Assert(
-            effectivePackableProjects.SequenceEqual(manifestProjects, StringComparer.Ordinal),
-            $"The DCB package manifest must exactly match effective packable dcb/src projects. " +
-            $"Missing: {string.Join(", ", effectivePackableProjects.Except(manifestProjects, StringComparer.Ordinal))}; " +
-            $"Unexpected: {string.Join(", ", manifestProjects.Except(effectivePackableProjects, StringComparer.Ordinal))}.");
-
-        var pullRequestManifestProjects = Regex.Matches(
-                azureQueueConsumer,
-                @"dotnet\s+pack\s+(?<project>dcb/src/[^\s""']+\.csproj)",
-                RegexOptions.CultureInvariant,
-                RegexTimeout)
-            .Cast<Match>()
-            .Select(match => match.Groups["project"].Value.Replace('\\', '/'))
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(path => path, StringComparer.Ordinal)
-            .ToArray();
-        Assert(
-            effectivePackableProjects.SequenceEqual(pullRequestManifestProjects, StringComparer.Ordinal),
+        var manifestProjects = ExtractPackManifest(dcbPackage);
+        var pullRequestManifestProjects = ExtractPackManifest(azureQueueConsumer);
+        Assert(effectivePackableProjects.SequenceEqual(manifestProjects, StringComparer.Ordinal),
+            "The DCB package manifest must exactly match effective packable dcb/src projects.");
+        Assert(effectivePackableProjects.SequenceEqual(pullRequestManifestProjects, StringComparer.Ordinal),
             "The Azure Queue pull-request workflow must pack the exact effective DCB packable project set.");
 
         foreach (var required in new[]
@@ -653,12 +766,57 @@ internal static class Program
                 $"The validation workflow must include '{required}'.");
         }
 
-        var validationSteps = ReadNamedWorkflowSteps(validation);
-        var publishSteps = ReadNamedWorkflowSteps(publish);
         RequireStepWithRun(
-            validationSteps,
+            ReadNamedWorkflowSteps(validation),
             "dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh",
             "The PR validation workflow must run the packaged-consumer path.");
+        ValidatePublishWorkflow(dcbPackage, publish);
+
+        ValidateConsumerScripts(repoRoot, packagedConsumerScript, azureQueueConsumerScript);
+    }
+
+    private static string[] ExtractPackManifest(string workflow) =>
+        Regex.Matches(
+                workflow,
+                @"dotnet\s+pack\s+(?<project>dcb/src/[^\s""']+\.csproj)",
+                RegexOptions.CultureInvariant,
+                RegexTimeout)
+            .Cast<Match>()
+            .Select(match => match.Groups["project"].Value.Replace('\\', '/'))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+
+    private static void ValidatePublishWorkflow(string dcbPackage, string publish)
+    {
+        var dcbPackageSteps = ReadNamedWorkflowSteps(dcbPackage);
+        var libraryRecord = RequireNamedStep(dcbPackageSteps, "Read immutable host-owned release record");
+        var libraryRecordValidation = RequireNamedStep(dcbPackageSteps, "Validate canonical library-tagged release state before finalization");
+        var libraryPush = RequireNamedStep(dcbPackageSteps, "Push to NuGet.org");
+        var libraryVisibility = RequireNamedStep(dcbPackageSteps, "Wait for exact public library visibility");
+        var libraryRelease = RequireNamedStep(dcbPackageSteps, "Create GitHub Release");
+        Assert(libraryRecord.Body.Contains("read-host-release-record.sh", StringComparison.Ordinal) &&
+               libraryRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_TOKEN", StringComparison.Ordinal) &&
+               libraryRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_REF", StringComparison.Ordinal) &&
+               libraryRecord.Body.Contains("--verify-tags library", StringComparison.Ordinal) &&
+               !libraryRecord.Body.Contains("github.token", StringComparison.Ordinal) &&
+               libraryRecord.Body.Contains("--state 'library-tagged/incomplete'", StringComparison.Ordinal),
+            "The library workflow must read the immutable host record at library-tagged/incomplete.");
+        Assert(libraryRecordValidation.Body.Contains("release-record --record", StringComparison.Ordinal) &&
+               libraryRecordValidation.Body.Contains("--state 'library-tagged/incomplete'", StringComparison.Ordinal),
+            "The library workflow must validate the canonical library-tagged state before finalization.");
+        Assert(libraryRecord.Ordinal < libraryRecordValidation.Ordinal &&
+               libraryRecordValidation.Ordinal < libraryPush.Ordinal,
+            "The library record gate must precede package publication and release finalization.");
+        Assert(dcbPackage.Contains("body_path: out/library-release-body.md", StringComparison.Ordinal) &&
+               dcbPackage.Contains("draft: false", StringComparison.Ordinal),
+            "The library release must use the reviewed bilingual body and be explicitly non-draft.");
+        Assert(libraryPush.Ordinal < libraryVisibility.Ordinal && libraryVisibility.Ordinal < libraryRelease.Ordinal,
+            "The library workflow must wait for exact public visibility before creating its release.");
+
+        var publishSteps = ReadNamedWorkflowSteps(publish);
+        var templateRecord = RequireNamedStep(publishSteps, "Read immutable host-owned release record");
+        var templateRecordValidation = RequireNamedStep(publishSteps, "Validate canonical libraries-verified state before template pack");
         var publishParity = RequireNamedStep(publishSteps, "Verify published library/template parity before pack");
         var packageAvailability = RequireNamedStep(publishSteps, "Wait for all published DCB packages");
         var pack = RequireNamedStep(publishSteps, "Pack Template");
@@ -667,21 +825,85 @@ internal static class Program
             "dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh",
             "The publish workflow must run the packaged-consumer/docs path.");
         var push = RequireNamedStep(publishSteps, "Push Template");
+        var retryGuard = RequireNamedStep(publishSteps, "Reject changed same-version template before duplicate-safe retry");
+        var templateVisibility = RequireNamedStep(publishSteps, "Wait for exact public template visibility");
+        var templateRelease = RequireNamedStep(publishSteps, "Create GitHub Release");
+        var templateLiveTag = RequireNamedStep(publishSteps, "Validate live template tag identity before template pack");
+        Assert(templateRecord.Body.Contains("read-host-release-record.sh", StringComparison.Ordinal) &&
+               templateRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_TOKEN", StringComparison.Ordinal) &&
+               templateRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_REF", StringComparison.Ordinal) &&
+               templateRecord.Body.Contains("--verify-tags library", StringComparison.Ordinal) &&
+               !templateRecord.Body.Contains("github.token", StringComparison.Ordinal) &&
+               templateRecord.Body.Contains("--state libraries-verified", StringComparison.Ordinal),
+            "The template workflow must read the immutable host record at libraries-verified.");
+        Assert(templateRecordValidation.Body.Contains("release-record --record", StringComparison.Ordinal) &&
+               templateRecordValidation.Body.Contains("--state libraries-verified", StringComparison.Ordinal),
+            "The template workflow must validate the canonical libraries-verified state before packing.");
+        Assert(templateRecord.Ordinal < templateRecordValidation.Ordinal &&
+               templateRecordValidation.Ordinal < templateLiveTag.Ordinal &&
+               templateLiveTag.Ordinal < pack.Ordinal,
+            "The template record gate must precede template packing.");
+        Assert(templateLiveTag.Body.Contains("validate-release-tags.sh", StringComparison.Ordinal) &&
+               templateLiveTag.Body.Contains("--check-live-tag", StringComparison.Ordinal) &&
+               templateLiveTag.Body.Contains("dcbTemplates-v${VERSION}", StringComparison.Ordinal),
+            "The template workflow must compare the live template tag object and peeled commit before packing.");
         Assert(publishParity.Body.Contains("validate-release-tags.sh --check-publish-parity", StringComparison.Ordinal),
             "The publish parity workflow step must run the parity gate.");
+        Assert(publishParity.Body.Contains("--check-library-verified", StringComparison.Ordinal),
+            "The template workflow must require immutable libraries-verified evidence before packing.");
+        Assert(publishParity.Body.Contains("git rev-list -n 1", StringComparison.Ordinal) &&
+               publishParity.Body.Contains("dcb-v${VERSION}", StringComparison.Ordinal),
+            "The template workflow must prove library and template tags share the current peeled commit.");
         Assert(packageAvailability.Body.Contains("validate-release-tags.sh --wait-for-published-packages", StringComparison.Ordinal),
             "The package-availability workflow step must run the availability gate.");
         Assert(publishParity.Ordinal < pack.Ordinal && packageAvailability.Ordinal < pack.Ordinal,
             "Publish parity and package-availability gates must run before Pack Template.");
         Assert(packagedConsumer.Ordinal < push.Ordinal,
             "The publish workflow must run the packaged-consumer/docs path before Push Template.");
+        Assert(publish.Contains("validate-release-tags.sh \\\n            --check-package-manifest", StringComparison.Ordinal),
+            "The template publish workflow must retain the exact library manifest gate.");
+        Assert(publish.Contains("docs/releases/dcbTemplates-v${VERSION}.en.md", StringComparison.Ordinal) &&
+               publish.Contains("docs/releases/dcbTemplates-v${VERSION}.ja.md", StringComparison.Ordinal),
+            "The template publish workflow must require both reviewed template release bodies.");
+        Assert(publish.Contains("release-bodies --repo-root", StringComparison.Ordinal) &&
+               publish.Contains("--kind template", StringComparison.Ordinal),
+            "The template publish workflow must invoke the bilingual template body validator before push.");
+        Assert(publish.Contains("body_path: out/template-release-body.md", StringComparison.Ordinal) &&
+               publish.Contains("draft: false", StringComparison.Ordinal),
+            "The template release must use the reviewed bilingual body and be explicitly non-draft.");
+        Assert(push.Body.Contains("--skip-duplicate", StringComparison.Ordinal),
+            "The template package push must allow an unchanged-tag transient retry.");
+        Assert(retryGuard.Body.Contains("--check-template-retry", StringComparison.Ordinal) &&
+               retryGuard.Body.Contains("--request-timeout-seconds", StringComparison.Ordinal),
+            "The template workflow must reject changed same-version content before its duplicate-safe retry.");
+        Assert(retryGuard.Ordinal < push.Ordinal,
+            "The immutable same-version guard must run before the duplicate-safe package push.");
+        Assert(push.Ordinal < templateVisibility.Ordinal && templateVisibility.Ordinal < templateRelease.Ordinal,
+            "The template workflow must wait for exact public visibility before creating its release.");
+    }
 
+    private static void ValidateConsumerScripts(
+        string repoRoot,
+        string packagedConsumerScript,
+        string azureQueueConsumerScript)
+    {
         var script = File.ReadAllText(packagedConsumerScript);
         var azureQueueScript = File.ReadAllText(azureQueueConsumerScript);
+        Assert(script.Contains("packageSourceMapping", StringComparison.Ordinal) &&
+               script.Contains("package pattern=\"Sekiban.Dcb.*\"", StringComparison.Ordinal) &&
+               script.Contains("missing-local-feed", StringComparison.Ordinal),
+            "The template packaged-consumer must isolate DCB packages to the supplied local feed and reject omissions.");
+        Assert(File.ReadAllText(Path.Combine(repoRoot, "dcb", "tests", "Sekiban.Dcb.TemplateValidation", "run-status-composition.sh"))
+                   .Contains("packageSourceMapping", StringComparison.Ordinal),
+            "The status-composition consumer must use the same local-feed source mapping.");
         Assert(azureQueueScript.Contains(
                 "dotnet run --project \"$project/consumer.csproj\"",
                 StringComparison.Ordinal),
             "The Azure Queue packaged-consumer path must execute each built consumer, not only compile it.");
+        Assert(azureQueueScript.Contains("packageSourceMapping", StringComparison.Ordinal) &&
+               azureQueueScript.Contains("package pattern=\"Sekiban.Dcb.*\"", StringComparison.Ordinal) &&
+               azureQueueScript.Contains("missing exact DCB artifact", StringComparison.Ordinal),
+            "The Azure Queue packaged-consumer must isolate DCB packages to its supplied local feed.");
         Assert(azureQueueScript.Contains("SEKIBAN_G76_FORCE_CONSUMER_THROW", StringComparison.Ordinal) &&
                azureQueueScript.Contains("deterministic packaged-consumer failure probe", StringComparison.Ordinal),
             "The Azure Queue packaged-consumer must expose an unconditional failure probe.");

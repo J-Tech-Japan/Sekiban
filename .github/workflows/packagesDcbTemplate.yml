@@ -33,9 +33,50 @@ jobs:
           fi
           echo "VERSION=${TAG#dcbTemplates-v}" >> $GITHUB_ENV
 
+      - name: Read immutable host-owned release record
+        env:
+          GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
+          SEKIBAN_RELEASE_RECORD_REF: ${{ vars.SEKIBAN_RELEASE_RECORD_REF }}
+        run: |
+          bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh \
+            --version "$VERSION" --state libraries-verified \
+            --verify-tags library \
+            --output "$RUNNER_TEMP/dcb-release-record.json"
+
+      - name: Build release validators
+        run: |
+          dotnet restore dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -p:NuGetAudit=false
+          dotnet build dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release --no-restore --nologo
+
+      - name: Validate canonical libraries-verified state before template pack
+        run: |
+          dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
+            release-record --record "$RUNNER_TEMP/dcb-release-record.json" \
+            --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
+            --state libraries-verified
+          test "$(jq -r '.merged_sha' "$RUNNER_TEMP/dcb-release-record.json")" = "$(git rev-parse HEAD)"
+
+      - name: Validate live template tag identity before template pack
+        env:
+          GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --check-live-tag --repo-root "$GITHUB_WORKSPACE" \
+            --tag "dcbTemplates-v${VERSION}" \
+            --expected-peeled "$(jq -r '.merged_sha' "$RUNNER_TEMP/dcb-release-record.json")"
+
       - name: Verify published library/template parity before pack
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git fetch --force --tags
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --check-package-manifest --repo-root "$GITHUB_WORKSPACE" \
+            --workflow-file "$GITHUB_WORKSPACE/.github/workflows/packagesDcb.yml"
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --check-library-verified --repo-root "$GITHUB_WORKSPACE" --version "$VERSION"
+          test "$(git rev-list -n 1 "dcb-v${VERSION}")" = "$(git rev-parse HEAD)"
+          test "$(git rev-list -n 1 "$GITHUB_REF_NAME")" = "$(git rev-parse HEAD)"
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh --check-publish-parity --repo-root "$GITHUB_WORKSPACE" --version "$VERSION" --template-tag "$GITHUB_REF_NAME"
 
       - name: Wait for all published DCB packages
@@ -50,12 +91,37 @@ jobs:
         run: |
           dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh --repo-root "$GITHUB_WORKSPACE" --package "$GITHUB_WORKSPACE/out/Sekiban.Dcb.Templates.$VERSION.nupkg" --version "$VERSION"
 
-      - name: Push Template
+      - name: Verify reviewed template release body input
         run: |
-          dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json
+          dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
+            release-bodies --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" --kind template
+
+      - name: Assemble reviewed template release body
+        run: |
+          cat "docs/releases/dcbTemplates-v${VERSION}.en.md" \
+            "docs/releases/dcbTemplates-v${VERSION}.ja.md" > out/template-release-body.md
+
+      - name: Reject changed same-version template before duplicate-safe retry
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --check-template-retry --package "out/Sekiban.Dcb.Templates.${VERSION}.nupkg" \
+            --version "$VERSION" --request-timeout-seconds 20
+
+      - name: Push Template
+        env:
+          NUGET_APIKEY: ${{ secrets.NUGET_APIKEY }}
+        run: |
+          dotnet nuget push out/*.nupkg --api-key "$NUGET_APIKEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Wait for exact public template visibility
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --wait-for-published-template --version "$VERSION" --timeout-seconds 900 --interval-seconds 15
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           files: out/*.nupkg
+          body_path: out/template-release-body.md
+          draft: false

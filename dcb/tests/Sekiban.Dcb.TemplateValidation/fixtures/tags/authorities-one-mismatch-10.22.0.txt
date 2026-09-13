@@ -1,0 +1,5 @@
+Sekiban.Dcb.Orleans=10.22.0
+Sekiban.Dcb.Orleans.WithoutResult=10.22.0
+Sekiban.Dcb.Orleans.WithoutResult.Aws=10.21.0
+Sekiban.Dcb.Orleans.Decider=10.22.0
+Sekiban.Dcb.Orleans.Decider.Aws=10.22.0

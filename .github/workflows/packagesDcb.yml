@@ -36,6 +36,22 @@ jobs:
           fi
           echo "VERSION=${TAG#dcb-v}" >> $GITHUB_ENV
 
+      - name: Read immutable host-owned release record
+        env:
+          GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
+          SEKIBAN_RELEASE_RECORD_REF: ${{ vars.SEKIBAN_RELEASE_RECORD_REF }}
+        run: |
+          bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh \
+            --version "$VERSION" --state 'library-tagged/incomplete' \
+            --verify-tags library \
+            --output "$RUNNER_TEMP/dcb-release-record.json"
+
+      - name: Validate exact 26-package source manifest before pack
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --check-package-manifest --repo-root "$GITHUB_WORKSPACE" \
+            --workflow-file "$GITHUB_WORKSPACE/.github/workflows/packagesDcb.yml"
+
       - name: Restore dependencies
         run: |
           dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
@@ -43,6 +59,22 @@ jobs:
 
       - name: Build with dotnet
         run: dotnet build dcb/Sekiban.Dcb.slnx -c Release
+
+      - name: Build release-record and package validators
+        run: dotnet build dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release
+
+      - name: Validate canonical library-tagged release state before finalization
+        run: |
+          dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
+            release-record --record "$RUNNER_TEMP/dcb-release-record.json" \
+            --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
+            --state 'library-tagged/incomplete'
+          test "$(jq -r '.merged_sha' "$RUNNER_TEMP/dcb-release-record.json")" = "$(git rev-parse HEAD)"
+
+      - name: Validate reviewed bilingual library release body
+        run: |
+          dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
+            release-bodies --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" --kind library
 
       - name: Pack NuGet packages
         run: |
@@ -73,16 +105,38 @@ jobs:
           dotnet pack dcb/src/Sekiban.Dcb.DynamoDB/Sekiban.Dcb.DynamoDB.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack dcb/src/Sekiban.Dcb.BlobStorage.S3/Sekiban.Dcb.BlobStorage.S3.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
 
+      - name: Inspect exact package set and dependency groups before push
+        run: |
+          dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
+            packages --directory "$GITHUB_WORKSPACE/out" --expected-version "$VERSION"
+
       - name: Validate Azure Queue V2 packaged consumer and dependency groups
         run: |
           bash dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh \
             --repo-root "$GITHUB_WORKSPACE" --feed "$GITHUB_WORKSPACE/out" --version "$VERSION"
 
+      - name: Verify reviewed library release body input
+        run: |
+          test -s "docs/releases/dcb-v${VERSION}-library.en.md"
+          test -s "docs/releases/dcb-v${VERSION}-library.ja.md"
+
+      - name: Assemble reviewed library release body
+        run: |
+          cat "docs/releases/dcb-v${VERSION}-library.en.md" \
+            "docs/releases/dcb-v${VERSION}-library.ja.md" > out/library-release-body.md
+
       - name: Push to NuGet.org
         run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Wait for exact public library visibility
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --wait-for-published-packages --version "$VERSION" --timeout-seconds 900 --interval-seconds 15
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           files: out/*.nupkg
+          body_path: out/library-release-body.md
+          draft: false
