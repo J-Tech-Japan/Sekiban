@@ -13,6 +13,7 @@ import base64
 import hashlib
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -26,7 +27,19 @@ def sha256(value: bytes) -> str:
 
 
 def git_blob_sha(value: bytes) -> str:
-    return hashlib.sha1(f"blob {len(value)}\0".encode() + value).hexdigest()
+    result = subprocess.run(
+        ["git", "hash-object", "--stdin"],
+        input=value,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"git hash-object failed with exit code {result.returncode}: "
+            f"{result.stderr.decode(errors='replace').strip()}"
+        )
+    return result.stdout.decode("ascii").strip()
 
 
 def immutable(repository: str, commit: str, path: str) -> str:

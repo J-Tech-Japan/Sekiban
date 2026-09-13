@@ -1,5 +1,5 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -8,11 +8,13 @@ namespace Sekiban.Dcb.TemplateValidation;
 internal sealed class ReleaseBundle
 {
     private const string HostRepository = "J-Tech-Japan/SekibanIntentHost";
-    private static readonly Regex Sha256 = new("^[0-9a-f]{64}$", RegexOptions.CultureInvariant);
-    private static readonly Regex Commit = new("^[0-9a-f]{40}$", RegexOptions.CultureInvariant);
+    private static readonly Regex Sha256 = new(
+        "^[0-9a-f]{64}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex Commit = new(
+        "^[0-9a-f]{40}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex ImmutableRef = new(
         "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}:.+$",
-        RegexOptions.CultureInvariant);
+        RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     private ReleaseBundle(
         string recordPath,
@@ -235,11 +237,29 @@ internal sealed class ReleaseBundle
 
     internal static string GitBlobSha(byte[] content)
     {
-        var prefix = Encoding.UTF8.GetBytes($"blob {content.Length}\0");
-        var input = new byte[prefix.Length + content.Length];
-        Buffer.BlockCopy(prefix, 0, input, 0, prefix.Length);
-        Buffer.BlockCopy(content, 0, input, prefix.Length, content.Length);
-        return Convert.ToHexString(SHA1.HashData(input)).ToLowerInvariant();
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "git",
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("hash-object");
+        startInfo.ArgumentList.Add("--stdin");
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Could not start git hash-object.");
+        process.StandardInput.BaseStream.Write(content, 0, content.Length);
+        process.StandardInput.Close();
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert(process.ExitCode == 0,
+            $"git hash-object failed with exit code {process.ExitCode}: {error.Trim()}");
+        var hash = output.Trim();
+        Assert(Commit.IsMatch(hash), "git hash-object returned an invalid blob identity.");
+        return hash;
     }
 
     private static bool IsSafeRelativePath(string path) =>
