@@ -156,14 +156,6 @@ internal sealed class ReleaseBundle
 
         ValidateHostContentsEvidence(loaded);
 
-        var readerAnchorRefs = loaded.Keys
-            .Where(reference => IsReaderAnchorReference(reference, hostRef))
-            .ToHashSet(StringComparer.Ordinal);
-        Assert(readerAnchorRefs.Count >= 2 &&
-               readerAnchorRefs.Any(reference => reference.Contains(":commits/", StringComparison.OrdinalIgnoreCase)) &&
-               readerAnchorRefs.Any(reference => reference.Contains(":git/trees/", StringComparison.OrdinalIgnoreCase)),
-            "The closed bundle must contain immutable host commit/tree anchors for every fetched host contents object.");
-
         ValidateNoSelfContainingHostObjects(loaded);
 
         return new ReleaseBundle(recordPath!, hostRef, recordBytes!, loaded);
@@ -175,13 +167,16 @@ internal sealed class ReleaseBundle
         var root = document.RootElement;
         var separator = immutableRef.IndexOf(':');
         var objectPath = immutableRef[(separator + 1)..];
-        string? expectedObjectId = objectPath switch
-        {
-            _ when objectPath.StartsWith("commits/", StringComparison.Ordinal) => objectPath["commits/".Length..],
-            _ when objectPath.StartsWith("git/trees/", StringComparison.Ordinal) => objectPath["git/trees/".Length..],
-            _ when objectPath.StartsWith("git/blobs/", StringComparison.Ordinal) => objectPath["git/blobs/".Length..],
-            _ => null
-        };
+        var expectedObjectId = objectPath.StartsWith("commits/", StringComparison.Ordinal) &&
+                               objectPath["commits/".Length..].Length == 40
+            ? objectPath["commits/".Length..]
+            : objectPath.StartsWith("git/trees/", StringComparison.Ordinal) &&
+              objectPath["git/trees/".Length..].Length == 40
+                ? objectPath["git/trees/".Length..]
+                : objectPath.StartsWith("git/blobs/", StringComparison.Ordinal) &&
+                  objectPath["git/blobs/".Length..].Length == 40
+                    ? objectPath["git/blobs/".Length..]
+                    : null;
         if (expectedObjectId is not null)
         {
             Assert(root.TryGetProperty("sha", out var sha) && sha.ValueKind == JsonValueKind.String &&
@@ -288,6 +283,7 @@ internal sealed class ReleaseBundle
             _ when objectPath.StartsWith("commits/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("pulls/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("actions/", StringComparison.Ordinal) ||
+                   objectPath.StartsWith("check-runs/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("releases/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("compare/", StringComparison.Ordinal) =>
                 $"repos/{repository}/{objectPath}",

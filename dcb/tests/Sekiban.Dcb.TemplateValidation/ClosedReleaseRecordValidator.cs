@@ -396,10 +396,6 @@ internal static class ClosedReleaseRecordValidator
         {
             EnqueueJson(rootDocument.RootElement);
         }
-        foreach (var anchor in bundle.Entries.Keys.Where(reference => IsReaderAnchorReference(reference, bundle.HostRef)))
-        {
-            Enqueue(anchor);
-        }
         foreach (var recordEntry in bundle.Entries.Values.Where(entry => entry.Kind == "record"))
         {
             Enqueue(recordEntry.ImmutableRef);
@@ -412,6 +408,26 @@ internal static class ClosedReleaseRecordValidator
             var reference = queue.Dequeue();
             if (!reachable.Add(reference)) continue;
             var entry = bundle.GetEntry(reference);
+
+            // A host anchor is evidence for a reachable contents object, not an
+            // independent root.  Derive and enqueue the containing commit/tree
+            // pair only after the contents reference itself is reached from the
+            // canonical pointer/approval graph.  This rejects coherent but
+            // orphaned anchor pairs without weakening the reader's ability to
+            // retain one anchor pair per fetched host revision.
+            if (IsHostContentsReference(reference) || entry.Kind == "record")
+            {
+                var commit = ReferenceCommit(reference);
+                Enqueue($"{HostRepository}@{commit}:commits/{commit}");
+            }
+            else if (reference.StartsWith($"{HostRepository}@", StringComparison.OrdinalIgnoreCase) &&
+                     reference.Contains(":commits/", StringComparison.OrdinalIgnoreCase))
+            {
+                using var commitDocument = JsonDocument.Parse(entry.RawBytes);
+                var treeSha = GetString(GetObject(commitDocument.RootElement.GetProperty("commit"), "tree"), "sha");
+                Enqueue($"{HostRepository}@{ReferenceCommit(reference)}:git/trees/{treeSha}");
+            }
+
             var bytes = entry.ContentBytes ?? entry.RawBytes;
             try
             {
@@ -431,14 +447,6 @@ internal static class ClosedReleaseRecordValidator
     private static bool IsHostContentsReference(string reference) =>
         reference.StartsWith($"{HostRepository}@", StringComparison.OrdinalIgnoreCase) &&
         reference.Contains(":contents/", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsReaderAnchorReference(string reference, string hostRef)
-    {
-        _ = hostRef;
-        return reference.StartsWith($"{HostRepository}@", StringComparison.OrdinalIgnoreCase) &&
-               (reference.Contains(":commits/", StringComparison.OrdinalIgnoreCase) ||
-                reference.Contains(":git/trees/", StringComparison.OrdinalIgnoreCase));
-    }
 
     private static string ReferenceCommit(string reference)
     {
@@ -462,17 +470,39 @@ internal static class ClosedReleaseRecordValidator
     private static void ValidateOrigin(JsonElement origin, ReleaseBundle bundle, string expectedVersion)
     {
         RequireMembers(origin, "origin_delivery", [
-            "repository", "pull_request", "reviewed_head_sha", "tree_sha", "body_sha256", "body_evidence_ref",
-            "review", "review_evidence_ref", "checks", "tags"
+            "repository", "pull_request", "pull_request_evidence_ref", "reviewed_head_sha", "reviewed_tree_sha",
+            "merged_sha", "merged_tree_sha", "merged_at_utc", "reviewed_commit_evidence_ref",
+            "merged_commit_evidence_ref", "reviewed_tree_evidence_ref", "merged_tree_evidence_ref",
+            "body_sha256", "body_evidence_ref", "review", "review_evidence_ref", "checks"
         ]);
         Assert(GetString(origin, "repository") == Repository && GetString(origin, "pull_request") == IntegrationPullRequest,
             "origin_delivery must identify the historical G79 delivery PR.");
         var originHead = GetString(origin, "reviewed_head_sha");
-        Assert(Commit.IsMatch(originHead) && Commit.IsMatch(GetString(origin, "tree_sha")),
-            "origin_delivery commit and tree identities must be immutable.");
+        var originMerged = GetString(origin, "merged_sha");
+        var originMergedAt = GetTimestamp(origin, "merged_at_utc");
+        var originReviewTree = GetString(origin, "reviewed_tree_sha");
+        var originMergedTree = GetString(origin, "merged_tree_sha");
+        Assert(Commit.IsMatch(originHead) && Commit.IsMatch(originMerged) &&
+               Commit.IsMatch(originReviewTree) && Commit.IsMatch(originMergedTree),
+            "origin_delivery reviewed and merged commit/tree identities must be immutable.");
         var bodyBytes = GetContent(bundle, GetString(origin, "body_evidence_ref"), "origin body");
         Assert(Sha256Bytes(bodyBytes) == GetString(origin, "body_sha256").ToLowerInvariant(),
             "origin_delivery.body_sha256 must match immutable body bytes.");
+
+        var originPr = GetApiObject(bundle, GetString(origin, "pull_request_evidence_ref"), "origin delivery PR");
+        Assert(GetString(originPr, "html_url") == GetString(origin, "pull_request") &&
+               GetString(GetObject(originPr, "repository"), "full_name") == Repository &&
+               GetString(GetObject(originPr, "base"), "ref") == "main" &&
+               GetString(GetObject(originPr, "head"), "sha") == originHead &&
+               GetString(originPr, "merge_commit_sha") == originMerged && GetBoolean(originPr, "merged") &&
+               GetTimestamp(originPr, "merged_at") == originMergedAt &&
+               Encoding.UTF8.GetBytes(GetString(originPr, "body")).SequenceEqual(bodyBytes),
+            "Origin delivery PR API evidence is not bound to the reviewed/merged identities and exact body bytes.");
+        ValidateOriginCommitAndTreeEvidence(origin, bundle, "reviewed", originHead, originReviewTree);
+        ValidateOriginCommitAndTreeEvidence(origin, bundle, "merged", originMerged, originMergedTree);
+        var mergedCommit = GetApiObject(bundle, GetString(origin, "merged_commit_evidence_ref"), "origin merged commit");
+        Assert(GetArray(mergedCommit, "parents").EnumerateArray().Any(parent => GetString(parent, "sha") == originHead),
+            "Origin merged commit must retain the historical reviewed head as a parent.");
 
         var review = GetObject(origin, "review");
         RequireMembers(review, "origin_delivery.review", [
@@ -503,6 +533,7 @@ internal static class ClosedReleaseRecordValidator
         ]);
         var originReviewAt = ParseTimestamp(GetString(review, "intent_completed_at_utc"), "origin review completion");
         Assert(GetInt(originCompletion, "schema_version") == 1 && GetString(originCompletion, "kind") == "intent-origin-review-completion" &&
+               GetString(originCompletion, "status") == "completed" &&
                GetString(originCompletion, "task_id") == GetString(review, "intent_task_id") &&
                GetString(originCompletion, "result_nonce") == GetString(review, "intent_result_nonce") &&
                GetString(originCompletion, "review_url") == GetString(review, "review_url") &&
@@ -518,37 +549,45 @@ internal static class ClosedReleaseRecordValidator
 
         var checks = GetArray(origin, "checks");
         Assert(checks.GetArrayLength() > 0, "origin_delivery must carry historical checks.");
-        var latestCheck = DateTimeOffset.MinValue;
+        var hasReviewedHeadCheck = false;
+        var hasMergedHeadCheck = false;
         foreach (var check in checks.EnumerateArray())
         {
             RequireMembers(check, "origin_delivery.check", [
                 "repository", "name", "workflow_file", "workflow_name", "job_name", "run_id", "job_id", "run_url", "job_url",
-                "attempt", "event", "superseded", "head_sha", "conclusion", "started_at_utc", "completed_at_utc", "evidence_ref"
+                "check_run_id", "check_url", "run_evidence_ref", "job_evidence_ref", "check_evidence_ref",
+                "attempt", "event", "superseded", "head_sha", "conclusion", "started_at_utc", "completed_at_utc"
             ]);
-            Assert(GetString(check, "head_sha") == originHead && GetString(check, "conclusion") == "success",
-                "origin checks must be successful and bound to the historical reviewed head.");
+            var eventName = GetString(check, "event");
+            var checkHead = GetString(check, "head_sha");
             var started = ParseTimestamp(GetString(check, "started_at_utc"), "origin check start");
             var completed = ParseTimestamp(GetString(check, "completed_at_utc"), "origin check completion");
-            Assert(GetString(check, "repository") == Repository && int.TryParse(GetString(check, "attempt"), out var attempt) && attempt >= 1 &&
+            Assert(GetString(check, "repository") == Repository && GetString(check, "conclusion") == "success" &&
+                   int.TryParse(GetString(check, "attempt"), out var attempt) && attempt >= 1 &&
                    ulong.TryParse(GetString(check, "run_id"), out _) && ulong.TryParse(GetString(check, "job_id"), out _) &&
-                   !GetBoolean(check, "superseded") && GetString(check, "event") == "workflow_dispatch" &&
-                   completed > started && started > originReviewAt,
-                "origin check identity and chronology are invalid.");
+                   ulong.TryParse(GetString(check, "check_run_id"), out _) && !GetBoolean(check, "superseded") &&
+                   ((eventName == "pull_request" && checkHead == originHead) ||
+                    (eventName == "workflow_dispatch" && checkHead == originMerged)) &&
+                   completed > started && started > GetTimestamp(review, "submitted_at_utc") &&
+                   (eventName == "pull_request" ? completed < originMergedAt : started >= originMergedAt),
+                "origin check identity, chronology, or event/head pair is invalid.");
+            hasReviewedHeadCheck |= eventName == "pull_request" && checkHead == originHead;
+            hasMergedHeadCheck |= eventName == "workflow_dispatch" && checkHead == originMerged;
             ValidateOriginCheckEvidence(check, bundle);
-            latestCheck = completed > latestCheck ? completed : latestCheck;
         }
-
-        foreach (var tag in GetArray(origin, "tags").EnumerateArray())
-        {
-            RequireMembers(tag, "origin_delivery.tag", [
-                "name", "object_id", "peeled_commit", "created_at_utc", "evidence_ref", "peeled_evidence_ref"
-            ]);
-            var created = ParseTimestamp(GetString(tag, "created_at_utc"), "origin tag creation");
-            Assert(Commit.IsMatch(GetString(tag, "object_id")) && GetString(tag, "peeled_commit") == originHead &&
-                   created > latestCheck, "origin tag identity or chronology is invalid.");
-            ValidateTagEvidence(tag, bundle, originHead);
-        }
+        Assert(hasReviewedHeadCheck && hasMergedHeadCheck,
+            "origin_delivery must include both the reviewed pull_request and merged workflow_dispatch evidence pairs.");
         Assert(expectedVersion == "10.22.0", "Origin version must be the approved DCB version.");
+    }
+
+    private static void ValidateOriginCommitAndTreeEvidence(JsonElement origin, ReleaseBundle bundle, string label, string commitSha, string treeSha)
+    {
+        var commit = GetApiObject(bundle, GetString(origin, $"{label}_commit_evidence_ref"), $"origin {label} commit");
+        var tree = GetApiObject(bundle, GetString(origin, $"{label}_tree_evidence_ref"), $"origin {label} tree");
+        Assert(GetString(commit, "sha") == commitSha &&
+               GetString(GetObject(GetObject(commit, "commit"), "tree"), "sha") == treeSha &&
+               GetString(tree, "sha") == treeSha && GetArray(tree, "tree").ValueKind == JsonValueKind.Array,
+            $"Origin {label} commit/tree API evidence is not bound to the recorded identities.");
     }
 
     private static void ValidateCandidate(
@@ -609,40 +648,36 @@ internal static class ClosedReleaseRecordValidator
             "Candidate reviewed/merged tree identities must each be API-bound.");
         var main = GetApiObject(bundle, GetString(candidate, "main_evidence_ref"), "canonical main evidence");
         var mainTip = GetString(candidate, "main_tip_sha");
-        Assert(Commit.IsMatch(mainTip) && GetString(GetObject(main, "base_commit"), "sha") == mergedSha &&
+        Assert(Commit.IsMatch(mainTip) &&
+               GetString(main, "url") == $"https://api.github.com/repos/{Repository}/compare/{mergedSha}...{mainTip}" &&
+               GetString(GetObject(main, "base_commit"), "sha") == mergedSha &&
                GetString(GetObject(main, "merge_base_commit"), "sha") == mergedSha &&
                GetString(GetObject(main, "head_commit"), "sha") == mainTip &&
                GetString(main, "status") is "ahead" or "identical" &&
                GetInt(main, "ahead_by") >= 0 && GetInt(main, "behind_by") == 0 &&
-               GetInt(main, "total_commits") == GetInt(main, "ahead_by"),
+               GetInt(main, "total_commits") >= GetInt(main, "ahead_by"),
             "canonical main compare evidence does not prove the merged candidate is an ancestor of main.");
-        var compareCommits = GetArray(main, "commits");
-        var aheadBy = GetInt(main, "ahead_by");
-        Assert(compareCommits.GetArrayLength() == aheadBy &&
-               (aheadBy == 0 || GetString(compareCommits.EnumerateArray().Last(), "sha") == mainTip),
-            "canonical main compare evidence must enumerate the complete descendant path.");
-        var priorCommit = mergedSha;
-        foreach (var compareCommit in compareCommits.EnumerateArray())
-        {
-            var compareSha = GetString(compareCommit, "sha");
-            var parents = GetArray(compareCommit, "parents");
-            Assert(Commit.IsMatch(compareSha) &&
-                   parents.EnumerateArray().Any(parent => GetString(parent, "sha") == priorCommit),
-                "canonical main compare evidence contains a descendant whose parent path is not bound to the candidate merge.");
-            priorCommit = compareSha;
-        }
-        Assert(priorCommit == mainTip, "canonical main compare evidence does not terminate at main_tip_sha.");
+        // The authenticated compare response already binds base, merge base, head,
+        // status, and ahead/behind counts.  Do not reinterpret its optional
+        // `commits` page as a linear first-parent chain: GitHub may paginate that
+        // array and a valid main descendant may contain a two-parent merge.  The
+        // merge-base equality is the ancestry proof used by this closed record.
 
         foreach (var check in checks.EnumerateArray())
         {
-            var checkApi = GetApiObject(bundle, GetString(check, "evidence_ref"), "integrated check");
-            Assert(GetString(checkApi, "head_sha") == mergedSha && GetString(checkApi, "name") == GetString(check, "job_name") &&
-                   GetString(checkApi, "conclusion") == "success",
-                "Integrated check API evidence is not bound to the merged candidate.");
+            if (GetString(check, "name") != "diff")
+            {
+                ValidateNativeCheckEvidence(check, bundle, "integrated check");
+            }
         }
         var checkSummary = GetApiObject(bundle, GetString(candidate, "checks_evidence_ref"), "candidate checks summary");
-        Assert(GetArray(checkSummary, "checks").GetArrayLength() == checks.GetArrayLength(),
-            "Candidate checks summary is incomplete.");
+        var nonDiffChecks = checks.EnumerateArray().Count(check => GetString(check, "name") != "diff");
+        Assert(GetInt(checkSummary, "total_count") == nonDiffChecks &&
+               GetArray(checkSummary, "check_runs").GetArrayLength() == nonDiffChecks &&
+               GetArray(checkSummary, "check_runs").EnumerateArray().All(apiCheck =>
+                   GetString(apiCheck, "head_sha") == mergedSha &&
+                   GetString(apiCheck, "conclusion") == "success"),
+            "Candidate native check-runs summary is incomplete or not bound to the merged candidate.");
     }
 
     private static void ValidateImplementationReview(JsonElement review, ReleaseBundle bundle, JsonElement effective, DateTimeOffset mergedAt)
@@ -739,9 +774,21 @@ internal static class ClosedReleaseRecordValidator
             var members = new List<string>
             {
                 "repository", "name", "workflow_file", "workflow_name", "job_name", "run_id", "job_id", "run_url", "job_url",
-                "attempt", "event", "superseded", "started_at_utc", "completed_at_utc", "head_sha", "conclusion", "evidence_ref"
+                "attempt", "event", "superseded", "started_at_utc", "completed_at_utc", "head_sha", "conclusion"
             };
-            if (name == "diff") members.Add("artifact_sha256");
+            if (name == "diff")
+            {
+                members.Add("evidence_ref");
+                members.Add("artifact_sha256");
+            }
+            else
+            {
+                members.Add("check_run_id");
+                members.Add("check_url");
+                members.Add("check_evidence_ref");
+                members.Add("run_evidence_ref");
+                members.Add("job_evidence_ref");
+            }
             RequireMembers(check, $"checks.{name}", members);
             Assert(GetString(check, "repository") == Repository &&
                    GetString(check, "workflow_file") == definition.workflow && GetString(check, "workflow_name") == definition.workflowName &&
@@ -753,28 +800,15 @@ internal static class ClosedReleaseRecordValidator
             var started = ParseTimestamp(GetString(check, "started_at_utc"), $"checks.{name}.started_at_utc");
             var completed = ParseTimestamp(GetString(check, "completed_at_utc"), $"checks.{name}.completed_at_utc");
             Assert(completed > started && started > mergedAt, $"Integrated check {name} is not a fresh post-merge success.");
-            var api = GetApiObject(bundle, GetString(check, "evidence_ref"), $"integrated check {name}");
-            Assert(GetString(api, "repository") == GetString(check, "repository") &&
-                   GetString(api, "name") == GetString(check, "job_name") &&
-                   GetString(api, "workflow_file") == GetString(check, "workflow_file") &&
-                   GetString(api, "workflow_name") == GetString(check, "workflow_name") &&
-                   GetString(api, "job_name") == GetString(check, "job_name") &&
-                   GetString(api, "run_id") == GetString(check, "run_id") &&
-                   GetString(api, "job_id") == GetString(check, "job_id") &&
-                   GetString(api, "run_url") == GetString(check, "run_url") &&
-                   GetString(api, "job_url") == GetString(check, "job_url") &&
-                   GetString(api, "attempt") == GetString(check, "attempt") &&
-                   GetString(api, "event") == GetString(check, "event") &&
-                   GetBoolean(api, "superseded") == GetBoolean(check, "superseded") &&
-                   GetString(api, "head_sha") == mergedSha && GetString(api, "name") == GetString(check, "job_name") &&
-                   GetString(api, "conclusion") == "success" &&
-                   GetString(api, "started_at_utc") == GetString(check, "started_at_utc") &&
-                   GetString(api, "completed_at_utc") == GetString(check, "completed_at_utc"),
-                $"Integrated check API evidence for {name} is not bound to the merged candidate.");
             if (name == "diff")
             {
+                var api = GetApiObject(bundle, GetString(check, "evidence_ref"), $"integrated check {name}");
                 Assert(GetString(check, "artifact_sha256") == DiffDigest && GetString(api, "command") == DiffCommand && GetString(api, "artifact_sha256") == DiffDigest,
                     "git diff --check evidence is not the canonical durable artifact.");
+            }
+            else
+            {
+                ValidateNativeCheckEvidence(check, bundle, $"integrated check {name}");
             }
         }
         Assert(names.SetEquals(required.Keys), "Integrated check inventory is incomplete.");
@@ -853,25 +887,39 @@ internal static class ClosedReleaseRecordValidator
     }
 
     private static void ValidateOriginCheckEvidence(JsonElement check, ReleaseBundle bundle)
+        => ValidateNativeCheckEvidence(check, bundle, "origin check");
+
+    private static void ValidateNativeCheckEvidence(JsonElement check, ReleaseBundle bundle, string purpose)
     {
-        var evidence = GetApiObject(bundle, GetString(check, "evidence_ref"), "origin check");
-        Assert(GetString(evidence, "repository") == GetString(check, "repository") &&
-               GetString(evidence, "name") == GetString(check, "name") &&
-               GetString(evidence, "workflow_file") == GetString(check, "workflow_file") &&
-               GetString(evidence, "workflow_name") == GetString(check, "workflow_name") &&
-               GetString(evidence, "job_name") == GetString(check, "job_name") &&
-               GetString(evidence, "run_id") == GetString(check, "run_id") &&
-               GetString(evidence, "job_id") == GetString(check, "job_id") &&
-               GetString(evidence, "run_url") == GetString(check, "run_url") &&
-               GetString(evidence, "job_url") == GetString(check, "job_url") &&
-               GetString(evidence, "attempt") == GetString(check, "attempt") &&
-               GetString(evidence, "event") == GetString(check, "event") &&
-               GetBoolean(evidence, "superseded") == GetBoolean(check, "superseded") &&
-               GetString(evidence, "head_sha") == GetString(check, "head_sha") &&
-               GetString(evidence, "conclusion") == GetString(check, "conclusion") &&
-               GetString(evidence, "started_at_utc") == GetString(check, "started_at_utc") &&
-               GetString(evidence, "completed_at_utc") == GetString(check, "completed_at_utc"),
-            "Origin check API evidence is not bound.");
+        var run = GetApiObject(bundle, GetString(check, "run_evidence_ref"), $"{purpose} workflow run");
+        var job = GetApiObject(bundle, GetString(check, "job_evidence_ref"), $"{purpose} job");
+        var checkRun = GetApiObject(bundle, GetString(check, "check_evidence_ref"), $"{purpose} check run");
+        var runId = GetScalarText(run, "id");
+        var jobId = GetScalarText(job, "id");
+        var checkRunId = GetScalarText(checkRun, "id");
+        Assert(runId == GetString(check, "run_id") && GetScalarText(run, "run_attempt") == GetString(check, "attempt") &&
+               GetString(run, "name") == GetString(check, "workflow_name") &&
+               GetString(run, "event") == GetString(check, "event") && GetString(run, "head_sha") == GetString(check, "head_sha") &&
+               GetString(run, "path") == GetString(check, "workflow_file") && GetString(run, "html_url") == GetString(check, "run_url") &&
+               GetString(run, "conclusion") == GetString(check, "conclusion") &&
+               GetTimestamp(run, "created_at") == GetTimestamp(check, "started_at_utc") &&
+               GetTimestamp(run, "updated_at") == GetTimestamp(check, "completed_at_utc") &&
+               jobId == GetString(check, "job_id") && GetScalarText(job, "run_id") == GetString(check, "run_id") &&
+               GetScalarText(job, "run_attempt") == GetString(check, "attempt") && GetString(job, "head_sha") == GetString(check, "head_sha") &&
+               GetString(job, "name") == GetString(check, "job_name") && GetString(job, "html_url") == GetString(check, "job_url") &&
+               GetString(job, "conclusion") == GetString(check, "conclusion") &&
+               GetTimestamp(job, "started_at") == GetTimestamp(check, "started_at_utc") &&
+               GetTimestamp(job, "completed_at") == GetTimestamp(check, "completed_at_utc") &&
+               checkRunId == GetString(check, "check_run_id") && GetString(checkRun, "name") == GetString(check, "job_name") &&
+               GetString(checkRun, "head_sha") == GetString(check, "head_sha") &&
+               GetString(checkRun, "conclusion") == GetString(check, "conclusion") &&
+               GetTimestamp(checkRun, "started_at") == GetTimestamp(check, "started_at_utc") &&
+               GetTimestamp(checkRun, "completed_at") == GetTimestamp(check, "completed_at_utc") &&
+               GetString(check, "run_evidence_ref").EndsWith($"actions/runs/{runId}", StringComparison.Ordinal) &&
+               GetString(check, "job_evidence_ref").EndsWith($"actions/jobs/{jobId}", StringComparison.Ordinal) &&
+               GetString(check, "check_evidence_ref").EndsWith($"check-runs/{checkRunId}", StringComparison.Ordinal) &&
+               GetString(check, "check_url") == $"https://github.com/{Repository}/check-runs/{checkRunId}",
+            $"Native {purpose} run/job/check API evidence is not bound to the recorded identity, head, event, attempt, or chronology.");
     }
 
     private static void ValidatePackages(JsonElement packages, string expectedVersion)
@@ -1057,6 +1105,16 @@ internal static class ClosedReleaseRecordValidator
     {
         Assert(element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String, $"Property {property} is required and must be a string.");
         return value.GetString() ?? string.Empty;
+    }
+
+    private static string GetScalarText(JsonElement element, string property)
+    {
+        Assert(element.TryGetProperty(property, out var value) &&
+               value.ValueKind is JsonValueKind.String or JsonValueKind.Number,
+            $"Property {property} is required and must be a scalar.");
+        return value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? string.Empty
+            : value.GetRawText();
     }
 
     private static int GetInt(JsonElement element, string property)

@@ -227,7 +227,7 @@ fetch_bundle_ref() {
   object_path="${BASH_REMATCH[3]}"
   case "$object_path" in
     contents/*) endpoint="repos/${repository}/${object_path}?ref=${commit}" ;;
-    commits/*|pulls/*|actions/*|releases/*|compare/*) endpoint="repos/${repository}/${object_path}" ;;
+    commits/*|pulls/*|actions/*|check-runs/*|releases/*|compare/*) endpoint="repos/${repository}/${object_path}" ;;
     git/trees/*) endpoint="repos/${repository}/${object_path}?recursive=1" ;;
     git/*) endpoint="repos/${repository}/${object_path}" ;;
     *) endpoint="repos/${repository}/contents/${object_path}?ref=${commit}" ;;

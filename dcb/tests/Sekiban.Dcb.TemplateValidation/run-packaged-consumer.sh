@@ -399,6 +399,13 @@ SHIM
   run_net10 "$validator" release-record --bundle "$output" --manifest "$manifest" \
     --repo-root "$repo_root" --expected-version "$version" --state complete
 
+  local compare_response
+  compare_response="$(awk -F '\t' '$1 ~ /:compare\// { print $3; exit }' "$closed_fixture/map.tsv")"
+  jq -e '.status == "ahead" and .merge_base_commit.sha == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
+    ([.commits[] | select((.parents | length) == 2)] | length) == 1' \
+    "$compare_response" >/dev/null
+  echo "Production two-parent main-descendant compare control passed."
+
   # The reader must retain the exact response bytes, including trailing
   # whitespace/newlines.  A command-substitution implementation strips them;
   # the fresh-output comparison below is the killing proof for that mutant.
@@ -443,6 +450,21 @@ SHIM
     echo "Command-substitution reader mutant preserved the exact response bytes." >&2
     return 1
   fi
+
+  # The bundle reader must use GitHub's native job route.  This source mutant
+  # deliberately rewrites actions/jobs/* to the historical fake
+  # actions/runs/{run}/jobs/{job} route; the shim has no such endpoint and must
+  # return 404 rather than allowing a synthetic combined response through.
+  local native_route_reader="$work_root/read-host-native-route-mutant.sh"
+  awk 'index($0, "    commits/*|pulls/*|actions/*") { print "    actions/jobs/*) endpoint=\"repos/${repository}/actions/runs/${object_path}\" ;;" } { print }' \
+    "$reader" > "$native_route_reader"
+  chmod +x "$native_route_reader"
+  expect_failure env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+    SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
+    FAKE_CLOSED_ROOT="$closed_fixture" FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" \
+    bash "$native_route_reader" --version "$version" --state complete --verify-tags all \
+    --output-dir "$work_root/native-route-output" --manifest "$work_root/native-route-output/bundle.json"
+  echo "Native GitHub job-route 404 mutant was rejected by the production reader."
 
   # Closed production states are prefix-valid: the future artifact authority
   # and future payloads are not required before their stage is reachable.
@@ -497,9 +519,9 @@ SHIM
       candidate-check-api-time candidate-check-api-event candidate-check-api-run-id candidate-check-api-job-id \
       candidate-check-api-run-url candidate-check-api-job-url candidate-check-api-attempt origin-check-api-time \
       origin-check-api-event origin-check-api-run-id origin-check-api-job-id origin-check-api-run-url \
-      origin-check-api-job-url origin-check-api-attempt \
+      origin-check-api-job-url origin-check-api-attempt origin-check-api-route \
       origin-candidate-substitution origin-review-api-body origin-review-head origin-review-submitted-at origin-review-reviewer \
-      origin-review-completion origin-review-request-update origin-review-negated origin-review-missing-verdict \
+      origin-review-completion origin-review-completion-status origin-review-request-update origin-review-negated origin-review-missing-verdict \
       origin-review-conflicting-verdict origin-review-body-byte semantic-negated self-containing-approval self-containing-completion \
       self-containing-payload missing-host-commit-anchor missing-host-tree-anchor wrong-host-commit-anchor \
       wrong-host-tree-anchor missing-host-tree-path wrong-host-tree-blob decoded-host-bytes prepared-completion-late \

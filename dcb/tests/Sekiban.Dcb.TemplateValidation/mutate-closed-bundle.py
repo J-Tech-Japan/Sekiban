@@ -138,6 +138,9 @@ def main() -> None:
 
     def mutate_api(suffix: str, mutate: Callable[[dict[str, object]], None]) -> None:
         reference = api_reference(suffix)
+        mutate_api_reference(reference, mutate)
+
+    def mutate_api_reference(reference: str, mutate: Callable[[dict[str, object]], None]) -> None:
         entry = find_entry(lambda item: item["immutable_ref"] == reference)
         value = json.loads((destination / entry["relative_path"]).read_text())
         mutate(value)
@@ -156,6 +159,16 @@ def main() -> None:
         commit_value = json.loads((destination / commit_entry["relative_path"]).read_text())
         tree = commit_value["commit"]["tree"]["sha"]
         return commit_reference, f"J-Tech-Japan/SekibanIntentHost@{commit}:git/trees/{tree}"
+
+    def add_host_tree_path(contents_reference: str, path: str, blob_sha: str) -> None:
+        _, tree_reference = host_anchor_refs(contents_reference)
+        tree_entry = find_entry(lambda item: item["immutable_ref"] == tree_reference)
+        tree = json.loads((destination / tree_entry["relative_path"]).read_text())
+        tree_entries = tree.setdefault("tree", [])
+        if any(item.get("path") == path for item in tree_entries):
+            raise ValueError(f"Host tree already contains {path}")
+        tree_entries.append({"path": path, "mode": "100644", "type": "blob", "sha": blob_sha, "size": 0})
+        write_raw(tree_reference, tree)
 
     def host_contents_reference(stage: str = "prepared") -> str:
         return payload_at(stage)[0]
@@ -347,7 +360,7 @@ def main() -> None:
         "origin-check-time", "origin-check-event", "origin-check-run-id", "origin-check-job-id",
         "origin-check-run-url", "origin-check-job-url", "origin-check-attempt", "origin-check-api-time",
         "origin-check-api-event", "origin-check-api-run-id", "origin-check-api-job-id", "origin-check-api-run-url",
-        "origin-check-api-job-url", "origin-check-api-attempt"
+        "origin-check-api-job-url", "origin-check-api-attempt", "origin-check-api-route"
     }:
         def mutate_candidate(payload: dict[str, object]) -> None:
             candidate = payload["changes"]["candidate"]
@@ -376,15 +389,23 @@ def main() -> None:
             elif kind.startswith("candidate-check-"):
                 if kind.startswith("candidate-check-api-"):
                     api_field = kind.removeprefix("candidate-check-api-")
+                    check = payload["changes"]["checks"][0]
+                    api_ref = check["run_evidence_ref"]
                     def mutate_candidate_check_api(value: dict[str, object]) -> None:
-                        if api_field == "time": value["started_at_utc"] = "2026-09-12T12:00:00Z"
+                        if api_field == "time": value["updated_at"] = "2026-09-12T12:00:00Z"
                         elif api_field == "event": value["event"] = "pull_request"
-                        elif api_field == "run-id": value["run_id"] = "999999"
-                        elif api_field == "job-id": value["job_id"] = "999999"
-                        elif api_field == "run-url": value["run_url"] = "https://example.invalid/run"
-                        elif api_field == "job-url": value["job_url"] = "https://example.invalid/job"
-                        else: value["attempt"] = "2"
-                    mutate_api(":actions/runs/1001/jobs/2001", mutate_candidate_check_api)
+                        elif api_field == "run-id": value["id"] = 999999
+                        elif api_field == "run-url": value["html_url"] = "https://example.invalid/run"
+                        elif api_field == "route": value["html_url"] = "https://example.invalid/not-a-native-run"
+                        else: value["run_attempt"] = 2
+                    if api_field == "job-id":
+                        api_ref = check["job_evidence_ref"]
+                        mutate_api_reference(api_ref, lambda value: value.update({"id": 999999}))
+                    elif api_field == "job-url":
+                        api_ref = check["job_evidence_ref"]
+                        mutate_api_reference(api_ref, lambda value: value.update({"html_url": "https://example.invalid/job"}))
+                    else:
+                        mutate_api_reference(api_ref, mutate_candidate_check_api)
                 else:
                     check = payload["changes"]["checks"][0]
                 if not kind.startswith("candidate-check-api-"):
@@ -405,17 +426,27 @@ def main() -> None:
             elif kind.startswith("origin-check-"):
                 if kind.startswith("origin-check-api-"):
                     api_field = kind.removeprefix("origin-check-api-")
+                    check_index = 1 if api_field == "event" else 0
+                    check = payload["changes"]["origin_delivery"]["checks"][check_index]
+                    api_ref = check["run_evidence_ref"]
                     def mutate_origin_check_api(value: dict[str, object]) -> None:
-                        if api_field == "time": value["completed_at_utc"] = "2026-09-13T12:00:00Z"
+                        if api_field == "time": value["updated_at"] = "2026-09-13T12:00:00Z"
                         elif api_field == "event": value["event"] = "pull_request"
-                        elif api_field == "run-id": value["run_id"] = "999999"
-                        elif api_field == "job-id": value["job_id"] = "999999"
-                        elif api_field == "run-url": value["run_url"] = "https://example.invalid/run"
-                        elif api_field == "job-url": value["job_url"] = "https://example.invalid/job"
-                        else: value["attempt"] = "2"
-                    mutate_api(":actions/runs/9001/jobs/9101", mutate_origin_check_api)
+                        elif api_field == "run-id": value["id"] = 999999
+                        elif api_field == "run-url": value["html_url"] = "https://example.invalid/run"
+                        elif api_field == "route": value["html_url"] = "https://example.invalid/not-a-native-run"
+                        else: value["run_attempt"] = 2
+                    if api_field == "job-id":
+                        api_ref = check["job_evidence_ref"]
+                        mutate_api_reference(api_ref, lambda value: value.update({"id": 999999}))
+                    elif api_field == "job-url":
+                        api_ref = check["job_evidence_ref"]
+                        mutate_api_reference(api_ref, lambda value: value.update({"html_url": "https://example.invalid/job"}))
+                    else:
+                        mutate_api_reference(api_ref, mutate_origin_check_api)
                 else:
-                    check = payload["changes"]["origin_delivery"]["checks"][0]
+                    check_index = 1 if kind == "origin-check-event" else 0
+                    check = payload["changes"]["origin_delivery"]["checks"][check_index]
                 if not kind.startswith("origin-check-api-"):
                     if kind.endswith("time"):
                         check["completed_at_utc"] = "2026-09-13T12:00:00Z"
@@ -431,8 +462,6 @@ def main() -> None:
                         check["job_url"] = "https://example.invalid/job"
                     elif kind.endswith("attempt"):
                         check["attempt"] = "2"
-                mutate_api(":commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                           lambda value: value["commit"]["tree"].update({"sha": "7" * 40}))
         if kind == "origin-candidate-substitution":
             mutate_payload("prepared", lambda payload: payload["changes"]["origin_delivery"].update({"reviewed_head_sha": payload["changes"]["candidate"]["reviewed_head_sha"]}))
         else:
@@ -452,7 +481,7 @@ def main() -> None:
         write_content(reference, dump(payload))
     elif kind in {
         "origin-review-api-body", "origin-review-head", "origin-review-submitted-at", "origin-review-reviewer",
-        "origin-review-completion", "origin-review-request-update", "origin-review-negated",
+        "origin-review-completion", "origin-review-completion-status", "origin-review-request-update", "origin-review-negated",
         "origin-review-missing-verdict", "origin-review-conflicting-verdict", "origin-review-body-byte"
     }:
         if kind == "origin-review-api-body":
@@ -465,6 +494,8 @@ def main() -> None:
             mutate_origin_review(lambda review: review.update({"reviewer": "forged-reviewer"}))
         elif kind == "origin-review-completion":
             mutate_origin_completion(lambda completion: completion.update({"head_sha": "9" * 40}))
+        elif kind == "origin-review-completion-status":
+            mutate_origin_completion(lambda completion: completion.update({"status": "blocked"}))
         elif kind == "origin-review-body-byte":
             _, prepared = payload_at("prepared")
             review = prepared["changes"]["origin_delivery"]["review"]
@@ -501,6 +532,7 @@ def main() -> None:
         path_digest = sha256((sibling_ref + chr(10) + sha256(raw)).encode())
         relative = f"objects/{path_digest}.json"
         (destination / relative).write_bytes(raw)
+        add_host_tree_path(original_ref, sibling_path, envelope["sha"])
         manifest["entries"].append({
             "kind": "host-response", "immutable_ref": sibling_ref,
             "endpoint": f"repos/J-Tech-Japan/SekibanIntentHost/contents/{sibling_path}?ref={repository_commit.split('@', 1)[1]}",
@@ -624,6 +656,7 @@ def main() -> None:
         raw = dump(envelope)
         relative = f"objects/{sha256((sibling_ref + chr(10) + sha256(raw)).encode())}.json"
         (destination / relative).write_bytes(raw)
+        add_host_tree_path(original_ref, sibling_path, envelope["sha"])
         manifest["entries"].append({
             "kind": "host-response", "immutable_ref": sibling_ref,
             "endpoint": f"repos/J-Tech-Japan/SekibanIntentHost/contents/{sibling_path}?ref={repository_commit.split('@', 1)[1]}",

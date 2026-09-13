@@ -38,7 +38,7 @@ def endpoint(reference: str) -> str:
         return f"repos/{repository}/{object_path}?ref={commit}"
     if object_path.startswith("git/trees/"):
         return f"repos/{repository}/{object_path}?recursive=1"
-    if object_path.startswith(("commits/", "git/", "pulls/", "actions/", "releases/", "compare/")):
+    if object_path.startswith(("commits/", "git/", "pulls/", "actions/", "check-runs/", "releases/", "compare/")):
         return f"repos/{repository}/{object_path}"
     return f"repos/{repository}/contents/{object_path}?ref={commit}"
 
@@ -62,41 +62,18 @@ def main() -> None:
     reviewed_tree = "5" * 40
     merged_tree = reviewed_tree
     origin_head = "01b3843276fa3bdd828afd484eb2fa0e8a6b63bb"
-    origin_tree = "2" * 40
+    origin_tree = "cd61cbd785bbc1568f14f8ebdb358691763fd58e"
+    origin_merged_sha = "7f684e6b9f769d436b12495acd07e7d74c5d8298"
+    origin_merged_tree = origin_tree
     host_tree = "8" * 40
     main_tip = "9" * 40
+    main_side_tip = "0" * 40
     library_tag_object = "b" * 40
     template_tag_object = "c" * 40
     version = "10.22.0"
-    actual_origin_review_body = """# SEK-G79 PR #1235 final exact-head review
-
-- Review date: 2026-09-13 (America/Los_Angeles)
-- Repository: `J-Tech-Japan/Sekiban`
-- PR: #1235
-- Contract: standalone Issue #1234
-- Reviewed head: `01b3843276fa3bdd828afd484eb2fa0e8a6b63bb`
-- Base at review: `bfb43b98472f184257016868884e65889ccce587`
-- Checkout: isolated clean detached checkout
-- Verdict: **APPROVE**
-
-## Contract and scope
-
-I re-derived AC1-AC10 from Issue #1234 and did not fill gaps from host-only metadata. The review remains release-free and retains the required closeout boundary.
-
-## Verification evidence
-
-- `git diff --check`: passed.
-- TemplateValidation and the required DCB net9/net10 checks passed.
-- The private-host probe remains a mandatory pre-tag operator gate and was not claimed as executed.
-
-## Findings
-
-No material implementation finding remains at this reviewed exact head.
-
-## Verdict
-
-**APPROVE** for `01b3843276fa3bdd828afd484eb2fa0e8a6b63bb` only.
-""".encode()
+    fixture_dir = Path(__file__).with_name("fixtures") / "release-record"
+    actual_origin_review_body = (fixture_dir / "origin-review-5189565347.md").read_bytes()
+    actual_origin_pr_body = (fixture_dir / "origin-pr-1235-body.md").read_bytes()
     stages = [
         ("base-prepared", "prepared", None, "2026-09-12T09:10:00Z", "base.json"),
         ("delta-library-tagged", "library-tagged/incomplete", "base-prepared", "2026-09-12T09:20:00Z", "library.json"),
@@ -157,30 +134,40 @@ No material implementation finding remains at this reviewed exact head.
     record["library_release"]["observed_at_utc"] = "2026-09-12T09:30:00Z"
     record["template_release"]["observed_at_utc"] = "2026-09-12T09:45:00Z"
 
-    origin_body = b"G79 origin body\n"
+    origin_body = actual_origin_pr_body
     origin_review_body = actual_origin_review_body
     implementation_body = b"# G80 implementation review\n\n- Verdict: **APPROVE**\n"
     implementation_artifact = b"APPROVE artifact\n"
     record["origin_delivery"]["body_evidence_ref"] = add_text("origin-body", origin_body)
     record["origin_delivery"]["body_sha256"] = sha256(origin_body)
     record["origin_delivery"]["reviewed_head_sha"] = origin_head
-    record["origin_delivery"]["tree_sha"] = origin_tree
-    for origin_check in record["origin_delivery"]["checks"]:
+    record["origin_delivery"].pop("tree_sha", None)
+    record["origin_delivery"].pop("tags", None)
+    record["origin_delivery"].update({
+        "reviewed_tree_sha": origin_tree,
+        "merged_sha": origin_merged_sha,
+        "merged_tree_sha": origin_merged_tree,
+        "merged_at_utc": "2026-09-13T04:47:20Z",
+    })
+    origin_checks = record["origin_delivery"]["checks"]
+    origin_checks[0]["name"] = "origin-dcb-net9"
+    origin_checks.append({"name": "origin-post-merge-net10", "run_id": "9002", "job_id": "9102"})
+    for index, origin_check in enumerate(origin_checks, start=1):
         origin_check["repository"] = repository
         origin_check["workflow_file"] = ".github/workflows/run_test_dcb.yml"
         origin_check["workflow_name"] = "Run DCB Tests"
         origin_check["job_name"] = origin_check["name"]
+        origin_check["check_run_id"] = str(3000 + index)
         origin_check["run_url"] = f"https://github.com/{repository}/actions/runs/{origin_check['run_id']}"
         origin_check["job_url"] = f"https://github.com/{repository}/actions/runs/{origin_check['run_id']}/job/{origin_check['job_id']}"
+        origin_check["check_url"] = f"https://github.com/{repository}/check-runs/{origin_check['check_run_id']}"
         origin_check["attempt"] = "1"
-        origin_check["event"] = "workflow_dispatch"
+        origin_check["event"] = "pull_request" if index == 1 else "workflow_dispatch"
         origin_check["superseded"] = False
-        origin_check["head_sha"] = origin_head
-        origin_check["started_at_utc"] = "2026-09-13T05:01:00Z"
-        origin_check["completed_at_utc"] = "2026-09-13T05:02:00Z"
-    for origin_tag in record["origin_delivery"]["tags"]:
-        origin_tag["peeled_commit"] = origin_head
-        origin_tag["created_at_utc"] = "2026-09-13T05:03:00Z"
+        origin_check["head_sha"] = origin_head if index == 1 else origin_merged_sha
+        origin_check["started_at_utc"] = "2026-09-13T04:46:20Z" if index == 1 else "2026-09-13T04:47:30Z"
+        origin_check["completed_at_utc"] = "2026-09-13T04:47:00Z" if index == 1 else "2026-09-13T04:48:30Z"
+        origin_check["conclusion"] = "success"
     origin_review = record["origin_delivery"]["review"]
     origin_review.update({
         "body_evidence_ref": add_text("origin-review-body", origin_review_body),
@@ -194,8 +181,14 @@ No material implementation finding remains at this reviewed exact head.
         "submitted_at_utc": "2026-09-13T04:46:14Z",
         "intent_completed_at_utc": "2026-09-13T04:50:00Z",
     })
-    origin_artifact = b"sek-g79-pr1235-01b38432-final-review-artifact\n"
-    origin_review["artifact_evidence_ref"] = add_text("origin-review-artifact", origin_artifact)
+    # Bind the historical origin completion to the durable G79 worker artifact
+    # bytes, rather than to a locally authored surrogate.
+    origin_review["intent_task_id"] = "sek-g79-pr1235-13e4b0ce-f1-f8-repair-20260912"
+    origin_review["intent_result_nonce"] = "1d9750ec-acde-4f27-b830-b61f80b70414"
+    origin_artifact = (fixture_dir / "origin-g79-repair-artifact.md").read_bytes()
+    origin_review["artifact_evidence_ref"] = add_content(
+        host_content("evidence/origin-g79-repair-artifact.md", "c" * 40),
+        "evidence/origin-g79-repair-artifact.md", origin_artifact)
     origin_review["artifact_sha256"] = sha256(origin_artifact)
     origin_completion_ref = host_content("evidence/origin-completion.json", "c" * 40)
     origin_completion = {
@@ -211,12 +204,16 @@ No material implementation finding remains at this reviewed exact head.
     add_content(origin_completion_ref, "evidence/origin-completion.json", dump(origin_completion))
     origin_review["review_evidence_ref"] = github("pulls/1235/reviews/5189565347")
     record["origin_delivery"]["review_evidence_ref"] = origin_review["review_evidence_ref"]
+    record["origin_delivery"]["pull_request_evidence_ref"] = github("pulls/1235")
+    record["origin_delivery"]["reviewed_commit_evidence_ref"] = github(f"commits/{origin_head}")
+    record["origin_delivery"]["merged_commit_evidence_ref"] = github(f"commits/{origin_merged_sha}")
+    record["origin_delivery"]["reviewed_tree_evidence_ref"] = immutable(repository, origin_head, f"git/trees/{origin_tree}")
+    record["origin_delivery"]["merged_tree_evidence_ref"] = immutable(repository, origin_merged_sha, f"git/trees/{origin_merged_tree}")
 
     for index, check in enumerate(record["origin_delivery"]["checks"], start=1):
-        check["evidence_ref"] = github(f"actions/runs/900{index}/jobs/910{index}")
-    for index, tag in enumerate(record["origin_delivery"]["tags"], start=1):
-        tag["evidence_ref"] = github(f"git/ref/tags/{tag['name']}")
-        tag["peeled_evidence_ref"] = github(f"git/tags/{tag['object_id']}")
+        check["run_evidence_ref"] = github(f"actions/runs/{check['run_id']}")
+        check["job_evidence_ref"] = github(f"actions/jobs/{check['job_id']}")
+        check["check_evidence_ref"] = github(f"check-runs/{check['check_run_id']}")
 
     implementation_review = record.pop("candidate_review")
     implementation_review.update({
@@ -239,12 +236,24 @@ No material implementation finding remains at this reviewed exact head.
         if check["name"] == "diff":
             check.pop("command", None)
             check.pop("result", None)
-        check["evidence_ref"] = github(f"actions/runs/100{index}/jobs/200{index}")
+        if check["name"] != "diff":
+            check["check_run_id"] = str(4000 + index)
+            check["run_evidence_ref"] = github(f"actions/runs/{1000 + index}")
+            check["job_evidence_ref"] = github(f"actions/jobs/{2000 + index}")
+            check["check_evidence_ref"] = github(f"check-runs/{4000 + index}")
         check.setdefault("run_id", str(1000 + index))
         check.setdefault("job_id", str(2000 + index))
+        if check["name"] != "diff":
+            # Bind native routes to the effective IDs after preserving any
+            # authored job identity (notably the Sonar check's job == run ID).
+            check["run_evidence_ref"] = github(f"actions/runs/{check['run_id']}")
+            check["job_evidence_ref"] = github(f"actions/jobs/{check['job_id']}")
+            check["check_evidence_ref"] = github(f"check-runs/{check['check_run_id']}")
         check["attempt"] = str(check.get("attempt", 1))
         check["run_url"] = f"https://github.com/{repository}/actions/runs/{check['run_id']}"
         check["job_url"] = f"https://github.com/{repository}/actions/runs/{check['run_id']}/job/{check['job_id']}"
+        if check["name"] != "diff":
+            check["check_url"] = f"https://github.com/{repository}/check-runs/{check['check_run_id']}"
         check.setdefault("workflow_file", "git" if check["name"] == "diff" else ".github/workflows/run_test_dcb.yml")
         check.setdefault("workflow_name", "git diff --check" if check["name"] == "diff" else "Run DCB Tests")
         check.setdefault("job_name", "post-merge" if check["name"] == "diff" else check["name"])
@@ -255,6 +264,7 @@ No material implementation finding remains at this reviewed exact head.
         check["conclusion"] = "success"
         check["superseded"] = False
         if check["name"] == "diff":
+            check["evidence_ref"] = github("actions/runs/1006")
             check["artifact_sha256"] = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
     record["candidate"].update({
@@ -264,7 +274,7 @@ No material implementation finding remains at this reviewed exact head.
         "reviewed_tree_evidence_ref": immutable(repository, candidate_head, f"git/trees/{reviewed_tree}"),
         "merged_tree_evidence_ref": immutable(repository, merged_sha, f"git/trees/{merged_tree}"),
         "main_evidence_ref": github(f"compare/{merged_sha}...{main_tip}"),
-        "checks_evidence_ref": github("actions/summary/1236"),
+        "checks_evidence_ref": github(f"commits/{merged_sha}/check-runs"),
     })
     for property_name in ("library_tag", "template_tag"):
         tag = record[property_name]
@@ -297,31 +307,81 @@ No material implementation finding remains at this reviewed exact head.
     add_api(record["candidate"]["reviewed_tree_evidence_ref"], {"sha": reviewed_tree, "tree": []})
     add_api(record["candidate"]["merged_tree_evidence_ref"], {"sha": merged_tree, "tree": []})
     add_api(record["candidate"]["main_evidence_ref"], {
-        "status": "ahead", "ahead_by": 1, "behind_by": 0, "total_commits": 1,
+        "url": f"https://api.github.com/repos/{repository}/compare/{merged_sha}...{main_tip}",
+        "status": "ahead", "ahead_by": 2, "behind_by": 0, "total_commits": 2,
         "base_commit": {"sha": merged_sha}, "merge_base_commit": {"sha": merged_sha},
-        "head_commit": {"sha": main_tip}, "commits": [{"sha": main_tip, "parents": [{"sha": merged_sha}]}],
+        "head_commit": {"sha": main_tip},
+        "commits": [
+            {"sha": main_side_tip, "parents": [{"sha": merged_sha}]},
+            {"sha": main_tip, "parents": [{"sha": merged_sha}, {"sha": main_side_tip}]},
+        ],
     })
-    add_api(record["candidate"]["checks_evidence_ref"], {"checks": [{"name": check["name"]} for check in record["checks"]]})
+    add_api(record["candidate"]["checks_evidence_ref"], {
+        "total_count": sum(check["name"] != "diff" for check in record["checks"]),
+        "check_runs": [{"id": int(check["check_run_id"]), "name": check["job_name"], "head_sha": merged_sha,
+                        "status": "completed", "conclusion": "success"}
+                       for check in record["checks"] if check["name"] != "diff"],
+    })
 
     for check in record["checks"]:
-        add_api(check["evidence_ref"], {
-            "repository": check["repository"], "name": check["job_name"], "workflow_file": check["workflow_file"],
-            "workflow_name": check["workflow_name"], "job_name": check["job_name"],
-            "run_id": check["run_id"], "job_id": check["job_id"], "run_url": check["run_url"],
-            "job_url": check["job_url"], "attempt": check["attempt"], "event": check["event"],
-            "superseded": check["superseded"], "head_sha": check["head_sha"], "conclusion": check["conclusion"],
-            "started_at_utc": check["started_at_utc"], "completed_at_utc": check["completed_at_utc"],
-            **({"command": "git diff --check", "artifact_sha256": check["artifact_sha256"]} if check["name"] == "diff" else {}),
+        if check["name"] == "diff":
+            add_api(check["evidence_ref"], {
+                "command": "git diff --check", "artifact_sha256": check["artifact_sha256"],
+            })
+            continue
+        add_api(check["run_evidence_ref"], {
+            "id": int(check["run_id"]), "name": check["workflow_name"], "event": check["event"],
+            "head_sha": check["head_sha"], "run_attempt": int(check["attempt"]), "status": "completed",
+            "conclusion": check["conclusion"], "workflow_id": 7000, "path": check["workflow_file"],
+            "html_url": check["run_url"], "created_at": check["started_at_utc"], "updated_at": check["completed_at_utc"],
+        })
+        add_api(check["job_evidence_ref"], {
+            "id": int(check["job_id"]), "run_id": int(check["run_id"]), "name": check["job_name"],
+            "head_sha": check["head_sha"], "conclusion": check["conclusion"],
+            "started_at": check["started_at_utc"], "completed_at": check["completed_at_utc"],
+            "html_url": check["job_url"], "workflow_name": check["workflow_name"],
+            "run_attempt": int(check["attempt"]),
+        })
+        add_api(check["check_evidence_ref"], {
+            "id": int(check["check_run_id"]), "name": check["job_name"], "head_sha": check["head_sha"],
+            "status": "completed", "conclusion": check["conclusion"], "details_url": check["job_url"],
+            "started_at": check["started_at_utc"], "completed_at": check["completed_at_utc"],
         })
     for check in record["origin_delivery"]["checks"]:
-        add_api(check["evidence_ref"], {
-            "repository": check["repository"], "name": check["name"], "workflow_file": check["workflow_file"],
-            "workflow_name": check["workflow_name"], "job_name": check["job_name"], "run_id": check["run_id"],
-            "job_id": check["job_id"], "run_url": check["run_url"], "job_url": check["job_url"],
-            "attempt": check["attempt"], "event": check["event"], "superseded": check["superseded"],
-            "head_sha": check["head_sha"], "conclusion": check["conclusion"],
-            "started_at_utc": check["started_at_utc"], "completed_at_utc": check["completed_at_utc"],
+        add_api(check["run_evidence_ref"], {
+            "id": int(check["run_id"]), "name": check["workflow_name"], "event": check["event"],
+            "head_sha": check["head_sha"], "run_attempt": int(check["attempt"]), "status": "completed",
+            "conclusion": check["conclusion"], "workflow_id": 8000, "path": check["workflow_file"],
+            "html_url": check["run_url"], "created_at": check["started_at_utc"], "updated_at": check["completed_at_utc"],
         })
+        add_api(check["job_evidence_ref"], {
+            "id": int(check["job_id"]), "run_id": int(check["run_id"]), "name": check["job_name"],
+            "head_sha": check["head_sha"], "conclusion": check["conclusion"],
+            "started_at": check["started_at_utc"], "completed_at": check["completed_at_utc"],
+            "html_url": check["job_url"], "workflow_name": check["workflow_name"],
+            "run_attempt": int(check["attempt"]),
+        })
+        add_api(check["check_evidence_ref"], {
+            "id": int(check["check_run_id"]), "name": check["name"], "head_sha": check["head_sha"],
+            "status": "completed", "conclusion": check["conclusion"], "details_url": check["job_url"],
+            "started_at": check["started_at_utc"], "completed_at": check["completed_at_utc"],
+        })
+
+    add_api(record["origin_delivery"]["pull_request_evidence_ref"], {
+        "html_url": record["origin_delivery"]["pull_request"], "repository": {"full_name": repository},
+        "head": {"sha": origin_head}, "base": {"ref": "main", "sha": "b" * 40},
+        "merge_commit_sha": origin_merged_sha, "merged": True,
+        "merged_at": record["origin_delivery"]["merged_at_utc"], "body": origin_body.decode(),
+    })
+    add_api(record["origin_delivery"]["reviewed_commit_evidence_ref"], {
+        "sha": origin_head, "commit": {"tree": {"sha": origin_tree}}, "parents": [{"sha": "6" * 40}]
+    })
+    add_api(record["origin_delivery"]["merged_commit_evidence_ref"], {
+        "sha": origin_merged_sha, "commit": {"tree": {"sha": origin_merged_tree}},
+        "parents": [{"sha": "bfb43ccbf866c06835edc5fa272f432de62ffced"}, {"sha": origin_head}]
+    })
+    add_api(record["origin_delivery"]["reviewed_tree_evidence_ref"], {"sha": origin_tree, "tree": []})
+    add_api(record["origin_delivery"]["merged_tree_evidence_ref"], {"sha": origin_merged_tree, "tree": []})
 
     add_api(origin_review["review_evidence_ref"], {
         "html_url": origin_review["review_url"], "id": int(origin_review["review_id"]), "user": {"login": origin_review["reviewer"]},
@@ -331,7 +391,7 @@ No material implementation finding remains at this reviewed exact head.
         "html_url": implementation_review["review_url"], "id": int(implementation_review["review_id"]), "user": {"login": implementation_review["reviewer"]},
         "state": "COMMENTED", "commit_id": candidate_head, "submitted_at": implementation_review["submitted_at_utc"], "body": implementation_body.decode(),
     })
-    for tag in list(record["origin_delivery"]["tags"]) + [record["library_tag"], record["template_tag"]]:
+    for tag in [record["library_tag"], record["template_tag"]]:
         add_api(tag["evidence_ref"], {"ref": "refs/tags/" + tag["name"], "object": {"sha": tag["object_id"], "type": "tag"}})
         add_api(tag["peeled_evidence_ref"], {"object": {"sha": tag["peeled_commit"], "type": "commit"}})
 
