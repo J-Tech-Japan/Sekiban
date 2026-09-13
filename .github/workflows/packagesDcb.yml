@@ -41,10 +41,12 @@ jobs:
           GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
           SEKIBAN_RELEASE_RECORD_REF: ${{ vars.SEKIBAN_RELEASE_RECORD_REF }}
         run: |
+          rm -rf "$RUNNER_TEMP/dcb-release-record-bundle"
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh \
             --version "$VERSION" --state 'library-tagged/incomplete' \
             --verify-tags library \
-            --output "$RUNNER_TEMP/dcb-release-record.json"
+            --output-dir "$RUNNER_TEMP/dcb-release-record-bundle" \
+            --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json"
 
       - name: Validate exact 26-package source manifest before pack
         run: |
@@ -65,11 +67,13 @@ jobs:
 
       - name: Validate canonical library-tagged release state before finalization
         run: |
+          RECORD_FILE="$(jq -r '.record_relative_path' "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json")"
           dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
-            release-record --record "$RUNNER_TEMP/dcb-release-record.json" \
+            release-record --bundle "$RUNNER_TEMP/dcb-release-record-bundle" \
+            --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json" \
             --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
             --state 'library-tagged/incomplete'
-          test "$(jq -r '.merged_sha' "$RUNNER_TEMP/dcb-release-record.json")" = "$(git rev-parse HEAD)"
+          test "$(jq -r '.merged_sha' "$RUNNER_TEMP/dcb-release-record-bundle/$RECORD_FILE")" = "$(git rev-parse HEAD)"
 
       - name: Validate reviewed bilingual library release body
         run: |

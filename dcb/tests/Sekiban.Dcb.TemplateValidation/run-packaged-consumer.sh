@@ -284,7 +284,8 @@ run_host_record_reader_shim_tests() {
   local reader="$script_dir/read-host-release-record.sh"
   local record="$script_dir/fixtures/release-record/valid-complete.json"
   local shim_root="$work_root/host-gh-shim"
-  local output="$work_root/host-record.json"
+  local output="$work_root/host-record-bundle"
+  local manifest="$output/bundle.json"
   local fake_ref="9999999999999999999999999999999999999999"
   mkdir -p "$shim_root"
   cat > "$shim_root/gh" <<'SHIM'
@@ -300,9 +301,11 @@ tree_sha="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 merged_sha="$(jq -r '.merged_sha' "$record")"
 content="$(base64 < "$record" | tr -d '\n')"
 
-case "$endpoint" in
+  case "$endpoint" in
   repos/J-Tech-Japan/SekibanIntentHost/contents/*)
-    jq -n --arg path "$record_path" --arg sha "$record_blob" --arg content "$content" \
+    response_path="${endpoint#repos/J-Tech-Japan/SekibanIntentHost/contents/}"
+    response_path="${response_path%%\?*}"
+    jq -n --arg path "$response_path" --arg sha "$record_blob" --arg content "$content" \
       '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
     ;;
   repos/J-Tech-Japan/SekibanIntentHost/commits/*)
@@ -313,7 +316,23 @@ case "$endpoint" in
   repos/J-Tech-Japan/SekibanIntentHost/git/trees/*)
     tree_blob="$record_blob"
     [[ "${FAKE_GH_BAD_BLOB:-0}" == 1 ]] && tree_blob="7777777777777777777777777777777777777777"
-    jq -n --arg path "$record_path" --arg sha "$tree_blob" '{tree:[{path:$path,type:"blob",sha:$sha}]}'
+    jq -n --arg tree "$tree_sha" --arg path "$record_path" --arg sha "$tree_blob" \
+      '{sha:$tree,tree:[{path:$path,type:"blob",sha:$sha}]}'
+    ;;
+  repos/J-Tech-Japan/SekibanIntentHost/contents/*)
+    jq -n --arg path "$record_path" --arg sha "$record_blob" --arg content "$content" \
+      '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
+    ;;
+  repos/J-Tech-Japan/SekibanIntentHost/git/blobs/*)
+    jq -n --arg sha "$record_blob" --arg content "$content" \
+      '{sha:$sha,encoding:"base64",content:$content}'
+    ;;
+  repos/J-Tech-Japan/Sekiban/commits/*)
+    jq -n --arg sha "$merged_sha" --arg tree "5555555555555555555555555555555555555555" \
+      '{sha:$sha,commit:{tree:{sha:$tree}}}'
+    ;;
+  repos/J-Tech-Japan/Sekiban/git/trees/*)
+    jq -n --arg sha "5555555555555555555555555555555555555555" '{sha:$sha,tree:[]}'
     ;;
   repos/J-Tech-Japan/Sekiban/git/ref/tags/*)
     tag="${endpoint##*/}"
@@ -341,18 +360,81 @@ SHIM
   chmod +x "$shim_root/gh"
 
   run_reader() {
+    rm -rf "$output"
     env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
       SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
       bash "$reader" "$@"
   }
 
-  run_reader --version "$version" --state complete --verify-tags all --output "$output"
-  [[ -s "$output" ]] || { echo "Host reader shim did not write its output." >&2; return 1; }
+  run_reader --version "$version" --state complete --verify-tags all \
+    --output-dir "$output" --manifest "$manifest"
+  [[ -s "$manifest" && -d "$output/objects" ]] || { echo "Host reader shim did not write its closed bundle." >&2; return 1; }
+  run_net10 "$validator" release-record --bundle "$output" --manifest "$manifest" \
+    --repo-root "$repo_root" --expected-version "$version" --state complete
+
+  bundle_digest_mutant="$work_root/bundle-digest-mutant"
+  cp -R "$output" "$bundle_digest_mutant"
+  digest_entry="$(jq -r '.entries[] | select(.kind == "record") | .relative_path' "$manifest")"
+  printf 'mutated bundle\n' > "$bundle_digest_mutant/$digest_entry"
+  expect_failure run_net10 "$validator" release-record --bundle "$bundle_digest_mutant" \
+    --manifest "$bundle_digest_mutant/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+
+  bundle_missing_mutant="$work_root/bundle-missing-mutant"
+  cp -R "$output" "$bundle_missing_mutant"
+  rm "$bundle_missing_mutant/$digest_entry"
+  expect_failure run_net10 "$validator" release-record --bundle "$bundle_missing_mutant" \
+    --manifest "$bundle_missing_mutant/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+
+  bundle_extra_mutant="$work_root/bundle-extra-mutant"
+  cp -R "$output" "$bundle_extra_mutant"
+  printf 'unreachable\n' > "$bundle_extra_mutant/objects/$(printf '0%.0s' {1..64}).json"
+  expect_failure run_net10 "$validator" release-record --bundle "$bundle_extra_mutant" \
+    --manifest "$bundle_extra_mutant/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+
+  bundle_alias_mutant="$work_root/bundle-alias-mutant"
+  cp -R "$output" "$bundle_alias_mutant"
+  jq '.entries[0].relative_path = "../record.json"' "$bundle_alias_mutant/bundle.json" > "$bundle_alias_mutant/bundle.json.tmp"
+  mv "$bundle_alias_mutant/bundle.json.tmp" "$bundle_alias_mutant/bundle.json"
+  expect_failure run_net10 "$validator" release-record --bundle "$bundle_alias_mutant" \
+    --manifest "$bundle_alias_mutant/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+
+  bundle_flattened_mutant="$work_root/bundle-flattened-mutant"
+  cp -R "$output" "$bundle_flattened_mutant"
+  jq '.entries[1].endpoint = "flattened-record.json"' "$bundle_flattened_mutant/bundle.json" > "$bundle_flattened_mutant/bundle.json.tmp"
+  mv "$bundle_flattened_mutant/bundle.json.tmp" "$bundle_flattened_mutant/bundle.json"
+  expect_failure run_net10 "$validator" release-record --bundle "$bundle_flattened_mutant" \
+    --manifest "$bundle_flattened_mutant/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+
+  bundle_self_commit_mutant="$work_root/bundle-self-commit-mutant"
+  cp -R "$output" "$bundle_self_commit_mutant"
+  self_commit_record_relative_path="$(jq -r '.record_relative_path' "$bundle_self_commit_mutant/bundle.json")"
+  self_commit_host_ref="$(jq -r '.host_ref' "$bundle_self_commit_mutant/bundle.json")"
+  self_commit_record="$work_root/self-commit-record.json"
+  jq --arg self_commit_host_ref "$self_commit_host_ref" \
+    '.record_source.commit_sha = $self_commit_host_ref' \
+    "$bundle_self_commit_mutant/$self_commit_record_relative_path" > "$self_commit_record"
+  self_commit_digest="$(sha256sum "$self_commit_record" | cut -d' ' -f1)"
+  cp "$self_commit_record" "$bundle_self_commit_mutant/objects/$self_commit_digest.json"
+  jq --arg old_path "$self_commit_record_relative_path" --arg new_path "objects/$self_commit_digest.json" \
+     --arg new_digest "$self_commit_digest" \
+     '.record_relative_path = $new_path | .entries |= map(if .kind == "record" then .relative_path = $new_path | .sha256 = $new_digest else . end)' \
+     "$bundle_self_commit_mutant/bundle.json" > "$bundle_self_commit_mutant/bundle.json.tmp"
+  mv "$bundle_self_commit_mutant/bundle.json.tmp" "$bundle_self_commit_mutant/bundle.json"
+  rm "$bundle_self_commit_mutant/$self_commit_record_relative_path"
+  expect_failure run_net10 "$validator" release-record --bundle "$bundle_self_commit_mutant" \
+    --manifest "$bundle_self_commit_mutant/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
 
   local failure_output
   if failure_output="$(env -u GH_TOKEN PATH="$shim_root:$PATH" SEKIBAN_RELEASE_RECORD_REF="$fake_ref" \
       FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" bash "$reader" \
-      --version "$version" --state complete --verify-tags all --output "$output" 2>&1)"; then
+      --version "$version" --state complete --verify-tags all \
+      --output-dir "$output" --manifest "$manifest" 2>&1)"; then
     echo "Host reader unexpectedly passed without its dedicated credential." >&2
     return 1
   fi
@@ -363,7 +445,8 @@ SHIM
 
   if failure_output="$(env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
       FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" bash "$reader" \
-      --version "$version" --state complete --ref main --verify-tags all --output "$output" 2>&1)"; then
+      --version "$version" --state complete --ref main --verify-tags all \
+      --output-dir "$output" --manifest "$manifest" 2>&1)"; then
     echo "Host reader unexpectedly accepted a mutable ref." >&2
     return 1
   fi
@@ -373,20 +456,25 @@ SHIM
   perl -0pi -e 's/J-Tech-Japan\/SekibanIntentHost/example.invalid\/WrongHost/g' "$wrong_reader"
   expect_failure env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
     SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
-    bash "$wrong_reader" --version "$version" --state complete --verify-tags all --output "$output"
+    bash "$wrong_reader" --version "$version" --state complete --verify-tags all \
+      --output-dir "$output" --manifest "$manifest"
 
   for flag in FAKE_GH_BAD_COMMIT FAKE_GH_BAD_BLOB FAKE_GH_BAD_TAG_OBJECT FAKE_GH_BAD_PEELED; do
     expect_failure env "$flag=1" PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
       SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
-      bash "$reader" --version "$version" --state complete --verify-tags all --output "$output"
+      bash "$reader" --version "$version" --state complete --verify-tags all \
+        --output-dir "$output" --manifest "$manifest"
   done
 
-  expect_failure run_reader --version "$version" --state prepared --verify-tags all --output "$output"
-  echo "Host release-record reader passed credential/ref, immutable commit/blob, tag-object, peeled-SHA, state, and wrong-host gh-shim mutants."
+  expect_failure run_reader --version "$version" --state prepared --verify-tags all \
+    --output-dir "$output" --manifest "$manifest"
+  echo "Host release-record reader passed credential/ref, immutable commit/blob, closed bundle, tag-object, peeled-SHA, state, and wrong-host gh-shim mutants."
 
   if [[ -n "${SEKIBAN_RELEASE_RECORD_TOKEN:-}" && -n "${SEKIBAN_RELEASE_RECORD_REF:-}" ]]; then
     GH_TOKEN="$SEKIBAN_RELEASE_RECORD_TOKEN" bash "$reader" --version "$version" \
-      --state libraries-verified --verify-tags library --output "$work_root/credentialed-host-record.json"
+      --state libraries-verified --verify-tags library \
+      --output-dir "$work_root/credentialed-host-bundle" \
+      --manifest "$work_root/credentialed-host-bundle/bundle.json"
     echo "Credentialed host read-only integration probe passed without printing its credential."
   else
     echo "Credentialed host read-only integration probe not run locally: dedicated secret/ref were not supplied; no credential was printed."
@@ -667,28 +755,48 @@ fi
 release_record="$script_dir/fixtures/release-record/valid-complete.json"
 run_net10 "$validator" release-record --record "$release_record" --repo-root "$repo_root" --expected-version "$version" --state complete
 
+# Schema-v2 production-path pairs: historical origin evidence is valid only in
+# origin_delivery; the later candidate and pointer joins must remain distinct.
+candidate_old_record="$work_root/release-candidate-origin-reused.json"
+jq '.candidate.pull_request = .origin_delivery.pull_request' "$release_record" > "$candidate_old_record"
+expect_failure run_net10 "$validator" release-record --record "$candidate_old_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+approval_rebind_record="$work_root/release-approval-rebind.json"
+jq '.pointer.artifact_approval_id = .pointer.prepared_approval_id' "$release_record" > "$approval_rebind_record"
+expect_failure run_net10 "$validator" release-record --record "$approval_rebind_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+unreferenced_sibling_record="$work_root/release-unreferenced-sibling.json"
+jq '.deltas += [{"id":"unreferenced-sibling","stage":"sibling","previous_id":"unreachable","payload_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","payload_ref":"J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/sibling.json","payload":{}}]' \
+  "$release_record" > "$unreferenced_sibling_record"
+run_net10 "$validator" release-record --record "$unreferenced_sibling_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+reachable_splice_record="$work_root/release-reachable-splice.json"
+jq '.deltas[1].previous_id = .base.id' "$release_record" > "$reachable_splice_record"
+expect_failure run_net10 "$validator" release-record --record "$reachable_splice_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+echo "Schema-v2 origin/candidate, approval-carry/rebind, unreferenced-sibling/reachable-splice, and external/current-host-commit discriminators passed."
+
 prepared_record="$work_root/release-prepared.json"
-jq '.stage = "prepared" | .history = ["prepared"] | del(.library_tag, .template_tag, .packages, .template, .library_release, .template_release, .closure)' \
+jq '.stage = "prepared" | .history = ["prepared"] | .pointer.payload_id = "base-prepared" | del(.library_tag, .template_tag, .packages, .template, .library_release, .template_release, .closure)' \
   "$release_record" > "$prepared_record"
 run_net10 "$validator" release-record --record "$prepared_record" --repo-root "$repo_root" --expected-version "$version" --state prepared
 
 library_tagged_record="$work_root/release-library-tagged.json"
-jq '.stage = "library-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete"] | del(.template_tag, .packages, .template, .library_release, .template_release, .closure)' \
+jq '.stage = "library-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete"] | .pointer.payload_id = "delta-library-tagged" | del(.template_tag, .packages, .template, .library_release, .template_release, .closure)' \
   "$release_record" > "$library_tagged_record"
 run_net10 "$validator" release-record --record "$library_tagged_record" --repo-root "$repo_root" --expected-version "$version" --state 'library-tagged/incomplete'
 
 libraries_verified_record="$work_root/release-libraries-verified.json"
-jq '.stage = "libraries-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified"] | del(.template_tag, .template, .template_release, .closure)' \
+jq '.stage = "libraries-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified"] | .pointer.payload_id = "delta-libraries-verified" | del(.template_tag, .template, .template_release, .closure)' \
   "$release_record" > "$libraries_verified_record"
 run_net10 "$validator" release-record --record "$libraries_verified_record" --repo-root "$repo_root" --expected-version "$version" --state libraries-verified
 
 template_tagged_record="$work_root/release-template-tagged.json"
-jq '.stage = "template-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete"] | del(.template, .template_release, .closure)' \
+jq '.stage = "template-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete"] | .pointer.payload_id = "delta-template-tagged" | del(.template, .template_release, .closure)' \
   "$release_record" > "$template_tagged_record"
 run_net10 "$validator" release-record --record "$template_tagged_record" --repo-root "$repo_root" --expected-version "$version" --state 'template-tagged/incomplete'
 
 artifacts_verified_record="$work_root/release-artifacts-verified.json"
-jq '.stage = "artifacts-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete", "artifacts-verified"] | del(.closure)' \
+jq '.stage = "artifacts-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete", "artifacts-verified"] | .pointer.payload_id = "delta-artifacts-verified" | del(.closure)' \
   "$release_record" > "$artifacts_verified_record"
 run_net10 "$validator" release-record --record "$artifacts_verified_record" --repo-root "$repo_root" --expected-version "$version" --state artifacts-verified
 
