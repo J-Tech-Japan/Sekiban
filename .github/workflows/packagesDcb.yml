@@ -73,7 +73,8 @@ jobs:
             --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json" \
             --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
             --state 'library-tagged/incomplete'
-          test "$(jq -r '.merged_sha' "$RUNNER_TEMP/dcb-release-record-bundle/$RECORD_FILE")" = "$(git rev-parse HEAD)"
+          MERGED_SHA="$(jq -r '.content' "$RUNNER_TEMP/dcb-release-record-bundle/$RECORD_FILE" | tr -d '\n' | base64 --decode | jq -r '.merged_sha')"
+          test "$MERGED_SHA" = "$(git rev-parse HEAD)"
 
       - name: Validate reviewed bilingual library release body
         run: |

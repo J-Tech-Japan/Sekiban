@@ -310,13 +310,16 @@ content="$(base64 < "$record" | tr -d '\n')"
 if [[ "$endpoint" == "repos/J-Tech-Japan/SekibanIntentHost/contents/${record_path}?ref=${requested_ref}" ]]; then
   jq -n --arg path "$record_path" --arg sha "$record_blob" --arg content "$content" \
     '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
+  if [[ "${FAKE_GH_TRAILING_BYTES:-0}" == 1 ]]; then
+    printf ' \n'
+  fi
   exit 0
 fi
 case "$endpoint" in
   repos/J-Tech-Japan/SekibanIntentHost/contents/*)
     response_path="${endpoint#repos/J-Tech-Japan/SekibanIntentHost/contents/}"
     response_path="${response_path%%\?*}"
-    map_line="$(awk -F '\t' -v reference="J-Tech-Japan/SekibanIntentHost@${requested_ref}:contents/${response_path}" '$1 == reference { print; exit }' "$fixture_root/map.tsv")"
+    map_line="$(awk -F '\t' -v response_path="contents/${response_path}" '$1 ~ /J-Tech-Japan\/SekibanIntentHost@[0-9a-fA-F]{40}:contents\// && $1 ~ response_path { print; exit }' "$fixture_root/map.tsv")"
     [[ -n "$map_line" ]] || { echo "missing host map entry for ${response_path}" >&2; exit 1; }
     response_file="$(printf '%s\n' "$map_line" | cut -f3)"
     response_content="$(base64 < "$response_file" | tr -d '\n')"
@@ -340,7 +343,7 @@ case "$endpoint" in
     [[ -n "$map_line" ]] || {
       if [[ "$endpoint" == "repos/J-Tech-Japan/Sekiban/git/ref/tags/"* ]]; then
         tag="${endpoint##*/}"
-        object_sha="$(jq -r --arg tag "$tag" 'if .library_tag.name == $tag then .library_tag.object_id else .template_tag.object_id end' "$record")"
+        object_sha="$(jq -r --arg tag "$tag" 'if .tag_joins.library_tag.name == $tag then .tag_joins.library_tag.object_id else .tag_joins.template_tag.object_id end' "$record")"
         [[ "${FAKE_GH_BAD_TAG_OBJECT:-0}" == 1 ]] && object_sha="6666666666666666666666666666666666666666"
         jq -n --arg sha "$object_sha" '{ref:"refs/tags/tag",object:{sha:$sha,type:"tag"}}'
         exit 0
@@ -372,6 +375,7 @@ SHIM
     env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
       SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
       FAKE_CLOSED_ROOT="$closed_fixture" FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" \
+      FAKE_GH_TRAILING_BYTES=1 \
       bash "$reader" "$@"
   }
 
@@ -380,6 +384,113 @@ SHIM
   [[ -s "$manifest" && -d "$output/objects" ]] || { echo "Host reader shim did not write its closed bundle." >&2; return 1; }
   run_net10 "$validator" release-record --bundle "$output" --manifest "$manifest" \
     --repo-root "$repo_root" --expected-version "$version" --state complete
+
+  # The reader must retain the exact response bytes, including trailing
+  # whitespace/newlines.  A command-substitution implementation strips them;
+  # the fresh-output comparison below is the killing proof for that mutant.
+  local record_api_path="intents/sekiban/releases/dcb-v10.22.0-release-record.json"
+  local record_endpoint="repos/J-Tech-Japan/SekibanIntentHost/contents/${record_api_path}?ref=${fake_ref}"
+  local raw_record_response="$work_root/raw-record-response.json"
+  env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+    FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" FAKE_CLOSED_ROOT="$closed_fixture" \
+    FAKE_GH_TRAILING_BYTES=1 "$shim_root/gh" api "$record_endpoint" > "$raw_record_response"
+  local record_relative_path
+  record_relative_path="$(jq -r '.record_relative_path' "$manifest")"
+  cmp "$raw_record_response" "$output/$record_relative_path"
+  for required_endpoint in \
+      "$record_endpoint" \
+      "repos/J-Tech-Japan/SekibanIntentHost/commits/${fake_ref}" \
+      "repos/J-Tech-Japan/SekibanIntentHost/git/trees/$(tr -d '\n' < "$closed_fixture/tree-sha")?recursive=1" \
+      "repos/J-Tech-Japan/Sekiban/git/ref/tags/dcb-v10.22.0" \
+      "repos/J-Tech-Japan/Sekiban/git/ref/tags/dcbTemplates-v10.22.0"; do
+    grep -Fx "$required_endpoint" "$work_root/closed-endpoints.log" >/dev/null || {
+      echo "Closed reader did not emit expected endpoint: $required_endpoint" >&2
+      return 1
+    }
+  done
+
+  local command_sub_reader="$work_root/read-host-command-substitution.sh"
+  sed 's|if ! gh api "repos/${host_repository}/contents/${record_path}?ref=${ref}" > "$envelope"; then|if ! printf "%s" "$(gh api "repos/${host_repository}/contents/${record_path}?ref=${ref}")" > "$envelope"; then|' \
+    "$reader" > "$command_sub_reader"
+  chmod +x "$command_sub_reader"
+  grep -F 'printf "%s" "$(gh api' "$command_sub_reader" >/dev/null || {
+    echo "Could not construct the command-substitution reader mutant." >&2
+    return 1
+  }
+  local command_sub_output="$work_root/command-sub-output"
+  env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+    SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
+    FAKE_CLOSED_ROOT="$closed_fixture" FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" \
+    FAKE_GH_TRAILING_BYTES=1 bash "$command_sub_reader" \
+    --version "$version" --state complete --verify-tags all \
+    --output-dir "$command_sub_output" --manifest "$command_sub_output/bundle.json"
+  command_sub_record_path="$(jq -r '.record_relative_path' "$command_sub_output/bundle.json")"
+  if cmp -s "$raw_record_response" "$command_sub_output/$command_sub_record_path"; then
+    echo "Command-substitution reader mutant preserved the exact response bytes." >&2
+    return 1
+  fi
+
+  # Closed production states are prefix-valid: the future artifact authority
+  # and future payloads are not required before their stage is reachable.
+  for early_state in prepared 'library-tagged/incomplete' libraries-verified 'template-tagged/incomplete' artifacts-verified; do
+    early_fixture="$work_root/closed-${early_state//\//-}"
+    python3 "$script_dir/make-closed-bundle-fixture.py" "$record_fixture" "$early_fixture" "$early_state"
+    early_output="$work_root/output-${early_state//\//-}"
+    early_manifest="$early_output/bundle.json"
+    early_verify=none
+    if [[ "$early_state" != prepared ]]; then early_verify=library; fi
+    if [[ "$early_state" == template-tagged/incomplete || "$early_state" == artifacts-verified ]]; then early_verify=all; fi
+    env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+      SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$early_fixture/record.json" \
+      FAKE_HOST_REF="$fake_ref" FAKE_CLOSED_ROOT="$early_fixture" \
+      FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" bash "$reader" \
+      --version "$version" --state "$early_state" --verify-tags "$early_verify" \
+      --output-dir "$early_output" --manifest "$early_manifest"
+    run_net10 "$validator" release-record --bundle "$early_output" --manifest "$early_manifest" \
+      --repo-root "$repo_root" --expected-version "$version" --state "$early_state"
+  done
+
+  # Production bundle mutations exercise the pointer-only reader/validator,
+  # not the fixture-only flattened --record compatibility adapter.  Each
+  # helper rewrites the immutable envelope and graph joins so the validator
+  # reaches the named semantic rule instead of failing on an unrelated digest.
+  for closed_mutant in root-merged-sha root-extra-cumulative-fact empty-delta skip-delta \
+      wrong-stage wrong-stage-field review-head review-head-and-api review-api-commit wrong-release-url wrong-release-body \
+      wrong-package-url wrong-template-url wrong-library-observed-time equal-template-tag-time \
+      draft-release wrong-release-tag missing-release-asset wrong-release-asset-name \
+      missing-artifact-authority authority-version authority-verdict authority-rebind authority-time \
+      noncanonical-closeout closure-before-authority early-future-authority; do
+    mutant_bundle="$work_root/closed-mutant-${closed_mutant//\//-}"
+    python3 "$script_dir/mutate-closed-bundle.py" "$output" "$mutant_bundle" "$closed_mutant"
+    mutant_state=complete
+    if [[ "$closed_mutant" == early-future-authority ]]; then mutant_state=prepared; fi
+    expect_failure run_net10 "$validator" release-record --bundle "$mutant_bundle" \
+      --manifest "$mutant_bundle/bundle.json" --repo-root "$repo_root" \
+      --expected-version "$version" --state "$mutant_state"
+  done
+
+  sibling_bundle="$work_root/closed-unreferenced-sibling"
+  python3 "$script_dir/mutate-closed-bundle.py" "$output" "$sibling_bundle" unreferenced-sibling
+  run_net10 "$validator" release-record --bundle "$sibling_bundle" \
+    --manifest "$sibling_bundle/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+
+  # Production release-record accepts only the pointer bundle.  The old
+  # flattened adapter remains available solely to legacy fixture tests below.
+  local legacy_rejection_output
+  if legacy_rejection_output="$(
+    unset SEKIBAN_TEMPLATE_VALIDATION_ALLOW_LEGACY
+    run_net10 "$validator" release-record --record "$record_fixture" \
+      --repo-root "$repo_root" --expected-version "$version" --state complete 2>&1
+  )"; then
+    echo "Production validator unexpectedly accepted --record." >&2
+    return 1
+  fi
+  [[ "$legacy_rejection_output" == *"--bundle"* ]] || {
+    echo "Production --record rejection did not name the bundle-only contract." >&2
+    return 1
+  }
+  printf '%s\n' "$legacy_rejection_output"
 
   bundle_digest_mutant="$work_root/bundle-digest-mutant"
   cp -R "$output" "$bundle_digest_mutant"
@@ -484,6 +595,7 @@ SHIM
     mutant_output="$(mktemp -d "$work_root/${flag}.XXXXXX")"
     expect_failure env "$flag=1" PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
       SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
+      FAKE_CLOSED_ROOT="$closed_fixture" FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" \
       bash "$reader" --version "$version" --state complete --verify-tags all \
         --output-dir "$mutant_output" --manifest "$mutant_output/bundle.json"
   done
@@ -777,6 +889,9 @@ fi
 # SEK-G79: the host-owned release record is read-only here. Exercise every valid
 # state prefix and deterministic identity/package/early-closure mutants locally.
 release_record="$script_dir/fixtures/release-record/valid-complete.json"
+# The legacy flattened matrix is a fixture-only compatibility adapter.  The
+# production workflow path above and below remains bundle-only.
+export SEKIBAN_TEMPLATE_VALIDATION_ALLOW_LEGACY=1
 run_net10 "$validator" release-record --record "$release_record" --repo-root "$repo_root" --expected-version "$version" --state complete
 
 # Schema-v2 production-path pairs: historical origin evidence is valid only in

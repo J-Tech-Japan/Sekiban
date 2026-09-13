@@ -58,17 +58,19 @@ jobs:
             --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json" \
             --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
             --state libraries-verified
-          test "$(jq -r '.merged_sha' "$RUNNER_TEMP/dcb-release-record-bundle/$RECORD_FILE")" = "$(git rev-parse HEAD)"
+          MERGED_SHA="$(jq -r '.content' "$RUNNER_TEMP/dcb-release-record-bundle/$RECORD_FILE" | tr -d '\n' | base64 --decode | jq -r '.merged_sha')"
+          test "$MERGED_SHA" = "$(git rev-parse HEAD)"
 
       - name: Validate live template tag identity before template pack
         env:
           GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
         run: |
           RECORD_FILE="$(jq -r '.record_relative_path' "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json")"
+          MERGED_SHA="$(jq -r '.content' "$RUNNER_TEMP/dcb-release-record-bundle/$RECORD_FILE" | tr -d '\n' | base64 --decode | jq -r '.merged_sha')"
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
             --check-live-tag --repo-root "$GITHUB_WORKSPACE" \
             --tag "dcbTemplates-v${VERSION}" \
-            --expected-peeled "$(jq -r '.merged_sha' "$RUNNER_TEMP/dcb-release-record-bundle/$RECORD_FILE")"
+            --expected-peeled "$MERGED_SHA"
 
       - name: Verify published library/template parity before pack
         env:

@@ -121,8 +121,14 @@ internal static class Program
                 case "release-record":
                     if (options.ContainsKey("record"))
                     {
-                        // Fixture-only compatibility for the inherited release-gate
-                        // matrix; both release workflows use the closed bundle path.
+                        // This adapter exists only for the historical fixture matrix.
+                        // Production workflows are required to use --bundle/--manifest
+                        // so a flattened record can never become a release decision.
+                        if (Environment.GetEnvironmentVariable("SEKIBAN_TEMPLATE_VALIDATION_ALLOW_LEGACY") != "1")
+                        {
+                            throw new InvalidOperationException(
+                                "The production release-record command accepts only --bundle and --manifest; --record is fixture-only.");
+                        }
                         ReleaseRecordValidator.Validate(
                             Required(options, "record"),
                             expectedVersion,

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace Sekiban.Dcb.TemplateValidation;
@@ -44,18 +45,12 @@ internal static class ClosedReleaseRecordValidator
         string? expectedState,
         string? repoRoot)
     {
-        Assert(root.ValueKind == JsonValueKind.Object, "Closed release record must be a JSON object.");
+        Assert(root.ValueKind == JsonValueKind.Object, "Closed release bundle root must be a JSON object.");
         RequireMembers(root, "closed release record", new[]
         {
-            "schema_version", "version", "record_source", "integration_pr", "merged_sha", "merged_at_utc",
-            "stage", "history", "checks", "release_bodies", "origin_delivery", "candidate",
-            "implementation_review", "base", "deltas", "pointer", "authorities", "bundle_refs"
-        }, new[]
-        {
-            "library_tag", "template_tag", "library_release", "template_release", "packages", "template", "closure"
+            "schema_version", "version", "record_source", "merged_sha", "tag_joins", "stage", "base", "deltas",
+            "pointer", "authorities", "bundle_refs"
         });
-        Assert(!root.TryGetProperty("artifacts_verified", out _) && !root.TryGetProperty("candidate_review", out _),
-            "Closed schema-v2 production records cannot use the legacy artifacts_verified/candidate_review review gate.");
         Assert(GetInt(root, "schema_version") == SchemaVersion,
             "Closed release record schema_version must be 2; v1 cannot be relabelled.");
         Assert(GetString(root, "version") == expectedVersion,
@@ -69,20 +64,75 @@ internal static class ClosedReleaseRecordValidator
             Assert(stage == expectedState, $"Closed release record stage is {stage}, expected {expectedState}.");
         }
 
-        ValidateRecordSource(root, expectedVersion, bundle.HostRef);
-        ValidateHistory(root, stageIndex);
-        var mergedSha = GetString(root, "merged_sha");
-        Assert(Commit.IsMatch(mergedSha), "merged_sha must be a 40-character immutable SHA.");
-        var mergedAt = ParseTimestamp(GetString(root, "merged_at_utc"), "merged_at_utc");
-        ValidateOrigin(root.GetProperty("origin_delivery"), bundle, expectedVersion);
-        ValidateCandidate(root, bundle, mergedSha, mergedAt);
-        ValidateImplementationReview(root.GetProperty("implementation_review"), bundle, mergedSha, mergedAt);
-        ValidateChecks(root.GetProperty("checks"), bundle, mergedSha, mergedAt);
         var graph = ValidateGraph(root, bundle, expectedVersion, stage, stageIndex);
-        ValidateAuthorities(root.GetProperty("authorities"), GetObject(root, "pointer"), bundle, graph, expectedVersion, stageIndex);
+        var effective = FoldEffectiveRecord(root, graph);
+        ValidateTagJoins(root, effective);
+        Assert(!effective.TryGetProperty("artifacts_verified", out _) &&
+               !effective.TryGetProperty("candidate_review", out _),
+            "Closed schema-v2 production records cannot use the legacy review-gate members.");
+
+        ValidateRecordSource(effective, expectedVersion, bundle.HostRef);
+        ValidateHistory(effective, stageIndex);
+        var mergedSha = GetString(effective, "merged_sha");
+        Assert(Commit.IsMatch(mergedSha), "merged_sha must be a 40-character immutable SHA.");
+        var mergedAt = ParseTimestamp(GetString(effective, "merged_at_utc"), "merged_at_utc");
+        ValidateOrigin(effective.GetProperty("origin_delivery"), bundle, expectedVersion);
+        ValidateCandidate(effective, bundle, mergedSha, mergedAt);
+        ValidateImplementationReview(effective.GetProperty("implementation_review"), bundle, effective, mergedAt);
+        ValidateChecks(effective.GetProperty("checks"), bundle, mergedSha, mergedAt);
+        ValidateAuthorities(root.GetProperty("authorities"), GetObject(root, "pointer"), bundle, graph, effective, expectedVersion, stageIndex);
         ValidateBundleReferences(root, bundle);
-        ValidateReleaseStage(root, bundle, stage, stageIndex, expectedVersion, mergedSha, repoRoot);
+        ValidateBodies(effective, expectedVersion, stageIndex, repoRoot);
+        ValidateReleaseStage(effective, bundle, stage, stageIndex, expectedVersion, mergedSha, repoRoot);
         Console.WriteLine($"Closed release bundle validation passed: {stage} for DCB {expectedVersion}.");
+    }
+
+    private static JsonElement FoldEffectiveRecord(JsonElement envelope, GraphState graph)
+    {
+        var effective = new JsonObject
+        {
+            ["schema_version"] = GetInt(envelope, "schema_version"),
+            ["version"] = GetString(envelope, "version"),
+            ["merged_sha"] = GetString(envelope, "merged_sha"),
+            ["stage"] = GetString(envelope, "stage"),
+            ["record_source"] = JsonNode.Parse(GetObject(envelope, "record_source").GetRawText())
+        };
+        var reserved = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "schema_version", "version", "record_source", "merged_sha", "stage", "base", "deltas",
+            "tag_joins", "pointer", "authorities", "bundle_refs"
+        };
+        foreach (var node in graph.Chain)
+        {
+            foreach (var property in node.Changes.EnumerateObject())
+            {
+                Assert(!reserved.Contains(property.Name),
+                    $"{node.Id}.changes cannot duplicate a pointer-envelope member '{property.Name}'.");
+                effective[property.Name] = JsonNode.Parse(property.Value.GetRawText());
+            }
+        }
+
+        using var document = JsonDocument.Parse(effective.ToJsonString());
+        return document.RootElement.Clone();
+    }
+
+    private static void ValidateTagJoins(JsonElement envelope, JsonElement effective)
+    {
+        var joins = GetObject(envelope, "tag_joins");
+        foreach (var property in new[] { "library_tag", "template_tag" })
+        {
+            var hasJoin = joins.TryGetProperty(property, out var join);
+            var hasTag = effective.TryGetProperty(property, out var tag);
+            Assert(hasJoin == hasTag, $"tag_joins.{property} must be present exactly when its stage is reachable.");
+            if (!hasJoin)
+            {
+                continue;
+            }
+            Assert(GetString(join, "name") == GetString(tag, "name") &&
+                   GetString(join, "object_id") == GetString(tag, "object_id") &&
+                   GetString(join, "peeled_commit") == GetString(tag, "peeled_commit"),
+                $"tag_joins.{property} is not bound to its folded stage payload.");
+        }
     }
 
     private static void ValidateRecordSource(JsonElement root, string expectedVersion, string hostRef)
@@ -255,7 +305,7 @@ internal static class ClosedReleaseRecordValidator
     private static void ValidateImplementationReview(
         JsonElement review,
         ReleaseBundle bundle,
-        string mergedSha,
+        JsonElement effective,
         DateTimeOffset mergedAt)
     {
         RequireMembers(review, "implementation_review", new[]
@@ -265,15 +315,16 @@ internal static class ClosedReleaseRecordValidator
             "intent_result_nonce", "approved_at_utc", "evidence_ref"
         });
         var head = GetString(review, "head_sha");
-        Assert(Commit.IsMatch(head) && head != mergedSha && GetString(review, "event_state") == "COMMENTED" &&
+        var candidateHead = GetString(GetObject(effective, "candidate"), "reviewed_head_sha");
+        Assert(Commit.IsMatch(head) && head == candidateHead && GetString(review, "event_state") == "COMMENTED" &&
                GetString(review, "semantic_state") == "APPROVE",
-            "implementation review must be a real COMMENTED semantic APPROVE on the reviewed source head.");
+            "implementation review must be a real COMMENTED semantic APPROVE on candidate.reviewed_head_sha.");
         var approvedAt = GetTimestamp(review, "approved_at_utc");
         Assert(approvedAt < mergedAt && !string.IsNullOrWhiteSpace(GetString(review, "reviewer")) &&
                !string.IsNullOrWhiteSpace(GetString(review, "intent_task_id")) &&
                !string.IsNullOrWhiteSpace(GetString(review, "intent_result_nonce")),
             "implementation review identity or chronology is invalid.");
-        ValidateReviewEvidence(review, bundle, GetString(review, "evidence_ref"), head, "COMMENTED");
+        ValidateReviewEvidence(review, bundle, GetString(review, "evidence_ref"), candidateHead, "COMMENTED");
         var body = GetContent(bundle, GetString(review, "body_evidence_ref"), "implementation review body");
         var artifact = GetContent(bundle, GetString(review, "artifact_evidence_ref"), "implementation review artifact");
         Assert(Sha256Bytes(body) == GetString(review, "body_sha256").ToLowerInvariant() &&
@@ -391,7 +442,8 @@ internal static class ClosedReleaseRecordValidator
         }
 
         var pointer = GetObject(root, "pointer");
-        RequireMembers(pointer, "pointer", new[] { "payload_id", "prepared_approval_id", "artifact_approval_id", "fold_sha256" });
+        RequireMembers(pointer, "pointer", new[] { "payload_id", "prepared_approval_id", "fold_sha256" },
+            new[] { "artifact_approval_id" });
         var pointerId = GetString(pointer, "payload_id");
         Assert(nodes.TryGetValue(pointerId, out var current) && current!.Stage == stage,
             "The canonical pointer must target an existing revision at the current stage.");
@@ -450,7 +502,7 @@ internal static class ClosedReleaseRecordValidator
         var payload = payloadDocument.RootElement;
         RequireMembers(payload, $"{path}.payload", new[]
         {
-            "id", "stage", "previous_id", "version", "recorded_at_utc", "previous_fold_sha256", "fold_sha256"
+            "id", "stage", "previous_id", "version", "recorded_at_utc", "previous_fold_sha256", "fold_sha256", "changes"
         });
         Assert(GetString(payload, "id") == id && GetString(payload, "stage") == stage &&
                GetString(payload, "version") == expectedVersion &&
@@ -462,11 +514,42 @@ internal static class ClosedReleaseRecordValidator
         var fold = GetString(payload, "fold_sha256");
         Assert(Sha256.IsMatch(fold) && (previousFold is null || Sha256.IsMatch(previousFold)),
             $"{path} payload fold fields must be SHA-256 values.");
+        var changes = GetObject(payload, "changes");
+        Assert(changes.EnumerateObject().Any(), $"{path}.payload.changes must contain real stage evidence.");
+        AssertNoApprovalReferences(changes, $"{path}.payload.changes");
+        ValidateStageChanges(changes, stage, $"{path}.payload.changes");
         if (previousNodes is not null && previousId is not null)
         {
             Assert(previousNodes.ContainsKey(previousId), $"{path} points to a missing predecessor.");
         }
-        return new Node(id, stage, previousId, payloadSha, payloadRef, previousFold, fold);
+        return new Node(id, stage, previousId, payloadSha, payloadRef, previousFold, fold, changes.Clone());
+    }
+
+    private static void ValidateStageChanges(JsonElement changes, string stage, string path)
+    {
+        var expected = stage switch
+        {
+            "prepared" =>
+                new[] { "integration_pr", "merged_at_utc", "origin_delivery", "candidate",
+                    "implementation_review", "checks", "release_bodies", "history" },
+            "library-tagged/incomplete" => new[] { "library_tag", "history" },
+            "libraries-verified" => new[] { "packages", "library_release", "history" },
+            "template-tagged/incomplete" => new[] { "template_tag", "history" },
+            "artifacts-verified" => new[] { "template", "template_release", "history" },
+            "complete" => new[] { "closure", "history" },
+            _ => throw new InvalidOperationException($"Unknown stage '{stage}'.")
+        };
+        RequireMembers(changes, path, expected);
+        var stageIndex = Array.IndexOf(Stages, stage);
+        var history = GetArray(changes, "history");
+        Assert(history.GetArrayLength() == stageIndex + 1,
+            $"{path}.history must contain the canonical stage prefix.");
+        for (var index = 0; index <= stageIndex; index++)
+        {
+            Assert(history[index].ValueKind == JsonValueKind.String &&
+                   history[index].GetString() == Stages[index],
+                $"{path}.history entry {index} must be {Stages[index]}.");
+        }
     }
 
     private static void ValidateAuthorities(
@@ -474,22 +557,53 @@ internal static class ClosedReleaseRecordValidator
         JsonElement pointer,
         ReleaseBundle bundle,
         GraphState graph,
+        JsonElement effective,
         string expectedVersion,
         int stageIndex)
     {
-        RequireMembers(authorities, "authorities", new[] { "prepared", "artifacts_verified" });
+        RequireMembers(authorities, "authorities", new[] { "prepared" }, new[] { "artifacts_verified" });
         var prepared = ReadAuthority(GetObject(authorities, "prepared"), bundle, graph, expectedVersion, "prepared");
-        var artifacts = ReadAuthority(GetObject(authorities, "artifacts_verified"), bundle, graph, expectedVersion, "artifacts_verified");
-        Assert(prepared.Id != artifacts.Id && prepared.TaskId != artifacts.TaskId && prepared.ResultNonce != artifacts.ResultNonce,
-            "Prepared and artifact authorities must have distinct identities and completion nonces.");
-        Assert(prepared.Stage == "prepared" && artifacts.Stage == "artifacts-verified" &&
-               prepared.ApprovedAt < artifacts.ApprovedAt,
-            "Host-stage authority order is invalid.");
-        Assert(stageIndex >= 4 || artifacts.ApprovedAt > prepared.ApprovedAt,
-            "Artifact authority must be present before artifact-bearing stages.");
-        Assert(GetString(pointer, "prepared_approval_id") == prepared.Id &&
-               GetString(pointer, "artifact_approval_id") == artifacts.Id,
-            "The canonical pointer must name the distinct prepared and artifact authorities.");
+        var checksComplete = GetArray(effective, "checks").EnumerateArray()
+            .Select(check => ParseTimestamp(GetString(check, "completed_at_utc"), "integrated check completion"))
+            .Max();
+        Assert(prepared.ApprovedAt > checksComplete,
+            "Prepared authority must follow the complete integrated-head checks.");
+        Assert(GetString(pointer, "prepared_approval_id") == prepared.Id,
+            "The canonical pointer must name the prepared authority.");
+        if (stageIndex >= 1)
+        {
+            var libraryTag = ParseTimestamp(GetString(GetObject(effective, "library_tag"), "created_at_utc"), "library tag");
+            Assert(libraryTag > prepared.ApprovedAt,
+                "Library tag creation must follow prepared authority approval.");
+        }
+
+        if (stageIndex >= 4)
+        {
+            Assert(authorities.TryGetProperty("artifacts_verified", out var artifactAuthority),
+                "Artifact authority is required at artifacts-verified and complete stages.");
+            var artifacts = ReadAuthority(artifactAuthority, bundle, graph, expectedVersion, "artifacts_verified");
+            Assert(prepared.Id != artifacts.Id && prepared.TaskId != artifacts.TaskId && prepared.ResultNonce != artifacts.ResultNonce &&
+                   prepared.ApprovedAt < artifacts.ApprovedAt,
+                "Prepared and artifact authorities must have distinct identities and ordered approvals.");
+            var templateTag = ParseTimestamp(GetString(GetObject(effective, "template_tag"), "created_at_utc"), "template tag");
+            Assert(artifacts.ApprovedAt > templateTag,
+                "Artifact authority must follow template-tag evidence.");
+            Assert(GetString(pointer, "artifact_approval_id") == artifacts.Id,
+                "The canonical pointer must name the artifact authority.");
+            if (stageIndex == 5)
+            {
+                var closure = GetObject(effective, "closure");
+                var complete = ParseTimestamp(GetString(closure, "completed_at_utc"), "closure.completed_at_utc");
+                Assert(complete > artifacts.ApprovedAt,
+                    "Complete-stage authority must precede the complete closeout chronology.");
+            }
+        }
+        else
+        {
+            Assert(!authorities.TryGetProperty("artifacts_verified", out _) &&
+                   !pointer.TryGetProperty("artifact_approval_id", out _),
+                "Future artifact authority must not be asserted before artifacts-verified.");
+        }
     }
 
     private static Authority ReadAuthority(
@@ -502,34 +616,65 @@ internal static class ClosedReleaseRecordValidator
         RequireMembers(authority, $"authorities.{name}", new[]
         {
             "id", "kind", "stage", "target_payload_id", "target_payload_ref", "target_payload_sha256",
-            "reviewer_role", "reviewer_identity", "report_ref", "completion_ref", "report_sha256",
-            "completion_sha256", "task_id", "result_nonce", "status", "approved_at_utc", "evidence_ref"
+            "version", "verdict", "reviewer_role", "reviewer_identity", "report_ref", "completion_ref", "report_sha256",
+            "completion_sha256", "artifact_ref", "artifact_sha256", "task_id", "result_nonce", "status",
+            "approved_at_utc", "evidence_ref"
         });
         var id = GetString(authority, "id");
         var stage = GetString(authority, "stage");
         var targetId = GetString(authority, "target_payload_id");
+        var expectedStage = name == "prepared" ? "prepared" : "artifacts-verified";
         Assert(GetString(authority, "kind") == "host-stage-review" && !string.IsNullOrWhiteSpace(id) &&
-               stage is "prepared" or "artifacts-verified" && !string.IsNullOrWhiteSpace(GetString(authority, "reviewer_role")) &&
+               GetString(authority, "version") == expectedVersion && GetString(authority, "verdict") == "approved" &&
+               stage == expectedStage && !string.IsNullOrWhiteSpace(GetString(authority, "reviewer_role")) &&
                !string.IsNullOrWhiteSpace(GetString(authority, "reviewer_identity")) &&
                !string.IsNullOrWhiteSpace(GetString(authority, "task_id")) &&
                !string.IsNullOrWhiteSpace(GetString(authority, "result_nonce")) &&
                GetString(authority, "status") == "completed",
             $"authorities.{name} is not a complete host-stage approval.");
         Assert(graph.Nodes.TryGetValue(targetId, out var target) &&
+               target.Stage == expectedStage &&
                target!.PayloadRef == GetString(authority, "target_payload_ref") &&
                target.PayloadSha256 == GetString(authority, "target_payload_sha256").ToLowerInvariant(),
             $"authorities.{name} is not bound to its target payload.");
         var report = GetContent(bundle, GetString(authority, "report_ref"), $"{name} report");
         var completion = GetContent(bundle, GetString(authority, "completion_ref"), $"{name} completion");
+        var artifact = GetContent(bundle, GetString(authority, "artifact_ref"), $"{name} artifact");
         Assert(Sha256Bytes(report) == GetString(authority, "report_sha256").ToLowerInvariant() &&
-               Sha256Bytes(completion) == GetString(authority, "completion_sha256").ToLowerInvariant(),
-            $"authorities.{name} report/completion bytes are not bound.");
+               Sha256Bytes(completion) == GetString(authority, "completion_sha256").ToLowerInvariant() &&
+               Sha256Bytes(artifact) == GetString(authority, "artifact_sha256").ToLowerInvariant(),
+            $"authorities.{name} report/completion/artifact bytes are not bound.");
         var evidence = GetContent(bundle, GetString(authority, "evidence_ref"), $"{name} approval");
         using var evidenceDocument = JsonDocument.Parse(evidence);
         var evidenceRoot = evidenceDocument.RootElement;
-        Assert(GetString(evidenceRoot, "id") == id && GetString(evidenceRoot, "task_id") == GetString(authority, "task_id") &&
+        RequireMembers(evidenceRoot, $"{name} approval evidence", new[]
+        {
+            "id", "kind", "stage", "version", "verdict", "target_payload_id", "target_payload_ref",
+            "target_payload_sha256", "reviewer_role", "reviewer_identity", "report_ref",
+            "completion_ref", "report_sha256", "completion_sha256", "artifact_ref", "artifact_sha256",
+            "task_id", "result_nonce", "status", "approved_at_utc"
+        });
+        Assert(GetString(evidenceRoot, "id") == id &&
+               GetString(evidenceRoot, "kind") == GetString(authority, "kind") &&
+               GetString(evidenceRoot, "stage") == GetString(authority, "stage") &&
+               GetString(evidenceRoot, "version") == expectedVersion &&
+               GetString(evidenceRoot, "verdict") == GetString(authority, "verdict") &&
+               GetString(evidenceRoot, "target_payload_id") == targetId &&
+               GetString(evidenceRoot, "target_payload_ref") == GetString(authority, "target_payload_ref") &&
+               GetString(evidenceRoot, "target_payload_sha256") == GetString(authority, "target_payload_sha256") &&
+               GetString(evidenceRoot, "reviewer_role") == GetString(authority, "reviewer_role") &&
+               GetString(evidenceRoot, "reviewer_identity") == GetString(authority, "reviewer_identity") &&
+               GetString(evidenceRoot, "report_ref") == GetString(authority, "report_ref") &&
+               GetString(evidenceRoot, "completion_ref") == GetString(authority, "completion_ref") &&
+               GetString(evidenceRoot, "report_sha256") == GetString(authority, "report_sha256") &&
+               GetString(evidenceRoot, "completion_sha256") == GetString(authority, "completion_sha256") &&
+               GetString(evidenceRoot, "artifact_ref") == GetString(authority, "artifact_ref") &&
+               GetString(evidenceRoot, "artifact_sha256") == GetString(authority, "artifact_sha256") &&
+               GetString(evidenceRoot, "task_id") == GetString(authority, "task_id") &&
                GetString(evidenceRoot, "result_nonce") == GetString(authority, "result_nonce") &&
-               GetString(evidenceRoot, "target_payload_id") == targetId,
+               GetString(evidenceRoot, "status") == GetString(authority, "status") &&
+               GetString(evidenceRoot, "approved_at_utc") == GetString(authority, "approved_at_utc") &&
+               GetString(authority, "verdict") == "approved",
             $"authorities.{name} is not bound to its immutable approval response.");
         var approvedAt = ParseTimestamp(GetString(authority, "approved_at_utc"), $"authorities.{name}.approved_at_utc");
         return new Authority(id, stage, targetId, GetString(authority, "task_id"), GetString(authority, "result_nonce"), approvedAt);
@@ -563,7 +708,7 @@ internal static class ClosedReleaseRecordValidator
         if (stageIndex >= 2)
         {
             ValidatePackages(root, expectedVersion);
-            ValidateReleaseEvidence(root, "library_release", $"dcb-v{expectedVersion}", expectedVersion, 26, repoRoot);
+            ValidateReleaseEvidence(root, bundle, "library_release", $"dcb-v{expectedVersion}", expectedVersion, 26, repoRoot);
         }
         if (stageIndex >= 3)
         {
@@ -576,7 +721,7 @@ internal static class ClosedReleaseRecordValidator
         if (stageIndex >= 4)
         {
             ValidateTemplate(root, expectedVersion);
-            ValidateReleaseEvidence(root, "template_release", $"dcbTemplates-v{expectedVersion}", expectedVersion, 1, repoRoot);
+            ValidateReleaseEvidence(root, bundle, "template_release", $"dcbTemplates-v{expectedVersion}", expectedVersion, 1, repoRoot);
         }
         if (stageIndex == 5)
         {
@@ -647,7 +792,9 @@ internal static class ClosedReleaseRecordValidator
         {
             var id = GetString(package, "id");
             Assert(ids.Add(id) && PackageIds.Contains(id, StringComparer.Ordinal) &&
-                   GetString(package, "version") == expectedVersion && GetInt(package, "asset_count") > 0,
+                   GetString(package, "version") == expectedVersion && GetInt(package, "asset_count") == 1 &&
+                   GetString(package, "public_url") ==
+                   $"https://api.nuget.org/v3-flatcontainer/{id.ToLowerInvariant()}/{expectedVersion}/{id.ToLowerInvariant()}.{expectedVersion}.nupkg",
                 $"Package evidence is invalid for {id}.");
         }
         Assert(ids.SetEquals(PackageIds), "Package evidence set is incomplete.");
@@ -657,12 +804,15 @@ internal static class ClosedReleaseRecordValidator
     {
         var template = GetObject(root, "template");
         Assert(GetString(template, "package_id") == "Sekiban.Dcb.Templates" &&
-               GetString(template, "version") == expectedVersion && GetInt(template, "asset_count") == 1,
+               GetString(template, "version") == expectedVersion && GetInt(template, "asset_count") == 1 &&
+               GetString(template, "public_url") ==
+               $"https://api.nuget.org/v3-flatcontainer/sekiban.dcb.templates/{expectedVersion}/sekiban.dcb.templates.{expectedVersion}.nupkg",
             "Template package evidence is invalid.");
     }
 
     private static void ValidateReleaseEvidence(
         JsonElement root,
+        ReleaseBundle bundle,
         string property,
         string expectedTag,
         string expectedVersion,
@@ -673,8 +823,40 @@ internal static class ClosedReleaseRecordValidator
         var release = GetObject(root, property);
         Assert(GetString(release, "repository") == Repository && GetString(release, "tag") == expectedTag &&
                GetString(release, "url") == $"https://github.com/{Repository}/releases/tag/{expectedTag}" &&
-               GetBoolean(release, "draft") == false && GetInt(release, "asset_count") == expectedAssets,
+               GetBoolean(release, "draft") == false && GetInt(release, "asset_count") == expectedAssets &&
+               ParseTimestamp(GetString(release, "observed_at_utc"), $"{property}.observed_at_utc") >=
+               ParseTimestamp(GetString(GetObject(root, property == "library_release" ? "library_tag" : "template_tag"), "created_at_utc"), "release tag"),
             $"{property} identity or asset count is invalid.");
+        var api = GetApiObject(bundle, GetString(release, "evidence_ref"), $"{property} API evidence");
+        Assert(GetString(api, "html_url") == GetString(release, "url") &&
+               GetString(GetObject(api, "repository"), "full_name") == Repository &&
+               GetString(api, "tag_name") == expectedTag && !GetBoolean(api, "draft") &&
+               Sha256Bytes(Encoding.UTF8.GetBytes(GetString(api, "body"))) == GetString(release, "body_sha256").ToLowerInvariant(),
+            $"{property} is not bound to the authoritative public release response.");
+        var assets = GetArray(api, "assets");
+        Assert(assets.GetArrayLength() == expectedAssets, $"{property} public asset response is incomplete.");
+        var expectedAssetMap = property == "library_release"
+            ? GetArray(root, "packages").EnumerateArray()
+                .ToDictionary(
+                    package => $"{GetString(package, "id")}.{expectedVersion}.nupkg",
+                    package => GetString(package, "public_url"),
+                    StringComparer.Ordinal)
+            : new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [$"Sekiban.Dcb.Templates.{expectedVersion}.nupkg"] =
+                    GetString(GetObject(root, "template"), "public_url")
+            };
+        foreach (var asset in assets.EnumerateArray())
+        {
+            RequireMembers(asset, $"{property}.asset", new[] { "name", "browser_download_url", "state" });
+            var assetName = GetString(asset, "name");
+            var assetUrl = GetString(asset, "browser_download_url");
+            Assert(GetString(asset, "state") == "uploaded" &&
+                   expectedAssetMap.Remove(assetName, out var expectedUrl) &&
+                   expectedUrl == assetUrl,
+                $"{property} contains an unexpected or unuploaded public asset.");
+        }
+        Assert(expectedAssetMap.Count == 0, $"{property} is missing a public package asset.");
         var bodies = GetObject(root, "release_bodies");
         var suffix = property == "library_release" ? "library" : "template";
         foreach (var language in new[] { "en", "ja" })
@@ -687,6 +869,48 @@ internal static class ClosedReleaseRecordValidator
             var digest = Sha256Bytes(File.ReadAllBytes(path));
             Assert(digest == GetString(bodies, $"{suffix}_{language}_sha256").ToLowerInvariant(),
                 $"{property} body digest does not match {relative}.");
+        }
+    }
+
+    private static void ValidateBodies(JsonElement root, string expectedVersion, int stageIndex, string? repoRoot)
+    {
+        if (stageIndex < 2)
+        {
+            return;
+        }
+
+        Assert(!string.IsNullOrWhiteSpace(repoRoot), "Release body verification requires --repo-root.");
+        var bodies = GetObject(root, "release_bodies");
+        var documents = new[]
+        {
+            ("library_en_sha256", $"docs/releases/dcb-v{expectedVersion}-library.en.md"),
+            ("library_ja_sha256", $"docs/releases/dcb-v{expectedVersion}-library.ja.md")
+        };
+        foreach (var (digestProperty, relative) in documents)
+        {
+            var path = Path.Combine(Path.GetFullPath(repoRoot!), relative);
+            Assert(File.Exists(path) && Sha256Bytes(File.ReadAllBytes(path)) == GetString(bodies, digestProperty).ToLowerInvariant(),
+                $"Release body digest does not match {relative}.");
+            Assert(GetString(bodies, digestProperty.Replace("_sha256", "_version")) == expectedVersion,
+                $"Release body version is not {expectedVersion} for {relative}.");
+        }
+
+        if (stageIndex < 4)
+        {
+            return;
+        }
+
+        foreach (var (digestProperty, relative) in new[]
+        {
+            ("template_en_sha256", $"docs/releases/dcbTemplates-v{expectedVersion}.en.md"),
+            ("template_ja_sha256", $"docs/releases/dcbTemplates-v{expectedVersion}.ja.md")
+        })
+        {
+            var path = Path.Combine(Path.GetFullPath(repoRoot!), relative);
+            Assert(File.Exists(path) && Sha256Bytes(File.ReadAllBytes(path)) == GetString(bodies, digestProperty).ToLowerInvariant(),
+                $"Template release body digest does not match {relative}.");
+            Assert(GetString(bodies, digestProperty.Replace("_sha256", "_version")) == expectedVersion,
+                $"Template release body version is not {expectedVersion} for {relative}.");
         }
     }
 
@@ -732,6 +956,28 @@ internal static class ClosedReleaseRecordValidator
         element.TryGetProperty(property, out var value) && value.ValueKind != JsonValueKind.Null
             ? GetString(element, property)
             : null;
+
+    private static void AssertNoApprovalReferences(JsonElement element, string path)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                Assert(!property.Name.Contains("approval", StringComparison.OrdinalIgnoreCase) &&
+                       !property.Name.Contains("authority", StringComparison.OrdinalIgnoreCase),
+                    $"{path} must not contain approval or authority references.");
+                AssertNoApprovalReferences(property.Value, $"{path}.{property.Name}");
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            var index = 0;
+            foreach (var item in element.EnumerateArray())
+            {
+                AssertNoApprovalReferences(item, $"{path}[{index++}]");
+            }
+        }
+    }
 
     private static string GetString(JsonElement element, string property)
     {
@@ -800,7 +1046,8 @@ internal static class ClosedReleaseRecordValidator
         string PayloadSha256,
         string PayloadRef,
         string? PreviousFoldSha256,
-        string FoldSha256);
+        string FoldSha256,
+        JsonElement Changes);
 
     private sealed record GraphState(
         IReadOnlyDictionary<string, Node> Nodes,

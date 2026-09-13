@@ -292,7 +292,8 @@ internal sealed class ReleaseBundle
                 $"repos/{repository}/{objectPath}?ref={commit}",
             _ when objectPath.StartsWith("commits/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("pulls/", StringComparison.Ordinal) ||
-                   objectPath.StartsWith("actions/", StringComparison.Ordinal) =>
+                   objectPath.StartsWith("actions/", StringComparison.Ordinal) ||
+                   objectPath.StartsWith("releases/", StringComparison.Ordinal) =>
                 $"repos/{repository}/{objectPath}",
             _ when objectPath.StartsWith("git/trees/", StringComparison.Ordinal) =>
                 $"repos/{repository}/{objectPath}?recursive=1",

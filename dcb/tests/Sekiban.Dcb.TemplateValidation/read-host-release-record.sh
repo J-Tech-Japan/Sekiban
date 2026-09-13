@@ -161,7 +161,7 @@ fetch_bundle_ref() {
   object_path="${BASH_REMATCH[3]}"
   case "$object_path" in
     contents/*) endpoint="repos/${repository}/${object_path}?ref=${commit}" ;;
-    commits/*|pulls/*|actions/*) endpoint="repos/${repository}/${object_path}" ;;
+    commits/*|pulls/*|actions/*|releases/*) endpoint="repos/${repository}/${object_path}" ;;
     git/trees/*) endpoint="repos/${repository}/${object_path}?recursive=1" ;;
     git/*) endpoint="repos/${repository}/${object_path}" ;;
     *) endpoint="repos/${repository}/contents/${object_path}?ref=${commit}" ;;
@@ -192,9 +192,9 @@ done < "$bundle_refs_file"
 
 verify_live_tag() {
   local property="$1" tag_name expected_object expected_peeled live_ref_file tag_object_file live_object live_type peeled
-  tag_name="$(jq -r --arg property "$property" '.[$property].name' "$decoded")"
-  expected_object="$(jq -r --arg property "$property" '.[$property].object_id' "$decoded")"
-  expected_peeled="$(jq -r --arg property "$property" '.[$property].peeled_commit' "$decoded")"
+  tag_name="$(jq -r --arg property "$property" '.tag_joins[$property].name' "$decoded")"
+  expected_object="$(jq -r --arg property "$property" '.tag_joins[$property].object_id' "$decoded")"
+  expected_peeled="$(jq -r --arg property "$property" '.tag_joins[$property].peeled_commit' "$decoded")"
   [[ "$tag_name" != "null" && "$expected_object" =~ ^[0-9a-fA-F]{40}$ && "$expected_peeled" =~ ^[0-9a-fA-F]{40}$ ]] || {
     echo "Host release record is missing complete ${property} tag identity." >&2
     return 1
