@@ -33,7 +33,7 @@ dcb_package_ids=(
 )
 
 usage() {
-  echo "Usage: $0 --check-package-manifest|--check-library-verified|--check-publish-parity|--check-drift|--wait-for-published-packages|--wait-for-published-template|--check-template-retry|--self-test [options]" >&2
+  echo "Usage: $0 --check-package-manifest|--check-library-verified|--check-live-tag|--check-publish-parity|--check-drift|--wait-for-published-packages|--wait-for-published-template|--check-template-retry|--self-test [options]" >&2
   exit 2
 }
 
@@ -44,6 +44,29 @@ require_value() {
     echo "Missing required --$name." >&2
     exit 2
   fi
+}
+
+monotonic_now() {
+  perl -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC -e \
+    'printf "%.6f\n", clock_gettime(CLOCK_MONOTONIC)'
+}
+
+monotonic_deadline() {
+  perl -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC -e \
+    'printf "%.6f\n", clock_gettime(CLOCK_MONOTONIC) + $ARGV[0]' "$1"
+}
+
+remaining_budget() {
+  perl -MTime::HiRes=clock_gettime,CLOCK_MONOTONIC -e '
+    my ($deadline, $request_limit) = @ARGV;
+    my $remaining = $deadline - clock_gettime(CLOCK_MONOTONIC);
+    if ($remaining <= 0) {
+      print "0\n";
+    } else {
+      my $budget = $remaining < $request_limit ? $remaining : $request_limit;
+      print $budget < 0.001 ? "0\n" : sprintf("%.3f\n", $budget);
+    }
+  ' "$1" "$2"
 }
 
 version_is_stable() {
@@ -243,6 +266,63 @@ check_library_release_evidence() {
   echo "libraries-verified evidence passed: ${tag}, 26 exact assets, non-draft release, reviewed body, and current peeled commit."
 }
 
+check_live_tag() {
+  local repo_root="$1"
+  local tag="$2"
+  local expected_peeled="$3"
+  require_value repo-root "$repo_root"
+  require_value tag "$tag"
+  require_value expected-peeled "$expected_peeled"
+  [[ "$expected_peeled" =~ ^[0-9a-fA-F]{40}$ ]] || {
+    echo "Expected peeled tag commit must be a 40-character commit SHA." >&2
+    return 1
+  }
+
+  local live_ref live_object live_type peeled local_object local_peeled
+  local repository="${GITHUB_REPOSITORY:-J-Tech-Japan/Sekiban}"
+  if ! live_ref="$(gh api "repos/${repository}/git/ref/tags/${tag}")"; then
+    echo "Unable to read live tag ref ${tag} from ${repository}." >&2
+    return 1
+  fi
+  live_object="$(jq -r '.object.sha' <<<"$live_ref")"
+  live_type="$(jq -r '.object.type' <<<"$live_ref")"
+  [[ "$live_object" =~ ^[0-9a-fA-F]{40}$ ]] || {
+    echo "Live tag ${tag} did not return a valid object identity." >&2
+    return 1
+  }
+  if local_object="$(git -C "$repo_root" rev-parse "${tag}^{tag}" 2>/dev/null)"; then
+    :
+  else
+    local_object="$(git -C "$repo_root" rev-parse "$tag" 2>/dev/null || true)"
+  fi
+  [[ "$local_object" == "$live_object" ]] || {
+    echo "Live tag ${tag} object identity differs from the checked-out tag ref." >&2
+    return 1
+  }
+  case "$live_type" in
+    tag)
+      if ! tag_object="$(gh api "repos/${repository}/git/tags/${live_object}")"; then
+        echo "Unable to peel annotated live tag ${tag}." >&2
+        return 1
+      fi
+      peeled="$(jq -r '.object.sha' <<<"$tag_object")"
+      ;;
+    commit)
+      peeled="$live_object"
+      ;;
+    *)
+      echo "Live tag ${tag} has unsupported object type ${live_type}." >&2
+      return 1
+      ;;
+  esac
+  local_peeled="$(git -C "$repo_root" rev-parse "${tag}^{commit}" 2>/dev/null || true)"
+  [[ "$peeled" == "$expected_peeled" && "$local_peeled" == "$expected_peeled" ]] || {
+    echo "Live tag ${tag} peeled commit does not match the merged SHA." >&2
+    return 1
+  }
+  echo "Live tag ${tag} matches object ${live_object} and peeled commit ${peeled}."
+}
+
 check_drift() {
   local repo_root="$1"
   local library_tags_file="$2"
@@ -300,11 +380,13 @@ verify_published_artifact() {
   local package="$2"
   local version="$3"
   local request_timeout="$4"
+  [[ "$request_timeout" != "0" ]] || return 124
   local package_lower artifact temp nuspec
   package_lower="$(printf '%s' "$package" | tr '[:upper:]' '[:lower:]')"
   artifact="${base_url%/}/${package_lower}/${version}/${package_lower}.${version}.nupkg"
-  temp="$(mktemp "${TMPDIR:-/tmp}/sek-published-${package_lower}.XXXXXX.nupkg")"
-  if ! curl --fail --silent --show-error --location --max-time "$request_timeout" \
+  temp="$(mktemp "${TMPDIR:-/tmp}/sek-published-${package_lower}.XXXXXX")"
+  if ! curl --fail --silent --show-error --location --retry 0 \
+    --connect-timeout "$request_timeout" --max-time "$request_timeout" \
     "$artifact" --output "$temp"; then
     rm -f "$temp"
     return 1
@@ -358,8 +440,9 @@ check_template_retry() {
   fi
 
   local temporary http_code
-  temporary="$(mktemp /tmp/sek-template-retry.XXXXXX.nupkg)"
-  if ! http_code="$(curl --silent --show-error --location --max-time "$request_timeout" \
+  temporary="$(mktemp /tmp/sek-template-retry.XXXXXX)"
+  if ! http_code="$(curl --silent --show-error --location --retry 0 \
+      --connect-timeout "$request_timeout" --max-time "$request_timeout" \
       --output "$temporary" --write-out '%{http_code}' "$artifact")"; then
     rm -f "$temporary"
     echo "Unable to inspect existing template package $artifact." >&2
@@ -402,13 +485,21 @@ wait_for_published_packages() {
     return 2
   fi
 
-  local started
-  started="$(date +%s)"
+  local deadline
+  deadline="$(monotonic_deadline "$timeout_seconds")"
   while true; do
     local pending=()
-    local package
-    for package in "${dcb_package_ids[@]}"; do
-      if ! verify_published_artifact "$base_url" "$package" "$version" "$request_timeout"; then
+    local package request_budget exhausted=0
+    local index
+    for index in "${!dcb_package_ids[@]}"; do
+      package="${dcb_package_ids[index]}"
+      request_budget="$(remaining_budget "$deadline" "$request_timeout")"
+      if [[ "$request_budget" == "0" ]]; then
+        pending+=("${dcb_package_ids[@]:index}")
+        exhausted=1
+        break
+      fi
+      if ! verify_published_artifact "$base_url" "$package" "$version" "$request_budget"; then
         pending+=("$package")
       fi
     done
@@ -417,15 +508,13 @@ wait_for_published_packages() {
       return 0
     fi
 
-    local now elapsed
-    now="$(date +%s)"
-    elapsed=$((now - started))
-    if (( elapsed >= timeout_seconds )); then
-      echo "Timed out after ${elapsed}s waiting for ${#pending[@]} DCB packages at ${version}: ${pending[*]}" >&2
+    request_budget="$(remaining_budget "$deadline" "$interval_seconds")"
+    if (( exhausted == 1 )) || [[ "$request_budget" == "0" ]]; then
+      echo "Timed out after ${timeout_seconds}s waiting for ${#pending[@]} DCB packages at ${version}; pending IDs: ${pending[*]}" >&2
       return 1
     fi
     echo "Waiting for ${#pending[@]} DCB packages at ${version}: ${pending[*]}" >&2
-    sleep "$interval_seconds"
+    sleep "$request_budget"
   done
 }
 
@@ -442,23 +531,27 @@ wait_for_published_template() {
   fi
 
   local package="Sekiban.Dcb.Templates"
-  local started
-  started="$(date +%s)"
+  local deadline
+  deadline="$(monotonic_deadline "$timeout_seconds")"
   while true; do
-    if verify_published_artifact "$base_url" "$package" "$version" "$request_timeout"; then
+    local request_budget
+    request_budget="$(remaining_budget "$deadline" "$request_timeout")"
+    if [[ "$request_budget" == "0" ]]; then
+      echo "Timed out after ${timeout_seconds}s waiting for the template package at ${version}; pending IDs: ${package}" >&2
+      return 1
+    fi
+    if verify_published_artifact "$base_url" "$package" "$version" "$request_budget"; then
       echo "Template package is available on nuget.org at ${version}."
       return 0
     fi
 
-    local now elapsed
-    now="$(date +%s)"
-    elapsed=$((now - started))
-    if (( elapsed >= timeout_seconds )); then
-      echo "Timed out after ${elapsed}s waiting for the template package at ${version}." >&2
+    request_budget="$(remaining_budget "$deadline" "$interval_seconds")"
+    if [[ "$request_budget" == "0" ]]; then
+      echo "Timed out after ${timeout_seconds}s waiting for the template package at ${version}; pending IDs: ${package}" >&2
       return 1
     fi
-    echo "Waiting for the template package at ${version}." >&2
-    sleep "$interval_seconds"
+    echo "Waiting for the template package at ${version}: ${package}" >&2
+    sleep "$request_budget"
   done
 }
 
@@ -632,9 +725,62 @@ PY
     echo "The real template wait loop did not report its bounded unresolved diagnostic." >&2
     return 1
   fi
+
+  local package_timeout_output
+  if package_timeout_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-packages \
+      --version "10.22.0" --feed-base-url "http://127.0.0.1:${timeout_port}" \
+      --timeout-seconds 2 --interval-seconds 1 --request-timeout-seconds 1 2>&1)"; then
+    printf '%s\n' "$package_timeout_output"
+    echo "Expected the real package wait loop to time out." >&2
+    return 1
+  fi
+  if [[ "$package_timeout_output" != *"Timed out after"* ||
+        "$package_timeout_output" != *"pending IDs:"* ||
+        "$package_timeout_output" != *"Sekiban.Dcb.BlobStorage.AzureStorage"* ||
+        "$package_timeout_output" != *"Sekiban.Dcb.WithoutResult.Testing"* ]]; then
+    printf '%s\n' "$package_timeout_output"
+    echo "The real package wait loop did not preserve its exact unresolved IDs." >&2
+    return 1
+  fi
   kill "$timeout_pid" 2>/dev/null || true
   wait "$timeout_pid" 2>/dev/null || true
   rm -f "$timeout_ready"
+
+  local malformed_wait_feed malformed_wait_output
+  malformed_wait_feed="$(mktemp -d "${TMPDIR:-/tmp}/sek-malformed-wait-feed.XXXXXX")"
+  for fake_package in "${dcb_package_ids[@]}" Sekiban.Dcb.Templates; do
+    fake_lower="$(printf '%s' "$fake_package" | tr '[:upper:]' '[:lower:]')"
+    write_fake_nupkg "$malformed_wait_feed/$fake_lower/10.22.0/$fake_lower.10.22.0.nupkg" "$fake_package" "10.22.0"
+  done
+  printf 'malformed nupkg\n' > "$malformed_wait_feed/sekiban.dcb.core/10.22.0/sekiban.dcb.core.10.22.0.nupkg"
+  if malformed_wait_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-packages \
+      --version "10.22.0" --feed-base-url "file://${malformed_wait_feed}" \
+      --timeout-seconds 2 --interval-seconds 1 --request-timeout-seconds 1 2>&1)"; then
+    printf '%s\n' "$malformed_wait_output"
+    echo "Expected malformed package wait evidence to remain unresolved." >&2
+    return 1
+  fi
+  if [[ "$malformed_wait_output" != *"pending IDs:"* ||
+        "$malformed_wait_output" != *"Sekiban.Dcb.Core"* ]]; then
+    printf '%s\n' "$malformed_wait_output"
+    echo "Malformed package evidence did not preserve the exact unresolved package ID." >&2
+    return 1
+  fi
+  printf 'malformed nupkg\n' > "$malformed_wait_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg"
+  if malformed_wait_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-template \
+      --version "10.22.0" --feed-base-url "file://${malformed_wait_feed}" \
+      --timeout-seconds 2 --interval-seconds 1 --request-timeout-seconds 1 2>&1)"; then
+    printf '%s\n' "$malformed_wait_output"
+    echo "Expected malformed template wait evidence to remain unresolved." >&2
+    return 1
+  fi
+  if [[ "$malformed_wait_output" != *"pending IDs:"* ||
+        "$malformed_wait_output" != *"Sekiban.Dcb.Templates"* ]]; then
+    printf '%s\n' "$malformed_wait_output"
+    echo "Malformed template evidence did not preserve the exact unresolved package ID." >&2
+    return 1
+  fi
+  rm -rf "$malformed_wait_feed"
 
   local delayed_feed delayed_ready delayed_pid delayed_port delayed_output
   delayed_feed="$(mktemp -d /tmp/sek-g79-delayed-feed.XXXXXX)"
@@ -741,6 +887,8 @@ library_tags_file=""
 template_tags_file=""
 authorities_file=""
 workflow_file=""
+tag=""
+expected_peeled=""
 timeout_seconds=900
 interval_seconds=15
 request_timeout_seconds=20
@@ -756,6 +904,8 @@ while (( $# > 0 )); do
     --template-tags-file) template_tags_file="$2"; shift 2 ;;
     --authorities-file) authorities_file="$2"; shift 2 ;;
     --workflow-file) workflow_file="$2"; shift 2 ;;
+    --tag) tag="$2"; shift 2 ;;
+    --expected-peeled) expected_peeled="$2"; shift 2 ;;
     --timeout-seconds) timeout_seconds="$2"; shift 2 ;;
     --interval-seconds) interval_seconds="$2"; shift 2 ;;
     --request-timeout-seconds) request_timeout_seconds="$2"; shift 2 ;;
@@ -771,6 +921,9 @@ case "$mode" in
     ;;
   --check-library-verified)
     check_library_release_evidence "$repo_root" "$version"
+    ;;
+  --check-live-tag)
+    check_live_tag "$repo_root" "$tag" "$expected_peeled"
     ;;
   --wait-for-published-template)
     wait_for_published_template "$version" "$timeout_seconds" "$interval_seconds" "$feed_base_url" "$request_timeout_seconds"

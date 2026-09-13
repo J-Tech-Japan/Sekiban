@@ -22,7 +22,7 @@ internal static class ReleaseRecordValidator
     private const string ClosedState = "closed";
     private const string Repository = "J-Tech-Japan/Sekiban";
     private const string IntegrationPullRequest = "https://github.com/J-Tech-Japan/Sekiban/pull/1235";
-    private const string HostRecordRepository = "J-Tech-Japan/Sekiban-Design";
+    private const string HostRecordRepository = "J-Tech-Japan/SekibanIntentHost";
     private const string HostRecordPath = "intents/sekiban/releases/dcb-v10.22.0-release-record.json";
     private const string SourceIssueCommentPattern =
         "^https://github\\.com/J-Tech-Japan/Sekiban/issues/1234#issuecomment-[0-9]+$";
@@ -31,6 +31,9 @@ internal static class ReleaseRecordValidator
     private const string Issue1230CommentPattern =
         "^https://github\\.com/J-Tech-Japan/Sekiban/issues/1230#issuecomment-[0-9]+$";
     private const string RequiredLink = "https://github.com/J-Tech-Japan/Sekiban/issues/1234";
+    private const string DiffCommand = "git diff --check";
+    private const string DiffOutputSha256 =
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     private static readonly string[] Stages =
     [
@@ -89,7 +92,8 @@ internal static class ReleaseRecordValidator
             "DCB Azure Queue packaged-consumer pull-request validation", "packaged-consumer"),
         new("templateConsumer", ".github/workflows/dcb_template_validation.yml",
             "DCB template packaged-consumer validation", "packaged-consumer"),
-        new("SonarCloud Code Analysis", "SonarCloud", "SonarCloud", "SonarCloud Code Analysis")
+        new("SonarCloud Code Analysis", "SonarCloud", "SonarCloud", "SonarCloud Code Analysis"),
+        new("diff", "git", "git diff --check", "post-merge diff")
     ];
 
     internal static void Validate(
@@ -213,12 +217,20 @@ internal static class ReleaseRecordValidator
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var check in checks.EnumerateArray())
         {
-            foreach (var property in new[]
-                     {
-                         "name", "workflow_file", "workflow_name", "job_name", "run_id", "job_id",
-                         "run_url", "job_url", "event", "started_at_utc", CompletedAtUtcProperty,
-                         "head_sha", "conclusion"
-                     })
+            var name = GetString(check, "name");
+            var requiredProperties = name == "diff"
+                ? new[]
+                {
+                    "name", "command", "result", "event", "started_at_utc",
+                    CompletedAtUtcProperty, "head_sha", "conclusion", "artifact_sha256"
+                }
+                : new[]
+                {
+                    "name", "workflow_file", "workflow_name", "job_name", "run_id", "job_id",
+                    "run_url", "job_url", "event", "started_at_utc", CompletedAtUtcProperty,
+                    "head_sha", "conclusion"
+                };
+            foreach (var property in requiredProperties)
             {
                 Assert(check.TryGetProperty(property, out var value) &&
                       value.ValueKind == JsonValueKind.String &&
@@ -226,10 +238,40 @@ internal static class ReleaseRecordValidator
                     $"Each release-record check requires non-empty {property}.");
             }
 
-            var name = check.GetProperty("name").GetString()!;
             var definition = RequiredChecks.SingleOrDefault(required => required.Name == name);
             Assert(definition is not null, $"Release-record check '{name}' is not in the required inventory.");
             Assert(names.Add(name), $"Release-record check '{name}' is duplicated.");
+            Assert(check.TryGetProperty("attempt", out var attempt) &&
+                   attempt.TryGetInt32(out var attemptNumber) && attemptNumber > 0,
+                $"Each release-record check requires a positive attempt.");
+            Assert(check.TryGetProperty("superseded", out var superseded) &&
+                   superseded.ValueKind == JsonValueKind.False,
+                $"Release-record check '{name}' must be the unsuperseded successful attempt.");
+            Assert(check.GetProperty("head_sha").GetString() == mergedSha,
+                "Release-record check head_sha must equal the merged integration SHA.");
+            Assert(string.Equals(check.GetProperty("conclusion").GetString(), "success", StringComparison.OrdinalIgnoreCase),
+                "Release-record CI evidence must conclude success before artifact verification.");
+            var started = ParseTimestamp(check.GetProperty("started_at_utc").GetString()!, "check.started_at_utc");
+            var completed = ParseTimestamp(check.GetProperty(CompletedAtUtcProperty).GetString()!, $"check.{CompletedAtUtcProperty}");
+            Assert(started > mergedAt,
+                $"Release-record check '{name}' must start strictly after the integration merge.");
+            Assert(completed > started, "Release-record check completion must strictly follow its start.");
+
+            if (name == "diff")
+            {
+                Assert(check.GetProperty("command").GetString() == DiffCommand,
+                    $"The diff evidence command must be exactly {DiffCommand}.");
+                Assert(check.GetProperty("result").GetString() == "passed",
+                    "The diff evidence result must be passed.");
+                Assert(check.GetProperty("event").GetString() == "post-merge",
+                    "The diff evidence event must identify the post-merge check.");
+                Assert(!check.TryGetProperty("workflow_file", out _),
+                    "The diff evidence must use its command identity instead of a workflow identity.");
+                Assert(check.GetProperty("artifact_sha256").GetString() == DiffOutputSha256,
+                    "The diff evidence digest must match the empty output of a passing git diff --check.");
+                continue;
+            }
+
             Assert(check.GetProperty("workflow_file").GetString() == definition!.WorkflowFile,
                 $"Release-record check '{name}' has the wrong workflow file identity.");
             Assert(check.GetProperty("workflow_name").GetString() == definition.WorkflowName,
@@ -253,21 +295,6 @@ internal static class ReleaseRecordValidator
             var eventName = GetString(check, "event");
             Assert(eventName is WorkflowDispatchEvent or PushEvent,
                 $"Release-record check '{name}' must be an integrated-head push or workflow_dispatch run.");
-            Assert(check.TryGetProperty("superseded", out var superseded) &&
-                   superseded.ValueKind == JsonValueKind.False,
-                $"Release-record check '{name}' must be the unsuperseded successful attempt.");
-
-            Assert(check.TryGetProperty("attempt", out var attempt) && attempt.TryGetInt32(out var attemptNumber) && attemptNumber > 0,
-                "Each release-record check requires a positive attempt.");
-            Assert(check.GetProperty("head_sha").GetString() == mergedSha,
-                "Release-record CI head_sha must equal the merged integration SHA.");
-            Assert(string.Equals(check.GetProperty("conclusion").GetString(), "success", StringComparison.OrdinalIgnoreCase),
-                "Release-record CI evidence must conclude success before artifact verification.");
-            var started = ParseTimestamp(check.GetProperty("started_at_utc").GetString()!, "check.started_at_utc");
-            var completed = ParseTimestamp(check.GetProperty(CompletedAtUtcProperty).GetString()!, $"check.{CompletedAtUtcProperty}");
-            Assert(started > mergedAt,
-                $"Release-record check '{name}' must start strictly after the integration merge.");
-            Assert(completed > started, "Release-record check completion must strictly follow its start.");
         }
 
         Assert(names.SetEquals(RequiredChecks.Select(required => required.Name)),

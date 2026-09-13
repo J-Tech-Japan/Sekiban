@@ -280,6 +280,119 @@ expect_failure() {
   fi
 }
 
+run_host_record_reader_shim_tests() {
+  local reader="$script_dir/read-host-release-record.sh"
+  local record="$script_dir/fixtures/release-record/valid-complete.json"
+  local shim_root="$work_root/host-gh-shim"
+  local output="$work_root/host-record.json"
+  local fake_ref="9999999999999999999999999999999999999999"
+  mkdir -p "$shim_root"
+  cat > "$shim_root/gh" <<'SHIM'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == "api" ]] && shift
+endpoint="${1:-}"
+record="${FAKE_HOST_RECORD:?}"
+requested_ref="${FAKE_HOST_REF:?}"
+record_path="intents/sekiban/releases/dcb-v10.22.0-release-record.json"
+record_blob="$(git hash-object "$record")"
+tree_sha="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+merged_sha="$(jq -r '.merged_sha' "$record")"
+content="$(base64 < "$record" | tr -d '\n')"
+
+case "$endpoint" in
+  repos/J-Tech-Japan/SekibanIntentHost/contents/*)
+    jq -n --arg path "$record_path" --arg sha "$record_blob" --arg content "$content" \
+      '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
+    ;;
+  repos/J-Tech-Japan/SekibanIntentHost/commits/*)
+    commit_sha="$requested_ref"
+    [[ "${FAKE_GH_BAD_COMMIT:-0}" == 1 ]] && commit_sha="8888888888888888888888888888888888888888"
+    jq -n --arg sha "$commit_sha" --arg tree "$tree_sha" '{sha:$sha,commit:{tree:{sha:$tree}}}'
+    ;;
+  repos/J-Tech-Japan/SekibanIntentHost/git/trees/*)
+    tree_blob="$record_blob"
+    [[ "${FAKE_GH_BAD_BLOB:-0}" == 1 ]] && tree_blob="7777777777777777777777777777777777777777"
+    jq -n --arg path "$record_path" --arg sha "$tree_blob" '{tree:[{path:$path,type:"blob",sha:$sha}]}'
+    ;;
+  repos/J-Tech-Japan/Sekiban/git/ref/tags/*)
+    tag="${endpoint##*/}"
+    if [[ "$tag" == "dcb-v10.22.0" ]]; then
+      object_sha="$(jq -r '.library_tag.object_id' "$record")"
+    elif [[ "$tag" == "dcbTemplates-v10.22.0" ]]; then
+      object_sha="$(jq -r '.template_tag.object_id' "$record")"
+    else
+      exit 1
+    fi
+    [[ "${FAKE_GH_BAD_TAG_OBJECT:-0}" == 1 ]] && object_sha="6666666666666666666666666666666666666666"
+    jq -n --arg sha "$object_sha" '{ref:"refs/tags/tag",object:{sha:$sha,type:"tag"}}'
+    ;;
+  repos/J-Tech-Japan/Sekiban/git/tags/*)
+    peeled="$merged_sha"
+    [[ "${FAKE_GH_BAD_PEELED:-0}" == 1 ]] && peeled="5555555555555555555555555555555555555555"
+    jq -n --arg sha "$peeled" '{object:{sha:$sha,type:"commit"}}'
+    ;;
+  *)
+    echo "unexpected gh api endpoint" >&2
+    exit 1
+    ;;
+esac
+SHIM
+  chmod +x "$shim_root/gh"
+
+  run_reader() {
+    env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+      SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
+      bash "$reader" "$@"
+  }
+
+  run_reader --version "$version" --state complete --verify-tags all --output "$output"
+  [[ -s "$output" ]] || { echo "Host reader shim did not write its output." >&2; return 1; }
+
+  local failure_output
+  if failure_output="$(env -u GH_TOKEN PATH="$shim_root:$PATH" SEKIBAN_RELEASE_RECORD_REF="$fake_ref" \
+      FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" bash "$reader" \
+      --version "$version" --state complete --verify-tags all --output "$output" 2>&1)"; then
+    echo "Host reader unexpectedly passed without its dedicated credential." >&2
+    return 1
+  fi
+  [[ "$failure_output" == *"SEKIBAN_RELEASE_RECORD_TOKEN"* ]] || {
+    echo "Missing-credential failure did not name the dedicated secret." >&2
+    return 1
+  }
+
+  if failure_output="$(env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+      FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" bash "$reader" \
+      --version "$version" --state complete --ref main --verify-tags all --output "$output" 2>&1)"; then
+    echo "Host reader unexpectedly accepted a mutable ref." >&2
+    return 1
+  fi
+
+  local wrong_reader="$work_root/read-host-wrong-repository.sh"
+  cp "$reader" "$wrong_reader"
+  perl -0pi -e 's/J-Tech-Japan\/SekibanIntentHost/example.invalid\/WrongHost/g' "$wrong_reader"
+  expect_failure env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+    SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
+    bash "$wrong_reader" --version "$version" --state complete --verify-tags all --output "$output"
+
+  for flag in FAKE_GH_BAD_COMMIT FAKE_GH_BAD_BLOB FAKE_GH_BAD_TAG_OBJECT FAKE_GH_BAD_PEELED; do
+    expect_failure env "$flag=1" PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+      SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
+      bash "$reader" --version "$version" --state complete --verify-tags all --output "$output"
+  done
+
+  expect_failure run_reader --version "$version" --state prepared --verify-tags all --output "$output"
+  echo "Host release-record reader passed credential/ref, immutable commit/blob, tag-object, peeled-SHA, state, and wrong-host gh-shim mutants."
+
+  if [[ -n "${SEKIBAN_RELEASE_RECORD_TOKEN:-}" && -n "${SEKIBAN_RELEASE_RECORD_REF:-}" ]]; then
+    GH_TOKEN="$SEKIBAN_RELEASE_RECORD_TOKEN" bash "$reader" --version "$version" \
+      --state libraries-verified --verify-tags library --output "$work_root/credentialed-host-record.json"
+    echo "Credentialed host read-only integration probe passed without printing its credential."
+  else
+    echo "Credentialed host read-only integration probe not run locally: dedicated secret/ref were not supplied; no credential was printed."
+  fi
+}
+
 assert_unavailable_package_diagnostic() {
   local operation="$1"
   local output="$2"
@@ -505,6 +618,19 @@ copy_workflow_fixture "$workflow_mutant"
 perl -0pi -e 's/^.*validate-release-tags\.sh --check-drift.*\n//m' "$workflow_mutant/.github/workflows/dcb_template_validation.yml"
 expect_failure run_net10 "$validator" workflow --repo-root "$workflow_mutant"
 
+host_credential_mutant="$work_root/host-credential-mutant"
+copy_workflow_fixture "$host_credential_mutant"
+perl -0pi -e 's/SEKIBAN_RELEASE_RECORD_TOKEN/github.token/g' \
+  "$host_credential_mutant/.github/workflows/packagesDcb.yml" \
+  "$host_credential_mutant/.github/workflows/packagesDcbTemplate.yml"
+expect_failure run_net10 "$validator" workflow --repo-root "$host_credential_mutant"
+
+host_repository_mutant="$work_root/host-repository-mutant"
+copy_workflow_fixture "$host_repository_mutant"
+perl -0pi -e 's/J-Tech-Japan\/SekibanIntentHost/J-Tech-Japan\/Sekiban-Design/g' \
+  "$host_repository_mutant/dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh"
+expect_failure run_net10 "$validator" workflow --repo-root "$host_repository_mutant"
+
 publish_workflow_mutant="$work_root/publish-workflow-mutant"
 copy_workflow_fixture "$publish_workflow_mutant"
 perl -0pi -e 's/^.*validate-release-tags\.sh --check-publish-parity.*\n//m' "$publish_workflow_mutant/.github/workflows/packagesDcbTemplate.yml"
@@ -526,6 +652,8 @@ publish_retry_mutant="$work_root/publish-retry-mutant"
 copy_workflow_fixture "$publish_retry_mutant"
 perl -0pi -e 's/ --skip-duplicate//g' "$publish_retry_mutant/.github/workflows/packagesDcbTemplate.yml"
 expect_failure run_net10 "$validator" workflow --repo-root "$publish_retry_mutant"
+
+run_host_record_reader_shim_tests
 
 "$script_dir/validate-release-tags.sh" --self-test --repo-root "$repo_root"
 status_composition_args=(--repo-root "$repo_root" --version "$version")
@@ -567,6 +695,38 @@ run_net10 "$validator" release-record --record "$artifacts_verified_record" --re
 stale_ci_record="$work_root/release-stale-ci.json"
 jq '.checks[0].head_sha = "9999999999999999999999999999999999999999"' "$release_record" > "$stale_ci_record"
 expect_failure run_net10 "$validator" release-record --record "$stale_ci_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+missing_diff_record="$work_root/release-missing-diff.json"
+jq '.checks |= map(select(.name != "diff"))' "$release_record" > "$missing_diff_record"
+expect_failure run_net10 "$validator" release-record --record "$missing_diff_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+renamed_diff_record="$work_root/release-renamed-diff.json"
+jq '(.checks[] | select(.name == "diff")).name = "renamed-diff"' "$release_record" > "$renamed_diff_record"
+expect_failure run_net10 "$validator" release-record --record "$renamed_diff_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+duplicate_diff_record="$work_root/release-duplicate-diff.json"
+jq '(.checks[] | select(.name == "diff")).name = "dcbTestsNet9"' "$release_record" > "$duplicate_diff_record"
+expect_failure run_net10 "$validator" release-record --record "$duplicate_diff_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+stale_diff_record="$work_root/release-stale-diff.json"
+jq '(.checks[] | select(.name == "diff")).started_at_utc = "2026-09-12T08:59:00Z"' "$release_record" > "$stale_diff_record"
+expect_failure run_net10 "$validator" release-record --record "$stale_diff_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+failed_diff_record="$work_root/release-failed-diff.json"
+jq '(.checks[] | select(.name == "diff")).result = "failed"' "$release_record" > "$failed_diff_record"
+expect_failure run_net10 "$validator" release-record --record "$failed_diff_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+wrong_diff_sha_record="$work_root/release-wrong-diff-sha.json"
+jq '(.checks[] | select(.name == "diff")).head_sha = "71853695e97293ecae01a89a7a511a718548aafd"' "$release_record" > "$wrong_diff_sha_record"
+expect_failure run_net10 "$validator" release-record --record "$wrong_diff_sha_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+wrong_diff_digest_record="$work_root/release-wrong-diff-digest.json"
+jq '(.checks[] | select(.name == "diff")).artifact_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"' "$release_record" > "$wrong_diff_digest_record"
+expect_failure run_net10 "$validator" release-record --record "$wrong_diff_digest_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+wrong_diff_command_record="$work_root/release-wrong-diff-command.json"
+jq '(.checks[] | select(.name == "diff")).command = "git status --short"' "$release_record" > "$wrong_diff_command_record"
+expect_failure run_net10 "$validator" release-record --record "$wrong_diff_command_record" --repo-root "$repo_root" --expected-version "$version" --state complete
 
 # Every CI identity/time/workflow field is required in every evidence state.
 for check_field in name workflow_file workflow_name job_name run_id job_id run_url job_url attempt event superseded started_at_utc completed_at_utc head_sha conclusion; do

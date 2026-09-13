@@ -646,6 +646,11 @@ internal static class Program
         Assert(File.Exists(packagedConsumerScript), "The DCB packaged-consumer script is missing.");
         Assert(File.Exists(azureQueueConsumerScript), "The Azure Queue packaged-consumer script is missing.");
         Assert(File.Exists(hostRecordReader), "The immutable host release-record reader is missing.");
+        var hostRecordReaderText = File.ReadAllText(hostRecordReader);
+        Assert(hostRecordReaderText.Contains("J-Tech-Japan/SekibanIntentHost", StringComparison.Ordinal) &&
+               !hostRecordReaderText.Contains("J-Tech-Japan/Sekiban-Design", StringComparison.Ordinal) &&
+               !hostRecordReaderText.Contains("SEKIBAN_RELEASE_RECORD_REPOSITORY", StringComparison.Ordinal),
+            "The host release-record reader must target the private canonical host without a repository override.");
         var validation = File.ReadAllText(validationWorkflow);
         var dcbTest = File.ReadAllText(dcbTestWorkflow);
         var dcbPackage = File.ReadAllText(dcbPackageWorkflow);
@@ -791,6 +796,10 @@ internal static class Program
         var libraryVisibility = RequireNamedStep(dcbPackageSteps, "Wait for exact public library visibility");
         var libraryRelease = RequireNamedStep(dcbPackageSteps, "Create GitHub Release");
         Assert(libraryRecord.Body.Contains("read-host-release-record.sh", StringComparison.Ordinal) &&
+               libraryRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_TOKEN", StringComparison.Ordinal) &&
+               libraryRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_REF", StringComparison.Ordinal) &&
+               libraryRecord.Body.Contains("--verify-tags library", StringComparison.Ordinal) &&
+               !libraryRecord.Body.Contains("github.token", StringComparison.Ordinal) &&
                libraryRecord.Body.Contains("--state 'library-tagged/incomplete'", StringComparison.Ordinal),
             "The library workflow must read the immutable host record at library-tagged/incomplete.");
         Assert(libraryRecordValidation.Body.Contains("release-record --record", StringComparison.Ordinal) &&
@@ -819,15 +828,25 @@ internal static class Program
         var retryGuard = RequireNamedStep(publishSteps, "Reject changed same-version template before duplicate-safe retry");
         var templateVisibility = RequireNamedStep(publishSteps, "Wait for exact public template visibility");
         var templateRelease = RequireNamedStep(publishSteps, "Create GitHub Release");
+        var templateLiveTag = RequireNamedStep(publishSteps, "Validate live template tag identity before template pack");
         Assert(templateRecord.Body.Contains("read-host-release-record.sh", StringComparison.Ordinal) &&
+               templateRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_TOKEN", StringComparison.Ordinal) &&
+               templateRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_REF", StringComparison.Ordinal) &&
+               templateRecord.Body.Contains("--verify-tags library", StringComparison.Ordinal) &&
+               !templateRecord.Body.Contains("github.token", StringComparison.Ordinal) &&
                templateRecord.Body.Contains("--state libraries-verified", StringComparison.Ordinal),
             "The template workflow must read the immutable host record at libraries-verified.");
         Assert(templateRecordValidation.Body.Contains("release-record --record", StringComparison.Ordinal) &&
                templateRecordValidation.Body.Contains("--state libraries-verified", StringComparison.Ordinal),
             "The template workflow must validate the canonical libraries-verified state before packing.");
         Assert(templateRecord.Ordinal < templateRecordValidation.Ordinal &&
-               templateRecordValidation.Ordinal < pack.Ordinal,
+               templateRecordValidation.Ordinal < templateLiveTag.Ordinal &&
+               templateLiveTag.Ordinal < pack.Ordinal,
             "The template record gate must precede template packing.");
+        Assert(templateLiveTag.Body.Contains("validate-release-tags.sh", StringComparison.Ordinal) &&
+               templateLiveTag.Body.Contains("--check-live-tag", StringComparison.Ordinal) &&
+               templateLiveTag.Body.Contains("dcbTemplates-v${VERSION}", StringComparison.Ordinal),
+            "The template workflow must compare the live template tag object and peeled commit before packing.");
         Assert(publishParity.Body.Contains("validate-release-tags.sh --check-publish-parity", StringComparison.Ordinal),
             "The publish parity workflow step must run the parity gate.");
         Assert(publishParity.Body.Contains("--check-library-verified", StringComparison.Ordinal),

@@ -35,12 +35,12 @@ jobs:
 
       - name: Read immutable host-owned release record
         env:
-          GH_TOKEN: ${{ github.token }}
-          SEKIBAN_RELEASE_RECORD_REPOSITORY: ${{ vars.SEKIBAN_RELEASE_RECORD_REPOSITORY }}
+          GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
           SEKIBAN_RELEASE_RECORD_REF: ${{ vars.SEKIBAN_RELEASE_RECORD_REF }}
         run: |
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh \
             --version "$VERSION" --state libraries-verified \
+            --verify-tags library \
             --output "$RUNNER_TEMP/dcb-release-record.json"
 
       - name: Build release validators
@@ -55,6 +55,15 @@ jobs:
             --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
             --state libraries-verified
           test "$(jq -r '.merged_sha' "$RUNNER_TEMP/dcb-release-record.json")" = "$(git rev-parse HEAD)"
+
+      - name: Validate live template tag identity before template pack
+        env:
+          GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --check-live-tag --repo-root "$GITHUB_WORKSPACE" \
+            --tag "dcbTemplates-v${VERSION}" \
+            --expected-peeled "$(jq -r '.merged_sha' "$RUNNER_TEMP/dcb-release-record.json")"
 
       - name: Verify published library/template parity before pack
         env:
