@@ -1272,6 +1272,38 @@ copy_workflow_fixture "$publish_retry_mutant"
 perl -0pi -e 's/ --skip-duplicate//g' "$publish_retry_mutant/.github/workflows/packagesDcbTemplate.yml"
 expect_failure run_net10 "$validator" workflow --repo-root "$publish_retry_mutant"
 
+# SEK-G80 amendment: the PostgreSQL harness's SHA-derived prerelease version
+# must be a valid NuGet version for every commit SHA (NuGet is the oracle; no
+# DCB packing).  Source mutants restoring the former bare 12-character prefix
+# must be rejected by the same check.
+version_derivation_check="$script_dir/validate-candidate-version-derivation.sh"
+postgres_harness="$repo_root/dcb/tests/Sekiban.Dcb.Postgres.Tests/run-packaged-consumer.sh"
+bash "$version_derivation_check" --postgres-harness "$postgres_harness"
+version_mutant_root="$work_root/version-derivation-mutants"
+mkdir -p "$version_mutant_root"
+cp "$postgres_harness" "$version_mutant_root/bare-prefix-derivation.sh"
+perl -pi -e 's/10\.0\.2-g62\.g%s/10.0.2-g62.%s/' "$version_mutant_root/bare-prefix-derivation.sh"
+cp "$postgres_harness" "$version_mutant_root/bare-prefix-version-line.sh"
+perl -0pi -e 's/version="\$\{G62_PACKAGE_VERSION:-\$\(derive_candidate_version "\$head_sha"\)\}"/version="\${G62_PACKAGE_VERSION:-10.0.2-g62.\${head_sha:0:12}}"/' "$version_mutant_root/bare-prefix-version-line.sh"
+for version_mutant in bare-prefix-derivation bare-prefix-version-line; do
+  if cmp -s "$postgres_harness" "$version_mutant_root/$version_mutant.sh"; then
+    echo "Could not construct the ${version_mutant} PostgreSQL harness mutant." >&2
+    exit 1
+  fi
+  if bash "$version_derivation_check" --postgres-harness "$version_mutant_root/$version_mutant.sh" \
+      > "$version_mutant_root/$version_mutant.log" 2>&1; then
+    cat "$version_mutant_root/$version_mutant.log" >&2
+    echo "MUTANT ${version_mutant}: SURVIVED the SHA-derived version check." >&2
+    exit 1
+  fi
+  grep -Eq 'NuGet rejected derived candidate version 10\.0\.2-g62\.095452654654 |required version line' "$version_mutant_root/$version_mutant.log" || {
+    cat "$version_mutant_root/$version_mutant.log" >&2
+    echo "MUTANT ${version_mutant}: failed for an unexpected reason." >&2
+    exit 1
+  }
+  echo "MUTANT ${version_mutant}: rejected: $(grep -E 'NuGet rejected derived candidate version|required version line' "$version_mutant_root/$version_mutant.log" | head -1)"
+done
+
 run_host_record_reader_shim_tests
 
 "$script_dir/validate-release-tags.sh" --self-test --repo-root "$repo_root"
