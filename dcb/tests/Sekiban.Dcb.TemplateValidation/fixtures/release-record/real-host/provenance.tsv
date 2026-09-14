@@ -1,0 +1,4 @@
+endpoint	file	redaction	sha256
+repos/J-Tech-Japan/SekibanIntentHost/commits/5d14b2799e9d89480d180ed029c15531a063f1ca	commit-5d14b2799e9d89480d180ed029c15531a063f1ca-redacted.json	files-removed;message-and-author-replaced	1fce6c3d2fbfe4796614d08f7e98d85fc899c780f4e8d6fe6e1830756c506b0f
+repos/J-Tech-Japan/SekibanIntentHost/git/trees/56d553f143458e661862367f40c0ca4137f3b336?recursive=1	tree-56d553f143458e661862367f40c0ca4137f3b336-recursive-redacted.json	tree-narrowed-to-release-evidence-allowlist	eecc5e32221475970a4330df980f442729bf257262e3b0d3197536eb60ec7480
+repos/J-Tech-Japan/SekibanIntentHost/contents/intents/sekiban/releases/dcb-v10.22.0/evidence/origin/review-outbox-record.jsonl?ref=5d14b2799e9d89480d180ed029c15531a063f1ca	contents-evidence-review-outbox-record-redacted.json	download-token-redacted	3b7e592b10e8dc303e339e50fe6fe7b1a8ade21653df0ffb9fe7a51ca73e1d41

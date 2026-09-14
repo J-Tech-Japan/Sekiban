@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -137,12 +139,7 @@ internal static class Program
                     }
                     else
                     {
-                        ReleaseRecordValidator.ValidateBundle(
-                            Required(options, "bundle"),
-                            Required(options, "manifest"),
-                            expectedVersion,
-                            options.GetValueOrDefault("state"),
-                            options.GetValueOrDefault("repo-root"));
+                        ValidateReleaseRecordBundle(options, expectedVersion);
                     }
                     break;
 
@@ -174,6 +171,97 @@ internal static class Program
         {
             Console.Error.WriteLine($"Template validation failed: {exception.Message}");
             return 1;
+        }
+    }
+
+    // The release workflows never parse host record bytes.  They consume the
+    // verified merged SHA and the closed release-facts JSON, which are written
+    // only after every validation rule passes, atomically, and only over paths
+    // this run cleared first.
+    private static void ValidateReleaseRecordBundle(Dictionary<string, string> options, string expectedVersion)
+    {
+        var mergedShaOutput = Path.GetFullPath(RequiredValue(options, "merged-sha-output"));
+        var factsOutput = Path.GetFullPath(RequiredValue(options, "release-facts-output"));
+        Assert(mergedShaOutput != factsOutput, "--merged-sha-output and --release-facts-output must be different paths.");
+        foreach (var output in new[] { mergedShaOutput, factsOutput })
+        {
+            Assert(!Directory.Exists(output), $"Validated output path is a directory: {output}");
+            // A stale file from an earlier run must never survive this run.
+            File.Delete(output);
+        }
+
+        var facts = ReleaseRecordValidator.ValidateBundle(
+            Required(options, "bundle"),
+            Required(options, "manifest"),
+            expectedVersion,
+            options.GetValueOrDefault("state"),
+            options.GetValueOrDefault("repo-root"));
+
+        var factsJson = new StringBuilder();
+        factsJson.Append("{\n");
+        var members = new List<(string Name, string Value)>
+        {
+            ("version", facts.Version),
+            ("state", facts.State),
+            ("merged_sha", facts.MergedSha),
+            ("prepared_completed_at_utc", facts.PreparedCompletedAtUtc),
+            ("latest_recorded_check_completed_at_utc", facts.LatestRecordedCheckCompletedAtUtc)
+        };
+        if (facts.LibraryTagObjectId is not null && facts.LibraryTagCreatedAtUtc is not null && facts.LibraryReleasePublishedAtUtc is not null)
+        {
+            members.Add(("library_tag_object_id", facts.LibraryTagObjectId));
+            members.Add(("library_tag_created_at_utc", facts.LibraryTagCreatedAtUtc));
+            members.Add(("library_release_published_at_utc", facts.LibraryReleasePublishedAtUtc));
+        }
+        for (var index = 0; index < members.Count; index++)
+        {
+            factsJson.Append("  ").Append(JsonSerializer.Serialize(members[index].Name)).Append(": ")
+                .Append(JsonSerializer.Serialize(members[index].Value))
+                .Append(index == members.Count - 1 ? "\n" : ",\n");
+        }
+        factsJson.Append("}\n");
+
+        WriteValidatedOutputs(
+            (mergedShaOutput, facts.MergedSha + "\n"),
+            (factsOutput, factsJson.ToString()));
+        Console.WriteLine($"Wrote validated merged SHA to {mergedShaOutput} and release facts to {factsOutput}.");
+    }
+
+    // Both files appear together or not at all: each is staged in a temporary
+    // file next to its destination and then renamed, and any partial result is
+    // removed if a later step fails.
+    private static void WriteValidatedOutputs(params (string Path, string Content)[] outputs)
+    {
+        var staged = new List<(string Temporary, string Destination)>();
+        var written = new List<string>();
+        try
+        {
+            foreach (var (path, content) in outputs)
+            {
+                var temporary = path + ".tmp-" + Guid.NewGuid().ToString("N");
+                File.WriteAllText(temporary, content);
+                staged.Add((temporary, path));
+            }
+            foreach (var (temporary, destination) in staged)
+            {
+                File.Move(temporary, destination, overwrite: false);
+                written.Add(destination);
+            }
+        }
+        catch (Exception exception)
+        {
+            foreach (var path in written.Concat(staged.Select(entry => entry.Temporary)))
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (IOException)
+                {
+                    // Reported through the thrown validation failure below.
+                }
+            }
+            throw new InvalidOperationException($"Validated release outputs could not be written atomically: {exception.Message}", exception);
         }
     }
 

@@ -22,6 +22,10 @@ mono_crash.*
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
+# The DCB release-gate fixtures mirror real GitHub and private-host object
+# paths, including `intents/sekiban/releases/...`, so they must not be taken
+# for build output by the `[Rr]elease(s)/` rules above.
+!dcb/tests/Sekiban.Dcb.TemplateValidation/fixtures/release-record/**
 x64/
 x86/
 [Ww][Ii][Nn]32/

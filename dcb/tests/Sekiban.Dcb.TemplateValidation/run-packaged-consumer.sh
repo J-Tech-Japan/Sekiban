@@ -305,6 +305,41 @@ expect_rule() {
   echo "MUTANT ${mutant}: rejected at [rule:${expected}]"
 }
 
+# Production `release-record --bundle` writes its validated outputs only after
+# every rule passes, so each harness invocation gets fresh output paths.
+release_record_validator() {
+  local outputs dll="${RELEASE_RECORD_VALIDATOR:-$validator}"
+  outputs="$(mktemp -d "$work_root/release-outputs.XXXXXX")"
+  run_net10 "$dll" release-record "$@" \
+    --merged-sha-output "$outputs/merged-sha.txt" --release-facts-output "$outputs/release-facts.json"
+}
+
+# Builds a validator whose named guard is removed or restored, so the harness
+# can prove that the guard, and not some later rule, is what rejects a mutant.
+build_validator_mutant() {
+  local name="$1" file="$2" search="$3" replace="$4"
+  local source_root="$work_root/validator-source-$name"
+  rm -rf "$source_root"
+  mkdir -p "$source_root"
+  cp "$script_dir"/*.cs "$script_dir/Sekiban.Dcb.TemplateValidation.csproj" "$source_root/"
+  rm -f "$source_root/StatusCompositionProgram.cs" "$source_root/LegacyStatusCompositionProgram.cs"
+  python3 - "$source_root/$file" "$search" "$replace" <<'VALIDATORMUTANT'
+import sys
+from pathlib import Path
+path, search, replace = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+text = path.read_text()
+if text.count(search) != 1:
+    sys.exit(f"validator source anchor occurs {text.count(search)} times in {path.name}")
+path.write_text(text.replace(search, replace))
+VALIDATORMUTANT
+  (cd "$source_root" && dotnet build -c Release --nologo) > "$source_root/build.log" 2>&1 || {
+    cat "$source_root/build.log" >&2
+    echo "Could not build the $name validator mutant." >&2
+    return 1
+  }
+  printf '%s\n' "$source_root/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll"
+}
+
 expect_pass() {
   local control="$1"
   shift
@@ -355,6 +390,87 @@ run_host_record_reader_shim_tests() {
   jq -j '.body' "$release_fixture_dir/native-origin/review-5189565347.json" | cmp - "$release_fixture_dir/origin-review-5189565347.md"
   echo "Archived native origin responses (${provenance_count}) and canonical review transport lines are byte-exact."
 
+  # AC9: freshly fetched real child responses are byte-exact, and the only
+  # archived private-host responses are redacted or already-published evidence.
+  local child_count=0
+  while IFS=$'\t' read -r provenance_endpoint provenance_file provenance_sha provenance_fetched; do
+    [[ "$provenance_endpoint" == endpoint ]] && continue
+    [[ "$(sha256sum "$release_fixture_dir/real-child/$provenance_file" | cut -d' ' -f1)" == "$provenance_sha" ]] || {
+      echo "Archived real child response $provenance_file (${provenance_endpoint}, fetched ${provenance_fetched}) was modified." >&2
+      return 1
+    }
+    child_count=$((child_count + 1))
+  done < "$release_fixture_dir/real-child/provenance.tsv"
+  (( child_count == 39 )) || { echo "Expected 39 archived real child responses, found ${child_count}." >&2; return 1; }
+  local host_commit host_path evidence_file evidence_blob evidence_sha evidence_count=0
+  while IFS=$'\t' read -r host_commit host_path evidence_file evidence_blob evidence_sha; do
+    [[ "$host_commit" == host_commit ]] && continue
+    [[ "$(sha256sum "$release_fixture_dir/real-host-evidence/$evidence_file" | cut -d' ' -f1)" == "$evidence_sha" ]] &&
+      [[ "$(git hash-object "$release_fixture_dir/real-host-evidence/$evidence_file")" == "$evidence_blob" ]] || {
+      echo "Published host evidence $evidence_file (${host_commit}:${host_path}) was modified." >&2
+      return 1
+    }
+    evidence_count=$((evidence_count + 1))
+  done < "$release_fixture_dir/real-host-evidence/provenance.tsv"
+  local redaction host_archive host_endpoint host_sha host_count=0
+  while IFS=$'\t' read -r host_endpoint host_archive redaction host_sha; do
+    [[ "$host_endpoint" == endpoint ]] && continue
+    [[ "$(sha256sum "$release_fixture_dir/real-host/$host_archive" | cut -d' ' -f1)" == "$host_sha" ]] || {
+      echo "Redacted host archive $host_archive (${host_endpoint}, ${redaction}) was modified." >&2
+      return 1
+    }
+    host_count=$((host_count + 1))
+  done < "$release_fixture_dir/real-host/provenance.tsv"
+  echo "Archived real child responses (${child_count}), published host evidence objects (${evidence_count}), and redacted host responses (${host_count}) are byte-exact."
+
+  # Archived evidence is only evidence if it is committed.  A .gitignore rule
+  # that swallows a fixture path (the build-output `[Rr]eleases/` rule matched
+  # the mirrored `intents/sekiban/releases/...` host path) leaves the file on
+  # the author's disk and out of the commit, so every digest check passes
+  # locally and fails in CI on a missing file.
+  python3 "$script_dir/release_fixture_shapes.py" tracked \
+    --fixtures-root "$release_fixture_dir" --map "$release_fixture_dir/real-shape-route-map.tsv"
+  local tracking_probe="$release_fixture_dir/real-host-evidence/untracked-probe.jsonl"
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" tracked \
+    --fixtures-root "$release_fixture_dir" --map "$release_fixture_dir/real-shape-route-map.tsv" \
+    --probe real-host-evidence/never-committed.jsonl
+  rm -f "$tracking_probe"
+  printf 'untracked probe\n' > "$tracking_probe"
+  if python3 "$script_dir/release_fixture_shapes.py" tracked \
+      --fixtures-root "$release_fixture_dir" --map "$release_fixture_dir/real-shape-route-map.tsv" \
+      --probe real-host-evidence/untracked-probe.jsonl > "$work_root/fixture-tracking-probe.log" 2>&1; then
+    rm -f "$tracking_probe"
+    echo "The fixture tracking guard accepted a present-but-untracked fixture." >&2
+    return 1
+  fi
+  rm -f "$tracking_probe"
+  grep -Fq "not tracked by git" "$work_root/fixture-tracking-probe.log" || {
+    cat "$work_root/fixture-tracking-probe.log" >&2
+    echo "The fixture tracking guard failed for the wrong reason." >&2
+    return 1
+  }
+  echo "Fixture tracking guard rejected a fixture missing from the working tree and a present-but-untracked fixture."
+  python3 "$script_dir/release_fixture_shapes.py" lint --path "$release_fixture_dir/real-host"
+
+  # AC9 fixture-lint mutants: an unredacted private host commit or tree archive
+  # must fail the lint, so redaction cannot silently regress.
+  local lint_mutant_dir="$work_root/host-archive-mutants"
+  rm -rf "$lint_mutant_dir"
+  mkdir -p "$lint_mutant_dir"
+  jq '. + {files: [{filename: "intents/sekiban/private/plan.md", patch: "@@ -1 +1 @@\n-old\n+new"}]}' \
+    "$release_fixture_dir/real-host/commit-5d14b2799e9d89480d180ed029c15531a063f1ca-redacted.json" \
+    > "$lint_mutant_dir/commit-unredacted.json"
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" lint --path "$lint_mutant_dir/commit-unredacted.json"
+  jq '.tree += [{path: "intents/sekiban/private/plan.md", mode: "100644", type: "blob", sha: "0000000000000000000000000000000000000000", size: 1, url: "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/0000000000000000000000000000000000000000"}]' \
+    "$release_fixture_dir/real-host/tree-56d553f143458e661862367f40c0ca4137f3b336-recursive-redacted.json" \
+    > "$lint_mutant_dir/tree-unredacted.json"
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" lint --path "$lint_mutant_dir/tree-unredacted.json"
+  jq '.download_url = "https://raw.githubusercontent.com/J-Tech-Japan/SekibanIntentHost/main/x?token=AAAABBBB"' \
+    "$release_fixture_dir/real-host/contents-evidence-review-outbox-record-redacted.json" \
+    > "$lint_mutant_dir/contents-token.json"
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" lint --path "$lint_mutant_dir/contents-token.json"
+  echo "Fixture lint rejected an unredacted host commit, an out-of-allowlist host tree entry, and a raw download token."
+
   python3 "$script_dir/make-closed-bundle-fixture.py" "$record_fixture" "$closed_fixture"
   local record="$closed_fixture/record.json"
   local shim_root="$work_root/host-gh-shim"
@@ -372,31 +488,49 @@ printf '%s\n' "$endpoint" >> "${FAKE_ENDPOINT_LOG:-/dev/null}"
 record="${FAKE_HOST_RECORD:?}"
 fixture_root="${FAKE_CLOSED_ROOT:?}"
 requested_ref="${FAKE_HOST_REF:?}"
-record_path="intents/sekiban/releases/dcb-v10.22.0-release-record.json"
-record_blob="$(tr -d '\n' < "$fixture_root/record-blob-sha")"
+record_path="$(tr -d '\n' < "$fixture_root/record-path")"
 tree_sha="$(tr -d '\n' < "$fixture_root/tree-sha")"
 merged_sha="$(tr -d '\n' < "$fixture_root/merged-sha")"
-content="$(base64 < "$record" | tr -d '\n')"
+
+# GitHub's contents response is a full envelope, not a four-member object; the
+# shim rebuilds it from an archived real contents response so the reader and the
+# real-shape check see the shape GitHub actually returns.
+emit_contents() {
+  local object_path="$1" object_file="$2" object_ref="$3" sha size content
+  sha="$(git hash-object "$object_file")"
+  size="$(wc -c < "$object_file" | tr -d ' ')"
+  content="$(base64 < "$object_file" | tr -d '\n')"
+  jq -n --arg path "$object_path" --arg sha "$sha" --arg content "$content" --argjson size "$size" \
+    --arg ref "$object_ref" --slurpfile template "$fixture_root/host-contents-template.json" '
+    $template[0]
+    | .name = ($path | split("/") | last)
+    | .path = $path
+    | .sha = $sha
+    | .size = $size
+    | .content = $content
+    | .url = "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/contents/\($path)?ref=\($ref)"
+    | .html_url = "https://github.com/J-Tech-Japan/SekibanIntentHost/blob/\($ref)/\($path)"
+    | .git_url = "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/\($sha)"
+    | .download_url = "https://raw.githubusercontent.com/J-Tech-Japan/SekibanIntentHost/\($ref)/\($path)?token=REDACTED"
+    | ._links = { self: .url, git: .git_url, html: .html_url }'
+}
 
 if [[ "$endpoint" == "repos/J-Tech-Japan/SekibanIntentHost/contents/${record_path}?ref=${requested_ref}" ]]; then
-  jq -n --arg path "$record_path" --arg sha "$record_blob" --arg content "$content" \
-    '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
+  emit_contents "$record_path" "$record" "$requested_ref"
   if [[ "${FAKE_GH_TRAILING_BYTES:-0}" == 1 ]]; then
     printf ' \n'
   fi
   exit 0
 fi
-  case "$endpoint" in
+case "$endpoint" in
   repos/J-Tech-Japan/SekibanIntentHost/contents/*)
     response_path="${endpoint#repos/J-Tech-Japan/SekibanIntentHost/contents/}"
+    response_ref="${response_path#*\?ref=}"
     response_path="${response_path%%\?*}"
-    map_line="$(awk -F '\t' -v response_path="contents/${response_path}" '$1 ~ /J-Tech-Japan\/SekibanIntentHost@[0-9a-fA-F]{40}:contents\// && $1 ~ response_path { print; exit }' "$fixture_root/map.tsv")"
+    map_line="$(awk -F '\t' -v response_path="contents/${response_path}" '$1 ~ /J-Tech-Japan\/SekibanIntentHost@[0-9a-fA-F]{40}:contents\// && index($1, response_path) { print; exit }' "$fixture_root/map.tsv")"
     [[ -n "$map_line" ]] || { echo "missing host map entry for ${response_path}" >&2; exit 1; }
     response_file="$(printf '%s\n' "$map_line" | cut -f3)"
-    response_content="$(base64 < "$response_file" | tr -d '\n')"
-    response_sha="$(git hash-object "$response_file")"
-    jq -n --arg path "$response_path" --arg sha "$response_sha" --arg content "$response_content" \
-      '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
+    emit_contents "$response_path" "$response_file" "$response_ref"
     ;;
   repos/J-Tech-Japan/SekibanIntentHost/commits/*)
     map_line="$(awk -F '\t' -v endpoint="$endpoint" '$4 == endpoint { print; exit }' "$fixture_root/map.tsv")"
@@ -470,7 +604,7 @@ SHIM
   run_reader --version "$version" --state complete --verify-tags all \
     --output-dir "$output" --manifest "$manifest"
   [[ -s "$manifest" && -d "$output/objects" ]] || { echo "Host reader shim did not write its closed bundle." >&2; return 1; }
-  expect_pass native-origin-complete-bundle run_net10 "$validator" release-record --bundle "$output" --manifest "$manifest" \
+  expect_pass native-origin-complete-bundle release_record_validator --bundle "$output" --manifest "$manifest" \
     --repo-root "$repo_root" --expected-version "$version" --state complete
   # The positive bundle carries every archived origin response unchanged.
   local native_bytes_count=0
@@ -484,6 +618,152 @@ SHIM
     native_bytes_count=$((native_bytes_count + 1))
   done < "$release_fixture_dir/native-origin/provenance.tsv"
   echo "POSITIVE native-origin-bytes: reader bundle carries ${native_bytes_count} archived GitHub responses byte-for-byte."
+
+  # AC9: every response the reader stored, and every response the generator
+  # wrote, must have the recursive key paths and JSON value kinds that the
+  # archived real responses of its route kind define, taken as their union
+  # (null versus absent included).  Each check is labelled, because several
+  # run per self-test and the label says which one failed.
+  python3 "$script_dir/release_fixture_shapes.py" shape-check --label synthetic-bundle \
+    --map "$release_fixture_dir/real-shape-route-map.tsv" --fixtures-root "$release_fixture_dir" \
+    --bundle "$output" --fixture-map "$closed_fixture/map.tsv" --endpoint-log "$work_root/closed-endpoints.log"
+  python3 "$script_dir/release_fixture_shapes.py" lint --path "$output" --path "$closed_fixture/content"
+
+  # AC9 shape controls.  A single archive is one observation, not the shape: a
+  # response is judged against the union over the archives of its route kind,
+  # and an array every archive left empty teaches nothing about its elements.
+  # These four controls fix both directions of that rule.
+  local shape_mutant_dir="$work_root/shape-mutants"
+  rm -rf "$shape_mutant_dir"
+  mkdir -p "$shape_mutant_dir"
+  local generated_compare compare_endpoint
+  generated_compare="$(awk -F '\t' '$1 ~ /:compare\// { print $3; exit }' "$closed_fixture/map.tsv")"
+  compare_endpoint="repos/J-Tech-Japan/Sekiban/compare/$(tr -d '\n' < "$closed_fixture/merged-sha")...$(tr -d '\n' < "$closed_fixture/main-tip")"
+  shape_control_map() {
+    printf '%s\tgithub-response\t%s\t%s\n' \
+      "J-Tech-Japan/Sekiban@$(tr -d '\n' < "$closed_fixture/merged-sha"):compare/control" "$1" "$compare_endpoint" > "$2"
+  }
+
+  # Learning: the identical and behind compares carry `commits: []`, so they
+  # observe no element path.  The generated ahead compare, which has commits,
+  # is still a real compare against a route kind whose archives never populated
+  # that array.
+  awk -F '\t' 'BEGIN { OFS = "\t" } $1 == "compare" { $3 = "real-child/compare-da58d974abbf46e40ee813caa71dc70819bf764f-da58d974abbf46e40ee813caa71dc70819bf764f.json,real-child/compare-da58d974abbf46e40ee813caa71dc70819bf764f-aefca245bdd4010b537657793eaa041c9c83d9c8.json" } { print }' \
+    "$release_fixture_dir/real-shape-route-map.tsv" > "$shape_mutant_dir/route-map-empty-commits.tsv"
+  shape_control_map "$generated_compare" "$shape_mutant_dir/map-generated-compare.tsv"
+  python3 "$script_dir/release_fixture_shapes.py" shape-check --label empty-array-learning \
+    --map "$shape_mutant_dir/route-map-empty-commits.tsv" --fixtures-root "$release_fixture_dir" \
+    --fixture-map "$shape_mutant_dir/map-generated-compare.tsv"
+
+  # An invented member no archived compare carries anywhere: this is the M1
+  # head_commit the repaired validator no longer reads.
+  jq '. + {head_commit: {sha: .commits[-1].sha}}' "$generated_compare" > "$shape_mutant_dir/compare-head-commit.json"
+  shape_control_map "$shape_mutant_dir/compare-head-commit.json" "$shape_mutant_dir/map-head-commit.tsv"
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" shape-check --label m1-head-commit-readded \
+    --map "$release_fixture_dir/real-shape-route-map.tsv" --fixtures-root "$release_fixture_dir" \
+    --fixture-map "$shape_mutant_dir/map-head-commit.tsv"
+
+  # A null where every archived compare carries a string.
+  jq '.base_commit.commit.verification.reason = null' "$generated_compare" > "$shape_mutant_dir/compare-null-swap.json"
+  shape_control_map "$shape_mutant_dir/compare-null-swap.json" "$shape_mutant_dir/map-null-swap.tsv"
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" shape-check --label null-for-string \
+    --map "$release_fixture_dir/real-shape-route-map.tsv" --fixtures-root "$release_fixture_dir" \
+    --fixture-map "$shape_mutant_dir/map-null-swap.tsv"
+
+  # A member every archived compare carries, dropped from the generated one.
+  jq 'del(.merge_base_commit)' "$generated_compare" > "$shape_mutant_dir/compare-absent-member.json"
+  shape_control_map "$shape_mutant_dir/compare-absent-member.json" "$shape_mutant_dir/map-absent-member.tsv"
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" shape-check --label absent-required-member \
+    --map "$release_fixture_dir/real-shape-route-map.tsv" --fixtures-root "$release_fixture_dir" \
+    --fixture-map "$shape_mutant_dir/map-absent-member.tsv"
+
+  # A generated route with no archive at all.  The row is dropped with awk, not
+  # a `\t` grep pattern, which is a tab only in some greps.
+  awk -F '\t' 'NR == 1 || $1 != "compare"' "$release_fixture_dir/real-shape-route-map.tsv" \
+    > "$shape_mutant_dir/route-map-without-compare.tsv"
+  if [[ "$(awk -F '\t' '$1 == "compare" { rows += 1 } END { print rows + 0 }' "$shape_mutant_dir/route-map-without-compare.tsv")" != 0 ]]; then
+    echo "The route-map control did not drop the compare row." >&2
+    return 1
+  fi
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" shape-check --label missing-route-archive \
+    --map "$shape_mutant_dir/route-map-without-compare.tsv" --fixtures-root "$release_fixture_dir" \
+    --fixture-map "$closed_fixture/map.tsv"
+  echo "Real-shape fixture controls passed: element paths are learned from the archives that have them, and re-added head_commit, a null for a string, an absent required member, and a missing route archive are all rejected."
+
+  # AC2: the validated outputs exist only after a passing validation, carry
+  # exactly the per-state member set, and repeat the validated values.
+  local facts_dir="$work_root/release-facts"
+  rm -rf "$facts_dir"
+  mkdir -p "$facts_dir"
+  run_net10 "$validator" release-record --bundle "$output" --manifest "$manifest" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete \
+    --merged-sha-output "$facts_dir/merged-sha.txt" --release-facts-output "$facts_dir/release-facts.json"
+  [[ "$(tr -d '\n' < "$facts_dir/merged-sha.txt")" == "$(tr -d '\n' < "$closed_fixture/merged-sha")" ]] || {
+    echo "Validated merged SHA output does not equal the validated record." >&2
+    return 1
+  }
+  jq -e --arg merged "$(tr -d '\n' < "$closed_fixture/merged-sha")" '
+    (keys == ["latest_recorded_check_completed_at_utc","library_release_published_at_utc","library_tag_created_at_utc",
+              "library_tag_object_id","merged_sha","prepared_completed_at_utc","state","version"]) and
+    .version == "10.22.0" and .state == "complete" and .merged_sha == $merged and
+    .library_tag_object_id == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" and
+    .library_tag_created_at_utc == "2026-09-12T09:20:00Z" and
+    .library_release_published_at_utc == "2026-09-12T09:30:00Z" and
+    .prepared_completed_at_utc == "2026-09-12T09:10:40.000011Z" and
+    .latest_recorded_check_completed_at_utc == "2026-09-12T09:08:00Z"' "$facts_dir/release-facts.json" > /dev/null || {
+    echo "Validated release facts are not the closed per-state member set bound to the validated values." >&2
+    cat "$facts_dir/release-facts.json" >&2
+    return 1
+  }
+  # A failing record leaves no output, including over a pre-existing file.
+  local failing_bundle="$work_root/closed-mutant-facts-guard"
+  rm -rf "$failing_bundle"
+  python3 "$script_dir/mutate-closed-bundle.py" "$output" "$failing_bundle" review-id
+  printf 'stale\n' > "$facts_dir/stale-facts.json"
+  printf 'stale\n' > "$facts_dir/stale-merged.txt"
+  expect_failure run_net10 "$validator" release-record --bundle "$failing_bundle" --manifest "$failing_bundle/bundle.json" \
+    --repo-root "$repo_root" --expected-version "$version" --state complete \
+    --merged-sha-output "$facts_dir/stale-merged.txt" --release-facts-output "$facts_dir/stale-facts.json"
+  [[ ! -e "$facts_dir/stale-facts.json" && ! -e "$facts_dir/stale-merged.txt" ]] || {
+    echo "A failing validation left a release-facts or merged-SHA output behind." >&2
+    return 1
+  }
+  # Both options are mandatory, and a directory is not an output path.
+  expect_failure run_net10 "$validator" release-record --bundle "$output" --manifest "$manifest" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete --merged-sha-output "$facts_dir/only-merged.txt"
+  [[ ! -e "$facts_dir/only-merged.txt" ]] || { echo "A missing --release-facts-output still wrote the merged SHA." >&2; return 1; }
+  expect_failure run_net10 "$validator" release-record --bundle "$output" --manifest "$manifest" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete --release-facts-output "$facts_dir/only-facts.json"
+  expect_failure run_net10 "$validator" release-record --bundle "$output" --manifest "$manifest" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete --merged-sha-output "$facts_dir" \
+    --release-facts-output "$facts_dir/directory-facts.json"
+  echo "Validated outputs: written only on success, closed member set, no output left by a failing or misconfigured run."
+
+  # AC4 behaviour control: GitHub's default commit check-runs listing (no
+  # filter=all, 30 per page) hides the superseded run this record names.
+  local default_listing_bundle="$work_root/default-latest-listing"
+  rm -rf "$default_listing_bundle"
+  cp -R "$output" "$default_listing_bundle"
+  python3 - "$default_listing_bundle" "$closed_fixture/default-listing.json" "$(tr -d '\n' < "$closed_fixture/merged-sha")" <<'DEFAULTLISTING'
+import hashlib, json, sys
+from pathlib import Path
+root, listing, merged = Path(sys.argv[1]), Path(sys.argv[2]).read_bytes(), sys.argv[3]
+manifest = json.loads((root / "bundle.json").read_text())
+endpoint = f"repos/J-Tech-Japan/Sekiban/commits/{merged}/check-runs?filter=all&per_page=100"
+entry = next(item for item in manifest["entries"] if item["endpoint"] == endpoint)
+(root / entry["relative_path"]).unlink()
+digest = hashlib.sha256(listing).hexdigest()
+# Bundle objects are named by their immutable reference and content digest.
+name = hashlib.sha256((entry["immutable_ref"] + "\n" + digest).encode()).hexdigest()
+entry["relative_path"] = f"objects/{name}.json"
+(root / entry["relative_path"]).write_bytes(listing)
+entry["sha256"] = digest
+(root / "bundle.json").write_bytes((json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode())
+DEFAULTLISTING
+  expect_rule default-latest-listing candidate.check.summary release_record_validator --bundle "$default_listing_bundle" \
+    --manifest "$default_listing_bundle/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+  echo "Named production pair: filter-all-superseded-real/pass=native-origin-complete-bundle vs default-latest-listing/fail."
 
   local compare_response
   compare_response="$(awk -F '\t' '$1 ~ /:compare\// { print $3; exit }' "$closed_fixture/map.tsv")"
@@ -579,7 +859,7 @@ SHIM
       FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" bash "$reader" \
       --version "$version" --state "$early_state" --verify-tags "$early_verify" \
       --output-dir "$early_output" --manifest "$early_manifest"
-    expect_pass "state-prefix-${early_state//\//-}" run_net10 "$validator" release-record --bundle "$early_output" --manifest "$early_manifest" \
+    expect_pass "state-prefix-${early_state//\//-}" release_record_validator --bundle "$early_output" --manifest "$early_manifest" \
       --repo-root "$repo_root" --expected-version "$version" --state "$early_state"
   done
 
@@ -611,8 +891,115 @@ for name in ["review-outbox-record.jsonl", "review-outbox-delivered.jsonl", "orc
     if (sample_dir / name).read_bytes() not in contents:
         sys.exit(f"Real transport sample {name} is not carried byte-for-byte in the reader bundle.")
 CARRIED
-  expect_pass real-format-implementation-transport run_net10 "$validator" release-record --bundle "$real_transport_output" \
+  expect_pass real-format-implementation-transport release_record_validator --bundle "$real_transport_output" \
     --manifest "$real_transport_output/bundle.json" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+  # AC10: the unmodified reader over real child responses for the merged
+  # candidate da58d974, the byte-exact published host evidence objects, and
+  # redacted host commit/tree anchors.  Only the host-stage approval, its
+  # payload and the canonical pointer are mock, in the real canonical formats.
+  local real_fixture="$work_root/closed-real-candidate"
+  local real_output="$work_root/real-candidate-bundle"
+  local real_manifest="$real_output/bundle.json"
+  local real_merged="da58d974abbf46e40ee813caa71dc70819bf764f"
+  python3 "$script_dir/make-closed-bundle-fixture.py" "$record_fixture" "$real_fixture" prepared real-candidate
+  local real_ref
+  real_ref="$(tr -d '\n' < "$real_fixture/host-ref")"
+  rm -rf "$real_output"
+  env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+    SEKIBAN_RELEASE_RECORD_REF="$real_ref" FAKE_HOST_RECORD="$real_fixture/record.json" FAKE_HOST_REF="$real_ref" \
+    FAKE_CLOSED_ROOT="$real_fixture" FAKE_ENDPOINT_LOG="$work_root/real-candidate-endpoints.log" \
+    bash "$reader" --version "$version" --state prepared --verify-tags none \
+    --output-dir "$real_output" --manifest "$real_manifest" > /dev/null
+  expect_pass real-data-prepared-da58d974 release_record_validator --bundle "$real_output" --manifest "$real_manifest" \
+    --repo-root "$repo_root" --expected-version "$version" --state prepared
+  python3 "$script_dir/release_fixture_shapes.py" shape-check --label real-data-bundle \
+    --map "$release_fixture_dir/real-shape-route-map.tsv" --fixtures-root "$release_fixture_dir" \
+    --bundle "$real_output" --endpoint-log "$work_root/real-candidate-endpoints.log"
+  python3 "$script_dir/release_fixture_shapes.py" lint --path "$real_output"
+  local real_used=0
+  while IFS=$'\t' read -r provenance_endpoint provenance_file provenance_sha provenance_fetched; do
+    [[ "$provenance_endpoint" == endpoint ]] && continue
+    jq -e --arg endpoint "$provenance_endpoint" --arg sha "$provenance_sha" \
+      'any(.entries[]; .endpoint == $endpoint and .sha256 == $sha)' "$real_manifest" > /dev/null || continue
+    real_used=$((real_used + 1))
+  done < "$release_fixture_dir/real-child/provenance.tsv"
+  (( real_used >= 16 )) || { echo "The real-data bundle carries only ${real_used} byte-exact archived child responses." >&2; return 1; }
+  [[ "$(jq -r --arg merged "$real_merged" 'any(.entries[]; .endpoint == "repos/J-Tech-Japan/Sekiban/commits/\($merged)/check-runs?filter=all&per_page=100")' "$real_manifest")" == "true" ]] || {
+    echo "The real-data bundle did not fetch the filtered check-runs listing for ${real_merged}." >&2
+    return 1
+  }
+  echo "POSITIVE real-data-prepared-da58d974: reader plus validator passed on ${real_used} byte-exact real child responses and published host evidence."
+
+  local real_control real_control_rule real_control_bundle
+  while IFS='|' read -r real_control real_control_rule <&4; do
+    [[ -z "$real_control" ]] && continue
+    real_control_bundle="$work_root/real-control-$real_control"
+    rm -rf "$real_control_bundle"
+    python3 "$script_dir/mutate-closed-bundle.py" "$real_output" "$real_control_bundle" "$real_control"
+    expect_rule "real-data-$real_control" "$real_control_rule" release_record_validator --bundle "$real_control_bundle" \
+      --manifest "$real_control_bundle/bundle.json" --repo-root "$repo_root" \
+      --expected-version "$version" --state prepared
+  done 4<<'REALCONTROLS'
+unequal-reviewed-merged-trees|candidate.tree-equality
+approval-transport-missing|authority.transport.missing
+approval-artifact-without-digest|authority.transport.payload-binding
+approval-duplicate-task|authority.distinct
+approval-duplicate-nonce|authority.distinct
+REALCONTROLS
+
+  # AC1/AC8/AC2 guard-removal demonstrations on the real data: each named rule
+  # is what rejects, and the outputs are ordered after validation.
+  local head_commit_validator
+  head_commit_validator="$(build_validator_mutant head-commit ClosedReleaseRecordValidator.cs \
+    '               compareCommits is not null &&' \
+    '               Text(main, "head_commit", "sha") == mainTip &&
+               compareCommits is not null &&')" || return 1
+  RELEASE_RECORD_VALIDATOR="$head_commit_validator"
+  expect_rule real-data-m1-head-commit-restored candidate.main-ancestry \
+    release_record_validator --bundle "$real_output" --manifest "$real_manifest" --repo-root "$repo_root" \
+    --expected-version "$version" --state prepared
+  unset RELEASE_RECORD_VALIDATOR
+  echo "MUTANT validator-head-commit-restored: the real compare response has no head_commit, so restoring M1 rejects a truthful record."
+
+  local tree_equality_validator
+  tree_equality_validator="$(build_validator_mutant tree-equality ClosedReleaseRecordValidator.cs \
+    'Assert("candidate.tree-equality", GetString(candidate, "reviewed_tree_sha") == GetString(candidate, "merged_tree_sha"),' \
+    'Assert("candidate.tree-equality", true || GetString(candidate, "reviewed_tree_sha") == GetString(candidate, "merged_tree_sha"),')" || return 1
+  local tree_control_bundle="$work_root/real-control-tree-equality-removed"
+  rm -rf "$tree_control_bundle"
+  python3 "$script_dir/mutate-closed-bundle.py" "$real_output" "$tree_control_bundle" unequal-reviewed-merged-trees
+  RELEASE_RECORD_VALIDATOR="$tree_equality_validator"
+  if release_record_validator --bundle "$tree_control_bundle" \
+      --manifest "$tree_control_bundle/bundle.json" --repo-root "$repo_root" --expected-version "$version" \
+      --state prepared > "$work_root/tree-equality-removed.log" 2>&1; then
+    unset RELEASE_RECORD_VALIDATOR
+    echo "The tree-equality guard-removal mutant unexpectedly passed." >&2
+    return 1
+  fi
+  unset RELEASE_RECORD_VALIDATOR
+  grep -Fq '[rule:candidate.tree-equality]' "$work_root/tree-equality-removed.log" && {
+    echo "Removing the tree-equality guard still reported that rule." >&2
+    return 1
+  }
+  echo "MUTANT validator-tree-equality-removed: with the guard removed the moved-base record is no longer rejected at [rule:candidate.tree-equality] ($(grep -o '\[rule:[^]]*\]' "$work_root/tree-equality-removed.log" | head -1))."
+
+  local eager_output_validator
+  eager_output_validator="$(build_validator_mutant eager-outputs Program.cs \
+    '        var facts = ReleaseRecordValidator.ValidateBundle(' \
+    '        File.WriteAllText(mergedShaOutput, "written before validation\n");
+        var facts = ReleaseRecordValidator.ValidateBundle(')" || return 1
+  local eager_dir="$work_root/eager-outputs"
+  rm -rf "$eager_dir"
+  mkdir -p "$eager_dir"
+  expect_failure run_net10 "$eager_output_validator" release-record --bundle "$tree_control_bundle" \
+    --manifest "$tree_control_bundle/bundle.json" --repo-root "$repo_root" --expected-version "$version" \
+    --state prepared --merged-sha-output "$eager_dir/merged-sha.txt" --release-facts-output "$eager_dir/facts.json"
+  [[ -e "$eager_dir/merged-sha.txt" ]] || {
+    echo "The non-atomic output mutant did not leave the output it writes before validation." >&2
+    return 1
+  }
+  echo "MUTANT validator-eager-outputs: writing an output before validation leaves it behind on failure; the production order does not."
 
   # A legal graph uses successive earlier immutable host commits for payload,
   # authorities, and the canonical pointer.  Keep this positive control next
@@ -621,7 +1008,7 @@ CARRIED
   for positive_control in external-commit origin-check-summary-additional-removed; do
     control_bundle="$work_root/closed-positive-${positive_control}"
     python3 "$script_dir/mutate-closed-bundle.py" "$output" "$control_bundle" "$positive_control"
-    expect_pass "$positive_control" run_net10 "$validator" release-record --bundle "$control_bundle" \
+    expect_pass "$positive_control" release_record_validator --bundle "$control_bundle" \
       --manifest "$control_bundle/bundle.json" --repo-root "$repo_root" --expected-version "$version" --state complete
   done
 
@@ -636,12 +1023,25 @@ CARRIED
     [[ -z "$closed_mutant" || "$closed_mutant" == \#* ]] && continue
     mutant_bundle="$work_root/closed-mutant-${closed_mutant//\//-}"
     python3 "$script_dir/mutate-closed-bundle.py" "$output" "$mutant_bundle" "$closed_mutant"
-    expect_rule "$closed_mutant" "$expected_rule" run_net10 "$validator" release-record --bundle "$mutant_bundle" \
+    expect_rule "$closed_mutant" "$expected_rule" release_record_validator --bundle "$mutant_bundle" \
       --manifest "$mutant_bundle/bundle.json" --repo-root "$repo_root" \
       --expected-version "$version" --state "$mutant_state"
     mutant_count=$((mutant_count + 1))
     matrix_mutant_names+=("$closed_mutant")
   done 3<<'MATRIX'
+approval-artifact-without-digest|complete|authority.transport.payload-binding
+approval-before-delivery|complete|authority.completion-chronology
+approval-completion-not-delivered|complete|authority.completion-chronology
+approval-created-after-reported|complete|authority.completion-chronology
+approval-duplicate-nonce|complete|authority.distinct
+approval-duplicate-task|complete|authority.distinct
+approval-receipt-without-digest|complete|authority.transport.payload-binding
+approval-transport-blocked|complete|authority.transport.status
+approval-transport-delivery-drift|complete|authority.transport.transport
+approval-transport-digest|complete|authority.transport.digest
+approval-transport-foreign-task|complete|authority.transport.identity
+approval-transport-missing|complete|authority.transport.missing
+approval-transport-not-approve|complete|authority.transport.verdict
 artifact-before-release|complete|authority.artifacts.after-release
 artifact-completion-equal|complete|chronology.closure-after-artifacts
 artifact-completion-late|complete|chronology.closure-after-artifacts
@@ -650,14 +1050,14 @@ authority-rebind|complete|authority.target
 authority-time|complete|authority.prepared.after-checks
 authority-verdict|complete|authority.metadata
 authority-version|complete|authority.metadata
-candidate-check-api-attempt|complete|candidate.check.binding
+candidate-check-api-attempt|complete|checks.run-rerun-detected
 candidate-check-api-event|complete|candidate.check.binding
 candidate-check-api-job-id|complete|candidate.check.binding
 candidate-check-api-jobs-url|complete|candidate.check.native-shape
 candidate-check-api-run-id|complete|candidate.check.binding
 candidate-check-api-run-url|complete|candidate.check.binding
-candidate-check-api-time|complete|candidate.check.binding
-candidate-check-attempt|complete|candidate.check.binding
+candidate-check-api-time|complete|checks.run-rerun-detected
+candidate-check-attempt|complete|checks.run-rerun-detected
 candidate-check-event|complete|candidate.check.identity
 candidate-check-job-id|complete|candidate.check.route
 candidate-check-job-url|complete|candidate.check.binding
@@ -680,8 +1080,24 @@ candidate-pr-top-level-repository|complete|candidate.pr.native-shape
 candidate-sonar-api-app|complete|candidate.sonar.binding
 candidate-sonar-as-actions|complete|candidate.check.identity
 candidate-template-legacy-job-name|complete|candidate.check.identity
-closeout-equal-authority|complete|chronology.closure-after-artifacts
-closure-before-authority|complete|chronology.closure-after-artifacts
+check-summary-duplicate-required|complete|candidate.check.summary
+check-summary-oversized-page|complete|candidate.check.summary
+check-summary-unfiltered-route|complete|bundle.endpoint
+closeout-reply-digest|complete|closeout.approved-replies
+closeout-required-links|complete|closeout.required-links
+closeout-unknown-member|complete|closeout.approved-replies
+closure-allowlist-changed|complete|authority.target-digest
+closure-comment-issue-url|complete|closure.comment-evidence
+closure-non-allowlisted-author|complete|closure.actor-allowlist
+closure-non-allowlisted-closer|complete|closure.actor-allowlist
+closure-old-members|complete|schema.members
+closure-reply-byte-drift|complete|closure.reply-body
+closure-state-reason|complete|closure.issue-evidence
+closure-unapproved-draft|complete|closure.reply-body
+closure-wrong-issue-url|complete|closure.issue-evidence
+compare-base-not-merge|complete|candidate.main-ancestry
+compare-behind|complete|candidate.main-ancestry
+compare-last-commit-mismatch|complete|candidate.main-ancestry
 completion-arbitrary|complete|authority.completion-schema
 completion-artifact|complete|authority.completion-binding
 completion-nonce|complete|authority.completion-binding
@@ -710,12 +1126,19 @@ implementation-completion-origin-transport|complete|implementation-review.comple
 implementation-completion-receipt-after-delivery|complete|implementation-review.completion.chronology
 implementation-completion-receipt-before-record|complete|implementation-review.completion.chronology
 implementation-completion-receipt-mismatch|complete|implementation-review.completion.transport
-issue1185-closeout-before-authority|complete|chronology.closure-after-artifacts
-issue1185-closeout-equal-authority|complete|chronology.closure-after-artifacts
-issue1230-closeout-before-authority|complete|chronology.closure-after-artifacts
-issue1230-closeout-equal-authority|complete|chronology.closure-after-artifacts
-library-closeout-before-authority|complete|chronology.closure-after-artifacts
-library-closeout-equal-authority|complete|chronology.closure-after-artifacts
+issue1185-closed-after-complete|complete|chronology.closure-after-artifacts
+issue1185-closed-at-complete|complete|chronology.closure-after-artifacts
+issue1185-closed-before-authority|complete|chronology.closure-after-artifacts
+issue1185-closed-equal-authority|complete|chronology.closure-after-artifacts
+issue1185-reply-after-closure|complete|chronology.closure-after-artifacts
+issue1185-reply-before-authority|complete|chronology.closure-after-artifacts
+issue1185-reply-equal-authority|complete|chronology.closure-after-artifacts
+issue1230-closed-before-authority|complete|chronology.closure-after-artifacts
+issue1230-closed-equal-authority|complete|chronology.closure-after-artifacts
+issue1230-reply-after-closure|complete|chronology.closure-after-artifacts
+issue1230-reply-before-authority|complete|chronology.closure-after-artifacts
+issue1230-reply-equal-authority|complete|chronology.closure-after-artifacts
+lightweight-tag|complete|tags.annotated-required
 main-unrelated-tip|complete|candidate.main-ancestry
 manifest-listed-unreachable|complete|bundle.reachability
 manifest-same-file-alias|complete|bundle.alias
@@ -726,15 +1149,16 @@ missing-host-tree-path|complete|bundle.host-tree-blob
 missing-merge-strategy|complete|schema.members
 missing-release-asset|complete|release.library_release.assets
 missing-reviewed-commit|complete|schema.members
+moved-base-merge|complete|candidate.tree-equality
 noncanonical-closeout|complete|schema.timestamp
 origin-candidate-substitution|complete|candidate.origin-substitution
-origin-check-api-attempt|complete|origin.check.binding
 origin-check-api-attempt-consistent|complete|origin.check.inventory
+origin-check-api-attempt|complete|checks.run-rerun-detected
 origin-check-api-check-suite|complete|origin.check.native-shape
 origin-check-api-event|complete|origin.check.binding
 origin-check-api-job-id|complete|origin.check.binding
 origin-check-api-run-id|complete|origin.check.binding
-origin-check-api-run-updated|complete|origin.check.binding
+origin-check-api-run-updated|complete|checks.run-rerun-detected
 origin-check-api-run-url|complete|origin.check.binding
 origin-check-attempt|complete|origin.check.inventory
 origin-check-dispatch-before-merge|complete|origin.check.chronology
@@ -767,8 +1191,8 @@ origin-completion-invented-time|complete|origin.completion.canonical-bytes
 origin-completion-post-merge|complete|origin.completion.canonical-bytes
 origin-completion-question|complete|origin.completion.canonical-bytes
 origin-completion-receipt-mismatch|complete|origin.completion.canonical-bytes
-origin-completion-repair-task|complete|origin.completion.canonical-bytes
 origin-completion-repair-task-projection|complete|origin.completion.identity
+origin-completion-repair-task|complete|origin.completion.canonical-bytes
 origin-completion-uuid-nonce|complete|origin.completion.canonical-bytes
 origin-heads-swapped|complete|origin.identity
 origin-merge-parents-reversed|complete|origin.commit.parents
@@ -778,8 +1202,8 @@ origin-pr-normalized-time|complete|origin.pr.binding
 origin-pr-top-level-repository|complete|origin.pr.native-shape
 origin-review-api-body|complete|origin.review.body.binding
 origin-review-api-pull-request-url|complete|origin.review.api.native-shape
-origin-review-body-byte|complete|origin.completion.artifact
 origin-review-body-byte-record-only|complete|origin.review.body.binding
+origin-review-body-byte|complete|origin.completion.artifact
 origin-review-conflicting-verdict|complete|origin.review.verdict
 origin-review-head|complete|origin.review.identity
 origin-review-missing-verdict|complete|origin.review.verdict
@@ -799,21 +1223,26 @@ prepared-completion-late|complete|chronology.prepared-before-library-tag
 release-asset-url|complete|release.library_release.assets
 review-api-body|complete|implementation-review.body.binding
 review-api-commit|complete|implementation-review.api.binding
-review-head|complete|implementation-review.identity
 review-head-and-api|complete|implementation-review.identity
+review-head|complete|implementation-review.identity
 review-id|complete|implementation-review.identity
 review-native-approved|complete|implementation-review.api.binding
 review-submitted-at|complete|implementation-review.api.binding
 review-url|complete|implementation-review.identity
 root-extra-cumulative-fact|complete|schema.members
 root-merged-sha|complete|schema.members
+run-conclusion-changed|complete|checks.run-rerun-detected
+run-jobs-relisted|complete|checks.run-rerun-detected
+run-jobs-rerun-attempt|complete|checks.run-rerun-detected
 self-containing-approval|complete|bundle.self-commit
 self-containing-completion|complete|bundle.self-commit
 self-containing-payload|complete|bundle.self-commit
 semantic-negated|complete|implementation-review.verdict
 skip-delta|complete|graph.stage-order
-template-closeout-before-authority|complete|chronology.closure-after-artifacts
-template-closeout-equal-authority|complete|chronology.closure-after-artifacts
+tag-object-commit|complete|tag.library_tag.object
+tag-object-name|complete|tag.library_tag.object
+tag-object-type|complete|tag.library_tag.object
+tag-tagger-date|complete|tag.library_tag.tagger-date
 unequal-reviewed-merged-trees|complete|candidate.tree-equality
 unknown-package-member|complete|schema.members
 unknown-release-body-member|complete|schema.members
@@ -830,15 +1259,15 @@ wrong-release-asset-name|complete|release.library_release.assets
 wrong-release-body|complete|release.library_release.binding
 wrong-release-tag|complete|release.library_release.binding
 wrong-release-url|complete|release.library_release.identity
-wrong-stage|complete|graph.stage-order
 wrong-stage-field|complete|schema.members
+wrong-stage|complete|graph.stage-order
 wrong-template-url|complete|template.identity
 MATRIX
   # The matrix and the mutator registry must name exactly the same mutants:
   # compare sorted name sets (and reject duplicate rows), not just counts.
   local registered_names="$work_root/mutant-registry.txt" matrix_names="$work_root/mutant-matrix.txt"
   python3 "$script_dir/mutate-closed-bundle.py" "$output" "$work_root/mutant-list" --list |
-    grep -Ev '^(external-commit|origin-check-summary-additional-removed)$' | LC_ALL=C sort > "$registered_names"
+    grep -Ev '^(external-commit|origin-check-summary-additional-removed|up-to-date-merge)$' | LC_ALL=C sort > "$registered_names"
   printf '%s\n' "${matrix_mutant_names[@]}" | LC_ALL=C sort > "$matrix_names"
   if [[ -n "$(LC_ALL=C uniq -d "$matrix_names")" ]] || ! cmp -s "$registered_names" "$matrix_names"; then
     echo "Closed mutation matrix names differ from the mutator registry (duplicates: $(LC_ALL=C uniq -d "$matrix_names" | tr '\n' ' '))." >&2
@@ -846,6 +1275,7 @@ MATRIX
     return 1
   fi
   echo "Closed mutation matrix: ${mutant_count} named mutants rejected at their asserted rules."
+  echo "SEK-G81 named real-shape pairs: compare-ahead-real/pass=native-origin-complete-bundle vs compare-last-commit-mismatch,compare-behind/fail; compare-identical-real/pass=real-data-prepared-da58d974 vs real-data-m1-head-commit-restored/fail; annotated-tag-real/pass vs lightweight-tag/fail; filter-all-superseded-real/pass vs default-latest-listing/fail; later-updated-at/pass=native-origin-complete-bundle vs candidate-check-api-attempt(rerun attempt 2),candidate-check-api-time(earlier updated_at)/fail; approval-with-transport/pass vs approval-transport-missing/fail; approved-reply-closed/pass vs closure-reply-byte-drift/fail; up-to-date-merge/pass (stale pulls/{n}.base.sha) vs moved-base-merge/fail at candidate.tree-equality."
   echo "Named production pairs: origin-old/pass=native-origin-complete-bundle vs candidate-old/fail=origin-candidate-substitution,origin-check-substitution,origin-tag-substitution; approval-carry/pass=state-prefix-* vs approval-rebind/fail=authority-rebind; unreferenced-sibling/pass=reader sibling exclusion vs reachable-splice/fail=reader-reachable-splice; external-commit/pass vs current-object-self-commit/fail."
 
   # The same sibling exists in the fake host repository but is not reachable
@@ -893,7 +1323,7 @@ PY
     FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" bash "$reader" \
       --version "$version" --state complete --verify-tags all \
       --output-dir "$reachable_output" --manifest "$reachable_manifest"
-  expect_rule reader-reachable-splice graph.base run_net10 "$validator" release-record --bundle "$reachable_output" \
+  expect_rule reader-reachable-splice graph.base release_record_validator --bundle "$reachable_output" \
     --manifest "$reachable_manifest" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
   echo "Production reader reachable-sibling splice control failed closed."
@@ -919,21 +1349,21 @@ PY
   cp -R "$output" "$bundle_digest_mutant"
   digest_entry="$(jq -r '.entries[] | select(.kind == "record") | .relative_path' "$manifest")"
   printf 'mutated bundle\n' > "$bundle_digest_mutant/$digest_entry"
-  expect_rule bundle-byte-mutation bundle.entry-digest run_net10 "$validator" release-record --bundle "$bundle_digest_mutant" \
+  expect_rule bundle-byte-mutation bundle.entry-digest release_record_validator --bundle "$bundle_digest_mutant" \
     --manifest "$bundle_digest_mutant/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
 
   bundle_missing_mutant="$work_root/bundle-missing-mutant"
   cp -R "$output" "$bundle_missing_mutant"
   rm "$bundle_missing_mutant/$digest_entry"
-  expect_rule bundle-missing-object bundle.missing-file run_net10 "$validator" release-record --bundle "$bundle_missing_mutant" \
+  expect_rule bundle-missing-object bundle.missing-file release_record_validator --bundle "$bundle_missing_mutant" \
     --manifest "$bundle_missing_mutant/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
 
   bundle_extra_mutant="$work_root/bundle-extra-mutant"
   cp -R "$output" "$bundle_extra_mutant"
   printf 'unreachable\n' > "$bundle_extra_mutant/objects/$(printf '0%.0s' {1..64}).json"
-  expect_rule bundle-extra-file bundle.closed-files run_net10 "$validator" release-record --bundle "$bundle_extra_mutant" \
+  expect_rule bundle-extra-file bundle.closed-files release_record_validator --bundle "$bundle_extra_mutant" \
     --manifest "$bundle_extra_mutant/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
 
@@ -941,7 +1371,7 @@ PY
   cp -R "$output" "$bundle_alias_mutant"
   jq '.entries[0].relative_path = "../record.json"' "$bundle_alias_mutant/bundle.json" > "$bundle_alias_mutant/bundle.json.tmp"
   mv "$bundle_alias_mutant/bundle.json.tmp" "$bundle_alias_mutant/bundle.json"
-  expect_rule bundle-traversal-alias bundle.path run_net10 "$validator" release-record --bundle "$bundle_alias_mutant" \
+  expect_rule bundle-traversal-alias bundle.path release_record_validator --bundle "$bundle_alias_mutant" \
     --manifest "$bundle_alias_mutant/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
 
@@ -949,7 +1379,7 @@ PY
   cp -R "$output" "$bundle_flattened_mutant"
   jq '.entries[1].endpoint = "flattened-record.json"' "$bundle_flattened_mutant/bundle.json" > "$bundle_flattened_mutant/bundle.json.tmp"
   mv "$bundle_flattened_mutant/bundle.json.tmp" "$bundle_flattened_mutant/bundle.json"
-  expect_rule bundle-flattened-endpoint bundle.endpoint run_net10 "$validator" release-record --bundle "$bundle_flattened_mutant" \
+  expect_rule bundle-flattened-endpoint bundle.endpoint release_record_validator --bundle "$bundle_flattened_mutant" \
     --manifest "$bundle_flattened_mutant/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
 

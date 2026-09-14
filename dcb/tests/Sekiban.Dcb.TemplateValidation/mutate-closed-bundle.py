@@ -53,6 +53,8 @@ class Bundle:
         self.record_ref = self.find(lambda item: item["kind"] == "record")["immutable_ref"]
         self.record = self.read_json_content(self.record_ref)
         self.payload_changed = False
+        # "changed after approval" mutants keep the approval digests untouched.
+        self.suppress_refresh = False
         self.payload_refs = {reference for reference, _ in self.chain()}
 
     # ---- manifest entries -------------------------------------------------
@@ -209,14 +211,25 @@ class Bundle:
                 continue
             approval = self.read_json_content(approval_ref)
             target_bytes = self.read_content(approval["target_payload_ref"])
-            approval["target_payload_sha256"] = sha256(target_bytes)
+            old_digest = approval["target_payload_sha256"]
+            new_digest = sha256(target_bytes)
             completion = self.read_json_content(approval["completion_ref"])
-            completion["target_payload_sha256"] = sha256(target_bytes)
+            if new_digest != old_digest:
+                # The delegation receipt and the review artifact both name the
+                # approved payload digest, so a re-signed payload restates them.
+                artifact = self.read_content(approval["artifact_ref"]).replace(old_digest.encode(), new_digest.encode())
+                artifact_digest = self.write_content(approval["artifact_ref"], artifact)
+                approval["artifact_sha256"] = artifact_digest
+                completion["artifact_sha256"] = artifact_digest
+                receipt = self.read_content(completion["transport_receipt_ref"]).replace(old_digest.encode(), new_digest.encode())
+                completion["transport_receipt_sha256"] = self.write_content(completion["transport_receipt_ref"], receipt)
+            approval["target_payload_sha256"] = new_digest
+            completion["target_payload_sha256"] = new_digest
             approval["completion_sha256"] = self.write_content(approval["completion_ref"], dump(completion))
             self.write_content(approval_ref, dump(approval))
 
     def finish(self) -> None:
-        if self.payload_changed:
+        if self.payload_changed and not self.suppress_refresh:
             self.refresh_approval_payload_digests()
         self.write_content(self.record_ref, dump(self.record))
         self.manifest_path.write_bytes(dump(self.manifest))
@@ -401,8 +414,8 @@ def main() -> None:
 
     @mutant("orphan-host-anchor-pair")
     def _orphan_anchor_pair() -> None:
-        commit = "d" * 40
-        tree = "e" * 40
+        commit = "0" * 40
+        tree = "0" * 39 + "1"
         b.add_host_entry(f"{HOST}@{commit}:commits/{commit}", dump({"sha": commit, "commit": {"tree": {"sha": tree}}}))
         b.add_host_entry(f"{HOST}@{commit}:git/trees/{tree}", dump({"sha": tree, "tree": []}))
 
@@ -455,7 +468,7 @@ def main() -> None:
     mutants["origin-check-run-url"] = lambda: update_origin_check("103671918609", {"run_url": "https://example.invalid/run"})
     mutants["origin-check-job-url"] = lambda: update_origin_check("103671918609", {"job_url": "https://example.invalid/job"})
     mutants["origin-check-time-record"] = lambda: update_origin_check("103671918609", {"completed_at_utc": "2026-09-13T04:36:10Z"})
-    mutants["origin-check-api-run-updated"] = lambda: b.mutate_api(":actions/runs/34737699937", lambda v: v.update({"updated_at": "2026-09-13T04:36:20Z"}))
+    mutants["origin-check-api-run-updated"] = lambda: b.mutate_api(":actions/runs/34737699937", lambda v: v.update({"updated_at": "2026-09-13T04:30:00Z"}))
     mutants["origin-check-api-event"] = lambda: b.mutate_api(":actions/runs/34737699937", lambda v: v.update({"event": "workflow_dispatch"}))
     mutants["origin-check-api-run-id"] = lambda: b.mutate_api(":actions/runs/34737699937", lambda v: v.update({"id": 999999}))
     mutants["origin-check-api-job-id"] = lambda: b.mutate_api(":actions/jobs/103671918609", lambda v: v.update({"id": 999999}))
@@ -485,7 +498,7 @@ def main() -> None:
         b.mutate_api(":actions/jobs/103671918609", lambda v: v.update({"completed_at": late}))
         b.mutate_api(":check-runs/103671918609", lambda v: v.update({"completed_at": late}))
         b.mutate_api(":actions/runs/34737699937", lambda v: v.update({"updated_at": late}))
-        b.mutate_api(f":commits/{ORIGIN_HEAD}/check-runs", lambda v: [run.update({"completed_at": late}) for run in v["check_runs"] if run["id"] == 103671918609])
+        b.mutate_api(f":commits/{ORIGIN_HEAD}/check-runs?filter=all&per_page=100", lambda v: [run.update({"completed_at": late}) for run in v["check_runs"] if run["id"] == 103671918609])
 
     @mutant("origin-check-dispatch-before-merge")
     def _dispatch_before_merge() -> None:
@@ -511,17 +524,17 @@ def main() -> None:
             for run in value["check_runs"]:
                 if run["id"] == 103671918609:
                     run["id"] = 103671999999
-        b.mutate_api(f":commits/{ORIGIN_HEAD}/check-runs", replace)
+        b.mutate_api(f":commits/{ORIGIN_HEAD}/check-runs?filter=all&per_page=100", replace)
 
     mutants["origin-check-summary-truncated"] = lambda: b.mutate_api(
-        f":commits/{ORIGIN_HEAD}/check-runs", lambda v: v.update({"check_runs": [r for r in v["check_runs"] if r["id"] != 103673077404]}))
+        f":commits/{ORIGIN_HEAD}/check-runs?filter=all&per_page=100", lambda v: v.update({"check_runs": [r for r in v["check_runs"] if r["id"] != 103673077404]}))
 
     @mutant("origin-check-summary-additional-removed")
     def _summary_additional_removed() -> None:
         def remove_additional(value: dict[str, object]) -> None:
             value["check_runs"] = [run for run in value["check_runs"] if run["id"] != 103673077404]
             value["total_count"] = len(value["check_runs"])
-        b.mutate_api(f":commits/{ORIGIN_HEAD}/check-runs", remove_additional)
+        b.mutate_api(f":commits/{ORIGIN_HEAD}/check-runs?filter=all&per_page=100", remove_additional)
 
     # ---- origin review and canonical completion transport ------------------------
     mutants["origin-review-api-body"] = lambda: b.mutate_api(":pulls/1235/reviews/5189565347", lambda v: v.update({"body": "tampered origin body"}))
@@ -660,7 +673,6 @@ def main() -> None:
     @mutant("main-unrelated-tip")
     def _main_tip() -> None:
         b.prepared_changes(lambda c: c["candidate"].update({"main_tip_sha": "8" * 40}))
-        b.mutate_api(f":compare/{'a' * 40}...{'9' * 40}", lambda v: v["head_commit"].update({"sha": "8" * 40}))
 
     mutants["candidate-pr-top-level-repository"] = lambda: b.mutate_api(":pulls/1236", lambda v: v.update({"repository": {"full_name": REPOSITORY}}))
     mutants["candidate-pr-head-repo-removed"] = lambda: b.mutate_api(":pulls/1236", lambda v: v["head"].pop("repo"))
@@ -683,7 +695,7 @@ def main() -> None:
     mutants["candidate-check-job-url"] = lambda: update_candidate_check("dcbTestsNet9", {"job_url": "https://example.invalid/job"})
     mutants["candidate-check-attempt"] = lambda: update_candidate_check("dcbTestsNet9", {"attempt": "2"})
     mutants["candidate-check-time-record"] = lambda: update_candidate_check("dcbTestsNet9", {"started_at_utc": "2026-09-12T09:02:04Z"})
-    mutants["candidate-check-api-time"] = lambda: b.mutate_api(":actions/runs/1001", lambda v: v.update({"updated_at": "2026-09-12T12:00:00Z"}))
+    mutants["candidate-check-api-time"] = lambda: b.mutate_api(":actions/runs/1001", lambda v: v.update({"updated_at": "2026-09-12T09:03:00Z"}))
     mutants["candidate-check-api-event"] = lambda: b.mutate_api(":actions/runs/1001", lambda v: v.update({"event": "pull_request"}))
     mutants["candidate-check-api-run-id"] = lambda: b.mutate_api(":actions/runs/1001", lambda v: v.update({"id": 999999}))
     mutants["candidate-check-api-job-id"] = lambda: b.mutate_api(":actions/jobs/2001", lambda v: v.update({"id": 999999}))
@@ -725,9 +737,9 @@ def main() -> None:
             for run in value["check_runs"]:
                 if run["id"] == 2004:
                     run["id"] = 2999
-        b.mutate_api(f":commits/{'a' * 40}/check-runs", replace)
+        b.mutate_api(f":commits/{'a' * 40}/check-runs?filter=all&per_page=100", replace)
 
-    mutants["candidate-check-summary-count"] = lambda: b.mutate_api(f":commits/{'a' * 40}/check-runs", lambda v: v.update({"total_count": 30}))
+    mutants["candidate-check-summary-count"] = lambda: b.mutate_api(f":commits/{'a' * 40}/check-runs?filter=all&per_page=100", lambda v: v.update({"total_count": 30}))
 
     @mutant("candidate-diff-evidence")
     def _diff_evidence() -> None:
@@ -821,6 +833,32 @@ def main() -> None:
         approval["completion_sha256"] = b.write_content(approval["completion_ref"], b"not-json\n")
         b.write_content(b.record["prepared_approval_ref"], dump(approval))
 
+    def set_approval_chronology(stage: str, completed: str, approved: str) -> Callable[[], None]:
+        """Moves one approval's whole canonical transport, completion and
+        approval instant together, keeping the approval ordering true."""
+        def run() -> None:
+            transport = completed.replace("Z", ".000000+00:00")
+            earlier = completed.replace("Z", ".000000+00:00")
+            approval_ref = b.approval_ref(stage)
+            approval = b.read_json_content(approval_ref)
+            completion = b.read_json_content(approval["completion_ref"])
+            record_line = json.loads(b.read_content(completion["transport_record_ref"]))
+            delivered_line = json.loads(b.read_content(completion["transport_delivered_ref"]))
+            receipt_line = json.loads(b.read_content(completion["transport_receipt_ref"]))
+            record_line["entry"]["created_at"] = earlier
+            delivered_line["entry"]["created_at"] = earlier
+            delivered_line["entry"]["last_attempt_at"] = transport
+            delivered_line["entry"]["delivered_at"] = transport
+            receipt_line["reported_at"] = earlier
+            completion["completed_at_utc"] = completed
+            completion["transport_record_sha256"] = b.write_content(completion["transport_record_ref"], line(record_line))
+            completion["transport_delivered_sha256"] = b.write_content(completion["transport_delivered_ref"], line(delivered_line))
+            completion["transport_receipt_sha256"] = b.write_content(completion["transport_receipt_ref"], line(receipt_line))
+            approval["completion_sha256"] = b.write_content(approval["completion_ref"], dump(completion))
+            approval["approved_at_utc"] = approved
+            b.write_content(approval_ref, dump(approval))
+        return run
+
     def completion_mutant(field: str, value: object, stage: str = "prepared") -> Callable[[], None]:
         def run() -> None:
             approval_ref = b.approval_ref(stage)
@@ -839,10 +877,10 @@ def main() -> None:
     mutants["completion-artifact"] = completion_mutant("artifact_sha256", "0" * 64)
     mutants["completion-reviewer"] = completion_mutant("reviewer_identity", "forged-reviewer")
     mutants["completion-time"] = completion_mutant("completed_at_utc", "2026-09-12T09:10:00Z")
-    mutants["prepared-completion-late"] = completion_mutant("completed_at_utc", "2026-09-12T10:20:00Z")
-    mutants["prepared-completion-equal"] = completion_mutant("completed_at_utc", "2026-09-12T09:20:00Z")
-    mutants["artifact-completion-late"] = completion_mutant("completed_at_utc", "2026-09-12T12:00:00Z", "artifacts-verified")
-    mutants["artifact-completion-equal"] = completion_mutant("completed_at_utc", "2026-09-12T11:00:00Z", "artifacts-verified")
+    mutants["prepared-completion-late"] = set_approval_chronology("prepared", "2026-09-12T09:25:00Z", "2026-09-12T09:26:00Z")
+    mutants["prepared-completion-equal"] = set_approval_chronology("prepared", "2026-09-12T09:20:00Z", "2026-09-12T09:21:00Z")
+    mutants["artifact-completion-late"] = set_approval_chronology("artifacts-verified", "2026-09-12T12:00:00Z", "2026-09-12T12:01:00Z")
+    mutants["artifact-completion-equal"] = set_approval_chronology("artifacts-verified", "2026-09-12T11:00:00Z", "2026-09-12T11:01:00Z")
 
     def approval_mutant(stage: str, values: Callable[[], dict[str, object]]) -> Callable[[], None]:
         def run() -> None:
@@ -856,9 +894,9 @@ def main() -> None:
     mutants["authority-verdict"] = approval_mutant("prepared", lambda: {"verdict": "rejected"})
     mutants["authority-rebind"] = approval_mutant("prepared", lambda: {
         "target_payload_ref": b.record["current_payload_ref"], "target_payload_sha256": sha256(b.read_content(b.record["current_payload_ref"]))})
-    mutants["authority-time"] = approval_mutant("prepared", lambda: {"approved_at_utc": "2026-09-12T09:00:00Z"})
-    mutants["artifact-before-release"] = approval_mutant("artifacts-verified", lambda: {"approved_at_utc": "2026-09-12T09:44:00Z"})
-    mutants["artifact-equal-release"] = approval_mutant("artifacts-verified", lambda: {"approved_at_utc": "2026-09-12T09:45:00Z"})
+    mutants["authority-time"] = set_approval_chronology("prepared", "2026-09-12T08:59:00Z", "2026-09-12T09:00:00Z")
+    mutants["artifact-before-release"] = set_approval_chronology("artifacts-verified", "2026-09-12T09:43:00Z", "2026-09-12T09:44:00Z")
+    mutants["artifact-equal-release"] = set_approval_chronology("artifacts-verified", "2026-09-12T09:44:00Z", "2026-09-12T09:45:00Z")
     mutants["missing-artifact-authority"] = lambda: b.record.pop("artifact_approval_ref")
 
     @mutant("early-future-authority")
@@ -873,21 +911,262 @@ def main() -> None:
     mutants["wrong-package-url"] = lambda: b.mutate_payload("libraries-verified", lambda p: p["changes"]["packages"][0].update({"public_url": p["changes"]["packages"][1]["public_url"]}))
     mutants["wrong-template-url"] = lambda: b.mutate_payload("artifacts-verified", lambda p: p["changes"]["template"].update({"public_url": "https://example.invalid/template.nupkg"}))
     mutants["wrong-library-observed-time"] = lambda: b.mutate_payload("libraries-verified", lambda p: p["changes"]["library_release"].update({"observed_at_utc": "2026-09-12T09:20:00Z"}))
-    mutants["equal-template-tag-time"] = lambda: b.mutate_payload("template-tagged/incomplete", lambda p: p["changes"]["template_tag"].update({"created_at_utc": "2026-09-12T09:30:00Z"}))
+    @mutant("equal-template-tag-time")
+    def _equal_template_tag_time() -> None:
+        equal = "2026-09-12T09:30:00Z"
+        b.mutate_payload("template-tagged/incomplete", lambda p: p["changes"]["template_tag"].update({"created_at_utc": equal}))
+        b.mutate_api(f":git/tags/{'c' * 40}", lambda v: v["tagger"].update({"date": equal}))
     mutants["draft-release"] = lambda: b.mutate_api(":releases/tags/dcb-v10.22.0", lambda v: v.update({"draft": True}))
     mutants["wrong-release-tag"] = lambda: b.mutate_api(":releases/tags/dcb-v10.22.0", lambda v: v.update({"tag_name": "dcb-v-forged"}))
     mutants["missing-release-asset"] = lambda: b.mutate_api(":releases/tags/dcb-v10.22.0", lambda v: v["assets"].pop())
     mutants["wrong-release-asset-name"] = lambda: b.mutate_api(":releases/tags/dcb-v10.22.0", lambda v: v["assets"][0].update({"name": "forged.nupkg"}))
     mutants["noncanonical-closeout"] = lambda: b.mutate_payload("complete", lambda p: p["changes"]["closure"].update({"completed_at_utc": "2026-09-12 20:05:00 +09:00"}))
-    mutants["closure-before-authority"] = lambda: b.mutate_payload("complete", lambda p: p["changes"]["closure"].update({"library_closed_at_utc": "2026-09-12T09:50:00Z"}))
-    mutants["closeout-equal-authority"] = lambda: b.mutate_payload("complete", lambda p: p["changes"]["closure"].update({"library_closed_at_utc": "2026-09-12T09:52:00Z"}))
-    for field in ["library", "template", "issue1185", "issue1230"]:
-        property_name = {"library": "library_closed_at_utc", "template": "template_closed_at_utc",
-                         "issue1185": "issue_1185_closed_at_utc", "issue1230": "issue_1230_closed_at_utc"}[field]
-        mutants[f"{field}-closeout-before-authority"] = (lambda p_name: lambda: b.mutate_payload(
-            "complete", lambda p: p["changes"]["closure"].update({p_name: "2026-09-12T09:50:00Z"})))(property_name)
-        mutants[f"{field}-closeout-equal-authority"] = (lambda p_name: lambda: b.mutate_payload(
-            "complete", lambda p: p["changes"]["closure"].update({p_name: "2026-09-12T09:52:00Z"})))(property_name)
+    mutants["closure-old-members"] = lambda: b.mutate_payload(
+        "complete", lambda p: p["changes"]["closure"].update({"library_closed_at_utc": "2026-09-12T11:04:00Z"}))
+
+    # ---- closure bound to the approved replies and the issue/comment API --------------
+    def comment_id(issue: str) -> str:
+        return f"56284242{issue}"
+
+    def set_reply_time(issue: str, value: str) -> None:
+        b.mutate_payload("complete", lambda p: p["changes"]["closure"][f"issue_{issue}"].update({"comment_created_at_utc": value}))
+        b.mutate_api(f":issues/comments/{comment_id(issue)}", lambda v: v.update({"created_at": value}))
+
+    def set_closed_time(issue: str, value: str) -> None:
+        b.mutate_payload("complete", lambda p: p["changes"]["closure"][f"issue_{issue}"].update({"closed_at_utc": value}))
+        b.mutate_api(f":issues/{issue}", lambda v: v.update({"closed_at": value}))
+
+    artifacts_completed = "2026-09-12T09:50:40.000011Z"
+    before_artifacts = "2026-09-12T09:50:00Z"
+    for issue in ["1185", "1230"]:
+        mutants[f"issue{issue}-reply-before-authority"] = (lambda number: lambda: set_reply_time(number, before_artifacts))(issue)
+        mutants[f"issue{issue}-reply-equal-authority"] = (lambda number: lambda: set_reply_time(number, artifacts_completed))(issue)
+        mutants[f"issue{issue}-closed-before-authority"] = (lambda number: lambda: set_closed_time(number, before_artifacts))(issue)
+        mutants[f"issue{issue}-closed-equal-authority"] = (lambda number: lambda: set_closed_time(number, artifacts_completed))(issue)
+    mutants["issue1185-closed-after-complete"] = lambda: set_closed_time("1185", "2026-09-12T11:06:00Z")
+    mutants["issue1185-closed-at-complete"] = lambda: set_closed_time("1185", "2026-09-12T11:05:00Z")
+    mutants["issue1185-reply-after-closure"] = lambda: set_reply_time("1185", "2026-09-12T11:01:30Z")
+    mutants["issue1230-reply-after-closure"] = lambda: set_reply_time("1230", "2026-09-12T11:03:30Z")
+
+    mutants["closure-wrong-issue-url"] = lambda: b.mutate_api(
+        ":issues/1185", lambda v: v.update({"html_url": "https://github.com/J-Tech-Japan/Sekiban/issues/9999"}))
+    mutants["closure-state-reason"] = lambda: b.mutate_api(":issues/1185", lambda v: v.update({"state_reason": "not_planned"}))
+    mutants["closure-comment-issue-url"] = lambda: b.mutate_api(
+        f":issues/comments/{comment_id('1230')}",
+        lambda v: v.update({"issue_url": "https://api.github.com/repos/J-Tech-Japan/Sekiban/issues/1185"}))
+    mutants["closure-non-allowlisted-author"] = lambda: b.mutate_api(
+        f":issues/comments/{comment_id('1185')}", lambda v: v["user"].update({"login": "release-bot"}))
+    mutants["closure-non-allowlisted-closer"] = lambda: b.mutate_api(
+        ":issues/1230", lambda v: v["closed_by"].update({"login": "release-bot"}))
+
+    @mutant("closure-reply-byte-drift")
+    def _reply_drift() -> None:
+        b.mutate_api(f":issues/comments/{comment_id('1185')}",
+                     lambda v: v.update({"body": v["body"].replace("is published", "is Published", 1)}))
+
+    @mutant("closure-unapproved-draft")
+    def _unapproved_draft() -> None:
+        # A reply nobody approved: the posted comment carries text that is not
+        # the approved artifacts-verified draft.
+        b.mutate_api(f":issues/comments/{comment_id('1230')}",
+                     lambda v: v.update({"body": "DCB 10.22.0 is published. Please reopen if anything is missing.\n"}))
+
+    @mutant("closure-allowlist-changed")
+    def _allowlist_changed() -> None:
+        # The allowlist is approved evidence: changing it after the artifacts
+        # approval breaks that approval's payload digest.
+        b.suppress_refresh = True
+        b.mutate_payload("artifacts-verified",
+                         lambda p: p["changes"]["approved_closeout"].update({"operator_allowlist": ["release-bot"]}))
+
+    mutants["closeout-unknown-member"] = lambda: b.mutate_payload(
+        "artifacts-verified", lambda p: p["changes"]["approved_closeout"].update({"issue_1169_reply_ref": "forged"}))
+
+    @mutant("closeout-reply-digest")
+    def _closeout_reply_digest() -> None:
+        b.mutate_payload("artifacts-verified",
+                         lambda p: p["changes"]["approved_closeout"].update({"issue_1185_reply_sha256": "0" * 64}))
+
+    @mutant("closeout-required-links")
+    def _closeout_required_links() -> None:
+        approved = b.payload_at("artifacts-verified")[1]["changes"]["approved_closeout"]
+        draft = b.read_content(approved["issue_1230_reply_ref"])
+        digest = b.write_content(approved["issue_1230_reply_ref"],
+                                 draft.replace(b"https://github.com/J-Tech-Japan/Sekiban/pull/1233", b"the follow-up PR"))
+        b.mutate_payload("artifacts-verified",
+                         lambda p: p["changes"]["approved_closeout"].update({"issue_1230_reply_sha256": digest}))
+        b.mutate_api(f":issues/comments/{comment_id('1230')}", lambda v: v.update({
+            "body": v["body"].replace("https://github.com/J-Tech-Japan/Sekiban/pull/1233", "the follow-up PR")}))
+
+    # ---- annotated tags -----------------------------------------------------------------
+    @mutant("lightweight-tag")
+    def _lightweight_tag() -> None:
+        # GitHub answers a lightweight tag ref with object.type "commit" and
+        # 404s git/tags/{id}; the named rule must fire before that read.
+        tag = b.payload_at("library-tagged/incomplete")[1]["changes"]["library_tag"]
+        lightweight = json.loads(Path(__file__).with_name("fixtures").joinpath(
+            "release-record/real-child/tag-ref-dcbTemplates-v10.19.0.json").read_text())
+        suffix = ":" + tag["evidence_ref"].split(":", 1)[1]
+        b.mutate_api(suffix, lambda v: v.update({
+            "object": {"sha": v["object"]["sha"], "type": "commit",
+                       "url": lightweight["object"]["url"]}}))
+
+    mutants["tag-object-name"] = lambda: b.mutate_api(f":git/tags/{'b' * 40}", lambda v: v.update({"tag": "dcb-v10.21.0"}))
+    mutants["tag-object-type"] = lambda: b.mutate_api(f":git/tags/{'b' * 40}", lambda v: v["object"].update({"type": "tag"}))
+    mutants["tag-object-commit"] = lambda: b.mutate_api(f":git/tags/{'b' * 40}", lambda v: v["object"].update({"sha": "9" * 40}))
+    mutants["tag-tagger-date"] = lambda: b.mutate_api(f":git/tags/{'b' * 40}", lambda v: v["tagger"].update({"date": "2026-09-12T09:21:00Z"}))
+
+    # ---- compare ancestry without head_commit -------------------------------------------
+    compare_suffix = f":compare/{'a' * 40}...{'9' * 40}"
+    mutants["compare-last-commit-mismatch"] = lambda: b.mutate_api(
+        compare_suffix, lambda v: v["commits"][-1].update({"sha": "8" * 40}))
+    mutants["compare-behind"] = lambda: b.mutate_api(
+        compare_suffix, lambda v: v.update({"status": "behind", "behind_by": 1}))
+    mutants["compare-base-not-merge"] = lambda: b.mutate_api(
+        compare_suffix, lambda v: v["base_commit"].update({"sha": "8" * 40}))
+
+    # ---- check-runs listing route and page ------------------------------------------------
+    @mutant("check-summary-oversized-page")
+    def _oversized_page() -> None:
+        def oversize(value: dict[str, object]) -> None:
+            template = value["check_runs"][0]
+            while len(value["check_runs"]) < 101:
+                extra = json.loads(json.dumps(template))
+                extra["id"] = 700000000 + len(value["check_runs"])
+                value["check_runs"].append(extra)
+            value["total_count"] = len(value["check_runs"])
+        b.mutate_api(f":commits/{'a' * 40}/check-runs?filter=all&per_page=100", oversize)
+
+    @mutant("check-summary-duplicate-required")
+    def _duplicate_required() -> None:
+        def duplicate(value: dict[str, object]) -> None:
+            recorded = next(run for run in value["check_runs"] if run["id"] == 2004)
+            value["check_runs"].append(json.loads(json.dumps(recorded)))
+            value["total_count"] = len(value["check_runs"])
+        b.mutate_api(f":commits/{'a' * 40}/check-runs?filter=all&per_page=100", duplicate)
+
+    @mutant("check-summary-unfiltered-route")
+    def _unfiltered_route() -> None:
+        old_ref = prepared()["candidate"]["checks_evidence_ref"]
+        new_ref = old_ref.replace("/check-runs?filter=all&per_page=100", "/check-runs")
+        b.move_api(old_ref, new_ref)
+        b.prepared_changes(lambda c: c["candidate"].update({"checks_evidence_ref": new_ref}))
+
+    # ---- live run mutability --------------------------------------------------------------
+    mutants["run-conclusion-changed"] = lambda: b.mutate_api(":actions/runs/1001", lambda v: v.update({"conclusion": "failure"}))
+
+    @mutant("run-jobs-relisted")
+    def _run_jobs_relisted() -> None:
+        def relist(value: dict[str, object]) -> None:
+            for job in value["jobs"]:
+                if job["id"] == 2001:
+                    job["id"] = 2991
+        b.mutate_api(":actions/runs/1001/jobs", relist)
+
+    @mutant("run-jobs-rerun-attempt")
+    def _run_jobs_rerun_attempt() -> None:
+        def rerun(value: dict[str, object]) -> None:
+            for job in value["jobs"]:
+                job["run_attempt"] = 2
+        b.mutate_api(":actions/runs/1003/jobs", rerun)
+
+    # ---- stale PR base with equal trees ----------------------------------------------------
+    stale_base = "d4490035dfcf870bcd400fe047b89402d5a892d4"
+    # Positive control: GitHub's pulls/{n}.base.sha moves after the merge, and a
+    # truthful record with equal trees and ordered parents still passes.
+    mutants["up-to-date-merge"] = lambda: b.mutate_api(":pulls/1236", lambda v: v["base"].update({"sha": stale_base}))
+
+    @mutant("moved-base-merge")
+    def _moved_base_merge() -> None:
+        b.mutate_api(":pulls/1236", lambda v: v["base"].update({"sha": stale_base}))
+        b.prepared_changes(lambda c: c["candidate"].update({"merged_tree_sha": "7" * 40}))
+
+    # ---- host-stage approval transport ------------------------------------------------------
+    def approval_transport(stage: str, mutate: Callable[[dict, dict, dict, dict], None]) -> Callable[[], None]:
+        def run() -> None:
+            approval_ref = b.approval_ref(stage)
+            approval = b.read_json_content(approval_ref)
+            completion = b.read_json_content(approval["completion_ref"])
+            record_line = json.loads(b.read_content(completion["transport_record_ref"]))
+            delivered_line = json.loads(b.read_content(completion["transport_delivered_ref"]))
+            receipt_line = json.loads(b.read_content(completion["transport_receipt_ref"]))
+            mutate(record_line, delivered_line, receipt_line, completion)
+            completion["transport_record_sha256"] = b.write_content(completion["transport_record_ref"], line(record_line))
+            completion["transport_delivered_sha256"] = b.write_content(completion["transport_delivered_ref"], line(delivered_line))
+            completion["transport_receipt_sha256"] = b.write_content(completion["transport_receipt_ref"], line(receipt_line))
+            approval["completion_sha256"] = b.write_content(approval["completion_ref"], dump(completion))
+            b.write_content(approval_ref, dump(approval))
+        return run
+
+    @mutant("approval-transport-missing")
+    def _approval_transport_missing() -> None:
+        approval_ref = b.approval_ref("prepared")
+        approval = b.read_json_content(approval_ref)
+        completion = b.read_json_content(approval["completion_ref"])
+        for member in ["transport_record_ref", "transport_record_sha256", "transport_delivered_ref",
+                       "transport_delivered_sha256", "transport_receipt_ref", "transport_receipt_sha256"]:
+            completion.pop(member)
+        approval["completion_sha256"] = b.write_content(approval["completion_ref"], dump(completion))
+        b.write_content(approval_ref, dump(approval))
+
+    @mutant("approval-transport-digest")
+    def _approval_transport_digest() -> None:
+        # Transport bytes edited without re-signing the completion projection.
+        approval = b.read_json_content(b.record["prepared_approval_ref"])
+        completion = b.read_json_content(approval["completion_ref"])
+        raw = b.read_content(completion["transport_record_ref"])
+        b.write_content(completion["transport_record_ref"], raw.replace(b"APPROVE", b"approve", 1))
+    mutants["approval-transport-blocked"] = approval_transport("prepared", lambda r, d, rc, c: (
+        r["entry"].update({"status": "blocked"}), d["entry"].update({"status": "blocked"}),
+        rc.update({"report_status": "blocked"})) and None)
+    mutants["approval-transport-foreign-task"] = approval_transport("prepared", lambda r, d, rc, c: (
+        r["entry"].update({"task_id": "sek-g81-foreign-task"}), d["entry"].update({"task_id": "sek-g81-foreign-task"}),
+        rc.update({"task_id": "sek-g81-foreign-task"})) and None)
+    mutants["approval-transport-not-approve"] = approval_transport("prepared", lambda r, d, rc, c: (
+        r["entry"].update({"summary": "REQUEST-UPDATE prepared payload"}),
+        d["entry"].update({"summary": "REQUEST-UPDATE prepared payload"}),
+        rc.update({"report_summary": "REQUEST-UPDATE prepared payload"})) and None)
+    mutants["approval-transport-delivery-drift"] = approval_transport("prepared", lambda r, d, rc, c: (
+        d["entry"].update({"summary": "APPROVE a different prepared payload"})) and None)
+    mutants["approval-receipt-without-digest"] = approval_transport("prepared", lambda r, d, rc, c: rc.update({
+        "objective": "Review the DCB 10.22.0 prepared payload.", "inputs": ["payload_ref=" + c["target_payload_ref"]]}))
+    mutants["approval-created-after-reported"] = approval_transport("prepared", lambda r, d, rc, c: (
+        r["entry"].update({"created_at": "2026-09-12T09:10:36.000000+00:00"}),
+        d["entry"].update({"created_at": "2026-09-12T09:10:36.000000+00:00"})) and None)
+
+    @mutant("approval-completion-not-delivered")
+    def _approval_completion_not_delivered() -> None:
+        approval_transport("prepared", lambda r, d, rc, c: c.update({"completed_at_utc": "2026-09-12T09:10:41Z"}))()
+
+    @mutant("approval-artifact-without-digest")
+    def _approval_artifact_without_digest() -> None:
+        approval_ref = b.approval_ref("prepared")
+        approval = b.read_json_content(approval_ref)
+        completion = b.read_json_content(approval["completion_ref"])
+        artifact = b.read_content(approval["artifact_ref"])
+        digest = b.write_content(approval["artifact_ref"],
+                                 artifact.replace(completion["target_payload_sha256"].encode(), b"(withheld)"))
+        approval["artifact_sha256"] = digest
+        completion["artifact_sha256"] = digest
+        approval["completion_sha256"] = b.write_content(approval["completion_ref"], dump(completion))
+        b.write_content(approval_ref, dump(approval))
+
+    mutants["approval-before-delivery"] = approval_mutant("prepared", lambda: {"approved_at_utc": "2026-09-12T09:10:39Z"})
+
+    def duplicate_identity(field: str, completion_field: str) -> Callable[[], None]:
+        def run() -> None:
+            value = prepared()["implementation_review"][field]
+            approval_transport("prepared", lambda r, d, rc, c: (
+                r["entry"].update({completion_field: value}), d["entry"].update({completion_field: value}),
+                rc.update({completion_field: value}), c.update({completion_field: value})) and None)()
+            approval_ref = b.approval_ref("prepared")
+            approval = b.read_json_content(approval_ref)
+            approval[completion_field] = value
+            b.write_content(approval_ref, dump(approval))
+        return run
+
+    mutants["approval-duplicate-task"] = duplicate_identity("intent_task_id", "task_id")
+    mutants["approval-duplicate-nonce"] = duplicate_identity("intent_result_nonce", "result_nonce")
 
     if kind == "--list":
         print("\n".join(sorted(mutants)))

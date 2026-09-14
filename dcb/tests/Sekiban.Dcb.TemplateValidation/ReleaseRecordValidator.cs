@@ -117,7 +117,7 @@ internal static class ReleaseRecordValidator
         ValidateRoot(document.RootElement, expectedVersion, expectedState, repoRoot, hostRef: null);
     }
 
-    internal static void ValidateBundle(
+    internal static ClosedReleaseRecordValidator.ValidatedReleaseFacts ValidateBundle(
         string bundleDirectory,
         string manifestPath,
         string expectedVersion,
@@ -126,7 +126,7 @@ internal static class ReleaseRecordValidator
     {
         var bundle = ReleaseBundle.Load(bundleDirectory, manifestPath);
         using var document = JsonDocument.Parse(bundle.RecordBytes);
-        ClosedReleaseRecordValidator.Validate(
+        return ClosedReleaseRecordValidator.Validate(
             document.RootElement, bundle, expectedVersion, expectedState, repoRoot);
     }
 

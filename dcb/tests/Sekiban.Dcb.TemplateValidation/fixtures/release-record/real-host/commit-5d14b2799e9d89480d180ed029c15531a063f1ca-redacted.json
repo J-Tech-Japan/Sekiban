@@ -1,0 +1,87 @@
+{
+  "author": {
+    "avatar_url": "https://avatars.githubusercontent.com/u/474920?v=4",
+    "events_url": "https://api.github.com/users/tomohisa/events{/privacy}",
+    "followers_url": "https://api.github.com/users/tomohisa/followers",
+    "following_url": "https://api.github.com/users/tomohisa/following{/other_user}",
+    "gists_url": "https://api.github.com/users/tomohisa/gists{/gist_id}",
+    "gravatar_id": "",
+    "html_url": "https://github.com/tomohisa",
+    "id": 474920,
+    "login": "tomohisa",
+    "node_id": "MDQ6VXNlcjQ3NDkyMA==",
+    "organizations_url": "https://api.github.com/users/tomohisa/orgs",
+    "received_events_url": "https://api.github.com/users/tomohisa/received_events",
+    "repos_url": "https://api.github.com/users/tomohisa/repos",
+    "site_admin": false,
+    "starred_url": "https://api.github.com/users/tomohisa/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/tomohisa/subscriptions",
+    "type": "User",
+    "url": "https://api.github.com/users/tomohisa",
+    "user_view_type": "public"
+  },
+  "comments_url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/commits/5d14b2799e9d89480d180ed029c15531a063f1ca/comments",
+  "commit": {
+    "author": {
+      "date": "2026-09-14T13:11:15Z",
+      "email": "redacted@example.invalid",
+      "name": "REDACTED"
+    },
+    "comment_count": 0,
+    "committer": {
+      "date": "2026-09-14T13:11:15Z",
+      "email": "redacted@example.invalid",
+      "name": "REDACTED"
+    },
+    "message": "REDACTED private host commit message",
+    "tree": {
+      "sha": "56d553f143458e661862367f40c0ca4137f3b336",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/trees/56d553f143458e661862367f40c0ca4137f3b336"
+    },
+    "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/commits/5d14b2799e9d89480d180ed029c15531a063f1ca",
+    "verification": {
+      "payload": null,
+      "reason": "unsigned",
+      "signature": null,
+      "verified": false,
+      "verified_at": null
+    }
+  },
+  "committer": {
+    "avatar_url": "https://avatars.githubusercontent.com/u/474920?v=4",
+    "events_url": "https://api.github.com/users/tomohisa/events{/privacy}",
+    "followers_url": "https://api.github.com/users/tomohisa/followers",
+    "following_url": "https://api.github.com/users/tomohisa/following{/other_user}",
+    "gists_url": "https://api.github.com/users/tomohisa/gists{/gist_id}",
+    "gravatar_id": "",
+    "html_url": "https://github.com/tomohisa",
+    "id": 474920,
+    "login": "tomohisa",
+    "node_id": "MDQ6VXNlcjQ3NDkyMA==",
+    "organizations_url": "https://api.github.com/users/tomohisa/orgs",
+    "received_events_url": "https://api.github.com/users/tomohisa/received_events",
+    "repos_url": "https://api.github.com/users/tomohisa/repos",
+    "site_admin": false,
+    "starred_url": "https://api.github.com/users/tomohisa/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/tomohisa/subscriptions",
+    "type": "User",
+    "url": "https://api.github.com/users/tomohisa",
+    "user_view_type": "public"
+  },
+  "html_url": "https://github.com/J-Tech-Japan/SekibanIntentHost/commit/5d14b2799e9d89480d180ed029c15531a063f1ca",
+  "node_id": "C_kwDOTU54I9oAKDVkMTRiMjc5OWU5ZDg5NDgwZDE4MGVkMDI5YzE1NTMxYTA2M2YxY2E",
+  "parents": [
+    {
+      "html_url": "https://github.com/J-Tech-Japan/SekibanIntentHost/commit/0388242fa0c6169f1b363d627adf2247dd18f16a",
+      "sha": "0388242fa0c6169f1b363d627adf2247dd18f16a",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/commits/0388242fa0c6169f1b363d627adf2247dd18f16a"
+    }
+  ],
+  "sha": "5d14b2799e9d89480d180ed029c15531a063f1ca",
+  "stats": {
+    "additions": 392,
+    "deletions": 0,
+    "total": 392
+  },
+  "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/commits/5d14b2799e9d89480d180ed029c15531a063f1ca"
+}

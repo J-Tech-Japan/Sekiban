@@ -1,0 +1,167 @@
+{
+  "sha": "56d553f143458e661862367f40c0ca4137f3b336",
+  "tree": [
+    {
+      "mode": "040000",
+      "path": "intents",
+      "sha": "19b2579e1d233feca5f3001779f2b0e127b074b5",
+      "type": "tree",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/trees/19b2579e1d233feca5f3001779f2b0e127b074b5"
+    },
+    {
+      "mode": "040000",
+      "path": "intents/sekiban",
+      "sha": "97508458b9b381d863ecfa6c8bddcf8e55c7824a",
+      "type": "tree",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/trees/97508458b9b381d863ecfa6c8bddcf8e55c7824a"
+    },
+    {
+      "mode": "040000",
+      "path": "intents/sekiban/releases",
+      "sha": "8d0d65f5acfc98e13c01fe2e8d31bad3ccf7b10b",
+      "type": "tree",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/trees/8d0d65f5acfc98e13c01fe2e8d31bad3ccf7b10b"
+    },
+    {
+      "mode": "040000",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence",
+      "sha": "51f27e386b31270d320eb85b4fd908905ce2ec50",
+      "type": "tree",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/trees/51f27e386b31270d320eb85b4fd908905ce2ec50"
+    },
+    {
+      "mode": "040000",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/checks",
+      "sha": "5aab5e9ca72d824d44262fa9b595d576071eae98",
+      "type": "tree",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/trees/5aab5e9ca72d824d44262fa9b595d576071eae98"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/checks/git-diff-check.json",
+      "sha": "ed75d210a0ace77101072ebe287f5c529f557f84",
+      "size": 1040,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/ed75d210a0ace77101072ebe287f5c529f557f84"
+    },
+    {
+      "mode": "040000",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/implementation",
+      "sha": "01a39d51c30ee617e5fe6a073efb1d177f4f6c96",
+      "type": "tree",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/trees/01a39d51c30ee617e5fe6a073efb1d177f4f6c96"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/implementation/orchestrator-report-receipt.jsonl",
+      "sha": "31553ca0dcb0b611e9542e70f6351150525fe0ec",
+      "size": 1625,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/31553ca0dcb0b611e9542e70f6351150525fe0ec"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/implementation/review-5197911207-body.md",
+      "sha": "aabf7a1e01c53b4cea1441348ae9de1d5c48622c",
+      "size": 13004,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/aabf7a1e01c53b4cea1441348ae9de1d5c48622c"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/implementation/review-outbox-delivered.jsonl",
+      "sha": "27376dc35f61eab7c30746e46dbadd6e5f2aaca7",
+      "size": 738,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/27376dc35f61eab7c30746e46dbadd6e5f2aaca7"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/implementation/review-outbox-record.jsonl",
+      "sha": "908c89dc623f0184843b22c5cf604beca7130e16",
+      "size": 631,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/908c89dc623f0184843b22c5cf604beca7130e16"
+    },
+    {
+      "mode": "040000",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/origin",
+      "sha": "65ef2d09d88e693a773e68e5b4b73558ba02b2c6",
+      "type": "tree",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/trees/65ef2d09d88e693a773e68e5b4b73558ba02b2c6"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/origin/orchestrator-report-receipt.jsonl",
+      "sha": "c5a9aed180959a3923ff511f688aac4af932d0b1",
+      "size": 2971,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/c5a9aed180959a3923ff511f688aac4af932d0b1"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/origin/pr-1235-body.md",
+      "sha": "559581af66c909b1a0f7cb7cb63bcacd848da550",
+      "size": 1819,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/559581af66c909b1a0f7cb7cb63bcacd848da550"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/origin/review-5189565347-body.md",
+      "sha": "54a8b87d84e4590cfa89a8343d52c937b73f7ab3",
+      "size": 9062,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/54a8b87d84e4590cfa89a8343d52c937b73f7ab3"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/origin/review-outbox-delivered.jsonl",
+      "sha": "bac6ce8330492cc68d9b03c96a4d5d3f55ccc196",
+      "size": 727,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/bac6ce8330492cc68d9b03c96a4d5d3f55ccc196"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/origin/review-outbox-record.jsonl",
+      "sha": "d8c3e7333b894758bb2b92ff4e7ff4debdf359bf",
+      "size": 620,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/d8c3e7333b894758bb2b92ff4e7ff4debdf359bf"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/origin/sek-g79-pr1235-01b38432-final-exact-codex-sol-review-20260913.md",
+      "sha": "c54dc72d01c584b834083c5910f566c4e3bf4338",
+      "size": 9305,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/c54dc72d01c584b834083c5910f566c4e3bf4338"
+    },
+    {
+      "mode": "100644",
+      "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/provenance.tsv",
+      "sha": "114dfb4892ac9ea4dcd457b5a24fb5590f49044f",
+      "size": 2373,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/114dfb4892ac9ea4dcd457b5a24fb5590f49044f"
+    },
+    {
+      "mode": "040000",
+      "path": "reports",
+      "sha": "98872b4d6043854605c31dd69cf5db4815d409ca",
+      "type": "tree",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/trees/98872b4d6043854605c31dd69cf5db4815d409ca"
+    },
+    {
+      "mode": "100644",
+      "path": "reports/sek-g80-pr1237-review-aefca245.md",
+      "sha": "aabf7a1e01c53b4cea1441348ae9de1d5c48622c",
+      "size": 13004,
+      "type": "blob",
+      "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/aabf7a1e01c53b4cea1441348ae9de1d5c48622c"
+    }
+  ],
+  "truncated": false,
+  "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/trees/56d553f143458e661862367f40c0ca4137f3b336"
+}

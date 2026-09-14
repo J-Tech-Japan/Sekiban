@@ -1,0 +1,18 @@
+{
+  "_links": {
+    "git": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/d8c3e7333b894758bb2b92ff4e7ff4debdf359bf",
+    "html": "https://github.com/J-Tech-Japan/SekibanIntentHost/blob/5d14b2799e9d89480d180ed029c15531a063f1ca/intents/sekiban/releases/dcb-v10.22.0/evidence/origin/review-outbox-record.jsonl",
+    "self": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/contents/intents/sekiban/releases/dcb-v10.22.0/evidence/origin/review-outbox-record.jsonl?ref=5d14b2799e9d89480d180ed029c15531a063f1ca"
+  },
+  "content": "eyJraW5kIjoicmVjb3JkIiwiZW50cnkiOnsiZG9tYWluIjoic2VraWJhbiIs\nInRlYW0iOiJzZWtpYmFuLW9yY2giLCJ0YXNrX2lkIjoic2VrLWc3OS1wcjEy\nMzUtMDFiMzg0MzItZmluYWwtZXhhY3QtcmV2aWV3LTIwMjYwOTEzIiwiZW50\ncnlfaWQiOiI1YTE3MjUzMDQ2YTc0NzQ1ODkyMzkyODgwMTI0YzI0NCIsInJl\nc3VsdF9ub25jZSI6InNlay1nNzktcHIxMjM1LXJldmlldy0wMWIzODQzMiIs\nImZyb21fcm9sZSI6InJldmlldyIsInRvX3JvbGUiOiJvcmNoZXN0cmF0b3Ii\nLCJzdGF0dXMiOiJjb21wbGV0ZWQiLCJhcnRpZmFjdCI6Ii9Vc2Vycy90b21v\naGlzYS9kZXYvR2l0SHViL1Nla2liYW4tUmV2aWV3ZXIvc2VrLWc3OS1wcjEy\nMzUtMDFiMzg0MzItZmluYWwtZXhhY3QtY29kZXgtc29sLXJldmlldy0yMDI2\nMDkxMy5tZCIsInN1bW1hcnkiOiJBUFBST1ZFIGV4YWN0IGhlYWQgMDFiMzg0\nMzI7IEYxLUYzIGNsb3NlZCwgQ0kgZ3JlZW4sIHByaXZhdGUtaG9zdCBwcm9i\nZSByZXRhaW5lZCBhcyBtYW5kYXRvcnkgcHJlLXRhZyBvcGVyYXRvciBnYXRl\nIiwiY3JlYXRlZF9hdCI6IjIwMjYtMDktMTNUMDQ6NDY6NDYuNDA1MzYzKzAw\nOjAwIiwiZGVsaXZlcnlfc3RhdGUiOiJwcmVwYXJlZCJ9fQo=\n",
+  "download_url": "https://raw.githubusercontent.com/J-Tech-Japan/SekibanIntentHost/5d14b2799e9d89480d180ed029c15531a063f1ca/intents/sekiban/releases/dcb-v10.22.0/evidence/origin/review-outbox-record.jsonl?token=REDACTED",
+  "encoding": "base64",
+  "git_url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/git/blobs/d8c3e7333b894758bb2b92ff4e7ff4debdf359bf",
+  "html_url": "https://github.com/J-Tech-Japan/SekibanIntentHost/blob/5d14b2799e9d89480d180ed029c15531a063f1ca/intents/sekiban/releases/dcb-v10.22.0/evidence/origin/review-outbox-record.jsonl",
+  "name": "review-outbox-record.jsonl",
+  "path": "intents/sekiban/releases/dcb-v10.22.0/evidence/origin/review-outbox-record.jsonl",
+  "sha": "d8c3e7333b894758bb2b92ff4e7ff4debdf359bf",
+  "size": 620,
+  "type": "file",
+  "url": "https://api.github.com/repos/J-Tech-Japan/SekibanIntentHost/contents/intents/sekiban/releases/dcb-v10.22.0/evidence/origin/review-outbox-record.jsonl?ref=5d14b2799e9d89480d180ed029c15531a063f1ca"
+}
