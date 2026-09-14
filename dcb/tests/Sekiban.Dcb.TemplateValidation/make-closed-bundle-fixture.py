@@ -13,14 +13,49 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
+
+# Candidate-world fixture timestamps are authored on 2026-09-12.  The
+# real-implementation-transport option moves that whole synthetic candidate
+# chronology uniformly so it truthfully brackets a real canonical transport
+# sample instead of editing the sample's bytes.  Origin evidence (2026-09-13)
+# and raw archived bytes are never shifted.
+CANDIDATE_TIMESTAMP = re.compile(r"^(2026-09-12T\d{2}:\d{2}:\d{2})(\.\d+)?(Z|\+00:00)$")
+TIME_SHIFT = [timedelta(0)]
+
+
+def shift_text(value: str) -> str:
+    match = CANDIDATE_TIMESTAMP.match(value)
+    if match is None or not TIME_SHIFT[0]:
+        return value
+    fraction = match.group(2) or ""
+    base = datetime.strptime(match.group(1), "%Y-%m-%dT%H:%M:%S")
+    if fraction:
+        base += timedelta(microseconds=int(fraction[1:].ljust(6, "0")[:6]))
+    moved = base + TIME_SHIFT[0]
+    text = moved.strftime("%Y-%m-%dT%H:%M:%S")
+    if fraction:
+        text += "." + moved.strftime("%f")[:len(fraction) - 1]
+    return text + match.group(3)
+
+
+def shifted(value: object) -> object:
+    if isinstance(value, str):
+        return shift_text(value)
+    if isinstance(value, list):
+        return [shifted(item) for item in value]
+    if isinstance(value, dict):
+        return {key: shifted(item) for key, item in value.items()}
+    return value
 
 
 def dump(value: object) -> bytes:
-    return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    return (json.dumps(shifted(value), sort_keys=True, separators=(",", ":")) + "\n").encode()
 
 
 def sha256(value: bytes) -> str:
@@ -82,6 +117,12 @@ def main() -> None:
     destination = Path(sys.argv[2]).resolve()
     requested_state = sys.argv[3] if len(sys.argv) > 3 else "complete"
     options = set(sys.argv[4:])
+    real_transport = "real-implementation-transport" in options
+    if real_transport:
+        # Real sample: record 2026-09-14T10:39:52.763165, receipt .844122,
+        # delivered .869409.  Review submission 08:45 -> 10:35 and merge
+        # 09:00 -> 10:50 bracket it; every later candidate stage moves too.
+        TIME_SHIFT[0] = datetime(2026, 9, 14, 10, 35) - datetime(2026, 9, 12, 8, 45)
     record = json.loads(source.read_text())
     shutil.rmtree(destination, ignore_errors=True)
     (destination / "content").mkdir(parents=True)
@@ -331,7 +372,7 @@ def main() -> None:
     # ---- implementation review: native review + canonical transport lines ----
     review_id = "6000000001"
     review_url = f"{candidate_url}#pullrequestreview-{review_id}"
-    review_submitted = "2026-09-12T08:45:00Z"
+    review_submitted = shift_text("2026-09-12T08:45:00Z")
     implementation_body = b"# SEK-G80 PR #1236 final exact-head review\n\n- Verdict: **APPROVE**\n\n## Findings\n\nNone.\n"
     split = implementation_body.index(b"## Findings")
     implementation_artifact = (implementation_body[:split] +
@@ -361,8 +402,20 @@ def main() -> None:
         "expected_artifact": implementation_artifact_path, "expected_artifacts": [implementation_artifact_path],
         "result_nonce": implementation_nonce, "dispatched_at": "2026-09-12T08:20:00.000000+00:00",
         "report_arrived": True, "report_status": "completed", "report_artifact": implementation_artifact_path,
-        "report_summary": implementation_summary, "reported_at": impl_delivered_entry["delivered_at"],
+        # The canonical orchestrator receipt is stamped independently, a few
+        # milliseconds before the outbox delivery (as in real transport).
+        "report_summary": implementation_summary, "reported_at": "2026-09-12T08:46:40.975722+00:00",
     }, separators=(",", ":")) + "\n").encode()
+    if real_transport:
+        sample_dir = fixture_dir / "real-transport-sample"
+        impl_record_line = (sample_dir / "review-outbox-record.jsonl").read_bytes()
+        impl_delivered_line = (sample_dir / "review-outbox-delivered.jsonl").read_bytes()
+        impl_receipt_line = (sample_dir / "orchestrator-report-receipt.jsonl").read_bytes()
+        impl_entry = json.loads(impl_record_line)["entry"]
+        impl_delivered_entry = json.loads(impl_delivered_line)["entry"]
+        implementation_task = impl_entry["task_id"]
+        implementation_nonce = impl_entry["result_nonce"]
+        implementation_artifact_path = impl_entry["artifact"]
     implementation_commit = "7" * 40
     record.pop("candidate_review", None)
     record["implementation_review"] = {

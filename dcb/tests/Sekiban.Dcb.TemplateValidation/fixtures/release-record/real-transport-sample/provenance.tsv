@@ -1,0 +1,4 @@
+file	source_repository_clone	source_path	source_line	source_revision	sha256
+review-outbox-record.jsonl	Sekiban-Design (J-Tech-Japan/SekibanIntentHost clone)	.intent-cli/notify/sekiban/sekiban-orch/report-outbox.jsonl	324	874e73746e09dddb4ea0f5d02ce6d5216d874806	10908e7927acca2f9419a509d66f8274f2a1040891e5ca40173803bf945d2d6b
+review-outbox-delivered.jsonl	Sekiban-Design (J-Tech-Japan/SekibanIntentHost clone)	.intent-cli/notify/sekiban/sekiban-orch/report-outbox.jsonl	325	874e73746e09dddb4ea0f5d02ce6d5216d874806	15a4a9c7100c433fb36b6399905e42c9d4047d576c6de9ba7f3517321ae4c263
+orchestrator-report-receipt.jsonl	Sekiban-Design (J-Tech-Japan/SekibanIntentHost clone)	.intent-cli/notify/sekiban/sekiban-orch/pending.jsonl	1104	874e73746e09dddb4ea0f5d02ce6d5216d874806	ff41e43e9f9984dbcb3764eef80a580a332c558646e87ad05391cd363943742d

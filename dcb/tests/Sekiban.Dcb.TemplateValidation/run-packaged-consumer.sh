@@ -345,6 +345,13 @@ run_host_record_reader_shim_tests() {
       return 1
     }
   done < "$release_fixture_dir/origin-transport/provenance.tsv"
+  while IFS=$'\t' read -r transport_file _ _ _ _ transport_sha; do
+    [[ "$transport_file" == file ]] && continue
+    [[ "$(sha256sum "$release_fixture_dir/real-transport-sample/$transport_file" | cut -d' ' -f1)" == "$transport_sha" ]] || {
+      echo "Real canonical transport sample $transport_file was modified." >&2
+      return 1
+    }
+  done < "$release_fixture_dir/real-transport-sample/provenance.tsv"
   jq -j '.body' "$release_fixture_dir/native-origin/review-5189565347.json" | cmp - "$release_fixture_dir/origin-review-5189565347.md"
   echo "Archived native origin responses (${provenance_count}) and canonical review transport lines are byte-exact."
 
@@ -576,6 +583,37 @@ SHIM
       --repo-root "$repo_root" --expected-version "$version" --state "$early_state"
   done
 
+  # Real-format positive: byte-exact canonical review transport lines, whose
+  # record created_at, receipt reported_at, and delivered_at differ by
+  # milliseconds, occupy the implementation-review slot.  The synthetic
+  # candidate chronology is shifted uniformly to bracket them; the real bytes
+  # are not edited.
+  local real_transport_fixture="$work_root/closed-real-transport"
+  local real_transport_output="$work_root/real-transport-bundle"
+  python3 "$script_dir/make-closed-bundle-fixture.py" "$record_fixture" "$real_transport_fixture" complete real-implementation-transport
+  env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+    SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$real_transport_fixture/record.json" \
+    FAKE_HOST_REF="$fake_ref" FAKE_CLOSED_ROOT="$real_transport_fixture" \
+    FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" bash "$reader" \
+    --version "$version" --state complete --verify-tags all \
+    --output-dir "$real_transport_output" --manifest "$real_transport_output/bundle.json" > /dev/null
+  python3 - "$real_transport_output" "$release_fixture_dir/real-transport-sample" <<'CARRIED'
+import base64, json, sys
+from pathlib import Path
+root, sample_dir = Path(sys.argv[1]), Path(sys.argv[2])
+manifest = json.loads((root / "bundle.json").read_text())
+contents = []
+for entry in manifest["entries"]:
+    envelope = json.loads((root / entry["relative_path"]).read_text())
+    if isinstance(envelope, dict) and isinstance(envelope.get("content"), str):
+        contents.append(base64.b64decode(envelope["content"]))
+for name in ["review-outbox-record.jsonl", "review-outbox-delivered.jsonl", "orchestrator-report-receipt.jsonl"]:
+    if (sample_dir / name).read_bytes() not in contents:
+        sys.exit(f"Real transport sample {name} is not carried byte-for-byte in the reader bundle.")
+CARRIED
+  expect_pass real-format-implementation-transport run_net10 "$validator" release-record --bundle "$real_transport_output" \
+    --manifest "$real_transport_output/bundle.json" --repo-root "$repo_root" --expected-version "$version" --state complete
+
   # A legal graph uses successive earlier immutable host commits for payload,
   # authorities, and the canonical pointer.  Keep this positive control next
   # to the self-containing negative below.
@@ -665,9 +703,12 @@ implementation-completion-after-merge|complete|implementation-review.completion.
 implementation-completion-artifact-byte|complete|implementation-review.completion.artifact
 implementation-completion-before-review|complete|implementation-review.completion.chronology
 implementation-completion-blocked|complete|implementation-review.completion.status
+implementation-completion-delivered-after-merge|complete|implementation-review.completion.chronology
 implementation-completion-digest|complete|implementation-review.completion.digest
 implementation-completion-invented-kind|complete|implementation-review.completion.transport
 implementation-completion-origin-transport|complete|implementation-review.completion.identity
+implementation-completion-receipt-after-delivery|complete|implementation-review.completion.chronology
+implementation-completion-receipt-before-record|complete|implementation-review.completion.chronology
 implementation-completion-receipt-mismatch|complete|implementation-review.completion.transport
 issue1185-closeout-before-authority|complete|chronology.closure-after-artifacts
 issue1185-closeout-equal-authority|complete|chronology.closure-after-artifacts

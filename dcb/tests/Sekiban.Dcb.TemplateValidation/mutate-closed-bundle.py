@@ -794,6 +794,21 @@ def main() -> None:
         artifact = b.read_content(prepared()["implementation_review"]["artifact_evidence_ref"])
         mutate_review_content("implementation", "artifact_evidence_ref", artifact.replace(b"None.", b"Nome.", 1), "artifact_sha256")
 
+    # Transport instants are an ordering, not an equality:
+    # record created_at <= receipt reported_at <= delivered_at < merge.
+    mutants["implementation-completion-receipt-before-record"] = lambda: mutate_transport(
+        "implementation", lambda r, d, rc, p: rc.update({"reported_at": "2026-09-12T08:46:30.123455+00:00"}))
+    mutants["implementation-completion-receipt-after-delivery"] = lambda: mutate_transport(
+        "implementation", lambda r, d, rc, p: rc.update({"reported_at": "2026-09-12T08:46:41.000012+00:00"}))
+
+    @mutant("implementation-completion-delivered-after-merge")
+    def _impl_delivered_after_merge() -> None:
+        late = "2026-09-12T09:00:00.000001+00:00"
+        def mutate(r: dict, d: dict, rc: dict, p: dict) -> None:
+            d["entry"]["delivered_at"] = late
+            p["intent_delivered_at"] = late
+        mutate_transport("implementation", mutate)
+
     mutants["implementation-completion-origin-transport"] = lambda: b.prepared_changes(lambda c: c["implementation_review"].update({
         key: c["origin_delivery"]["review"][key] for key in [
             "transport_record_ref", "transport_record_sha256", "transport_delivered_ref", "transport_delivered_sha256",

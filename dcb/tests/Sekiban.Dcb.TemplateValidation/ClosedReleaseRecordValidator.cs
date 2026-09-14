@@ -941,7 +941,7 @@ internal static class ClosedReleaseRecordValidator
                Text(receipt, "report_to_role") == Text(record, "entry", "to_role") &&
                Text(receipt, "expected_artifact") == artifactPath && Text(receipt, "report_artifact") == artifactPath &&
                Text(receipt, "report_summary") == Text(record, "entry", "summary") &&
-               Text(receipt, "reported_at") == Text(delivered, "entry", "delivered_at") &&
+               Text(receipt, "reported_at") is { } receiptReportedAt && TryParseTransportTimestamp(receiptReportedAt, out _) &&
                GetString(review, "intent_reported_at") == Text(record, "entry", "created_at") &&
                GetString(review, "intent_delivered_at") == Text(delivered, "entry", "delivered_at") &&
                TryParseTransportTimestamp(GetString(review, "intent_reported_at"), out _) &&
@@ -955,10 +955,18 @@ internal static class ClosedReleaseRecordValidator
                (Text(record, "entry", "summary") ?? string.Empty).StartsWith("APPROVE", StringComparison.Ordinal),
             "The canonical completed transport and artifact must carry semantic APPROVE.");
 
+        // The canonical writers stamp these instants independently: the
+        // reviewer outbox record (created_at), the orchestrator receipt
+        // (reported_at), and the outbox delivery (delivered_at).  A real
+        // completion records them microseconds to milliseconds apart, so the
+        // rule is an ordering, never equality.
         TryParseTransportTimestamp(GetString(review, "intent_reported_at"), out var reportedAt);
         TryParseTransportTimestamp(GetString(review, "intent_delivered_at"), out var deliveredAt);
-        Assert($"{rule}.chronology", facts.SubmittedAt < reportedAt && reportedAt < deliveredAt && deliveredAt < mergedAt,
-            "Review completion chronology must be GitHub submission < completed report < delivery < merge.");
+        TryParseTransportTimestamp(Text(receipt, "reported_at")!, out var receiptAt);
+        Assert($"{rule}.chronology", facts.SubmittedAt < reportedAt &&
+               reportedAt <= receiptAt && receiptAt <= deliveredAt &&
+               deliveredAt < mergedAt,
+            "Review completion chronology must be GitHub submission < record created_at <= receipt reported_at <= delivered_at < merge.");
     }
 
     // The reviewer artifact is either the exact GitHub review body or that body
