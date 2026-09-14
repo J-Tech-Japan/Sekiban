@@ -606,7 +606,7 @@ def main() -> None:
 
     mutants["origin-completion-blocked"] = status_mutant("blocked")
     mutants["origin-completion-question"] = status_mutant("question")
-    mutants["origin-completion-receipt-mismatch"] = lambda: mutate_transport("origin", lambda r, d, rc, p: rc.update({"report_artifact": "/tmp/other-artifact.md"}))
+    mutants["origin-completion-receipt-mismatch"] = lambda: mutate_transport("origin", lambda r, d, rc, p: rc.update({"report_artifact": "reports/other-artifact.md"}))
 
     @mutant("origin-completion-digest")
     def _completion_digest() -> None:
