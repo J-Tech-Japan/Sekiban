@@ -562,6 +562,117 @@ public class MaterializedViewGrainTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SemaphoreSkippedIdleProbe_ClearsAfterRelease_WithoutApplyOrExtraRestore()
+    {
+        // What this fact pins: a semaphore-skipped idle probe does no executor catch-up work and applies nothing, it
+        // leaves the catch-up flags raised only until a later tick acquires the semaphore, and it repeats no
+        // active-status restore. Losing the skip branch's retry (stopping the timer and returning instead of leaving
+        // the next tick to re-probe) therefore fails this fact.
+        // It deliberately does NOT pin that the clearing tick itself read the store: a skip advances neither
+        // _lastCatchUpAttemptAt nor the consumed hints, so the next tick simply re-probes and a regression that
+        // abandons a skipped retry without a read stays invisible here. That is harmless for this oracle.
+        // Precondition: process-wide catch-up concurrency is 1 (the CatchUpBatchSemaphore is static and
+        // ReconfigureCatchUpSemaphore only ever raises it), and no test in this assembly raises
+        // CatchUpMaxConcurrentBatches. If one did, no skip would occur and the skip wait below would time out.
+        SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Success(1);
+        SharedExecutor.InitialEvents.Clear();
+        const string serviceA = "orders";
+        const string serviceB = "billing";
+        await SharedRegistry.SetActiveAsync(serviceA, TestMaterializedViewProjector.ViewNameConst, 1);
+        await SharedRegistry.SetActiveAsync(serviceB, TestMaterializedViewProjector.ViewNameConst, 1);
+        SharedRegistry.ExpectActiveStatusRestoreCallCount(2);
+        var grains = new Dictionary<string, IMaterializedViewGrain>
+        {
+            [serviceA] = _cluster.Client.GetGrain<IMaterializedViewGrain>(
+                MvGrainKey.Build(serviceA, TestMaterializedViewProjector.ViewNameConst, 1)),
+            [serviceB] = _cluster.Client.GetGrain<IMaterializedViewGrain>(
+                MvGrainKey.Build(serviceB, TestMaterializedViewProjector.ViewNameConst, 1))
+        };
+        await grains[serviceA].EnsureStartedAsync();
+        await grains[serviceB].EnsureStartedAsync();
+        await SharedRegistry.ActiveStatusRestoreCallCountReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        foreach (var startedGrain in grains.Values)
+        {
+            await WaitUntilAsync(async () =>
+            {
+                var settling = await startedGrain.GetStatusAsync();
+                return settling.LastCatchUpAttemptAt is not null &&
+                       !settling.CatchUpInProgress &&
+                       !settling.IsCatchUpActive &&
+                       !settling.CatchUpHalted &&
+                       settling.BufferedEventCount == 0;
+            });
+        }
+
+        var appliedBefore = SharedExecutor.AppliedEventExecutionCount;
+        var restoresBefore = SharedRegistry.ActiveStatusRestoreCalls;
+
+        // Whichever grain's next idle probe reaches the executor first holds the process-wide catch-up semaphore.
+        // The try opens immediately after the block so that even a timed-out CatchUpEntered wait reaches the release.
+        SharedExecutor.BlockNextCatchUp();
+        try
+        {
+            await SharedExecutor.CatchUpEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            var skipAtEntry = new Dictionary<string, long>();
+            foreach (var (service, grain) in grains)
+            {
+                skipAtEntry[service] = (await grain.GetStatusAsync()).CatchUpBatchSkipCount;
+            }
+
+            var callsAtEntry = SharedExecutor.CatchUpCalls;
+            string? skippedService = null;
+            await WaitUntilAsync(async () =>
+            {
+                foreach (var (service, grain) in grains)
+                {
+                    if ((await grain.GetStatusAsync()).CatchUpBatchSkipCount > skipAtEntry[service])
+                    {
+                        skippedService = service;
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+            var skipped = skippedService ??
+                throw new InvalidOperationException(
+                    "No grain recorded a skipped catch-up batch while the catch-up semaphore was held.");
+            var blocked = skipped == serviceA ? serviceB : serviceA;
+
+            var skippedStatus = await grains[skipped].GetStatusAsync();
+            var blockedStatus = await grains[blocked].GetStatusAsync();
+            // A skipped probe does no executor work while the semaphore is held.
+            Assert.Equal(callsAtEntry, SharedExecutor.CatchUpCalls);
+            Assert.Equal(skipAtEntry[blocked], blockedStatus.CatchUpBatchSkipCount);
+            // Current G58 status semantics (see design R5), not a product rule: a skipped idle probe leaves the
+            // catch-up flags raised until a later tick acquires the semaphore.
+            Assert.True(skippedStatus.IsCatchUpActive);
+            Assert.False(skippedStatus.CatchUpHalted);
+        }
+        finally
+        {
+            SharedExecutor.ReleaseBlockedCatchUp();
+        }
+
+        // Product rule: both grains clear without any external input, apply nothing, and repeat no restore.
+        foreach (var settledGrain in grains.Values)
+        {
+            await WaitUntilAsync(async () =>
+            {
+                var settled = await settledGrain.GetStatusAsync();
+                return !settled.CatchUpInProgress &&
+                       !settled.IsCatchUpActive &&
+                       !settled.CatchUpHalted &&
+                       settled.BufferedEventCount == 0;
+            });
+        }
+
+        Assert.Equal(appliedBefore, SharedExecutor.AppliedEventExecutionCount);
+        Assert.Equal(restoresBefore, SharedRegistry.ActiveStatusRestoreCalls);
+    }
+
+    [Fact]
     public async Task ActiveStatusRestore_NotSupported_StopsCatchUpWithoutSyntheticCompletion()
     {
         var grain = await StartServingGrainAsync();
