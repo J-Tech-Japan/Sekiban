@@ -5,6 +5,7 @@ on:
     paths:
       - 'templates/Sekiban.Dcb.Templates/**'
       - 'dcb/tests/Sekiban.Dcb.TemplateValidation/**'
+      - 'dcb/tests/Sekiban.Dcb.Postgres.Tests/run-packaged-consumer.sh'
       - 'dcb/src/**'
       - '.github/workflows/dcb_template_validation.yml'
       - '.github/workflows/packagesDcbTemplate.yml'
@@ -51,7 +52,7 @@ jobs:
 
   currency-drift:
     name: Scheduled stable DCB/template currency check
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

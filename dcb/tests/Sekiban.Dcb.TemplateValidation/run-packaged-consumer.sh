@@ -280,79 +280,684 @@ expect_failure() {
   fi
 }
 
+# Runs a named mutant, captures stdout+stderr, and requires the validator to
+# reject it at exactly one `[rule:<id>]` equal to the expected rule.  A mutant
+# that passes, dies without a rule identifier, or dies at an earlier/different
+# rule fails the harness.
+expect_rule() {
+  local mutant="$1" expected="$2"
+  shift 2
+  local log_dir="$work_root/mutant-logs"
+  local log="$log_dir/${mutant//\//-}.log"
+  mkdir -p "$log_dir"
+  if "$@" > "$log" 2>&1; then
+    cat "$log" >&2
+    echo "MUTANT ${mutant}: SURVIVED; expected rejection at [rule:${expected}]" >&2
+    return 1
+  fi
+  local observed
+  observed="$(grep -o '\[rule:[^]]*\]' "$log" | sort -u | tr '\n' ' ' | sed 's/ $//')"
+  if [[ "$observed" != "[rule:${expected}]" ]]; then
+    cat "$log" >&2
+    echo "MUTANT ${mutant}: rejected at '${observed:-<no rule identifier>}', expected [rule:${expected}]" >&2
+    return 1
+  fi
+  echo "MUTANT ${mutant}: rejected at [rule:${expected}]"
+}
+
+expect_pass() {
+  local control="$1"
+  shift
+  local log_dir="$work_root/mutant-logs"
+  local log="$log_dir/${control//\//-}.log"
+  mkdir -p "$log_dir"
+  if ! "$@" > "$log" 2>&1; then
+    cat "$log" >&2
+    echo "POSITIVE ${control}: FAILED" >&2
+    return 1
+  fi
+  echo "POSITIVE ${control}: passed"
+}
+
 run_host_record_reader_shim_tests() {
   local reader="$script_dir/read-host-release-record.sh"
-  local record="$script_dir/fixtures/release-record/valid-complete.json"
+  local record_fixture="$script_dir/fixtures/release-record/valid-complete.json"
+  local closed_fixture="$work_root/closed-bundle-fixture"
+  local release_fixture_dir="$script_dir/fixtures/release-record"
+
+  # F1/F3 native evidence is byte-exact: every archived `gh api` response and
+  # canonical transport JSONL line must still hash to its recorded provenance.
+  local provenance_endpoint provenance_file provenance_sha provenance_fetched provenance_count=0
+  while IFS=$'\t' read -r provenance_endpoint provenance_file provenance_sha provenance_fetched; do
+    [[ "$provenance_endpoint" == endpoint ]] && continue
+    [[ "$(sha256sum "$release_fixture_dir/native-origin/$provenance_file" | cut -d' ' -f1)" == "$provenance_sha" ]] || {
+      echo "Archived native response $provenance_file (${provenance_endpoint}, fetched ${provenance_fetched}) was modified." >&2
+      return 1
+    }
+    provenance_count=$((provenance_count + 1))
+  done < "$release_fixture_dir/native-origin/provenance.tsv"
+  (( provenance_count == 28 )) || { echo "Expected 28 archived native origin responses, found ${provenance_count}." >&2; return 1; }
+  local transport_file transport_sha
+  while IFS=$'\t' read -r transport_file _ _ _ _ transport_sha; do
+    [[ "$transport_file" == file ]] && continue
+    [[ "$(sha256sum "$release_fixture_dir/origin-transport/$transport_file" | cut -d' ' -f1)" == "$transport_sha" ]] || {
+      echo "Canonical origin transport evidence $transport_file was modified." >&2
+      return 1
+    }
+  done < "$release_fixture_dir/origin-transport/provenance.tsv"
+  while IFS=$'\t' read -r transport_file _ _ _ _ transport_sha; do
+    [[ "$transport_file" == file ]] && continue
+    [[ "$(sha256sum "$release_fixture_dir/real-transport-sample/$transport_file" | cut -d' ' -f1)" == "$transport_sha" ]] || {
+      echo "Real canonical transport sample $transport_file was modified." >&2
+      return 1
+    }
+  done < "$release_fixture_dir/real-transport-sample/provenance.tsv"
+  jq -j '.body' "$release_fixture_dir/native-origin/review-5189565347.json" | cmp - "$release_fixture_dir/origin-review-5189565347.md"
+  echo "Archived native origin responses (${provenance_count}) and canonical review transport lines are byte-exact."
+
+  python3 "$script_dir/make-closed-bundle-fixture.py" "$record_fixture" "$closed_fixture"
+  local record="$closed_fixture/record.json"
   local shim_root="$work_root/host-gh-shim"
-  local output="$work_root/host-record.json"
-  local fake_ref="9999999999999999999999999999999999999999"
+  local output="$work_root/host-record-bundle"
+  local manifest="$output/bundle.json"
+  local fake_ref
+  fake_ref="$(tr -d '\n' < "$closed_fixture/host-ref")"
   mkdir -p "$shim_root"
   cat > "$shim_root/gh" <<'SHIM'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "${1:-}" == "api" ]] && shift
 endpoint="${1:-}"
+printf '%s\n' "$endpoint" >> "${FAKE_ENDPOINT_LOG:-/dev/null}"
 record="${FAKE_HOST_RECORD:?}"
+fixture_root="${FAKE_CLOSED_ROOT:?}"
 requested_ref="${FAKE_HOST_REF:?}"
 record_path="intents/sekiban/releases/dcb-v10.22.0-release-record.json"
-record_blob="$(git hash-object "$record")"
-tree_sha="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-merged_sha="$(jq -r '.merged_sha' "$record")"
+record_blob="$(tr -d '\n' < "$fixture_root/record-blob-sha")"
+tree_sha="$(tr -d '\n' < "$fixture_root/tree-sha")"
+merged_sha="$(tr -d '\n' < "$fixture_root/merged-sha")"
 content="$(base64 < "$record" | tr -d '\n')"
 
-case "$endpoint" in
+if [[ "$endpoint" == "repos/J-Tech-Japan/SekibanIntentHost/contents/${record_path}?ref=${requested_ref}" ]]; then
+  jq -n --arg path "$record_path" --arg sha "$record_blob" --arg content "$content" \
+    '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
+  if [[ "${FAKE_GH_TRAILING_BYTES:-0}" == 1 ]]; then
+    printf ' \n'
+  fi
+  exit 0
+fi
+  case "$endpoint" in
   repos/J-Tech-Japan/SekibanIntentHost/contents/*)
-    jq -n --arg path "$record_path" --arg sha "$record_blob" --arg content "$content" \
+    response_path="${endpoint#repos/J-Tech-Japan/SekibanIntentHost/contents/}"
+    response_path="${response_path%%\?*}"
+    map_line="$(awk -F '\t' -v response_path="contents/${response_path}" '$1 ~ /J-Tech-Japan\/SekibanIntentHost@[0-9a-fA-F]{40}:contents\// && $1 ~ response_path { print; exit }' "$fixture_root/map.tsv")"
+    [[ -n "$map_line" ]] || { echo "missing host map entry for ${response_path}" >&2; exit 1; }
+    response_file="$(printf '%s\n' "$map_line" | cut -f3)"
+    response_content="$(base64 < "$response_file" | tr -d '\n')"
+    response_sha="$(git hash-object "$response_file")"
+    jq -n --arg path "$response_path" --arg sha "$response_sha" --arg content "$response_content" \
       '{type:"file",encoding:"base64",path:$path,sha:$sha,content:$content}'
     ;;
   repos/J-Tech-Japan/SekibanIntentHost/commits/*)
-    commit_sha="$requested_ref"
-    [[ "${FAKE_GH_BAD_COMMIT:-0}" == 1 ]] && commit_sha="8888888888888888888888888888888888888888"
-    jq -n --arg sha "$commit_sha" --arg tree "$tree_sha" '{sha:$sha,commit:{tree:{sha:$tree}}}'
+    map_line="$(awk -F '\t' -v endpoint="$endpoint" '$4 == endpoint { print; exit }' "$fixture_root/map.tsv")"
+    [[ -n "$map_line" ]] || { echo "missing host commit map entry for ${endpoint}" >&2; exit 1; }
+    response_file="$(printf '%s\n' "$map_line" | cut -f3)"
+    if [[ "${FAKE_GH_BAD_COMMIT:-0}" == 1 && "$endpoint" == "repos/J-Tech-Japan/SekibanIntentHost/commits/${requested_ref}" ]]; then
+      jq '.sha = "8888888888888888888888888888888888888888"' "$response_file"
+    else
+      cat "$response_file"
+    fi
     ;;
   repos/J-Tech-Japan/SekibanIntentHost/git/trees/*)
-    tree_blob="$record_blob"
-    [[ "${FAKE_GH_BAD_BLOB:-0}" == 1 ]] && tree_blob="7777777777777777777777777777777777777777"
-    jq -n --arg path "$record_path" --arg sha "$tree_blob" '{tree:[{path:$path,type:"blob",sha:$sha}]}'
-    ;;
-  repos/J-Tech-Japan/Sekiban/git/ref/tags/*)
-    tag="${endpoint##*/}"
-    if [[ "$tag" == "dcb-v10.22.0" ]]; then
-      object_sha="$(jq -r '.library_tag.object_id' "$record")"
-    elif [[ "$tag" == "dcbTemplates-v10.22.0" ]]; then
-      object_sha="$(jq -r '.template_tag.object_id' "$record")"
+    map_line="$(awk -F '\t' -v endpoint="$endpoint" '$4 == endpoint { print; exit }' "$fixture_root/map.tsv")"
+    [[ -n "$map_line" ]] || { echo "missing host tree map entry for ${endpoint}" >&2; exit 1; }
+    response_file="$(printf '%s\n' "$map_line" | cut -f3)"
+    if [[ "${FAKE_GH_BAD_BLOB:-0}" == 1 && "$endpoint" == "repos/J-Tech-Japan/SekibanIntentHost/git/trees/${tree_sha}?recursive=1" ]]; then
+      jq --arg path "$record_path" --arg sha "7777777777777777777777777777777777777777" \
+        '(.tree[] | select(.path == $path)).sha = $sha' "$response_file"
     else
-      exit 1
+      cat "$response_file"
     fi
-    [[ "${FAKE_GH_BAD_TAG_OBJECT:-0}" == 1 ]] && object_sha="6666666666666666666666666666666666666666"
-    jq -n --arg sha "$object_sha" '{ref:"refs/tags/tag",object:{sha:$sha,type:"tag"}}'
-    ;;
-  repos/J-Tech-Japan/Sekiban/git/tags/*)
-    peeled="$merged_sha"
-    [[ "${FAKE_GH_BAD_PEELED:-0}" == 1 ]] && peeled="5555555555555555555555555555555555555555"
-    jq -n --arg sha "$peeled" '{object:{sha:$sha,type:"commit"}}'
     ;;
   *)
-    echo "unexpected gh api endpoint" >&2
-    exit 1
+    map_line="$(awk -F '\t' -v endpoint="$endpoint" '$4 == endpoint { print; exit }' "$fixture_root/map.tsv")"
+    [[ -n "$map_line" ]] || {
+      if [[ "$endpoint" == "repos/J-Tech-Japan/Sekiban/git/ref/tags/"* ]]; then
+        tag="${endpoint##*/}"
+        if [[ "$tag" == dcb-v10.22.0 ]]; then
+          object_sha="$(tr -d '\n' < "$fixture_root/library-tag-object")"
+        else
+          object_sha="$(tr -d '\n' < "$fixture_root/template-tag-object")"
+        fi
+        [[ "${FAKE_GH_BAD_TAG_OBJECT:-0}" == 1 ]] && object_sha="6666666666666666666666666666666666666666"
+        jq -n --arg sha "$object_sha" '{ref:"refs/tags/tag",object:{sha:$sha,type:"tag"}}'
+        exit 0
+      fi
+      if [[ "$endpoint" == "repos/J-Tech-Japan/Sekiban/git/tags/"* ]]; then
+        peeled="$merged_sha"
+        [[ "${FAKE_GH_BAD_PEELED:-0}" == 1 ]] && peeled="5555555555555555555555555555555555555555"
+        jq -n --arg sha "$peeled" '{object:{sha:$sha,type:"commit"}}'
+        exit 0
+      fi
+      # Model GitHub for routes it does not serve, notably the former
+      # actions/runs/{run}/jobs/{job} job route.
+      printf '%s\n' "404 $endpoint" >> "${FAKE_NOT_FOUND_LOG:-/dev/null}"
+      echo "gh: Not Found (HTTP 404): $endpoint" >&2
+      exit 1
+    }
+    response_file="$(printf '%s\n' "$map_line" | cut -f3)"
+    if [[ "$endpoint" == "repos/J-Tech-Japan/Sekiban/git/ref/tags/"* && "${FAKE_GH_BAD_TAG_OBJECT:-0}" == 1 ]]; then
+      jq '.object.sha = "6666666666666666666666666666666666666666"' "$response_file"
+    elif [[ "$endpoint" == "repos/J-Tech-Japan/Sekiban/git/tags/"* && "${FAKE_GH_BAD_PEELED:-0}" == 1 ]]; then
+      jq '.object.sha = "5555555555555555555555555555555555555555"' "$response_file"
+    else
+      cat "$response_file"
+    fi
     ;;
 esac
 SHIM
   chmod +x "$shim_root/gh"
 
   run_reader() {
+    rm -rf "$output"
     env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
       SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
+      FAKE_CLOSED_ROOT="$closed_fixture" FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" \
+      FAKE_GH_TRAILING_BYTES=1 \
       bash "$reader" "$@"
   }
 
-  run_reader --version "$version" --state complete --verify-tags all --output "$output"
-  [[ -s "$output" ]] || { echo "Host reader shim did not write its output." >&2; return 1; }
+  run_reader --version "$version" --state complete --verify-tags all \
+    --output-dir "$output" --manifest "$manifest"
+  [[ -s "$manifest" && -d "$output/objects" ]] || { echo "Host reader shim did not write its closed bundle." >&2; return 1; }
+  expect_pass native-origin-complete-bundle run_net10 "$validator" release-record --bundle "$output" --manifest "$manifest" \
+    --repo-root "$repo_root" --expected-version "$version" --state complete
+  # The positive bundle carries every archived origin response unchanged.
+  local native_bytes_count=0
+  while IFS=$'\t' read -r provenance_endpoint provenance_file provenance_sha provenance_fetched; do
+    [[ "$provenance_endpoint" == endpoint ]] && continue
+    jq -e --arg endpoint "$provenance_endpoint" --arg sha "$provenance_sha" \
+      'any(.entries[]; .endpoint == $endpoint and .sha256 == $sha)' "$manifest" >/dev/null || {
+      echo "Reader bundle does not carry the byte-exact archived response for ${provenance_endpoint}." >&2
+      return 1
+    }
+    native_bytes_count=$((native_bytes_count + 1))
+  done < "$release_fixture_dir/native-origin/provenance.tsv"
+  echo "POSITIVE native-origin-bytes: reader bundle carries ${native_bytes_count} archived GitHub responses byte-for-byte."
+
+  local compare_response
+  compare_response="$(awk -F '\t' '$1 ~ /:compare\// { print $3; exit }' "$closed_fixture/map.tsv")"
+  jq -e '.status == "ahead" and .merge_base_commit.sha == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
+    ([.commits[] | select((.parents | length) == 2)] | length) == 1' \
+    "$compare_response" >/dev/null
+  echo "Production two-parent main-descendant compare control passed."
+
+  # The reader must retain the exact response bytes, including trailing
+  # whitespace/newlines.  A command-substitution implementation strips them;
+  # the fresh-output comparison below is the killing proof for that mutant.
+  local record_api_path="intents/sekiban/releases/dcb-v10.22.0-release-record.json"
+  local record_endpoint="repos/J-Tech-Japan/SekibanIntentHost/contents/${record_api_path}?ref=${fake_ref}"
+  local raw_record_response="$work_root/raw-record-response.json"
+  env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+    FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" FAKE_CLOSED_ROOT="$closed_fixture" \
+    FAKE_GH_TRAILING_BYTES=1 "$shim_root/gh" api "$record_endpoint" > "$raw_record_response"
+  local record_relative_path
+  record_relative_path="$(jq -r '.record_relative_path' "$manifest")"
+  cmp "$raw_record_response" "$output/$record_relative_path"
+  for required_endpoint in \
+      "$record_endpoint" \
+      "repos/J-Tech-Japan/SekibanIntentHost/commits/${fake_ref}" \
+      "repos/J-Tech-Japan/SekibanIntentHost/git/trees/$(tr -d '\n' < "$closed_fixture/tree-sha")?recursive=1" \
+      "repos/J-Tech-Japan/Sekiban/git/ref/tags/dcb-v10.22.0" \
+      "repos/J-Tech-Japan/Sekiban/git/ref/tags/dcbTemplates-v10.22.0"; do
+    grep -Fx "$required_endpoint" "$work_root/closed-endpoints.log" >/dev/null || {
+      echo "Closed reader did not emit expected endpoint: $required_endpoint" >&2
+      return 1
+    }
+  done
+
+  local command_sub_reader="$work_root/read-host-command-substitution.sh"
+  sed 's|if ! gh api "repos/${host_repository}/contents/${record_path}?ref=${ref}" > "$envelope"; then|if ! printf "%s" "$(gh api "repos/${host_repository}/contents/${record_path}?ref=${ref}")" > "$envelope"; then|' \
+    "$reader" > "$command_sub_reader"
+  chmod +x "$command_sub_reader"
+  grep -F 'printf "%s" "$(gh api' "$command_sub_reader" >/dev/null || {
+    echo "Could not construct the command-substitution reader mutant." >&2
+    return 1
+  }
+  local command_sub_output="$work_root/command-sub-output"
+  env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+    SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
+    FAKE_CLOSED_ROOT="$closed_fixture" FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" \
+    FAKE_GH_TRAILING_BYTES=1 bash "$command_sub_reader" \
+    --version "$version" --state complete --verify-tags all \
+    --output-dir "$command_sub_output" --manifest "$command_sub_output/bundle.json"
+  command_sub_record_path="$(jq -r '.record_relative_path' "$command_sub_output/bundle.json")"
+  if cmp -s "$raw_record_response" "$command_sub_output/$command_sub_record_path"; then
+    echo "Command-substitution reader mutant preserved the exact response bytes." >&2
+    return 1
+  fi
+
+  # The former job route actions/runs/{run}/jobs/{job} does not exist on
+  # GitHub.  A bundle whose job evidence names that exact route must make the
+  # real reader fail on GitHub's 404, while actions/jobs/{job} passes above.
+  local legacy_route_fixture="$work_root/closed-legacy-job-route"
+  python3 "$script_dir/make-closed-bundle-fixture.py" "$record_fixture" "$legacy_route_fixture" complete legacy-job-route
+  local legacy_route_log="$work_root/legacy-job-route.log"
+  rm -f "$work_root/legacy-job-route-404.log"
+  if env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+      SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$legacy_route_fixture/record.json" FAKE_HOST_REF="$fake_ref" \
+      FAKE_CLOSED_ROOT="$legacy_route_fixture" FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" \
+      FAKE_NOT_FOUND_LOG="$work_root/legacy-job-route-404.log" \
+      bash "$reader" --version "$version" --state complete --verify-tags all \
+      --output-dir "$work_root/legacy-job-route-output" --manifest "$work_root/legacy-job-route-output/bundle.json" \
+      > "$legacy_route_log" 2>&1; then
+    cat "$legacy_route_log" >&2
+    echo "MUTANT reader-legacy-job-route: SURVIVED" >&2
+    return 1
+  fi
+  grep -Fxq '404 repos/J-Tech-Japan/Sekiban/actions/runs/34737699937/jobs/103671918666' "$work_root/legacy-job-route-404.log" &&
+    grep -Eq 'Unable to read immutable bundle response J-Tech-Japan/Sekiban@01b3843276fa3bdd828afd484eb2fa0e8a6b63bb:actions/runs/34737699937/jobs/103671918666\.' "$legacy_route_log" || {
+    cat "$legacy_route_log" "$work_root/legacy-job-route-404.log" >&2
+    echo "MUTANT reader-legacy-job-route: did not fail on GitHub's 404 for actions/runs/{run}/jobs/{job}." >&2
+    return 1
+  }
+  echo "MUTANT reader-legacy-job-route: rejected at GitHub 404 for $(head -1 "$work_root/legacy-job-route-404.log" | cut -d' ' -f2)"
+
+  # Closed production states are prefix-valid: the future artifact authority
+  # and future payloads are not required before their stage is reachable.
+  for early_state in prepared 'library-tagged/incomplete' libraries-verified 'template-tagged/incomplete' artifacts-verified; do
+    early_fixture="$work_root/closed-${early_state//\//-}"
+    python3 "$script_dir/make-closed-bundle-fixture.py" "$record_fixture" "$early_fixture" "$early_state"
+    early_output="$work_root/output-${early_state//\//-}"
+    early_manifest="$early_output/bundle.json"
+    early_verify=none
+    if [[ "$early_state" != prepared ]]; then early_verify=library; fi
+    if [[ "$early_state" == template-tagged/incomplete || "$early_state" == artifacts-verified ]]; then early_verify=all; fi
+    env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+      SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$early_fixture/record.json" \
+      FAKE_HOST_REF="$fake_ref" FAKE_CLOSED_ROOT="$early_fixture" \
+      FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" bash "$reader" \
+      --version "$version" --state "$early_state" --verify-tags "$early_verify" \
+      --output-dir "$early_output" --manifest "$early_manifest"
+    expect_pass "state-prefix-${early_state//\//-}" run_net10 "$validator" release-record --bundle "$early_output" --manifest "$early_manifest" \
+      --repo-root "$repo_root" --expected-version "$version" --state "$early_state"
+  done
+
+  # Real-format positive: byte-exact canonical review transport lines, whose
+  # record created_at, receipt reported_at, and delivered_at differ by
+  # milliseconds, occupy the implementation-review slot.  The synthetic
+  # candidate chronology is shifted uniformly to bracket them; the real bytes
+  # are not edited.
+  local real_transport_fixture="$work_root/closed-real-transport"
+  local real_transport_output="$work_root/real-transport-bundle"
+  python3 "$script_dir/make-closed-bundle-fixture.py" "$record_fixture" "$real_transport_fixture" complete real-implementation-transport
+  env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+    SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$real_transport_fixture/record.json" \
+    FAKE_HOST_REF="$fake_ref" FAKE_CLOSED_ROOT="$real_transport_fixture" \
+    FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" bash "$reader" \
+    --version "$version" --state complete --verify-tags all \
+    --output-dir "$real_transport_output" --manifest "$real_transport_output/bundle.json" > /dev/null
+  python3 - "$real_transport_output" "$release_fixture_dir/real-transport-sample" <<'CARRIED'
+import base64, json, sys
+from pathlib import Path
+root, sample_dir = Path(sys.argv[1]), Path(sys.argv[2])
+manifest = json.loads((root / "bundle.json").read_text())
+contents = []
+for entry in manifest["entries"]:
+    envelope = json.loads((root / entry["relative_path"]).read_text())
+    if isinstance(envelope, dict) and isinstance(envelope.get("content"), str):
+        contents.append(base64.b64decode(envelope["content"]))
+for name in ["review-outbox-record.jsonl", "review-outbox-delivered.jsonl", "orchestrator-report-receipt.jsonl"]:
+    if (sample_dir / name).read_bytes() not in contents:
+        sys.exit(f"Real transport sample {name} is not carried byte-for-byte in the reader bundle.")
+CARRIED
+  expect_pass real-format-implementation-transport run_net10 "$validator" release-record --bundle "$real_transport_output" \
+    --manifest "$real_transport_output/bundle.json" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+  # A legal graph uses successive earlier immutable host commits for payload,
+  # authorities, and the canonical pointer.  Keep this positive control next
+  # to the self-containing negative below.
+  local control_bundle
+  for positive_control in external-commit origin-check-summary-additional-removed; do
+    control_bundle="$work_root/closed-positive-${positive_control}"
+    python3 "$script_dir/mutate-closed-bundle.py" "$output" "$control_bundle" "$positive_control"
+    expect_pass "$positive_control" run_net10 "$validator" release-record --bundle "$control_bundle" \
+      --manifest "$control_bundle/bundle.json" --repo-root "$repo_root" --expected-version "$version" --state complete
+  done
+
+  # Production bundle mutations exercise the pointer-only reader/validator,
+  # not the fixture-only flattened --record compatibility adapter.  Each
+  # helper rewrites the immutable envelope and graph joins so the validator
+  # reaches the named semantic rule instead of failing on an unrelated digest.
+  # Columns: mutant, stage passed to the validator, the only accepted rule.
+  local closed_mutant mutant_state expected_rule mutant_bundle mutant_count=0
+  local -a matrix_mutant_names=()
+  while IFS='|' read -r closed_mutant mutant_state expected_rule <&3; do
+    [[ -z "$closed_mutant" || "$closed_mutant" == \#* ]] && continue
+    mutant_bundle="$work_root/closed-mutant-${closed_mutant//\//-}"
+    python3 "$script_dir/mutate-closed-bundle.py" "$output" "$mutant_bundle" "$closed_mutant"
+    expect_rule "$closed_mutant" "$expected_rule" run_net10 "$validator" release-record --bundle "$mutant_bundle" \
+      --manifest "$mutant_bundle/bundle.json" --repo-root "$repo_root" \
+      --expected-version "$version" --state "$mutant_state"
+    mutant_count=$((mutant_count + 1))
+    matrix_mutant_names+=("$closed_mutant")
+  done 3<<'MATRIX'
+artifact-before-release|complete|authority.artifacts.after-release
+artifact-completion-equal|complete|chronology.closure-after-artifacts
+artifact-completion-late|complete|chronology.closure-after-artifacts
+artifact-equal-release|complete|authority.artifacts.after-release
+authority-rebind|complete|authority.target
+authority-time|complete|authority.prepared.after-checks
+authority-verdict|complete|authority.metadata
+authority-version|complete|authority.metadata
+candidate-check-api-attempt|complete|candidate.check.binding
+candidate-check-api-event|complete|candidate.check.binding
+candidate-check-api-job-id|complete|candidate.check.binding
+candidate-check-api-jobs-url|complete|candidate.check.native-shape
+candidate-check-api-run-id|complete|candidate.check.binding
+candidate-check-api-run-url|complete|candidate.check.binding
+candidate-check-api-time|complete|candidate.check.binding
+candidate-check-attempt|complete|candidate.check.binding
+candidate-check-event|complete|candidate.check.identity
+candidate-check-job-id|complete|candidate.check.route
+candidate-check-job-url|complete|candidate.check.binding
+candidate-check-legacy-job-route|complete|candidate.check.route
+candidate-check-partial-order|complete|candidate.check.partial-order
+candidate-check-run-id|complete|candidate.check.route
+candidate-check-run-url|complete|candidate.check.binding
+candidate-check-stale|complete|candidate.check.chronology
+candidate-check-summary-count|complete|candidate.check.summary
+candidate-check-summary-replaced-required|complete|candidate.check.summary
+candidate-check-time-record|complete|candidate.check.binding
+candidate-diff-evidence|complete|candidate.diff.evidence
+candidate-parent-count-1|complete|candidate.parents
+candidate-parent-count-3|complete|candidate.parents
+candidate-parent-reversed|complete|candidate.parents
+candidate-parent-unrelated|complete|candidate.parents
+candidate-pr-head-repo-removed|complete|candidate.pr.native-shape
+candidate-pr-merge-sha|complete|candidate.pr.binding
+candidate-pr-top-level-repository|complete|candidate.pr.native-shape
+candidate-sonar-api-app|complete|candidate.sonar.binding
+candidate-sonar-as-actions|complete|candidate.check.identity
+candidate-template-legacy-job-name|complete|candidate.check.identity
+closeout-equal-authority|complete|chronology.closure-after-artifacts
+closure-before-authority|complete|chronology.closure-after-artifacts
+completion-arbitrary|complete|authority.completion-schema
+completion-artifact|complete|authority.completion-binding
+completion-nonce|complete|authority.completion-binding
+completion-reviewer|complete|authority.completion-binding
+completion-status|complete|authority.completion-schema
+completion-target|complete|authority.completion-binding
+completion-task|complete|authority.completion-binding
+completion-time|complete|authority.completion-chronology
+completion-verdict|complete|authority.completion-schema
+current-object-self-commit|complete|bundle.self-commit
+decoded-host-bytes|complete|bundle.contents-blob
+draft-release|complete|release.library_release.binding
+duplicate-root-fact|complete|schema.members
+early-future-authority|prepared|authority.future
+empty-delta|complete|schema.members
+equal-template-tag-time|complete|chronology.library-before-template
+id-only-predecessor|complete|graph.immutable-ref
+implementation-completion-after-merge|complete|implementation-review.completion.chronology
+implementation-completion-artifact-byte|complete|implementation-review.completion.artifact
+implementation-completion-before-review|complete|implementation-review.completion.chronology
+implementation-completion-blocked|complete|implementation-review.completion.status
+implementation-completion-delivered-after-merge|complete|implementation-review.completion.chronology
+implementation-completion-digest|complete|implementation-review.completion.digest
+implementation-completion-invented-kind|complete|implementation-review.completion.transport
+implementation-completion-origin-transport|complete|implementation-review.completion.identity
+implementation-completion-receipt-after-delivery|complete|implementation-review.completion.chronology
+implementation-completion-receipt-before-record|complete|implementation-review.completion.chronology
+implementation-completion-receipt-mismatch|complete|implementation-review.completion.transport
+issue1185-closeout-before-authority|complete|chronology.closure-after-artifacts
+issue1185-closeout-equal-authority|complete|chronology.closure-after-artifacts
+issue1230-closeout-before-authority|complete|chronology.closure-after-artifacts
+issue1230-closeout-equal-authority|complete|chronology.closure-after-artifacts
+library-closeout-before-authority|complete|chronology.closure-after-artifacts
+library-closeout-equal-authority|complete|chronology.closure-after-artifacts
+main-unrelated-tip|complete|candidate.main-ancestry
+manifest-listed-unreachable|complete|bundle.reachability
+manifest-same-file-alias|complete|bundle.alias
+missing-artifact-authority|complete|authority.artifacts.required
+missing-host-commit-anchor|complete|bundle.host-anchor
+missing-host-tree-anchor|complete|bundle.host-anchor
+missing-host-tree-path|complete|bundle.host-tree-blob
+missing-merge-strategy|complete|schema.members
+missing-release-asset|complete|release.library_release.assets
+missing-reviewed-commit|complete|schema.members
+noncanonical-closeout|complete|schema.timestamp
+origin-candidate-substitution|complete|candidate.origin-substitution
+origin-check-api-attempt|complete|origin.check.binding
+origin-check-api-attempt-consistent|complete|origin.check.inventory
+origin-check-api-check-suite|complete|origin.check.native-shape
+origin-check-api-event|complete|origin.check.binding
+origin-check-api-job-id|complete|origin.check.binding
+origin-check-api-run-id|complete|origin.check.binding
+origin-check-api-run-updated|complete|origin.check.binding
+origin-check-api-run-url|complete|origin.check.binding
+origin-check-attempt|complete|origin.check.inventory
+origin-check-dispatch-before-merge|complete|origin.check.chronology
+origin-check-event|complete|origin.check.inventory
+origin-check-inventory-missing-dispatch-job|complete|origin.check.inventory
+origin-check-job-id|complete|origin.check.inventory
+origin-check-job-url|complete|origin.check.binding
+origin-check-legacy-job-route|complete|origin.check.route
+origin-check-normalized-time|complete|origin.check.historical-time
+origin-check-partial-order|complete|origin.check.partial-order
+origin-check-reversed-chronology|complete|origin.check.chronology
+origin-check-run-conclusion|complete|origin.check.inventory
+origin-check-run-id|complete|origin.check.inventory
+origin-check-run-inventory|complete|origin.check.run-inventory
+origin-check-run-url|complete|origin.check.binding
+origin-check-substitution|complete|candidate.origin-substitution
+origin-check-summary-replaced-required|complete|origin.check.summary
+origin-check-summary-truncated|complete|origin.check.summary
+origin-check-time-record|complete|origin.check.binding
+origin-check-truthful-conclusion|complete|origin.check.inventory
+origin-commit-tree-changed|complete|origin.commit.binding
+origin-completion-artifact-byte|complete|origin.completion.canonical-bytes
+origin-completion-before-review|complete|origin.completion.canonical-bytes
+origin-completion-blocked|complete|origin.completion.canonical-bytes
+origin-completion-consistent-fabrication|complete|origin.completion.canonical-bytes
+origin-completion-digest|complete|origin.completion.canonical-bytes
+origin-completion-implementation-artifact|complete|origin.completion.canonical-bytes
+origin-completion-invented-kind|complete|origin.completion.canonical-bytes
+origin-completion-invented-time|complete|origin.completion.canonical-bytes
+origin-completion-post-merge|complete|origin.completion.canonical-bytes
+origin-completion-question|complete|origin.completion.canonical-bytes
+origin-completion-receipt-mismatch|complete|origin.completion.canonical-bytes
+origin-completion-repair-task|complete|origin.completion.canonical-bytes
+origin-completion-repair-task-projection|complete|origin.completion.identity
+origin-completion-uuid-nonce|complete|origin.completion.canonical-bytes
+origin-heads-swapped|complete|origin.identity
+origin-merge-parents-reversed|complete|origin.commit.parents
+origin-pr-base-repo-removed|complete|origin.pr.native-shape
+origin-pr-head-repository|complete|origin.pr.native-shape
+origin-pr-normalized-time|complete|origin.pr.binding
+origin-pr-top-level-repository|complete|origin.pr.native-shape
+origin-review-api-body|complete|origin.review.body.binding
+origin-review-api-pull-request-url|complete|origin.review.api.native-shape
+origin-review-body-byte|complete|origin.completion.artifact
+origin-review-body-byte-record-only|complete|origin.review.body.binding
+origin-review-conflicting-verdict|complete|origin.review.verdict
+origin-review-head|complete|origin.review.identity
+origin-review-missing-verdict|complete|origin.review.verdict
+origin-review-native-approved|complete|origin.review.identity
+origin-review-negated|complete|origin.review.verdict
+origin-review-request-update|complete|origin.review.verdict
+origin-review-reviewer|complete|origin.review.api.binding
+origin-review-submitted-at|complete|origin.review.api.binding
+origin-tag-substitution|complete|tag.library_tag.identity
+origin-transport-one-byte-consistent|complete|origin.completion.canonical-bytes
+origin-tree-both-changed|complete|origin.identity
+origin-tree-unequal|complete|origin.tree-equality
+orphan-host-anchor-pair|complete|bundle.reachability
+payload-fold|complete|schema.members
+prepared-completion-equal|complete|chronology.prepared-before-library-tag
+prepared-completion-late|complete|chronology.prepared-before-library-tag
+release-asset-url|complete|release.library_release.assets
+review-api-body|complete|implementation-review.body.binding
+review-api-commit|complete|implementation-review.api.binding
+review-head|complete|implementation-review.identity
+review-head-and-api|complete|implementation-review.identity
+review-id|complete|implementation-review.identity
+review-native-approved|complete|implementation-review.api.binding
+review-submitted-at|complete|implementation-review.api.binding
+review-url|complete|implementation-review.identity
+root-extra-cumulative-fact|complete|schema.members
+root-merged-sha|complete|schema.members
+self-containing-approval|complete|bundle.self-commit
+self-containing-completion|complete|bundle.self-commit
+self-containing-payload|complete|bundle.self-commit
+semantic-negated|complete|implementation-review.verdict
+skip-delta|complete|graph.stage-order
+template-closeout-before-authority|complete|chronology.closure-after-artifacts
+template-closeout-equal-authority|complete|chronology.closure-after-artifacts
+unequal-reviewed-merged-trees|complete|candidate.tree-equality
+unknown-package-member|complete|schema.members
+unknown-release-body-member|complete|schema.members
+unknown-release-member|complete|schema.members
+unknown-tag-member|complete|schema.members
+unreferenced-sibling|complete|bundle.reachability
+wrong-host-commit-anchor|complete|bundle.response-identity
+wrong-host-tree-anchor|complete|bundle.host-anchor
+wrong-host-tree-blob|complete|bundle.host-tree-blob
+wrong-library-observed-time|complete|release.library_release.identity
+wrong-merge-strategy|complete|candidate.merge-strategy
+wrong-package-url|complete|packages.identity
+wrong-release-asset-name|complete|release.library_release.assets
+wrong-release-body|complete|release.library_release.binding
+wrong-release-tag|complete|release.library_release.binding
+wrong-release-url|complete|release.library_release.identity
+wrong-stage|complete|graph.stage-order
+wrong-stage-field|complete|schema.members
+wrong-template-url|complete|template.identity
+MATRIX
+  # The matrix and the mutator registry must name exactly the same mutants:
+  # compare sorted name sets (and reject duplicate rows), not just counts.
+  local registered_names="$work_root/mutant-registry.txt" matrix_names="$work_root/mutant-matrix.txt"
+  python3 "$script_dir/mutate-closed-bundle.py" "$output" "$work_root/mutant-list" --list |
+    grep -Ev '^(external-commit|origin-check-summary-additional-removed)$' | LC_ALL=C sort > "$registered_names"
+  printf '%s\n' "${matrix_mutant_names[@]}" | LC_ALL=C sort > "$matrix_names"
+  if [[ -n "$(LC_ALL=C uniq -d "$matrix_names")" ]] || ! cmp -s "$registered_names" "$matrix_names"; then
+    echo "Closed mutation matrix names differ from the mutator registry (duplicates: $(LC_ALL=C uniq -d "$matrix_names" | tr '\n' ' '))." >&2
+    diff "$registered_names" "$matrix_names" >&2 || true
+    return 1
+  fi
+  echo "Closed mutation matrix: ${mutant_count} named mutants rejected at their asserted rules."
+  echo "Named production pairs: origin-old/pass=native-origin-complete-bundle vs candidate-old/fail=origin-candidate-substitution,origin-check-substitution,origin-tag-substitution; approval-carry/pass=state-prefix-* vs approval-rebind/fail=authority-rebind; unreferenced-sibling/pass=reader sibling exclusion vs reachable-splice/fail=reader-reachable-splice; external-commit/pass vs current-object-self-commit/fail."
+
+  # The same sibling exists in the fake host repository but is not reachable
+  # from the pointer. The production reader must not fetch/list it, and the
+  # resulting closed bundle remains valid.
+  sibling_ref="$(tr -d '\n' < "$closed_fixture/sibling-ref")"
+  if jq -e --arg ref "$sibling_ref" '.entries[] | select(.immutable_ref == $ref)' "$manifest" >/dev/null; then
+    echo "An unreachable host sibling was unexpectedly included in the reader bundle." >&2
+    return 1
+  fi
+  echo "Production reader unreferenced-sibling control passed: host sibling remained outside the closed graph."
+
+  reachable_fixture="$work_root/reachable-sibling-host"
+  cp -R "$closed_fixture" "$reachable_fixture"
+  python3 - "$reachable_fixture" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+rows = [line.split("\t") for line in (root / "map.tsv").read_text().splitlines() if line]
+sibling = (root / "sibling-ref").read_text().strip()
+target = next(row for row in rows if ":contents/" in row[0] and row[0].endswith("/library.json"))
+content_path = Path(target[2])
+payload = json.loads(content_path.read_text())
+payload["previous_payload_ref"] = sibling
+content_path.write_bytes((json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode())
+object_path = target[0].split(":", 1)[1][len("contents/"):]
+commit = target[0].split("@", 1)[1].split(":", 1)[0]
+tree_row = next(row for row in rows if row[0].startswith(f"J-Tech-Japan/SekibanIntentHost@{commit}:git/trees/"))
+tree_path = Path(tree_row[2])
+tree = json.loads(tree_path.read_text())
+blob = subprocess.run(["git", "hash-object", "--stdin"], input=content_path.read_bytes(), stdout=subprocess.PIPE, check=True).stdout.decode().strip()
+for entry in tree["tree"]:
+    if entry.get("path") == object_path:
+        entry["sha"] = blob
+tree_path.write_text(json.dumps(tree, sort_keys=True, separators=(",", ":")) + "\n")
+PY
+  reachable_output="$work_root/reachable-sibling-output"
+  reachable_manifest="$reachable_output/bundle.json"
+  env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+    SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$reachable_fixture/record.json" \
+    FAKE_HOST_REF="$fake_ref" FAKE_CLOSED_ROOT="$reachable_fixture" \
+    FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" bash "$reader" \
+      --version "$version" --state complete --verify-tags all \
+      --output-dir "$reachable_output" --manifest "$reachable_manifest"
+  expect_rule reader-reachable-splice graph.base run_net10 "$validator" release-record --bundle "$reachable_output" \
+    --manifest "$reachable_manifest" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+  echo "Production reader reachable-sibling splice control failed closed."
+
+  # Production release-record accepts only the pointer bundle.  The old
+  # flattened adapter remains available solely to legacy fixture tests below.
+  local legacy_rejection_output
+  if legacy_rejection_output="$(
+    unset SEKIBAN_TEMPLATE_VALIDATION_ALLOW_LEGACY
+    run_net10 "$validator" release-record --record "$record_fixture" \
+      --repo-root "$repo_root" --expected-version "$version" --state complete 2>&1
+  )"; then
+    echo "Production validator unexpectedly accepted --record." >&2
+    return 1
+  fi
+  [[ "$legacy_rejection_output" == *"--bundle"* ]] || {
+    echo "Production --record rejection did not name the bundle-only contract." >&2
+    return 1
+  }
+  printf '%s\n' "$legacy_rejection_output"
+
+  bundle_digest_mutant="$work_root/bundle-digest-mutant"
+  cp -R "$output" "$bundle_digest_mutant"
+  digest_entry="$(jq -r '.entries[] | select(.kind == "record") | .relative_path' "$manifest")"
+  printf 'mutated bundle\n' > "$bundle_digest_mutant/$digest_entry"
+  expect_rule bundle-byte-mutation bundle.entry-digest run_net10 "$validator" release-record --bundle "$bundle_digest_mutant" \
+    --manifest "$bundle_digest_mutant/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+
+  bundle_missing_mutant="$work_root/bundle-missing-mutant"
+  cp -R "$output" "$bundle_missing_mutant"
+  rm "$bundle_missing_mutant/$digest_entry"
+  expect_rule bundle-missing-object bundle.missing-file run_net10 "$validator" release-record --bundle "$bundle_missing_mutant" \
+    --manifest "$bundle_missing_mutant/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+
+  bundle_extra_mutant="$work_root/bundle-extra-mutant"
+  cp -R "$output" "$bundle_extra_mutant"
+  printf 'unreachable\n' > "$bundle_extra_mutant/objects/$(printf '0%.0s' {1..64}).json"
+  expect_rule bundle-extra-file bundle.closed-files run_net10 "$validator" release-record --bundle "$bundle_extra_mutant" \
+    --manifest "$bundle_extra_mutant/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+
+  bundle_alias_mutant="$work_root/bundle-alias-mutant"
+  cp -R "$output" "$bundle_alias_mutant"
+  jq '.entries[0].relative_path = "../record.json"' "$bundle_alias_mutant/bundle.json" > "$bundle_alias_mutant/bundle.json.tmp"
+  mv "$bundle_alias_mutant/bundle.json.tmp" "$bundle_alias_mutant/bundle.json"
+  expect_rule bundle-traversal-alias bundle.path run_net10 "$validator" release-record --bundle "$bundle_alias_mutant" \
+    --manifest "$bundle_alias_mutant/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
+
+  bundle_flattened_mutant="$work_root/bundle-flattened-mutant"
+  cp -R "$output" "$bundle_flattened_mutant"
+  jq '.entries[1].endpoint = "flattened-record.json"' "$bundle_flattened_mutant/bundle.json" > "$bundle_flattened_mutant/bundle.json.tmp"
+  mv "$bundle_flattened_mutant/bundle.json.tmp" "$bundle_flattened_mutant/bundle.json"
+  expect_rule bundle-flattened-endpoint bundle.endpoint run_net10 "$validator" release-record --bundle "$bundle_flattened_mutant" \
+    --manifest "$bundle_flattened_mutant/bundle.json" --repo-root "$repo_root" \
+    --expected-version "$version" --state complete
 
   local failure_output
   if failure_output="$(env -u GH_TOKEN PATH="$shim_root:$PATH" SEKIBAN_RELEASE_RECORD_REF="$fake_ref" \
       FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" bash "$reader" \
-      --version "$version" --state complete --verify-tags all --output "$output" 2>&1)"; then
+      --version "$version" --state complete --verify-tags all \
+      --output-dir "$output" --manifest "$manifest" 2>&1)"; then
     echo "Host reader unexpectedly passed without its dedicated credential." >&2
     return 1
   fi
@@ -363,7 +968,9 @@ SHIM
 
   if failure_output="$(env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
       FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" bash "$reader" \
-      --version "$version" --state complete --ref main --verify-tags all --output "$output" 2>&1)"; then
+      --version "$version" --state complete --ref main --verify-tags all \
+      --output-dir "$(mktemp -d "$work_root/mutable-ref.XXXXXX")" \
+      --manifest "$work_root/mutable-ref-manifest.json" 2>&1)"; then
     echo "Host reader unexpectedly accepted a mutable ref." >&2
     return 1
   fi
@@ -371,22 +978,34 @@ SHIM
   local wrong_reader="$work_root/read-host-wrong-repository.sh"
   cp "$reader" "$wrong_reader"
   perl -0pi -e 's/J-Tech-Japan\/SekibanIntentHost/example.invalid\/WrongHost/g' "$wrong_reader"
+  local wrong_output
+  wrong_output="$(mktemp -d "$work_root/wrong-host-output.XXXXXX")"
   expect_failure env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
     SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
-    bash "$wrong_reader" --version "$version" --state complete --verify-tags all --output "$output"
+    bash "$wrong_reader" --version "$version" --state complete --verify-tags all \
+      --output-dir "$wrong_output" --manifest "$wrong_output/bundle.json"
 
   for flag in FAKE_GH_BAD_COMMIT FAKE_GH_BAD_BLOB FAKE_GH_BAD_TAG_OBJECT FAKE_GH_BAD_PEELED; do
+    local mutant_output
+    mutant_output="$(mktemp -d "$work_root/${flag}.XXXXXX")"
     expect_failure env "$flag=1" PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
       SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
-      bash "$reader" --version "$version" --state complete --verify-tags all --output "$output"
+      FAKE_CLOSED_ROOT="$closed_fixture" FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" \
+      bash "$reader" --version "$version" --state complete --verify-tags all \
+        --output-dir "$mutant_output" --manifest "$mutant_output/bundle.json"
   done
 
-  expect_failure run_reader --version "$version" --state prepared --verify-tags all --output "$output"
-  echo "Host release-record reader passed credential/ref, immutable commit/blob, tag-object, peeled-SHA, state, and wrong-host gh-shim mutants."
+  local prepared_output
+  prepared_output="$(mktemp -d "$work_root/prepared-output.XXXXXX")"
+  expect_failure run_reader --version "$version" --state prepared --verify-tags all \
+    --output-dir "$prepared_output" --manifest "$prepared_output/bundle.json"
+  echo "Host release-record reader passed credential/ref, immutable commit/blob, closed bundle, tag-object, peeled-SHA, state, and wrong-host gh-shim mutants."
 
   if [[ -n "${SEKIBAN_RELEASE_RECORD_TOKEN:-}" && -n "${SEKIBAN_RELEASE_RECORD_REF:-}" ]]; then
     GH_TOKEN="$SEKIBAN_RELEASE_RECORD_TOKEN" bash "$reader" --version "$version" \
-      --state libraries-verified --verify-tags library --output "$work_root/credentialed-host-record.json"
+      --state libraries-verified --verify-tags library \
+      --output-dir "$work_root/credentialed-host-bundle" \
+      --manifest "$work_root/credentialed-host-bundle/bundle.json"
     echo "Credentialed host read-only integration probe passed without printing its credential."
   else
     echo "Credentialed host read-only integration probe not run locally: dedicated secret/ref were not supplied; no credential was printed."
@@ -648,10 +1267,89 @@ perl -0pi -e 's/read-host-release-record\.sh/removed-record-reader.sh/g' \
   "$template_record_invocation_mutant/.github/workflows/packagesDcbTemplate.yml"
 expect_failure run_net10 "$validator" workflow --repo-root "$template_record_invocation_mutant"
 
+# The template validation workflow must trigger on PostgreSQL harness changes,
+# and the packaged-consumer path must keep running the version check.
+postgres_trigger_mutant="$work_root/postgres-trigger-mutant"
+copy_workflow_fixture "$postgres_trigger_mutant"
+perl -0pi -e "s{^      - 'dcb/tests/Sekiban\.Dcb\.Postgres\.Tests/run-packaged-consumer\.sh'\n}{}m" \
+  "$postgres_trigger_mutant/.github/workflows/dcb_template_validation.yml"
+if cmp -s "$repo_root/.github/workflows/dcb_template_validation.yml" "$postgres_trigger_mutant/.github/workflows/dcb_template_validation.yml"; then
+  echo "Could not construct the PostgreSQL trigger workflow mutant." >&2
+  exit 1
+fi
+expect_failure run_net10 "$validator" workflow --repo-root "$postgres_trigger_mutant"
+
+version_check_route_mutant="$work_root/version-check-route-mutant"
+copy_workflow_fixture "$version_check_route_mutant"
+perl -0pi -e 's/^bash "\$version_derivation_check" --postgres-harness "\$postgres_harness" --repo-root "\$repo_root"\n//m' \
+  "$version_check_route_mutant/dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh"
+if cmp -s "$script_dir/run-packaged-consumer.sh" "$version_check_route_mutant/dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh"; then
+  echo "Could not construct the version-check route mutant." >&2
+  exit 1
+fi
+expect_failure run_net10 "$validator" workflow --repo-root "$version_check_route_mutant"
+
 publish_retry_mutant="$work_root/publish-retry-mutant"
 copy_workflow_fixture "$publish_retry_mutant"
 perl -0pi -e 's/ --skip-duplicate//g' "$publish_retry_mutant/.github/workflows/packagesDcbTemplate.yml"
 expect_failure run_net10 "$validator" workflow --repo-root "$publish_retry_mutant"
+
+# SEK-G80 amendment: the PostgreSQL harness's SHA-derived prerelease version
+# must be a valid NuGet version for every commit SHA (NuGet is the oracle; no
+# DCB packing), and the version its first restore receives must be that
+# derivation.  Harness source mutants must each be rejected for their reason.
+version_derivation_check="$script_dir/validate-candidate-version-derivation.sh"
+postgres_harness="$repo_root/dcb/tests/Sekiban.Dcb.Postgres.Tests/run-packaged-consumer.sh"
+bash "$version_derivation_check" --postgres-harness "$postgres_harness" --repo-root "$repo_root"
+version_mutant_root="$work_root/version-derivation-mutants"
+mkdir -p "$version_mutant_root"
+python3 - "$postgres_harness" "$version_mutant_root" <<'VERSION_MUTANTS'
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text()
+root = Path(sys.argv[2])
+required = 'version="${G62_PACKAGE_VERSION:-$(derive_candidate_version "$head_sha")}"\n'
+feed_line = 'feed="$temp_root/candidate-feed"\n'
+bare = '10.0.2-g62.${head_sha:0:12}'
+mutants = {
+    # Derivation restored to the bare 12-character prefix.
+    "bare-prefix-derivation": source.replace("printf '10.0.2-g62.g%s\\n'", "printf '10.0.2-g62.%s\\n'", 1),
+    # The single assignment no longer uses the derivation function.
+    "bare-prefix-version-line": source.replace(required, 'version="${G62_PACKAGE_VERSION:-' + bare + '}"\n', 1),
+    # A reassignment appended directly after the required line.
+    "reassigned-after-required-line": source.replace(required, required + 'version="' + bare + '"\n', 1),
+    # A reassignment through read, after the print-mode exit.
+    "late-read-reassignment": source.replace(feed_line, 'read -r version <<< "' + bare + '"\n' + feed_line, 1),
+    # A reassignment the static count cannot see; only the captured restore
+    # version exposes it.
+    "late-eval-reassignment": source.replace(feed_line, 'eval "versio""n=' + bare.replace("$", "\\$") + '"\n' + feed_line, 1),
+}
+for name, text in mutants.items():
+    if text == source:
+        sys.exit(f"Could not construct the {name} PostgreSQL harness mutant.")
+    (root / f"{name}.sh").write_text(text)
+VERSION_MUTANTS
+for version_mutant_spec in \
+    "bare-prefix-derivation|NuGet rejected derived candidate version 10.0.2-g62.095452654654 " \
+    "bare-prefix-version-line|does not contain the required version line" \
+    "reassigned-after-required-line|must assign version exactly once" \
+    "late-read-reassignment|must assign version exactly once" \
+    "late-eval-reassignment|Harness passed PackageVersion '10.0.2-g62."; do
+  IFS='|' read -r version_mutant version_mutant_reason <<< "$version_mutant_spec"
+  if bash "$version_derivation_check" --postgres-harness "$version_mutant_root/$version_mutant.sh" --repo-root "$repo_root" \
+      > "$version_mutant_root/$version_mutant.log" 2>&1; then
+    cat "$version_mutant_root/$version_mutant.log" >&2
+    echo "MUTANT ${version_mutant}: SURVIVED the SHA-derived version check." >&2
+    exit 1
+  fi
+  grep -Fq "$version_mutant_reason" "$version_mutant_root/$version_mutant.log" || {
+    cat "$version_mutant_root/$version_mutant.log" >&2
+    echo "MUTANT ${version_mutant}: failed without the expected reason: ${version_mutant_reason}" >&2
+    exit 1
+  }
+  echo "MUTANT ${version_mutant}: rejected: $(grep -F "$version_mutant_reason" "$version_mutant_root/$version_mutant.log" | head -1)"
+done
 
 run_host_record_reader_shim_tests
 
@@ -665,30 +1363,53 @@ fi
 # SEK-G79: the host-owned release record is read-only here. Exercise every valid
 # state prefix and deterministic identity/package/early-closure mutants locally.
 release_record="$script_dir/fixtures/release-record/valid-complete.json"
+# The legacy flattened matrix is a fixture-only compatibility adapter.  The
+# production workflow path above and below remains bundle-only.
+export SEKIBAN_TEMPLATE_VALIDATION_ALLOW_LEGACY=1
 run_net10 "$validator" release-record --record "$release_record" --repo-root "$repo_root" --expected-version "$version" --state complete
 
+# Schema-v2 production-path pairs: historical origin evidence is valid only in
+# origin_delivery; the later candidate and pointer joins must remain distinct.
+candidate_old_record="$work_root/release-candidate-origin-reused.json"
+jq '.candidate.pull_request = .origin_delivery.pull_request' "$release_record" > "$candidate_old_record"
+expect_failure run_net10 "$validator" release-record --record "$candidate_old_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+approval_rebind_record="$work_root/release-approval-rebind.json"
+jq '.pointer.artifact_approval_id = .pointer.prepared_approval_id' "$release_record" > "$approval_rebind_record"
+expect_failure run_net10 "$validator" release-record --record "$approval_rebind_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+legacy_unreferenced_sibling_record="$work_root/release-unreferenced-sibling.json"
+jq '.deltas += [{"id":"unreferenced-sibling","stage":"sibling","previous_id":"unreachable","payload_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","payload_ref":"J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/sibling.json","payload":{}}]' \
+  "$release_record" > "$legacy_unreferenced_sibling_record"
+run_net10 "$validator" release-record --record "$legacy_unreferenced_sibling_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+
+reachable_splice_record="$work_root/release-reachable-splice.json"
+jq '.deltas[1].previous_id = .base.id' "$release_record" > "$reachable_splice_record"
+expect_failure run_net10 "$validator" release-record --record "$reachable_splice_record" --repo-root "$repo_root" --expected-version "$version" --state complete
+echo "Legacy flattened adapter controls passed; production --bundle origin/candidate, approval-carry/rebind, external/self-host-commit, reachability, alias, semantic, and chronology discriminators are exercised above."
+
 prepared_record="$work_root/release-prepared.json"
-jq '.stage = "prepared" | .history = ["prepared"] | del(.library_tag, .template_tag, .packages, .template, .library_release, .template_release, .closure)' \
+jq '.stage = "prepared" | .history = ["prepared"] | .pointer.payload_id = "base-prepared" | del(.library_tag, .template_tag, .packages, .template, .library_release, .template_release, .closure)' \
   "$release_record" > "$prepared_record"
 run_net10 "$validator" release-record --record "$prepared_record" --repo-root "$repo_root" --expected-version "$version" --state prepared
 
 library_tagged_record="$work_root/release-library-tagged.json"
-jq '.stage = "library-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete"] | del(.template_tag, .packages, .template, .library_release, .template_release, .closure)' \
+jq '.stage = "library-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete"] | .pointer.payload_id = "delta-library-tagged" | del(.template_tag, .packages, .template, .library_release, .template_release, .closure)' \
   "$release_record" > "$library_tagged_record"
 run_net10 "$validator" release-record --record "$library_tagged_record" --repo-root "$repo_root" --expected-version "$version" --state 'library-tagged/incomplete'
 
 libraries_verified_record="$work_root/release-libraries-verified.json"
-jq '.stage = "libraries-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified"] | del(.template_tag, .template, .template_release, .closure)' \
+jq '.stage = "libraries-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified"] | .pointer.payload_id = "delta-libraries-verified" | del(.template_tag, .template, .template_release, .closure)' \
   "$release_record" > "$libraries_verified_record"
 run_net10 "$validator" release-record --record "$libraries_verified_record" --repo-root "$repo_root" --expected-version "$version" --state libraries-verified
 
 template_tagged_record="$work_root/release-template-tagged.json"
-jq '.stage = "template-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete"] | del(.template, .template_release, .closure)' \
+jq '.stage = "template-tagged/incomplete" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete"] | .pointer.payload_id = "delta-template-tagged" | del(.template, .template_release, .closure)' \
   "$release_record" > "$template_tagged_record"
 run_net10 "$validator" release-record --record "$template_tagged_record" --repo-root "$repo_root" --expected-version "$version" --state 'template-tagged/incomplete'
 
 artifacts_verified_record="$work_root/release-artifacts-verified.json"
-jq '.stage = "artifacts-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete", "artifacts-verified"] | del(.closure)' \
+jq '.stage = "artifacts-verified" | .history = ["prepared", "library-tagged/incomplete", "libraries-verified", "template-tagged/incomplete", "artifacts-verified"] | .pointer.payload_id = "delta-artifacts-verified" | del(.closure)' \
   "$release_record" > "$artifacts_verified_record"
 run_net10 "$validator" release-record --record "$artifacts_verified_record" --repo-root "$repo_root" --expected-version "$version" --state artifacts-verified
 
@@ -761,6 +1482,8 @@ wrong_integration_pr="$work_root/release-wrong-integration-pr.json"
 jq '.integration_pr = "https://github.com/J-Tech-Japan/Sekiban/pull/9999"' "$release_record" > "$wrong_integration_pr"
 expect_failure run_net10 "$validator" release-record --record "$wrong_integration_pr" --repo-root "$repo_root" --expected-version "$version" --state complete
 
+# This record_source mutation remains fixture-only coverage for the legacy
+# --record adapter; closed production bundles reject that vocabulary by shape.
 wrong_record_source="$work_root/release-wrong-record-source.json"
 jq '.record_source.repository = "example/forged"' "$release_record" > "$wrong_record_source"
 expect_failure run_net10 "$validator" release-record --record "$wrong_record_source" --repo-root "$repo_root" --expected-version "$version" --state complete

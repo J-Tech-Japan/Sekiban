@@ -1,13 +1,164 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "version": "10.22.0",
   "record_source": {
     "repository": "J-Tech-Japan/SekibanIntentHost",
     "path": "intents/sekiban/releases/dcb-v10.22.0-release-record.json",
-    "commit_sha": "dddddddddddddddddddddddddddddddddddddddd",
+    "commit_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
     "version": "10.22.0"
   },
-  "integration_pr": "https://github.com/J-Tech-Japan/Sekiban/pull/1235",
+  "origin_delivery": {
+    "repository": "J-Tech-Japan/Sekiban",
+    "pull_request": "https://github.com/J-Tech-Japan/Sekiban/pull/1235",
+    "reviewed_head_sha": "1111111111111111111111111111111111111111",
+    "tree_sha": "2222222222222222222222222222222222222222",
+    "body_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "review": {
+      "review_url": "https://github.com/J-Tech-Japan/Sekiban/pull/1235#pullrequestreview-5188648124",
+      "review_id": "5188648124",
+      "reviewer": "independent-reviewer",
+      "state": "approved",
+      "commit_id": "1111111111111111111111111111111111111111",
+      "body_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "intent_task_id": "sek-g79-pr1235-71853695-f1-f5-repair-20260913",
+      "intent_result_nonce": "sek-g79-pr1235-repair-71853695",
+      "intent_completed_at_utc": "2026-09-11T08:00:00Z"
+    },
+    "checks": [
+      {
+        "name": "origin-dcb-net10",
+        "run_id": "9001",
+        "job_id": "9101",
+        "head_sha": "1111111111111111111111111111111111111111",
+        "conclusion": "success",
+        "started_at_utc": "2026-09-11T08:30:00Z",
+        "completed_at_utc": "2026-09-11T08:40:00Z"
+      }
+    ],
+    "tags": [
+      {
+        "name": "dcb-v10.22.0-origin",
+        "object_id": "4444444444444444444444444444444444444444",
+        "peeled_commit": "1111111111111111111111111111111111111111",
+        "created_at_utc": "2026-09-11T08:45:00Z"
+      }
+    ]
+  },
+  "candidate": {
+    "repository": "J-Tech-Japan/Sekiban",
+    "pull_request": "https://github.com/J-Tech-Japan/Sekiban/pull/1236",
+    "reviewed_head_sha": "3333333333333333333333333333333333333333",
+    "merged_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "merged_at_utc": "2026-09-12T09:00:00Z",
+    "parent_shas": [
+      "3333333333333333333333333333333333333333",
+      "4444444444444444444444444444444444444444"
+    ],
+    "tree_sha": "5555555555555555555555555555555555555555",
+    "api_tree_sha": "5555555555555555555555555555555555555555",
+    "main_ancestry": true,
+    "checkout_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "candidate_review": {
+    "review_url": "https://github.com/J-Tech-Japan/Sekiban/pull/1236#pullrequestreview-6000000001",
+    "review_id": "6000000001",
+    "reviewer": "independent-reviewer",
+    "event_state": "COMMENTED",
+    "semantic_state": "APPROVE",
+    "head_sha": "3333333333333333333333333333333333333333",
+    "body_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "artifact_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "intent_task_id": "sek-g80-implementation-20260913",
+    "intent_result_nonce": "9061c383-a0f2-4bd7-a589-8a04f289ac89",
+    "approved_at_utc": "2026-09-12T08:50:00Z"
+  },
+  "base": {
+    "id": "base-prepared",
+    "stage": "prepared",
+    "previous_id": null,
+    "payload_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "payload_ref": "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/base.json"
+  },
+  "deltas": [
+    {
+      "id": "delta-library-tagged",
+      "stage": "library-tagged/incomplete",
+      "previous_id": "base-prepared",
+      "payload_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "payload_ref": "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/library.json",
+      "payload": {"stage":"library-tagged/incomplete","version":"10.22.0"}
+    },
+    {
+      "id": "delta-libraries-verified",
+      "stage": "libraries-verified",
+      "previous_id": "delta-library-tagged",
+      "payload_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "payload_ref": "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/libraries.json",
+      "payload": {"stage":"libraries-verified","version":"10.22.0"}
+    },
+    {
+      "id": "delta-template-tagged",
+      "stage": "template-tagged/incomplete",
+      "previous_id": "delta-libraries-verified",
+      "payload_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "payload_ref": "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/template.json",
+      "payload": {"stage":"template-tagged/incomplete","version":"10.22.0"}
+    },
+    {
+      "id": "delta-artifacts-verified",
+      "stage": "artifacts-verified",
+      "previous_id": "delta-template-tagged",
+      "payload_sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+      "payload_ref": "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/artifacts.json",
+      "payload": {"stage":"artifacts-verified","version":"10.22.0"}
+    },
+    {
+      "id": "delta-complete",
+      "stage": "complete",
+      "previous_id": "delta-artifacts-verified",
+      "payload_sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+      "payload_ref": "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/complete.json",
+      "payload": {"stage":"complete","version":"10.22.0"}
+    }
+  ],
+  "pointer": {
+    "payload_id": "delta-complete",
+    "prepared_approval_id": "prepared-authority",
+    "artifact_approval_id": "artifacts-authority"
+  },
+  "authorities": {
+    "prepared": {
+      "id": "prepared-authority",
+      "kind": "prepared",
+      "task_id": "sek-g80-implementation-20260913",
+      "result_nonce": "9061c383-a0f2-4bd7-a589-8a04f289ac89",
+      "completion_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "payload_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "approved_at_utc": "2026-09-12T09:10:00Z"
+    },
+    "artifacts_verified": {
+      "id": "artifacts-authority",
+      "kind": "artifacts_verified",
+      "task_id": "sek-g80-implementation-20260913",
+      "result_nonce": "9061c383-a0f2-4bd7-a589-8a04f289ac89",
+      "completion_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "payload_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "report_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "approved_at_utc": "2026-09-12T10:10:00Z"
+    }
+  },
+  "bundle_refs": [
+    "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/base.json",
+    "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/library.json",
+    "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/libraries.json",
+    "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/template.json",
+    "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/artifacts.json",
+    "J-Tech-Japan/SekibanIntentHost@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:intents/sekiban/releases/dcb-v10.22.0/complete.json",
+    "J-Tech-Japan/Sekiban@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "J-Tech-Japan/Sekiban@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:git/trees/5555555555555555555555555555555555555555"
+  ],
+  "integration_pr": "https://github.com/J-Tech-Japan/Sekiban/pull/1236",
   "merged_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "merged_at_utc": "2026-09-12T09:00:00Z",
   "stage": "complete",

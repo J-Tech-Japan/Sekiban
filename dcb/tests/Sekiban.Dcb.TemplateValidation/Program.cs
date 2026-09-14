@@ -119,11 +119,31 @@ internal static class Program
                     break;
 
                 case "release-record":
-                    ReleaseRecordValidator.Validate(
-                        Required(options, "record"),
-                        expectedVersion,
-                        options.GetValueOrDefault("state"),
-                        options.GetValueOrDefault("repo-root"));
+                    if (options.ContainsKey("record"))
+                    {
+                        // This adapter exists only for the historical fixture matrix.
+                        // Production workflows are required to use --bundle/--manifest
+                        // so a flattened record can never become a release decision.
+                        if (Environment.GetEnvironmentVariable("SEKIBAN_TEMPLATE_VALIDATION_ALLOW_LEGACY") != "1")
+                        {
+                            throw new InvalidOperationException(
+                                "The production release-record command accepts only --bundle and --manifest; --record is fixture-only.");
+                        }
+                        ReleaseRecordValidator.Validate(
+                            Required(options, "record"),
+                            expectedVersion,
+                            options.GetValueOrDefault("state"),
+                            options.GetValueOrDefault("repo-root"));
+                    }
+                    else
+                    {
+                        ReleaseRecordValidator.ValidateBundle(
+                            Required(options, "bundle"),
+                            Required(options, "manifest"),
+                            expectedVersion,
+                            options.GetValueOrDefault("state"),
+                            options.GetValueOrDefault("repo-root"));
+                    }
                     break;
 
                 case "packages":
@@ -649,7 +669,10 @@ internal static class Program
         var hostRecordReaderText = File.ReadAllText(hostRecordReader);
         Assert(hostRecordReaderText.Contains("J-Tech-Japan/SekibanIntentHost", StringComparison.Ordinal) &&
                !hostRecordReaderText.Contains("J-Tech-Japan/Sekiban-Design", StringComparison.Ordinal) &&
-               !hostRecordReaderText.Contains("SEKIBAN_RELEASE_RECORD_REPOSITORY", StringComparison.Ordinal),
+               !hostRecordReaderText.Contains("SEKIBAN_RELEASE_RECORD_REPOSITORY", StringComparison.Ordinal) &&
+               hostRecordReaderText.Contains("--output-dir", StringComparison.Ordinal) &&
+               hostRecordReaderText.Contains("--manifest", StringComparison.Ordinal) &&
+               !hostRecordReaderText.Contains("--output)", StringComparison.Ordinal),
             "The host release-record reader must target the private canonical host without a repository override.");
         var validation = File.ReadAllText(validationWorkflow);
         var dcbTest = File.ReadAllText(dcbTestWorkflow);
@@ -757,6 +780,7 @@ internal static class Program
                      "schedule:",
                      "templates/Sekiban.Dcb.Templates/**",
                      "dcb/tests/Sekiban.Dcb.TemplateValidation/**",
+                     "dcb/tests/Sekiban.Dcb.Postgres.Tests/run-packaged-consumer.sh",
                      ".github/workflows/dcb_template_validation.yml",
                      ".github/workflows/packagesDcbTemplate.yml",
                      "validate-release-tags.sh --check-drift"
@@ -765,6 +789,10 @@ internal static class Program
             Assert(validation.Contains(required, StringComparison.Ordinal),
                 $"The validation workflow must include '{required}'.");
         }
+
+        Assert(validation.Contains("if: github.event_name == 'schedule'", StringComparison.Ordinal) &&
+               !validation.Contains("if: github.event_name != 'pull_request'", StringComparison.Ordinal),
+            "The currency-drift job must be schedule-only; workflow_dispatch must remain packaged-consumer-only.");
 
         RequireStepWithRun(
             ReadNamedWorkflowSteps(validation),
@@ -802,7 +830,11 @@ internal static class Program
                !libraryRecord.Body.Contains("github.token", StringComparison.Ordinal) &&
                libraryRecord.Body.Contains("--state 'library-tagged/incomplete'", StringComparison.Ordinal),
             "The library workflow must read the immutable host record at library-tagged/incomplete.");
-        Assert(libraryRecordValidation.Body.Contains("release-record --record", StringComparison.Ordinal) &&
+        Assert(libraryRecord.Body.Contains("--output-dir", StringComparison.Ordinal) &&
+               libraryRecord.Body.Contains("--manifest", StringComparison.Ordinal),
+            "The library workflow must consume the closed bundle/manifest reader boundary.");
+        Assert(libraryRecordValidation.Body.Contains("release-record --bundle", StringComparison.Ordinal) &&
+               libraryRecordValidation.Body.Contains("--manifest", StringComparison.Ordinal) &&
                libraryRecordValidation.Body.Contains("--state 'library-tagged/incomplete'", StringComparison.Ordinal),
             "The library workflow must validate the canonical library-tagged state before finalization.");
         Assert(libraryRecord.Ordinal < libraryRecordValidation.Ordinal &&
@@ -836,7 +868,11 @@ internal static class Program
                !templateRecord.Body.Contains("github.token", StringComparison.Ordinal) &&
                templateRecord.Body.Contains("--state libraries-verified", StringComparison.Ordinal),
             "The template workflow must read the immutable host record at libraries-verified.");
-        Assert(templateRecordValidation.Body.Contains("release-record --record", StringComparison.Ordinal) &&
+        Assert(templateRecord.Body.Contains("--output-dir", StringComparison.Ordinal) &&
+               templateRecord.Body.Contains("--manifest", StringComparison.Ordinal),
+            "The template workflow must consume the closed bundle/manifest reader boundary.");
+        Assert(templateRecordValidation.Body.Contains("release-record --bundle", StringComparison.Ordinal) &&
+               templateRecordValidation.Body.Contains("--manifest", StringComparison.Ordinal) &&
                templateRecordValidation.Body.Contains("--state libraries-verified", StringComparison.Ordinal),
             "The template workflow must validate the canonical libraries-verified state before packing.");
         Assert(templateRecord.Ordinal < templateRecordValidation.Ordinal &&
@@ -913,6 +949,10 @@ internal static class Program
         Assert(sourceStage >= 0 && docsCurrencyStage >= 0 && packageBoundary >= 0 &&
                sourceStage < docsCurrencyStage && docsCurrencyStage < packageBoundary,
             "The packaged-consumer source phase must run the docs-currency stage after source validation and before packing.");
+        Assert(script.Contains(
+                "bash \"$version_derivation_check\" --postgres-harness \"$postgres_harness\" --repo-root \"$repo_root\"",
+                StringComparison.Ordinal),
+            "The packaged-consumer path must run the PostgreSQL SHA-derived version check against the real harness.");
     }
 
     private static bool IsEffectivelyPackable(string projectPath)

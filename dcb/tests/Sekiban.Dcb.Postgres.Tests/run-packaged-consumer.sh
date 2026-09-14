@@ -3,6 +3,20 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../../.." && pwd)"
+print_candidate_version_for=""
+
+# The candidate prerelease identifier is letter-prefixed ("g" + 12 hex chars)
+# so it is a valid SemVer alphanumeric identifier for every commit SHA.  A
+# bare 12-character prefix is numeric when it has no a-f letters, and SemVer
+# rejects a numeric identifier with a leading zero (for example 095452346654).
+derive_candidate_version() {
+  local commit_sha="$1"
+  if [[ ! "$commit_sha" =~ ^[0-9a-f]{12,40}$ ]]; then
+    echo "Candidate version derivation requires a lowercase hexadecimal commit SHA: $commit_sha" >&2
+    return 1
+  fi
+  printf '10.0.2-g62.g%s\n' "${commit_sha:0:12}"
+}
 
 while (( $# > 0 )); do
   case "$1" in
@@ -10,16 +24,35 @@ while (( $# > 0 )); do
       repo_root="$(cd "$2" && pwd)"
       shift 2
       ;;
+    --print-candidate-version)
+      print_candidate_version_for="$2"
+      shift 2
+      ;;
     *)
-      echo "Usage: $0 [--repo-root <path>]" >&2
+      echo "Usage: $0 [--repo-root <path>] [--print-candidate-version <commit-sha>]" >&2
       exit 2
       ;;
   esac
 done
 
-if [[ "$(git -C "$repo_root" rev-parse --show-toplevel)" != "$repo_root" ]]; then
-  echo "The supplied repo root is not a Git worktree: $repo_root" >&2
-  exit 1
+if [[ -n "$print_candidate_version_for" ]]; then
+  head_sha="$print_candidate_version_for"
+else
+  if [[ "$(git -C "$repo_root" rev-parse --show-toplevel)" != "$repo_root" ]]; then
+    echo "The supplied repo root is not a Git worktree: $repo_root" >&2
+    exit 1
+  fi
+  head_sha="$(git -C "$repo_root" rev-parse HEAD)"
+fi
+
+# The only assignments of the candidate and omission-mutant versions.  The
+# side-effect-free --print-candidate-version mode reports exactly these values
+# (including any G62_PACKAGE_VERSION override) and exits before packing.
+version="${G62_PACKAGE_VERSION:-$(derive_candidate_version "$head_sha")}"
+mutant_version="${version}-omission"
+if [[ -n "$print_candidate_version_for" ]]; then
+  printf '%s\n%s\n' "$version" "$mutant_version"
+  exit 0
 fi
 
 temp_root="$(mktemp -d "${TMPDIR:-/tmp}/sek-g62-postgres-package.XXXXXX")"
@@ -42,9 +75,6 @@ printf '%s\n' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allow
 run_net9() { (cd "$net9_host" && dotnet "$@"); }
 run_net10() { (cd "$net10_host" && dotnet "$@"); }
 
-short_head="$(git -C "$repo_root" rev-parse --short=12 HEAD)"
-version="${G62_PACKAGE_VERSION:-10.0.2-g62.${short_head}}"
-mutant_version="${version}-omission"
 feed="$temp_root/candidate-feed"
 mutant_feed="$temp_root/mutant-feed"
 mkdir -p "$feed" "$mutant_feed"
