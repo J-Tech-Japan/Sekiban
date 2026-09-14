@@ -422,6 +422,34 @@ run_host_record_reader_shim_tests() {
     host_count=$((host_count + 1))
   done < "$release_fixture_dir/real-host/provenance.tsv"
   echo "Archived real child responses (${child_count}), published host evidence objects (${evidence_count}), and redacted host responses (${host_count}) are byte-exact."
+
+  # Archived evidence is only evidence if it is committed.  A .gitignore rule
+  # that swallows a fixture path (the build-output `[Rr]eleases/` rule matched
+  # the mirrored `intents/sekiban/releases/...` host path) leaves the file on
+  # the author's disk and out of the commit, so every digest check passes
+  # locally and fails in CI on a missing file.
+  python3 "$script_dir/release_fixture_shapes.py" tracked \
+    --fixtures-root "$release_fixture_dir" --map "$release_fixture_dir/real-shape-route-map.tsv"
+  local tracking_probe="$release_fixture_dir/real-host-evidence/untracked-probe.jsonl"
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" tracked \
+    --fixtures-root "$release_fixture_dir" --map "$release_fixture_dir/real-shape-route-map.tsv" \
+    --probe real-host-evidence/never-committed.jsonl
+  rm -f "$tracking_probe"
+  printf 'untracked probe\n' > "$tracking_probe"
+  if python3 "$script_dir/release_fixture_shapes.py" tracked \
+      --fixtures-root "$release_fixture_dir" --map "$release_fixture_dir/real-shape-route-map.tsv" \
+      --probe real-host-evidence/untracked-probe.jsonl > "$work_root/fixture-tracking-probe.log" 2>&1; then
+    rm -f "$tracking_probe"
+    echo "The fixture tracking guard accepted a present-but-untracked fixture." >&2
+    return 1
+  fi
+  rm -f "$tracking_probe"
+  grep -Fq "not tracked by git" "$work_root/fixture-tracking-probe.log" || {
+    cat "$work_root/fixture-tracking-probe.log" >&2
+    echo "The fixture tracking guard failed for the wrong reason." >&2
+    return 1
+  }
+  echo "Fixture tracking guard rejected a fixture missing from the working tree and a present-but-untracked fixture."
   python3 "$script_dir/release_fixture_shapes.py" lint --path "$release_fixture_dir/real-host"
 
   # AC9 fixture-lint mutants: an unredacted private host commit or tree archive

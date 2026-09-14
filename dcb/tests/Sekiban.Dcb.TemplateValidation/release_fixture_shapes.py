@@ -19,6 +19,7 @@ import argparse
 import base64
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -245,6 +246,60 @@ def redact_host_contents(contents: dict) -> dict:
 REDACTORS = {"commit": redact_host_commit, "tree": redact_host_tree, "contents": redact_host_contents}
 
 
+# ------------------------------------------------------- tracked fixtures ----
+# Archived evidence is only evidence if it is really in the repository.  A
+# .gitignore rule that swallows a fixture path (for example the build-output
+# `[Rr]eleases/` rule over the mirrored `intents/sekiban/releases/...` host
+# path) leaves the file on the author's disk and out of the commit, so the
+# checks pass locally and fail in CI on a missing file.
+def named_fixture_files(root: Path, route_map: Path | None) -> set[Path]:
+    """Every file the provenance tables and the route map name, plus the
+    tables themselves."""
+    named: set[Path] = set()
+    if route_map is not None:
+        named.add(route_map.resolve())
+        for line in route_map.read_text().splitlines():
+            if not line.strip() or line.startswith("#") or line.startswith("route_kind\t"):
+                continue
+            for archive in line.split("\t")[2].split(","):
+                named.add((root / archive).resolve())
+    for provenance in sorted(root.rglob("provenance.tsv")):
+        named.add(provenance.resolve())
+        rows = provenance.read_text().splitlines()
+        if not rows:
+            raise SystemExit(f"{provenance}: provenance table is empty")
+        header = rows[0].split("\t")
+        if "file" not in header:
+            raise SystemExit(f"{provenance}: provenance table has no 'file' column")
+        column = header.index("file")
+        for row in rows[1:]:
+            if not row.strip():
+                continue
+            named.add((provenance.parent / row.split("\t")[column]).resolve())
+    return named
+
+
+def git_tracked_files(root: Path) -> set[Path]:
+    result = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--", "."],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if result.returncode != 0:
+        raise SystemExit(f"git ls-files failed under {root}: {result.stderr.decode(errors='replace').strip()}")
+    return {(root / name).resolve() for name in result.stdout.decode().split("\0") if name}
+
+
+def check_tracked(root: Path, route_map: Path | None, probes: list[Path]) -> list[str]:
+    named = named_fixture_files(root, route_map) | set(probes)
+    tracked = git_tracked_files(root)
+    problems = []
+    for path in sorted(named):
+        if not path.is_file():
+            problems.append(f"{path}: named by the fixture provenance or route map but missing from the working tree")
+        elif path not in tracked:
+            problems.append(f"{path}: present on disk but not tracked by git; a .gitignore rule is swallowing it")
+    return problems
+
+
+
 # ------------------------------------------------------------------- CLI ----
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -260,6 +315,11 @@ def main() -> None:
     lint = sub.add_parser("lint")
     lint.add_argument("--path", action="append", required=True)
 
+    tracked = sub.add_parser("tracked")
+    tracked.add_argument("--fixtures-root", required=True)
+    tracked.add_argument("--map")
+    tracked.add_argument("--probe", action="append", default=[])
+
     redact = sub.add_parser("redact")
     redact.add_argument("--kind", required=True, choices=sorted(REDACTORS))
     redact.add_argument("--input", required=True)
@@ -269,6 +329,16 @@ def main() -> None:
     if args.command == "redact":
         source = json.loads(Path(args.input).read_text())
         Path(args.output).write_text(json.dumps(REDACTORS[args.kind](source), indent=2, sort_keys=True) + "\n")
+        return
+
+    if args.command == "tracked":
+        fixtures_root = Path(args.fixtures_root).resolve()
+        problems = check_tracked(fixtures_root, Path(args.map).resolve() if args.map else None,
+                                 [(fixtures_root / probe) for probe in args.probe])
+        if problems:
+            raise SystemExit("Archived fixtures are not committed:\n" + "\n".join(problems))
+        print(f"Fixture tracking check passed: every file named by the provenance tables and the route map under "
+              f"{fixtures_root.name} exists and is tracked by git.")
         return
 
     if args.command == "lint":
