@@ -63,19 +63,71 @@ def shape(value: object, path: str = "$", into: dict[str, set[str]] | None = Non
     return into
 
 
-def shape_matches(generated: dict[str, set[str]], archived: dict[str, set[str]]) -> list[str]:
-    """Returns the differences that make `generated` an invalid real shape."""
-    problems = []
-    for path in sorted(set(generated) - set(archived)):
-        problems.append(f"path not present in the archived response: {path} ({'|'.join(sorted(generated[path]))})")
-    for path in sorted(set(archived) - set(generated)):
-        problems.append(f"path missing from the generated response: {path} ({'|'.join(sorted(archived[path]))})")
-    for path in sorted(set(generated) & set(archived)):
-        extra = generated[path] - archived[path]
-        if extra:
-            problems.append(f"value kind {'|'.join(sorted(extra))} at {path} never occurs in the archived response "
-                            f"({'|'.join(sorted(archived[path]))})")
-    return problems
+class RouteShape:
+    """What the archived responses of one route kind say a real response of
+    that kind looks like.
+
+    A single archived response is a single observation, never the shape: the
+    identical compare carries `commits: []`, so no element path can be observed
+    in it, and one pull request may omit a member another carries.  The
+    permitted shape is therefore the union over every archive of the route
+    kind, the required shape is the intersection, and an array no archive ever
+    populated teaches nothing about its elements, so paths under it are
+    unconstrained rather than illegal.
+    """
+
+    def __init__(self, archives: list[Path]) -> None:
+        self.archives = archives
+        observations = [shape(json.loads(archive.read_text())) for archive in archives]
+        self.union: dict[str, set[str]] = {}
+        for observation in observations:
+            for path, kinds in observation.items():
+                self.union.setdefault(path, set()).update(kinds)
+        self.required: set[str] = set(observations[0]) if observations else set()
+        for observation in observations[1:]:
+            self.required &= set(observation)
+        # Array paths that every archive left empty: their element paths are
+        # unobserved, not forbidden.
+        self.unpopulated = tuple(f"{path}[]" for path, kinds in self.union.items()
+                                 if "array" in kinds and f"{path}[]" not in self.union)
+
+    def unconstrained(self, path: str) -> bool:
+        return any(path == prefix or path.startswith(prefix) for prefix in self.unpopulated)
+
+    def describe(self) -> str:
+        return ", ".join(archive.name for archive in self.archives)
+
+    def violations(self, generated: dict[str, set[str]]) -> list[str]:
+        """Returns what makes `generated` an invalid real shape for this kind."""
+        problems = []
+        for path in sorted(generated):
+            if self.unconstrained(path):
+                continue
+            if path not in self.union:
+                problems.append(f"path not present in any archived response of this route kind: "
+                                f"{path} ({'|'.join(sorted(generated[path]))})")
+                continue
+            extra = generated[path] - self.union[path]
+            if extra:
+                problems.append(f"value kind {'|'.join(sorted(extra))} at {path} never occurs in any archived "
+                                f"response of this route kind ({'|'.join(sorted(self.union[path]))})")
+        for path in sorted(self.required - set(generated)):
+            # An element path is only required where the generated response
+            # actually carries elements at that array.
+            if self.unconstrained(path) or not self._array_ancestors_present(path, generated):
+                continue
+            problems.append(f"path missing from the generated response, although every archived response of this "
+                            f"route kind carries it: {path} ({'|'.join(sorted(self.union[path]))})")
+        return problems
+
+    @staticmethod
+    def _array_ancestors_present(path: str, generated: dict[str, set[str]]) -> bool:
+        index = path.find("[]")
+        while index >= 0:
+            if path[:index + 2] not in generated:
+                return False
+            index = path.find("[]", index + 2)
+        return True
 
 
 def cover_items(items: list) -> list:
@@ -121,6 +173,12 @@ class RouteMap:
             if missing:
                 raise SystemExit(f"route kind {route_kind} names a missing archive: {', '.join(missing)}")
             self.rows.append((route_kind, re.compile(pattern), files))
+        self.shapes: dict[str, RouteShape] = {}
+
+    def shape_of(self, route_kind: str, archives: list[Path]) -> RouteShape:
+        if route_kind not in self.shapes:
+            self.shapes[route_kind] = RouteShape(archives)
+        return self.shapes[route_kind]
 
     def classify(self, endpoint: str) -> tuple[str, list[Path]]:
         matches = [(route_kind, files) for route_kind, pattern, files in self.rows if pattern.fullmatch(endpoint)]
@@ -131,16 +189,14 @@ class RouteMap:
         return matches[0]
 
 
-def check_response(route_map: RouteMap, endpoint: str, response: object) -> str:
+def check_response(route_map: RouteMap, endpoint: str, response: object, label: str) -> str:
     route_kind, archives = route_map.classify(endpoint)
-    generated = shape(response)
-    failures = []
-    for archive in archives:
-        problems = shape_matches(generated, shape(json.loads(archive.read_text())))
-        if not problems:
-            return route_kind
-        failures.append(f"  vs {archive.name}: " + "; ".join(problems[:6]))
-    raise SystemExit(f"{endpoint} does not have the real {route_kind} shape:\n" + "\n".join(failures))
+    route_shape = route_map.shape_of(route_kind, archives)
+    problems = route_shape.violations(shape(response))
+    if not problems:
+        return route_kind
+    raise SystemExit(f"[{label}] {endpoint} does not have the real {route_kind} shape, as the archived responses "
+                     f"of that route kind ({route_shape.describe()}) define it:\n  " + "\n  ".join(problems[:8]))
 
 
 # ------------------------------------------------------------------ lint ----
@@ -311,6 +367,8 @@ def main() -> None:
     check.add_argument("--bundle", action="append", default=[])
     check.add_argument("--fixture-map", action="append", default=[])
     check.add_argument("--endpoint-log", action="append", default=[])
+    # Several shape checks run per self-test; the label says which one failed.
+    check.add_argument("--label", default="shape-check")
 
     lint = sub.add_parser("lint")
     lint.add_argument("--path", action="append", required=True)
@@ -359,7 +417,8 @@ def main() -> None:
         root = Path(bundle)
         manifest = json.loads((root / "bundle.json").read_text())
         for entry in manifest["entries"]:
-            route_kind = check_response(route_map, entry["endpoint"], json.loads((root / entry["relative_path"]).read_text()))
+            route_kind = check_response(route_map, entry["endpoint"],
+                                        json.loads((root / entry["relative_path"]).read_text()), args.label)
             checked[route_kind] = checked.get(route_kind, 0) + 1
     for fixture_map in args.fixture_map:
         for line in Path(fixture_map).read_text().splitlines():
@@ -371,13 +430,14 @@ def main() -> None:
                 # envelope, which the bundle carries and shape-check covers.
                 route_map.classify(endpoint)
                 continue
-            route_kind = check_response(route_map, endpoint, json.loads(Path(response_path).read_text()))
+            route_kind = check_response(route_map, endpoint, json.loads(Path(response_path).read_text()), args.label)
             checked[route_kind] = checked.get(route_kind, 0) + 1
     for endpoint_log in args.endpoint_log:
         for endpoint in Path(endpoint_log).read_text().splitlines():
             if endpoint.strip():
                 route_map.classify(endpoint.strip())
-    print("Real-shape check passed: " + ", ".join(f"{route_kind}={count}" for route_kind, count in sorted(checked.items())))
+    print(f"Real-shape check passed [{args.label}]: " +
+          ", ".join(f"{route_kind}={count}" for route_kind, count in sorted(checked.items())))
 
 
 if __name__ == "__main__":

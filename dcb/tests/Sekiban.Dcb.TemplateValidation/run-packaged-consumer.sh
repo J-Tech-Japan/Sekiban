@@ -620,40 +620,75 @@ SHIM
   echo "POSITIVE native-origin-bytes: reader bundle carries ${native_bytes_count} archived GitHub responses byte-for-byte."
 
   # AC9: every response the reader stored, and every response the generator
-  # wrote, must have the recursive key paths and JSON value kinds of an
-  # archived real response for that route (null versus absent included).
-  python3 "$script_dir/release_fixture_shapes.py" shape-check \
+  # wrote, must have the recursive key paths and JSON value kinds that the
+  # archived real responses of its route kind define, taken as their union
+  # (null versus absent included).  Each check is labelled, because several
+  # run per self-test and the label says which one failed.
+  python3 "$script_dir/release_fixture_shapes.py" shape-check --label synthetic-bundle \
     --map "$release_fixture_dir/real-shape-route-map.tsv" --fixtures-root "$release_fixture_dir" \
     --bundle "$output" --fixture-map "$closed_fixture/map.tsv" --endpoint-log "$work_root/closed-endpoints.log"
   python3 "$script_dir/release_fixture_shapes.py" lint --path "$output" --path "$closed_fixture/content"
 
-  # AC9 shape mutants: a generated response that re-adds compare.head_commit,
-  # swaps null for absent, or names a route with no archive must be rejected.
+  # AC9 shape controls.  A single archive is one observation, not the shape: a
+  # response is judged against the union over the archives of its route kind,
+  # and an array every archive left empty teaches nothing about its elements.
+  # These four controls fix both directions of that rule.
   local shape_mutant_dir="$work_root/shape-mutants"
   rm -rf "$shape_mutant_dir"
   mkdir -p "$shape_mutant_dir"
-  local generated_compare
+  local generated_compare compare_endpoint
   generated_compare="$(awk -F '\t' '$1 ~ /:compare\// { print $3; exit }' "$closed_fixture/map.tsv")"
-  printf '%s\tgithub-response\t%s\t%s\n' \
-    "J-Tech-Japan/Sekiban@$(tr -d '\n' < "$closed_fixture/merged-sha"):compare/x" \
-    "$shape_mutant_dir/compare-head-commit.json" \
-    "repos/J-Tech-Japan/Sekiban/compare/$(tr -d '\n' < "$closed_fixture/merged-sha")...$(tr -d '\n' < "$closed_fixture/main-tip")" \
-    > "$shape_mutant_dir/map-head-commit.tsv"
+  compare_endpoint="repos/J-Tech-Japan/Sekiban/compare/$(tr -d '\n' < "$closed_fixture/merged-sha")...$(tr -d '\n' < "$closed_fixture/main-tip")"
+  shape_control_map() {
+    printf '%s\tgithub-response\t%s\t%s\n' \
+      "J-Tech-Japan/Sekiban@$(tr -d '\n' < "$closed_fixture/merged-sha"):compare/control" "$1" "$compare_endpoint" > "$2"
+  }
+
+  # Learning: the identical and behind compares carry `commits: []`, so they
+  # observe no element path.  The generated ahead compare, which has commits,
+  # is still a real compare against a route kind whose archives never populated
+  # that array.
+  awk -F '\t' 'BEGIN { OFS = "\t" } $1 == "compare" { $3 = "real-child/compare-da58d974abbf46e40ee813caa71dc70819bf764f-da58d974abbf46e40ee813caa71dc70819bf764f.json,real-child/compare-da58d974abbf46e40ee813caa71dc70819bf764f-aefca245bdd4010b537657793eaa041c9c83d9c8.json" } { print }' \
+    "$release_fixture_dir/real-shape-route-map.tsv" > "$shape_mutant_dir/route-map-empty-commits.tsv"
+  shape_control_map "$generated_compare" "$shape_mutant_dir/map-generated-compare.tsv"
+  python3 "$script_dir/release_fixture_shapes.py" shape-check --label empty-array-learning \
+    --map "$shape_mutant_dir/route-map-empty-commits.tsv" --fixtures-root "$release_fixture_dir" \
+    --fixture-map "$shape_mutant_dir/map-generated-compare.tsv"
+
+  # An invented member no archived compare carries anywhere: this is the M1
+  # head_commit the repaired validator no longer reads.
   jq '. + {head_commit: {sha: .commits[-1].sha}}' "$generated_compare" > "$shape_mutant_dir/compare-head-commit.json"
-  expect_failure python3 "$script_dir/release_fixture_shapes.py" shape-check \
+  shape_control_map "$shape_mutant_dir/compare-head-commit.json" "$shape_mutant_dir/map-head-commit.tsv"
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" shape-check --label m1-head-commit-readded \
     --map "$release_fixture_dir/real-shape-route-map.tsv" --fixtures-root "$release_fixture_dir" \
     --fixture-map "$shape_mutant_dir/map-head-commit.tsv"
-  sed 's#\t[^\t]*compare-head-commit.json\t#\t'"$shape_mutant_dir"'/compare-null-swap.json\t#' \
-    "$shape_mutant_dir/map-head-commit.tsv" > "$shape_mutant_dir/map-null-swap.tsv"
+
+  # A null where every archived compare carries a string.
   jq '.base_commit.commit.verification.reason = null' "$generated_compare" > "$shape_mutant_dir/compare-null-swap.json"
-  expect_failure python3 "$script_dir/release_fixture_shapes.py" shape-check \
+  shape_control_map "$shape_mutant_dir/compare-null-swap.json" "$shape_mutant_dir/map-null-swap.tsv"
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" shape-check --label null-for-string \
     --map "$release_fixture_dir/real-shape-route-map.tsv" --fixtures-root "$release_fixture_dir" \
     --fixture-map "$shape_mutant_dir/map-null-swap.tsv"
-  grep -v '^compare\t' "$release_fixture_dir/real-shape-route-map.tsv" > "$shape_mutant_dir/route-map-without-compare.tsv"
-  expect_failure python3 "$script_dir/release_fixture_shapes.py" shape-check \
+
+  # A member every archived compare carries, dropped from the generated one.
+  jq 'del(.merge_base_commit)' "$generated_compare" > "$shape_mutant_dir/compare-absent-member.json"
+  shape_control_map "$shape_mutant_dir/compare-absent-member.json" "$shape_mutant_dir/map-absent-member.tsv"
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" shape-check --label absent-required-member \
+    --map "$release_fixture_dir/real-shape-route-map.tsv" --fixtures-root "$release_fixture_dir" \
+    --fixture-map "$shape_mutant_dir/map-absent-member.tsv"
+
+  # A generated route with no archive at all.  The row is dropped with awk, not
+  # a `\t` grep pattern, which is a tab only in some greps.
+  awk -F '\t' 'NR == 1 || $1 != "compare"' "$release_fixture_dir/real-shape-route-map.tsv" \
+    > "$shape_mutant_dir/route-map-without-compare.tsv"
+  if [[ "$(awk -F '\t' '$1 == "compare" { rows += 1 } END { print rows + 0 }' "$shape_mutant_dir/route-map-without-compare.tsv")" != 0 ]]; then
+    echo "The route-map control did not drop the compare row." >&2
+    return 1
+  fi
+  expect_failure python3 "$script_dir/release_fixture_shapes.py" shape-check --label missing-route-archive \
     --map "$shape_mutant_dir/route-map-without-compare.tsv" --fixtures-root "$release_fixture_dir" \
     --fixture-map "$closed_fixture/map.tsv"
-  echo "Real-shape fixture controls passed: head_commit re-added, a null/absent swap, and a missing route archive are all rejected."
+  echo "Real-shape fixture controls passed: element paths are learned from the archives that have them, and re-added head_commit, a null for a string, an absent required member, and a missing route archive are all rejected."
 
   # AC2: the validated outputs exist only after a passing validation, carry
   # exactly the per-state member set, and repeat the validated values.
@@ -878,7 +913,7 @@ CARRIED
     --output-dir "$real_output" --manifest "$real_manifest" > /dev/null
   expect_pass real-data-prepared-da58d974 release_record_validator --bundle "$real_output" --manifest "$real_manifest" \
     --repo-root "$repo_root" --expected-version "$version" --state prepared
-  python3 "$script_dir/release_fixture_shapes.py" shape-check \
+  python3 "$script_dir/release_fixture_shapes.py" shape-check --label real-data-bundle \
     --map "$release_fixture_dir/real-shape-route-map.tsv" --fixtures-root "$release_fixture_dir" \
     --bundle "$real_output" --endpoint-log "$work_root/real-candidate-endpoints.log"
   python3 "$script_dir/release_fixture_shapes.py" lint --path "$real_output"
