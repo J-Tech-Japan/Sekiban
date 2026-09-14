@@ -1267,6 +1267,28 @@ perl -0pi -e 's/read-host-release-record\.sh/removed-record-reader.sh/g' \
   "$template_record_invocation_mutant/.github/workflows/packagesDcbTemplate.yml"
 expect_failure run_net10 "$validator" workflow --repo-root "$template_record_invocation_mutant"
 
+# The template validation workflow must trigger on PostgreSQL harness changes,
+# and the packaged-consumer path must keep running the version check.
+postgres_trigger_mutant="$work_root/postgres-trigger-mutant"
+copy_workflow_fixture "$postgres_trigger_mutant"
+perl -0pi -e "s{^      - 'dcb/tests/Sekiban\.Dcb\.Postgres\.Tests/run-packaged-consumer\.sh'\n}{}m" \
+  "$postgres_trigger_mutant/.github/workflows/dcb_template_validation.yml"
+if cmp -s "$repo_root/.github/workflows/dcb_template_validation.yml" "$postgres_trigger_mutant/.github/workflows/dcb_template_validation.yml"; then
+  echo "Could not construct the PostgreSQL trigger workflow mutant." >&2
+  exit 1
+fi
+expect_failure run_net10 "$validator" workflow --repo-root "$postgres_trigger_mutant"
+
+version_check_route_mutant="$work_root/version-check-route-mutant"
+copy_workflow_fixture "$version_check_route_mutant"
+perl -0pi -e 's/^bash "\$version_derivation_check" --postgres-harness "\$postgres_harness" --repo-root "\$repo_root"\n//m' \
+  "$version_check_route_mutant/dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh"
+if cmp -s "$script_dir/run-packaged-consumer.sh" "$version_check_route_mutant/dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh"; then
+  echo "Could not construct the version-check route mutant." >&2
+  exit 1
+fi
+expect_failure run_net10 "$validator" workflow --repo-root "$version_check_route_mutant"
+
 publish_retry_mutant="$work_root/publish-retry-mutant"
 copy_workflow_fixture "$publish_retry_mutant"
 perl -0pi -e 's/ --skip-duplicate//g' "$publish_retry_mutant/.github/workflows/packagesDcbTemplate.yml"
@@ -1274,34 +1296,59 @@ expect_failure run_net10 "$validator" workflow --repo-root "$publish_retry_mutan
 
 # SEK-G80 amendment: the PostgreSQL harness's SHA-derived prerelease version
 # must be a valid NuGet version for every commit SHA (NuGet is the oracle; no
-# DCB packing).  Source mutants restoring the former bare 12-character prefix
-# must be rejected by the same check.
+# DCB packing), and the version its first restore receives must be that
+# derivation.  Harness source mutants must each be rejected for their reason.
 version_derivation_check="$script_dir/validate-candidate-version-derivation.sh"
 postgres_harness="$repo_root/dcb/tests/Sekiban.Dcb.Postgres.Tests/run-packaged-consumer.sh"
-bash "$version_derivation_check" --postgres-harness "$postgres_harness"
+bash "$version_derivation_check" --postgres-harness "$postgres_harness" --repo-root "$repo_root"
 version_mutant_root="$work_root/version-derivation-mutants"
 mkdir -p "$version_mutant_root"
-cp "$postgres_harness" "$version_mutant_root/bare-prefix-derivation.sh"
-perl -pi -e 's/10\.0\.2-g62\.g%s/10.0.2-g62.%s/' "$version_mutant_root/bare-prefix-derivation.sh"
-cp "$postgres_harness" "$version_mutant_root/bare-prefix-version-line.sh"
-perl -0pi -e 's/version="\$\{G62_PACKAGE_VERSION:-\$\(derive_candidate_version "\$head_sha"\)\}"/version="\${G62_PACKAGE_VERSION:-10.0.2-g62.\${head_sha:0:12}}"/' "$version_mutant_root/bare-prefix-version-line.sh"
-for version_mutant in bare-prefix-derivation bare-prefix-version-line; do
-  if cmp -s "$postgres_harness" "$version_mutant_root/$version_mutant.sh"; then
-    echo "Could not construct the ${version_mutant} PostgreSQL harness mutant." >&2
-    exit 1
-  fi
-  if bash "$version_derivation_check" --postgres-harness "$version_mutant_root/$version_mutant.sh" \
+python3 - "$postgres_harness" "$version_mutant_root" <<'VERSION_MUTANTS'
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text()
+root = Path(sys.argv[2])
+required = 'version="${G62_PACKAGE_VERSION:-$(derive_candidate_version "$head_sha")}"\n'
+feed_line = 'feed="$temp_root/candidate-feed"\n'
+bare = '10.0.2-g62.${head_sha:0:12}'
+mutants = {
+    # Derivation restored to the bare 12-character prefix.
+    "bare-prefix-derivation": source.replace("printf '10.0.2-g62.g%s\\n'", "printf '10.0.2-g62.%s\\n'", 1),
+    # The single assignment no longer uses the derivation function.
+    "bare-prefix-version-line": source.replace(required, 'version="${G62_PACKAGE_VERSION:-' + bare + '}"\n', 1),
+    # A reassignment appended directly after the required line.
+    "reassigned-after-required-line": source.replace(required, required + 'version="' + bare + '"\n', 1),
+    # A reassignment through read, after the print-mode exit.
+    "late-read-reassignment": source.replace(feed_line, 'read -r version <<< "' + bare + '"\n' + feed_line, 1),
+    # A reassignment the static count cannot see; only the captured restore
+    # version exposes it.
+    "late-eval-reassignment": source.replace(feed_line, 'eval "versio""n=' + bare.replace("$", "\\$") + '"\n' + feed_line, 1),
+}
+for name, text in mutants.items():
+    if text == source:
+        sys.exit(f"Could not construct the {name} PostgreSQL harness mutant.")
+    (root / f"{name}.sh").write_text(text)
+VERSION_MUTANTS
+for version_mutant_spec in \
+    "bare-prefix-derivation|NuGet rejected derived candidate version 10.0.2-g62.095452654654 " \
+    "bare-prefix-version-line|does not contain the required version line" \
+    "reassigned-after-required-line|must assign version exactly once" \
+    "late-read-reassignment|must assign version exactly once" \
+    "late-eval-reassignment|Harness passed PackageVersion '10.0.2-g62."; do
+  IFS='|' read -r version_mutant version_mutant_reason <<< "$version_mutant_spec"
+  if bash "$version_derivation_check" --postgres-harness "$version_mutant_root/$version_mutant.sh" --repo-root "$repo_root" \
       > "$version_mutant_root/$version_mutant.log" 2>&1; then
     cat "$version_mutant_root/$version_mutant.log" >&2
     echo "MUTANT ${version_mutant}: SURVIVED the SHA-derived version check." >&2
     exit 1
   fi
-  grep -Eq 'NuGet rejected derived candidate version 10\.0\.2-g62\.095452654654 |required version line' "$version_mutant_root/$version_mutant.log" || {
+  grep -Fq "$version_mutant_reason" "$version_mutant_root/$version_mutant.log" || {
     cat "$version_mutant_root/$version_mutant.log" >&2
-    echo "MUTANT ${version_mutant}: failed for an unexpected reason." >&2
+    echo "MUTANT ${version_mutant}: failed without the expected reason: ${version_mutant_reason}" >&2
     exit 1
   }
-  echo "MUTANT ${version_mutant}: rejected: $(grep -E 'NuGet rejected derived candidate version|required version line' "$version_mutant_root/$version_mutant.log" | head -1)"
+  echo "MUTANT ${version_mutant}: rejected: $(grep -F "$version_mutant_reason" "$version_mutant_root/$version_mutant.log" | head -1)"
 done
 
 run_host_record_reader_shim_tests

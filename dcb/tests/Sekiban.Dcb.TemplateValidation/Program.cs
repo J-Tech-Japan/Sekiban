@@ -780,6 +780,7 @@ internal static class Program
                      "schedule:",
                      "templates/Sekiban.Dcb.Templates/**",
                      "dcb/tests/Sekiban.Dcb.TemplateValidation/**",
+                     "dcb/tests/Sekiban.Dcb.Postgres.Tests/run-packaged-consumer.sh",
                      ".github/workflows/dcb_template_validation.yml",
                      ".github/workflows/packagesDcbTemplate.yml",
                      "validate-release-tags.sh --check-drift"
@@ -948,6 +949,10 @@ internal static class Program
         Assert(sourceStage >= 0 && docsCurrencyStage >= 0 && packageBoundary >= 0 &&
                sourceStage < docsCurrencyStage && docsCurrencyStage < packageBoundary,
             "The packaged-consumer source phase must run the docs-currency stage after source validation and before packing.");
+        Assert(script.Contains(
+                "bash \"$version_derivation_check\" --postgres-harness \"$postgres_harness\" --repo-root \"$repo_root\"",
+                StringComparison.Ordinal),
+            "The packaged-consumer path must run the PostgreSQL SHA-derived version check against the real harness.");
     }
 
     private static bool IsEffectivelyPackable(string projectPath)

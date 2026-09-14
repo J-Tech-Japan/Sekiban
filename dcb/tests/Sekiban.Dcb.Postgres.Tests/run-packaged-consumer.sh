@@ -35,16 +35,24 @@ while (( $# > 0 )); do
   esac
 done
 
-# Side-effect-free mode used by the SemVer derivation check: print the exact
-# version this harness derives for a commit and exit before packing anything.
 if [[ -n "$print_candidate_version_for" ]]; then
-  derive_candidate_version "$print_candidate_version_for"
-  exit 0
+  head_sha="$print_candidate_version_for"
+else
+  if [[ "$(git -C "$repo_root" rev-parse --show-toplevel)" != "$repo_root" ]]; then
+    echo "The supplied repo root is not a Git worktree: $repo_root" >&2
+    exit 1
+  fi
+  head_sha="$(git -C "$repo_root" rev-parse HEAD)"
 fi
 
-if [[ "$(git -C "$repo_root" rev-parse --show-toplevel)" != "$repo_root" ]]; then
-  echo "The supplied repo root is not a Git worktree: $repo_root" >&2
-  exit 1
+# The only assignments of the candidate and omission-mutant versions.  The
+# side-effect-free --print-candidate-version mode reports exactly these values
+# (including any G62_PACKAGE_VERSION override) and exits before packing.
+version="${G62_PACKAGE_VERSION:-$(derive_candidate_version "$head_sha")}"
+mutant_version="${version}-omission"
+if [[ -n "$print_candidate_version_for" ]]; then
+  printf '%s\n%s\n' "$version" "$mutant_version"
+  exit 0
 fi
 
 temp_root="$(mktemp -d "${TMPDIR:-/tmp}/sek-g62-postgres-package.XXXXXX")"
@@ -67,9 +75,6 @@ printf '%s\n' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allow
 run_net9() { (cd "$net9_host" && dotnet "$@"); }
 run_net10() { (cd "$net10_host" && dotnet "$@"); }
 
-head_sha="$(git -C "$repo_root" rev-parse HEAD)"
-version="${G62_PACKAGE_VERSION:-$(derive_candidate_version "$head_sha")}"
-mutant_version="${version}-omission"
 feed="$temp_root/candidate-feed"
 mutant_feed="$temp_root/mutant-feed"
 mkdir -p "$feed" "$mutant_feed"
