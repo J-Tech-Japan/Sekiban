@@ -572,12 +572,42 @@ def main() -> None:
 
     @mutant("origin-completion-invented-time")
     def _invented_time() -> None:
-        invented = "2026-09-13T04:50:00Z"
+        # Well-formed and inside the legal submission < delivery < merge window.
+        invented = "2026-09-13T04:47:10.123456+00:00"
         def mutate(r: dict, d: dict, rc: dict, p: dict) -> None:
             d["entry"]["delivered_at"] = invented
             rc["reported_at"] = invented
             p["intent_delivered_at"] = invented
         mutate_transport("origin", mutate)
+
+    @mutant("origin-completion-consistent-fabrication")
+    def _consistent_fabrication() -> None:
+        created = "2026-09-13T04:46:30.000000+00:00"
+        delivered = "2026-09-13T04:47:05.000000+00:00"
+        summary = "APPROVE fabricated completion line"
+        def mutate(r: dict, d: dict, rc: dict, p: dict) -> None:
+            for entry in (r["entry"], d["entry"]):
+                entry.update({"entry_id": "0" * 32, "summary": summary, "created_at": created})
+            d["entry"]["last_attempt_at"] = delivered
+            d["entry"]["delivered_at"] = delivered
+            rc.update({"report_summary": summary, "reported_at": delivered})
+            p.update({"intent_entry_id": "0" * 32, "intent_reported_at": created, "intent_delivered_at": delivered})
+        mutate_transport("origin", mutate)
+
+    @mutant("origin-transport-one-byte-consistent")
+    def _one_byte_consistent() -> None:
+        # Exactly one byte changes in each canonical line (the summary text);
+        # the projection digests are recomputed so only the pin can reject it.
+        review = prepared()["origin_delivery"]["review"]
+        digests = {}
+        for ref_field, digest_field in [("transport_record_ref", "transport_record_sha256"),
+                                        ("transport_delivered_ref", "transport_delivered_sha256"),
+                                        ("transport_receipt_ref", "transport_receipt_sha256")]:
+            raw = b.read_content(review[ref_field])
+            if raw.count(b"CI green") != 1:
+                raise ValueError(f"{ref_field} does not contain exactly one summary marker")
+            digests[digest_field] = b.write_content(review[ref_field], raw.replace(b"CI green", b"CI Green", 1))
+        b.prepared_changes(lambda c: c["origin_delivery"]["review"].update(digests))
 
     @mutant("origin-completion-post-merge")
     def _post_merge() -> None:
@@ -738,6 +768,31 @@ def main() -> None:
             rc["reported_at"] = late
             p["intent_delivered_at"] = late
         mutate_transport("implementation", mutate)
+
+    # Origin transport is pinned to canonical bytes, so the generic transport
+    # rules are proven discriminating on the unpinned implementation review.
+    mutants["implementation-completion-invented-kind"] = lambda: mutate_transport("implementation", lambda r, d, rc, p: r.update({"kind": "intent-origin-review-completion"}))
+    mutants["implementation-completion-receipt-mismatch"] = lambda: mutate_transport("implementation", lambda r, d, rc, p: rc.update({"report_artifact": "reports/other-artifact.md"}))
+
+    @mutant("implementation-completion-before-review")
+    def _impl_before_review() -> None:
+        early = "2026-09-12T08:44:00.000000+00:00"
+        def mutate(r: dict, d: dict, rc: dict, p: dict) -> None:
+            r["entry"]["created_at"] = early
+            d["entry"]["created_at"] = early
+            p["intent_reported_at"] = early
+        mutate_transport("implementation", mutate)
+
+    @mutant("implementation-completion-digest")
+    def _impl_digest() -> None:
+        review = prepared()["implementation_review"]
+        raw = b.read_content(review["transport_record_ref"])
+        b.write_content(review["transport_record_ref"], raw.replace(b"no material findings", b"no material Findings", 1))
+
+    @mutant("implementation-completion-artifact-byte")
+    def _impl_artifact_byte() -> None:
+        artifact = b.read_content(prepared()["implementation_review"]["artifact_evidence_ref"])
+        mutate_review_content("implementation", "artifact_evidence_ref", artifact.replace(b"None.", b"Nome.", 1), "artifact_sha256")
 
     mutants["implementation-completion-origin-transport"] = lambda: b.prepared_changes(lambda c: c["implementation_review"].update({
         key: c["origin_delivery"]["review"][key] for key in [

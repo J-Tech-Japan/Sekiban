@@ -593,6 +593,7 @@ SHIM
   # reaches the named semantic rule instead of failing on an unrelated digest.
   # Columns: mutant, stage passed to the validator, the only accepted rule.
   local closed_mutant mutant_state expected_rule mutant_bundle mutant_count=0
+  local -a matrix_mutant_names=()
   while IFS='|' read -r closed_mutant mutant_state expected_rule <&3; do
     [[ -z "$closed_mutant" || "$closed_mutant" == \#* ]] && continue
     mutant_bundle="$work_root/closed-mutant-${closed_mutant//\//-}"
@@ -601,6 +602,7 @@ SHIM
       --manifest "$mutant_bundle/bundle.json" --repo-root "$repo_root" \
       --expected-version "$version" --state "$mutant_state"
     mutant_count=$((mutant_count + 1))
+    matrix_mutant_names+=("$closed_mutant")
   done 3<<'MATRIX'
 artifact-before-release|complete|authority.artifacts.after-release
 artifact-completion-equal|complete|chronology.closure-after-artifacts
@@ -660,8 +662,13 @@ empty-delta|complete|schema.members
 equal-template-tag-time|complete|chronology.library-before-template
 id-only-predecessor|complete|graph.immutable-ref
 implementation-completion-after-merge|complete|implementation-review.completion.chronology
+implementation-completion-artifact-byte|complete|implementation-review.completion.artifact
+implementation-completion-before-review|complete|implementation-review.completion.chronology
 implementation-completion-blocked|complete|implementation-review.completion.status
+implementation-completion-digest|complete|implementation-review.completion.digest
+implementation-completion-invented-kind|complete|implementation-review.completion.transport
 implementation-completion-origin-transport|complete|implementation-review.completion.identity
+implementation-completion-receipt-mismatch|complete|implementation-review.completion.transport
 issue1185-closeout-before-authority|complete|chronology.closure-after-artifacts
 issue1185-closeout-equal-authority|complete|chronology.closure-after-artifacts
 issue1230-closeout-before-authority|complete|chronology.closure-after-artifacts
@@ -708,19 +715,20 @@ origin-check-summary-truncated|complete|origin.check.summary
 origin-check-time-record|complete|origin.check.binding
 origin-check-truthful-conclusion|complete|origin.check.inventory
 origin-commit-tree-changed|complete|origin.commit.binding
-origin-completion-artifact-byte|complete|origin.completion.artifact
-origin-completion-before-review|complete|origin.completion.chronology
-origin-completion-blocked|complete|origin.completion.status
-origin-completion-digest|complete|origin.completion.digest
-origin-completion-implementation-artifact|complete|origin.completion.artifact
-origin-completion-invented-kind|complete|origin.completion.transport
-origin-completion-invented-time|complete|origin.completion.transport
-origin-completion-post-merge|complete|origin.completion.chronology
-origin-completion-question|complete|origin.completion.status
-origin-completion-receipt-mismatch|complete|origin.completion.transport
-origin-completion-repair-task|complete|origin.completion.identity
+origin-completion-artifact-byte|complete|origin.completion.canonical-bytes
+origin-completion-before-review|complete|origin.completion.canonical-bytes
+origin-completion-blocked|complete|origin.completion.canonical-bytes
+origin-completion-consistent-fabrication|complete|origin.completion.canonical-bytes
+origin-completion-digest|complete|origin.completion.canonical-bytes
+origin-completion-implementation-artifact|complete|origin.completion.canonical-bytes
+origin-completion-invented-kind|complete|origin.completion.canonical-bytes
+origin-completion-invented-time|complete|origin.completion.canonical-bytes
+origin-completion-post-merge|complete|origin.completion.canonical-bytes
+origin-completion-question|complete|origin.completion.canonical-bytes
+origin-completion-receipt-mismatch|complete|origin.completion.canonical-bytes
+origin-completion-repair-task|complete|origin.completion.canonical-bytes
 origin-completion-repair-task-projection|complete|origin.completion.identity
-origin-completion-uuid-nonce|complete|origin.completion.identity
+origin-completion-uuid-nonce|complete|origin.completion.canonical-bytes
 origin-heads-swapped|complete|origin.identity
 origin-merge-parents-reversed|complete|origin.commit.parents
 origin-pr-base-repo-removed|complete|origin.pr.native-shape
@@ -740,6 +748,7 @@ origin-review-request-update|complete|origin.review.verdict
 origin-review-reviewer|complete|origin.review.api.binding
 origin-review-submitted-at|complete|origin.review.api.binding
 origin-tag-substitution|complete|tag.library_tag.identity
+origin-transport-one-byte-consistent|complete|origin.completion.canonical-bytes
 origin-tree-both-changed|complete|origin.identity
 origin-tree-unequal|complete|origin.tree-equality
 orphan-host-anchor-pair|complete|bundle.reachability
@@ -784,12 +793,17 @@ wrong-stage|complete|graph.stage-order
 wrong-stage-field|complete|schema.members
 wrong-template-url|complete|template.identity
 MATRIX
-  local registered_mutants
-  registered_mutants="$(python3 "$script_dir/mutate-closed-bundle.py" "$output" "$work_root/mutant-list" --list | grep -Evc '^(external-commit|origin-check-summary-additional-removed)$')"
-  (( mutant_count == registered_mutants )) || {
-    echo "Closed mutation matrix ran ${mutant_count} mutants but the mutator registers ${registered_mutants}." >&2
+  # The matrix and the mutator registry must name exactly the same mutants:
+  # compare sorted name sets (and reject duplicate rows), not just counts.
+  local registered_names="$work_root/mutant-registry.txt" matrix_names="$work_root/mutant-matrix.txt"
+  python3 "$script_dir/mutate-closed-bundle.py" "$output" "$work_root/mutant-list" --list |
+    grep -Ev '^(external-commit|origin-check-summary-additional-removed)$' | LC_ALL=C sort > "$registered_names"
+  printf '%s\n' "${matrix_mutant_names[@]}" | LC_ALL=C sort > "$matrix_names"
+  if [[ -n "$(LC_ALL=C uniq -d "$matrix_names")" ]] || ! cmp -s "$registered_names" "$matrix_names"; then
+    echo "Closed mutation matrix names differ from the mutator registry (duplicates: $(LC_ALL=C uniq -d "$matrix_names" | tr '\n' ' '))." >&2
+    diff "$registered_names" "$matrix_names" >&2 || true
     return 1
-  }
+  fi
   echo "Closed mutation matrix: ${mutant_count} named mutants rejected at their asserted rules."
   echo "Named production pairs: origin-old/pass=native-origin-complete-bundle vs candidate-old/fail=origin-candidate-substitution,origin-check-substitution,origin-tag-substitution; approval-carry/pass=state-prefix-* vs approval-rebind/fail=authority-rebind; unreferenced-sibling/pass=reader sibling exclusion vs reachable-splice/fail=reader-reachable-splice; external-commit/pass vs current-object-self-commit/fail."
 

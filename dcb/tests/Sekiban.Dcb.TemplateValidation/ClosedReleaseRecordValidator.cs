@@ -47,6 +47,16 @@ internal static class ClosedReleaseRecordValidator
     private const string OriginReviewNonce = "sek-g79-pr1235-review-01b38432";
     private const string OriginReviewArtifactName = "sek-g79-pr1235-01b38432-final-exact-codex-sol-review-20260913.md";
 
+    // SHA-256 of the canonical, byte-exact origin review transport: reviewer
+    // outbox `record` and `delivered` JSONL lines, the orchestrator `report`
+    // receipt line, and the review artifact.  These are fixed history, so a
+    // self-consistent but fabricated transport (edited entry id, summary, or
+    // in-window times with recomputed digests) cannot authenticate origin.
+    private const string OriginTransportRecordSha256 = "4d08a289bf8e9fba074de95f60be87acf2635726fd74a65370f9073826ed22a1";
+    private const string OriginTransportDeliveredSha256 = "2c73e6e5cf64e77cb51dd92b0da6320b2840b53ada80fc13d00c6718531ffcd6";
+    private const string OriginTransportReceiptSha256 = "0e63f74c4b33a98cede206838548a00c754b99c4d2de669dde9bd93f2ee8c6b3";
+    private const string OriginReviewArtifactSha256 = "22c97e22c8c25ca226f0fad3d3dc184a5e6a5fbbeb94207c5d74c486e0efbc97";
+
     // Exact historical origin run inventory: the PR-head run that produced the
     // two DCB test checks before Review, and all jobs of the three diagnostic
     // workflow_dispatch runs started after merge, with truthful conclusions.
@@ -604,7 +614,8 @@ internal static class ClosedReleaseRecordValidator
             "origin_delivery.review must identify historical review 5189565347.");
         var reviewFacts = ValidateGitHubReview(review, bundle, "origin.review", OriginPullRequest, OriginPullRequestNumber, originHead);
         ValidateReviewTransport(review, bundle, "origin.completion", reviewFacts, originMergedAt,
-            new PinnedTransport(OriginReviewTask, OriginReviewNonce, OriginReviewArtifactName));
+            new PinnedTransport(OriginReviewTask, OriginReviewNonce, OriginReviewArtifactName,
+                OriginTransportRecordSha256, OriginTransportDeliveredSha256, OriginTransportReceiptSha256, OriginReviewArtifactSha256));
 
         ValidateOriginChecks(origin, bundle, reviewFacts.SubmittedAt, originMergedAt, originHead);
     }
@@ -869,6 +880,21 @@ internal static class ClosedReleaseRecordValidator
         var recordBytes = GetContent(bundle, GetString(review, "transport_record_ref"), "transport record");
         var deliveredBytes = GetContent(bundle, GetString(review, "transport_delivered_ref"), "transport delivery");
         var receiptBytes = GetContent(bundle, GetString(review, "transport_receipt_ref"), "transport receipt");
+        var artifact = GetContent(bundle, GetString(review, "artifact_evidence_ref"), "review artifact");
+        if (pinned is not null)
+        {
+            // Pinned history is checked before any other transport rule.
+            Assert($"{rule}.canonical-bytes",
+                Sha256Bytes(recordBytes) == pinned.RecordSha256 &&
+                Sha256Bytes(deliveredBytes) == pinned.DeliveredSha256 &&
+                Sha256Bytes(receiptBytes) == pinned.ReceiptSha256 &&
+                Sha256Bytes(artifact) == pinned.ArtifactSha256 &&
+                GetString(review, "transport_record_sha256") == pinned.RecordSha256 &&
+                GetString(review, "transport_delivered_sha256") == pinned.DeliveredSha256 &&
+                GetString(review, "transport_receipt_sha256") == pinned.ReceiptSha256 &&
+                GetString(review, "artifact_sha256") == pinned.ArtifactSha256,
+                "Origin review completion must be the exact canonical historical transport lines and review artifact bytes.");
+        }
         Assert($"{rule}.digest", Sha256Bytes(recordBytes) == GetString(review, "transport_record_sha256").ToLowerInvariant() &&
                Sha256Bytes(deliveredBytes) == GetString(review, "transport_delivered_sha256").ToLowerInvariant() &&
                Sha256Bytes(receiptBytes) == GetString(review, "transport_receipt_sha256").ToLowerInvariant() &&
@@ -922,7 +948,6 @@ internal static class ClosedReleaseRecordValidator
                TryParseTransportTimestamp(GetString(review, "intent_delivered_at"), out _),
             "Review report record, delivery, and orchestrator receipt are not one canonical completed transport transition.");
 
-        var artifact = GetContent(bundle, GetString(review, "artifact_evidence_ref"), "review artifact");
         Assert($"{rule}.artifact", Sha256Bytes(artifact) == GetString(review, "artifact_sha256").ToLowerInvariant() &&
                ArtifactCarriesReviewBody(artifact, facts),
             "The review artifact is not the exact reviewed artifact that carries the authenticated GitHub review body.");
@@ -1493,5 +1518,7 @@ internal static class ClosedReleaseRecordValidator
     private sealed record AuthorityState(Authority Prepared, Authority? ArtifactsVerified);
     private sealed record OriginJob(string JobId, string RunId, string WorkflowFile, string WorkflowName, string Event, string HeadSha, string RunConclusion, string RunCreatedAt, string JobName, string Conclusion, string JobStartedAt, string JobCompletedAt);
     private sealed record ReviewFacts(string ReviewId, string ReviewUrl, string HeadSha, string SubmittedAtText, DateTimeOffset SubmittedAt, byte[] Body);
-    private sealed record PinnedTransport(string TaskId, string ResultNonce, string ArtifactName);
+    private sealed record PinnedTransport(
+        string TaskId, string ResultNonce, string ArtifactName,
+        string RecordSha256, string DeliveredSha256, string ReceiptSha256, string ArtifactSha256);
 }
