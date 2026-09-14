@@ -328,6 +328,11 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         // receipt. The next strictly newer attempt is compared only with this same application status clock.
         var postReceiptCatchUpAttemptAt = (await committedRestart.GetStatusAsync()).LastCatchUpAttemptAt;
 
+        // GetStatusAsync is [AlwaysInterleave] and the status flags are raw grain fields, so a re-read taken after this
+        // wait can land inside a G58 idle durable probe that has already raised the flags before its first provider
+        // await. The status assertions below therefore use the causal snapshot that satisfied the predicate. It is
+        // captured only on the true-return path, after the status gate and every data condition have passed.
+        MaterializedViewGrainStatus? completedAttemptStatus = null;
         await WaitUntilAsync(async () =>
         {
             var status = await committedRestart.GetStatusAsync();
@@ -342,14 +347,22 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             }
 
             var state = await ReadOrderStateAsync();
-            return state.Registry.LastStreamReceivedAt is { } receivedAt &&
-                   receivedAt >= duplicateReceiptAt &&
-                   state.Order?.Total == beforeDuplicate.Order?.Total &&
-                   state.ItemCount == beforeDuplicate.ItemCount &&
-                   state.Registry.CurrentPosition == beforeDuplicate.Registry.CurrentPosition;
+            if (state.Registry.LastStreamReceivedAt is not { } receivedAt ||
+                receivedAt < duplicateReceiptAt ||
+                state.Order?.Total != beforeDuplicate.Order?.Total ||
+                state.ItemCount != beforeDuplicate.ItemCount ||
+                state.Registry.CurrentPosition != beforeDuplicate.Registry.CurrentPosition)
+            {
+                return false;
+            }
+
+            completedAttemptStatus = status;
+            return true;
         }, timeoutMs: 15000);
 
-        var afterDuplicateStatus = await committedRestart.GetStatusAsync();
+        var afterDuplicateStatus = completedAttemptStatus
+            ?? throw new InvalidOperationException(
+                "The completed catch-up attempt did not expose a status snapshot.");
         Assert.True(
             afterDuplicateStatus.LastCatchUpAttemptAt is { } afterDuplicateAttemptAt &&
             (postReceiptCatchUpAttemptAt is not { } priorAttempt || afterDuplicateAttemptAt > priorAttempt));
@@ -369,6 +382,37 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             afterDuplicateReceiptAt >= duplicateReceiptAt);
         Assert.Equal(beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId, afterDuplicate.Registry.LastStreamReceivedSortableUniqueId);
         Assert.Null(afterDuplicate.Registry.LastStreamAppliedSortableUniqueId);
+
+        // Committed liveness oracle: the snapshot above proves one completed attempt was idle, so this proves the
+        // flags keep clearing afterwards and that later probes re-apply nothing. It cannot pass vacuously: within
+        // 15 s an advanced LastCatchUpAttemptAt can only come from a tick that actually acquired the catch-up
+        // semaphore, because the fixture keeps the default 30 s CatchUpStallThreshold and no recovery write can
+        // advance the marker in that window.
+        // This wait MAY also exercise the semaphore-skip path, because contention with the WeatherForecast grain in
+        // this class is probabilistic; it is not forced here. Only the uncommitted AC8 lock demonstration forces it,
+        // and the deterministic skip-path coverage lives in the Orleans.Tests fact
+        // SemaphoreSkippedIdleProbe_ClearsAfterRelease_WithoutApplyOrExtraRestore.
+        var livenessBaselineAttemptAt = afterDuplicateStatus.LastCatchUpAttemptAt
+            ?? throw new InvalidOperationException("The completed catch-up attempt did not expose an attempt marker.");
+        await WaitUntilAsync(async () =>
+        {
+            var status = await committedRestart.GetStatusAsync();
+            if (status.LastCatchUpAttemptAt is not { } laterAttemptAt ||
+                laterAttemptAt <= livenessBaselineAttemptAt ||
+                status.CatchUpInProgress ||
+                status.IsCatchUpActive ||
+                status.CatchUpHalted ||
+                status.BufferedEventCount != 0)
+            {
+                return false;
+            }
+
+            var state = await ReadOrderStateAsync();
+            return state.Order?.Total == 15m &&
+                   state.ItemCount == 1 &&
+                   state.Registry.AppliedEventVersion == 2 &&
+                   state.Registry.CurrentPosition == beforeDuplicate.Registry.CurrentPosition;
+        }, timeoutMs: 15000);
 
         var beforeIdle = afterDuplicate;
         var idleReceiptAt = beforeIdle.Registry.LastStreamReceivedAt;
@@ -1227,6 +1271,11 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         var postReceiptCatchUpAttemptAt = (await grain.GetStatusAsync()).LastCatchUpAttemptAt
             ?? throw new InvalidOperationException("The post-receipt state did not expose a catch-up attempt marker.");
 
+        // GetStatusAsync is [AlwaysInterleave] and the status flags are raw grain fields, so a re-read taken after this
+        // wait can land inside a G58 idle durable probe that has already raised the flags before its first provider
+        // await. The status assertions below therefore use the causal snapshot that satisfied the predicate. It is
+        // captured only on the true-return path, after the status gate and every data condition have passed.
+        MaterializedViewGrainStatus? completedAttemptStatus = null;
         await WaitUntilAsync(async () =>
         {
             var status = await grain.GetStatusAsync();
@@ -1241,21 +1290,29 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
             }
 
             var state = await ReadStateAsync();
-            return state.Registry.LastStreamReceivedAt is { } receivedAt &&
-                   receivedAt >= duplicateReceiptAt &&
-                   state.Registry.CurrentPosition == beforeDuplicate.Registry.CurrentPosition &&
-                   state.Registry.AppliedEventVersion == beforeDuplicate.Registry.AppliedEventVersion &&
-                   state.Registry.LastStreamReceivedSortableUniqueId == beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId &&
-                   state.Registry.LastStreamAppliedSortableUniqueId is null &&
-                   state.Registry.LastCatchUpSortableUniqueId == beforeDuplicate.Registry.LastCatchUpSortableUniqueId &&
-                   state.DelayedRow is not null &&
-                   state.DelayedRow.Location == beforeDuplicate.DelayedRow!.Location &&
-                   state.DelayedRow.LastSortableUniqueId == beforeDuplicate.DelayedRow.LastSortableUniqueId &&
-                   state.AdvancedRow is not null &&
-                   state.AdvancedRow.LastSortableUniqueId == beforeDuplicate.AdvancedRow!.LastSortableUniqueId;
+            if (state.Registry.LastStreamReceivedAt is not { } receivedAt ||
+                receivedAt < duplicateReceiptAt ||
+                state.Registry.CurrentPosition != beforeDuplicate.Registry.CurrentPosition ||
+                state.Registry.AppliedEventVersion != beforeDuplicate.Registry.AppliedEventVersion ||
+                state.Registry.LastStreamReceivedSortableUniqueId != beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId ||
+                state.Registry.LastStreamAppliedSortableUniqueId is not null ||
+                state.Registry.LastCatchUpSortableUniqueId != beforeDuplicate.Registry.LastCatchUpSortableUniqueId ||
+                state.DelayedRow is null ||
+                state.DelayedRow.Location != beforeDuplicate.DelayedRow!.Location ||
+                state.DelayedRow.LastSortableUniqueId != beforeDuplicate.DelayedRow.LastSortableUniqueId ||
+                state.AdvancedRow is null ||
+                state.AdvancedRow.LastSortableUniqueId != beforeDuplicate.AdvancedRow!.LastSortableUniqueId)
+            {
+                return false;
+            }
+
+            completedAttemptStatus = status;
+            return true;
         }, timeoutMs: 15000);
 
-        var afterDuplicateStatus = await grain.GetStatusAsync();
+        var afterDuplicateStatus = completedAttemptStatus
+            ?? throw new InvalidOperationException(
+                "The completed catch-up attempt did not expose a status snapshot.");
         Assert.True(
             afterDuplicateStatus.LastCatchUpAttemptAt is { } afterCatchUpAttemptAt &&
             afterCatchUpAttemptAt > postReceiptCatchUpAttemptAt);
@@ -1280,6 +1337,40 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         Assert.Equal(beforeDuplicate.DelayedRow.LastSortableUniqueId, afterDuplicate.DelayedRow.LastSortableUniqueId);
         Assert.NotNull(afterDuplicate.AdvancedRow);
         Assert.Equal(beforeDuplicate.AdvancedRow!.LastSortableUniqueId, afterDuplicate.AdvancedRow.LastSortableUniqueId);
+
+        // Committed liveness oracle: the snapshot above proves one completed attempt was idle, so this proves the
+        // flags keep clearing afterwards and that later probes re-apply nothing. It cannot pass vacuously: within
+        // 15 s an advanced LastCatchUpAttemptAt can only come from a tick that actually acquired the catch-up
+        // semaphore, because the fixture keeps the default 30 s CatchUpStallThreshold and no recovery write can
+        // advance the marker in that window. A stuck flag never satisfies the status gate, a requeued hint fails
+        // BufferedEventCount == 0, and a re-apply fails the data oracles carried forward from beforeDuplicate.
+        var livenessBaselineAttemptAt = afterDuplicateStatus.LastCatchUpAttemptAt
+            ?? throw new InvalidOperationException("The completed catch-up attempt did not expose an attempt marker.");
+        await WaitUntilAsync(async () =>
+        {
+            var status = await grain.GetStatusAsync();
+            if (status.LastCatchUpAttemptAt is not { } laterAttemptAt ||
+                laterAttemptAt <= livenessBaselineAttemptAt ||
+                status.CatchUpInProgress ||
+                status.IsCatchUpActive ||
+                status.CatchUpHalted ||
+                status.BufferedEventCount != 0)
+            {
+                return false;
+            }
+
+            var state = await ReadStateAsync();
+            return state.Registry.CurrentPosition == beforeDuplicate.Registry.CurrentPosition &&
+                   state.Registry.AppliedEventVersion == beforeDuplicate.Registry.AppliedEventVersion &&
+                   state.Registry.LastStreamReceivedSortableUniqueId == beforeDuplicate.Registry.LastStreamReceivedSortableUniqueId &&
+                   state.Registry.LastStreamAppliedSortableUniqueId is null &&
+                   state.Registry.LastCatchUpSortableUniqueId == beforeDuplicate.Registry.LastCatchUpSortableUniqueId &&
+                   state.DelayedRow is not null &&
+                   state.DelayedRow.Location == beforeDuplicate.DelayedRow!.Location &&
+                   state.DelayedRow.LastSortableUniqueId == beforeDuplicate.DelayedRow.LastSortableUniqueId &&
+                   state.AdvancedRow is not null &&
+                   state.AdvancedRow.LastSortableUniqueId == beforeDuplicate.AdvancedRow!.LastSortableUniqueId;
+        }, timeoutMs: 15000);
     }
 
     private static async Task WaitUntilAsync(Func<Task<bool>> predicate, int timeoutMs = 10000, int pollMs = 100)
