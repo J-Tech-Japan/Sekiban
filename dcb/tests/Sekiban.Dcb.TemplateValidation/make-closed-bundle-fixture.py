@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Build a deterministic pointer-only schema-v2 production bundle fixture."""
+"""Build a deterministic pointer-only schema-v2 production bundle fixture.
+
+Origin (#1235) evidence is taken byte-for-byte from checked-in archived
+`gh api` responses and canonical intent-cli transport JSONL lines; nothing in
+that historical evidence is synthesized.  The future release candidate cannot
+exist yet, so its child API responses are synthesized in GitHub's native
+response shapes (no top-level PR/release repository member, cross-linked
+run/job/check-run URLs, and distinct run/job/check timestamps).
+"""
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import shutil
@@ -43,16 +50,43 @@ def endpoint(reference: str) -> str:
     return f"repos/{repository}/contents/{object_path}?ref={commit}"
 
 
+REPOSITORY = "J-Tech-Japan/Sekiban"
+API = f"https://api.github.com/repos/{REPOSITORY}"
+HTML = f"https://github.com/{REPOSITORY}"
+CHECK_POLICY = "required-check-run-ids-subset/additional-check-runs-ignored"
+
+ORIGIN_HEAD = "01b3843276fa3bdd828afd484eb2fa0e8a6b63bb"
+ORIGIN_MERGED = "7f684e6b9f769d436b12495acd07e7d74c5d8298"
+ORIGIN_BASE = "bfb43ccbf866c06835edc5fa272f432de62ffced"
+ORIGIN_TREE = "cd61cbd785bbc1568f14f8ebdb358691763fd58e"
+
+# (job_id, run_id) for the exact historical origin inventory.
+ORIGIN_JOBS = [
+    ("103671918666", "34737699937"),
+    ("103671918609", "34737699937"),
+    ("103674951300", "34738840878"),
+    ("103674951391", "34738840878"),
+    ("103674954698", "34738842353"),
+    ("103674956469", "34738843321"),
+    ("103674956408", "34738843321"),
+]
+
+
+def evidence_line(review_id: str, submitted: str, head: str, url: str) -> bytes:
+    return (f"Same-account GitHub review evidence: COMMENTED review `{review_id}`, submitted at `{submitted}` "
+            f"against commit `{head}`: {url}\n\n").encode()
+
+
 def main() -> None:
     source = Path(sys.argv[1]).resolve()
     destination = Path(sys.argv[2]).resolve()
     requested_state = sys.argv[3] if len(sys.argv) > 3 else "complete"
+    options = set(sys.argv[4:])
     record = json.loads(source.read_text())
     shutil.rmtree(destination, ignore_errors=True)
     (destination / "content").mkdir(parents=True)
 
     host_repository = "J-Tech-Japan/SekibanIntentHost"
-    repository = "J-Tech-Japan/Sekiban"
     host_ref = "f" * 40
     evidence_host_ref = "e" * 40
     payload_host_refs = ["1" * 40, "2" * 40, "3" * 40, "4" * 40, "5" * 40, "6" * 40]
@@ -61,10 +95,6 @@ def main() -> None:
     candidate_base = "4" * 40
     reviewed_tree = "5" * 40
     merged_tree = reviewed_tree
-    origin_head = "01b3843276fa3bdd828afd484eb2fa0e8a6b63bb"
-    origin_tree = "cd61cbd785bbc1568f14f8ebdb358691763fd58e"
-    origin_merged_sha = "7f684e6b9f769d436b12495acd07e7d74c5d8298"
-    origin_merged_tree = origin_tree
     host_tree = "8" * 40
     main_tip = "9" * 40
     main_side_tip = "0" * 40
@@ -72,8 +102,8 @@ def main() -> None:
     template_tag_object = "c" * 40
     version = "10.22.0"
     fixture_dir = Path(__file__).with_name("fixtures") / "release-record"
-    actual_origin_review_body = (fixture_dir / "origin-review-5189565347.md").read_bytes()
-    actual_origin_pr_body = (fixture_dir / "origin-pr-1235-body.md").read_bytes()
+    native_dir = fixture_dir / "native-origin"
+    transport_dir = fixture_dir / "origin-transport"
     stages = [
         ("base-prepared", "prepared", None, "2026-09-12T09:10:00Z", "base.json"),
         ("delta-library-tagged", "library-tagged/incomplete", "base-prepared", "2026-09-12T09:20:00Z", "library.json"),
@@ -87,8 +117,8 @@ def main() -> None:
     def host_content(path: str, commit: str = evidence_host_ref) -> str:
         return immutable(host_repository, commit, f"contents/{path}")
 
-    def github(path: str) -> str:
-        return immutable(repository, merged_sha, path)
+    def github(path: str, commit: str = merged_sha) -> str:
+        return immutable(REPOSITORY, commit, path)
 
     mapped: list[tuple[str, str, str]] = []
 
@@ -110,172 +140,368 @@ def main() -> None:
         mapped.append((reference, "github-response", str(path)))
         return reference
 
+    def add_native(reference: str, filename: str) -> str:
+        # Archived `gh api` bytes are copied unchanged; the checked-in
+        # provenance.tsv records the endpoint and SHA-256 of each file.
+        if any(item[0] == reference for item in mapped):
+            return reference
+        raw = (native_dir / filename).read_bytes()
+        path = destination / "content" / ("api-" + sha256(reference.encode()) + ".json")
+        path.write_bytes(raw)
+        mapped.append((reference, "github-response", str(path)))
+        return reference
+
+    def native_json(filename: str) -> dict[str, object]:
+        return json.loads((native_dir / filename).read_text())
+
     record["schema_version"] = 2
     record.pop("record_source", None)
-    record["candidate"].update({
+
+    # ---- origin_delivery: historical PR #1235, byte-exact native evidence ----
+    origin_pr = native_json("pr-1235.json")
+    origin_review_api = native_json("review-5189565347.json")
+    origin_body = origin_pr["body"].encode()
+    origin_review_body = origin_review_api["body"].encode()
+    if origin_review_body != (fixture_dir / "origin-review-5189565347.md").read_bytes():
+        raise RuntimeError("Archived review body fixture no longer matches the archived review response.")
+    origin_review_url = origin_review_api["html_url"]
+    origin = {
+        "repository": REPOSITORY,
+        "pull_request": origin_pr["html_url"],
+        "pull_request_evidence_ref": add_native(github("pulls/1235", ORIGIN_MERGED), "pr-1235.json"),
+        "base_sha": ORIGIN_BASE,
+        "reviewed_head_sha": ORIGIN_HEAD,
+        "reviewed_tree_sha": ORIGIN_TREE,
+        "merged_sha": ORIGIN_MERGED,
+        "merged_tree_sha": ORIGIN_TREE,
+        "merged_at_utc": origin_pr["merged_at"],
+        "reviewed_commit_evidence_ref": add_native(github(f"commits/{ORIGIN_HEAD}", ORIGIN_HEAD), f"commit-{ORIGIN_HEAD}.json"),
+        "merged_commit_evidence_ref": add_native(github(f"commits/{ORIGIN_MERGED}", ORIGIN_MERGED), f"commit-{ORIGIN_MERGED}.json"),
+        "reviewed_tree_evidence_ref": add_native(github(f"git/trees/{ORIGIN_TREE}", ORIGIN_HEAD), f"tree-{ORIGIN_TREE}.json"),
+        "merged_tree_evidence_ref": add_native(github(f"git/trees/{ORIGIN_TREE}", ORIGIN_MERGED), f"tree-{ORIGIN_TREE}.json"),
+        "body_sha256": sha256(origin_body),
+        "body_evidence_ref": add_text("origin-body", origin_body),
+        "check_identity_policy": CHECK_POLICY,
+        "checks_evidence_ref": add_native(github(f"commits/{ORIGIN_HEAD}/check-runs", ORIGIN_HEAD), f"check-runs-{ORIGIN_HEAD}.json"),
+    }
+
+    transport_commit = "c" * 40
+    record_line = (transport_dir / "review-outbox-record.jsonl").read_bytes()
+    delivered_line = (transport_dir / "review-outbox-delivered.jsonl").read_bytes()
+    receipt_line = (transport_dir / "orchestrator-report-receipt.jsonl").read_bytes()
+    record_entry = json.loads(record_line)["entry"]
+    delivered_entry = json.loads(delivered_line)["entry"]
+    origin_artifact = (fixture_dir / "origin-g79-review-artifact.md").read_bytes()
+    origin["review"] = {
+        "review_url": origin_review_url,
+        "review_id": str(origin_review_api["id"]),
+        "reviewer": origin_review_api["user"]["login"],
+        "github_state": origin_review_api["state"],
+        "semantic_verdict": "APPROVE",
+        "commit_id": origin_review_api["commit_id"],
+        "submitted_at_utc": origin_review_api["submitted_at"],
+        "body_sha256": sha256(origin_review_body),
+        "body_evidence_ref": add_text("origin-review-body", origin_review_body),
+        "review_evidence_ref": add_native(github("pulls/1235/reviews/5189565347", ORIGIN_HEAD), "review-5189565347.json"),
+        "artifact_path": record_entry["artifact"],
+        "artifact_sha256": sha256(origin_artifact),
+        "artifact_evidence_ref": add_content(
+            host_content("evidence/origin-g79-review-artifact.md", transport_commit),
+            "evidence/origin-g79-review-artifact.md", origin_artifact),
+        "intent_task_id": record_entry["task_id"],
+        "intent_result_nonce": record_entry["result_nonce"],
+        "intent_entry_id": record_entry["entry_id"],
+        "intent_from_role": record_entry["from_role"],
+        "intent_to_role": record_entry["to_role"],
+        "intent_status": record_entry["status"],
+        "intent_reported_at": record_entry["created_at"],
+        "intent_delivered_at": delivered_entry["delivered_at"],
+        "transport_record_ref": add_content(
+            host_content("evidence/origin-review-outbox-record.jsonl", transport_commit),
+            "evidence/origin-review-outbox-record.jsonl", record_line),
+        "transport_record_sha256": sha256(record_line),
+        "transport_delivered_ref": add_content(
+            host_content("evidence/origin-review-outbox-delivered.jsonl", transport_commit),
+            "evidence/origin-review-outbox-delivered.jsonl", delivered_line),
+        "transport_delivered_sha256": sha256(delivered_line),
+        "transport_receipt_ref": add_content(
+            host_content("evidence/origin-orchestrator-report-receipt.jsonl", transport_commit),
+            "evidence/origin-orchestrator-report-receipt.jsonl", receipt_line),
+        "transport_receipt_sha256": sha256(receipt_line),
+    }
+
+    origin_checks = []
+    for job_id, run_id in ORIGIN_JOBS:
+        run = native_json(f"run-{run_id}.json")
+        job = native_json(f"job-{job_id}.json")
+        check_run = native_json(f"check-run-{job_id}.json")
+        run_commit = run["head_sha"]
+        origin_checks.append({
+            "repository": REPOSITORY,
+            "workflow_file": run["path"], "workflow_name": run["name"], "job_name": job["name"],
+            "run_id": run_id, "job_id": job_id, "check_run_id": str(check_run["id"]),
+            "run_url": run["html_url"], "job_url": job["html_url"], "check_url": check_run["url"],
+            "run_evidence_ref": add_native(github(f"actions/runs/{run_id}", run_commit), f"run-{run_id}.json"),
+            "run_jobs_evidence_ref": add_native(github(f"actions/runs/{run_id}/jobs", run_commit), f"run-{run_id}-jobs.json"),
+            # The legacy-job-route option reproduces the former route
+            # actions/runs/{run}/jobs/{job} for the historical origin jobs; GitHub
+            # answers 404 for it, so no response is registered and the shim 404s.
+            "job_evidence_ref": github(f"actions/runs/{run_id}/jobs/{job_id}", run_commit) if "legacy-job-route" in options
+            else add_native(github(f"actions/jobs/{job_id}", run_commit), f"job-{job_id}.json"),
+            "check_evidence_ref": add_native(github(f"check-runs/{job_id}", run_commit), f"check-run-{job_id}.json"),
+            "attempt": str(run["run_attempt"]), "event": run["event"], "head_sha": run_commit,
+            "run_conclusion": run["conclusion"], "conclusion": job["conclusion"],
+            "run_created_at_utc": run["created_at"], "run_updated_at_utc": run["updated_at"],
+            "job_started_at_utc": job["started_at"], "job_completed_at_utc": job["completed_at"],
+            "started_at_utc": check_run["started_at"], "completed_at_utc": check_run["completed_at"],
+        })
+    origin["checks"] = origin_checks
+    record["origin_delivery"] = origin
+
+    # ---- release candidate: future repair PR, native-shaped synthetic API ----
+    candidate_pr_number = 1236
+    candidate_url = f"{HTML}/pull/{candidate_pr_number}"
+    candidate_merged_at = "2026-09-12T09:00:00Z"
+    record["candidate"] = {
+        "repository": REPOSITORY,
+        "pull_request": candidate_url,
+        "reviewed_head_sha": candidate_head,
+        "merged_sha": merged_sha,
+        "merged_at_utc": candidate_merged_at,
+        "parent_shas": [candidate_base, candidate_head],
         "base_sha": candidate_base,
         "merge_strategy": "merge-commit",
         "reviewed_tree_sha": reviewed_tree,
         "merged_tree_sha": merged_tree,
+        "main_ancestry": True,
         "main_tip_sha": main_tip,
         "checkout_sha": merged_sha,
-        "main_ancestry": True,
-        "pull_request": "https://github.com/J-Tech-Japan/Sekiban/pull/1236",
-        "reviewed_head_sha": candidate_head,
-        "merged_sha": merged_sha,
-        "merged_at_utc": "2026-09-12T09:00:00Z",
-        "parent_shas": [candidate_base, candidate_head],
-    })
-    record["candidate"].pop("tree_sha", None)
-    record["candidate"].pop("api_tree_sha", None)
-    record["integration_pr"] = record["candidate"]["pull_request"]
+        "pr_evidence_ref": github(f"pulls/{candidate_pr_number}"),
+        "reviewed_commit_evidence_ref": github(f"commits/{candidate_head}", candidate_head),
+        "merged_commit_evidence_ref": github(f"commits/{merged_sha}"),
+        "reviewed_tree_evidence_ref": github(f"git/trees/{reviewed_tree}", candidate_head),
+        "merged_tree_evidence_ref": github(f"git/trees/{merged_tree}"),
+        "main_evidence_ref": github(f"compare/{merged_sha}...{main_tip}"),
+        "check_identity_policy": CHECK_POLICY,
+        "checks_evidence_ref": github(f"commits/{merged_sha}/check-runs"),
+    }
+    candidate = record["candidate"]
+    record["integration_pr"] = candidate_url
+    record["merged_sha"] = merged_sha
+    record["merged_at_utc"] = candidate_merged_at
     record["library_tag"].update({"object_id": library_tag_object, "peeled_commit": merged_sha, "created_at_utc": "2026-09-12T09:20:00Z"})
     record["template_tag"].update({"object_id": template_tag_object, "peeled_commit": merged_sha, "created_at_utc": "2026-09-12T09:40:00Z"})
     record["library_release"]["observed_at_utc"] = "2026-09-12T09:30:00Z"
     record["template_release"]["observed_at_utc"] = "2026-09-12T09:45:00Z"
 
-    origin_body = actual_origin_pr_body
-    origin_review_body = actual_origin_review_body
-    implementation_body = b"# G80 implementation review\n\n- Verdict: **APPROVE**\n"
-    implementation_artifact = b"APPROVE artifact\n"
-    record["origin_delivery"]["body_evidence_ref"] = add_text("origin-body", origin_body)
-    record["origin_delivery"]["body_sha256"] = sha256(origin_body)
-    record["origin_delivery"]["reviewed_head_sha"] = origin_head
-    record["origin_delivery"].pop("tree_sha", None)
-    record["origin_delivery"].pop("tags", None)
-    record["origin_delivery"].update({
-        "reviewed_tree_sha": origin_tree,
-        "merged_sha": origin_merged_sha,
-        "merged_tree_sha": origin_merged_tree,
-        "merged_at_utc": "2026-09-13T04:47:20Z",
+    add_api(candidate["pr_evidence_ref"], {
+        "url": f"{API}/pulls/{candidate_pr_number}", "id": 4600000001, "number": candidate_pr_number,
+        "html_url": candidate_url, "state": "closed", "title": "SEK-G80 Repair DCB 10.22 release provenance after merge",
+        "body": "Closes #1236\n", "created_at": "2026-09-12T07:00:00Z", "updated_at": "2026-09-12T09:00:05Z",
+        "closed_at": candidate_merged_at, "merged_at": candidate_merged_at, "merge_commit_sha": merged_sha,
+        "merged": True, "draft": False,
+        "base": {"label": "J-Tech-Japan:main", "ref": "main", "sha": candidate_base,
+                 "repo": {"id": 644262537, "full_name": REPOSITORY, "private": False}},
+        "head": {"label": "J-Tech-Japan:codex/sek-g80-release-provenance-v2", "ref": "codex/sek-g80-release-provenance-v2",
+                 "sha": candidate_head, "repo": {"id": 644262537, "full_name": REPOSITORY, "private": False}},
     })
-    origin_checks = record["origin_delivery"]["checks"]
-    origin_checks[0]["name"] = "origin-dcb-net9"
-    origin_checks.append({"name": "origin-post-merge-net10", "run_id": "9002", "job_id": "9102"})
-    for index, origin_check in enumerate(origin_checks, start=1):
-        origin_check["repository"] = repository
-        origin_check["workflow_file"] = ".github/workflows/run_test_dcb.yml"
-        origin_check["workflow_name"] = "Run DCB Tests"
-        origin_check["job_name"] = origin_check["name"]
-        origin_check["check_run_id"] = str(3000 + index)
-        origin_check["run_url"] = f"https://github.com/{repository}/actions/runs/{origin_check['run_id']}"
-        origin_check["job_url"] = f"https://github.com/{repository}/actions/runs/{origin_check['run_id']}/job/{origin_check['job_id']}"
-        origin_check["check_url"] = f"https://github.com/{repository}/check-runs/{origin_check['check_run_id']}"
-        origin_check["attempt"] = "1"
-        origin_check["event"] = "pull_request" if index == 1 else "workflow_dispatch"
-        origin_check["superseded"] = False
-        origin_check["head_sha"] = origin_head if index == 1 else origin_merged_sha
-        origin_check["started_at_utc"] = "2026-09-13T04:46:20Z" if index == 1 else "2026-09-13T04:47:30Z"
-        origin_check["completed_at_utc"] = "2026-09-13T04:47:00Z" if index == 1 else "2026-09-13T04:48:30Z"
-        origin_check["conclusion"] = "success"
-    origin_review = record["origin_delivery"]["review"]
-    origin_review.update({
-        "body_evidence_ref": add_text("origin-review-body", origin_review_body),
-        "body_sha256": sha256(origin_review_body),
-        "semantic_verdict": "APPROVE",
-        "state": "COMMENTED",
-        "commit_id": origin_head,
-        "review_url": "https://github.com/J-Tech-Japan/Sekiban/pull/1235#pullrequestreview-5189565347",
-        "review_id": "5189565347",
-        "reviewer": "tomohisa",
-        "submitted_at_utc": "2026-09-13T04:46:14Z",
-        "intent_completed_at_utc": "2026-09-13T04:50:00Z",
+    add_api(candidate["reviewed_commit_evidence_ref"], {
+        "sha": candidate_head, "url": f"{API}/commits/{candidate_head}",
+        "commit": {"tree": {"sha": reviewed_tree, "url": f"{API}/git/trees/{reviewed_tree}"}},
+        "parents": [{"sha": candidate_base}],
     })
-    # Bind the historical origin completion to the durable G79 worker artifact
-    # bytes, rather than to a locally authored surrogate.
-    origin_review["intent_task_id"] = "sek-g79-pr1235-13e4b0ce-f1-f8-repair-20260912"
-    origin_review["intent_result_nonce"] = "1d9750ec-acde-4f27-b830-b61f80b70414"
-    origin_artifact = (fixture_dir / "origin-g79-repair-artifact.md").read_bytes()
-    origin_review["artifact_evidence_ref"] = add_content(
-        host_content("evidence/origin-g79-repair-artifact.md", "c" * 40),
-        "evidence/origin-g79-repair-artifact.md", origin_artifact)
-    origin_review["artifact_sha256"] = sha256(origin_artifact)
-    origin_completion_ref = host_content("evidence/origin-completion.json", "c" * 40)
-    origin_completion = {
-        "schema_version": 1, "kind": "intent-origin-review-completion",
-        "task_id": origin_review["intent_task_id"], "result_nonce": origin_review["intent_result_nonce"],
-        "status": "completed", "review_url": origin_review["review_url"], "review_id": origin_review["review_id"],
-        "head_sha": origin_head, "body_sha256": origin_review["body_sha256"],
-        "artifact_sha256": origin_review["artifact_sha256"], "semantic_verdict": "APPROVE",
-        "completed_at_utc": origin_review["intent_completed_at_utc"],
+    add_api(candidate["merged_commit_evidence_ref"], {
+        "sha": merged_sha, "url": f"{API}/commits/{merged_sha}",
+        "commit": {"tree": {"sha": merged_tree, "url": f"{API}/git/trees/{merged_tree}"}},
+        "parents": [{"sha": candidate_base}, {"sha": candidate_head}],
+    })
+    add_api(candidate["reviewed_tree_evidence_ref"], {"sha": reviewed_tree, "url": f"{API}/git/trees/{reviewed_tree}", "tree": [], "truncated": False})
+    add_api(candidate["merged_tree_evidence_ref"], {"sha": merged_tree, "url": f"{API}/git/trees/{merged_tree}", "tree": [], "truncated": False})
+    add_api(candidate["main_evidence_ref"], {
+        "url": f"{API}/compare/{merged_sha}...{main_tip}",
+        "status": "ahead", "ahead_by": 2, "behind_by": 0, "total_commits": 2,
+        "base_commit": {"sha": merged_sha}, "merge_base_commit": {"sha": merged_sha},
+        "head_commit": {"sha": main_tip},
+        "commits": [
+            {"sha": main_side_tip, "parents": [{"sha": merged_sha}]},
+            {"sha": main_tip, "parents": [{"sha": merged_sha}, {"sha": main_side_tip}]},
+        ],
+    })
+
+    # ---- implementation review: native review + canonical transport lines ----
+    review_id = "6000000001"
+    review_url = f"{candidate_url}#pullrequestreview-{review_id}"
+    review_submitted = "2026-09-12T08:45:00Z"
+    implementation_body = b"# SEK-G80 PR #1236 final exact-head review\n\n- Verdict: **APPROVE**\n\n## Findings\n\nNone.\n"
+    split = implementation_body.index(b"## Findings")
+    implementation_artifact = (implementation_body[:split] +
+                               evidence_line(review_id, review_submitted, candidate_head, review_url) +
+                               implementation_body[split:])
+    implementation_artifact_path = "/Users/reviewer/Sekiban-Reviewer/sek-g80-pr1236-33333333-final-exact-review.md"
+    implementation_task = "sek-g80-pr1236-33333333-final-exact-review"
+    implementation_nonce = "sek-g80-pr1236-review-33333333"
+    implementation_summary = "APPROVE exact head 33333333; no material findings"
+    impl_entry = {
+        "domain": "sekiban", "team": "sekiban-orch", "task_id": implementation_task,
+        "entry_id": "0f0f0f0f0f0f4f0f8f0f0f0f0f0f0f0f", "result_nonce": implementation_nonce,
+        "from_role": "review", "to_role": "orchestrator", "status": "completed",
+        "artifact": implementation_artifact_path, "summary": implementation_summary,
+        "created_at": "2026-09-12T08:46:30.123456+00:00", "delivery_state": "prepared",
     }
-    origin_review["intent_completion_evidence_ref"] = origin_completion_ref
-    origin_review["intent_completion_sha256"] = sha256(dump(origin_completion))
-    add_content(origin_completion_ref, "evidence/origin-completion.json", dump(origin_completion))
-    origin_review["review_evidence_ref"] = github("pulls/1235/reviews/5189565347")
-    record["origin_delivery"]["review_evidence_ref"] = origin_review["review_evidence_ref"]
-    record["origin_delivery"]["pull_request_evidence_ref"] = github("pulls/1235")
-    record["origin_delivery"]["reviewed_commit_evidence_ref"] = github(f"commits/{origin_head}")
-    record["origin_delivery"]["merged_commit_evidence_ref"] = github(f"commits/{origin_merged_sha}")
-    record["origin_delivery"]["reviewed_tree_evidence_ref"] = immutable(repository, origin_head, f"git/trees/{origin_tree}")
-    record["origin_delivery"]["merged_tree_evidence_ref"] = immutable(repository, origin_merged_sha, f"git/trees/{origin_merged_tree}")
-
-    for index, check in enumerate(record["origin_delivery"]["checks"], start=1):
-        check["run_evidence_ref"] = github(f"actions/runs/{check['run_id']}")
-        check["job_evidence_ref"] = github(f"actions/jobs/{check['job_id']}")
-        check["check_evidence_ref"] = github(f"check-runs/{check['check_run_id']}")
-
-    implementation_review = record.pop("candidate_review")
-    implementation_review.update({
-        "review_url": "https://github.com/J-Tech-Japan/Sekiban/pull/1236#pullrequestreview-6000000001",
-        "review_id": "6000000001",
-        "head_sha": candidate_head,
-        "body_evidence_ref": add_text("implementation-body", implementation_body),
-        "artifact_evidence_ref": add_text("implementation-artifact", implementation_artifact),
+    impl_record_line = (json.dumps({"kind": "record", "entry": impl_entry}, separators=(",", ":")) + "\n").encode()
+    impl_delivered_entry = dict(impl_entry)
+    impl_delivered_entry.update({
+        "last_attempt_at": "2026-09-12T08:46:41.000001+00:00", "delivered_at": "2026-09-12T08:46:41.000011+00:00",
+        "delivery_state": "delivered",
+    })
+    impl_delivered_line = (json.dumps({"kind": "delivered", "entry": impl_delivered_entry}, separators=(",", ":")) + "\n").encode()
+    impl_receipt_line = (json.dumps({
+        "event": "report", "domain": "sekiban", "team": "sekiban-orch", "task_id": implementation_task,
+        "delegating_role": "orchestrator", "recipient_role": "review", "report_to_role": "orchestrator",
+        "expected_artifact": implementation_artifact_path, "expected_artifacts": [implementation_artifact_path],
+        "result_nonce": implementation_nonce, "dispatched_at": "2026-09-12T08:20:00.000000+00:00",
+        "report_arrived": True, "report_status": "completed", "report_artifact": implementation_artifact_path,
+        "report_summary": implementation_summary, "reported_at": impl_delivered_entry["delivered_at"],
+    }, separators=(",", ":")) + "\n").encode()
+    implementation_commit = "7" * 40
+    record.pop("candidate_review", None)
+    record["implementation_review"] = {
+        "review_url": review_url, "review_id": review_id, "reviewer": "tomohisa",
+        "github_state": "COMMENTED", "semantic_verdict": "APPROVE", "commit_id": candidate_head,
+        "submitted_at_utc": review_submitted,
         "body_sha256": sha256(implementation_body),
+        "body_evidence_ref": add_text("implementation-body", implementation_body),
+        "review_evidence_ref": github(f"pulls/{candidate_pr_number}/reviews/{review_id}"),
+        "artifact_path": implementation_artifact_path,
         "artifact_sha256": sha256(implementation_artifact),
-        "submitted_at_utc": "2026-09-12T08:45:00Z",
-        "approved_at_utc": "2026-09-12T08:50:00Z",
-        "evidence_ref": github("pulls/1236/reviews/6000000001"),
-        "semantic_state": "APPROVE",
+        "artifact_evidence_ref": add_text("implementation-artifact", implementation_artifact),
+        "intent_task_id": implementation_task, "intent_result_nonce": implementation_nonce,
+        "intent_entry_id": impl_entry["entry_id"], "intent_from_role": "review", "intent_to_role": "orchestrator",
+        "intent_status": "completed", "intent_reported_at": impl_entry["created_at"],
+        "intent_delivered_at": impl_delivered_entry["delivered_at"],
+        "transport_record_ref": add_content(host_content("evidence/implementation-review-outbox-record.jsonl", implementation_commit),
+                                            "evidence/implementation-review-outbox-record.jsonl", impl_record_line),
+        "transport_record_sha256": sha256(impl_record_line),
+        "transport_delivered_ref": add_content(host_content("evidence/implementation-review-outbox-delivered.jsonl", implementation_commit),
+                                               "evidence/implementation-review-outbox-delivered.jsonl", impl_delivered_line),
+        "transport_delivered_sha256": sha256(impl_delivered_line),
+        "transport_receipt_ref": add_content(host_content("evidence/implementation-orchestrator-report-receipt.jsonl", implementation_commit),
+                                             "evidence/implementation-orchestrator-report-receipt.jsonl", impl_receipt_line),
+        "transport_receipt_sha256": sha256(impl_receipt_line),
+    }
+    add_api(record["implementation_review"]["review_evidence_ref"], {
+        "id": int(review_id), "node_id": "PRR_fixture", "user": {"login": "tomohisa", "type": "User"},
+        "body": implementation_body.decode(), "state": "COMMENTED", "html_url": review_url,
+        "pull_request_url": f"{API}/pulls/{candidate_pr_number}", "author_association": "MEMBER",
+        "submitted_at": review_submitted, "commit_id": candidate_head,
     })
-    record["implementation_review"] = implementation_review
 
-    for index, check in enumerate(record["checks"], start=1):
-        check["repository"] = repository
-        if check["name"] == "diff":
-            check.pop("command", None)
-            check.pop("result", None)
-        if check["name"] != "diff":
-            check["check_run_id"] = str(4000 + index)
-            check["run_evidence_ref"] = github(f"actions/runs/{1000 + index}")
-            check["job_evidence_ref"] = github(f"actions/jobs/{2000 + index}")
-            check["check_evidence_ref"] = github(f"check-runs/{4000 + index}")
-        check.setdefault("run_id", str(1000 + index))
-        check.setdefault("job_id", str(2000 + index))
-        if check["name"] != "diff":
-            # Bind native routes to the effective IDs after preserving any
-            # authored job identity (notably the Sonar check's job == run ID).
-            check["run_evidence_ref"] = github(f"actions/runs/{check['run_id']}")
-            check["job_evidence_ref"] = github(f"actions/jobs/{check['job_id']}")
-            check["check_evidence_ref"] = github(f"check-runs/{check['check_run_id']}")
-        check["attempt"] = str(check.get("attempt", 1))
-        check["run_url"] = f"https://github.com/{repository}/actions/runs/{check['run_id']}"
-        check["job_url"] = f"https://github.com/{repository}/actions/runs/{check['run_id']}/job/{check['job_id']}"
-        if check["name"] != "diff":
-            check["check_url"] = f"https://github.com/{repository}/check-runs/{check['check_run_id']}"
-        check.setdefault("workflow_file", "git" if check["name"] == "diff" else ".github/workflows/run_test_dcb.yml")
-        check.setdefault("workflow_name", "git diff --check" if check["name"] == "diff" else "Run DCB Tests")
-        check.setdefault("job_name", "post-merge" if check["name"] == "diff" else check["name"])
-        check["event"] = "post-merge" if check["name"] == "diff" else check.get("event", "workflow_dispatch")
-        check["head_sha"] = merged_sha
-        check["started_at_utc"] = f"2026-09-12T09:{index + 1:02d}:00Z"
-        check["completed_at_utc"] = f"2026-09-12T09:{index + 2:02d}:00Z"
-        check["conclusion"] = "success"
-        check["superseded"] = False
-        if check["name"] == "diff":
-            check["evidence_ref"] = github("actions/runs/1006")
-            check["artifact_sha256"] = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    # ---- integrated merge-commit checks ----
+    actions_definitions = {
+        "dcbTestsNet9": (".github/workflows/run_test_dcb.yml", "Run DCB Tests", "dcbTestsNet9", 1001),
+        "dcbTestsNet10": (".github/workflows/run_test_dcb.yml", "Run DCB Tests", "dcbTestsNet10", 1001),
+        "packagedConsumer": (".github/workflows/dcb_azure_queue_packaged_consumer.yml", "DCB Azure Queue packaged-consumer pull-request validation", "packaged-consumer", 1003),
+        "templateConsumer": (".github/workflows/dcb_template_validation.yml", "DCB template packaged-consumer validation", "Pack, install, generate, restore, build, and test templates", 1004),
+    }
+    suites = {1001: 91001, 1003: 91003, 1004: 91004}
+    checks: list[dict[str, object]] = []
+    summary_runs: list[dict[str, object]] = []
+    for index, (name, (workflow, workflow_name, job_name, run_id)) in enumerate(actions_definitions.items(), start=1):
+        job_id = 2000 + index
+        run_created = f"2026-09-12T09:0{index + 1}:00Z"
+        job_started = f"2026-09-12T09:0{index + 1}:0{index + 2}Z"
+        job_completed = f"2026-09-12T09:0{index + 1}:5{index}Z"
+        run_updated = f"2026-09-12T09:0{index + 2}:00Z"
+        if run_id == 1001:
+            run_created = "2026-09-12T09:02:00Z"
+            run_updated = "2026-09-12T09:04:00Z"
+        check = {
+            "repository": REPOSITORY, "name": name, "workflow_file": workflow, "workflow_name": workflow_name,
+            "job_name": job_name, "run_id": str(run_id), "job_id": str(job_id), "check_run_id": str(job_id),
+            "run_url": f"{HTML}/actions/runs/{run_id}", "job_url": f"{HTML}/actions/runs/{run_id}/job/{job_id}",
+            "check_url": f"{API}/check-runs/{job_id}",
+            "run_evidence_ref": github(f"actions/runs/{run_id}"), "job_evidence_ref": github(f"actions/jobs/{job_id}"),
+            "check_evidence_ref": github(f"check-runs/{job_id}"),
+            "attempt": "1", "event": "workflow_dispatch", "superseded": False, "head_sha": merged_sha,
+            "run_conclusion": "success", "conclusion": "success",
+            "run_created_at_utc": run_created, "run_updated_at_utc": run_updated,
+            "job_started_at_utc": job_started, "job_completed_at_utc": job_completed,
+            "started_at_utc": job_started, "completed_at_utc": job_completed,
+        }
+        checks.append(check)
+        add_api(check["run_evidence_ref"], {
+            "id": run_id, "name": workflow_name, "path": workflow, "event": "workflow_dispatch", "status": "completed",
+            "conclusion": "success", "head_sha": merged_sha, "head_branch": "main", "run_attempt": 1,
+            "url": f"{API}/actions/runs/{run_id}", "html_url": check["run_url"], "jobs_url": f"{API}/actions/runs/{run_id}/jobs",
+            "check_suite_id": suites[run_id], "check_suite_url": f"{API}/check-suites/{suites[run_id]}",
+            "created_at": run_created, "updated_at": run_updated, "run_started_at": run_created,
+            "repository": {"full_name": REPOSITORY}, "head_repository": {"full_name": REPOSITORY},
+        })
+        add_api(check["job_evidence_ref"], {
+            "id": job_id, "run_id": run_id, "run_url": f"{API}/actions/runs/{run_id}", "run_attempt": 1,
+            "head_sha": merged_sha, "head_branch": "main", "url": f"{API}/actions/jobs/{job_id}", "html_url": check["job_url"],
+            "status": "completed", "conclusion": "success", "created_at": run_created,
+            "started_at": job_started, "completed_at": job_completed, "name": job_name,
+            "check_run_url": f"{API}/check-runs/{job_id}", "workflow_name": workflow_name,
+        })
+        check_run = {
+            "id": job_id, "name": job_name, "head_sha": merged_sha, "external_id": f"fixture-{job_id}",
+            "url": f"{API}/check-runs/{job_id}", "html_url": check["job_url"], "details_url": check["job_url"],
+            "status": "completed", "conclusion": "success", "started_at": job_started, "completed_at": job_completed,
+            "check_suite": {"id": suites[run_id]}, "app": {"slug": "github-actions"},
+        }
+        add_api(check["check_evidence_ref"], check_run)
+        summary_runs.append(check_run)
 
-    record["candidate"].update({
-        "pr_evidence_ref": github("pulls/1236"),
-        "reviewed_commit_evidence_ref": github(f"commits/{candidate_head}"),
-        "merged_commit_evidence_ref": github(f"commits/{merged_sha}"),
-        "reviewed_tree_evidence_ref": immutable(repository, candidate_head, f"git/trees/{reviewed_tree}"),
-        "merged_tree_evidence_ref": immutable(repository, merged_sha, f"git/trees/{merged_tree}"),
-        "main_evidence_ref": github(f"compare/{merged_sha}...{main_tip}"),
-        "checks_evidence_ref": github(f"commits/{merged_sha}/check-runs"),
+    sonar_id = "3005"
+    sonar = {
+        "repository": REPOSITORY, "name": "SonarCloud Code Analysis", "app_slug": "sonarqubecloud",
+        "check_run_id": sonar_id, "check_url": f"{API}/check-runs/{sonar_id}",
+        "check_evidence_ref": github(f"check-runs/{sonar_id}"), "superseded": False, "head_sha": merged_sha,
+        "conclusion": "success", "started_at_utc": "2026-09-12T09:05:10Z", "completed_at_utc": "2026-09-12T09:07:20Z",
+    }
+    checks.append(sonar)
+    sonar_run = {
+        "id": int(sonar_id), "name": "SonarCloud Code Analysis", "head_sha": merged_sha, "external_id": "",
+        "url": sonar["check_url"], "html_url": f"{HTML}/runs/{sonar_id}",
+        "details_url": "https://sonarcloud.io/dashboard?id=J-Tech-Japan_Sekiban&branch=main",
+        "status": "completed", "conclusion": "success", "started_at": sonar["started_at_utc"],
+        "completed_at": sonar["completed_at_utc"], "check_suite": {"id": 93005}, "app": {"slug": "sonarqubecloud"},
+    }
+    add_api(sonar["check_evidence_ref"], sonar_run)
+    summary_runs.append(sonar_run)
+
+    diff_evidence = {
+        "command": "git diff --check", "head_sha": merged_sha, "exit_code": 0,
+        "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "completed_at_utc": "2026-09-12T09:08:00Z",
+    }
+    diff = {
+        "repository": REPOSITORY, "name": "diff", "command": "git diff --check", "event": "post-merge",
+        "head_sha": merged_sha, "conclusion": "success", "superseded": False,
+        "started_at_utc": "2026-09-12T09:07:30Z", "completed_at_utc": "2026-09-12T09:08:00Z",
+        "evidence_ref": add_content(host_content("evidence/git-diff-check.json"), "evidence/git-diff-check.json", dump(diff_evidence)),
+        "artifact_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    }
+    checks.append(diff)
+    record["checks"] = checks
+
+    # Additional check runs permitted by the explicit identity policy: GitHub's
+    # skipped conditional job (completed_at precedes started_at natively) and
+    # the companion SonarCloud check from another app.
+    summary_runs.append({
+        "id": 2005, "name": "Scheduled stable DCB/template currency check", "head_sha": merged_sha,
+        "url": f"{API}/check-runs/2005", "status": "completed", "conclusion": "skipped",
+        "started_at": "2026-09-12T09:05:01Z", "completed_at": "2026-09-12T09:05:00Z",
+        "check_suite": {"id": 91004}, "app": {"slug": "github-actions"},
     })
+    summary_runs.append({
+        "id": 3006, "name": "SonarCloud", "head_sha": merged_sha, "url": f"{API}/check-runs/3006",
+        "status": "completed", "conclusion": "success", "started_at": "2026-09-12T09:07:25Z",
+        "completed_at": "2026-09-12T09:07:27Z", "check_suite": {"id": 93006}, "app": {"slug": "github-advanced-security"},
+    })
+    add_api(candidate["checks_evidence_ref"], {"total_count": len(summary_runs), "check_runs": summary_runs})
+
     for property_name in ("library_tag", "template_tag"):
         tag = record[property_name]
         tag["evidence_ref"] = github(f"git/ref/tags/{tag['name']}")
@@ -292,131 +518,41 @@ def main() -> None:
         "evidence_ref": github("releases/tags/dcbTemplates-v10.22.0"),
     })
 
-    add_api(record["candidate"]["pr_evidence_ref"], {
-        "html_url": record["candidate"]["pull_request"], "repository": {"full_name": repository},
-        "base": {"ref": "main", "sha": candidate_base}, "head": {"sha": candidate_head},
-        "merge_commit_sha": merged_sha, "merged": True, "merged_at": record["candidate"]["merged_at_utc"],
-    })
-    add_api(record["candidate"]["reviewed_commit_evidence_ref"], {
-        "sha": candidate_head, "commit": {"tree": {"sha": reviewed_tree}}, "parents": []
-    })
-    add_api(record["candidate"]["merged_commit_evidence_ref"], {
-        "sha": merged_sha, "commit": {"tree": {"sha": merged_tree}},
-        "parents": [{"sha": candidate_base}, {"sha": candidate_head}]
-    })
-    add_api(record["candidate"]["reviewed_tree_evidence_ref"], {"sha": reviewed_tree, "tree": []})
-    add_api(record["candidate"]["merged_tree_evidence_ref"], {"sha": merged_tree, "tree": []})
-    add_api(record["candidate"]["main_evidence_ref"], {
-        "url": f"https://api.github.com/repos/{repository}/compare/{merged_sha}...{main_tip}",
-        "status": "ahead", "ahead_by": 2, "behind_by": 0, "total_commits": 2,
-        "base_commit": {"sha": merged_sha}, "merge_base_commit": {"sha": merged_sha},
-        "head_commit": {"sha": main_tip},
-        "commits": [
-            {"sha": main_side_tip, "parents": [{"sha": merged_sha}]},
-            {"sha": main_tip, "parents": [{"sha": merged_sha}, {"sha": main_side_tip}]},
-        ],
-    })
-    add_api(record["candidate"]["checks_evidence_ref"], {
-        "total_count": sum(check["name"] != "diff" for check in record["checks"]),
-        "check_runs": [{"id": int(check["check_run_id"]), "name": check["job_name"], "head_sha": merged_sha,
-                        "status": "completed", "conclusion": "success"}
-                       for check in record["checks"] if check["name"] != "diff"],
-    })
-
-    for check in record["checks"]:
-        if check["name"] == "diff":
-            add_api(check["evidence_ref"], {
-                "command": "git diff --check", "artifact_sha256": check["artifact_sha256"],
-            })
-            continue
-        add_api(check["run_evidence_ref"], {
-            "id": int(check["run_id"]), "name": check["workflow_name"], "event": check["event"],
-            "head_sha": check["head_sha"], "run_attempt": int(check["attempt"]), "status": "completed",
-            "conclusion": check["conclusion"], "workflow_id": 7000, "path": check["workflow_file"],
-            "html_url": check["run_url"], "created_at": check["started_at_utc"], "updated_at": check["completed_at_utc"],
-        })
-        add_api(check["job_evidence_ref"], {
-            "id": int(check["job_id"]), "run_id": int(check["run_id"]), "name": check["job_name"],
-            "head_sha": check["head_sha"], "conclusion": check["conclusion"],
-            "started_at": check["started_at_utc"], "completed_at": check["completed_at_utc"],
-            "html_url": check["job_url"], "workflow_name": check["workflow_name"],
-            "run_attempt": int(check["attempt"]),
-        })
-        add_api(check["check_evidence_ref"], {
-            "id": int(check["check_run_id"]), "name": check["job_name"], "head_sha": check["head_sha"],
-            "status": "completed", "conclusion": check["conclusion"], "details_url": check["job_url"],
-            "started_at": check["started_at_utc"], "completed_at": check["completed_at_utc"],
-        })
-    for check in record["origin_delivery"]["checks"]:
-        add_api(check["run_evidence_ref"], {
-            "id": int(check["run_id"]), "name": check["workflow_name"], "event": check["event"],
-            "head_sha": check["head_sha"], "run_attempt": int(check["attempt"]), "status": "completed",
-            "conclusion": check["conclusion"], "workflow_id": 8000, "path": check["workflow_file"],
-            "html_url": check["run_url"], "created_at": check["started_at_utc"], "updated_at": check["completed_at_utc"],
-        })
-        add_api(check["job_evidence_ref"], {
-            "id": int(check["job_id"]), "run_id": int(check["run_id"]), "name": check["job_name"],
-            "head_sha": check["head_sha"], "conclusion": check["conclusion"],
-            "started_at": check["started_at_utc"], "completed_at": check["completed_at_utc"],
-            "html_url": check["job_url"], "workflow_name": check["workflow_name"],
-            "run_attempt": int(check["attempt"]),
-        })
-        add_api(check["check_evidence_ref"], {
-            "id": int(check["check_run_id"]), "name": check["name"], "head_sha": check["head_sha"],
-            "status": "completed", "conclusion": check["conclusion"], "details_url": check["job_url"],
-            "started_at": check["started_at_utc"], "completed_at": check["completed_at_utc"],
-        })
-
-    add_api(record["origin_delivery"]["pull_request_evidence_ref"], {
-        "html_url": record["origin_delivery"]["pull_request"], "repository": {"full_name": repository},
-        "head": {"sha": origin_head}, "base": {"ref": "main", "sha": "b" * 40},
-        "merge_commit_sha": origin_merged_sha, "merged": True,
-        "merged_at": record["origin_delivery"]["merged_at_utc"], "body": origin_body.decode(),
-    })
-    add_api(record["origin_delivery"]["reviewed_commit_evidence_ref"], {
-        "sha": origin_head, "commit": {"tree": {"sha": origin_tree}}, "parents": [{"sha": "6" * 40}]
-    })
-    add_api(record["origin_delivery"]["merged_commit_evidence_ref"], {
-        "sha": origin_merged_sha, "commit": {"tree": {"sha": origin_merged_tree}},
-        "parents": [{"sha": "bfb43ccbf866c06835edc5fa272f432de62ffced"}, {"sha": origin_head}]
-    })
-    add_api(record["origin_delivery"]["reviewed_tree_evidence_ref"], {"sha": origin_tree, "tree": []})
-    add_api(record["origin_delivery"]["merged_tree_evidence_ref"], {"sha": origin_merged_tree, "tree": []})
-
-    add_api(origin_review["review_evidence_ref"], {
-        "html_url": origin_review["review_url"], "id": int(origin_review["review_id"]), "user": {"login": origin_review["reviewer"]},
-        "state": "COMMENTED", "commit_id": origin_review["commit_id"], "submitted_at": origin_review["submitted_at_utc"], "body": origin_review_body.decode(),
-    })
-    add_api(implementation_review["evidence_ref"], {
-        "html_url": implementation_review["review_url"], "id": int(implementation_review["review_id"]), "user": {"login": implementation_review["reviewer"]},
-        "state": "COMMENTED", "commit_id": candidate_head, "submitted_at": implementation_review["submitted_at_utc"], "body": implementation_body.decode(),
-    })
     for tag in [record["library_tag"], record["template_tag"]]:
-        add_api(tag["evidence_ref"], {"ref": "refs/tags/" + tag["name"], "object": {"sha": tag["object_id"], "type": "tag"}})
-        add_api(tag["peeled_evidence_ref"], {"object": {"sha": tag["peeled_commit"], "type": "commit"}})
+        add_api(tag["evidence_ref"], {
+            "ref": "refs/tags/" + tag["name"], "node_id": "REF_fixture", "url": f"{API}/git/refs/tags/{tag['name']}",
+            "object": {"sha": tag["object_id"], "type": "tag", "url": f"{API}/git/tags/{tag['object_id']}"},
+        })
+        add_api(tag["peeled_evidence_ref"], {
+            "sha": tag["object_id"], "tag": tag["name"], "url": f"{API}/git/tags/{tag['object_id']}",
+            "object": {"sha": tag["peeled_commit"], "type": "commit", "url": f"{API}/git/commits/{tag['peeled_commit']}"},
+        })
 
+    def release_asset(asset_id: int, name: str, tag: str) -> dict[str, object]:
+        return {
+            "url": f"{API}/releases/assets/{asset_id}", "id": asset_id, "node_id": f"RA_fixture{asset_id}", "name": name,
+            "label": "", "uploader": {"login": "github-actions[bot]"}, "content_type": "application/octet-stream",
+            "state": "uploaded", "size": 1024, "digest": "sha256:" + sha256(name.encode()), "download_count": 0,
+            "created_at": "2026-09-12T09:25:00Z", "updated_at": "2026-09-12T09:25:00Z",
+            "browser_download_url": f"{HTML}/releases/download/{tag}/{name}",
+        }
+
+    library_tag_name = record["library_release"]["tag"]
     add_api(record["library_release"]["evidence_ref"], {
-        "html_url": record["library_release"]["url"], "repository": {"full_name": repository},
-        "tag_name": record["library_release"]["tag"], "draft": False,
+        "url": f"{API}/releases/500000001", "id": 500000001, "html_url": record["library_release"]["url"],
+        "tag_name": library_tag_name, "target_commitish": "main", "name": library_tag_name, "draft": False,
+        "prerelease": False, "immutable": False, "created_at": "2026-09-12T09:20:30Z",
         "published_at": record["library_release"]["observed_at_utc"], "body": library_body.decode(),
-        "assets": [
-            {
-                "name": f"{package['id']}.{version}.nupkg",
-                "browser_download_url": f"https://github.com/{repository}/releases/download/{record['library_release']['tag']}/{package['id']}.{version}.nupkg",
-                "state": "uploaded",
-            }
-            for package in record["packages"]
-        ],
+        "assets": [release_asset(600000000 + position, f"{package['id']}.{version}.nupkg", library_tag_name)
+                   for position, package in enumerate(record["packages"])],
     })
+    template_tag_name = record["template_release"]["tag"]
     add_api(record["template_release"]["evidence_ref"], {
-        "html_url": record["template_release"]["url"], "repository": {"full_name": repository},
-        "tag_name": record["template_release"]["tag"], "draft": False,
+        "url": f"{API}/releases/500000002", "id": 500000002, "html_url": record["template_release"]["url"],
+        "tag_name": template_tag_name, "target_commitish": "main", "name": template_tag_name, "draft": False,
+        "prerelease": False, "immutable": False, "created_at": "2026-09-12T09:40:30Z",
         "published_at": record["template_release"]["observed_at_utc"], "body": template_body.decode(),
-        "assets": [{
-            "name": f"Sekiban.Dcb.Templates.{version}.nupkg",
-            "browser_download_url": f"https://github.com/{repository}/releases/download/{record['template_release']['tag']}/Sekiban.Dcb.Templates.{version}.nupkg",
-            "state": "uploaded",
-        }],
+        "assets": [release_asset(700000001, f"Sekiban.Dcb.Templates.{version}.nupkg", template_tag_name)],
     })
 
     payload_refs: list[dict[str, object]] = []
@@ -426,19 +562,6 @@ def main() -> None:
             "filename": filename, "ref": host_content(
                 f"intents/sekiban/releases/dcb-v{version}/{filename}", payload_host_refs[len(payload_refs)]),
         })
-
-    implementation_completion_ref = host_content("evidence/implementation-completion.json", "7" * 40)
-    implementation_completion = {
-        "schema_version": 1, "kind": "intent-worker-completion", "task_id": implementation_review["intent_task_id"],
-        "result_nonce": implementation_review["intent_result_nonce"], "status": "completed",
-        "review_url": implementation_review["review_url"], "review_id": implementation_review["review_id"],
-        "head_sha": candidate_head, "body_sha256": implementation_review["body_sha256"],
-        "artifact_sha256": implementation_review["artifact_sha256"], "semantic_verdict": "APPROVE",
-        "completed_at_utc": implementation_review["approved_at_utc"],
-    }
-    add_content(implementation_completion_ref, "evidence/implementation-completion.json", dump(implementation_completion))
-    implementation_review["intent_completion_evidence_ref"] = implementation_completion_ref
-    implementation_review["intent_completion_sha256"] = sha256(dump(implementation_completion))
 
     base_keys = [
         "integration_pr", "merged_sha", "merged_at_utc", "origin_delivery", "candidate",

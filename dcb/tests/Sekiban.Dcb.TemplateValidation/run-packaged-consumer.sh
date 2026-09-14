@@ -280,10 +280,74 @@ expect_failure() {
   fi
 }
 
+# Runs a named mutant, captures stdout+stderr, and requires the validator to
+# reject it at exactly one `[rule:<id>]` equal to the expected rule.  A mutant
+# that passes, dies without a rule identifier, or dies at an earlier/different
+# rule fails the harness.
+expect_rule() {
+  local mutant="$1" expected="$2"
+  shift 2
+  local log_dir="$work_root/mutant-logs"
+  local log="$log_dir/${mutant//\//-}.log"
+  mkdir -p "$log_dir"
+  if "$@" > "$log" 2>&1; then
+    cat "$log" >&2
+    echo "MUTANT ${mutant}: SURVIVED; expected rejection at [rule:${expected}]" >&2
+    return 1
+  fi
+  local observed
+  observed="$(grep -o '\[rule:[^]]*\]' "$log" | sort -u | tr '\n' ' ' | sed 's/ $//')"
+  if [[ "$observed" != "[rule:${expected}]" ]]; then
+    cat "$log" >&2
+    echo "MUTANT ${mutant}: rejected at '${observed:-<no rule identifier>}', expected [rule:${expected}]" >&2
+    return 1
+  fi
+  echo "MUTANT ${mutant}: rejected at [rule:${expected}]"
+}
+
+expect_pass() {
+  local control="$1"
+  shift
+  local log_dir="$work_root/mutant-logs"
+  local log="$log_dir/${control//\//-}.log"
+  mkdir -p "$log_dir"
+  if ! "$@" > "$log" 2>&1; then
+    cat "$log" >&2
+    echo "POSITIVE ${control}: FAILED" >&2
+    return 1
+  fi
+  echo "POSITIVE ${control}: passed"
+}
+
 run_host_record_reader_shim_tests() {
   local reader="$script_dir/read-host-release-record.sh"
   local record_fixture="$script_dir/fixtures/release-record/valid-complete.json"
   local closed_fixture="$work_root/closed-bundle-fixture"
+  local release_fixture_dir="$script_dir/fixtures/release-record"
+
+  # F1/F3 native evidence is byte-exact: every archived `gh api` response and
+  # canonical transport JSONL line must still hash to its recorded provenance.
+  local provenance_endpoint provenance_file provenance_sha provenance_fetched provenance_count=0
+  while IFS=$'\t' read -r provenance_endpoint provenance_file provenance_sha provenance_fetched; do
+    [[ "$provenance_endpoint" == endpoint ]] && continue
+    [[ "$(sha256sum "$release_fixture_dir/native-origin/$provenance_file" | cut -d' ' -f1)" == "$provenance_sha" ]] || {
+      echo "Archived native response $provenance_file (${provenance_endpoint}, fetched ${provenance_fetched}) was modified." >&2
+      return 1
+    }
+    provenance_count=$((provenance_count + 1))
+  done < "$release_fixture_dir/native-origin/provenance.tsv"
+  (( provenance_count == 28 )) || { echo "Expected 28 archived native origin responses, found ${provenance_count}." >&2; return 1; }
+  local transport_file transport_sha
+  while IFS=$'\t' read -r transport_file _ _ _ _ transport_sha; do
+    [[ "$transport_file" == file ]] && continue
+    [[ "$(sha256sum "$release_fixture_dir/origin-transport/$transport_file" | cut -d' ' -f1)" == "$transport_sha" ]] || {
+      echo "Canonical origin transport evidence $transport_file was modified." >&2
+      return 1
+    }
+  done < "$release_fixture_dir/origin-transport/provenance.tsv"
+  jq -j '.body' "$release_fixture_dir/native-origin/review-5189565347.json" | cmp - "$release_fixture_dir/origin-review-5189565347.md"
+  echo "Archived native origin responses (${provenance_count}) and canonical review transport lines are byte-exact."
+
   python3 "$script_dir/make-closed-bundle-fixture.py" "$record_fixture" "$closed_fixture"
   local record="$closed_fixture/record.json"
   local shim_root="$work_root/host-gh-shim"
@@ -368,7 +432,10 @@ fi
         jq -n --arg sha "$peeled" '{object:{sha:$sha,type:"commit"}}'
         exit 0
       fi
-      echo "unexpected gh api endpoint: $endpoint" >&2
+      # Model GitHub for routes it does not serve, notably the former
+      # actions/runs/{run}/jobs/{job} job route.
+      printf '%s\n' "404 $endpoint" >> "${FAKE_NOT_FOUND_LOG:-/dev/null}"
+      echo "gh: Not Found (HTTP 404): $endpoint" >&2
       exit 1
     }
     response_file="$(printf '%s\n' "$map_line" | cut -f3)"
@@ -396,8 +463,20 @@ SHIM
   run_reader --version "$version" --state complete --verify-tags all \
     --output-dir "$output" --manifest "$manifest"
   [[ -s "$manifest" && -d "$output/objects" ]] || { echo "Host reader shim did not write its closed bundle." >&2; return 1; }
-  run_net10 "$validator" release-record --bundle "$output" --manifest "$manifest" \
+  expect_pass native-origin-complete-bundle run_net10 "$validator" release-record --bundle "$output" --manifest "$manifest" \
     --repo-root "$repo_root" --expected-version "$version" --state complete
+  # The positive bundle carries every archived origin response unchanged.
+  local native_bytes_count=0
+  while IFS=$'\t' read -r provenance_endpoint provenance_file provenance_sha provenance_fetched; do
+    [[ "$provenance_endpoint" == endpoint ]] && continue
+    jq -e --arg endpoint "$provenance_endpoint" --arg sha "$provenance_sha" \
+      'any(.entries[]; .endpoint == $endpoint and .sha256 == $sha)' "$manifest" >/dev/null || {
+      echo "Reader bundle does not carry the byte-exact archived response for ${provenance_endpoint}." >&2
+      return 1
+    }
+    native_bytes_count=$((native_bytes_count + 1))
+  done < "$release_fixture_dir/native-origin/provenance.tsv"
+  echo "POSITIVE native-origin-bytes: reader bundle carries ${native_bytes_count} archived GitHub responses byte-for-byte."
 
   local compare_response
   compare_response="$(awk -F '\t' '$1 ~ /:compare\// { print $3; exit }' "$closed_fixture/map.tsv")"
@@ -451,20 +530,31 @@ SHIM
     return 1
   fi
 
-  # The bundle reader must use GitHub's native job route.  This source mutant
-  # deliberately rewrites actions/jobs/* to the historical fake
-  # actions/runs/{run}/jobs/{job} route; the shim has no such endpoint and must
-  # return 404 rather than allowing a synthetic combined response through.
-  local native_route_reader="$work_root/read-host-native-route-mutant.sh"
-  awk 'index($0, "    commits/*|pulls/*|actions/*") { print "    actions/jobs/*) endpoint=\"repos/${repository}/actions/runs/${object_path}\" ;;" } { print }' \
-    "$reader" > "$native_route_reader"
-  chmod +x "$native_route_reader"
-  expect_failure env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
-    SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$record" FAKE_HOST_REF="$fake_ref" \
-    FAKE_CLOSED_ROOT="$closed_fixture" FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" \
-    bash "$native_route_reader" --version "$version" --state complete --verify-tags all \
-    --output-dir "$work_root/native-route-output" --manifest "$work_root/native-route-output/bundle.json"
-  echo "Native GitHub job-route 404 mutant was rejected by the production reader."
+  # The former job route actions/runs/{run}/jobs/{job} does not exist on
+  # GitHub.  A bundle whose job evidence names that exact route must make the
+  # real reader fail on GitHub's 404, while actions/jobs/{job} passes above.
+  local legacy_route_fixture="$work_root/closed-legacy-job-route"
+  python3 "$script_dir/make-closed-bundle-fixture.py" "$record_fixture" "$legacy_route_fixture" complete legacy-job-route
+  local legacy_route_log="$work_root/legacy-job-route.log"
+  rm -f "$work_root/legacy-job-route-404.log"
+  if env PATH="$shim_root:$PATH" GH_TOKEN="shim-read-only-token" \
+      SEKIBAN_RELEASE_RECORD_REF="$fake_ref" FAKE_HOST_RECORD="$legacy_route_fixture/record.json" FAKE_HOST_REF="$fake_ref" \
+      FAKE_CLOSED_ROOT="$legacy_route_fixture" FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" \
+      FAKE_NOT_FOUND_LOG="$work_root/legacy-job-route-404.log" \
+      bash "$reader" --version "$version" --state complete --verify-tags all \
+      --output-dir "$work_root/legacy-job-route-output" --manifest "$work_root/legacy-job-route-output/bundle.json" \
+      > "$legacy_route_log" 2>&1; then
+    cat "$legacy_route_log" >&2
+    echo "MUTANT reader-legacy-job-route: SURVIVED" >&2
+    return 1
+  fi
+  grep -Fxq '404 repos/J-Tech-Japan/Sekiban/actions/runs/34737699937/jobs/103671918666' "$work_root/legacy-job-route-404.log" &&
+    grep -Eq 'Unable to read immutable bundle response J-Tech-Japan/Sekiban@01b3843276fa3bdd828afd484eb2fa0e8a6b63bb:actions/runs/34737699937/jobs/103671918666\.' "$legacy_route_log" || {
+    cat "$legacy_route_log" "$work_root/legacy-job-route-404.log" >&2
+    echo "MUTANT reader-legacy-job-route: did not fail on GitHub's 404 for actions/runs/{run}/jobs/{job}." >&2
+    return 1
+  }
+  echo "MUTANT reader-legacy-job-route: rejected at GitHub 404 for $(head -1 "$work_root/legacy-job-route-404.log" | cut -d' ' -f2)"
 
   # Closed production states are prefix-valid: the future artifact authority
   # and future payloads are not required before their stage is reachable.
@@ -482,65 +572,226 @@ SHIM
       FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" bash "$reader" \
       --version "$version" --state "$early_state" --verify-tags "$early_verify" \
       --output-dir "$early_output" --manifest "$early_manifest"
-    run_net10 "$validator" release-record --bundle "$early_output" --manifest "$early_manifest" \
+    expect_pass "state-prefix-${early_state//\//-}" run_net10 "$validator" release-record --bundle "$early_output" --manifest "$early_manifest" \
       --repo-root "$repo_root" --expected-version "$version" --state "$early_state"
   done
 
   # A legal graph uses successive earlier immutable host commits for payload,
   # authorities, and the canonical pointer.  Keep this positive control next
   # to the self-containing negative below.
-  external_bundle="$work_root/closed-external-commit"
-  python3 "$script_dir/mutate-closed-bundle.py" "$output" "$external_bundle" external-commit
-  run_net10 "$validator" release-record --bundle "$external_bundle" \
-    --manifest "$external_bundle/bundle.json" --repo-root "$repo_root" \
-    --expected-version "$version" --state complete
+  local control_bundle
+  for positive_control in external-commit origin-check-summary-additional-removed; do
+    control_bundle="$work_root/closed-positive-${positive_control}"
+    python3 "$script_dir/mutate-closed-bundle.py" "$output" "$control_bundle" "$positive_control"
+    expect_pass "$positive_control" run_net10 "$validator" release-record --bundle "$control_bundle" \
+      --manifest "$control_bundle/bundle.json" --repo-root "$repo_root" --expected-version "$version" --state complete
+  done
 
   # Production bundle mutations exercise the pointer-only reader/validator,
   # not the fixture-only flattened --record compatibility adapter.  Each
   # helper rewrites the immutable envelope and graph joins so the validator
   # reaches the named semantic rule instead of failing on an unrelated digest.
-  for closed_mutant in root-merged-sha root-extra-cumulative-fact payload-fold id-only-predecessor duplicate-root-fact \
-      unknown-package-member unknown-release-member unknown-release-body-member unknown-tag-member \
-      empty-delta skip-delta wrong-stage wrong-stage-field review-head review-head-and-api review-api-commit \
-      review-api-body review-submitted-at review-url review-id completion-arbitrary completion-task completion-target \
-      completion-nonce completion-status completion-verdict completion-artifact completion-reviewer completion-time \
-      wrong-release-url wrong-release-body release-asset-url wrong-package-url wrong-template-url \
-      wrong-library-observed-time equal-template-tag-time draft-release wrong-release-tag missing-release-asset \
-      wrong-release-asset-name missing-artifact-authority authority-version authority-verdict authority-rebind authority-time \
-      noncanonical-closeout closure-before-authority closeout-equal-authority artifact-before-release artifact-equal-release \
-      library-closeout-before-authority template-closeout-before-authority issue1185-closeout-before-authority \
-      issue1230-closeout-before-authority library-closeout-equal-authority template-closeout-equal-authority \
-      issue1185-closeout-equal-authority issue1230-closeout-equal-authority early-future-authority \
-      current-object-self-commit missing-merge-strategy wrong-merge-strategy candidate-parent-count-1 \
-      candidate-parent-count-3 candidate-parent-reversed candidate-parent-unrelated missing-reviewed-commit \
-      unequal-reviewed-merged-trees main-unrelated-tip candidate-check-time candidate-check-event candidate-check-run-id \
-      candidate-check-job-id candidate-check-run-url candidate-check-job-url candidate-check-attempt origin-check-time \
-      origin-check-event origin-check-run-id origin-check-job-id origin-check-run-url origin-check-job-url origin-check-attempt \
-      candidate-check-api-time candidate-check-api-event candidate-check-api-run-id candidate-check-api-job-id \
-      candidate-check-api-run-url candidate-check-api-job-url candidate-check-api-attempt origin-check-api-time \
-      origin-check-api-event origin-check-api-run-id origin-check-api-job-id origin-check-api-run-url \
-      origin-check-api-job-url origin-check-api-attempt origin-check-api-route \
-      origin-candidate-substitution origin-review-api-body origin-review-head origin-review-submitted-at origin-review-reviewer \
-      origin-review-completion origin-review-completion-status origin-review-request-update origin-review-negated origin-review-missing-verdict \
-      origin-review-conflicting-verdict origin-review-body-byte semantic-negated self-containing-approval self-containing-completion \
-      self-containing-payload missing-host-commit-anchor missing-host-tree-anchor wrong-host-commit-anchor \
-      wrong-host-tree-anchor missing-host-tree-path wrong-host-tree-blob decoded-host-bytes prepared-completion-late \
-      prepared-completion-equal artifact-completion-late artifact-completion-equal manifest-listed-unreachable \
-      manifest-same-file-alias; do
+  # Columns: mutant, stage passed to the validator, the only accepted rule.
+  local closed_mutant mutant_state expected_rule mutant_bundle mutant_count=0
+  while IFS='|' read -r closed_mutant mutant_state expected_rule <&3; do
+    [[ -z "$closed_mutant" || "$closed_mutant" == \#* ]] && continue
     mutant_bundle="$work_root/closed-mutant-${closed_mutant//\//-}"
     python3 "$script_dir/mutate-closed-bundle.py" "$output" "$mutant_bundle" "$closed_mutant"
-    mutant_state=complete
-    if [[ "$closed_mutant" == early-future-authority ]]; then mutant_state=prepared; fi
-    expect_failure run_net10 "$validator" release-record --bundle "$mutant_bundle" \
+    expect_rule "$closed_mutant" "$expected_rule" run_net10 "$validator" release-record --bundle "$mutant_bundle" \
       --manifest "$mutant_bundle/bundle.json" --repo-root "$repo_root" \
       --expected-version "$version" --state "$mutant_state"
-  done
-
-  sibling_bundle="$work_root/closed-unreferenced-sibling"
-  python3 "$script_dir/mutate-closed-bundle.py" "$output" "$sibling_bundle" unreferenced-sibling
-  expect_failure run_net10 "$validator" release-record --bundle "$sibling_bundle" \
-    --manifest "$sibling_bundle/bundle.json" --repo-root "$repo_root" \
-    --expected-version "$version" --state complete
+    mutant_count=$((mutant_count + 1))
+  done 3<<'MATRIX'
+artifact-before-release|complete|authority.artifacts.after-release
+artifact-completion-equal|complete|chronology.closure-after-artifacts
+artifact-completion-late|complete|chronology.closure-after-artifacts
+artifact-equal-release|complete|authority.artifacts.after-release
+authority-rebind|complete|authority.target
+authority-time|complete|authority.prepared.after-checks
+authority-verdict|complete|authority.metadata
+authority-version|complete|authority.metadata
+candidate-check-api-attempt|complete|candidate.check.binding
+candidate-check-api-event|complete|candidate.check.binding
+candidate-check-api-job-id|complete|candidate.check.binding
+candidate-check-api-jobs-url|complete|candidate.check.native-shape
+candidate-check-api-run-id|complete|candidate.check.binding
+candidate-check-api-run-url|complete|candidate.check.binding
+candidate-check-api-time|complete|candidate.check.binding
+candidate-check-attempt|complete|candidate.check.binding
+candidate-check-event|complete|candidate.check.identity
+candidate-check-job-id|complete|candidate.check.route
+candidate-check-job-url|complete|candidate.check.binding
+candidate-check-legacy-job-route|complete|candidate.check.route
+candidate-check-partial-order|complete|candidate.check.partial-order
+candidate-check-run-id|complete|candidate.check.route
+candidate-check-run-url|complete|candidate.check.binding
+candidate-check-stale|complete|candidate.check.chronology
+candidate-check-summary-count|complete|candidate.check.summary
+candidate-check-summary-replaced-required|complete|candidate.check.summary
+candidate-check-time-record|complete|candidate.check.binding
+candidate-diff-evidence|complete|candidate.diff.evidence
+candidate-parent-count-1|complete|candidate.parents
+candidate-parent-count-3|complete|candidate.parents
+candidate-parent-reversed|complete|candidate.parents
+candidate-parent-unrelated|complete|candidate.parents
+candidate-pr-head-repo-removed|complete|candidate.pr.native-shape
+candidate-pr-merge-sha|complete|candidate.pr.binding
+candidate-pr-top-level-repository|complete|candidate.pr.native-shape
+candidate-sonar-api-app|complete|candidate.sonar.binding
+candidate-sonar-as-actions|complete|candidate.check.identity
+candidate-template-legacy-job-name|complete|candidate.check.identity
+closeout-equal-authority|complete|chronology.closure-after-artifacts
+closure-before-authority|complete|chronology.closure-after-artifacts
+completion-arbitrary|complete|authority.completion-schema
+completion-artifact|complete|authority.completion-binding
+completion-nonce|complete|authority.completion-binding
+completion-reviewer|complete|authority.completion-binding
+completion-status|complete|authority.completion-schema
+completion-target|complete|authority.completion-binding
+completion-task|complete|authority.completion-binding
+completion-time|complete|authority.completion-chronology
+completion-verdict|complete|authority.completion-schema
+current-object-self-commit|complete|bundle.self-commit
+decoded-host-bytes|complete|bundle.contents-blob
+draft-release|complete|release.library_release.binding
+duplicate-root-fact|complete|schema.members
+early-future-authority|prepared|authority.future
+empty-delta|complete|schema.members
+equal-template-tag-time|complete|chronology.library-before-template
+id-only-predecessor|complete|graph.immutable-ref
+implementation-completion-after-merge|complete|implementation-review.completion.chronology
+implementation-completion-blocked|complete|implementation-review.completion.status
+implementation-completion-origin-transport|complete|implementation-review.completion.identity
+issue1185-closeout-before-authority|complete|chronology.closure-after-artifacts
+issue1185-closeout-equal-authority|complete|chronology.closure-after-artifacts
+issue1230-closeout-before-authority|complete|chronology.closure-after-artifacts
+issue1230-closeout-equal-authority|complete|chronology.closure-after-artifacts
+library-closeout-before-authority|complete|chronology.closure-after-artifacts
+library-closeout-equal-authority|complete|chronology.closure-after-artifacts
+main-unrelated-tip|complete|candidate.main-ancestry
+manifest-listed-unreachable|complete|bundle.reachability
+manifest-same-file-alias|complete|bundle.alias
+missing-artifact-authority|complete|authority.artifacts.required
+missing-host-commit-anchor|complete|bundle.host-anchor
+missing-host-tree-anchor|complete|bundle.host-anchor
+missing-host-tree-path|complete|bundle.host-tree-blob
+missing-merge-strategy|complete|schema.members
+missing-release-asset|complete|release.library_release.assets
+missing-reviewed-commit|complete|schema.members
+noncanonical-closeout|complete|schema.timestamp
+origin-candidate-substitution|complete|candidate.origin-substitution
+origin-check-api-attempt|complete|origin.check.binding
+origin-check-api-attempt-consistent|complete|origin.check.inventory
+origin-check-api-check-suite|complete|origin.check.native-shape
+origin-check-api-event|complete|origin.check.binding
+origin-check-api-job-id|complete|origin.check.binding
+origin-check-api-run-id|complete|origin.check.binding
+origin-check-api-run-updated|complete|origin.check.binding
+origin-check-api-run-url|complete|origin.check.binding
+origin-check-attempt|complete|origin.check.inventory
+origin-check-dispatch-before-merge|complete|origin.check.chronology
+origin-check-event|complete|origin.check.inventory
+origin-check-inventory-missing-dispatch-job|complete|origin.check.inventory
+origin-check-job-id|complete|origin.check.inventory
+origin-check-job-url|complete|origin.check.binding
+origin-check-legacy-job-route|complete|origin.check.route
+origin-check-normalized-time|complete|origin.check.historical-time
+origin-check-partial-order|complete|origin.check.partial-order
+origin-check-reversed-chronology|complete|origin.check.chronology
+origin-check-run-conclusion|complete|origin.check.inventory
+origin-check-run-id|complete|origin.check.inventory
+origin-check-run-inventory|complete|origin.check.run-inventory
+origin-check-run-url|complete|origin.check.binding
+origin-check-substitution|complete|candidate.origin-substitution
+origin-check-summary-replaced-required|complete|origin.check.summary
+origin-check-summary-truncated|complete|origin.check.summary
+origin-check-time-record|complete|origin.check.binding
+origin-check-truthful-conclusion|complete|origin.check.inventory
+origin-commit-tree-changed|complete|origin.commit.binding
+origin-completion-artifact-byte|complete|origin.completion.artifact
+origin-completion-before-review|complete|origin.completion.chronology
+origin-completion-blocked|complete|origin.completion.status
+origin-completion-digest|complete|origin.completion.digest
+origin-completion-implementation-artifact|complete|origin.completion.artifact
+origin-completion-invented-kind|complete|origin.completion.transport
+origin-completion-invented-time|complete|origin.completion.transport
+origin-completion-post-merge|complete|origin.completion.chronology
+origin-completion-question|complete|origin.completion.status
+origin-completion-receipt-mismatch|complete|origin.completion.transport
+origin-completion-repair-task|complete|origin.completion.identity
+origin-completion-repair-task-projection|complete|origin.completion.identity
+origin-completion-uuid-nonce|complete|origin.completion.identity
+origin-heads-swapped|complete|origin.identity
+origin-merge-parents-reversed|complete|origin.commit.parents
+origin-pr-base-repo-removed|complete|origin.pr.native-shape
+origin-pr-head-repository|complete|origin.pr.native-shape
+origin-pr-normalized-time|complete|origin.pr.binding
+origin-pr-top-level-repository|complete|origin.pr.native-shape
+origin-review-api-body|complete|origin.review.body.binding
+origin-review-api-pull-request-url|complete|origin.review.api.native-shape
+origin-review-body-byte|complete|origin.completion.artifact
+origin-review-body-byte-record-only|complete|origin.review.body.binding
+origin-review-conflicting-verdict|complete|origin.review.verdict
+origin-review-head|complete|origin.review.identity
+origin-review-missing-verdict|complete|origin.review.verdict
+origin-review-native-approved|complete|origin.review.identity
+origin-review-negated|complete|origin.review.verdict
+origin-review-request-update|complete|origin.review.verdict
+origin-review-reviewer|complete|origin.review.api.binding
+origin-review-submitted-at|complete|origin.review.api.binding
+origin-tag-substitution|complete|tag.library_tag.identity
+origin-tree-both-changed|complete|origin.identity
+origin-tree-unequal|complete|origin.tree-equality
+orphan-host-anchor-pair|complete|bundle.reachability
+payload-fold|complete|schema.members
+prepared-completion-equal|complete|chronology.prepared-before-library-tag
+prepared-completion-late|complete|chronology.prepared-before-library-tag
+release-asset-url|complete|release.library_release.assets
+review-api-body|complete|implementation-review.body.binding
+review-api-commit|complete|implementation-review.api.binding
+review-head|complete|implementation-review.identity
+review-head-and-api|complete|implementation-review.identity
+review-id|complete|implementation-review.identity
+review-native-approved|complete|implementation-review.api.binding
+review-submitted-at|complete|implementation-review.api.binding
+review-url|complete|implementation-review.identity
+root-extra-cumulative-fact|complete|schema.members
+root-merged-sha|complete|schema.members
+self-containing-approval|complete|bundle.self-commit
+self-containing-completion|complete|bundle.self-commit
+self-containing-payload|complete|bundle.self-commit
+semantic-negated|complete|implementation-review.verdict
+skip-delta|complete|graph.stage-order
+template-closeout-before-authority|complete|chronology.closure-after-artifacts
+template-closeout-equal-authority|complete|chronology.closure-after-artifacts
+unequal-reviewed-merged-trees|complete|candidate.tree-equality
+unknown-package-member|complete|schema.members
+unknown-release-body-member|complete|schema.members
+unknown-release-member|complete|schema.members
+unknown-tag-member|complete|schema.members
+unreferenced-sibling|complete|bundle.reachability
+wrong-host-commit-anchor|complete|bundle.response-identity
+wrong-host-tree-anchor|complete|bundle.host-anchor
+wrong-host-tree-blob|complete|bundle.host-tree-blob
+wrong-library-observed-time|complete|release.library_release.identity
+wrong-merge-strategy|complete|candidate.merge-strategy
+wrong-package-url|complete|packages.identity
+wrong-release-asset-name|complete|release.library_release.assets
+wrong-release-body|complete|release.library_release.binding
+wrong-release-tag|complete|release.library_release.binding
+wrong-release-url|complete|release.library_release.identity
+wrong-stage|complete|graph.stage-order
+wrong-stage-field|complete|schema.members
+wrong-template-url|complete|template.identity
+MATRIX
+  local registered_mutants
+  registered_mutants="$(python3 "$script_dir/mutate-closed-bundle.py" "$output" "$work_root/mutant-list" --list | grep -Evc '^(external-commit|origin-check-summary-additional-removed)$')"
+  (( mutant_count == registered_mutants )) || {
+    echo "Closed mutation matrix ran ${mutant_count} mutants but the mutator registers ${registered_mutants}." >&2
+    return 1
+  }
+  echo "Closed mutation matrix: ${mutant_count} named mutants rejected at their asserted rules."
+  echo "Named production pairs: origin-old/pass=native-origin-complete-bundle vs candidate-old/fail=origin-candidate-substitution,origin-check-substitution,origin-tag-substitution; approval-carry/pass=state-prefix-* vs approval-rebind/fail=authority-rebind; unreferenced-sibling/pass=reader sibling exclusion vs reachable-splice/fail=reader-reachable-splice; external-commit/pass vs current-object-self-commit/fail."
 
   # The same sibling exists in the fake host repository but is not reachable
   # from the pointer. The production reader must not fetch/list it, and the
@@ -587,7 +838,7 @@ PY
     FAKE_ENDPOINT_LOG="$work_root/closed-endpoints.log" bash "$reader" \
       --version "$version" --state complete --verify-tags all \
       --output-dir "$reachable_output" --manifest "$reachable_manifest"
-  expect_failure run_net10 "$validator" release-record --bundle "$reachable_output" \
+  expect_rule reader-reachable-splice graph.base run_net10 "$validator" release-record --bundle "$reachable_output" \
     --manifest "$reachable_manifest" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
   echo "Production reader reachable-sibling splice control failed closed."
@@ -613,21 +864,21 @@ PY
   cp -R "$output" "$bundle_digest_mutant"
   digest_entry="$(jq -r '.entries[] | select(.kind == "record") | .relative_path' "$manifest")"
   printf 'mutated bundle\n' > "$bundle_digest_mutant/$digest_entry"
-  expect_failure run_net10 "$validator" release-record --bundle "$bundle_digest_mutant" \
+  expect_rule bundle-byte-mutation bundle.entry-digest run_net10 "$validator" release-record --bundle "$bundle_digest_mutant" \
     --manifest "$bundle_digest_mutant/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
 
   bundle_missing_mutant="$work_root/bundle-missing-mutant"
   cp -R "$output" "$bundle_missing_mutant"
   rm "$bundle_missing_mutant/$digest_entry"
-  expect_failure run_net10 "$validator" release-record --bundle "$bundle_missing_mutant" \
+  expect_rule bundle-missing-object bundle.missing-file run_net10 "$validator" release-record --bundle "$bundle_missing_mutant" \
     --manifest "$bundle_missing_mutant/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
 
   bundle_extra_mutant="$work_root/bundle-extra-mutant"
   cp -R "$output" "$bundle_extra_mutant"
   printf 'unreachable\n' > "$bundle_extra_mutant/objects/$(printf '0%.0s' {1..64}).json"
-  expect_failure run_net10 "$validator" release-record --bundle "$bundle_extra_mutant" \
+  expect_rule bundle-extra-file bundle.closed-files run_net10 "$validator" release-record --bundle "$bundle_extra_mutant" \
     --manifest "$bundle_extra_mutant/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
 
@@ -635,7 +886,7 @@ PY
   cp -R "$output" "$bundle_alias_mutant"
   jq '.entries[0].relative_path = "../record.json"' "$bundle_alias_mutant/bundle.json" > "$bundle_alias_mutant/bundle.json.tmp"
   mv "$bundle_alias_mutant/bundle.json.tmp" "$bundle_alias_mutant/bundle.json"
-  expect_failure run_net10 "$validator" release-record --bundle "$bundle_alias_mutant" \
+  expect_rule bundle-traversal-alias bundle.path run_net10 "$validator" release-record --bundle "$bundle_alias_mutant" \
     --manifest "$bundle_alias_mutant/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
 
@@ -643,14 +894,8 @@ PY
   cp -R "$output" "$bundle_flattened_mutant"
   jq '.entries[1].endpoint = "flattened-record.json"' "$bundle_flattened_mutant/bundle.json" > "$bundle_flattened_mutant/bundle.json.tmp"
   mv "$bundle_flattened_mutant/bundle.json.tmp" "$bundle_flattened_mutant/bundle.json"
-  expect_failure run_net10 "$validator" release-record --bundle "$bundle_flattened_mutant" \
+  expect_rule bundle-flattened-endpoint bundle.endpoint run_net10 "$validator" release-record --bundle "$bundle_flattened_mutant" \
     --manifest "$bundle_flattened_mutant/bundle.json" --repo-root "$repo_root" \
-    --expected-version "$version" --state complete
-
-  bundle_self_commit_mutant="$work_root/bundle-self-commit-mutant"
-  python3 "$script_dir/mutate-closed-bundle.py" "$output" "$bundle_self_commit_mutant" current-object-self-commit
-  expect_failure run_net10 "$validator" release-record --bundle "$bundle_self_commit_mutant" \
-    --manifest "$bundle_self_commit_mutant/bundle.json" --repo-root "$repo_root" \
     --expected-version "$version" --state complete
 
   local failure_output

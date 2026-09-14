@@ -16,6 +16,11 @@ internal sealed class ReleaseBundle
     private static readonly Regex ImmutableRef = new(
         "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}:.+$",
         RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    // Unanchored scan for immutable references embedded anywhere in host
+    // object bytes (for example inside a JSON string member).
+    private static readonly Regex EmbeddedHostRef = new(
+        "(?<![A-Za-z0-9_.-])J-Tech-Japan/SekibanIntentHost@([0-9a-fA-F]{40}):",
+        RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     private ReleaseBundle(
         string recordPath,
@@ -48,7 +53,7 @@ internal sealed class ReleaseBundle
 
     internal Entry GetEntry(string immutableRef)
     {
-        Assert(Entries.TryGetValue(immutableRef, out var entry),
+        Assert("bundle.missing-ref", Entries.TryGetValue(immutableRef, out var entry),
             $"Closed release bundle does not contain immutable reference {immutableRef}.");
         return entry!;
     }
@@ -57,27 +62,27 @@ internal sealed class ReleaseBundle
     {
         bundleDirectory = Path.GetFullPath(bundleDirectory);
         manifestPath = Path.GetFullPath(manifestPath);
-        Assert(Directory.Exists(bundleDirectory), $"Release bundle directory does not exist: {bundleDirectory}.");
-        Assert(File.Exists(manifestPath), $"Release bundle manifest does not exist: {manifestPath}.");
-        Assert(Path.GetDirectoryName(manifestPath) == bundleDirectory &&
+        Assert("bundle.location", Directory.Exists(bundleDirectory), $"Release bundle directory does not exist: {bundleDirectory}.");
+        Assert("bundle.location", File.Exists(manifestPath), $"Release bundle manifest does not exist: {manifestPath}.");
+        Assert("bundle.location", Path.GetDirectoryName(manifestPath) == bundleDirectory &&
                Path.GetFileName(manifestPath) == "bundle.json",
             "The manifest must be the bundle root's bundle.json file.");
 
         using var document = JsonDocument.Parse(File.ReadAllBytes(manifestPath));
         var root = document.RootElement;
-        Assert(root.ValueKind == JsonValueKind.Object, "Bundle manifest must be a JSON object.");
+        Assert("bundle.manifest", root.ValueKind == JsonValueKind.Object, "Bundle manifest must be a JSON object.");
         RequireMembers(root, "bundle manifest", new[]
         {
             "schema_version", "host_repository", "host_ref", "record_relative_path", "entries"
         });
-        Assert(GetInt(root, "schema_version") == 2, "Bundle manifest schema_version must be 2.");
-        Assert(GetString(root, "host_repository") == HostRepository,
+        Assert("bundle.manifest", GetInt(root, "schema_version") == 2, "Bundle manifest schema_version must be 2.");
+        Assert("bundle.manifest", GetString(root, "host_repository") == HostRepository,
             "Bundle manifest host_repository must be the private canonical host.");
         var hostRef = GetString(root, "host_ref").ToLowerInvariant();
-        Assert(Commit.IsMatch(hostRef), "Bundle manifest host_ref must be an immutable 40-character SHA.");
+        Assert("bundle.manifest", Commit.IsMatch(hostRef), "Bundle manifest host_ref must be an immutable 40-character SHA.");
 
         var entries = root.GetProperty("entries");
-        Assert(entries.ValueKind == JsonValueKind.Array && entries.GetArrayLength() > 0,
+        Assert("bundle.manifest", entries.ValueKind == JsonValueKind.Array && entries.GetArrayLength() > 0,
             "Bundle manifest entries must be a non-empty array.");
         var paths = new HashSet<string>(StringComparer.Ordinal);
         var refs = new HashSet<string>(StringComparer.Ordinal);
@@ -96,38 +101,38 @@ internal sealed class ReleaseBundle
             var endpoint = GetString(entry, "endpoint");
             var relativePath = GetString(entry, "relative_path");
             var digest = GetString(entry, "sha256").ToLowerInvariant();
-            Assert(kind is "record" or "host-response" or "github-response",
+            Assert("bundle.entry-kind", kind is "record" or "host-response" or "github-response",
                 $"Bundle manifest entry kind '{kind}' is not supported.");
-            Assert(ImmutableRef.IsMatch(immutableRef),
+            Assert("bundle.entry-ref", ImmutableRef.IsMatch(immutableRef),
                 $"Bundle entry {relativePath} must identify a full immutable reference.");
-            Assert(endpoint == ExpectedEndpoint(immutableRef),
+            Assert("bundle.endpoint", endpoint == ExpectedEndpoint(immutableRef),
                 $"Bundle entry {relativePath} endpoint does not match its immutable reference.");
-            Assert(Sha256.IsMatch(digest), $"Bundle entry {relativePath} must have a SHA-256 digest.");
-            Assert(IsSafeRelativePath(relativePath), $"Bundle entry path '{relativePath}' is unsafe.");
-            Assert(paths.Add(relativePath),
+            Assert("bundle.entry-digest", Sha256.IsMatch(digest), $"Bundle entry {relativePath} must have a SHA-256 digest.");
+            Assert("bundle.path", IsSafeRelativePath(relativePath), $"Bundle entry path '{relativePath}' is unsafe.");
+            Assert("bundle.alias", paths.Add(relativePath),
                 $"Bundle aliases multiple immutable references to the same local path {relativePath}.");
             var expectedPathDigest = Convert.ToHexString(SHA256.HashData(
                 Encoding.UTF8.GetBytes($"{immutableRef}\n{digest}"))).ToLowerInvariant();
-            Assert(relativePath.StartsWith("objects/", StringComparison.Ordinal) &&
+            Assert("bundle.path", relativePath.StartsWith("objects/", StringComparison.Ordinal) &&
                    Path.GetFileNameWithoutExtension(relativePath) == expectedPathDigest,
                 $"Bundle entry {relativePath} must be deterministically named by its immutable reference and content digest.");
-            Assert(refs.Add(immutableRef),
+            Assert("bundle.duplicate-ref", refs.Add(immutableRef),
                 $"Bundle contains duplicate immutable reference {immutableRef}.");
 
             var fullPath = Path.GetFullPath(Path.Combine(bundleDirectory, relativePath));
-            Assert(IsWithin(bundleDirectory, fullPath) && File.Exists(fullPath),
+            Assert("bundle.missing-file", IsWithin(bundleDirectory, fullPath) && File.Exists(fullPath),
                 $"Bundle entry is missing: {relativePath}.");
-            Assert(new FileInfo(fullPath).LinkTarget is null,
+            Assert("bundle.path", new FileInfo(fullPath).LinkTarget is null,
                 $"Bundle entry must not be a symbolic link: {relativePath}.");
             var rawBytes = File.ReadAllBytes(fullPath);
             var actualDigest = Convert.ToHexString(SHA256.HashData(rawBytes)).ToLowerInvariant();
-            Assert(actualDigest == digest, $"Bundle entry digest mismatch: {relativePath}.");
+            Assert("bundle.entry-digest", actualDigest == digest, $"Bundle entry digest mismatch: {relativePath}.");
 
             byte[]? contentBytes;
             if (kind == "record")
             {
-                Assert(recordPath is null, "Bundle manifest must contain exactly one record entry.");
-                Assert(immutableRef.Contains($"@{hostRef}:", StringComparison.OrdinalIgnoreCase),
+                Assert("bundle.record", recordPath is null, "Bundle manifest must contain exactly one record entry.");
+                Assert("bundle.record", immutableRef.Contains($"@{hostRef}:", StringComparison.OrdinalIgnoreCase),
                     "The record entry must be anchored to the requested immutable host commit.");
                 contentBytes = ValidateContentsEnvelope(rawBytes, immutableRef, relativePath);
                 recordPath = fullPath;
@@ -142,16 +147,16 @@ internal sealed class ReleaseBundle
                 kind, immutableRef, endpoint, relativePath, digest, rawBytes, contentBytes));
         }
 
-        Assert(recordPath is not null && recordBytes is not null,
+        Assert("bundle.record", recordPath is not null && recordBytes is not null,
             "Bundle manifest must contain one record entry.");
-        Assert(GetString(root, "record_relative_path") == Path.GetRelativePath(bundleDirectory, recordPath!),
+        Assert("bundle.record", GetString(root, "record_relative_path") == Path.GetRelativePath(bundleDirectory, recordPath!),
             "Bundle record_relative_path must identify the record entry exactly.");
 
         var actualFiles = Directory.EnumerateFiles(bundleDirectory, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(bundleDirectory, path).Replace(Path.DirectorySeparatorChar, '/'))
             .Where(path => path != "bundle.json")
             .ToHashSet(StringComparer.Ordinal);
-        Assert(actualFiles.SetEquals(paths),
+        Assert("bundle.closed-files", actualFiles.SetEquals(paths),
             "Bundle contains an extra, missing, or unreachable file outside the closed manifest.");
 
         ValidateHostContentsEvidence(loaded);
@@ -179,7 +184,7 @@ internal sealed class ReleaseBundle
                     : null;
         if (expectedObjectId is not null)
         {
-            Assert(root.TryGetProperty("sha", out var sha) && sha.ValueKind == JsonValueKind.String &&
+            Assert("bundle.response-identity", root.TryGetProperty("sha", out var sha) && sha.ValueKind == JsonValueKind.String &&
                    sha.GetString() == expectedObjectId,
                 $"Bundle response {relativePath} is not the API object named by {immutableRef}.");
             return null;
@@ -190,7 +195,7 @@ internal sealed class ReleaseBundle
             return ValidateContentsEnvelope(bytes, immutableRef, relativePath);
         }
 
-        Assert(root.ValueKind == JsonValueKind.Object,
+        Assert("bundle.response-identity", root.ValueKind == JsonValueKind.Object,
             $"Bundle response {relativePath} must be a JSON API object.");
         return null;
     }
@@ -204,7 +209,7 @@ internal sealed class ReleaseBundle
         var expectedPath = objectPath.StartsWith("contents/", StringComparison.Ordinal)
             ? objectPath["contents/".Length..]
             : objectPath;
-        Assert(root.TryGetProperty("type", out var type) && type.GetString() == "file" &&
+        Assert("bundle.contents-envelope", root.TryGetProperty("type", out var type) && type.GetString() == "file" &&
                root.TryGetProperty("encoding", out var encoding) && encoding.GetString() == "base64" &&
                root.TryGetProperty("path", out var path) && path.GetString() == expectedPath,
             $"Bundle response {relativePath} is not the immutable contents object named by {immutableRef}.");
@@ -217,10 +222,10 @@ internal sealed class ReleaseBundle
         }
         catch (FormatException exception)
         {
-            throw new InvalidOperationException($"Bundle response {relativePath} contains invalid base64 content.", exception);
+            throw new InvalidOperationException($"[rule:bundle.contents-envelope] Bundle response {relativePath} contains invalid base64 content.", exception);
         }
 
-        Assert(root.TryGetProperty("sha", out var sha) && sha.GetString() == GitBlobSha(content),
+        Assert("bundle.contents-blob", root.TryGetProperty("sha", out var sha) && sha.GetString() == GitBlobSha(content),
             $"Bundle response {relativePath} does not preserve the exact Git contents blob identity.");
         return content;
     }
@@ -245,10 +250,10 @@ internal sealed class ReleaseBundle
         var output = process.StandardOutput.ReadToEnd();
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
-        Assert(process.ExitCode == 0,
+        Assert("bundle.git", process.ExitCode == 0,
             $"git hash-object failed with exit code {process.ExitCode}: {error.Trim()}");
         var hash = output.Trim();
-        Assert(Commit.IsMatch(hash), "git hash-object returned an invalid blob identity.");
+        Assert("bundle.git", Commit.IsMatch(hash), "git hash-object returned an invalid blob identity.");
         return hash;
     }
 
@@ -259,7 +264,7 @@ internal sealed class ReleaseBundle
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Select(directory => Path.Combine(directory, executableName))
             .FirstOrDefault(File.Exists);
-        Assert(candidate is not null, "The git executable is not available on PATH.");
+        Assert("bundle.git", candidate is not null, "The git executable is not available on PATH.");
         return Path.GetFullPath(candidate!);
     }
 
@@ -299,7 +304,7 @@ internal sealed class ReleaseBundle
     {
         var at = immutableRef.LastIndexOf('@');
         var colon = immutableRef.IndexOf(':', at + 1);
-        Assert(at > 0 && colon > at, $"Immutable reference {immutableRef} has no commit identity.");
+        Assert("bundle.entry-ref", at > 0 && colon > at, $"Immutable reference {immutableRef} has no commit identity.");
         return immutableRef[(at + 1)..colon];
     }
 
@@ -317,25 +322,25 @@ internal sealed class ReleaseBundle
         {
             var commit = ReferenceCommit(contentEntry.ImmutableRef);
             var commitRef = $"{HostRepository}@{commit}:commits/{commit}";
-            Assert(entries.TryGetValue(commitRef, out var commitEntry),
+            Assert("bundle.host-anchor", entries.TryGetValue(commitRef, out var commitEntry),
                 $"Host contents object {contentEntry.ImmutableRef} is missing its immutable commit response.");
             using var commitDocument = JsonDocument.Parse(commitEntry!.RawBytes);
             var commitObject = commitDocument.RootElement;
-            Assert(GetString(commitObject, "sha") == commit && commitObject.TryGetProperty("commit", out _),
+            Assert("bundle.host-anchor", GetString(commitObject, "sha") == commit && commitObject.TryGetProperty("commit", out _),
                 $"Host commit response is not bound to {commit}.");
             var commitDetails = commitObject.GetProperty("commit");
             var tree = commitDetails.GetProperty("tree");
-            Assert(tree.ValueKind == JsonValueKind.Object, $"Host commit response is not bound to {commit}.");
+            Assert("bundle.host-anchor", tree.ValueKind == JsonValueKind.Object, $"Host commit response is not bound to {commit}.");
             var treeSha = GetString(tree, "sha");
             var treeRef = $"{HostRepository}@{commit}:git/trees/{treeSha}";
-            Assert(entries.TryGetValue(treeRef, out var treeEntry),
+            Assert("bundle.host-anchor", entries.TryGetValue(treeRef, out var treeEntry),
                 $"Host contents object {contentEntry.ImmutableRef} is missing its immutable tree response.");
             using var treeDocument = JsonDocument.Parse(treeEntry!.RawBytes);
             var treeObject = treeDocument.RootElement;
-            Assert(GetString(treeObject, "sha") == treeSha && treeObject.TryGetProperty("tree", out _),
+            Assert("bundle.host-anchor", GetString(treeObject, "sha") == treeSha && treeObject.TryGetProperty("tree", out _),
                 $"Host tree response is not bound to {treeSha}.");
             var treeEntries = treeObject.GetProperty("tree");
-            Assert(treeEntries.ValueKind == JsonValueKind.Array, $"Host tree response is not bound to {treeSha}.");
+            Assert("bundle.host-anchor", treeEntries.ValueKind == JsonValueKind.Array, $"Host tree response is not bound to {treeSha}.");
 
             var separator = contentEntry.ImmutableRef.IndexOf(':');
             var expectedPath = contentEntry.ImmutableRef[(separator + 1)..]["contents/".Length..];
@@ -343,7 +348,7 @@ internal sealed class ReleaseBundle
                 .Where(item => item.ValueKind == JsonValueKind.Object &&
                                item.TryGetProperty("path", out var path) && path.GetString() == expectedPath)
                 .ToArray();
-            Assert(matches.Length == 1 && GetString(matches[0], "type") == "blob" &&
+            Assert("bundle.host-tree-blob", matches.Length == 1 && GetString(matches[0], "type") == "blob" &&
                    GetString(matches[0], "sha") == GitBlobSha(contentEntry.ContentBytes!),
                 $"Host tree {treeSha} does not bind exactly one blob for {expectedPath}.");
         }
@@ -357,14 +362,10 @@ internal sealed class ReleaseBundle
         {
             var containingCommit = ReferenceCommit(entry.ImmutableRef);
             var text = Encoding.UTF8.GetString(entry.ContentBytes!);
-            foreach (Match match in ImmutableRef.Matches(text))
+            foreach (Match match in EmbeddedHostRef.Matches(text))
             {
-                var nestedReference = match.Value;
-                if (nestedReference.StartsWith($"{HostRepository}@", StringComparison.OrdinalIgnoreCase))
-                {
-                    Assert(!ReferenceCommit(nestedReference).Equals(containingCommit, StringComparison.OrdinalIgnoreCase),
-                        $"Host object {entry.ImmutableRef} must not reference an object from its containing commit.");
-                }
+                Assert("bundle.self-commit", !match.Groups[1].Value.Equals(containingCommit, StringComparison.OrdinalIgnoreCase),
+                    $"Host object {entry.ImmutableRef} must not reference an object from its containing commit.");
             }
         }
     }
@@ -381,19 +382,19 @@ internal sealed class ReleaseBundle
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in element.EnumerateObject())
         {
-            Assert(names.Contains(property.Name), $"{path} contains unknown member '{property.Name}'.");
-            Assert(seen.Add(property.Name), $"{path} contains duplicate member '{property.Name}'.");
+            Assert("bundle.members", names.Contains(property.Name), $"{path} contains unknown member '{property.Name}'.");
+            Assert("bundle.members", seen.Add(property.Name), $"{path} contains duplicate member '{property.Name}'.");
         }
 
         foreach (var name in expected)
         {
-            Assert(element.TryGetProperty(name, out _), $"{path} is missing required member '{name}'.");
+            Assert("bundle.members", element.TryGetProperty(name, out _), $"{path} is missing required member '{name}'.");
         }
     }
 
     private static string GetString(JsonElement element, string property)
     {
-        Assert(element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String,
+        Assert("bundle.members", element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String,
             $"Bundle property {property} is required and must be a string.");
         return value.GetString() ?? string.Empty;
     }
@@ -401,16 +402,16 @@ internal sealed class ReleaseBundle
     private static int GetInt(JsonElement element, string property)
     {
         var result = 0;
-        Assert(element.TryGetProperty(property, out var value) && value.TryGetInt32(out result),
+        Assert("bundle.members", element.TryGetProperty(property, out var value) && value.TryGetInt32(out result),
             $"Bundle property {property} is required and must be an integer.");
         return result;
     }
 
-    private static void Assert(bool condition, string message)
+    private static void Assert(string rule, bool condition, string message)
     {
         if (!condition)
         {
-            throw new InvalidOperationException(message);
+            throw new InvalidOperationException($"[rule:{rule}] {message}");
         }
     }
 }

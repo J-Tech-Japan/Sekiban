@@ -1,0 +1,5 @@
+file	source_repository_clone	source_path	source_line	source_revision	sha256
+review-outbox-record.jsonl	Sekiban-Reviewer (J-Tech-Japan/SekibanIntentHost clone)	.intent-cli/notify/sekiban/sekiban-orch/report-outbox.jsonl	480	working-tree (reviewer seat outbox)	4d08a289bf8e9fba074de95f60be87acf2635726fd74a65370f9073826ed22a1
+review-outbox-delivered.jsonl	Sekiban-Reviewer (J-Tech-Japan/SekibanIntentHost clone)	.intent-cli/notify/sekiban/sekiban-orch/report-outbox.jsonl	481	working-tree (reviewer seat outbox)	2c73e6e5cf64e77cb51dd92b0da6320b2840b53ada80fc13d00c6718531ffcd6
+orchestrator-report-receipt.jsonl	Sekiban-Design (J-Tech-Japan/SekibanIntentHost clone)	.intent-cli/notify/sekiban/sekiban-orch/pending.jsonl	1071	a32357d9acfd63403b548d2f3bce261acc719185	0e63f74c4b33a98cede206838548a00c754b99c4d2de669dde9bd93f2ee8c6b3
+../origin-g79-review-artifact.md	Sekiban-Reviewer	sek-g79-pr1235-01b38432-final-exact-codex-sol-review-20260913.md	-	untracked reviewer artifact	22c97e22c8c25ca226f0fad3d3dc184a5e6a5fbbeb94207c5d74c486e0efbc97

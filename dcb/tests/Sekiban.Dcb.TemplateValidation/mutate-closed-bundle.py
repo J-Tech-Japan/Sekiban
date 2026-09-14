@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Create semantic mutants of a fetched pointer-only schema-v2 bundle."""
+"""Create named semantic mutants of a fetched pointer-only schema-v2 bundle.
+
+Each mutant rewrites only what is needed to reach one validator rule: owning
+digests, host tree blobs, and approval payload digests are refreshed so that
+the mutant is not rejected by an unrelated earlier guard.  The harness asserts
+the exact `[rule:<id>]` reported for every mutant.
+"""
 
 from __future__ import annotations
 
@@ -12,9 +18,18 @@ import sys
 from pathlib import Path
 from typing import Callable
 
+HOST = "J-Tech-Japan/SekibanIntentHost"
+REPOSITORY = "J-Tech-Japan/Sekiban"
+ORIGIN_HEAD = "01b3843276fa3bdd828afd484eb2fa0e8a6b63bb"
+ORIGIN_MERGED = "7f684e6b9f769d436b12495acd07e7d74c5d8298"
+
 
 def dump(value: object) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def line(value: object) -> bytes:
+    return (json.dumps(value, separators=(",", ":")) + "\n").encode()
 
 
 def sha256(value: bytes) -> str:
@@ -29,668 +44,790 @@ def git_blob_sha(value: bytes) -> str:
     return result.stdout.decode("ascii").strip()
 
 
-def main() -> None:
-    source = Path(sys.argv[1]).resolve()
-    destination = Path(sys.argv[2]).resolve()
-    kind = sys.argv[3]
-    shutil.copytree(source, destination)
-    manifest_path = destination / "bundle.json"
-    manifest = json.loads(manifest_path.read_text())
+class Bundle:
+    def __init__(self, source: Path, destination: Path) -> None:
+        shutil.copytree(source, destination)
+        self.root = destination
+        self.manifest_path = destination / "bundle.json"
+        self.manifest = json.loads(self.manifest_path.read_text())
+        self.record_ref = self.find(lambda item: item["kind"] == "record")["immutable_ref"]
+        self.record = self.read_json_content(self.record_ref)
+        self.payload_changed = False
+        self.payload_refs = {reference for reference, _ in self.chain()}
 
-    def find_entry(predicate: Callable[[dict[str, object]], bool]) -> dict[str, object]:
-        for entry in manifest["entries"]:
+    # ---- manifest entries -------------------------------------------------
+    def find(self, predicate: Callable[[dict[str, object]], bool]) -> dict[str, object]:
+        for entry in self.manifest["entries"]:
             if predicate(entry):
                 return entry
         raise ValueError("The closed bundle does not contain the requested immutable object.")
 
-    def read_content(reference: str) -> tuple[dict[str, object], bytes]:
-        entry = find_entry(lambda item: item["immutable_ref"] == reference)
-        envelope = json.loads((destination / entry["relative_path"]).read_text())
-        if not isinstance(envelope.get("content"), str):
-            raise ValueError(f"{reference} is not a contents response")
-        return entry, base64.b64decode(envelope["content"].replace("\n", ""))
+    def entry(self, reference: str) -> dict[str, object]:
+        return self.find(lambda item: item["immutable_ref"] == reference)
 
-    def read_json_content(reference: str) -> tuple[dict[str, object], dict[str, object]]:
-        entry, content = read_content(reference)
-        value = json.loads(content)
-        if not isinstance(value, dict):
-            raise ValueError(f"{reference} is not a JSON object")
-        return entry, value
+    def refs_ending(self, suffix: str) -> list[str]:
+        refs = [entry["immutable_ref"] for entry in self.manifest["entries"] if entry["immutable_ref"].endswith(suffix)]
+        if not refs:
+            raise ValueError(f"No bundle entry ends with {suffix}")
+        return refs
 
-    def write_content(reference: str, content: bytes) -> str:
-        entry = find_entry(lambda item: item["immutable_ref"] == reference)
-        old_path = destination / entry["relative_path"]
-        envelope = json.loads(old_path.read_text())
-        envelope["content"] = base64.b64encode(content).decode("ascii")
-        envelope["sha"] = git_blob_sha(content)
-        raw = dump(envelope)
-        new_relative = f"objects/{sha256((reference + chr(10) + sha256(raw)).encode()).lower()}.json"
-        (destination / new_relative).write_bytes(raw)
+    def store(self, entry: dict[str, object], raw: bytes) -> None:
+        old_path = self.root / entry["relative_path"]
+        new_relative = f"objects/{sha256((entry['immutable_ref'] + chr(10) + sha256(raw)).encode())}.json"
+        (self.root / new_relative).write_bytes(raw)
         if new_relative != entry["relative_path"]:
             old_path.unlink()
         entry["relative_path"] = new_relative
         entry["sha256"] = sha256(raw)
         if entry.get("kind") == "record":
-            manifest["record_relative_path"] = new_relative
-        refresh_host_tree(reference, envelope["sha"])
+            self.manifest["record_relative_path"] = new_relative
+
+    # ---- host contents ------------------------------------------------------
+    def read_content(self, reference: str) -> bytes:
+        envelope = json.loads((self.root / self.entry(reference)["relative_path"]).read_text())
+        return base64.b64decode(envelope["content"].replace("\n", ""))
+
+    def read_json_content(self, reference: str) -> dict[str, object]:
+        return json.loads(self.read_content(reference))
+
+    def write_content(self, reference: str, content: bytes) -> str:
+        entry = self.entry(reference)
+        envelope = json.loads((self.root / entry["relative_path"]).read_text())
+        envelope["content"] = base64.b64encode(content).decode("ascii")
+        envelope["sha"] = git_blob_sha(content)
+        self.store(entry, dump(envelope))
+        self.refresh_host_tree(reference, envelope["sha"])
+        if reference in self.payload_refs:
+            self.payload_changed = True
         return sha256(content)
 
-    def write_raw(reference: str, value: dict[str, object]) -> None:
-        entry = find_entry(lambda item: item["immutable_ref"] == reference)
-        old_path = destination / entry["relative_path"]
-        raw = dump(value)
-        new_relative = f"objects/{sha256((reference + chr(10) + sha256(raw)).encode()).lower()}.json"
-        (destination / new_relative).write_bytes(raw)
-        if new_relative != entry["relative_path"]:
-            old_path.unlink()
-        entry["relative_path"] = new_relative
-        entry["sha256"] = sha256(raw)
-
-    def refresh_host_tree(reference: str, blob_sha: str) -> None:
-        if not reference.startswith("J-Tech-Japan/SekibanIntentHost@") or ":contents/" not in reference:
+    def refresh_host_tree(self, reference: str, blob_sha: str) -> None:
+        if not reference.startswith(f"{HOST}@") or ":contents/" not in reference:
             return
         repository_commit, object_path = reference.split(":", 1)
         commit = repository_commit.rsplit("@", 1)[1]
-        tree_entry = find_entry(lambda item: item["immutable_ref"].startswith(
-            f"J-Tech-Japan/SekibanIntentHost@{commit}:git/trees/"))
-        tree_reference = tree_entry["immutable_ref"]
-        tree = json.loads((destination / tree_entry["relative_path"]).read_text())
-        expected_path = object_path.removeprefix("contents/")
-        matches = [item for item in tree.get("tree", []) if item.get("path") == expected_path]
+        tree_entry = self.find(lambda item: item["immutable_ref"].startswith(f"{HOST}@{commit}:git/trees/"))
+        tree = json.loads((self.root / tree_entry["relative_path"]).read_text())
+        matches = [item for item in tree.get("tree", []) if item.get("path") == object_path.removeprefix("contents/")]
         if len(matches) != 1:
             raise ValueError(f"Host tree has no unique path for {reference}")
         matches[0]["sha"] = blob_sha
-        write_raw(tree_reference, tree)
+        self.store(tree_entry, dump(tree))
 
-    record_entry = find_entry(lambda item: item["kind"] == "record")
-    record_ref = record_entry["immutable_ref"]
-    _, record = read_json_content(record_ref)
+    def host_anchor_refs(self, contents_reference: str) -> tuple[str, str]:
+        commit = contents_reference.split(":", 1)[0].rsplit("@", 1)[1]
+        commit_reference = f"{HOST}@{commit}:commits/{commit}"
+        commit_value = json.loads((self.root / self.entry(commit_reference)["relative_path"]).read_text())
+        return commit_reference, f"{HOST}@{commit}:git/trees/{commit_value['commit']['tree']['sha']}"
 
-    def payload_chain() -> list[tuple[str, dict[str, object]]]:
+    def add_host_tree_path(self, contents_reference: str, path: str, blob_sha: str) -> None:
+        _, tree_reference = self.host_anchor_refs(contents_reference)
+        tree_entry = self.entry(tree_reference)
+        tree = json.loads((self.root / tree_entry["relative_path"]).read_text())
+        tree.setdefault("tree", []).append({"path": path, "mode": "100644", "type": "blob", "sha": blob_sha, "size": 0})
+        self.store(tree_entry, dump(tree))
+
+    def add_host_entry(self, reference: str, raw: bytes) -> None:
+        relative = f"objects/{sha256((reference + chr(10) + sha256(raw)).encode())}.json"
+        (self.root / relative).write_bytes(raw)
+        repository, rest = reference.split("@", 1)
+        commit, object_path = rest.split(":", 1)
+        if object_path.startswith("contents/"):
+            endpoint = f"repos/{repository}/{object_path}?ref={commit}"
+        elif object_path.startswith("git/trees/"):
+            endpoint = f"repos/{repository}/{object_path}?recursive=1"
+        else:
+            endpoint = f"repos/{repository}/{object_path}"
+        self.manifest["entries"].append({
+            "kind": "host-response", "immutable_ref": reference, "endpoint": endpoint,
+            "relative_path": relative, "sha256": sha256(raw),
+        })
+
+    # ---- raw API responses ---------------------------------------------------
+    def read_api(self, reference: str) -> dict[str, object]:
+        return json.loads((self.root / self.entry(reference)["relative_path"]).read_text())
+
+    def write_api(self, reference: str, value: dict[str, object]) -> None:
+        self.store(self.entry(reference), dump(value))
+
+    def mutate_api(self, suffix: str, mutate: Callable[[dict[str, object]], None]) -> None:
+        for reference in self.refs_ending(suffix):
+            value = self.read_api(reference)
+            mutate(value)
+            self.write_api(reference, value)
+
+    def move_api(self, old_reference: str, new_reference: str) -> None:
+        entry = self.entry(old_reference)
+        raw = (self.root / entry["relative_path"]).read_bytes()
+        (self.root / entry["relative_path"]).unlink()
+        self.manifest["entries"].remove(entry)
+        self.add_host_entry(new_reference, raw)
+        self.manifest["entries"][-1]["kind"] = "github-response"
+
+    def remove_entry(self, reference: str) -> None:
+        entry = self.entry(reference)
+        (self.root / entry["relative_path"]).unlink()
+        self.manifest["entries"].remove(entry)
+
+    # ---- payload graph ---------------------------------------------------------
+    def chain(self) -> list[tuple[str, dict[str, object]]]:
         chain: list[tuple[str, dict[str, object]]] = []
         seen: set[str] = set()
-        reference = record["current_payload_ref"]
-        while reference is not None:
-            if reference in seen:
-                raise ValueError("The fixture payload chain contains a cycle.")
+        reference = self.record["current_payload_ref"]
+        while reference is not None and reference not in seen:
             seen.add(reference)
-            _, payload = read_json_content(reference)
+            try:
+                payload = self.read_json_content(reference)
+            except (ValueError, KeyError):
+                break
             chain.append((reference, payload))
             reference = payload.get("previous_payload_ref")
         chain.reverse()
         return chain
 
-    chain = payload_chain()
-
-    def payload_at(stage: str) -> tuple[str, dict[str, object]]:
-        for reference, payload in chain:
+    def payload_at(self, stage: str) -> tuple[str, dict[str, object]]:
+        for reference, payload in self.chain():
             if payload.get("stage") == stage:
                 return reference, payload
         raise ValueError(f"Missing payload stage {stage}")
 
-    def mutate_payload(stage: str, mutate: Callable[[dict[str, object]], None]) -> None:
-        reference, payload = payload_at(stage)
+    def mutate_payload(self, stage: str, mutate: Callable[[dict[str, object]], None]) -> None:
+        reference, payload = self.payload_at(stage)
         mutate(payload)
-        write_content(reference, dump(payload))
+        self.write_content(reference, dump(payload))
 
-    def api_reference(suffix: str) -> str:
-        return find_entry(lambda item: item["immutable_ref"].endswith(suffix))["immutable_ref"]
+    def prepared_changes(self, mutate: Callable[[dict[str, object]], None]) -> None:
+        self.mutate_payload("prepared", lambda payload: mutate(payload["changes"]))
 
-    def mutate_api(suffix: str, mutate: Callable[[dict[str, object]], None]) -> None:
-        reference = api_reference(suffix)
-        mutate_api_reference(reference, mutate)
+    def approval_ref(self, stage: str) -> str:
+        return self.record["prepared_approval_ref"] if stage == "prepared" else self.record["artifact_approval_ref"]
 
-    def mutate_api_reference(reference: str, mutate: Callable[[dict[str, object]], None]) -> None:
-        entry = find_entry(lambda item: item["immutable_ref"] == reference)
-        value = json.loads((destination / entry["relative_path"]).read_text())
-        mutate(value)
-        write_raw(reference, value)
-
-    def remove_entry(reference: str) -> None:
-        entry = find_entry(lambda item: item["immutable_ref"] == reference)
-        (destination / entry["relative_path"]).unlink()
-        manifest["entries"].remove(entry)
-
-    def host_anchor_refs(contents_reference: str) -> tuple[str, str]:
-        repository_commit, _ = contents_reference.split(":", 1)
-        commit = repository_commit.rsplit("@", 1)[1]
-        commit_reference = f"J-Tech-Japan/SekibanIntentHost@{commit}:commits/{commit}"
-        commit_entry = find_entry(lambda item: item["immutable_ref"] == commit_reference)
-        commit_value = json.loads((destination / commit_entry["relative_path"]).read_text())
-        tree = commit_value["commit"]["tree"]["sha"]
-        return commit_reference, f"J-Tech-Japan/SekibanIntentHost@{commit}:git/trees/{tree}"
-
-    def add_host_tree_path(contents_reference: str, path: str, blob_sha: str) -> None:
-        _, tree_reference = host_anchor_refs(contents_reference)
-        tree_entry = find_entry(lambda item: item["immutable_ref"] == tree_reference)
-        tree = json.loads((destination / tree_entry["relative_path"]).read_text())
-        tree_entries = tree.setdefault("tree", [])
-        if any(item.get("path") == path for item in tree_entries):
-            raise ValueError(f"Host tree already contains {path}")
-        tree_entries.append({"path": path, "mode": "100644", "type": "blob", "sha": blob_sha, "size": 0})
-        write_raw(tree_reference, tree)
-
-    def host_contents_reference(stage: str = "prepared") -> str:
-        return payload_at(stage)[0]
-
-    def mutate_origin_review(mutate: Callable[[dict[str, object]], None]) -> None:
-        mutate_payload("prepared", lambda payload: mutate(payload["changes"]["origin_delivery"]["review"]))
-
-    def mutate_origin_completion(mutate: Callable[[dict[str, object]], None]) -> None:
-        prepared_ref, prepared = payload_at("prepared")
-        review = prepared["changes"]["origin_delivery"]["review"]
-        completion_ref = review["intent_completion_evidence_ref"]
-        _, completion = read_json_content(completion_ref)
-        mutate(completion)
-        completion_digest = write_content(completion_ref, dump(completion))
-        review["intent_completion_sha256"] = completion_digest
-        write_content(prepared_ref, dump(prepared))
-
-    def mutate_origin_body(body: bytes) -> None:
-        prepared_ref, prepared = payload_at("prepared")
-        review = prepared["changes"]["origin_delivery"]["review"]
-        body_ref = review["body_evidence_ref"]
-        review["body_sha256"] = write_content(body_ref, body)
-        completion_ref = review["intent_completion_evidence_ref"]
-        _, completion = read_json_content(completion_ref)
-        completion["body_sha256"] = review["body_sha256"]
-        completion_digest = write_content(completion_ref, dump(completion))
-        review["intent_completion_sha256"] = completion_digest
-        write_content(prepared_ref, dump(prepared))
-        mutate_api(":pulls/1235/reviews/5189565347", lambda value: value.update({"body": body.decode()}))
-
-    def mutate_origin_body_record_only(body: bytes) -> None:
-        prepared_ref, prepared = payload_at("prepared")
-        review = prepared["changes"]["origin_delivery"]["review"]
-        review["body_sha256"] = write_content(review["body_evidence_ref"], body)
-        completion_ref = review["intent_completion_evidence_ref"]
-        _, completion = read_json_content(completion_ref)
-        completion["body_sha256"] = review["body_sha256"]
-        completion_digest = write_content(completion_ref, dump(completion))
-        review["intent_completion_sha256"] = completion_digest
-        write_content(prepared_ref, dump(prepared))
-
-    def mutate_approval(stage: str, mutate: Callable[[dict[str, object]], None]) -> None:
-        approval_ref = record["prepared_approval_ref"] if stage == "prepared" else record["artifact_approval_ref"]
-        _, approval = read_json_content(approval_ref)
-        mutate(approval)
-        write_content(approval_ref, dump(approval))
-
-    def mutate_completion(stage: str, mutate: Callable[[dict[str, object]], None]) -> None:
-        approval_ref = record["prepared_approval_ref"] if stage == "prepared" else record["artifact_approval_ref"]
-        _, approval = read_json_content(approval_ref)
-        completion_ref = approval["completion_ref"]
-        _, completion = read_json_content(completion_ref)
-        mutate(completion)
-        write_content(completion_ref, dump(completion))
-        approval["completion_sha256"] = sha256(dump(completion))
-        write_content(approval_ref, dump(approval))
-
-    def refresh_approval_payload_digests() -> None:
+    def refresh_approval_payload_digests(self) -> None:
         for key in ("prepared_approval_ref", "artifact_approval_ref"):
-            approval_ref = record.get(key)
+            approval_ref = self.record.get(key)
             if not approval_ref:
                 continue
-            _, approval = read_json_content(approval_ref)
-            target_ref = approval["target_payload_ref"]
-            _, target_bytes = read_content(target_ref)
+            approval = self.read_json_content(approval_ref)
+            target_bytes = self.read_content(approval["target_payload_ref"])
             approval["target_payload_sha256"] = sha256(target_bytes)
-            completion_ref = approval["completion_ref"]
-            _, completion = read_json_content(completion_ref)
+            completion = self.read_json_content(approval["completion_ref"])
             completion["target_payload_sha256"] = sha256(target_bytes)
-            write_content(completion_ref, dump(completion))
-            approval["completion_sha256"] = sha256(dump(completion))
-            write_content(approval_ref, dump(approval))
+            approval["completion_sha256"] = self.write_content(approval["completion_ref"], dump(completion))
+            self.write_content(approval_ref, dump(approval))
 
-    if kind == "root-merged-sha":
-        record["merged_sha"] = "9" * 40
-    elif kind == "root-extra-cumulative-fact":
-        record["candidate"] = {"forged": True}
-    elif kind == "unknown-package-member":
-        mutate_payload("libraries-verified", lambda payload: payload["changes"]["packages"][0].update({"unexpected": True}))
-    elif kind == "unknown-release-member":
-        mutate_payload("libraries-verified", lambda payload: payload["changes"]["library_release"].update({"unexpected": True}))
-    elif kind == "unknown-release-body-member":
-        mutate_payload("prepared", lambda payload: payload["changes"]["release_bodies"].update({"unexpected": True}))
-    elif kind == "unknown-tag-member":
-        mutate_payload("library-tagged/incomplete", lambda payload: payload["changes"]["library_tag"].update({"unexpected": True}))
-    elif kind == "payload-fold":
-        mutate_payload("complete", lambda payload: payload.update({"fold_sha256": "0" * 64}))
-    elif kind == "id-only-predecessor":
-        mutate_payload("complete", lambda payload: payload.update({"previous_payload_ref": "delta-artifacts-verified"}))
-    elif kind == "duplicate-root-fact":
-        record["prepared_authority"] = {"forged": True}
-    elif kind == "empty-delta":
-        mutate_payload("library-tagged/incomplete", lambda payload: payload.update({"changes": {}}))
-    elif kind == "skip-delta":
-        reference, payload = payload_at("complete")
-        payload["previous_payload_ref"] = payload_chain()[2][0]
-        write_content(reference, dump(payload))
-    elif kind == "wrong-stage":
-        mutate_payload("complete", lambda payload: payload.update({"stage": "prepared"}))
-    elif kind == "wrong-stage-field":
-        mutate_payload("prepared", lambda payload: payload["changes"].update({"library_tag": {"forged": True}}))
-    elif kind in {"review-head", "review-head-and-api"}:
-        mutate_payload("prepared", lambda payload: payload["changes"]["implementation_review"].update({"head_sha": "9" * 40}))
-        if kind == "review-head-and-api":
-            mutate_api(":pulls/1236/reviews/6000000001", lambda value: value.update({"commit_id": "9" * 40}))
-    elif kind == "review-api-commit":
-        mutate_api(":pulls/1236/reviews/6000000001", lambda value: value.update({"commit_id": "9" * 40}))
-    elif kind == "review-api-body":
-        mutate_api(":pulls/1236/reviews/6000000001", lambda value: value.update({"body": "TAMPERED"}))
-    elif kind == "review-submitted-at":
-        mutate_api(":pulls/1236/reviews/6000000001", lambda value: value.update({"submitted_at": "2026-09-12T08:44:00Z"}))
-    elif kind == "review-url":
-        mutate_payload("prepared", lambda payload: payload["changes"]["implementation_review"].update({"review_url": "https://github.com/J-Tech-Japan/Sekiban/pull/1236#pullrequestreview-9999999999"}))
-    elif kind == "review-id":
-        mutate_payload("prepared", lambda payload: payload["changes"]["implementation_review"].update({"review_id": "6000000002"}))
-    elif kind == "external-commit":
-        pass
-    elif kind == "current-object-self-commit":
-        current_ref = record["current_payload_ref"]
-        entry = find_entry(lambda item: item["immutable_ref"] == current_ref)
+    def finish(self) -> None:
+        if self.payload_changed:
+            self.refresh_approval_payload_digests()
+        self.write_content(self.record_ref, dump(self.record))
+        self.manifest_path.write_bytes(dump(self.manifest))
+
+
+def main() -> None:
+    source = Path(sys.argv[1]).resolve()
+    destination = Path(sys.argv[2]).resolve()
+    kind = sys.argv[3]
+    b = Bundle(source, destination)
+
+    def prepared() -> dict[str, object]:
+        return b.payload_at("prepared")[1]["changes"]
+
+    def origin_check(job_id: str) -> dict[str, object]:
+        return next(check for check in prepared()["origin_delivery"]["checks"] if check["job_id"] == job_id)
+
+    def update_origin_check(job_id: str, values: dict[str, object]) -> None:
+        def mutate(changes: dict[str, object]) -> None:
+            next(check for check in changes["origin_delivery"]["checks"] if check["job_id"] == job_id).update(values)
+        b.prepared_changes(mutate)
+
+    def update_candidate_check(name: str, values: dict[str, object]) -> None:
+        def mutate(changes: dict[str, object]) -> None:
+            next(check for check in changes["checks"] if check["name"] == name).update(values)
+        b.prepared_changes(mutate)
+
+    def candidate_check(name: str) -> dict[str, object]:
+        return next(check for check in prepared()["checks"] if check["name"] == name)
+
+    def mutate_review_content(section: str, field: str, content: bytes, digest_field: str) -> None:
+        review_ref_field = {"origin": lambda changes: changes["origin_delivery"]["review"],
+                            "implementation": lambda changes: changes["implementation_review"]}[section]
+        review = review_ref_field(prepared())
+        digest = b.write_content(review[field], content)
+        b.prepared_changes(lambda changes: review_ref_field(changes).update({digest_field: digest}))
+
+    def review_of(section: str, changes: dict[str, object]) -> dict[str, object]:
+        return changes["origin_delivery"]["review"] if section == "origin" else changes["implementation_review"]
+
+    def mutate_transport(section: str, mutate: Callable[[dict, dict, dict, dict], None]) -> None:
+        review = review_of(section, prepared())
+        record_line = json.loads(b.read_content(review["transport_record_ref"]))
+        delivered_line = json.loads(b.read_content(review["transport_delivered_ref"]))
+        receipt_line = json.loads(b.read_content(review["transport_receipt_ref"]))
+        projection: dict[str, object] = {}
+        mutate(record_line, delivered_line, receipt_line, projection)
+        digests = {
+            "transport_record_sha256": b.write_content(review["transport_record_ref"], line(record_line)),
+            "transport_delivered_sha256": b.write_content(review["transport_delivered_ref"], line(delivered_line)),
+            "transport_receipt_sha256": b.write_content(review["transport_receipt_ref"], line(receipt_line)),
+        }
+        b.prepared_changes(lambda changes: review_of(section, changes).update(digests | projection))
+
+    def mutate_review_body(section: str, body: bytes, also_api: bool) -> None:
+        review = review_of(section, prepared())
+        mutate_review_content(section, "body_evidence_ref", body, "body_sha256")
+        if also_api:
+            suffix = ":" + review["review_evidence_ref"].split(":", 1)[1]
+            b.mutate_api(suffix, lambda value: value.update({"body": body.decode()}))
+
+    def set_everywhere_task(record_line: dict, delivered_line: dict, receipt_line: dict, projection: dict, task: str) -> None:
+        record_line["entry"]["task_id"] = task
+        delivered_line["entry"]["task_id"] = task
+        receipt_line["task_id"] = task
+        projection["intent_task_id"] = task
+
+    mutants: dict[str, Callable[[], None]] = {}
+
+    def mutant(name: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
+        def register(function: Callable[[], None]) -> Callable[[], None]:
+            mutants[name] = function
+            return function
+        return register
+
+    # ---- closed envelope / graph / schema ------------------------------------
+    mutants["external-commit"] = lambda: None
+    mutants["root-merged-sha"] = lambda: b.record.update({"merged_sha": "9" * 40})
+    mutants["root-extra-cumulative-fact"] = lambda: b.record.update({"candidate": {"forged": True}})
+    mutants["duplicate-root-fact"] = lambda: b.record.update({"prepared_authority": {"forged": True}})
+    mutants["unknown-package-member"] = lambda: b.mutate_payload("libraries-verified", lambda p: p["changes"]["packages"][0].update({"unexpected": True}))
+    mutants["unknown-release-member"] = lambda: b.mutate_payload("libraries-verified", lambda p: p["changes"]["library_release"].update({"unexpected": True}))
+    mutants["unknown-release-body-member"] = lambda: b.prepared_changes(lambda c: c["release_bodies"].update({"unexpected": True}))
+    mutants["unknown-tag-member"] = lambda: b.mutate_payload("library-tagged/incomplete", lambda p: p["changes"]["library_tag"].update({"unexpected": True}))
+    mutants["payload-fold"] = lambda: b.mutate_payload("complete", lambda p: p.update({"fold_sha256": "0" * 64}))
+    mutants["id-only-predecessor"] = lambda: b.mutate_payload("complete", lambda p: p.update({"previous_payload_ref": "delta-artifacts-verified"}))
+    mutants["empty-delta"] = lambda: b.mutate_payload("library-tagged/incomplete", lambda p: p.update({"changes": {}}))
+    mutants["wrong-stage"] = lambda: b.mutate_payload("complete", lambda p: p.update({"stage": "prepared"}))
+    mutants["wrong-stage-field"] = lambda: b.prepared_changes(lambda c: c.update({"library_tag": {"forged": True}}))
+
+    @mutant("skip-delta")
+    def _skip_delta() -> None:
+        chain = b.chain()
+        reference, payload = b.payload_at("complete")
+        payload["previous_payload_ref"] = chain[2][0]
+        b.write_content(reference, dump(payload))
+
+    @mutant("current-object-self-commit")
+    def _self_commit() -> None:
+        # Re-home the current payload into the canonical pointer's own host
+        # commit, with a coherent manifest name and host tree blob, so only the
+        # self-containing-commit rule can reject it.
+        current_ref = b.record["current_payload_ref"]
         object_path = current_ref.split(":", 1)[1]
-        self_ref = f"J-Tech-Japan/SekibanIntentHost@{manifest['host_ref']}:{object_path}"
-        entry["immutable_ref"] = self_ref
-        entry["endpoint"] = f"repos/J-Tech-Japan/SekibanIntentHost/{object_path}?ref={manifest['host_ref']}"
-        record["current_payload_ref"] = self_ref
-    elif kind in {"self-containing-approval", "self-containing-completion", "self-containing-payload"}:
-        if kind == "self-containing-payload":
-            reference, payload = payload_at("library-tagged/incomplete")
-            commit = reference.split("@", 1)[1].split(":", 1)[0]
-            payload["previous_payload_ref"] = f"J-Tech-Japan/SekibanIntentHost@{commit}:contents/evidence/self-containing-predecessor.json"
-            write_content(reference, dump(payload))
-        elif kind == "self-containing-approval":
-            approval_ref = record["prepared_approval_ref"]
-            _, approval = read_json_content(approval_ref)
-            commit = approval_ref.split("@", 1)[1].split(":", 1)[0]
-            approval["report_ref"] = f"J-Tech-Japan/SekibanIntentHost@{commit}:contents/evidence/self-containing-report.bin"
-            approval["artifact_ref"] = f"J-Tech-Japan/SekibanIntentHost@{commit}:contents/evidence/self-containing-artifact.bin"
-            write_content(approval_ref, dump(approval))
+        self_ref = f"{HOST}@{b.manifest['host_ref']}:{object_path}"
+        content = b.read_content(current_ref)
+        envelope = json.loads((b.root / b.entry(current_ref)["relative_path"]).read_text())
+        b.remove_entry(current_ref)
+        b.add_host_entry(self_ref, dump(envelope))
+        b.add_host_tree_path(self_ref, object_path.removeprefix("contents/"), git_blob_sha(content))
+        b.record["current_payload_ref"] = self_ref
+
+    @mutant("self-containing-payload")
+    def _self_payload() -> None:
+        reference, payload = b.payload_at("library-tagged/incomplete")
+        commit = reference.split("@", 1)[1].split(":", 1)[0]
+        payload["previous_payload_ref"] = f"{HOST}@{commit}:contents/evidence/self-containing-predecessor.json"
+        b.write_content(reference, dump(payload))
+
+    @mutant("self-containing-approval")
+    def _self_approval() -> None:
+        approval_ref = b.record["prepared_approval_ref"]
+        approval = b.read_json_content(approval_ref)
+        commit = approval_ref.split("@", 1)[1].split(":", 1)[0]
+        approval["report_ref"] = f"{HOST}@{commit}:contents/evidence/self-containing-report.bin"
+        b.write_content(approval_ref, dump(approval))
+
+    @mutant("self-containing-completion")
+    def _self_completion() -> None:
+        approval_ref = b.record["prepared_approval_ref"]
+        approval = b.read_json_content(approval_ref)
+        completion = b.read_json_content(approval["completion_ref"])
+        commit = approval["completion_ref"].split("@", 1)[1].split(":", 1)[0]
+        completion["report_ref"] = f"{HOST}@{commit}:contents/evidence/self-containing-report.bin"
+        approval["completion_sha256"] = b.write_content(approval["completion_ref"], dump(completion))
+        b.write_content(approval_ref, dump(approval))
+
+    def host_anchor_mutant(kind_name: str) -> None:
+        contents_ref = b.payload_at("prepared")[0]
+        commit_ref, tree_ref = b.host_anchor_refs(contents_ref)
+        if kind_name == "missing-host-commit-anchor":
+            b.remove_entry(commit_ref)
+        elif kind_name == "missing-host-tree-anchor":
+            b.remove_entry(tree_ref)
+        elif kind_name == "wrong-host-commit-anchor":
+            b.write_api(commit_ref, b.read_api(commit_ref) | {"sha": "8" * 40})
+        elif kind_name == "wrong-host-tree-anchor":
+            value = b.read_api(commit_ref)
+            value["commit"]["tree"]["sha"] = "8" * 40
+            b.write_api(commit_ref, value)
+        elif kind_name in {"missing-host-tree-path", "wrong-host-tree-blob"}:
+            value = b.read_api(tree_ref)
+            object_path = contents_ref.split(":", 1)[1].removeprefix("contents/")
+            match = next(item for item in value["tree"] if item.get("path") == object_path)
+            if kind_name == "missing-host-tree-path":
+                value["tree"].remove(match)
+            else:
+                match["sha"] = "7" * 40
+            b.write_api(tree_ref, value)
         else:
-            approval_ref = record["prepared_approval_ref"]
-            _, approval = read_json_content(approval_ref)
-            completion_ref = approval["completion_ref"]
-            _, completion = read_json_content(completion_ref)
-            commit = completion_ref.split("@", 1)[1].split(":", 1)[0]
-            completion["report_ref"] = f"J-Tech-Japan/SekibanIntentHost@{commit}:contents/evidence/self-containing-report.bin"
-            completion["artifact_ref"] = f"J-Tech-Japan/SekibanIntentHost@{commit}:contents/evidence/self-containing-artifact.bin"
-            completion_digest = write_content(completion_ref, dump(completion))
-            approval["completion_sha256"] = completion_digest
-            write_content(approval_ref, dump(approval))
-    elif kind in {
-        "missing-host-commit-anchor", "missing-host-tree-anchor", "wrong-host-commit-anchor",
-        "wrong-host-tree-anchor", "missing-host-tree-path", "wrong-host-tree-blob", "decoded-host-bytes"
-    }:
-        contents_ref = host_contents_reference()
-        commit_ref, tree_ref = host_anchor_refs(contents_ref)
-        if kind == "missing-host-commit-anchor":
-            remove_entry(commit_ref)
-        elif kind == "missing-host-tree-anchor":
-            remove_entry(tree_ref)
-        elif kind == "wrong-host-commit-anchor":
-            mutate_api(f":commits/{commit_ref.rsplit('/', 1)[1]}", lambda value: value.update({"sha": "8" * 40}))
-        elif kind == "wrong-host-tree-anchor":
-            mutate_api(f":commits/{commit_ref.rsplit('/', 1)[1]}", lambda value: value["commit"]["tree"].update({"sha": "8" * 40}))
-        elif kind in {"missing-host-tree-path", "wrong-host-tree-blob"}:
-            def mutate_tree(value: dict[str, object]) -> None:
-                object_path = contents_ref.split(":", 1)[1].removeprefix("contents/")
-                tree_entries = value["tree"]
-                match = next(item for item in tree_entries if item.get("path") == object_path)
-                if kind == "missing-host-tree-path":
-                    tree_entries.remove(match)
-                else:
-                    match["sha"] = "7" * 40
-            mutate_api(f":git/trees/{tree_ref.split(':git/trees/', 1)[1]}", mutate_tree)
-        else:
-            def mutate_envelope(value: dict[str, object]) -> None:
-                value["content"] = base64.b64encode(b"decoded host bytes were changed").decode("ascii")
-            entry = find_entry(lambda item: item["immutable_ref"] == contents_ref)
-            value = json.loads((destination / entry["relative_path"]).read_text())
-            mutate_envelope(value)
-            write_raw(contents_ref, value)
-    elif kind in {
-        "missing-merge-strategy", "wrong-merge-strategy", "candidate-parent-count-1",
-        "candidate-parent-count-3", "candidate-parent-reversed", "candidate-parent-unrelated",
-        "missing-reviewed-commit", "unequal-reviewed-merged-trees", "origin-candidate-substitution",
-        "main-unrelated-tip", "candidate-check-time", "candidate-check-event", "candidate-check-run-id",
-        "candidate-check-job-id", "candidate-check-run-url", "candidate-check-job-url", "candidate-check-attempt",
-        "candidate-check-api-time", "candidate-check-api-event", "candidate-check-api-run-id",
-        "candidate-check-api-job-id", "candidate-check-api-run-url", "candidate-check-api-job-url", "candidate-check-api-attempt",
-        "origin-check-time", "origin-check-event", "origin-check-run-id", "origin-check-job-id",
-        "origin-check-run-url", "origin-check-job-url", "origin-check-attempt", "origin-check-api-time",
-        "origin-check-api-event", "origin-check-api-run-id", "origin-check-api-job-id", "origin-check-api-run-url",
-        "origin-check-api-job-url", "origin-check-api-attempt", "origin-check-api-route"
-    }:
-        def mutate_candidate(payload: dict[str, object]) -> None:
-            candidate = payload["changes"]["candidate"]
-            if kind == "missing-merge-strategy":
-                candidate.pop("merge_strategy", None)
-            elif kind == "wrong-merge-strategy":
-                candidate["merge_strategy"] = "squash"
-            elif kind == "candidate-parent-count-1":
-                candidate["parent_shas"] = [candidate["base_sha"]]
-            elif kind == "candidate-parent-count-3":
-                candidate["parent_shas"] = [candidate["base_sha"], candidate["reviewed_head_sha"], "9" * 40]
-            elif kind == "candidate-parent-reversed":
-                candidate["parent_shas"] = [candidate["reviewed_head_sha"], candidate["base_sha"]]
-            elif kind == "candidate-parent-unrelated":
-                candidate["parent_shas"] = ["8" * 40, "9" * 40]
-            elif kind == "missing-reviewed-commit":
-                candidate.pop("reviewed_commit_evidence_ref", None)
-            elif kind == "unequal-reviewed-merged-trees":
-                candidate["merged_tree_sha"] = "7" * 40
-                mutate_api("@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:git/trees/5555555555555555555555555555555555555555",
-                           lambda value: value.update({"sha": "7" * 40}))
-            elif kind == "main-unrelated-tip":
-                candidate["main_tip_sha"] = "8" * 40
-                mutate_api(":compare/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...9999999999999999999999999999999999999999",
-                           lambda value: (value["head_commit"].update({"sha": "8" * 40}), value["commits"][0].update({"sha": "8" * 40, "parents": [{"sha": "7" * 40}]})))
-            elif kind.startswith("candidate-check-"):
-                if kind.startswith("candidate-check-api-"):
-                    api_field = kind.removeprefix("candidate-check-api-")
-                    check = payload["changes"]["checks"][0]
-                    api_ref = check["run_evidence_ref"]
-                    def mutate_candidate_check_api(value: dict[str, object]) -> None:
-                        if api_field == "time": value["updated_at"] = "2026-09-12T12:00:00Z"
-                        elif api_field == "event": value["event"] = "pull_request"
-                        elif api_field == "run-id": value["id"] = 999999
-                        elif api_field == "run-url": value["html_url"] = "https://example.invalid/run"
-                        elif api_field == "route": value["html_url"] = "https://example.invalid/not-a-native-run"
-                        else: value["run_attempt"] = 2
-                    if api_field == "job-id":
-                        api_ref = check["job_evidence_ref"]
-                        mutate_api_reference(api_ref, lambda value: value.update({"id": 999999}))
-                    elif api_field == "job-url":
-                        api_ref = check["job_evidence_ref"]
-                        mutate_api_reference(api_ref, lambda value: value.update({"html_url": "https://example.invalid/job"}))
-                    else:
-                        mutate_api_reference(api_ref, mutate_candidate_check_api)
-                else:
-                    check = payload["changes"]["checks"][0]
-                if not kind.startswith("candidate-check-api-"):
-                    if kind.endswith("time"):
-                        check["started_at_utc"] = "2026-09-12T12:00:00Z"
-                    elif kind.endswith("event"):
-                        check["event"] = "pull_request"
-                    elif kind.endswith("run-id"):
-                        check["run_id"] = "999999"
-                    elif kind.endswith("job-id"):
-                        check["job_id"] = "999999"
-                    elif kind.endswith("run-url"):
-                        check["run_url"] = "https://example.invalid/run"
-                    elif kind.endswith("job-url"):
-                        check["job_url"] = "https://example.invalid/job"
-                    elif kind.endswith("attempt"):
-                        check["attempt"] = "2"
-            elif kind.startswith("origin-check-"):
-                if kind.startswith("origin-check-api-"):
-                    api_field = kind.removeprefix("origin-check-api-")
-                    check_index = 1 if api_field == "event" else 0
-                    check = payload["changes"]["origin_delivery"]["checks"][check_index]
-                    api_ref = check["run_evidence_ref"]
-                    def mutate_origin_check_api(value: dict[str, object]) -> None:
-                        if api_field == "time": value["updated_at"] = "2026-09-13T12:00:00Z"
-                        elif api_field == "event": value["event"] = "pull_request"
-                        elif api_field == "run-id": value["id"] = 999999
-                        elif api_field == "run-url": value["html_url"] = "https://example.invalid/run"
-                        elif api_field == "route": value["html_url"] = "https://example.invalid/not-a-native-run"
-                        else: value["run_attempt"] = 2
-                    if api_field == "job-id":
-                        api_ref = check["job_evidence_ref"]
-                        mutate_api_reference(api_ref, lambda value: value.update({"id": 999999}))
-                    elif api_field == "job-url":
-                        api_ref = check["job_evidence_ref"]
-                        mutate_api_reference(api_ref, lambda value: value.update({"html_url": "https://example.invalid/job"}))
-                    else:
-                        mutate_api_reference(api_ref, mutate_origin_check_api)
-                else:
-                    check_index = 1 if kind == "origin-check-event" else 0
-                    check = payload["changes"]["origin_delivery"]["checks"][check_index]
-                if not kind.startswith("origin-check-api-"):
-                    if kind.endswith("time"):
-                        check["completed_at_utc"] = "2026-09-13T12:00:00Z"
-                    elif kind.endswith("event"):
-                        check["event"] = "pull_request"
-                    elif kind.endswith("run-id"):
-                        check["run_id"] = "999999"
-                    elif kind.endswith("job-id"):
-                        check["job_id"] = "999999"
-                    elif kind.endswith("run-url"):
-                        check["run_url"] = "https://example.invalid/run"
-                    elif kind.endswith("job-url"):
-                        check["job_url"] = "https://example.invalid/job"
-                    elif kind.endswith("attempt"):
-                        check["attempt"] = "2"
-        if kind == "origin-candidate-substitution":
-            mutate_payload("prepared", lambda payload: payload["changes"]["origin_delivery"].update({"reviewed_head_sha": payload["changes"]["candidate"]["reviewed_head_sha"]}))
-        else:
-            mutate_payload("prepared", mutate_candidate)
-    elif kind == "semantic-negated":
-        body = b"REQUEST-UPDATE - DO NOT APPROVE\n"
-        reference, payload = payload_at("prepared")
-        review = payload["changes"]["implementation_review"]
-        body_ref = review["body_evidence_ref"]
-        review["body_sha256"] = write_content(body_ref, body)
-        completion_ref = review["intent_completion_evidence_ref"]
-        _, completion = read_json_content(completion_ref)
-        completion["body_sha256"] = review["body_sha256"]
-        write_content(completion_ref, dump(completion))
-        review["intent_completion_sha256"] = sha256(dump(completion))
-        mutate_api(":pulls/1236/reviews/6000000001", lambda value: value.update({"body": body.decode()}))
-        write_content(reference, dump(payload))
-    elif kind in {
-        "origin-review-api-body", "origin-review-head", "origin-review-submitted-at", "origin-review-reviewer",
-        "origin-review-completion", "origin-review-completion-status", "origin-review-request-update", "origin-review-negated",
-        "origin-review-missing-verdict", "origin-review-conflicting-verdict", "origin-review-body-byte"
-    }:
-        if kind == "origin-review-api-body":
-            mutate_api(":pulls/1235/reviews/5189565347", lambda value: value.update({"body": "tampered origin body"}))
-        elif kind == "origin-review-head":
-            mutate_origin_review(lambda review: review.update({"commit_id": "9" * 40}))
-        elif kind == "origin-review-submitted-at":
-            mutate_origin_review(lambda review: review.update({"submitted_at_utc": "2026-09-13T04:45:00Z"}))
-        elif kind == "origin-review-reviewer":
-            mutate_origin_review(lambda review: review.update({"reviewer": "forged-reviewer"}))
-        elif kind == "origin-review-completion":
-            mutate_origin_completion(lambda completion: completion.update({"head_sha": "9" * 40}))
-        elif kind == "origin-review-completion-status":
-            mutate_origin_completion(lambda completion: completion.update({"status": "blocked"}))
-        elif kind == "origin-review-body-byte":
-            _, prepared = payload_at("prepared")
-            review = prepared["changes"]["origin_delivery"]["review"]
-            current_body = read_content(review["body_evidence_ref"])[1]
-            mutate_origin_body_record_only(current_body.replace(b"G79", b"G78", 1))
-        else:
-            body = {
-                "origin-review-request-update": b"# Review\n\n- Verdict: **REQUEST-UPDATE**\n",
-                "origin-review-negated": b"# Review\n\n- Verdict: **APPROVE** -- not approved\n",
-                "origin-review-missing-verdict": b"# Review\n\nNo verdict was issued.\n",
-                "origin-review-conflicting-verdict": b"# Review\n\n- Verdict: **APPROVE**\n- Verdict: **REQUEST-UPDATE**\n",
-            }[kind]
-            mutate_origin_body(body)
-    elif kind in {"prepared-completion-late", "prepared-completion-equal", "artifact-completion-late", "artifact-completion-equal"}:
-        authority_stage = "prepared" if kind.startswith("prepared") else "artifacts-verified"
-        timestamp = {
-            "prepared-completion-late": "2026-09-12T10:20:00Z",
-            "prepared-completion-equal": "2026-09-12T09:20:00Z",
-            "artifact-completion-late": "2026-09-12T12:00:00Z",
-            "artifact-completion-equal": "2026-09-12T11:00:00Z",
-        }[kind]
-        mutate_completion(authority_stage, lambda completion: completion.update({"completed_at_utc": timestamp}))
-    elif kind == "manifest-listed-unreachable":
-        original_ref, original_payload = chain[1]
-        repository_commit, _ = original_ref.split(":", 1)
-        sibling_path = "intents/sekiban/releases/dcb-v10.22.0/unreachable.json"
+            value = b.read_api(contents_ref)
+            value["content"] = base64.b64encode(b"decoded host bytes were changed").decode("ascii")
+            b.write_api(contents_ref, value)
+
+    for anchor_kind in ["missing-host-commit-anchor", "missing-host-tree-anchor", "wrong-host-commit-anchor",
+                        "wrong-host-tree-anchor", "missing-host-tree-path", "wrong-host-tree-blob", "decoded-host-bytes"]:
+        mutants[anchor_kind] = (lambda name: (lambda: host_anchor_mutant(name)))(anchor_kind)
+
+    def unreachable_sibling(sibling_name: str) -> None:
+        original_ref, original_payload = b.chain()[1]
+        repository_commit = original_ref.split(":", 1)[0]
+        sibling_path = f"intents/sekiban/releases/dcb-v10.22.0/{sibling_name}.json"
         sibling_ref = f"{repository_commit}:contents/{sibling_path}"
-        content = dump({"unreachable": True})
-        envelope = {
-            "type": "file", "encoding": "base64", "path": sibling_path,
-            "sha": git_blob_sha(content), "content": base64.b64encode(content).decode(),
-        }
-        raw = dump(envelope)
-        path_digest = sha256((sibling_ref + chr(10) + sha256(raw)).encode())
-        relative = f"objects/{path_digest}.json"
-        (destination / relative).write_bytes(raw)
-        add_host_tree_path(original_ref, sibling_path, envelope["sha"])
-        manifest["entries"].append({
-            "kind": "host-response", "immutable_ref": sibling_ref,
-            "endpoint": f"repos/J-Tech-Japan/SekibanIntentHost/contents/{sibling_path}?ref={repository_commit.split('@', 1)[1]}",
-            "relative_path": relative, "sha256": sha256(raw),
-        })
-    elif kind == "manifest-same-file-alias":
-        first = manifest["entries"][1]
-        alias = dict(first)
-        alias["immutable_ref"] = "J-Tech-Japan/Sekiban@" + ("a" * 40) + ":pulls/9999"
-        alias["endpoint"] = "repos/J-Tech-Japan/Sekiban/pulls/9999"
-        manifest["entries"].append(alias)
-    elif kind == "completion-arbitrary":
-        _, approval = read_json_content(record["prepared_approval_ref"])
-        write_content(approval["completion_ref"], b"not-json\n")
-        approval["completion_sha256"] = sha256(b"not-json\n")
-        write_content(record["prepared_approval_ref"], dump(approval))
-    elif kind in {"completion-task", "completion-nonce", "completion-status", "completion-verdict", "completion-target", "completion-artifact", "completion-reviewer", "completion-time"}:
-        _, approval = read_json_content(record["prepared_approval_ref"])
-        completion_ref = approval["completion_ref"]
-        _, completion = read_json_content(completion_ref)
-        if kind == "completion-task":
-            completion["task_id"] = "forged-task"
-        elif kind == "completion-nonce":
-            completion["result_nonce"] = "forged-nonce"
-        elif kind == "completion-status":
-            completion["status"] = "failed"
-        elif kind == "completion-verdict":
-            completion["verdict"] = "rejected"
-        elif kind == "completion-target":
-            completion["target_payload_ref"] = record["current_payload_ref"]
-        elif kind == "completion-artifact":
-            completion["artifact_sha256"] = "0" * 64
-        elif kind == "completion-reviewer":
-            completion["reviewer_identity"] = "forged-reviewer"
-        else:
-            completion["completed_at_utc"] = "2026-09-12T09:10:00Z"
-        approval["completion_sha256"] = write_content(completion_ref, dump(completion))
-        write_content(record["prepared_approval_ref"], dump(approval))
-    elif kind == "wrong-release-url":
-        mutate_payload("libraries-verified", lambda payload: payload["changes"]["library_release"].update({"url": "https://example.invalid/forged"}))
-    elif kind == "wrong-release-body":
-        mutate_payload("libraries-verified", lambda payload: payload["changes"]["library_release"].update({"body_sha256": "0" * 64}))
-    elif kind == "release-asset-url":
-        mutate_api(":releases/tags/dcb-v10.22.0", lambda value: value["assets"][0].update({"browser_download_url": "https://api.nuget.org/v3-flatcontainer/forged"}))
-    elif kind == "wrong-package-url":
-        mutate_payload("libraries-verified", lambda payload: payload["changes"]["packages"][0].update({"public_url": payload["changes"]["packages"][1]["public_url"]}))
-    elif kind == "wrong-template-url":
-        mutate_payload("artifacts-verified", lambda payload: payload["changes"]["template"].update({"public_url": "https://example.invalid/template.nupkg"}))
-    elif kind == "wrong-library-observed-time":
-        mutate_payload("libraries-verified", lambda payload: payload["changes"]["library_release"].update({"observed_at_utc": "2026-09-12T09:20:00Z"}))
-    elif kind == "equal-template-tag-time":
-        mutate_payload("template-tagged/incomplete", lambda payload: payload["changes"]["template_tag"].update({"created_at_utc": "2026-09-12T09:30:00Z"}))
-    elif kind in {"draft-release", "wrong-release-tag", "missing-release-asset", "wrong-release-asset-name"}:
-        reference = api_reference(":releases/tags/dcb-v10.22.0")
-        entry = find_entry(lambda item: item["immutable_ref"] == reference)
-        value = json.loads((destination / entry["relative_path"]).read_text())
-        if kind == "draft-release":
-            value["draft"] = True
-        elif kind == "wrong-release-tag":
-            value["tag_name"] = "dcb-v-forged"
-        elif kind == "missing-release-asset":
-            value["assets"].pop()
-        else:
-            value["assets"][0]["name"] = "forged.nupkg"
-        write_raw(reference, value)
-    elif kind == "missing-artifact-authority":
-        record.pop("artifact_approval_ref", None)
-    elif kind == "authority-version":
-        mutate_approval("prepared", lambda value: value.update({"version": "10.21.0"}))
-    elif kind == "authority-verdict":
-        mutate_approval("prepared", lambda value: value.update({"verdict": "rejected"}))
-    elif kind == "authority-rebind":
-        _, target_bytes = read_content(record["current_payload_ref"])
-        mutate_approval("prepared", lambda value: value.update({"target_payload_ref": record["current_payload_ref"], "target_payload_sha256": sha256(target_bytes)}))
-    elif kind == "authority-time":
-        mutate_approval("prepared", lambda value: value.update({"approved_at_utc": "2026-09-12T09:00:00Z"}))
-    elif kind == "noncanonical-closeout":
-        mutate_payload("complete", lambda payload: payload["changes"]["closure"].update({"completed_at_utc": "2026-09-12 20:05:00 +09:00"}))
-    elif kind == "closure-before-authority":
-        mutate_payload("complete", lambda payload: payload["changes"]["closure"].update({"library_closed_at_utc": "2026-09-12T09:50:00Z"}))
-    elif kind == "closeout-equal-authority":
-        mutate_payload("complete", lambda payload: payload["changes"]["closure"].update({"library_closed_at_utc": "2026-09-12T09:51:00Z"}))
-    elif kind == "artifact-before-release":
-        mutate_approval("artifacts-verified", lambda value: value.update({"approved_at_utc": "2026-09-12T09:44:00Z"}))
-    elif kind == "artifact-equal-release":
-        mutate_approval("artifacts-verified", lambda value: value.update({"approved_at_utc": "2026-09-12T09:45:00Z"}))
-    elif kind in {
-        "library-closeout-before-authority", "template-closeout-before-authority",
-        "issue1185-closeout-before-authority", "issue1230-closeout-before-authority",
-        "library-closeout-equal-authority", "template-closeout-equal-authority",
-        "issue1185-closeout-equal-authority", "issue1230-closeout-equal-authority",
-    }:
-        closeout_field = {
-            "library-closeout-before-authority": "library_closed_at_utc",
-            "template-closeout-before-authority": "template_closed_at_utc",
-            "issue1185-closeout-before-authority": "issue_1185_closed_at_utc",
-            "issue1230-closeout-before-authority": "issue_1230_closed_at_utc",
-            "library-closeout-equal-authority": "library_closed_at_utc",
-            "template-closeout-equal-authority": "template_closed_at_utc",
-            "issue1185-closeout-equal-authority": "issue_1185_closed_at_utc",
-            "issue1230-closeout-equal-authority": "issue_1230_closed_at_utc",
-        }[kind]
-        closeout_time = "2026-09-12T09:50:00Z" if kind.endswith("before-authority") else "2026-09-12T09:51:00Z"
-        mutate_payload("complete", lambda payload: payload["changes"]["closure"].update({closeout_field: closeout_time}))
-    elif kind == "early-future-authority":
-        record["stage"] = "prepared"
-        record["current_payload_ref"] = payload_at("prepared")[0]
-    elif kind == "unreferenced-sibling":
-        original_ref, original_payload = chain[1]
-        repository_commit, _ = original_ref.split(":", 1)
-        sibling_path = "intents/sekiban/releases/dcb-v10.22.0/unreferenced-sibling.json"
-        sibling_ref = f"{repository_commit}:contents/{sibling_path}"
-        sibling_payload = dict(original_payload)
-        sibling_payload["id"] = "unreferenced-sibling"
-        sibling_payload["recorded_at_utc"] = "2026-09-12T09:21:00Z"
-        content = dump(sibling_payload)
-        envelope = {
-            "type": "file", "encoding": "base64", "path": sibling_path,
-            "sha": git_blob_sha(content), "content": base64.b64encode(content).decode("ascii"),
-        }
-        raw = dump(envelope)
-        relative = f"objects/{sha256((sibling_ref + chr(10) + sha256(raw)).encode())}.json"
-        (destination / relative).write_bytes(raw)
-        add_host_tree_path(original_ref, sibling_path, envelope["sha"])
-        manifest["entries"].append({
-            "kind": "host-response", "immutable_ref": sibling_ref,
-            "endpoint": f"repos/J-Tech-Japan/SekibanIntentHost/contents/{sibling_path}?ref={repository_commit.split('@', 1)[1]}",
-            "relative_path": relative, "sha256": sha256(raw),
-        })
-    else:
+        content = dump(original_payload | {"id": sibling_name, "recorded_at_utc": "2026-09-12T09:21:00Z"})
+        envelope = {"type": "file", "encoding": "base64", "path": sibling_path, "sha": git_blob_sha(content),
+                    "content": base64.b64encode(content).decode("ascii")}
+        b.add_host_entry(sibling_ref, dump(envelope))
+        b.add_host_tree_path(original_ref, sibling_path, envelope["sha"])
+
+    mutants["manifest-listed-unreachable"] = lambda: unreachable_sibling("unreachable")
+    mutants["unreferenced-sibling"] = lambda: unreachable_sibling("unreferenced-sibling")
+
+    @mutant("orphan-host-anchor-pair")
+    def _orphan_anchor_pair() -> None:
+        commit = "d" * 40
+        tree = "e" * 40
+        b.add_host_entry(f"{HOST}@{commit}:commits/{commit}", dump({"sha": commit, "commit": {"tree": {"sha": tree}}}))
+        b.add_host_entry(f"{HOST}@{commit}:git/trees/{tree}", dump({"sha": tree, "tree": []}))
+
+    @mutant("manifest-same-file-alias")
+    def _alias() -> None:
+        alias = dict(b.manifest["entries"][1])
+        alias["immutable_ref"] = f"{REPOSITORY}@{'a' * 40}:pulls/9999"
+        alias["endpoint"] = f"repos/{REPOSITORY}/pulls/9999"
+        b.manifest["entries"].append(alias)
+
+    # ---- origin_delivery identity / native PR shape ----------------------------
+    mutants["origin-tree-unequal"] = lambda: b.prepared_changes(lambda c: c["origin_delivery"].update({"merged_tree_sha": "7" * 40}))
+    mutants["origin-tree-both-changed"] = lambda: b.prepared_changes(lambda c: c["origin_delivery"].update({"reviewed_tree_sha": "7" * 40, "merged_tree_sha": "7" * 40}))
+    mutants["origin-heads-swapped"] = lambda: b.prepared_changes(lambda c: c["origin_delivery"].update({
+        "reviewed_head_sha": c["origin_delivery"]["merged_sha"], "merged_sha": c["origin_delivery"]["reviewed_head_sha"]}))
+    mutants["origin-pr-top-level-repository"] = lambda: b.mutate_api(":pulls/1235", lambda v: v.update({"repository": {"full_name": REPOSITORY}}))
+    mutants["origin-pr-base-repo-removed"] = lambda: b.mutate_api(":pulls/1235", lambda v: v["base"].pop("repo"))
+    mutants["origin-pr-head-repository"] = lambda: b.mutate_api(":pulls/1235", lambda v: v["head"]["repo"].update({"full_name": "example/forged"}))
+    mutants["origin-pr-normalized-time"] = lambda: b.mutate_api(":pulls/1235", lambda v: v.update({"merged_at": "2026-09-13T04:47:20.000Z"}))
+    mutants["origin-merge-parents-reversed"] = lambda: b.mutate_api(f":commits/{ORIGIN_MERGED}", lambda v: v.update({"parents": list(reversed(v["parents"]))}))
+    mutants["origin-commit-tree-changed"] = lambda: b.mutate_api(f":commits/{ORIGIN_HEAD}", lambda v: v["commit"]["tree"].update({"sha": "7" * 40}))
+
+    # ---- origin checks / exact historical run inventory --------------------------
+    mutants["origin-check-inventory-missing-dispatch-job"] = lambda: b.prepared_changes(
+        lambda c: c["origin_delivery"].update({"checks": [x for x in c["origin_delivery"]["checks"] if x["job_id"] != "103674956408"]}))
+
+    @mutant("origin-check-truthful-conclusion")
+    def _truthful_conclusion() -> None:
+        update_origin_check("103674956408", {"conclusion": "success"})
+        b.mutate_api(":actions/jobs/103674956408", lambda v: v.update({"conclusion": "success"}))
+        b.mutate_api(":check-runs/103674956408", lambda v: v.update({"conclusion": "success"}))
+
+    @mutant("origin-check-run-conclusion")
+    def _run_conclusion() -> None:
+        update_origin_check("103674956469", {"run_conclusion": "success"})
+        update_origin_check("103674956408", {"run_conclusion": "success"})
+        b.mutate_api(":actions/runs/34738843321", lambda v: v.update({"conclusion": "success"}))
+
+    mutants["origin-check-event"] = lambda: update_origin_check("103671918609", {"event": "workflow_dispatch"})
+    mutants["origin-check-run-id"] = lambda: update_origin_check("103671918609", {"run_id": "34738840878"})
+    mutants["origin-check-attempt"] = lambda: update_origin_check("103671918609", {"attempt": "2"})
+
+    @mutant("origin-check-api-attempt-consistent")
+    def _api_attempt() -> None:
+        update_origin_check("103674954698", {"attempt": "2"})
+        b.mutate_api(":actions/runs/34738842353", lambda v: v.update({"run_attempt": 2}))
+        b.mutate_api(":actions/jobs/103674954698", lambda v: v.update({"run_attempt": 2}))
+
+    mutants["origin-check-job-id"] = lambda: update_origin_check("103671918609", {"job_id": "999999"})
+    mutants["origin-check-run-url"] = lambda: update_origin_check("103671918609", {"run_url": "https://example.invalid/run"})
+    mutants["origin-check-job-url"] = lambda: update_origin_check("103671918609", {"job_url": "https://example.invalid/job"})
+    mutants["origin-check-time-record"] = lambda: update_origin_check("103671918609", {"completed_at_utc": "2026-09-13T04:36:10Z"})
+    mutants["origin-check-api-run-updated"] = lambda: b.mutate_api(":actions/runs/34737699937", lambda v: v.update({"updated_at": "2026-09-13T04:36:20Z"}))
+    mutants["origin-check-api-event"] = lambda: b.mutate_api(":actions/runs/34737699937", lambda v: v.update({"event": "workflow_dispatch"}))
+    mutants["origin-check-api-run-id"] = lambda: b.mutate_api(":actions/runs/34737699937", lambda v: v.update({"id": 999999}))
+    mutants["origin-check-api-job-id"] = lambda: b.mutate_api(":actions/jobs/103671918609", lambda v: v.update({"id": 999999}))
+    mutants["origin-check-api-run-url"] = lambda: b.mutate_api(":actions/runs/34737699937", lambda v: v.update({"html_url": "https://example.invalid/run"}))
+    mutants["origin-check-api-attempt"] = lambda: b.mutate_api(":actions/jobs/103671918609", lambda v: v.update({"run_attempt": 2}))
+    mutants["origin-check-api-check-suite"] = lambda: b.mutate_api(":check-runs/103671918609", lambda v: v["check_suite"].update({"id": 1}))
+
+    @mutant("origin-check-legacy-job-route")
+    def _origin_legacy_route() -> None:
+        check = origin_check("103671918609")
+        new_ref = check["job_evidence_ref"].replace(":actions/jobs/103671918609", ":actions/runs/34737699937/jobs/103671918609")
+        b.move_api(check["job_evidence_ref"], new_ref)
+        update_origin_check("103671918609", {"job_evidence_ref": new_ref})
+
+    @mutant("origin-check-run-inventory")
+    def _run_inventory() -> None:
+        def drop(value: dict[str, object]) -> None:
+            value["jobs"] = [job for job in value["jobs"] if job["id"] != 103674956408]
+            value["total_count"] = len(value["jobs"])
+        b.mutate_api(":actions/runs/34738843321/jobs", drop)
+
+    @mutant("origin-check-reversed-chronology")
+    def _reversed() -> None:
+        late = "2026-09-13T04:47:00Z"
+        update_origin_check("103671918609", {"job_completed_at_utc": late, "completed_at_utc": late, "run_updated_at_utc": late})
+        update_origin_check("103671918666", {"run_updated_at_utc": late})
+        b.mutate_api(":actions/jobs/103671918609", lambda v: v.update({"completed_at": late}))
+        b.mutate_api(":check-runs/103671918609", lambda v: v.update({"completed_at": late}))
+        b.mutate_api(":actions/runs/34737699937", lambda v: v.update({"updated_at": late}))
+        b.mutate_api(f":commits/{ORIGIN_HEAD}/check-runs", lambda v: [run.update({"completed_at": late}) for run in v["check_runs"] if run["id"] == 103671918609])
+
+    @mutant("origin-check-dispatch-before-merge")
+    def _dispatch_before_merge() -> None:
+        early = "2026-09-13T04:47:00Z"
+        update_origin_check("103674954698", {"run_created_at_utc": early})
+        b.mutate_api(":actions/runs/34738842353", lambda v: v.update({"created_at": early}))
+
+    @mutant("origin-check-normalized-time")
+    def _normalized() -> None:
+        normalized = "2026-09-13T04:50:37Z"
+        update_origin_check("103674954698", {"run_created_at_utc": normalized})
+        b.mutate_api(":actions/runs/34738842353", lambda v: v.update({"created_at": normalized}))
+
+    @mutant("origin-check-partial-order")
+    def _partial_order() -> None:
+        started = "2026-09-13T04:54:50Z"
+        update_origin_check("103674954698", {"started_at_utc": started})
+        b.mutate_api(":check-runs/103674954698", lambda v: v.update({"started_at": started}))
+
+    @mutant("origin-check-summary-replaced-required")
+    def _summary_replaced() -> None:
+        def replace(value: dict[str, object]) -> None:
+            for run in value["check_runs"]:
+                if run["id"] == 103671918609:
+                    run["id"] = 103671999999
+        b.mutate_api(f":commits/{ORIGIN_HEAD}/check-runs", replace)
+
+    mutants["origin-check-summary-truncated"] = lambda: b.mutate_api(
+        f":commits/{ORIGIN_HEAD}/check-runs", lambda v: v.update({"check_runs": [r for r in v["check_runs"] if r["id"] != 103673077404]}))
+
+    @mutant("origin-check-summary-additional-removed")
+    def _summary_additional_removed() -> None:
+        def remove_additional(value: dict[str, object]) -> None:
+            value["check_runs"] = [run for run in value["check_runs"] if run["id"] != 103673077404]
+            value["total_count"] = len(value["check_runs"])
+        b.mutate_api(f":commits/{ORIGIN_HEAD}/check-runs", remove_additional)
+
+    # ---- origin review and canonical completion transport ------------------------
+    mutants["origin-review-api-body"] = lambda: b.mutate_api(":pulls/1235/reviews/5189565347", lambda v: v.update({"body": "tampered origin body"}))
+    mutants["origin-review-head"] = lambda: b.prepared_changes(lambda c: c["origin_delivery"]["review"].update({"commit_id": "9" * 40}))
+    mutants["origin-review-native-approved"] = lambda: b.prepared_changes(lambda c: c["origin_delivery"]["review"].update({"github_state": "APPROVED"}))
+    mutants["origin-review-submitted-at"] = lambda: b.prepared_changes(lambda c: c["origin_delivery"]["review"].update({"submitted_at_utc": "2026-09-13T04:45:00Z"}))
+    mutants["origin-review-reviewer"] = lambda: b.prepared_changes(lambda c: c["origin_delivery"]["review"].update({"reviewer": "forged-reviewer"}))
+    mutants["origin-review-api-pull-request-url"] = lambda: b.mutate_api(":pulls/1235/reviews/5189565347", lambda v: v.update({"pull_request_url": "https://api.github.com/repos/example/forged/pulls/1235"}))
+
+    def origin_body() -> bytes:
+        return b.read_content(prepared()["origin_delivery"]["review"]["body_evidence_ref"])
+
+    mutants["origin-review-body-byte-record-only"] = lambda: mutate_review_body("origin", origin_body().replace(b"G79", b"G78", 1), also_api=False)
+    mutants["origin-review-body-byte"] = lambda: mutate_review_body("origin", origin_body().replace(b"G79", b"G78", 1), also_api=True)
+    mutants["origin-review-request-update"] = lambda: mutate_review_body("origin", origin_body().replace(b"- Verdict: **APPROVE**", b"- Verdict: **REQUEST-UPDATE**", 1), also_api=True)
+    mutants["origin-review-negated"] = lambda: mutate_review_body("origin", origin_body().replace(b"- Verdict: **APPROVE**", b"- Verdict: **APPROVE** -- not approved", 1), also_api=True)
+    mutants["origin-review-missing-verdict"] = lambda: mutate_review_body("origin", origin_body().replace(b"- Verdict: **APPROVE**\n", b"", 1), also_api=True)
+    mutants["origin-review-conflicting-verdict"] = lambda: mutate_review_body("origin", origin_body().replace(b"- Verdict: **APPROVE**\n", b"- Verdict: **APPROVE**\n- Verdict: **REQUEST-UPDATE**\n", 1), also_api=True)
+
+    mutants["origin-completion-repair-task-projection"] = lambda: b.prepared_changes(
+        lambda c: c["origin_delivery"]["review"].update({"intent_task_id": "sek-g79-pr1235-13e4b0ce-f1-f8-repair-20260912"}))
+    mutants["origin-completion-repair-task"] = lambda: mutate_transport(
+        "origin", lambda r, d, rc, p: set_everywhere_task(r, d, rc, p, "sek-g79-pr1235-13e4b0ce-f1-f8-repair-20260912"))
+
+    @mutant("origin-completion-uuid-nonce")
+    def _uuid_nonce() -> None:
+        nonce = "1d9750ec-acde-4f27-b830-b61f80b70414"
+        def mutate(r: dict, d: dict, rc: dict, p: dict) -> None:
+            r["entry"]["result_nonce"] = nonce
+            d["entry"]["result_nonce"] = nonce
+            rc["result_nonce"] = nonce
+            p["intent_result_nonce"] = nonce
+        mutate_transport("origin", mutate)
+
+    @mutant("origin-completion-implementation-artifact")
+    def _implementation_artifact() -> None:
+        artifact = b"# SEK-G79 PR #1235 F1-F8 repair\n\nStatus: completed.\n\n- Verdict: **APPROVE**\n"
+        mutate_review_content("origin", "artifact_evidence_ref", artifact, "artifact_sha256")
+
+    @mutant("origin-completion-artifact-byte")
+    def _artifact_byte() -> None:
+        artifact = b.read_content(prepared()["origin_delivery"]["review"]["artifact_evidence_ref"])
+        mutate_review_content("origin", "artifact_evidence_ref", artifact.replace(b"Issue #1234", b"Issue #1233", 1), "artifact_sha256")
+
+    @mutant("origin-completion-invented-kind")
+    def _invented_kind() -> None:
+        mutate_transport("origin", lambda r, d, rc, p: r.update({"kind": "intent-origin-review-completion"}))
+
+    @mutant("origin-completion-invented-time")
+    def _invented_time() -> None:
+        invented = "2026-09-13T04:50:00Z"
+        def mutate(r: dict, d: dict, rc: dict, p: dict) -> None:
+            d["entry"]["delivered_at"] = invented
+            rc["reported_at"] = invented
+            p["intent_delivered_at"] = invented
+        mutate_transport("origin", mutate)
+
+    @mutant("origin-completion-post-merge")
+    def _post_merge() -> None:
+        late = "2026-09-13T04:47:21.000000+00:00"
+        def mutate(r: dict, d: dict, rc: dict, p: dict) -> None:
+            d["entry"]["delivered_at"] = late
+            rc["reported_at"] = late
+            p["intent_delivered_at"] = late
+        mutate_transport("origin", mutate)
+
+    @mutant("origin-completion-before-review")
+    def _before_review() -> None:
+        early = "2026-09-13T04:46:00.000000+00:00"
+        def mutate(r: dict, d: dict, rc: dict, p: dict) -> None:
+            r["entry"]["created_at"] = early
+            d["entry"]["created_at"] = early
+            p["intent_reported_at"] = early
+        mutate_transport("origin", mutate)
+
+    def status_mutant(status: str) -> Callable[[], None]:
+        def mutate(r: dict, d: dict, rc: dict, p: dict) -> None:
+            r["entry"]["status"] = status
+            d["entry"]["status"] = status
+            rc["report_status"] = status
+        return lambda: mutate_transport("origin", mutate)
+
+    mutants["origin-completion-blocked"] = status_mutant("blocked")
+    mutants["origin-completion-question"] = status_mutant("question")
+    mutants["origin-completion-receipt-mismatch"] = lambda: mutate_transport("origin", lambda r, d, rc, p: rc.update({"report_artifact": "/tmp/other-artifact.md"}))
+
+    @mutant("origin-completion-digest")
+    def _completion_digest() -> None:
+        review = prepared()["origin_delivery"]["review"]
+        raw = b.read_content(review["transport_record_ref"])
+        b.write_content(review["transport_record_ref"], raw.replace(b"CI green", b"CI Green", 1))
+
+    # ---- release candidate --------------------------------------------------------
+    mutants["missing-merge-strategy"] = lambda: b.prepared_changes(lambda c: c["candidate"].pop("merge_strategy"))
+    mutants["wrong-merge-strategy"] = lambda: b.prepared_changes(lambda c: c["candidate"].update({"merge_strategy": "squash"}))
+    mutants["candidate-parent-count-1"] = lambda: b.prepared_changes(lambda c: c["candidate"].update({"parent_shas": [c["candidate"]["base_sha"]]}))
+    mutants["candidate-parent-count-3"] = lambda: b.prepared_changes(lambda c: c["candidate"].update({"parent_shas": [c["candidate"]["base_sha"], c["candidate"]["reviewed_head_sha"], "9" * 40]}))
+    mutants["candidate-parent-reversed"] = lambda: b.prepared_changes(lambda c: c["candidate"].update({"parent_shas": [c["candidate"]["reviewed_head_sha"], c["candidate"]["base_sha"]]}))
+    mutants["candidate-parent-unrelated"] = lambda: b.prepared_changes(lambda c: c["candidate"].update({"parent_shas": ["8" * 40, "9" * 40]}))
+    mutants["missing-reviewed-commit"] = lambda: b.prepared_changes(lambda c: c["candidate"].pop("reviewed_commit_evidence_ref"))
+
+    @mutant("unequal-reviewed-merged-trees")
+    def _unequal_trees() -> None:
+        b.prepared_changes(lambda c: c["candidate"].update({"merged_tree_sha": "7" * 40}))
+
+    @mutant("main-unrelated-tip")
+    def _main_tip() -> None:
+        b.prepared_changes(lambda c: c["candidate"].update({"main_tip_sha": "8" * 40}))
+        b.mutate_api(f":compare/{'a' * 40}...{'9' * 40}", lambda v: v["head_commit"].update({"sha": "8" * 40}))
+
+    mutants["candidate-pr-top-level-repository"] = lambda: b.mutate_api(":pulls/1236", lambda v: v.update({"repository": {"full_name": REPOSITORY}}))
+    mutants["candidate-pr-head-repo-removed"] = lambda: b.mutate_api(":pulls/1236", lambda v: v["head"].pop("repo"))
+    mutants["candidate-pr-merge-sha"] = lambda: b.mutate_api(":pulls/1236", lambda v: v.update({"merge_commit_sha": "9" * 40}))
+    mutants["origin-candidate-substitution"] = lambda: b.prepared_changes(lambda c: c["candidate"].update({"reviewed_head_sha": ORIGIN_HEAD}))
+
+    @mutant("origin-check-substitution")
+    def _origin_check_substitution() -> None:
+        origin = origin_check("103671918609")
+        update_candidate_check("dcbTestsNet10", {key: origin[key] for key in ["run_id", "job_id", "check_run_id", "head_sha"]})
+
+    @mutant("origin-tag-substitution")
+    def _origin_tag() -> None:
+        b.mutate_payload("library-tagged/incomplete", lambda p: p["changes"]["library_tag"].update({"peeled_commit": ORIGIN_MERGED}))
+
+    mutants["candidate-check-event"] = lambda: update_candidate_check("dcbTestsNet9", {"event": "pull_request"})
+    mutants["candidate-check-run-id"] = lambda: update_candidate_check("dcbTestsNet9", {"run_id": "999999"})
+    mutants["candidate-check-job-id"] = lambda: update_candidate_check("dcbTestsNet9", {"job_id": "999999"})
+    mutants["candidate-check-run-url"] = lambda: update_candidate_check("dcbTestsNet9", {"run_url": "https://example.invalid/run"})
+    mutants["candidate-check-job-url"] = lambda: update_candidate_check("dcbTestsNet9", {"job_url": "https://example.invalid/job"})
+    mutants["candidate-check-attempt"] = lambda: update_candidate_check("dcbTestsNet9", {"attempt": "2"})
+    mutants["candidate-check-time-record"] = lambda: update_candidate_check("dcbTestsNet9", {"started_at_utc": "2026-09-12T09:02:04Z"})
+    mutants["candidate-check-api-time"] = lambda: b.mutate_api(":actions/runs/1001", lambda v: v.update({"updated_at": "2026-09-12T12:00:00Z"}))
+    mutants["candidate-check-api-event"] = lambda: b.mutate_api(":actions/runs/1001", lambda v: v.update({"event": "pull_request"}))
+    mutants["candidate-check-api-run-id"] = lambda: b.mutate_api(":actions/runs/1001", lambda v: v.update({"id": 999999}))
+    mutants["candidate-check-api-job-id"] = lambda: b.mutate_api(":actions/jobs/2001", lambda v: v.update({"id": 999999}))
+    mutants["candidate-check-api-run-url"] = lambda: b.mutate_api(":actions/runs/1001", lambda v: v.update({"html_url": "https://example.invalid/run"}))
+    mutants["candidate-check-api-attempt"] = lambda: b.mutate_api(":actions/runs/1001", lambda v: v.update({"run_attempt": 2}))
+    mutants["candidate-check-api-jobs-url"] = lambda: b.mutate_api(":actions/runs/1003", lambda v: v.update({"jobs_url": "https://api.github.com/repos/J-Tech-Japan/Sekiban/actions/runs/1003/attempts/1/jobs"}))
+
+    @mutant("candidate-check-stale")
+    def _candidate_stale() -> None:
+        stale = "2026-09-12T08:59:00Z"
+        update_candidate_check("packagedConsumer", {"run_created_at_utc": stale})
+        b.mutate_api(":actions/runs/1003", lambda v: v.update({"created_at": stale}))
+
+    @mutant("candidate-check-partial-order")
+    def _candidate_partial() -> None:
+        early = "2026-09-12T09:03:59Z"
+        update_candidate_check("packagedConsumer", {"job_started_at_utc": early})
+        b.mutate_api(":actions/jobs/2003", lambda v: v.update({"started_at": early}))
+
+    @mutant("candidate-check-legacy-job-route")
+    def _candidate_legacy_route() -> None:
+        check = candidate_check("dcbTestsNet9")
+        new_ref = check["job_evidence_ref"].replace(":actions/jobs/2001", ":actions/runs/1001/jobs/2001")
+        b.move_api(check["job_evidence_ref"], new_ref)
+        update_candidate_check("dcbTestsNet9", {"job_evidence_ref": new_ref})
+
+    @mutant("candidate-template-legacy-job-name")
+    def _template_job_name() -> None:
+        update_candidate_check("templateConsumer", {"job_name": "packaged-consumer"})
+        b.mutate_api(":actions/jobs/2004", lambda v: v.update({"name": "packaged-consumer"}))
+        b.mutate_api(":check-runs/2004", lambda v: v.update({"name": "packaged-consumer"}))
+
+    mutants["candidate-sonar-as-actions"] = lambda: update_candidate_check("SonarCloud Code Analysis", {"app_slug": "github-actions"})
+    mutants["candidate-sonar-api-app"] = lambda: b.mutate_api(":check-runs/3005", lambda v: v["app"].update({"slug": "github-actions"}))
+
+    @mutant("candidate-check-summary-replaced-required")
+    def _candidate_summary() -> None:
+        def replace(value: dict[str, object]) -> None:
+            for run in value["check_runs"]:
+                if run["id"] == 2004:
+                    run["id"] = 2999
+        b.mutate_api(f":commits/{'a' * 40}/check-runs", replace)
+
+    mutants["candidate-check-summary-count"] = lambda: b.mutate_api(f":commits/{'a' * 40}/check-runs", lambda v: v.update({"total_count": 30}))
+
+    @mutant("candidate-diff-evidence")
+    def _diff_evidence() -> None:
+        check = candidate_check("diff")
+        evidence = b.read_json_content(check["evidence_ref"])
+        evidence["output_sha256"] = "0" * 64
+        b.write_content(check["evidence_ref"], dump(evidence))
+
+    # ---- implementation review ------------------------------------------------------
+    mutants["review-head"] = lambda: b.prepared_changes(lambda c: c["implementation_review"].update({"commit_id": "9" * 40}))
+
+    @mutant("review-head-and-api")
+    def _review_head_and_api() -> None:
+        b.prepared_changes(lambda c: c["implementation_review"].update({"commit_id": "9" * 40}))
+        b.mutate_api(":pulls/1236/reviews/6000000001", lambda v: v.update({"commit_id": "9" * 40}))
+
+    mutants["review-api-commit"] = lambda: b.mutate_api(":pulls/1236/reviews/6000000001", lambda v: v.update({"commit_id": "9" * 40}))
+    mutants["review-api-body"] = lambda: b.mutate_api(":pulls/1236/reviews/6000000001", lambda v: v.update({"body": "TAMPERED"}))
+    mutants["review-submitted-at"] = lambda: b.mutate_api(":pulls/1236/reviews/6000000001", lambda v: v.update({"submitted_at": "2026-09-12T08:44:00Z"}))
+    mutants["review-url"] = lambda: b.prepared_changes(lambda c: c["implementation_review"].update({"review_url": "https://github.com/J-Tech-Japan/Sekiban/pull/1236#pullrequestreview-9999999999"}))
+    mutants["review-id"] = lambda: b.prepared_changes(lambda c: c["implementation_review"].update({"review_id": "6000000002"}))
+    mutants["review-native-approved"] = lambda: b.mutate_api(":pulls/1236/reviews/6000000001", lambda v: v.update({"state": "APPROVED"}))
+    mutants["semantic-negated"] = lambda: mutate_review_body("implementation", b"REQUEST-UPDATE - DO NOT APPROVE\n", also_api=True)
+
+    @mutant("implementation-completion-blocked")
+    def _impl_blocked() -> None:
+        def mutate(r: dict, d: dict, rc: dict, p: dict) -> None:
+            r["entry"]["status"] = "blocked"
+            d["entry"]["status"] = "blocked"
+            rc["report_status"] = "blocked"
+        mutate_transport("implementation", mutate)
+
+    @mutant("implementation-completion-after-merge")
+    def _impl_after_merge() -> None:
+        late = "2026-09-12T09:00:01.000000+00:00"
+        def mutate(r: dict, d: dict, rc: dict, p: dict) -> None:
+            d["entry"]["delivered_at"] = late
+            rc["reported_at"] = late
+            p["intent_delivered_at"] = late
+        mutate_transport("implementation", mutate)
+
+    mutants["implementation-completion-origin-transport"] = lambda: b.prepared_changes(lambda c: c["implementation_review"].update({
+        key: c["origin_delivery"]["review"][key] for key in [
+            "transport_record_ref", "transport_record_sha256", "transport_delivered_ref", "transport_delivered_sha256",
+            "transport_receipt_ref", "transport_receipt_sha256"]}))
+
+    # ---- host-stage authorities -------------------------------------------------------
+    @mutant("completion-arbitrary")
+    def _completion_arbitrary() -> None:
+        approval = b.read_json_content(b.record["prepared_approval_ref"])
+        approval["completion_sha256"] = b.write_content(approval["completion_ref"], b"not-json\n")
+        b.write_content(b.record["prepared_approval_ref"], dump(approval))
+
+    def completion_mutant(field: str, value: object, stage: str = "prepared") -> Callable[[], None]:
+        def run() -> None:
+            approval_ref = b.approval_ref(stage)
+            approval = b.read_json_content(approval_ref)
+            completion = b.read_json_content(approval["completion_ref"])
+            completion[field] = value if not callable(value) else value()
+            approval["completion_sha256"] = b.write_content(approval["completion_ref"], dump(completion))
+            b.write_content(approval_ref, dump(approval))
+        return run
+
+    mutants["completion-task"] = completion_mutant("task_id", "forged-task")
+    mutants["completion-nonce"] = completion_mutant("result_nonce", "forged-nonce")
+    mutants["completion-status"] = completion_mutant("status", "failed")
+    mutants["completion-verdict"] = completion_mutant("verdict", "rejected")
+    mutants["completion-target"] = completion_mutant("target_payload_ref", lambda: b.record["current_payload_ref"])
+    mutants["completion-artifact"] = completion_mutant("artifact_sha256", "0" * 64)
+    mutants["completion-reviewer"] = completion_mutant("reviewer_identity", "forged-reviewer")
+    mutants["completion-time"] = completion_mutant("completed_at_utc", "2026-09-12T09:10:00Z")
+    mutants["prepared-completion-late"] = completion_mutant("completed_at_utc", "2026-09-12T10:20:00Z")
+    mutants["prepared-completion-equal"] = completion_mutant("completed_at_utc", "2026-09-12T09:20:00Z")
+    mutants["artifact-completion-late"] = completion_mutant("completed_at_utc", "2026-09-12T12:00:00Z", "artifacts-verified")
+    mutants["artifact-completion-equal"] = completion_mutant("completed_at_utc", "2026-09-12T11:00:00Z", "artifacts-verified")
+
+    def approval_mutant(stage: str, values: Callable[[], dict[str, object]]) -> Callable[[], None]:
+        def run() -> None:
+            approval_ref = b.approval_ref(stage)
+            approval = b.read_json_content(approval_ref)
+            approval.update(values())
+            b.write_content(approval_ref, dump(approval))
+        return run
+
+    mutants["authority-version"] = approval_mutant("prepared", lambda: {"version": "10.21.0"})
+    mutants["authority-verdict"] = approval_mutant("prepared", lambda: {"verdict": "rejected"})
+    mutants["authority-rebind"] = approval_mutant("prepared", lambda: {
+        "target_payload_ref": b.record["current_payload_ref"], "target_payload_sha256": sha256(b.read_content(b.record["current_payload_ref"]))})
+    mutants["authority-time"] = approval_mutant("prepared", lambda: {"approved_at_utc": "2026-09-12T09:00:00Z"})
+    mutants["artifact-before-release"] = approval_mutant("artifacts-verified", lambda: {"approved_at_utc": "2026-09-12T09:44:00Z"})
+    mutants["artifact-equal-release"] = approval_mutant("artifacts-verified", lambda: {"approved_at_utc": "2026-09-12T09:45:00Z"})
+    mutants["missing-artifact-authority"] = lambda: b.record.pop("artifact_approval_ref")
+
+    @mutant("early-future-authority")
+    def _early_future() -> None:
+        b.record["stage"] = "prepared"
+        b.record["current_payload_ref"] = b.payload_at("prepared")[0]
+
+    # ---- publication evidence and closeout --------------------------------------------
+    mutants["wrong-release-url"] = lambda: b.mutate_payload("libraries-verified", lambda p: p["changes"]["library_release"].update({"url": "https://example.invalid/forged"}))
+    mutants["wrong-release-body"] = lambda: b.mutate_payload("libraries-verified", lambda p: p["changes"]["library_release"].update({"body_sha256": "0" * 64}))
+    mutants["release-asset-url"] = lambda: b.mutate_api(":releases/tags/dcb-v10.22.0", lambda v: v["assets"][0].update({"browser_download_url": "https://api.nuget.org/v3-flatcontainer/forged"}))
+    mutants["wrong-package-url"] = lambda: b.mutate_payload("libraries-verified", lambda p: p["changes"]["packages"][0].update({"public_url": p["changes"]["packages"][1]["public_url"]}))
+    mutants["wrong-template-url"] = lambda: b.mutate_payload("artifacts-verified", lambda p: p["changes"]["template"].update({"public_url": "https://example.invalid/template.nupkg"}))
+    mutants["wrong-library-observed-time"] = lambda: b.mutate_payload("libraries-verified", lambda p: p["changes"]["library_release"].update({"observed_at_utc": "2026-09-12T09:20:00Z"}))
+    mutants["equal-template-tag-time"] = lambda: b.mutate_payload("template-tagged/incomplete", lambda p: p["changes"]["template_tag"].update({"created_at_utc": "2026-09-12T09:30:00Z"}))
+    mutants["draft-release"] = lambda: b.mutate_api(":releases/tags/dcb-v10.22.0", lambda v: v.update({"draft": True}))
+    mutants["wrong-release-tag"] = lambda: b.mutate_api(":releases/tags/dcb-v10.22.0", lambda v: v.update({"tag_name": "dcb-v-forged"}))
+    mutants["missing-release-asset"] = lambda: b.mutate_api(":releases/tags/dcb-v10.22.0", lambda v: v["assets"].pop())
+    mutants["wrong-release-asset-name"] = lambda: b.mutate_api(":releases/tags/dcb-v10.22.0", lambda v: v["assets"][0].update({"name": "forged.nupkg"}))
+    mutants["noncanonical-closeout"] = lambda: b.mutate_payload("complete", lambda p: p["changes"]["closure"].update({"completed_at_utc": "2026-09-12 20:05:00 +09:00"}))
+    mutants["closure-before-authority"] = lambda: b.mutate_payload("complete", lambda p: p["changes"]["closure"].update({"library_closed_at_utc": "2026-09-12T09:50:00Z"}))
+    mutants["closeout-equal-authority"] = lambda: b.mutate_payload("complete", lambda p: p["changes"]["closure"].update({"library_closed_at_utc": "2026-09-12T09:52:00Z"}))
+    for field in ["library", "template", "issue1185", "issue1230"]:
+        property_name = {"library": "library_closed_at_utc", "template": "template_closed_at_utc",
+                         "issue1185": "issue_1185_closed_at_utc", "issue1230": "issue_1230_closed_at_utc"}[field]
+        mutants[f"{field}-closeout-before-authority"] = (lambda p_name: lambda: b.mutate_payload(
+            "complete", lambda p: p["changes"]["closure"].update({p_name: "2026-09-12T09:50:00Z"})))(property_name)
+        mutants[f"{field}-closeout-equal-authority"] = (lambda p_name: lambda: b.mutate_payload(
+            "complete", lambda p: p["changes"]["closure"].update({p_name: "2026-09-12T09:52:00Z"})))(property_name)
+
+    if kind == "--list":
+        print("\n".join(sorted(mutants)))
+        shutil.rmtree(destination)
+        return
+    if kind not in mutants:
+        shutil.rmtree(destination)
         raise ValueError(f"Unknown closed bundle mutant: {kind}")
-
-    if kind in {
-        "payload-fold", "id-only-predecessor", "empty-delta", "skip-delta", "wrong-stage",
-        "wrong-stage-field", "review-head", "review-head-and-api", "review-url", "review-id",
-        "unknown-package-member", "unknown-release-member", "unknown-release-body-member", "unknown-tag-member",
-        "wrong-release-url", "wrong-release-body", "wrong-package-url", "wrong-template-url",
-        "wrong-library-observed-time", "equal-template-tag-time", "noncanonical-closeout",
-        "closure-before-authority", "closeout-equal-authority", "artifact-equal-release",
-        "library-closeout-before-authority", "template-closeout-before-authority",
-        "issue1185-closeout-before-authority", "issue1230-closeout-before-authority",
-        "library-closeout-equal-authority", "template-closeout-equal-authority",
-        "issue1185-closeout-equal-authority", "issue1230-closeout-equal-authority",
-        "missing-merge-strategy", "wrong-merge-strategy", "candidate-parent-count-1", "candidate-parent-count-3", "candidate-parent-reversed",
-        "candidate-parent-unrelated", "missing-reviewed-commit", "unequal-reviewed-merged-trees",
-        "origin-candidate-substitution", "semantic-negated", "self-containing-approval", "self-containing-completion",
-        "self-containing-payload", "main-unrelated-tip", "candidate-check-time", "candidate-check-event",
-        "candidate-check-run-id", "candidate-check-job-id", "candidate-check-run-url", "candidate-check-job-url",
-        "candidate-check-attempt", "origin-check-time", "origin-check-event", "origin-check-run-id",
-        "origin-check-job-id", "origin-check-run-url", "origin-check-job-url", "origin-check-attempt",
-        "origin-review-head", "origin-review-submitted-at", "origin-review-reviewer", "origin-review-completion",
-        "origin-review-request-update", "origin-review-negated", "origin-review-missing-verdict",
-        "origin-review-conflicting-verdict", "origin-review-body-byte",
-    }:
-        refresh_approval_payload_digests()
-
-    write_content(record_ref, dump(record))
-    manifest_path.write_bytes(dump(manifest))
+    mutants[kind]()
+    b.finish()
 
 
 if __name__ == "__main__":
