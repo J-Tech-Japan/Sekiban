@@ -225,9 +225,16 @@ fetch_bundle_ref() {
   repository="${BASH_REMATCH[1]}"
   commit="${BASH_REMATCH[2]}"
   object_path="${BASH_REMATCH[3]}"
+  # GitHub's commit check-runs listing hides superseded same-name runs unless
+  # it is fetched with filter=all, and truncates after 30 items by default.
+  if [[ "$object_path" =~ ^commits/[0-9a-fA-F]{40}/check-runs ]] &&
+     [[ "$object_path" != */check-runs\?filter=all\&per_page=100 ]]; then
+    echo "Commit check-runs listings must be fetched as check-runs?filter=all&per_page=100: ${immutable_ref}." >&2
+    return 1
+  fi
   case "$object_path" in
     contents/*) endpoint="repos/${repository}/${object_path}?ref=${commit}" ;;
-    commits/*|pulls/*|actions/*|check-runs/*|releases/*|compare/*) endpoint="repos/${repository}/${object_path}" ;;
+    commits/*|pulls/*|actions/*|check-runs/*|issues/*|releases/*|compare/*) endpoint="repos/${repository}/${object_path}" ;;
     git/trees/*) endpoint="repos/${repository}/${object_path}?recursive=1" ;;
     git/*) endpoint="repos/${repository}/${object_path}" ;;
     *) endpoint="repos/${repository}/contents/${object_path}?ref=${commit}" ;;

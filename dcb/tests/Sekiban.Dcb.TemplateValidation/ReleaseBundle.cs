@@ -13,6 +13,12 @@ internal sealed class ReleaseBundle
         "^[0-9a-f]{64}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex Commit = new(
         "^[0-9a-f]{40}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex CanonicalCheckRunsListing = new(
+        "^commits/[0-9a-fA-F]{40}/check-runs\\?filter=all&per_page=100$",
+        RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex UnfilteredCheckRunsListing = new(
+        "^commits/[0-9a-fA-F]{40}/check-runs(\\?.*)?$",
+        RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     private static readonly Regex ImmutableRef = new(
         "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}:.+$",
         RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
@@ -285,10 +291,17 @@ internal sealed class ReleaseBundle
         {
             _ when objectPath.StartsWith("contents/", StringComparison.Ordinal) =>
                 $"repos/{repository}/{objectPath}?ref={commit}",
+            // GitHub's commit check-runs listing defaults to filter=latest and
+            // 30 items, which hides superseded same-name runs and truncates.
+            // Only the fully filtered, single-page route is a valid reference.
+            _ when CanonicalCheckRunsListing.IsMatch(objectPath) => $"repos/{repository}/{objectPath}",
+            _ when UnfilteredCheckRunsListing.IsMatch(objectPath) =>
+                $"invalid: commit check-runs listings must use {ClosedReleaseRecordValidator.CheckRunsListingRoute}",
             _ when objectPath.StartsWith("commits/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("pulls/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("actions/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("check-runs/", StringComparison.Ordinal) ||
+                   objectPath.StartsWith("issues/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("releases/", StringComparison.Ordinal) ||
                    objectPath.StartsWith("compare/", StringComparison.Ordinal) =>
                 $"repos/{repository}/{objectPath}",
