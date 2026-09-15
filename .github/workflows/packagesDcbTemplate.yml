@@ -8,11 +8,29 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: dcb-release
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Export triggering template tag object id
+        env:
+          EVENT_AFTER: ${{ github.event.after }}
+        run: |
+          if [[ -z "${EVENT_AFTER}" ]]; then
+            echo "github.event.after is required so retries bind the triggering annotated tag object." >&2
+            exit 1
+          fi
+          [[ "$EVENT_AFTER" =~ ^[0-9a-fA-F]{40}$ ]] || {
+            echo "github.event.after must be a 40-character tag object SHA." >&2
+            exit 1
+          }
+          # Provenance: for annotated tag pushes, GitHub documents github.event.after as the
+          # created tag object SHA (unchanged on workflow re-run). Archived annotated tag-push
+          # evidence: fixtures/workflow-harness/tag-push-event-dcb-v10.21.0.json (run 34577364648).
+          echo "TRIGGER_TAG_OBJECT_ID=${EVENT_AFTER}" >> "$GITHUB_ENV"
 
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
@@ -52,21 +70,23 @@ jobs:
 
       - name: Validate canonical libraries-verified state before template pack
         run: |
-          RECORD_FILE="$(jq -r '.record_relative_path' "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json")"
           dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
             release-record --bundle "$RUNNER_TEMP/dcb-release-record-bundle" \
             --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json" \
             --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
-            --state libraries-verified
-          MERGED_SHA="$(jq -r '.content' "$RUNNER_TEMP/dcb-release-record-bundle/$RECORD_FILE" | tr -d '\n' | base64 --decode | jq -r '.merged_sha')"
-          test "$MERGED_SHA" = "$(git rev-parse HEAD)"
+            --state libraries-verified \
+            --merged-sha-output "$RUNNER_TEMP/validated-merged-sha.txt" \
+            --release-facts-output "$RUNNER_TEMP/release-facts.json"
+          test "$(tr -d '\n' < "$RUNNER_TEMP/validated-merged-sha.txt")" = "$(git rev-parse 'HEAD^{commit}')"
+
+      - name: Fetch tags before live checks
+        run: git fetch --force --tags
 
       - name: Validate live template tag identity before template pack
         env:
           GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
         run: |
-          RECORD_FILE="$(jq -r '.record_relative_path' "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json")"
-          MERGED_SHA="$(jq -r '.content' "$RUNNER_TEMP/dcb-release-record-bundle/$RECORD_FILE" | tr -d '\n' | base64 --decode | jq -r '.merged_sha')"
+          MERGED_SHA="$(tr -d '\n' < "$RUNNER_TEMP/validated-merged-sha.txt")"
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
             --check-live-tag --repo-root "$GITHUB_WORKSPACE" \
             --tag "dcbTemplates-v${VERSION}" \
@@ -77,13 +97,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           git fetch --force --tags
+          MERGED_SHA="$(tr -d '\n' < "$RUNNER_TEMP/validated-merged-sha.txt")"
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
             --check-package-manifest --repo-root "$GITHUB_WORKSPACE" \
             --workflow-file "$GITHUB_WORKSPACE/.github/workflows/packagesDcb.yml"
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
             --check-library-verified --repo-root "$GITHUB_WORKSPACE" --version "$VERSION"
-          test "$(git rev-list -n 1 "dcb-v${VERSION}")" = "$(git rev-parse HEAD)"
-          test "$(git rev-list -n 1 "$GITHUB_REF_NAME")" = "$(git rev-parse HEAD)"
+          test "$(git rev-list -n 1 "dcb-v${VERSION}")" = "$MERGED_SHA"
+          test "$(git rev-list -n 1 "$GITHUB_REF_NAME")" = "$MERGED_SHA"
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh --check-publish-parity --repo-root "$GITHUB_WORKSPACE" --version "$VERSION" --template-tag "$GITHUB_REF_NAME"
 
       - name: Wait for all published DCB packages
@@ -114,6 +135,17 @@ jobs:
             --check-template-retry --package "out/Sekiban.Dcb.Templates.${VERSION}.nupkg" \
             --version "$VERSION" --request-timeout-seconds 20
 
+      - name: Enforce template live guard before push
+        env:
+          GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --check-template-live-guard --repo-root "$GITHUB_WORKSPACE" \
+            --version "$VERSION" \
+            --facts-file "$RUNNER_TEMP/release-facts.json" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --trigger-tag-object "$TRIGGER_TAG_OBJECT_ID"
+
       - name: Push Template
         env:
           NUGET_APIKEY: ${{ secrets.NUGET_APIKEY }}
@@ -124,6 +156,12 @@ jobs:
         run: |
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
             --wait-for-published-template --version "$VERSION" --timeout-seconds 900 --interval-seconds 15
+
+      - name: Prove public template package matches local pack
+        run: |
+          dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
+            --check-template-post-push-equality --version "$VERSION" \
+            --package "out/Sekiban.Dcb.Templates.${VERSION}.nupkg"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

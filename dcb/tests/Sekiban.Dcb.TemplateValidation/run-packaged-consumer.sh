@@ -1632,6 +1632,7 @@ copy_workflow_fixture() {
   cp "$repo_root/.github/workflows/dcb_template_validation.yml" "$destination/.github/workflows/dcb_template_validation.yml"
   cp "$repo_root/.github/workflows/packagesDcb.yml" "$destination/.github/workflows/packagesDcb.yml"
   cp "$repo_root/.github/workflows/packagesDcbTemplate.yml" "$destination/.github/workflows/packagesDcbTemplate.yml"
+  cp "$repo_root/.github/workflows/dcb_release_record_check.yml" "$destination/.github/workflows/dcb_release_record_check.yml"
   cp "$repo_root/.github/workflows/run_test_dcb.yml" "$destination/.github/workflows/run_test_dcb.yml"
   cp "$repo_root/.github/workflows/dcb_azure_queue_packaged_consumer.yml" "$destination/.github/workflows/dcb_azure_queue_packaged_consumer.yml"
   cp "$repo_root/dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh" \
@@ -1640,6 +1641,9 @@ copy_workflow_fixture() {
   cp "$script_dir/run-status-composition.sh" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation/run-status-composition.sh"
   cp "$script_dir/validate-release-tags.sh" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh"
   cp "$script_dir/read-host-release-record.sh" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh"
+  cp "$script_dir/run-workflow-harness.py" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation/run-workflow-harness.py"
+  cp "$script_dir/run-workflow-harness.sh" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation/run-workflow-harness.sh"
+  cp "$script_dir/run-library-pack-determinism.sh" "$destination/dcb/tests/Sekiban.Dcb.TemplateValidation/run-library-pack-determinism.sh"
   cp -R "$repo_root/dcb/src/." "$destination/dcb/src/"
 }
 

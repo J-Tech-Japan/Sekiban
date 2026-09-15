@@ -1,0 +1,17 @@
+{
+  "provenance": {
+    "source": "GitHub Actions run 34577364648 annotated tag push dcb-v10.21.0",
+    "docs": "https://docs.github.com/en/webhooks/webhook-events-and-payloads#push",
+    "note": "For refs/tags/* annotated tag pushes, github.event.after is the tag object id and is stable across same-run retries."
+  },
+  "ref": "refs/tags/dcb-v10.21.0",
+  "before": "0000000000000000000000000000000000000000",
+  "after": "85f6eeb49f0acc1f8bbeba66bdaf768809be19c5",
+  "created": true,
+  "deleted": false,
+  "forced": false,
+  "head_commit": null,
+  "repository": {
+    "full_name": "J-Tech-Japan/Sekiban"
+  }
+}

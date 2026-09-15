@@ -33,7 +33,7 @@ dcb_package_ids=(
 )
 
 usage() {
-  echo "Usage: $0 --check-package-manifest|--check-library-verified|--check-live-tag|--check-publish-parity|--check-drift|--wait-for-published-packages|--wait-for-published-template|--check-template-retry|--self-test [options]" >&2
+  echo "Usage: $0 --check-package-manifest|--check-library-verified|--check-live-tag|--check-library-live-guard|--check-template-live-guard|--check-library-post-push-equality|--check-template-post-push-equality|--check-publish-parity|--check-drift|--wait-for-published-packages|--wait-for-published-template|--check-template-retry|--self-test [options]" >&2
   exit 2
 }
 
@@ -266,6 +266,8 @@ check_library_release_evidence() {
   echo "libraries-verified evidence passed: ${tag}, 26 exact assets, non-draft release, reviewed body, and current peeled commit."
 }
 
+# Checkout-safe live tag check (AC2/AC3): compare API identity plus peeled commit
+# only. Never compare local tag object identity after actions/checkout rewrite.
 check_live_tag() {
   local repo_root="$1"
   local tag="$2"
@@ -278,7 +280,7 @@ check_live_tag() {
     return 1
   }
 
-  local live_ref live_object live_type peeled local_object local_peeled
+  local live_ref live_object live_type peeled tag_object local_peeled
   local repository="${GITHUB_REPOSITORY:-J-Tech-Japan/Sekiban}"
   if ! live_ref="$(gh api "repos/${repository}/git/ref/tags/${tag}")"; then
     echo "Unable to read live tag ref ${tag} from ${repository}." >&2
@@ -290,37 +292,397 @@ check_live_tag() {
     echo "Live tag ${tag} did not return a valid object identity." >&2
     return 1
   }
-  if local_object="$(git -C "$repo_root" rev-parse "${tag}^{tag}" 2>/dev/null)"; then
-    :
-  else
-    local_object="$(git -C "$repo_root" rev-parse "$tag" 2>/dev/null || true)"
-  fi
-  [[ "$local_object" == "$live_object" ]] || {
-    echo "Live tag ${tag} object identity differs from the checked-out tag ref." >&2
+  # Named lightweight-tag error before any git/tags/{id} read.
+  if [[ "$live_type" != "tag" ]]; then
+    echo "${tag} must be an annotated tag: its ref object type is '${live_type}', not 'tag'." >&2
     return 1
-  }
-  case "$live_type" in
-    tag)
-      if ! tag_object="$(gh api "repos/${repository}/git/tags/${live_object}")"; then
-        echo "Unable to peel annotated live tag ${tag}." >&2
-        return 1
-      fi
-      peeled="$(jq -r '.object.sha' <<<"$tag_object")"
-      ;;
-    commit)
-      peeled="$live_object"
-      ;;
-    *)
-      echo "Live tag ${tag} has unsupported object type ${live_type}." >&2
-      return 1
-      ;;
-  esac
+  fi
+  if ! tag_object="$(gh api "repos/${repository}/git/tags/${live_object}")"; then
+    echo "Unable to peel annotated live tag ${tag}." >&2
+    return 1
+  fi
+  peeled="$(jq -r '.object.sha' <<<"$tag_object")"
   local_peeled="$(git -C "$repo_root" rev-parse "${tag}^{commit}" 2>/dev/null || true)"
   [[ "$peeled" == "$expected_peeled" && "$local_peeled" == "$expected_peeled" ]] || {
     echo "Live tag ${tag} peeled commit does not match the merged SHA." >&2
     return 1
   }
   echo "Live tag ${tag} matches object ${live_object} and peeled commit ${peeled}."
+}
+
+parse_utc_epoch() {
+  local value="$1"
+  python3 - "$value" <<'PY'
+import datetime
+import sys
+raw = sys.argv[1]
+if raw.endswith("Z"):
+    raw = raw[:-1] + "+00:00"
+print(int(datetime.datetime.fromisoformat(raw).timestamp()))
+PY
+}
+
+package_version_absent() {
+  local package="$1"
+  local version="$2"
+  local base_url="${3:-https://api.nuget.org/v3-flatcontainer}"
+  local package_lower http_code temporary
+  package_lower="$(printf '%s' "$package" | tr '[:upper:]' '[:lower:]')"
+  temporary="$(mktemp /tmp/sek-package-index.XXXXXX)"
+  if [[ "$base_url" == file://* ]]; then
+    local root index_path
+    root="$(printf '%s' "$base_url" | sed 's#^file://##')"
+    index_path="$root/$package_lower/index.json"
+    if [[ ! -f "$index_path" ]]; then
+      rm -f "$temporary"
+      return 0
+    fi
+    if jq -e --arg version "$version" '
+          ((.versions // []) | map(tostring) | index($version)) == null
+        ' "$index_path" >/dev/null; then
+      rm -f "$temporary"
+      return 0
+    fi
+    rm -f "$temporary"
+    echo "Package ${package}/${version} already exists on the feed." >&2
+    return 1
+  fi
+  if ! http_code="$(curl --silent --show-error --location --retry 0 \
+      --connect-timeout 20 --max-time 20 \
+      --output "$temporary" --write-out '%{http_code}' \
+      "$base_url/$package_lower/index.json")"; then
+    rm -f "$temporary"
+    echo "Unable to inspect flat-container index for ${package}." >&2
+    return 1
+  fi
+  if [[ "$http_code" == 404 ]]; then
+    rm -f "$temporary"
+    return 0
+  fi
+  if [[ "$http_code" != 200 ]]; then
+    rm -f "$temporary"
+    echo "Package absence check for ${package} returned HTTP ${http_code}." >&2
+    return 1
+  fi
+  if jq -e --arg version "$version" '
+        ((.versions // []) | map(tostring) | index($version)) == null
+      ' "$temporary" >/dev/null; then
+    rm -f "$temporary"
+    return 0
+  fi
+  rm -f "$temporary"
+  echo "Package ${package}/${version} already exists on nuget.org." >&2
+  return 1
+}
+
+require_trigger_tag_object() {
+  local run_attempt="$1"
+  local trigger_tag_object="$2"
+  if (( run_attempt > 1 )); then
+    [[ "$trigger_tag_object" =~ ^[0-9a-fA-F]{40}$ ]] || {
+      echo "Retry requires the triggering tag object id from github.event.after." >&2
+      return 1
+    }
+  fi
+}
+
+check_library_live_guard() {
+  local repo_root="$1"
+  local version="$2"
+  local facts_file="$3"
+  local run_attempt="$4"
+  local trigger_tag_object="$5"
+  local feed_base_url="$6"
+  require_value repo-root "$repo_root"
+  require_value version "$version"
+  require_value facts-file "$facts_file"
+  require_value run-attempt "$run_attempt"
+  [[ -f "$facts_file" ]] || {
+    echo "Release facts file is missing: ${facts_file}" >&2
+    return 1
+  }
+  require_trigger_tag_object "$run_attempt" "$trigger_tag_object" || return 1
+
+  local tag="dcb-v${version}"
+  local template_tag="dcbTemplates-v${version}"
+  local repository="${GITHUB_REPOSITORY:-J-Tech-Japan/Sekiban}"
+  local merged_sha prepared_completed latest_check live_ref live_object live_type tag_object peeled tagger_date
+  merged_sha="$(jq -r '.merged_sha' "$facts_file")"
+  prepared_completed="$(jq -r '.prepared_completed_at_utc' "$facts_file")"
+  latest_check="$(jq -r '.latest_recorded_check_completed_at_utc' "$facts_file")"
+  [[ "$merged_sha" =~ ^[0-9a-fA-F]{40}$ ]] || {
+    echo "Release facts are missing a validated merged_sha." >&2
+    return 1
+  }
+
+  if ! live_ref="$(gh api "repos/${repository}/git/ref/tags/${tag}")"; then
+    echo "Unable to read live library tag ref ${tag}." >&2
+    return 1
+  fi
+  live_object="$(jq -r '.object.sha' <<<"$live_ref")"
+  live_type="$(jq -r '.object.type' <<<"$live_ref")"
+  if [[ "$live_type" != "tag" ]]; then
+    echo "${tag} must be an annotated tag: its ref object type is '${live_type}', not 'tag'." >&2
+    return 1
+  fi
+  if ! tag_object="$(gh api "repos/${repository}/git/tags/${live_object}")"; then
+    echo "Unable to peel annotated library tag ${tag}." >&2
+    return 1
+  fi
+  peeled="$(jq -r '.object.sha' <<<"$tag_object")"
+  tagger_date="$(jq -r '.tagger.date' <<<"$tag_object")"
+  [[ "$peeled" == "$merged_sha" ]] || {
+    echo "Library tag ${tag} does not point at the validated merged SHA." >&2
+    return 1
+  }
+  local tag_epoch prepared_epoch check_epoch
+  tag_epoch="$(parse_utc_epoch "$tagger_date")"
+  prepared_epoch="$(parse_utc_epoch "$prepared_completed")"
+  check_epoch="$(parse_utc_epoch "$latest_check")"
+  (( tag_epoch > prepared_epoch )) || {
+    echo "Library tagger.date must be strictly later than prepared_completed_at_utc." >&2
+    return 1
+  }
+  (( tag_epoch > check_epoch )) || {
+    echo "Library tagger.date must be strictly later than latest_recorded_check_completed_at_utc." >&2
+    return 1
+  }
+
+  # Fail closed: only an explicit HTTP 404 means the template tag is absent.
+  local template_http template_body
+  template_body="$(mktemp /tmp/sek-template-tag.XXXXXX)"
+  if ! template_http="$(gh api -i "repos/${repository}/git/ref/tags/${template_tag}" 2>"$template_body.err" | tee "$template_body" | head -n 1 | awk '{print $2}')"; then
+    if grep -Eq 'HTTP 404|Not Found \(HTTP 404\)' "$template_body.err" "$template_body" 2>/dev/null; then
+      rm -f "$template_body" "$template_body.err"
+    else
+      cat "$template_body.err" >&2 || true
+      rm -f "$template_body" "$template_body.err"
+      echo "Unable to prove template tag ${template_tag} is absent (non-404 API failure)." >&2
+      return 1
+    fi
+  else
+    rm -f "$template_body" "$template_body.err"
+    echo "Template tag ${template_tag} must not exist before the library workflow pushes packages." >&2
+    return 1
+  fi
+
+  if (( run_attempt == 1 )); then
+    local package
+    for package in "${dcb_package_ids[@]}"; do
+      package_version_absent "$package" "$version" "$feed_base_url" || return 1
+    done
+  else
+    [[ "$live_object" == "$trigger_tag_object" ]] || {
+      echo "Retry live tag object ${live_object} differs from triggering tag object ${trigger_tag_object}." >&2
+      return 1
+    }
+  fi
+  echo "Library live guard passed for ${tag} at attempt ${run_attempt}."
+}
+
+check_template_live_guard() {
+  local repo_root="$1"
+  local version="$2"
+  local facts_file="$3"
+  local run_attempt="$4"
+  local trigger_tag_object="$5"
+  local feed_base_url="$6"
+  require_value repo-root "$repo_root"
+  require_value version "$version"
+  require_value facts-file "$facts_file"
+  require_value run-attempt "$run_attempt"
+  [[ -f "$facts_file" ]] || {
+    echo "Release facts file is missing: ${facts_file}" >&2
+    return 1
+  }
+  require_trigger_tag_object "$run_attempt" "$trigger_tag_object" || return 1
+
+  local tag="dcbTemplates-v${version}"
+  local library_tag="dcb-v${version}"
+  local repository="${GITHUB_REPOSITORY:-J-Tech-Japan/Sekiban}"
+  local merged_sha facts_tag_object facts_tag_created facts_release_published
+  local live_ref live_object live_type tag_object peeled tagger_date
+  local library_ref library_object library_type library_tag_object library_tagger_date library_release published_at
+  merged_sha="$(jq -r '.merged_sha' "$facts_file")"
+  facts_tag_object="$(jq -r '.library_tag_object_id' "$facts_file")"
+  facts_tag_created="$(jq -r '.library_tag_created_at_utc' "$facts_file")"
+  facts_release_published="$(jq -r '.library_release_published_at_utc' "$facts_file")"
+  [[ "$merged_sha" =~ ^[0-9a-fA-F]{40}$ && "$facts_tag_object" =~ ^[0-9a-fA-F]{40}$ ]] || {
+    echo "Release facts are missing libraries-verified library tag members." >&2
+    return 1
+  }
+
+  if ! library_ref="$(gh api "repos/${repository}/git/ref/tags/${library_tag}")"; then
+    echo "Unable to read live library tag ref ${library_tag}." >&2
+    return 1
+  fi
+  library_object="$(jq -r '.object.sha' <<<"$library_ref")"
+  library_type="$(jq -r '.object.type' <<<"$library_ref")"
+  if [[ "$library_type" != "tag" ]]; then
+    echo "${library_tag} must be an annotated tag: its ref object type is '${library_type}', not 'tag'." >&2
+    return 1
+  fi
+  [[ "$library_object" == "$facts_tag_object" ]] || {
+    echo "Live library tag object does not equal release-facts library_tag_object_id." >&2
+    return 1
+  }
+  if ! library_tag_object="$(gh api "repos/${repository}/git/tags/${library_object}")"; then
+    echo "Unable to peel annotated library tag ${library_tag}." >&2
+    return 1
+  fi
+  library_tagger_date="$(jq -r '.tagger.date' <<<"$library_tag_object")"
+  [[ "$library_tagger_date" == "$facts_tag_created" ]] || {
+    echo "Live library tagger.date does not equal release-facts library_tag_created_at_utc." >&2
+    return 1
+  }
+  if ! library_release="$(gh api "repos/${repository}/releases/tags/${library_tag}")"; then
+    echo "Unable to read live library GitHub Release ${library_tag}." >&2
+    return 1
+  fi
+  published_at="$(jq -r '.published_at' <<<"$library_release")"
+  [[ "$published_at" == "$facts_release_published" ]] || {
+    echo "Live library release published_at does not equal release-facts library_release_published_at_utc." >&2
+    return 1
+  }
+
+  if ! live_ref="$(gh api "repos/${repository}/git/ref/tags/${tag}")"; then
+    echo "Unable to read live template tag ref ${tag}." >&2
+    return 1
+  fi
+  live_object="$(jq -r '.object.sha' <<<"$live_ref")"
+  live_type="$(jq -r '.object.type' <<<"$live_ref")"
+  if [[ "$live_type" != "tag" ]]; then
+    echo "${tag} must be an annotated tag: its ref object type is '${live_type}', not 'tag'." >&2
+    return 1
+  fi
+  if ! tag_object="$(gh api "repos/${repository}/git/tags/${live_object}")"; then
+    echo "Unable to peel annotated template tag ${tag}." >&2
+    return 1
+  fi
+  peeled="$(jq -r '.object.sha' <<<"$tag_object")"
+  tagger_date="$(jq -r '.tagger.date' <<<"$tag_object")"
+  [[ "$peeled" == "$merged_sha" ]] || {
+    echo "Template tag ${tag} does not point at the validated merged SHA." >&2
+    return 1
+  }
+  local template_epoch library_tag_epoch library_release_epoch
+  template_epoch="$(parse_utc_epoch "$tagger_date")"
+  library_tag_epoch="$(parse_utc_epoch "$library_tagger_date")"
+  library_release_epoch="$(parse_utc_epoch "$published_at")"
+  (( template_epoch > library_tag_epoch )) || {
+    echo "Template tagger.date must be strictly later than the library tag tagger.date." >&2
+    return 1
+  }
+  (( template_epoch > library_release_epoch )) || {
+    echo "Template tagger.date must be strictly later than the library release published_at." >&2
+    return 1
+  }
+
+  if (( run_attempt == 1 )); then
+    package_version_absent "Sekiban.Dcb.Templates" "$version" "$feed_base_url" || return 1
+  else
+    [[ "$live_object" == "$trigger_tag_object" ]] || {
+      echo "Retry live template tag object ${live_object} differs from triggering tag object ${trigger_tag_object}." >&2
+      return 1
+    }
+  fi
+  echo "Template live guard passed for ${tag} at attempt ${run_attempt}."
+}
+
+check_library_post_push_equality() {
+  local version="$1"
+  local local_out_dir="$2"
+  local feed_base_url="${3:-https://api.nuget.org/v3-flatcontainer}"
+  require_value version "$version"
+  require_value local-out-dir "$local_out_dir"
+  [[ -d "$local_out_dir" ]] || {
+    echo "Local package directory does not exist: ${local_out_dir}" >&2
+    return 1
+  }
+  local package package_lower local_path remote_path temporary http_code
+  for package in "${dcb_package_ids[@]}"; do
+    package_lower="$(printf '%s' "$package" | tr '[:upper:]' '[:lower:]')"
+    local_path="$local_out_dir/${package}.${version}.nupkg"
+    [[ -f "$local_path" ]] || {
+      echo "Local package missing: ${local_path}" >&2
+      return 1
+    }
+    if [[ "$feed_base_url" == file://* ]]; then
+      remote_path="$(printf '%s' "$feed_base_url" | sed 's#^file://##')/$package_lower/$version/$package_lower.$version.nupkg"
+      [[ -f "$remote_path" ]] || {
+        echo "Public package missing on feed: ${package}/${version}" >&2
+        return 1
+      }
+      compare_semantic_package_manifests "$local_path" "$remote_path" || return 1
+      continue
+    fi
+    temporary="$(mktemp /tmp/sek-public-pkg.XXXXXX)"
+    if ! http_code="$(curl --silent --show-error --location --retry 0 \
+        --connect-timeout 20 --max-time 60 \
+        --output "$temporary" --write-out '%{http_code}' \
+        "$feed_base_url/$package_lower/$version/$package_lower.$version.nupkg")"; then
+      rm -f "$temporary"
+      echo "Unable to download public package ${package}/${version}." >&2
+      return 1
+    fi
+    if [[ "$http_code" != 200 ]]; then
+      rm -f "$temporary"
+      echo "Public package ${package}/${version} returned HTTP ${http_code}." >&2
+      return 1
+    fi
+    if ! compare_semantic_package_manifests "$local_path" "$temporary"; then
+      rm -f "$temporary"
+      return 1
+    fi
+    rm -f "$temporary"
+  done
+  echo "Public library packages match the local pack under compare_semantic_package_manifests (${#dcb_package_ids[@]}/${#dcb_package_ids[@]})."
+}
+
+check_template_post_push_equality() {
+  local version="$1"
+  local local_package="$2"
+  local feed_base_url="${3:-https://api.nuget.org/v3-flatcontainer}"
+  require_value version "$version"
+  require_value local-package "$local_package"
+  [[ -f "$local_package" ]] || {
+    echo "Local template package does not exist: ${local_package}" >&2
+    return 1
+  }
+  local package="Sekiban.Dcb.Templates"
+  local package_lower="sekiban.dcb.templates"
+  if [[ "$feed_base_url" == file://* ]]; then
+    local remote_path
+    remote_path="$(printf '%s' "$feed_base_url" | sed 's#^file://##')/$package_lower/$version/$package_lower.$version.nupkg"
+    [[ -f "$remote_path" ]] || {
+      echo "Public template package missing on feed." >&2
+      return 1
+    }
+    compare_semantic_package_manifests "$local_package" "$remote_path" || return 1
+    echo "Public template package matches the local pack under compare_semantic_package_manifests."
+    return 0
+  fi
+  local temporary http_code
+  temporary="$(mktemp /tmp/sek-public-template.XXXXXX)"
+  if ! http_code="$(curl --silent --show-error --location --retry 0 \
+      --connect-timeout 20 --max-time 60 \
+      --output "$temporary" --write-out '%{http_code}' \
+      "$feed_base_url/$package_lower/$version/$package_lower.$version.nupkg")"; then
+    rm -f "$temporary"
+    echo "Unable to download public template package." >&2
+    return 1
+  fi
+  if [[ "$http_code" != 200 ]]; then
+    rm -f "$temporary"
+    echo "Public template package returned HTTP ${http_code}." >&2
+    return 1
+  fi
+  if ! compare_semantic_package_manifests "$local_package" "$temporary"; then
+    rm -f "$temporary"
+    return 1
+  fi
+  rm -f "$temporary"
+  echo "Public template package matches the local pack under compare_semantic_package_manifests."
 }
 
 check_drift() {
@@ -874,7 +1236,51 @@ PY
   check_template_retry "$retry_package" "10.22.0" "$retry_base" 2
   rm -rf "$retry_feed"
   rm -rf "$fake_feed"
-  echo "Release-gate fixtures passed, including feed metadata/nuspec, immutable template retry, stale-but-valid library-ahead drift, and the exact DCB manifest."
+
+  # AC2: named lightweight-tag error before any git/tags/{id} read.
+  local lightweight_root lightweight_output
+  lightweight_root="$(mktemp -d "${TMPDIR:-/tmp}/sek-g82-lightweight.XXXXXX")"
+  mkdir -p "$lightweight_root"
+  git -C "$lightweight_root" init >/dev/null
+  git -C "$lightweight_root" config user.email "g82@example.com"
+  git -C "$lightweight_root" config user.name "g82"
+  echo lightweight > "$lightweight_root/README"
+  git -C "$lightweight_root" add README
+  git -C "$lightweight_root" commit -m init >/dev/null
+  local lightweight_sha
+  lightweight_sha="$(git -C "$lightweight_root" rev-parse HEAD)"
+  PATH="$(mktemp -d "${TMPDIR:-/tmp}/sek-g82-gh-shim.XXXXXX"):$PATH"
+  cat > "${PATH%%:*}/gh" <<'GH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$*" == *"git/ref/tags/"* ]]; then
+  cat <<JSON
+{"ref":"refs/tags/dcb-v10.22.0","object":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","type":"commit"}}
+JSON
+  exit 0
+fi
+echo "unexpected gh invocation: $*" >&2
+exit 1
+GH
+  chmod +x "${PATH%%:*}/gh"
+  if lightweight_output="$(check_live_tag "$lightweight_root" "dcb-v10.22.0" "$lightweight_sha" 2>&1)"; then
+    echo "$lightweight_output"
+    echo "Expected lightweight live tag to fail with the named annotated-tag error." >&2
+    return 1
+  fi
+  if [[ "$lightweight_output" != *"must be an annotated tag: its ref object type is 'commit', not 'tag'."* ]]; then
+    echo "$lightweight_output"
+    echo "Lightweight-tag failure did not use the fixed named error." >&2
+    return 1
+  fi
+  if [[ "$lightweight_output" == *"git/tags/"* ]]; then
+    echo "$lightweight_output"
+    echo "Lightweight-tag failure must not reach git/tags/{id}." >&2
+    return 1
+  fi
+  rm -rf "$lightweight_root" "${PATH%%:*}"
+
+  echo "Release-gate fixtures passed, including feed metadata/nuspec, immutable template retry, stale-but-valid library-ahead drift, named lightweight-tag errors, and the exact DCB manifest."
 }
 
 mode="${1:-}"
@@ -889,6 +1295,11 @@ authorities_file=""
 workflow_file=""
 tag=""
 expected_peeled=""
+facts_file=""
+run_attempt="1"
+trigger_tag_object=""
+local_out_dir=""
+local_package=""
 timeout_seconds=900
 interval_seconds=15
 request_timeout_seconds=20
@@ -906,6 +1317,11 @@ while (( $# > 0 )); do
     --workflow-file) workflow_file="$2"; shift 2 ;;
     --tag) tag="$2"; shift 2 ;;
     --expected-peeled) expected_peeled="$2"; shift 2 ;;
+    --facts-file) facts_file="$2"; shift 2 ;;
+    --run-attempt) run_attempt="$2"; shift 2 ;;
+    --trigger-tag-object) trigger_tag_object="$2"; shift 2 ;;
+    --local-out-dir) local_out_dir="$2"; shift 2 ;;
+    --local-package) local_package="$2"; shift 2 ;;
     --timeout-seconds) timeout_seconds="$2"; shift 2 ;;
     --interval-seconds) interval_seconds="$2"; shift 2 ;;
     --request-timeout-seconds) request_timeout_seconds="$2"; shift 2 ;;
@@ -925,8 +1341,25 @@ case "$mode" in
   --check-live-tag)
     check_live_tag "$repo_root" "$tag" "$expected_peeled"
     ;;
+  --check-library-live-guard)
+    check_library_live_guard "$repo_root" "$version" "$facts_file" "$run_attempt" "$trigger_tag_object" "$feed_base_url"
+    ;;
+  --check-template-live-guard)
+    check_template_live_guard "$repo_root" "$version" "$facts_file" "$run_attempt" "$trigger_tag_object" "$feed_base_url"
+    ;;
+  --check-library-post-push-equality)
+    check_library_post_push_equality "$version" "$local_out_dir" "$feed_base_url"
+    ;;
+  --check-template-post-push-equality)
+    check_template_post_push_equality "$version" "${local_package:-$package_path}" "$feed_base_url"
+    ;;
   --wait-for-published-template)
     wait_for_published_template "$version" "$timeout_seconds" "$interval_seconds" "$feed_base_url" "$request_timeout_seconds"
+    ;;
+  --compare-semantic-manifests)
+    require_value left-package "$package_path"
+    require_value right-package "$local_package"
+    compare_semantic_package_manifests "$package_path" "$local_package"
     ;;
   --check-template-retry)
     check_template_retry "$package_path" "$version" "$feed_base_url" "$request_timeout_seconds"

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 --version <version> --state <state> --output-dir <directory> --manifest <directory>/bundle.json [--ref <40-char-commit>] [--verify-tags library|all]" >&2
+  echo "Usage: $0 --version <version> --state <state> --output-dir <directory> --manifest <directory>/bundle.json [--ref <40-char-commit>] [--verify-tags none|library|all]" >&2
   exit 2
 }
 
@@ -315,21 +315,19 @@ verify_live_tag() {
   live_object="$(jq -r '.object.sha' "$live_ref_file")"
   live_type="$(jq -r '.object.type' "$live_ref_file")"
   rm -f "$live_ref_file"
-  [[ "$live_object" == "$expected_object" ]] || { echo "Live tag ${tag_name} object ID does not match the host record." >&2; return 1; }
-  if [[ "$live_type" == tag ]]; then
-    tag_object_file="$(mktemp "${TMPDIR:-/tmp}/sek-live-tag-object.XXXXXX")"
-    if ! gh api "repos/${target_repository}/git/tags/${live_object}" > "$tag_object_file"; then
-      rm -f "$tag_object_file"
-      return 1
-    fi
-    peeled="$(jq -r '.object.sha' "$tag_object_file")"
-    rm -f "$tag_object_file"
-  elif [[ "$live_type" == commit ]]; then
-    peeled="$live_object"
-  else
-    echo "Live tag ${tag_name} has unsupported object type ${live_type}." >&2
+  # Named lightweight-tag error: check ref object.type before any git/tags/{id} read.
+  if [[ "$live_type" != "tag" ]]; then
+    echo "${tag_name} must be an annotated tag: its ref object type is '${live_type}', not 'tag'." >&2
     return 1
   fi
+  [[ "$live_object" == "$expected_object" ]] || { echo "Live tag ${tag_name} object ID does not match the host record." >&2; return 1; }
+  tag_object_file="$(mktemp "${TMPDIR:-/tmp}/sek-live-tag-object.XXXXXX")"
+  if ! gh api "repos/${target_repository}/git/tags/${live_object}" > "$tag_object_file"; then
+    rm -f "$tag_object_file"
+    return 1
+  fi
+  peeled="$(jq -r '.object.sha' "$tag_object_file")"
+  rm -f "$tag_object_file"
   [[ "$peeled" == "$expected_peeled" ]] || { echo "Live tag ${tag_name} peeled commit does not match the host record." >&2; return 1; }
 }
 
