@@ -33,6 +33,28 @@ tip (`compare/main...{head}` reports `behind_by == 0`, or the merge-base equals
 the `main` tip). Otherwise update, re-run CI / PostgreSQL dispatch, and
 re-review.
 
+## Implementation-review transport for the release-candidate PR
+
+The PR whose merge becomes the closed schema-v2 `prepared` `candidate` must
+finish its exact-head implementation review before merge. Same-account GitHub
+reviews stay `COMMENTED` and must carry exactly one canonical semantic verdict
+line of the form `Verdict: **APPROVE**` (a leading list marker `- ` is allowed).
+
+Complete the review through intent-cli notify so the host transport matches the
+closed validator:
+
+- outbox `from_role` is `review` and `to_role` is `orchestrator` (not
+  `reviewer`);
+- `result_nonce` is present and identical on the outbox record line, the
+  delivered line, and the orchestrator report receipt;
+- the orchestrator receipt reaches `report_arrived=true` before merge;
+- chronology is GitHub review `submitted_at` < outbox record `created_at` <=
+  receipt `reported_at` <= `delivered_at` < merge.
+
+Do not invent or rewrite transport after merge to repair a missing nonce, wrong
+role, or open receipt. Cut a new tip-binder PR instead and gather fresh
+integrated-head CI on that tip before authoring `prepared`.
+
 ## Pre-tag package absence
 
 Before the library tag push, confirm none of the 26 `{id}/{V}` packages exist
