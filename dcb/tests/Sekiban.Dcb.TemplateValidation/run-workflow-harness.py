@@ -361,7 +361,7 @@ if [[ "${{1:-}}" == nuget && "${{2:-}}" == push ]]; then
         [[ -f "$pkg" ]] || continue
         base="$(basename "$pkg")"
         idver="${{base%.nupkg}}"
-        if [[ "$idver" =~ ^(.*)\.([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+        if [[ "$idver" =~ ^(.*)\\.([0-9]+\\.[0-9]+\\.[0-9]+)$ ]]; then
           id="${{BASH_REMATCH[1]}}"
           version="${{BASH_REMATCH[2]}}"
         else
@@ -575,10 +575,13 @@ def execute_workflow(
     template_tag_object = None
     if mode == "template":
         # Annotated template tag on same head.
-        seed = work / "mirror-lib-seed-reuse"
         # Recreate template annotated tag object identity from a second annotated tag in a clone.
+        # Bare clones do not carry user.name/email; runners without a global identity fail
+        # annotated-tag creation unless we set a local identity here.
         clone = work / "tag-seed"
         subprocess.check_call(["git", "clone", str(mirror), str(clone)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.check_call(["git", "config", "user.email", "g82@example.com"], cwd=clone)
+        subprocess.check_call(["git", "config", "user.name", "g82"], cwd=clone)
         env = os.environ.copy()
         env["GIT_COMMITTER_DATE"] = "2026-09-14T19:00:00Z"
         env["GIT_AUTHOR_DATE"] = "2026-09-14T19:00:00Z"
