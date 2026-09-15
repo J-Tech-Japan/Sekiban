@@ -728,6 +728,19 @@ internal static class Program
             workflowRoot,
             "dcb_azure_queue_packaged_consumer.yml");
         var publishWorkflow = Path.Combine(workflowRoot, "packagesDcbTemplate.yml");
+        var stageCheckWorkflow = Path.Combine(workflowRoot, "dcb_release_record_check.yml");
+        var workflowHarnessScript = Path.Combine(
+            repoRoot,
+            "dcb",
+            "tests",
+            "Sekiban.Dcb.TemplateValidation",
+            "run-workflow-harness.sh");
+        var libraryPackDeterminismScript = Path.Combine(
+            repoRoot,
+            "dcb",
+            "tests",
+            "Sekiban.Dcb.TemplateValidation",
+            "run-library-pack-determinism.sh");
         var packagedConsumerScript = Path.Combine(
             repoRoot,
             "dcb",
@@ -751,6 +764,9 @@ internal static class Program
         Assert(File.Exists(dcbPackageWorkflow), "The DCB package workflow is missing.");
         Assert(File.Exists(azureQueueConsumerWorkflow), "The Azure Queue PR packaged-consumer workflow is missing.");
         Assert(File.Exists(publishWorkflow), "The DCB template publish workflow is missing.");
+        Assert(File.Exists(stageCheckWorkflow), "The DCB release record stage-check workflow is missing.");
+        Assert(File.Exists(workflowHarnessScript), "The workflow harness script is missing.");
+        Assert(File.Exists(libraryPackDeterminismScript), "The library pack determinism script is missing.");
         Assert(File.Exists(packagedConsumerScript), "The DCB packaged-consumer script is missing.");
         Assert(File.Exists(azureQueueConsumerScript), "The Azure Queue packaged-consumer script is missing.");
         Assert(File.Exists(hostRecordReader), "The immutable host release-record reader is missing.");
@@ -871,7 +887,10 @@ internal static class Program
                      "dcb/tests/Sekiban.Dcb.Postgres.Tests/run-packaged-consumer.sh",
                      ".github/workflows/dcb_template_validation.yml",
                      ".github/workflows/packagesDcbTemplate.yml",
-                     "validate-release-tags.sh --check-drift"
+                     ".github/workflows/dcb_release_record_check.yml",
+                     "validate-release-tags.sh --check-drift",
+                     "run-workflow-harness.sh",
+                     "run-library-pack-determinism.sh"
                  })
         {
             Assert(validation.Contains(required, StringComparison.Ordinal),
@@ -881,12 +900,21 @@ internal static class Program
         Assert(validation.Contains("if: github.event_name == 'schedule'", StringComparison.Ordinal) &&
                !validation.Contains("if: github.event_name != 'pull_request'", StringComparison.Ordinal),
             "The currency-drift job must be schedule-only; workflow_dispatch must remain packaged-consumer-only.");
+        Assert(File.ReadAllText(libraryPackDeterminismScript).Contains(
+                "LIBRARY PACK DETERMINISM: 26/26 equal",
+                StringComparison.Ordinal),
+            "The library pack determinism script must print the fixed determinism line.");
+        Assert(!validation.Contains("SEKIBAN_RELEASE_RECORD_TOKEN", StringComparison.Ordinal) &&
+               !validation.Contains("environment: dcb-release", StringComparison.Ordinal),
+            "PR-triggered template validation must neither read the release-record token nor declare dcb-release.");
 
         RequireStepWithRun(
             ReadNamedWorkflowSteps(validation),
             "dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh",
             "The PR validation workflow must run the packaged-consumer path.");
         ValidatePublishWorkflow(dcbPackage, publish);
+        ValidateStageCheckWorkflow(repoRoot);
+        ValidateTokenEnvironments(repoRoot);
 
         ValidateConsumerScripts(repoRoot, packagedConsumerScript, azureQueueConsumerScript);
     }
@@ -906,37 +934,69 @@ internal static class Program
     private static void ValidatePublishWorkflow(string dcbPackage, string publish)
     {
         var dcbPackageSteps = ReadNamedWorkflowSteps(dcbPackage);
+        Assert(dcbPackage.Contains("environment: dcb-release", StringComparison.Ordinal),
+            "The library workflow job must declare environment: dcb-release.");
+        Assert(!dcbPackage.Contains("base64 --decode", StringComparison.Ordinal) &&
+               !dcbPackage.Contains("jq -r '.content'", StringComparison.Ordinal),
+            "The library workflow must not decode pointer or payload bytes.");
+        var libraryTrigger = RequireNamedStep(dcbPackageSteps, "Export triggering library tag object id");
         var libraryRecord = RequireNamedStep(dcbPackageSteps, "Read immutable host-owned release record");
-        var libraryRecordValidation = RequireNamedStep(dcbPackageSteps, "Validate canonical library-tagged release state before finalization");
+        var libraryRecordValidation = RequireNamedStep(dcbPackageSteps, "Validate canonical prepared release state before pack");
+        var libraryLiveGuard = RequireNamedStep(dcbPackageSteps, "Enforce library live guard before push");
         var libraryPush = RequireNamedStep(dcbPackageSteps, "Push to NuGet.org");
         var libraryVisibility = RequireNamedStep(dcbPackageSteps, "Wait for exact public library visibility");
+        var libraryEquality = RequireNamedStep(dcbPackageSteps, "Prove public library packages match local pack");
         var libraryRelease = RequireNamedStep(dcbPackageSteps, "Create GitHub Release");
+        Assert(libraryTrigger.Body.Contains("github.event.after", StringComparison.Ordinal) &&
+               libraryTrigger.Body.Contains("EVENT_AFTER", StringComparison.Ordinal) &&
+               libraryTrigger.Body.Contains("TRIGGER_TAG_OBJECT_ID", StringComparison.Ordinal),
+            "The library workflow must export github.event.after as TRIGGER_TAG_OBJECT_ID on every attempt.");
         Assert(libraryRecord.Body.Contains("read-host-release-record.sh", StringComparison.Ordinal) &&
                libraryRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_TOKEN", StringComparison.Ordinal) &&
                libraryRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_REF", StringComparison.Ordinal) &&
-               libraryRecord.Body.Contains("--verify-tags library", StringComparison.Ordinal) &&
+               libraryRecord.Body.Contains("--verify-tags none", StringComparison.Ordinal) &&
                !libraryRecord.Body.Contains("github.token", StringComparison.Ordinal) &&
-               libraryRecord.Body.Contains("--state 'library-tagged/incomplete'", StringComparison.Ordinal),
-            "The library workflow must read the immutable host record at library-tagged/incomplete.");
+               libraryRecord.Body.Contains("--state prepared", StringComparison.Ordinal),
+            "The library workflow must read the immutable host record at prepared with --verify-tags none.");
         Assert(libraryRecord.Body.Contains("--output-dir", StringComparison.Ordinal) &&
                libraryRecord.Body.Contains("--manifest", StringComparison.Ordinal),
             "The library workflow must consume the closed bundle/manifest reader boundary.");
         Assert(libraryRecordValidation.Body.Contains("release-record --bundle", StringComparison.Ordinal) &&
                libraryRecordValidation.Body.Contains("--manifest", StringComparison.Ordinal) &&
-               libraryRecordValidation.Body.Contains("--state 'library-tagged/incomplete'", StringComparison.Ordinal),
-            "The library workflow must validate the canonical library-tagged state before finalization.");
-        Assert(libraryRecord.Ordinal < libraryRecordValidation.Ordinal &&
-               libraryRecordValidation.Ordinal < libraryPush.Ordinal,
-            "The library record gate must precede package publication and release finalization.");
+               libraryRecordValidation.Body.Contains("--state prepared", StringComparison.Ordinal) &&
+               libraryRecordValidation.Body.Contains("--merged-sha-output", StringComparison.Ordinal) &&
+               libraryRecordValidation.Body.Contains("--release-facts-output", StringComparison.Ordinal) &&
+               libraryRecordValidation.Body.Contains("HEAD^{commit}", StringComparison.Ordinal) &&
+               !libraryRecordValidation.Body.Contains("base64 --decode", StringComparison.Ordinal) &&
+               !libraryRecordValidation.Body.Contains(".merged_sha", StringComparison.Ordinal),
+            "The library workflow must validate prepared via merged-sha/release-facts outputs only.");
+        Assert(libraryLiveGuard.Body.Contains("--check-library-live-guard", StringComparison.Ordinal) &&
+               libraryLiveGuard.Body.Contains("--facts-file", StringComparison.Ordinal),
+            "The library workflow must run the fail-closed live guard from release facts before push.");
+        Assert(libraryEquality.Body.Contains("--check-library-post-push-equality", StringComparison.Ordinal),
+            "The library workflow must prove public packages match the local pack before the GitHub Release.");
+        Assert(libraryTrigger.Ordinal < libraryRecord.Ordinal &&
+               libraryRecord.Ordinal < libraryRecordValidation.Ordinal &&
+               libraryRecordValidation.Ordinal < libraryLiveGuard.Ordinal &&
+               libraryLiveGuard.Ordinal < libraryPush.Ordinal,
+            "The library record and live guards must precede package publication.");
         Assert(dcbPackage.Contains("body_path: out/library-release-body.md", StringComparison.Ordinal) &&
                dcbPackage.Contains("draft: false", StringComparison.Ordinal),
             "The library release must use the reviewed bilingual body and be explicitly non-draft.");
-        Assert(libraryPush.Ordinal < libraryVisibility.Ordinal && libraryVisibility.Ordinal < libraryRelease.Ordinal,
-            "The library workflow must wait for exact public visibility before creating its release.");
+        Assert(libraryPush.Ordinal < libraryVisibility.Ordinal &&
+               libraryVisibility.Ordinal < libraryEquality.Ordinal &&
+               libraryEquality.Ordinal < libraryRelease.Ordinal,
+            "The library workflow must wait, prove semantic equality, then create its release.");
 
+        Assert(!publish.Contains("base64 --decode", StringComparison.Ordinal),
+            "The template workflow must not decode pointer or payload bytes.");
         var publishSteps = ReadNamedWorkflowSteps(publish);
+        Assert(publish.Contains("environment: dcb-release", StringComparison.Ordinal),
+            "The template workflow job must declare environment: dcb-release.");
+        var templateTrigger = RequireNamedStep(publishSteps, "Export triggering template tag object id");
         var templateRecord = RequireNamedStep(publishSteps, "Read immutable host-owned release record");
         var templateRecordValidation = RequireNamedStep(publishSteps, "Validate canonical libraries-verified state before template pack");
+        var templateFetch = RequireNamedStep(publishSteps, "Fetch tags before live checks");
         var publishParity = RequireNamedStep(publishSteps, "Verify published library/template parity before pack");
         var packageAvailability = RequireNamedStep(publishSteps, "Wait for all published DCB packages");
         var pack = RequireNamedStep(publishSteps, "Pack Template");
@@ -946,9 +1006,15 @@ internal static class Program
             "The publish workflow must run the packaged-consumer/docs path.");
         var push = RequireNamedStep(publishSteps, "Push Template");
         var retryGuard = RequireNamedStep(publishSteps, "Reject changed same-version template before duplicate-safe retry");
+        var templateLiveGuard = RequireNamedStep(publishSteps, "Enforce template live guard before push");
         var templateVisibility = RequireNamedStep(publishSteps, "Wait for exact public template visibility");
+        var templateEquality = RequireNamedStep(publishSteps, "Prove public template package matches local pack");
         var templateRelease = RequireNamedStep(publishSteps, "Create GitHub Release");
         var templateLiveTag = RequireNamedStep(publishSteps, "Validate live template tag identity before template pack");
+        Assert(templateTrigger.Body.Contains("github.event.after", StringComparison.Ordinal) &&
+               templateTrigger.Body.Contains("EVENT_AFTER", StringComparison.Ordinal) &&
+               templateTrigger.Body.Contains("TRIGGER_TAG_OBJECT_ID", StringComparison.Ordinal),
+            "The template workflow must export github.event.after as TRIGGER_TAG_OBJECT_ID on every attempt.");
         Assert(templateRecord.Body.Contains("read-host-release-record.sh", StringComparison.Ordinal) &&
                templateRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_TOKEN", StringComparison.Ordinal) &&
                templateRecord.Body.Contains("SEKIBAN_RELEASE_RECORD_REF", StringComparison.Ordinal) &&
@@ -961,16 +1027,26 @@ internal static class Program
             "The template workflow must consume the closed bundle/manifest reader boundary.");
         Assert(templateRecordValidation.Body.Contains("release-record --bundle", StringComparison.Ordinal) &&
                templateRecordValidation.Body.Contains("--manifest", StringComparison.Ordinal) &&
-               templateRecordValidation.Body.Contains("--state libraries-verified", StringComparison.Ordinal),
-            "The template workflow must validate the canonical libraries-verified state before packing.");
+               templateRecordValidation.Body.Contains("--state libraries-verified", StringComparison.Ordinal) &&
+               templateRecordValidation.Body.Contains("--merged-sha-output", StringComparison.Ordinal) &&
+               templateRecordValidation.Body.Contains("--release-facts-output", StringComparison.Ordinal) &&
+               !templateRecordValidation.Body.Contains("base64 --decode", StringComparison.Ordinal),
+            "The template workflow must validate libraries-verified via merged-sha/release-facts outputs only.");
+        Assert(templateFetch.Body.Contains("git fetch --force --tags", StringComparison.Ordinal),
+            "The template workflow must fetch tags before live checks.");
         Assert(templateRecord.Ordinal < templateRecordValidation.Ordinal &&
-               templateRecordValidation.Ordinal < templateLiveTag.Ordinal &&
+               templateRecordValidation.Ordinal < templateFetch.Ordinal &&
+               templateFetch.Ordinal < templateLiveTag.Ordinal &&
                templateLiveTag.Ordinal < pack.Ordinal,
-            "The template record gate must precede template packing.");
+            "The template record gate and fetch-then-live-check ordering must precede template packing.");
         Assert(templateLiveTag.Body.Contains("validate-release-tags.sh", StringComparison.Ordinal) &&
                templateLiveTag.Body.Contains("--check-live-tag", StringComparison.Ordinal) &&
-               templateLiveTag.Body.Contains("dcbTemplates-v${VERSION}", StringComparison.Ordinal),
-            "The template workflow must compare the live template tag object and peeled commit before packing.");
+               templateLiveTag.Body.Contains("dcbTemplates-v${VERSION}", StringComparison.Ordinal) &&
+               templateLiveTag.Body.Contains("validated-merged-sha.txt", StringComparison.Ordinal) &&
+               templateLiveTag.Body.Contains("$MERGED_SHA", StringComparison.Ordinal) &&
+               !templateLiveTag.Body.Contains("base64 --decode", StringComparison.Ordinal) &&
+               !templateLiveTag.Body.Contains("jq -r '.content'", StringComparison.Ordinal),
+            "The template workflow must compare the live template tag using the validated merged SHA file.");
         Assert(publishParity.Body.Contains("validate-release-tags.sh --check-publish-parity", StringComparison.Ordinal),
             "The publish parity workflow step must run the parity gate.");
         Assert(publishParity.Body.Contains("--check-library-verified", StringComparison.Ordinal),
@@ -1000,10 +1076,148 @@ internal static class Program
         Assert(retryGuard.Body.Contains("--check-template-retry", StringComparison.Ordinal) &&
                retryGuard.Body.Contains("--request-timeout-seconds", StringComparison.Ordinal),
             "The template workflow must reject changed same-version content before its duplicate-safe retry.");
-        Assert(retryGuard.Ordinal < push.Ordinal,
-            "The immutable same-version guard must run before the duplicate-safe package push.");
-        Assert(push.Ordinal < templateVisibility.Ordinal && templateVisibility.Ordinal < templateRelease.Ordinal,
-            "The template workflow must wait for exact public visibility before creating its release.");
+        Assert(templateLiveGuard.Body.Contains("--check-template-live-guard", StringComparison.Ordinal) &&
+               templateLiveGuard.Body.Contains("--facts-file", StringComparison.Ordinal),
+            "The template workflow must run the fail-closed live guard before push.");
+        Assert(templateEquality.Body.Contains("--check-template-post-push-equality", StringComparison.Ordinal),
+            "The template workflow must prove the public template package matches the local pack before the GitHub Release.");
+        Assert(retryGuard.Ordinal < templateLiveGuard.Ordinal &&
+               templateLiveGuard.Ordinal < push.Ordinal,
+            "The immutable same-version and live guards must run before the duplicate-safe package push.");
+        Assert(push.Ordinal < templateVisibility.Ordinal &&
+               templateVisibility.Ordinal < templateEquality.Ordinal &&
+               templateEquality.Ordinal < templateRelease.Ordinal,
+            "The template workflow must wait, prove semantic equality, then create its release.");
+    }
+
+    private static void ValidateStageCheckWorkflow(string repoRoot)
+    {
+        var path = Path.Combine(repoRoot, ".github", "workflows", "dcb_release_record_check.yml");
+        Assert(File.Exists(path), "The hardened stage-check workflow is missing.");
+        var text = File.ReadAllText(path);
+        Assert(text.Contains("workflow_dispatch:", StringComparison.Ordinal),
+            "The stage-check workflow must be workflow_dispatch only.");
+        Assert(!Regex.IsMatch(text, @"^\s*push:", RegexOptions.Multiline, RegexTimeout) &&
+               !Regex.IsMatch(text, @"^\s*pull_request:", RegexOptions.Multiline, RegexTimeout) &&
+               !text.Contains("pull_request_target", StringComparison.Ordinal),
+            "The stage-check workflow must not add push/pull_request triggers.");
+        Assert(text.Contains("contents: read", StringComparison.Ordinal) &&
+               !text.Contains("contents: write", StringComparison.Ordinal),
+            "The stage-check workflow permissions must be contents: read only.");
+        Assert(text.Contains("environment: dcb-release", StringComparison.Ordinal),
+            "The stage-check job must declare environment: dcb-release.");
+        Assert(text.Contains("type: choice", StringComparison.Ordinal) &&
+               text.Contains("library-tagged/incomplete", StringComparison.Ordinal) &&
+               text.Contains("artifacts-verified", StringComparison.Ordinal),
+            "The stage-check state input must be a fixed choice over the six stages.");
+        Assert(text.Contains("refs/heads/main", StringComparison.Ordinal),
+            "The stage-check workflow must refuse unless github.ref is refs/heads/main.");
+        Assert(!WorkflowRunBlocksContainInputInterpolation(text),
+            "Stage-check inputs must not appear as ${{ inputs.* }} inside run: blocks.");
+        Assert(text.Contains("INPUT_VERSION: ${{ inputs.version }}", StringComparison.Ordinal) &&
+               text.Contains("INPUT_STATE: ${{ inputs.state }}", StringComparison.Ordinal) &&
+               text.Contains("INPUT_REF: ${{ inputs.ref }}", StringComparison.Ordinal) &&
+               text.Contains("INPUT_CANDIDATE: ${{ inputs.candidate }}", StringComparison.Ordinal),
+            "Stage-check inputs must reach scripts only through env:.");
+        Assert(text.Contains("^[0-9]+\\.[0-9]+\\.[0-9]+$", StringComparison.Ordinal) &&
+               text.Contains("^[0-9a-fA-F]{40}$", StringComparison.Ordinal),
+            "Stage-check must validate version and 40-hex ref/candidate patterns.");
+        Assert(text.Contains("read-host-release-record.sh", StringComparison.Ordinal) &&
+               text.Contains("release-record --bundle", StringComparison.Ordinal) &&
+               text.Contains("--merged-sha-output", StringComparison.Ordinal) &&
+               text.Contains("--release-facts-output", StringComparison.Ordinal),
+            "Stage-check must call read-host-release-record.sh and release-record with both outputs.");
+        Assert(text.Contains("INPUT_CANDIDATE", StringComparison.Ordinal) &&
+               text.Contains("HEAD^{commit}", StringComparison.Ordinal),
+            "Stage-check must compare validated merged SHA to candidate and HEAD.");
+        Assert(!text.Contains("set -x", StringComparison.Ordinal) &&
+               !text.Contains("actions/upload-artifact", StringComparison.Ordinal),
+            "Stage-check must not use set -x or artifact uploads.");
+    }
+
+    private static void ValidateTokenEnvironments(string repoRoot)
+    {
+        var workflowRoot = Path.Combine(repoRoot, ".github", "workflows");
+        var expected = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["packagesDcb.yml"] = "build",
+            ["packagesDcbTemplate.yml"] = "build",
+            ["dcb_release_record_check.yml"] = "check"
+        };
+        var observed = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var path in Directory.EnumerateFiles(workflowRoot, "*.yml"))
+        {
+            var name = Path.GetFileName(path);
+            var text = File.ReadAllText(path);
+            if (!text.Contains("SEKIBAN_RELEASE_RECORD_TOKEN", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            Assert(expected.ContainsKey(name),
+                $"Unexpected workflow reads SEKIBAN_RELEASE_RECORD_TOKEN without dcb-release ownership: {name}");
+            Assert(text.Contains("environment: dcb-release", StringComparison.Ordinal),
+                $"Token-reading workflow {name} must declare environment: dcb-release.");
+            observed[name] = expected[name];
+        }
+
+        Assert(observed.Count == expected.Count,
+            "Exactly packagesDcb.yml, packagesDcbTemplate.yml, and dcb_release_record_check.yml may read the release-record token.");
+
+        var validationWorkflow = Path.Combine(workflowRoot, "dcb_template_validation.yml");
+        var validationText = File.ReadAllText(validationWorkflow);
+        Assert(!validationText.Contains("SEKIBAN_RELEASE_RECORD_TOKEN", StringComparison.Ordinal) &&
+               !validationText.Contains("environment: dcb-release", StringComparison.Ordinal),
+            "dcb_template_validation.yml must neither read the release-record token nor declare dcb-release.");
+    }
+
+    private static bool WorkflowRunBlocksContainInputInterpolation(string workflow)
+    {
+        var lines = workflow.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var insideRunBlock = false;
+        var runBlockIndent = string.Empty;
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var line = lines[index];
+            if (Regex.IsMatch(line, @"^\s*run:\s*(?:\||[^\n]*$)", RegexOptions.CultureInvariant, RegexTimeout))
+            {
+                if (line.Contains("${{ inputs.", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                if (line.TrimEnd().EndsWith("|", StringComparison.Ordinal))
+                {
+                    insideRunBlock = true;
+                    runBlockIndent = Regex.Match(line, @"^(\s*)", RegexOptions.CultureInvariant, RegexTimeout).Groups[1].Value + "  ";
+                }
+                else
+                {
+                    insideRunBlock = false;
+                }
+
+                continue;
+            }
+
+            if (!insideRunBlock)
+            {
+                continue;
+            }
+
+            if (line.Length == 0 || line.StartsWith(runBlockIndent, StringComparison.Ordinal))
+            {
+                if (line.Contains("${{ inputs.", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                continue;
+            }
+
+            insideRunBlock = false;
+        }
+
+        return false;
     }
 
     private static void ValidateConsumerScripts(

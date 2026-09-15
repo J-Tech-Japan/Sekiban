@@ -10,6 +10,7 @@ on:
       - '.github/workflows/dcb_template_validation.yml'
       - '.github/workflows/packagesDcbTemplate.yml'
       - '.github/workflows/packagesDcb.yml'
+      - '.github/workflows/dcb_release_record_check.yml'
       - 'docs/releases/**'
       - 'docs/dcb_llm/20_materialized_view.md'
       - 'docs/dcb_llm/11_storage_providers.md'
@@ -44,6 +45,28 @@ jobs:
         run: |
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/pack-local-dcb.sh \
             --repo-root "$GITHUB_WORKSPACE" --output "$GITHUB_WORKSPACE/dcb-local-feed" --version 10.22.0
+
+      - name: Independent second library pack for determinism
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/dcb-local-feed-second"
+          mkdir -p "$GITHUB_WORKSPACE/dcb-local-feed-second"
+          bash dcb/tests/Sekiban.Dcb.TemplateValidation/pack-local-dcb.sh \
+            --repo-root "$GITHUB_WORKSPACE" --output "$GITHUB_WORKSPACE/dcb-local-feed-second" --version 10.22.0
+
+      - name: Prove library pack determinism
+        run: |
+          bash dcb/tests/Sekiban.Dcb.TemplateValidation/run-library-pack-determinism.sh \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --first-feed "$GITHUB_WORKSPACE/dcb-local-feed" \
+            --second-feed "$GITHUB_WORKSPACE/dcb-local-feed-second" \
+            --version 10.22.0 | tee "$RUNNER_TEMP/library-pack-determinism.log"
+          grep -Fxq 'LIBRARY PACK DETERMINISM: 26/26 equal' "$RUNNER_TEMP/library-pack-determinism.log"
+
+      - name: Executable tag-workflow harness
+        run: |
+          bash dcb/tests/Sekiban.Dcb.TemplateValidation/run-workflow-harness.sh \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --local-feed "$GITHUB_WORKSPACE/dcb-local-feed"
 
       - name: Validate packaged consumer path and killing fixtures
         run: |
