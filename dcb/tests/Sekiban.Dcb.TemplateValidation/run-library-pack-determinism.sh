@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# SEK-G82 AC9: prove two independent clean library packs are semantically equal.
+# SEK-G82 AC9: prove two independent clean library packs are semantically equal
+# under compare_semantic_package_manifests (all canonical package entries).
 set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   echo "Usage: $0 --repo-root <path> --first-feed <dir> --second-feed <dir> [--version <version>]" >&2
@@ -36,22 +39,10 @@ if [[ "$first_count" != 26 || "$second_count" != 26 ]]; then
 fi
 
 compare_one() {
-  python3 - "$1" "$2" <<'PY'
-import sys
-import zipfile
-from pathlib import Path
-
-def nuspec(path: Path) -> bytes:
-    with zipfile.ZipFile(path) as archive:
-        names = [name for name in archive.namelist() if name.lower().endswith(".nuspec")]
-        if len(names) != 1:
-            raise SystemExit(f"expected one nuspec in {path}, found {names}")
-        return archive.read(names[0])
-
-left, right = Path(sys.argv[1]), Path(sys.argv[2])
-if nuspec(left) != nuspec(right):
-    raise SystemExit(f"semantic manifests differ: {left.name}")
-PY
+  bash "$script_dir/validate-release-tags.sh" \
+    --compare-semantic-manifests \
+    --package "$1" \
+    --local-package "$2"
 }
 
 while IFS= read -r package; do
@@ -67,12 +58,17 @@ while IFS= read -r package; do
     echo "Second pack reused a first-pack path for $name" >&2
     exit 1
   fi
-  compare_one "$package" "$other"
+  compare_one "$package" "$other" || {
+    echo "Semantic package manifests differ for $name" >&2
+    exit 1
+  }
 done < <(find "$first_feed" -maxdepth 1 -name '*.nupkg' | sort)
 
 echo "LIBRARY PACK DETERMINISM: 26/26 equal"
 
 near_root="$(mktemp -d "${TMPDIR:-/tmp}/sek-g82-near-pack.XXXXXX")"
+cleanup() { rm -rf "$near_root"; }
+trap cleanup EXIT
 cp -R "$second_feed"/. "$near_root/"
 victim="$(find "$near_root" -maxdepth 1 -name "Sekiban.Dcb.Core.${version}.nupkg" | head -n 1)"
 original="$(find "$first_feed" -maxdepth 1 -name "Sekiban.Dcb.Core.${version}.nupkg" | head -n 1)"
@@ -80,30 +76,16 @@ original="$(find "$first_feed" -maxdepth 1 -name "Sekiban.Dcb.Core.${version}.nu
   echo "Could not locate Sekiban.Dcb.Core.${version}.nupkg for the near-case." >&2
   exit 1
 }
+# Near case mutates a non-nuspec canonical entry so compare_semantic_package_manifests kills it.
 python3 - "$victim" <<'PY'
+from zipfile import ZIP_DEFLATED, ZipFile
 import sys
-import zipfile
-from pathlib import Path
-path = Path(sys.argv[1])
-with zipfile.ZipFile(path, "a") as archive:
-    archive.writestr("content/changed-same-version.txt", "changed payload")
-with zipfile.ZipFile(path) as archive:
-    names = [name for name in archive.namelist() if name.lower().endswith(".nuspec")]
-    nuspec_name = names[0]
-    body = archive.read(nuspec_name).decode("utf-8") + "<!--mut-->"
-tmp = path.with_suffix(".tmp.nupkg")
-with zipfile.ZipFile(path) as source, zipfile.ZipFile(tmp, "w") as target:
-    for info in source.infolist():
-        data = source.read(info.filename)
-        if info.filename == nuspec_name:
-            data = body.encode("utf-8")
-        target.writestr(info, data)
-tmp.replace(path)
+path = sys.argv[1]
+with ZipFile(path, "a", compression=ZIP_DEFLATED) as archive:
+    archive.writestr("content/determinism-near-case.txt", "changed payload")
 PY
 if compare_one "$original" "$victim"; then
   echo "Near-case pack determinism unexpectedly passed." >&2
-  rm -rf "$near_root"
   exit 1
 fi
-rm -rf "$near_root"
 echo "LIBRARY PACK DETERMINISM near-case failed as required"

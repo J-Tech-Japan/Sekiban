@@ -448,7 +448,20 @@ check_library_live_guard() {
     return 1
   }
 
-  if gh api "repos/${repository}/git/ref/tags/${template_tag}" >/dev/null 2>&1; then
+  # Fail closed: only an explicit HTTP 404 means the template tag is absent.
+  local template_http template_body
+  template_body="$(mktemp /tmp/sek-template-tag.XXXXXX)"
+  if ! template_http="$(gh api -i "repos/${repository}/git/ref/tags/${template_tag}" 2>"$template_body.err" | tee "$template_body" | head -n 1 | awk '{print $2}')"; then
+    if grep -Eq 'HTTP 404|Not Found \(HTTP 404\)' "$template_body.err" "$template_body" 2>/dev/null; then
+      rm -f "$template_body" "$template_body.err"
+    else
+      cat "$template_body.err" >&2 || true
+      rm -f "$template_body" "$template_body.err"
+      echo "Unable to prove template tag ${template_tag} is absent (non-404 API failure)." >&2
+      return 1
+    fi
+  else
+    rm -f "$template_body" "$template_body.err"
     echo "Template tag ${template_tag} must not exist before the library workflow pushes packages." >&2
     return 1
   fi
@@ -1342,6 +1355,11 @@ case "$mode" in
     ;;
   --wait-for-published-template)
     wait_for_published_template "$version" "$timeout_seconds" "$interval_seconds" "$feed_base_url" "$request_timeout_seconds"
+    ;;
+  --compare-semantic-manifests)
+    require_value left-package "$package_path"
+    require_value right-package "$local_package"
+    compare_semantic_package_manifests "$package_path" "$local_package"
     ;;
   --check-template-retry)
     check_template_retry "$package_path" "$version" "$feed_base_url" "$request_timeout_seconds"

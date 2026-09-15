@@ -24,6 +24,35 @@ from pathlib import Path
 
 import yaml
 
+DCB_PACKAGE_IDS = [
+    "Sekiban.Dcb.BlobStorage.AzureStorage",
+    "Sekiban.Dcb.BlobStorage.S3",
+    "Sekiban.Dcb.ColdStorage",
+    "Sekiban.Dcb.Core",
+    "Sekiban.Dcb.Core.Model",
+    "Sekiban.Dcb.Core.Testing",
+    "Sekiban.Dcb.CosmosDb",
+    "Sekiban.Dcb.DynamoDB",
+    "Sekiban.Dcb.MaterializedView",
+    "Sekiban.Dcb.MaterializedView.MySql",
+    "Sekiban.Dcb.MaterializedView.Orleans",
+    "Sekiban.Dcb.MaterializedView.Postgres",
+    "Sekiban.Dcb.MaterializedView.SqlServer",
+    "Sekiban.Dcb.MaterializedView.Sqlite",
+    "Sekiban.Dcb.Orleans.AzureQueue",
+    "Sekiban.Dcb.Orleans.Core",
+    "Sekiban.Dcb.Orleans.WithResult",
+    "Sekiban.Dcb.Orleans.WithoutResult",
+    "Sekiban.Dcb.Postgres",
+    "Sekiban.Dcb.Sqlite",
+    "Sekiban.Dcb.WithResult",
+    "Sekiban.Dcb.WithResult.Model",
+    "Sekiban.Dcb.WithResult.Testing",
+    "Sekiban.Dcb.WithoutResult",
+    "Sekiban.Dcb.WithoutResult.Model",
+    "Sekiban.Dcb.WithoutResult.Testing",
+]
+
 ALLOWLIST = {
     "github.event.after",
     "github.ref_name",
@@ -38,6 +67,13 @@ ALLOWLIST = {
     "inputs.candidate",
 }
 
+PINNED_USES = {
+    "actions/checkout@v4",
+    "actions/setup-dotnet@v4",
+    "softprops/action-gh-release@v2",
+}
+
+# Heavy pack, consumer, and publication-adjacent steps AC8 allows the harness to stub.
 STUB_STEP_NAMES = {
     "Setup .NET 8",
     "Setup .NET 9",
@@ -46,7 +82,6 @@ STUB_STEP_NAMES = {
     "Build with dotnet",
     "Build release-record and package validators",
     "Build release validators",
-    "Validate exact 26-package source manifest before pack",
     "Pack NuGet packages",
     "Inspect exact package set and dependency groups before push",
     "Validate Azure Queue V2 packaged consumer and dependency groups",
@@ -57,14 +92,9 @@ STUB_STEP_NAMES = {
     "Verify reviewed template release body input",
     "Assemble reviewed template release body",
     "Pack Template",
-    "Wait for all published DCB packages",
-    "Wait for exact public library visibility",
-    "Wait for exact public template visibility",
     "Create GitHub Release",
     "Check out release candidate",
     "Build release-record validator",
-    "Verify published library/template parity before pack",
-    "Reject changed same-version template before duplicate-safe retry",
 }
 
 EXPR_RE = re.compile(r"\$\{\{\s*([^}]+?)\s*\}\}")
@@ -81,6 +111,13 @@ def die(message: str) -> None:
 def write_executable(path: Path, body: str) -> None:
     path.write_text(body, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def mutate_nupkg_entry(path: Path, entry_name: str, payload: str) -> None:
+    import zipfile
+
+    with zipfile.ZipFile(path, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(entry_name, payload)
 
 
 def write_minimal_nupkg(path: Path, package_id: str, package_version: str) -> None:
@@ -179,9 +216,25 @@ def emulate_checkout(mirror: Path, dest: Path, tag_name: str, head: str, fetch_d
     )
 
 
+def seed_feed_from_local_feed(feed_root: Path, local_feed: Path, version: str) -> None:
+    for pkg in local_feed.glob("*.nupkg"):
+        base = pkg.stem
+        if not base.endswith(f".{version}"):
+            continue
+        package_id = base[: -(len(version) + 1)]
+        lower = package_id.lower()
+        target_dir = feed_root / lower / version
+        target_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(pkg, target_dir / f"{lower}.{version}.nupkg")
+        (feed_root / lower / "index.json").write_text(
+            json.dumps({"versions": [version]}) + "\n", encoding="utf-8"
+        )
+
+
 def copy_repo_surface(repo_root: Path, dest: Path) -> None:
     for relative in [
         ".github/workflows",
+        "dcb/src",
         "dcb/tests/Sekiban.Dcb.TemplateValidation",
         "dcb/tests/Sekiban.Dcb.Orleans.Tests",
         "docs/releases",
@@ -215,32 +268,43 @@ def install_shims(
         f"""#!/usr/bin/env bash
 set -euo pipefail
 args=("$@")
-joined="${{args[*]}}"
-api_root={json.dumps(str(api_root))}
-if [[ "$joined" == api* ]]; then
-  route=""
-  for ((i=0; i<${{#args[@]}}; i++)); do
-    if [[ "${{args[$i]}}" == repos/* || "${{args[$i]}}" == /repos/* ]]; then
-      route="${{args[$i]#/}}"
-      break
-    fi
-  done
-  [[ -n "$route" ]] || {{ echo "gh shim missing route: $joined" >&2; exit 1; }}
-  # Normalize nested tags route.
-  file="$api_root/${{route//\\//__}}.json"
-  if [[ ! -f "$file" ]]; then
-    # Also try without repos/ prefix variants.
-    alt="$api_root/$(printf '%s' "$route" | tr '/' '_').json"
-    if [[ -f "$alt" ]]; then file="$alt"; else
-      echo "gh shim missing archive for $route ($file)" >&2
-      exit 1
-    fi
-  fi
-  cat "$file"
-  exit 0
+include_headers=0
+route=""
+start=0
+if [[ "${{args[0]:-}}" == api ]]; then
+  start=1
 fi
-echo "gh shim unsupported: $joined" >&2
-exit 1
+for ((i=start; i<${{#args[@]}}; i++)); do
+  case "${{args[$i]}}" in
+    -i|--include) include_headers=1 ;;
+    repos/*|/repos/*) route="${{args[$i]#/}}" ;;
+  esac
+done
+api_root={json.dumps(str(api_root))}
+if [[ -z "$route" ]]; then
+  echo "gh shim missing route: ${{args[*]}}" >&2
+  exit 1
+fi
+file="$api_root/${{route//\\//__}}.json"
+if [[ ! -f "$file" ]]; then
+  alt="$api_root/$(printf '%s' "$route" | tr '/' '_').json"
+  if [[ -f "$alt" ]]; then
+    file="$alt"
+  fi
+fi
+if [[ ! -f "$file" ]]; then
+  if (( include_headers == 1 )); then
+    printf 'HTTP/1.1 404 Not Found\\ncontent-type: application/json\\n\\n'
+  fi
+  echo '{{"message":"Not Found","documentation_url":"https://docs.github.com/rest"}}'
+  echo "gh: Not Found (HTTP 404)" >&2
+  exit 1
+fi
+if (( include_headers == 1 )); then
+  printf 'HTTP/1.1 200 OK\\ncontent-type: application/json\\n\\n'
+fi
+cat "$file"
+exit 0
 """,
     )
     write_executable(
@@ -250,9 +314,11 @@ set -euo pipefail
 out=""
 url=""
 write_out=""
+fail=0
 args=("$@")
 for ((i=0; i<${{#args[@]}}; i++)); do
   case "${{args[$i]}}" in
+    --fail) fail=1 ;;
     --output|-o) out="${{args[$((i+1))]}}" ;;
     --write-out) write_out="${{args[$((i+1))]}}" ;;
     http://*|https://*|file://*) url="${{args[$i]}}" ;;
@@ -268,10 +334,13 @@ if [[ -f "$path" ]]; then
   code=200
   if [[ -n "$out" ]]; then cp "$path" "$out"; fi
 else
-  if [[ -n "$out" ]]; then : > "$out"; fi
+  if [[ -n "$out" ]]; then rm -f "$out"; fi
 fi
 if [[ -n "$write_out" ]]; then
   printf '%s' "$code"
+fi
+if (( fail == 1 && code != 200 )); then
+  exit 22
 fi
 exit 0
 """,
@@ -301,7 +370,12 @@ if [[ "${{1:-}}" == nuget && "${{2:-}}" == push ]]; then
         fi
         lower="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
         mkdir -p "$feed_root/$lower/$version"
-        cp "$pkg" "$feed_root/$lower/$version/$lower.$version.nupkg"
+        target="$feed_root/$lower/$version/$lower.$version.nupkg"
+        if [[ -f "$target" ]]; then
+          echo "STUB nuget push skip-duplicate: $target already exists"
+        else
+          cp "$pkg" "$target"
+        fi
         printf '%s\\n' '{{"versions":["'"$version"'"]}}' > "$feed_root/$lower/index.json"
       done
     fi
@@ -379,6 +453,21 @@ def libraries_facts(version: str, merged_sha: str, library_tag_object: str) -> d
     return facts
 
 
+def library_release_payload(version: str, repo_root: Path) -> dict:
+    lib_tag = f"dcb-v{version}"
+    repository = "J-Tech-Japan/Sekiban"
+    en = (repo_root / f"docs/releases/{lib_tag}-library.en.md").read_text(encoding="utf-8")
+    ja = (repo_root / f"docs/releases/{lib_tag}-library.ja.md").read_text(encoding="utf-8")
+    return {
+        "tag_name": lib_tag,
+        "published_at": "2026-09-14T18:30:00Z",
+        "draft": False,
+        "html_url": f"https://github.com/{repository}/releases/tag/{lib_tag}",
+        "body": en + ja,
+        "assets": [{"name": f"{package}.{version}.nupkg"} for package in DCB_PACKAGE_IDS],
+    }
+
+
 def seed_pass_apis(
     api_root: Path,
     *,
@@ -387,6 +476,7 @@ def seed_pass_apis(
     library_tag_object: str,
     template_tag_object: str | None,
     mode: str,
+    repo_root: Path,
 ) -> None:
     lib_tag = f"dcb-v{version}"
     tmpl_tag = f"dcbTemplates-v{version}"
@@ -430,12 +520,7 @@ def seed_pass_apis(
         write_api(
             api_root,
             f"repos/J-Tech-Japan/Sekiban/releases/tags/{lib_tag}",
-            {
-                "tag_name": lib_tag,
-                "published_at": "2026-09-14T18:30:00Z",
-                "draft": False,
-                "assets": [{"name": f"Sekiban.Dcb.Core.{version}.nupkg"}] * 26,
-            },
+            library_release_payload(version, repo_root),
         )
 
 
@@ -534,6 +619,7 @@ def execute_workflow(
             library_tag_object=library_tag_object,
             template_tag_object=None,
             mode="library",
+            repo_root=repo_root,
         )
     elif mode == "template":
         seed_pass_apis(
@@ -543,8 +629,8 @@ def execute_workflow(
             library_tag_object=library_tag_object,
             template_tag_object=template_tag_object,
             mode="template",
+            repo_root=repo_root,
         )
-        # 26-asset analogue already in release payload.
     else:
         seed_pass_apis(
             api_root,
@@ -553,6 +639,7 @@ def execute_workflow(
             library_tag_object=library_tag_object,
             template_tag_object=None,
             mode="library",
+            repo_root=repo_root,
         )
 
     # Mutant API overlays
@@ -593,12 +680,144 @@ def execute_workflow(
                 "tagger": {"date": "2026-09-14T18:00:00Z"},
             },
         )
+    if mutant == "template-tag-equal-library":
+        assert template_tag_object is not None
+        write_api(
+            api_root,
+            f"repos/J-Tech-Japan/Sekiban/git/tags/{template_tag_object}",
+            {
+                "sha": template_tag_object,
+                "tag": tag_name,
+                "object": {"sha": head, "type": "commit"},
+                "tagger": {"date": "2026-09-14T18:00:00Z"},
+            },
+        )
+    if mutant == "template-tag-before-library":
+        assert template_tag_object is not None
+        write_api(
+            api_root,
+            f"repos/J-Tech-Japan/Sekiban/git/tags/{template_tag_object}",
+            {
+                "sha": template_tag_object,
+                "tag": tag_name,
+                "object": {"sha": head, "type": "commit"},
+                "tagger": {"date": "2026-09-14T17:00:00Z"},
+            },
+        )
+    if mutant == "template-tag-equal-release":
+        assert template_tag_object is not None
+        write_api(
+            api_root,
+            f"repos/J-Tech-Japan/Sekiban/git/tags/{template_tag_object}",
+            {
+                "sha": template_tag_object,
+                "tag": tag_name,
+                "object": {"sha": head, "type": "commit"},
+                "tagger": {"date": "2026-09-14T18:30:00Z"},
+            },
+        )
+    if mutant == "template-wrong-commit":
+        assert template_tag_object is not None
+        wrong = "cccccccccccccccccccccccccccccccccccccccc"
+        write_api(
+            api_root,
+            f"repos/J-Tech-Japan/Sekiban/git/tags/{template_tag_object}",
+            {
+                "sha": template_tag_object,
+                "tag": tag_name,
+                "object": {"sha": wrong, "type": "commit"},
+                "tagger": {"date": "2026-09-14T19:00:00Z"},
+            },
+        )
+    if mutant == "lightweight-template-tag":
+        write_api(
+            api_root,
+            f"repos/J-Tech-Japan/Sekiban/git/ref/tags/{tag_name}",
+            {"ref": f"refs/tags/{tag_name}", "object": {"sha": head, "type": "commit"}},
+        )
+    if mutant == "template-preexisting-package":
+        pkg = "sekiban.dcb.templates"
+        index = feed_root / pkg / "index.json"
+        index.parent.mkdir(parents=True, exist_ok=True)
+        index.write_text(json.dumps({"versions": [version]}) + "\n", encoding="utf-8")
+    if mutant == "library-tag-before-completion":
+        write_api(
+            api_root,
+            f"repos/J-Tech-Japan/Sekiban/git/tags/{library_tag_object}",
+            {
+                "sha": library_tag_object,
+                "tag": f"dcb-v{version}",
+                "object": {"sha": head, "type": "commit"},
+                "tagger": {"date": "2026-09-14T11:00:00Z"},
+            },
+        )
+    if mutant == "library-tag-equal-latest-check":
+        write_api(
+            api_root,
+            f"repos/J-Tech-Japan/Sekiban/git/tags/{library_tag_object}",
+            {
+                "sha": library_tag_object,
+                "tag": f"dcb-v{version}",
+                "object": {"sha": head, "type": "commit"},
+                "tagger": {"date": "2026-09-14T13:00:00Z"},
+            },
+        )
+    if mutant == "library-tag-wrong-commit":
+        wrong = "dddddddddddddddddddddddddddddddddddddddd"
+        write_api(
+            api_root,
+            f"repos/J-Tech-Japan/Sekiban/git/tags/{library_tag_object}",
+            {
+                "sha": library_tag_object,
+                "tag": f"dcb-v{version}",
+                "object": {"sha": wrong, "type": "commit"},
+                "tagger": {"date": "2026-09-14T18:00:00Z"},
+            },
+        )
+    if mutant == "template-ref-exists":
+        tmpl = f"dcbTemplates-v{version}"
+        write_api(
+            api_root,
+            f"repos/J-Tech-Japan/Sekiban/git/ref/tags/{tmpl}",
+            {"ref": f"refs/tags/{tmpl}", "object": {"sha": library_tag_object, "type": "tag"}},
+        )
+    if mutant == "non-404-index-error":
+        pkg = "sekiban.dcb.core"
+        index = feed_root / pkg / "index.json"
+        index.parent.mkdir(parents=True, exist_ok=True)
+        index.write_text("server error\n", encoding="utf-8")
+    if mutant == "retry-different-public-package":
+        seed_feed_from_local_feed(feed_root, local_feed, version)
+        victim = feed_root / "sekiban.dcb.core" / version / f"sekiban.dcb.core.{version}.nupkg"
+        if victim.exists():
+            mutate_nupkg_entry(victim, "content/changed-public.txt", "mutated")
+    if mutant == "template-retry-different-public-package":
+        seed_feed_from_local_feed(feed_root, local_feed, version)
+        pkg = "sekiban.dcb.templates"
+        target = feed_root / pkg / version / f"{pkg}.{version}.nupkg"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        write_minimal_nupkg(target, "Sekiban.Dcb.Templates", version)
+        mutate_nupkg_entry(target, "content/changed-public.txt", "mutated")
+        (feed_root / pkg / "index.json").write_text(
+            json.dumps({"versions": [version]}) + "\n", encoding="utf-8"
+        )
+    if mutant == "guard-removed-library-live-guard":
+        pkg = "sekiban.dcb.core"
+        index = feed_root / pkg / "index.json"
+        index.parent.mkdir(parents=True, exist_ok=True)
+        index.write_text(json.dumps({"versions": [version]}) + "\n", encoding="utf-8")
+
+    if mode == "template" and mutant != "template-preexisting-package":
+        if mutant != "template-retry-different-public-package":
+            seed_feed_from_local_feed(feed_root, local_feed, version)
 
     trigger = library_tag_object if mode == "library" else (template_tag_object or library_tag_object)
-    if mutant == "retry-changed-tag-object":
+    if mutant in {"retry-changed-tag-object", "template-retry-changed-tag-object"}:
         trigger = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    if mutant == "retry-missing-after":
+    if mutant in {"retry-missing-after", "template-retry-missing-after"}:
         trigger = ""
+    if mutant == "retry-same-tag-object":
+        trigger = library_tag_object if mode == "library" else (template_tag_object or library_tag_object)
 
     expr_values = {
         "github.event.after": trigger,
@@ -628,7 +847,18 @@ def execute_workflow(
             "GITHUB_REF": f"refs/tags/{tag_name}" if mode != "stage" else "refs/heads/main",
             "GITHUB_REF_NAME": tag_name if mode != "stage" else "main",
             "GITHUB_REPOSITORY": "J-Tech-Japan/Sekiban",
-            "GITHUB_RUN_ATTEMPT": "2" if mutant in {"retry-changed-tag-object", "retry-missing-after", "retry-same-tag-object"} else "1",
+            "GITHUB_RUN_ATTEMPT": "2"
+            if mutant
+            in {
+                "retry-changed-tag-object",
+                "retry-missing-after",
+                "retry-same-tag-object",
+                "retry-different-public-package",
+                "template-retry-changed-tag-object",
+                "template-retry-missing-after",
+                "template-retry-different-public-package",
+            }
+            else "1",
             "RUNNER_TEMP": str(runner_temp),
             "VERSION": version,
             "GH_TOKEN": "release-token",
@@ -650,7 +880,10 @@ def execute_workflow(
     facts = prepared_facts(version, head) if mode != "template" else libraries_facts(version, head, library_tag_object)
     if mutant == "live-library-time-mismatch" and mode == "template":
         facts["library_tag_created_at_utc"] = "2026-09-14T17:00:00Z"
-    facts_path = runner_temp / "pre-facts.json"
+    if mutant == "missing-facts-file":
+        facts_path = runner_temp / "pre-facts-missing.json"
+    else:
+        facts_path = runner_temp / "pre-facts.json"
     facts_path.write_text(json.dumps(facts, indent=2) + "\n", encoding="utf-8")
     merged_path = runner_temp / "pre-merged.txt"
     merged_path.write_text(head + "\n", encoding="utf-8")
@@ -671,8 +904,12 @@ while (( $# > 0 )); do
 done
 [[ -n "$merged" && -n "$facts" ]] || {{ echo "release-record stub requires outputs" >&2; exit 1; }}
 cp {json.dumps(str(merged_path))} "$merged"
-cp {json.dumps(str(facts_path))} "$facts"
-echo "Wrote validated merged SHA to $merged and release facts to $facts."
+if [[ "{mutant or ''}" != "missing-facts-file" ]]; then
+  cp {json.dumps(str(facts_path))} "$facts"
+  echo "Wrote validated merged SHA to $merged and release facts to $facts."
+else
+  echo "Wrote validated merged SHA to $merged without release facts (missing-facts-file mutant)."
+fi
 """,
     )
 
@@ -685,6 +922,8 @@ echo "Wrote validated merged SHA to $merged and release facts to $facts."
     # Monkeypatch: replace DLL invocations in scripts by rewriting checkout workflows temporarily.
     for wf in (checkout / ".github/workflows").glob("*.yml"):
         text = wf.read_text(encoding="utf-8")
+        text = text.replace("--timeout-seconds 900", "--timeout-seconds 5")
+        text = text.replace("--interval-seconds 15", "--interval-seconds 1")
         text = text.replace(
             "dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \\\n            release-record",
             "sekiban-release-record-stub release-record",
@@ -704,6 +943,26 @@ echo "Wrote validated merged SHA to $merged and release facts to $facts."
                 "MERGED_SHA=\"$(jq -r '.content' \"$RUNNER_TEMP/dcb-release-record-bundle/record.json\" | tr -d '\\n' | base64 --decode | jq -r '.merged_sha')\"\n"
                 "          test \"$MERGED_SHA\" = \"$(git rev-parse 'HEAD^{commit}')\"",
             )
+        if mutant == "pointer-payload-bytes-read" and "packagesDcb.yml" in str(wf):
+            text = text.replace(
+                "--facts-file \"$RUNNER_TEMP/release-facts.json\"",
+                "--facts-file \"$RUNNER_TEMP/dcb-release-record-bundle/record.json\"",
+            )
+        if mutant == "guard-removed-library-live-guard":
+            text = re.sub(
+                r"\n      - name: Enforce library live guard before push\n(?:        .*\n)*?        --trigger-tag-object \"\$TRIGGER_TAG_OBJECT_ID\"\n",
+                "\n",
+                text,
+            )
+        if mutant == "guard-removed-template-live-guard":
+            text = re.sub(
+                r"\n      - name: Enforce template live guard before push\n(?:        .*\n)*?        --trigger-tag-object \"\$TRIGGER_TAG_OBJECT_ID\"\n",
+                "\n",
+                text,
+            )
+        if mutant == "retry-different-public-package" and "packagesDcb.yml" in str(wf):
+            # Attempt 2: public package differs semantically from the local pack.
+            pass
         if mutant == "live-check-before-fetch" and "packagesDcbTemplate.yml" in str(wf):
             text = text.replace(
                 "      - name: Fetch tags before live checks\n        run: git fetch --force --tags\n\n      - name: Validate live template tag identity before template pack\n",
@@ -765,9 +1024,10 @@ echo "host release-record stub wrote $manifest"
             die("environment-removed mutant: dcb-release environment is absent")
         for step in named_steps(job):
             name = step.get("name", "")
-            if name.startswith("uses:") or "uses" in step and "run" not in step:
-                if name in STUB_STEP_NAMES or name.startswith("uses:"):
-                    continue
+            if "uses" in step and "run" not in step:
+                uses = step.get("uses", "")
+                if uses not in PINNED_USES:
+                    die(f"Unpinned uses: action: {uses}")
                 continue
             if name in STUB_STEP_NAMES:
                 if "Pack NuGet packages" in name:
@@ -798,7 +1058,15 @@ echo "host release-record stub wrote $manifest"
             run_script(substituted, cwd=checkout, env=step_env)
             env = step_env
             if publication_hit and ("Push to NuGet.org" in name or name == "Push Template"):
-                continue
+                if mutant not in {
+                    "retry-different-public-package",
+                    "template-retry-different-public-package",
+                }:
+                    break
+        if mutant == "guard-removed-library-live-guard" and push_log.stat().st_size > 0:
+            die("guard-removed-library-live-guard reached publication without the live guard")
+        if mutant == "guard-removed-template-live-guard" and push_log.stat().st_size > 0:
+            die("guard-removed-template-live-guard reached publication without the live guard")
         if expect_failure:
             raise HarnessError(f"Expected mutant {mutant} to fail, but workflow completed.")
         print(f"HARNESS PASS mode={mode} mutant={mutant or 'none'} fetch_depth={fetch_depth}")
@@ -821,18 +1089,16 @@ def apply_mutant(checkout: Path, mutant: str, mode: str) -> None:
 
 def compare_semantic(a: Path, b: Path) -> None:
     script = Path(__file__).resolve().parent / "validate-release-tags.sh"
-    # Use the script's compare via a tiny python reimplementation for determinism proof.
-    import zipfile
-
-    def manifest_bytes(path: Path) -> bytes:
-        with zipfile.ZipFile(path) as zf:
-            names = [n for n in zf.namelist() if n.lower().endswith(".nuspec")]
-            if len(names) != 1:
-                die(f"expected one nuspec in {path}, found {names}")
-            return zf.read(names[0])
-
-    if manifest_bytes(a) != manifest_bytes(b):
-        die(f"semantic package manifests differ: {a} vs {b}")
+    completed = subprocess.run(
+        ["bash", str(script), "--compare-semantic-manifests", "--package", str(a), "--local-package", str(b)],
+        text=True,
+        capture_output=True,
+    )
+    if completed.returncode != 0:
+        die(
+            f"semantic package manifests differ: {a} vs {b}\n"
+            f"{completed.stdout}\n{completed.stderr}"
+        )
 
 
 def prove_pack_determinism(local_feed: Path, second_feed: Path) -> None:
@@ -861,19 +1127,49 @@ def main() -> int:
     version = "10.22.0"
 
     cases = [
+        # AC1-AC3 / AC7 pass paths
         ("library", None, False, 1),
         ("library", None, False, 0),
         ("template", None, False, 0),
         ("stage", None, False, 1),
+        ("library", "retry-same-tag-object", False, 1),
+        ("template", "retry-same-tag-object", False, 0),
+        # AC1 validated-facts mutants
         ("library", "pointer-bytes-read", True, 1),
+        ("library", "pointer-payload-bytes-read", True, 1),
+        ("library", "missing-facts-file", True, 1),
+        ("template", "live-library-time-mismatch", True, 0),
+        # AC2 lightweight-tag
         ("library", "lightweight-live-tag", True, 1),
+        ("template", "lightweight-template-tag", True, 0),
+        # AC3 checkout-safe live tag ordering
         ("template", "live-check-before-fetch", True, 0),
+        # AC4 library live guard input matrix
         ("library", "library-attempt1-preexisting", True, 1),
         ("library", "library-tag-equal-completion", True, 1),
+        ("library", "library-tag-before-completion", True, 1),
+        ("library", "library-tag-equal-latest-check", True, 1),
+        ("library", "library-tag-wrong-commit", True, 1),
+        ("library", "template-ref-exists", True, 1),
         ("library", "retry-changed-tag-object", True, 1),
         ("library", "retry-missing-after", True, 1),
+        ("library", "retry-different-public-package", True, 1),
+        ("library", "non-404-index-error", True, 1),
+        ("library", "guard-removed-library-live-guard", True, 1),
+        # AC5 template live guard input matrix
         ("template", "template-tag-early", True, 0),
+        ("template", "template-tag-equal-library", True, 0),
+        ("template", "template-tag-before-library", True, 0),
+        ("template", "template-tag-equal-release", True, 0),
+        ("template", "template-wrong-commit", True, 0),
+        ("template", "template-preexisting-package", True, 0),
+        ("template", "template-retry-changed-tag-object", True, 0),
+        ("template", "template-retry-missing-after", True, 0),
+        ("template", "template-retry-different-public-package", True, 0),
+        ("template", "guard-removed-template-live-guard", True, 0),
+        # AC6 stage-check hardening
         ("stage", "stage-check-inputs-in-run", True, 1),
+        # AC7 environment boundary
         ("library", "environment-removed", True, 1),
     ]
 
