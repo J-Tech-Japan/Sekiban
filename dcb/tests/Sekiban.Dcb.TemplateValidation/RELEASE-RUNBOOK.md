@@ -55,6 +55,16 @@ Do not invent or rewrite transport after merge to repair a missing nonce, wrong
 role, or open receipt. Cut a new tip-binder PR instead and gather fresh
 integrated-head CI on that tip before authoring `prepared`.
 
+### After SEK-G85 (#1249)
+
+Product tip advanced to merge `1bc6d495` with #1244 tombstone query fail-closed.
+That PR must **not** be used as the prepared `candidate`: its host notify used
+`from_role=reviewer` without `result_nonce`, and the COMMENTED APPROVE targeted
+head `84d81acc` rather than merge head `f78abb9f`. Cut a new tip-binder PR from
+current `main`, complete exact-head review with `from_role=review` +
+`result_nonce` + closed orchestrator receipt before merge, then re-gather tip CI
+before authoring `prepared`.
+
 ## Pre-tag package absence
 
 Before the library tag push, confirm none of the 26 `{id}/{V}` packages exist
