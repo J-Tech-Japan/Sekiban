@@ -22,7 +22,10 @@ public sealed class MultiProjectionGrainStatusSurrogateConverter : IConverter<Mu
             surrogate.SafeStateSize,
             surrogate.UnsafeStateSize,
             surrogate.HasError,
-            surrogate.LastError);
+            surrogate.LastError,
+            surrogate.TombstoneFailClosedPending,
+            surrogate.IsCatchUpActive,
+            surrogate.CatchUpBatchesProcessed);
 
     public MultiProjectionGrainStatusSurrogate ConvertToSurrogate(in MultiProjectionGrainStatus value) =>
         new(
@@ -37,5 +40,8 @@ public sealed class MultiProjectionGrainStatusSurrogateConverter : IConverter<Mu
             value.SafeStateSize,
             value.UnsafeStateSize,
             value.HasError,
-            value.LastError);
+            value.LastError,
+            value.TombstoneFailClosedPending,
+            value.IsCatchUpActive,
+            value.CatchUpBatchesProcessed);
 }

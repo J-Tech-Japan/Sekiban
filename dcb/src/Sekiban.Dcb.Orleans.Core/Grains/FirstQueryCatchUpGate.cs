@@ -16,6 +16,19 @@ internal sealed class FirstQueryCatchUpGate
     private bool _armed;
     private bool _satisfied;
     private Task? _inFlight;
+    private int _armGeneration;
+
+    /// <summary>Monotonic generation incremented on every <see cref="Arm" />.</summary>
+    public int ArmGeneration
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _armGeneration;
+            }
+        }
+    }
 
     /// <summary>
     ///     Arm the gate so the next query runs the barrier. Resets any prior satisfied/in-flight state, so it can be
@@ -28,6 +41,7 @@ internal sealed class FirstQueryCatchUpGate
             _armed = true;
             _satisfied = false;
             _inFlight = null;
+            _armGeneration++;
         }
     }
 
@@ -67,17 +81,22 @@ internal sealed class FirstQueryCatchUpGate
                 return _inFlight;
             }
 
-            _inFlight = SettleAsync(work);
+            var capturedGeneration = _armGeneration;
+            _inFlight = SettleAsync(work, capturedGeneration);
             return _inFlight;
         }
     }
 
-    private async Task SettleAsync(Func<Task> work)
+    private async Task SettleAsync(Func<Task> work, int capturedGeneration)
     {
         await work(); // throws on failure -> this task faults, _satisfied stays false, so the next call retries
         lock (_sync)
         {
-            _satisfied = true;
+            // A re-Arm during an in-flight Ensure must not be satisfied by the old Ensure's success.
+            if (_armGeneration == capturedGeneration)
+            {
+                _satisfied = true;
+            }
         }
     }
 }

@@ -28,4 +28,10 @@ public record MultiProjectionGrainStatus(
     [property: Id(8)]
     bool HasError,
     [property: Id(9)]
-    string? LastError);
+    string? LastError,
+    [property: Id(12)]
+    bool TombstoneFailClosedPending,
+    [property: Id(13)]
+    bool IsCatchUpActive,
+    [property: Id(14)]
+    int CatchUpBatchesProcessed);
