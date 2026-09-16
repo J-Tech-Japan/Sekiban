@@ -142,6 +142,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // sticky) lives in the gate component, which a friend test drives directly.
     private readonly FirstQueryCatchUpGate _firstQueryGate = new();
 
+    // SEK-G85: tombstone arm episode generation. Fail-closed queries apply only while this matches the live gate generation.
+    private int _tombstoneFailClosedArmGeneration;
+
     // The last event-store read exception the in-call catch-up swallowed (ProcessSerializableBatch launders a failed
     // read into an empty batch for the resilient background path). The first-query barrier consults it to fail closed
     // with the original exception when catch-up did not reach the head, instead of answering empty success.
@@ -621,6 +624,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (rebuildBlock is not null)
         {
             return ResultBox.Error<MultiProjectionState>(rebuildBlock); // SEK-G18 #6 fail-closed while rebuild pending
+        }
+
+        var tombstoneBlock = TryTombstoneFailClosedBlock();
+        if (tombstoneBlock is not null)
+        {
+            return ResultBox.Error<MultiProjectionState>(tombstoneBlock);
         }
 
         try
@@ -1156,6 +1165,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return ResultBox.Error<string>(rebuildBlock); // SEK-G18 #6 fail-closed while rebuild pending
         }
 
+        var tombstoneBlock = TryTombstoneFailClosedBlock();
+        if (tombstoneBlock is not null)
+        {
+            return ResultBox.Error<string>(tombstoneBlock);
+        }
+
         try
         {
             await EnsureFirstQuerySyncCatchUpAsync();
@@ -1405,7 +1420,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             safeStateSize,
             unsafeStateSize,
             !string.IsNullOrEmpty(_lastError),
-            _lastError);
+            _lastError,
+            TombstoneFailClosedPending,
+            _catchUpProgress.IsActive,
+            _catchUpProgress.BatchesProcessed);
     }
 
     // Threshold for forcing GC before serialization (10MB payload)
@@ -2021,6 +2039,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 throw rebuildBlock; // SEK-G18 #6 fail-closed while rebuild pending
             }
 
+            var tombstoneBlock = TryTombstoneFailClosedBlock();
+            if (tombstoneBlock is not null)
+            {
+                throw tombstoneBlock;
+            }
+
             await EnsureFirstQuerySyncCatchUpAsync();
 
             var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
@@ -2048,7 +2072,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
-            _lastError = $"Query failed: {ex.Message}";
+            if (!IsTombstoneFailClosedException(ex))
+            {
+                _lastError = $"Query failed: {ex.Message}";
+            }
+
             throw;
         }
     }
@@ -2086,6 +2114,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 throw rebuildBlock; // SEK-G18 #6 fail-closed while rebuild pending
             }
 
+            var tombstoneBlock = TryTombstoneFailClosedBlock();
+            if (tombstoneBlock is not null)
+            {
+                throw tombstoneBlock;
+            }
+
             await EnsureFirstQuerySyncCatchUpAsync();
 
             var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
@@ -2113,7 +2147,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
-            _lastError = $"List query failed: {ex.Message}";
+            if (!IsTombstoneFailClosedException(ex))
+            {
+                _lastError = $"List query failed: {ex.Message}";
+            }
+
             throw;
         }
     }
@@ -2435,6 +2473,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             projectorName);
                         _checkpointMutation.AdoptTombstone(slot);
                         _firstQueryGate.Arm();
+                        _tombstoneFailClosedArmGeneration = _firstQueryGate.ArmGeneration;
                         forceFullCatchUp = true;
                         checkpointTombstoned = true;
                     }
@@ -2700,7 +2739,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // If nothing was restored, we cannot be sure a fault is not waiting in the un-caught-up tail (its descriptor
         // may have been lost to a process crash while persistence was failing). The first query must therefore
         // synchronously catch up before it can answer — no fresh-activation empty-success window.
-        if (_projectionFault is null && !_restoreRetirementFailed)
+        // SEK-G85: skip when a tombstone arm episode already armed the gate — a second Arm() would bump generation and
+        // clear TombstoneFailClosedPending before queries can observe the fail-closed window.
+        if (_projectionFault is null && !_restoreRetirementFailed && _tombstoneFailClosedArmGeneration == 0)
         {
             _firstQueryGate.Arm();
         }
@@ -3434,6 +3475,95 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     /// </summary>
     private Task EnsureFirstQuerySyncCatchUpAsync() => _firstQueryGate.EnsureAsync(RunFirstQuerySyncCatchUpAsync);
 
+    private bool TombstoneFailClosedPending =>
+        _tombstoneFailClosedArmGeneration != 0
+        && _firstQueryGate.IsPending
+        && _firstQueryGate.ArmGeneration == _tombstoneFailClosedArmGeneration;
+
+    private static InvalidOperationException CreateTombstoneRebuildPendingException() =>
+        new(
+            "Projection rebuild is pending: checkpoint tombstone force-full catch-up is still in progress; "
+            + "the query fails closed rather than await the forced full replay.");
+
+    private static bool IsTombstoneFailClosedException(Exception ex) =>
+        ex is InvalidOperationException
+        && ex.Message.StartsWith("Projection rebuild is pending:", StringComparison.Ordinal)
+        && ex.Message.Contains("checkpoint tombstone", StringComparison.Ordinal);
+
+    private Exception? TryTombstoneFailClosedBlock()
+    {
+        if (!TombstoneFailClosedPending)
+        {
+            return null;
+        }
+
+        KickTombstoneGateProgressIfNeeded();
+        return CreateTombstoneRebuildPendingException();
+    }
+
+    private bool ForcedCatchUpReachedAuthoritativeHead() =>
+        _catchUpProgress.ConsecutiveEmptyBatches >= MaxConsecutiveEmptyBatches;
+
+    private void KickTombstoneGateProgressIfNeeded()
+    {
+        RecoverStaleCatchUpIfNeeded(GetProjectorName());
+
+        if (_catchUpProgress.IsActive)
+        {
+            return;
+        }
+
+        if (!ForcedCatchUpReachedAuthoritativeHead())
+        {
+            ObserveCatchUpRestart(CatchUpFromEventStoreAsync(forceFull: true));
+            return;
+        }
+
+        ObserveEnsureAsync(EnsureFirstQuerySyncCatchUpAsync);
+    }
+
+    private void ObserveEnsureAsync(Func<Task> ensureWork) => _ = ObserveEnsureInnerAsync(ensureWork);
+
+    private async Task ObserveEnsureInnerAsync(Func<Task> ensureWork)
+    {
+        try
+        {
+            await ensureWork();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "[{ProjectorName}] Tombstone fail-closed Ensure kick faulted",
+                GetProjectorName());
+        }
+    }
+
+    private void ObserveCatchUpRestart(Task catchUpTask) => _ = ObserveCatchUpRestartInnerAsync(catchUpTask);
+
+    private async Task ObserveCatchUpRestartInnerAsync(Task catchUpTask)
+    {
+        try
+        {
+            await catchUpTask;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "[{ProjectorName}] Tombstone fail-closed catch-up restart faulted",
+                GetProjectorName());
+        }
+    }
+
+    private void KickTombstoneIdleEnsureIfNeededAfterTimerCompleteCatchUp()
+    {
+        if (TombstoneFailClosedPending)
+        {
+            ObserveEnsureAsync(EnsureFirstQuerySyncCatchUpAsync);
+        }
+    }
+
     private async Task RunFirstQuerySyncCatchUpAsync()
     {
         if (_host is null)
@@ -4158,6 +4288,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     // Catch-up complete
                     await CompleteCatchUp();
+                    KickTombstoneIdleEnsureIfNeededAfterTimerCompleteCatchUp();
                 }
             }
             else
