@@ -125,6 +125,32 @@ public class SnapshotVersioningTests : IAsyncLifetime
                 e.EventType))
             .ToList();
 
+    private static async Task WaitUntilTombstoneFailClosedClearedAsync(
+        IMultiProjectionGrain grain,
+        int timeoutMs = 60_000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!(await grain.GetStatusAsync()).TombstoneFailClosedPending)
+            {
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException(
+            "Timed out waiting for TombstoneFailClosedPending to clear after checkpoint tombstone rebuild.");
+    }
+
+    private static bool IsTombstoneFailClosed(Exception ex)
+    {
+        var message = ex.ToString();
+        return message.Contains("Projection rebuild is pending:", StringComparison.Ordinal)
+               && message.Contains("checkpoint tombstone", StringComparison.Ordinal);
+    }
+
     private static async Task<int> WaitForSnapshotVersionAsync(
         IMultiProjectionGrain grain,
         int expectedVersion,
@@ -147,6 +173,10 @@ public class SnapshotVersioningTests : IAsyncLifetime
                     }
                 }
             }
+            else if (!IsTombstoneFailClosed(serStateAfter.GetException()))
+            {
+                // Non-tombstone failures are unexpected during wait; keep polling but surface at the end.
+            }
 
             await Task.Delay(delayMs);
         }
@@ -154,7 +184,15 @@ public class SnapshotVersioningTests : IAsyncLifetime
         var finalState = await grain.GetSnapshotJsonAsync(canGetUnsafeState: true);
         if (!finalState.IsSuccess)
         {
-            throw finalState.GetException();
+            var ex = finalState.GetException();
+            if (IsTombstoneFailClosed(ex))
+            {
+                throw new TimeoutException(
+                    "Snapshot wait timed out while checkpoint tombstone fail-closed was still pending.",
+                    ex);
+            }
+
+            throw ex;
         }
         var finalEnv = JsonSerializer.Deserialize<Sekiban.Dcb.Snapshots.SerializableMultiProjectionStateEnvelope>(
             finalState.GetValue());
@@ -243,11 +281,13 @@ public class SnapshotVersioningTests : IAsyncLifetime
         await grain.RequestDeactivationAsync();
         await Task.Delay(1000);
 
-        // Re-acquire grain reference (new activation)
+        // Re-acquire grain reference (new activation). DeleteExternalStateAsync tombs the
+        // checkpoint (SEK-G20); SEK-G85 fail-closes snapshot reads until force-full catch-up
+        // settles, so wait for that gate before asserting version.
         var grain2 = _client.GetGrain<IMultiProjectionGrain>(grainId);
+        await WaitUntilTombstoneFailClosedClearedAsync(grain2);
 
-        // Wait for catch-up to complete
-        var version = await WaitForSnapshotVersionAsync(grain2, expectedVersion: 5, maxAttempts: 15, delayMs: 200);
+        var version = await WaitForSnapshotVersionAsync(grain2, expectedVersion: 5, maxAttempts: 50, delayMs: 200);
         Assert.Equal(5, version);
 
         // Then: persist succeeds (integrity guard does not block)

@@ -19,4 +19,7 @@ public record struct MultiProjectionGrainStatusSurrogate(
     [property: Id(10)] long SafeStateSize,
     [property: Id(11)] long UnsafeStateSize,
     [property: Id(8)] bool HasError,
-    [property: Id(9)] string? LastError);
+    [property: Id(9)] string? LastError,
+    [property: Id(12)] bool TombstoneFailClosedPending,
+    [property: Id(13)] bool IsCatchUpActive,
+    [property: Id(14)] int CatchUpBatchesProcessed);

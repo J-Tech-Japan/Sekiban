@@ -107,4 +107,24 @@ public class FirstQueryCatchUpGateTests
         Assert.False(ran);
         Assert.False(gate.IsPending);
     }
+
+    [Fact]
+    public async Task ReArm_during_in_flight_settle_does_not_satisfy_the_gate()
+    {
+        var gate = new FirstQueryCatchUpGate();
+        gate.Arm();
+        var generationAtArm = gate.ArmGeneration;
+
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ensure = gate.EnsureAsync(async () => await release.Task);
+
+        gate.Arm(); // bumps generation — the in-flight settle must not satisfy this episode
+        Assert.NotEqual(generationAtArm, gate.ArmGeneration);
+        Assert.True(gate.IsPending);
+
+        release.SetResult();
+        await ensure;
+
+        Assert.True(gate.IsPending, "old Ensure success must not satisfy a later re-Arm episode");
+    }
 }
