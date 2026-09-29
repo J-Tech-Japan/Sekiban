@@ -188,11 +188,13 @@ in global `SortableUniqueId` order) and a **served/unsafe** state (what queries 
 deliberately mutates and returns its input, its payload must implement `IMutatesProjectionInput`, and
 `GenerateInitialPayload` must return a fresh instance on every call. The marker makes the dual-state wrapper isolate the
 safe baseline through the snapshot serializer. Every reconcile, including the reconcile after each safe in-order event
-during catch-up or rebuild, creates an independent clone of safe. Every unsafe fold also starts from an independently
-cloned safe baseline, so each reconcile costs O(state size). This opt-in trades throughput for safety; prefer a
-non-mutating (immutable or copy-on-write) projector for large states. The fresh factory path clones the initial payload
-once through the registered serializer, while direct use of the public constructor falls back to `System.Text.Json`.
-Operators can temporarily enable
+during catch-up or rebuild, creates an independent clone of safe and therefore costs O(state size). In-order unsafe
+folds apply to the already-independent served instance without another clone. This opt-in trades throughput for safety;
+prefer a non-mutating (immutable or copy-on-write) projector for large states. The public
+`DualStateProjectionWrapper<T>` constructor and `DualStateProjectionWrapperFactory.Create` overloads that accept
+`DcbDomainTypes` clone the initial marker payload once through the registered snapshot serializer. Their legacy
+overloads without `DcbDomainTypes` fail fast for marker payloads because they cannot guarantee serializer-correct
+isolation; they retain their existing `System.Text.Json` behavior for non-marker payloads. Operators can temporarily enable
 `GeneralMultiProjectionActorOptions.VerifySafeStateIsolation` to fail fast when an unmarked projector mutates safe state;
 the diagnostic is off by default because it serializes the safe payload around unsafe folds and compares the serialized
 bytes. Serialization must be deterministic: output whose byte order can vary (for example, an unordered collection) can

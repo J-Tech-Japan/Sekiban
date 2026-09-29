@@ -11,11 +11,48 @@ namespace Sekiban.Dcb.MultiProjections;
 /// </summary>
 public static class DualStateProjectionWrapperFactory
 {
+    /// <summary>
+    ///     Creates a wrapper for a payload that does not implement <see cref="IMutatesProjectionInput" />.
+    ///     Marker payloads require the overload that accepts <see cref="DcbDomainTypes" />.
+    /// </summary>
     public static IMultiProjectionPayload? Create(
         IMultiProjectionPayload payload,
         string projectorName,
         ICoreMultiProjectorTypes multiProjectorTypes,
         JsonSerializerOptions jsonOptions,
+        int initialVersion = 0,
+        Guid initialLastEventId = default,
+        string? initialLastSortableUniqueId = null)
+    {
+        if (payload is IMutatesProjectionInput)
+        {
+            throw new InvalidOperationException(
+                $"Payloads implementing {nameof(IMutatesProjectionInput)} require isolation through the registered " +
+                $"snapshot serializer. Use the {nameof(Create)} overload that accepts {nameof(DcbDomainTypes)}.");
+        }
+
+        return CreateCore(
+            payload,
+            projectorName,
+            multiProjectorTypes,
+            jsonOptions,
+            initialVersion,
+            initialLastEventId,
+            initialLastSortableUniqueId,
+            verifySafeStateIsolation: false,
+            domainTypes: null);
+    }
+
+    /// <summary>
+    ///     Creates a wrapper and uses the registered snapshot serializer from <paramref name="domainTypes" /> to isolate
+    ///     payloads that implement <see cref="IMutatesProjectionInput" />.
+    /// </summary>
+    public static IMultiProjectionPayload? Create(
+        IMultiProjectionPayload payload,
+        string projectorName,
+        ICoreMultiProjectorTypes multiProjectorTypes,
+        JsonSerializerOptions jsonOptions,
+        DcbDomainTypes domainTypes,
         int initialVersion = 0,
         Guid initialLastEventId = default,
         string? initialLastSortableUniqueId = null)
@@ -28,7 +65,7 @@ public static class DualStateProjectionWrapperFactory
             initialLastEventId,
             initialLastSortableUniqueId,
             verifySafeStateIsolation: false,
-            domainTypes: null);
+            domainTypes);
 
     internal static IMultiProjectionPayload? Create(
         IMultiProjectionPayload payload,
