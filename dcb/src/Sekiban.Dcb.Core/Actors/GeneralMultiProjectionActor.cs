@@ -1485,6 +1485,7 @@ public class GeneralMultiProjectionActor
                     _projectorName,
                     _types,
                     _jsonOptions,
+                    _domain,
                     _options.VerifySafeStateIsolation);
 
                 if (_singleStateAccessor == null)

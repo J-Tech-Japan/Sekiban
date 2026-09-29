@@ -27,13 +27,15 @@ public static class DualStateProjectionWrapperFactory
             initialVersion,
             initialLastEventId,
             initialLastSortableUniqueId,
-            verifySafeStateIsolation: false);
+            verifySafeStateIsolation: false,
+            domainTypes: null);
 
     internal static IMultiProjectionPayload? Create(
         IMultiProjectionPayload payload,
         string projectorName,
         ICoreMultiProjectorTypes multiProjectorTypes,
         JsonSerializerOptions jsonOptions,
+        DcbDomainTypes domainTypes,
         bool verifySafeStateIsolation)
         => CreateCore(
             payload,
@@ -43,7 +45,8 @@ public static class DualStateProjectionWrapperFactory
             0,
             default,
             null,
-            verifySafeStateIsolation);
+            verifySafeStateIsolation,
+            domainTypes);
 
     public static IMultiProjectionPayload? CreateFromRestoredSnapshot(
         IMultiProjectionPayload payload,
@@ -119,7 +122,9 @@ public static class DualStateProjectionWrapperFactory
                 initialVersion,
                 initialLastEventId,
                 initialLastSortableUniqueId,
-                verifySafeStateIsolation
+                verifySafeStateIsolation,
+                domainTypes,
+                safeWindowThreshold
             ],
             culture: null) as IMultiProjectionPayload;
     }
@@ -173,7 +178,9 @@ public static class DualStateProjectionWrapperFactory
                 initialVersion,
                 initialLastEventId,
                 initialLastSortableUniqueId,
-                verifySafeStateIsolation
+                verifySafeStateIsolation,
+                domainTypes,
+                safeWindowThreshold
             ],
             culture: null) as IMultiProjectionPayload;
     }
@@ -186,7 +193,8 @@ public static class DualStateProjectionWrapperFactory
         int initialVersion,
         Guid initialLastEventId,
         string? initialLastSortableUniqueId,
-        bool verifySafeStateIsolation)
+        bool verifySafeStateIsolation,
+        DcbDomainTypes? domainTypes)
     {
         var wrapperType = typeof(DualStateProjectionWrapper<>).MakeGenericType(payload.GetType());
 
@@ -203,7 +211,8 @@ public static class DualStateProjectionWrapperFactory
                 initialVersion,
                 initialLastEventId,
                 initialLastSortableUniqueId,
-                verifySafeStateIsolation
+                verifySafeStateIsolation,
+                domainTypes
             ],
             culture: null) as IMultiProjectionPayload;
     }

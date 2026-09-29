@@ -31,8 +31,7 @@ public class DualStateProjectionWrapper<T>
     private readonly bool _isolatesProjectionInput;
     private readonly bool _verifySafeStateIsolation;
     private byte[]? _safeStateFingerprint;
-    // Marker payloads may defer allocating the served backing instance while its logical value equals safe. A snapshot
-    // clone is materialized before the next unsafe fold or before the served payload is exposed to any caller.
+    // Marker payloads always keep distinct safe and served backing instances, even while their logical values match.
     private bool _servedMirrorsSafe;
     private bool _useIncrementalSafePromotion;
 
@@ -78,6 +77,11 @@ public class DualStateProjectionWrapper<T>
 
     public int SafeVersion => _safeVersion;
 
+    /// <summary>
+    ///     Creates a wrapper using <see cref="JsonSerializer" /> to isolate marker payloads. Callers that require the
+    ///     registered snapshot serializer (for example, for members ignored by System.Text.Json) should use the
+    ///     domain-aware internal <see cref="DualStateProjectionWrapperFactory" /> path.
+    /// </summary>
     public DualStateProjectionWrapper(
         T initialProjector,
         string projectorName,
@@ -94,7 +98,8 @@ public class DualStateProjectionWrapper<T>
             initialVersion,
             initialLastEventId,
             initialLastSortableUniqueId,
-            verifySafeStateIsolation: false)
+            verifySafeStateIsolation: false,
+            domainTypes: null)
     {
     }
 
@@ -106,7 +111,8 @@ public class DualStateProjectionWrapper<T>
         int initialVersion,
         Guid initialLastEventId,
         string? initialLastSortableUniqueId,
-        bool verifySafeStateIsolation)
+        bool verifySafeStateIsolation,
+        DcbDomainTypes? domainTypes)
     {
         _jsonOptions = jsonOptions;
         _safeProjector = initialProjector;
@@ -114,12 +120,22 @@ public class DualStateProjectionWrapper<T>
         _types = types;
         _isolatesProjectionInput = typeof(IMutatesProjectionInput).IsAssignableFrom(typeof(T))
             || initialProjector is IMutatesProjectionInput;
-        _unsafeProjector = _isolatesProjectionInput
-            ? initialProjector
+        _unsafeProjector = _isolatesProjectionInput && domainTypes is not null
+            ? (T)DualStateProjectionWrapperFactory.ClonePayload(
+                initialProjector,
+                projectorName,
+                types,
+                domainTypes,
+                ZeroThreshold.Value)
             : CloneProjector(initialProjector, jsonOptions);
-        _servedMirrorsSafe = _isolatesProjectionInput;
+        _servedMirrorsSafe = false;
         _verifySafeStateIsolation = verifySafeStateIsolation;
         _useIncrementalSafePromotion = false;
+        if (_isolatesProjectionInput && domainTypes is not null)
+        {
+            _lastDomainTypes = domainTypes;
+            _lastSafeWindowThreshold = ZeroThreshold;
+        }
 
         // Initialize version tracking
         _safeVersion = initialVersion;
@@ -140,19 +156,42 @@ public class DualStateProjectionWrapper<T>
         int initialVersion,
         Guid initialLastEventId,
         string? initialLastSortableUniqueId,
-        bool verifySafeStateIsolation)
+        bool verifySafeStateIsolation,
+        DcbDomainTypes? domainTypes,
+        string? safeWindowThreshold)
     {
         _jsonOptions = jsonOptions;
         _safeProjector = safeProjector;
-        _unsafeProjector = unsafeProjector;
         _projectorName = projectorName;
         _types = types;
         _isolatesProjectionInput = typeof(IMutatesProjectionInput).IsAssignableFrom(typeof(T))
             || safeProjector is IMutatesProjectionInput
             || unsafeProjector is IMutatesProjectionInput;
-        _servedMirrorsSafe = _isolatesProjectionInput && ReferenceEquals(safeProjector, unsafeProjector);
+        if (_isolatesProjectionInput && ReferenceEquals(safeProjector, unsafeProjector))
+        {
+            if (domainTypes is null)
+            {
+                throw new ArgumentException(
+                    "Marker safe and unsafe payloads must be distinct when no domain context is available.",
+                    nameof(unsafeProjector));
+            }
+
+            unsafeProjector = (T)DualStateProjectionWrapperFactory.ClonePayload(
+                safeProjector,
+                projectorName,
+                types,
+                domainTypes,
+                safeWindowThreshold ?? ZeroThreshold.Value);
+        }
+        _unsafeProjector = unsafeProjector;
+        _servedMirrorsSafe = false;
         _verifySafeStateIsolation = verifySafeStateIsolation;
         _useIncrementalSafePromotion = true;
+        if (_isolatesProjectionInput && domainTypes is not null)
+        {
+            _lastDomainTypes = domainTypes;
+            _lastSafeWindowThreshold = new SortableUniqueId(safeWindowThreshold ?? ZeroThreshold.Value);
+        }
 
         _safeVersion = initialVersion;
         _safeHistoryBaseVersion = initialVersion;
@@ -490,11 +529,19 @@ public class DualStateProjectionWrapper<T>
             _safeVersion = published.SafeVersion;
             _safeLastEventId = published.SafeLastEventId;
             _safeLastSortableUniqueId = published.SafeLastSortableUniqueId;
-            _unsafeProjector = published.UnsafeProjector;
+            _unsafeProjector = _isolatesProjectionInput
+                && ReferenceEquals(published.SafeProjector, published.UnsafeProjector)
+                    ? (T)DualStateProjectionWrapperFactory.ClonePayload(
+                        published.SafeProjector,
+                        _projectorName,
+                        _types,
+                        domainTypes,
+                        safeWindowThreshold.Value)
+                    : published.UnsafeProjector;
             _unsafeVersion = published.UnsafeVersion;
             _unsafeLastEventId = published.UnsafeLastEventId;
             _unsafeLastSortableUniqueId = published.UnsafeLastSortableUniqueId;
-            _servedMirrorsSafe = published.ServedMirrorsSafe;
+            _servedMirrorsSafe = false;
             _safeStateFingerprint = published.SafeStateFingerprint;
             _servedStateDirty = true;
             AttachDeferredRepairDirtyAttribution(exception);
@@ -667,12 +714,11 @@ public class DualStateProjectionWrapper<T>
     ///     SEK-G18 graduation reconcile: re-derive the served (unsafe) state as the safe baseline plus the still-buffered
     ///     events replayed in global SortableUniqueId ordinal order, then publish payload / last-event / position / version
     ///     atomically. The <c>Project</c> contract requires a projector not to mutate its input. Payloads that opt into
-    ///     <see cref="IMutatesProjectionInput" /> are isolated lazily: an empty-buffer reconcile records that served
-    ///     logically mirrors safe without allocating a clone. The first unsafe fold or served-payload exposure clones safe
-    ///     through the snapshot serialization path, so no caller observes the safe instance as served. Verification mode
-    ///     detects undeclared mutation by comparing serialized bytes; non-deterministic serialization can therefore report
-    ///     a false positive. When a rebuild is pending, reconciliation is skipped, but exposure still materializes a clone
-    ///     so the safe instance is never leaked as served (queries are gated on rebuild by the grain/host).
+    ///     <see cref="IMutatesProjectionInput" /> are isolated through the snapshot serialization path, including an
+    ///     empty-buffer reconcile, so the safe and served backing fields never share a marker payload instance.
+    ///     Verification mode detects undeclared mutation by comparing serialized bytes; non-deterministic serialization can
+    ///     therefore report a false positive. When a rebuild is pending, reconciliation is skipped (queries are gated on
+    ///     rebuild by the grain/host).
     /// </summary>
     private void ReconcileServedState(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
@@ -685,7 +731,10 @@ public class DualStateProjectionWrapper<T>
 
         if (_bufferedEvents.Count == 0 && _isolatesProjectionInput)
         {
-            _servedMirrorsSafe = true;
+            _lastDomainTypes = domainTypes;
+            _lastSafeWindowThreshold = safeWindowThreshold;
+            _unsafeProjector = CloneSafeProjector(safeWindowThreshold, domainTypes);
+            _servedMirrorsSafe = false;
             _unsafeLastEventId = _safeLastEventId;
             _unsafeLastSortableUniqueId = _safeLastSortableUniqueId;
             _unsafeVersion = _safeVersion;

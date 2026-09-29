@@ -15,6 +15,41 @@ namespace Sekiban.Dcb.Tests;
 public class DualStateProjectionWrapperInputMutationTests
 {
     [Fact]
+    public void FreshPublicMarkerWrapper_StartsWithDistinctBackingFieldsAndImmediateUnsafeAccessWorks()
+    {
+        var (types, domain) = CreateDomain<MarkedMutatingCounter>();
+        var wrapper = new DualStateProjectionWrapper<MarkedMutatingCounter>(
+            MarkedMutatingCounter.GenerateInitialPayload(),
+            MarkedMutatingCounter.MultiProjectorName,
+            types,
+            domain.JsonSerializerOptions);
+
+        var safe = GetField(wrapper, "_safeProjector");
+        var served = ((IDualStateAccessor)wrapper).GetUnsafeProjectorPayload();
+
+        Assert.NotSame(safe, GetField(wrapper, "_unsafeProjector"));
+        Assert.NotSame(safe, served);
+        Assert.Equal(0, MarkedMutatingCounter.SerializeCount);
+    }
+
+    [Fact]
+    public void FreshFactoryMarkerWrapper_UsesRegisteredSerializerAndSupportsImmediateUnsafeAccess()
+    {
+        var (types, domain) = CreateDomain<MarkedMutatingCounter>();
+        var initial = new MarkedMutatingCounter { Values = new() { ["total"] = 7 } };
+        var wrapper = CreateFactoryWrapper(initial, types, domain);
+
+        var safe = GetField(wrapper, "_safeProjector");
+        var served = Assert.IsType<MarkedMutatingCounter>(
+            ((IDualStateAccessor)wrapper).GetUnsafeProjectorPayload());
+
+        Assert.NotSame(safe, GetField(wrapper, "_unsafeProjector"));
+        Assert.NotSame(safe, served);
+        Assert.Equal(7, served.Total);
+        Assert.Equal(1, MarkedMutatingCounter.SerializeCount);
+    }
+
+    [Fact]
     public void MarkerPayload_IsolatesSafeStateDuringOutOfOrderUnsafeReconcile()
     {
         var (types, domain) = CreateDomain<MarkedMutatingCounter>();
@@ -62,6 +97,7 @@ public class DualStateProjectionWrapperInputMutationTests
         var zero = ReportedEvents().Safe;
 
         wrapper.ProcessEvent(zero, Threshold(), domain);
+        Assert.NotSame(GetField(wrapper, "_safeProjector"), GetField(wrapper, "_unsafeProjector"));
 
         var safe = wrapper.GetSafeProjection(Threshold(), domain).State;
         var served = wrapper.GetUnsafeProjection(domain).State;
@@ -79,17 +115,14 @@ public class DualStateProjectionWrapperInputMutationTests
     }
 
     [Fact]
-    public void FreshMarker_FirstUnsafeFoldClonesBaselineThroughRegisteredSerializer()
+    public void FreshFactoryMarker_EagerCloneUsesRegisteredSerializerAndPreservesIgnoredState()
     {
         var (types, domain) = CreateDomain<MarkedMutatingCounter>();
         var initial = new MarkedMutatingCounter { Values = new() { ["total"] = 7 } };
-        var wrapper = new DualStateProjectionWrapper<MarkedMutatingCounter>(
-            initial,
-            MarkedMutatingCounter.MultiProjectorName,
-            types,
-            domain.JsonSerializerOptions);
+        var wrapper = CreateFactoryWrapper(initial, types, domain);
 
-        Assert.Equal(0, MarkedMutatingCounter.SerializeCount);
+        // The factory now eagerly isolates marker payloads, so its one registered-serializer clone happens here.
+        Assert.Equal(1, MarkedMutatingCounter.SerializeCount);
 
         wrapper.ProcessEvent(CreateEvent(2, DateTime.UtcNow, 20), Threshold(), domain);
 
@@ -214,6 +247,9 @@ public class DualStateProjectionWrapperInputMutationTests
 
         Assert.Equal(1, MarkedMutatingCounter.SerializeCount);
         Assert.NotSame(GetField(wrapper, "_safeProjector"), GetField(wrapper, "_unsafeProjector"));
+        Assert.NotSame(
+            ((IDualStateAccessor)wrapper).GetSafeProjectorPayload(),
+            ((IDualStateAccessor)wrapper).GetUnsafeProjectorPayload());
     }
 
     [Fact]
@@ -254,6 +290,28 @@ public class DualStateProjectionWrapperInputMutationTests
         typeof(DualStateProjectionWrapper<T>)
             .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(wrapper)!;
+
+    private static DualStateProjectionWrapper<MarkedMutatingCounter> CreateFactoryWrapper(
+        MarkedMutatingCounter initial,
+        SimpleMultiProjectorTypes types,
+        DcbDomainTypes domain)
+    {
+        var factoryCreate = typeof(DualStateProjectionWrapperFactory)
+            .GetMethods(BindingFlags.Static | BindingFlags.NonPublic)
+            .Single(method =>
+                method.Name == nameof(DualStateProjectionWrapperFactory.Create)
+                && method.GetParameters().Length == 6);
+        return Assert.IsType<DualStateProjectionWrapper<MarkedMutatingCounter>>(
+            factoryCreate.Invoke(null,
+            [
+                initial,
+                MarkedMutatingCounter.MultiProjectorName,
+                types,
+                domain.JsonSerializerOptions,
+                domain,
+                false
+            ]));
+    }
 
     private static void ApplyReportedTrace<T>(DualStateProjectionWrapper<T> wrapper, DcbDomainTypes domain)
         where T : IMultiProjectionPayload
