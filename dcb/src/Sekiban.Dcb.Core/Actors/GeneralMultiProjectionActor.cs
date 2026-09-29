@@ -1341,10 +1341,11 @@ public class GeneralMultiProjectionActor
                 lastEventId = dualAccessor.UnsafeLastEventId;
                 stateVersion = dualAccessor.UnsafeVersion;
 
-                // SEK-G18: IsSafeState reflects the RECONCILE FACT — the served state was published identical to the safe
-                // state (no buffered events remain, no rebuild pending) — never a timestamp comparison that can report
-                // true for an unreconciled, arrival-ordered payload (#1092). Read via the internal signal seam; fall back
-                // to the legacy timestamp comparison only for external accessors that do not implement the seam.
+                // SEK-G18: IsSafeState reflects the RECONCILE FACT — served is logically identical to safe (no buffered
+                // events remain, no rebuild pending), even though a mutating projector is exposed as an independent
+                // snapshot clone — never a timestamp or reference comparison that can misreport an unreconciled,
+                // arrival-ordered payload (#1092). Read via the internal signal seam; fall back to the legacy timestamp
+                // comparison only for external accessors that do not implement the seam.
                 if (dualAccessor is IDualStateRebuildSignals signals)
                 {
                     isSafeState = signals.IsServedIdenticalToSafe;

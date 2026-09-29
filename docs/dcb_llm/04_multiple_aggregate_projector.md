@@ -187,10 +187,15 @@ in global `SortableUniqueId` order) and a **served/unsafe** state (what queries 
 `Project` must treat its input payload as immutable and return a new payload instance. If an existing projector
 deliberately mutates and returns its input, its payload must implement `IMutatesProjectionInput`, and
 `GenerateInitialPayload` must return a fresh instance on every call. The marker makes the dual-state wrapper isolate the
-safe baseline through the registered snapshot serializer before an unsafe fold. This opt-in trades serialization work
+safe baseline through the registered snapshot serializer before an unsafe fold. When served state logically equals safe,
+the wrapper keeps a lazy mirror instead of cloning after every safe-window graduation; it materializes an independent
+clone only at the first unsafe fold or when served state is exposed. Catch-up with no reads therefore avoids a clone per
+event, while the first fold/read after a mirror pays one snapshot serialization round trip. This opt-in trades that work
 for correctness and is therefore not applied to immutable projectors. Operators can temporarily enable
 `GeneralMultiProjectionActorOptions.VerifySafeStateIsolation` to fail fast when an unmarked projector mutates safe state;
-the diagnostic is off by default because it serializes the safe payload around unsafe folds.
+the diagnostic is off by default because it serializes the safe payload around unsafe folds and compares the serialized
+bytes. Serialization must be deterministic: output whose byte order can vary (for example, an unordered collection) can
+raise a false positive even when the logical payload did not change.
 
 - **Served state is reconciled, not arrival-ordered.** At every safe-window graduation the
   served state is re-derived as `safe baseline + still-buffered events replayed in global
