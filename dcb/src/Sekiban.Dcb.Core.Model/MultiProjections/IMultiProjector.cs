@@ -13,7 +13,10 @@ public interface ICoreMultiProjector<T> : IMultiProjectionPayload where T : ICor
     static abstract string MultiProjectorName { get; }
     static abstract string MultiProjectorVersion { get; }
     /// <summary>
-    ///     Project with tags support for tag-based filtering
+    ///     Projects one event with tags support for tag-based filtering. Implementations must not mutate
+    ///     <paramref name="payload" /> and should return a new payload instance. A payload that deliberately mutates
+    ///     and returns its input must implement <see cref="IMutatesProjectionInput" /> so safe and unsafe state can be
+    ///     isolated. Such a projector must also return a fresh instance from <c>GenerateInitialPayload</c> on every call.
     /// </summary>
     /// <param name="payload">Current projector payload</param>
     /// <param name="ev">Event to project</param>

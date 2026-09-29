@@ -184,6 +184,14 @@ must live in a relational database. See [Materialized View Basics](20_materializ
 Multi-projections keep two states: a **safe** state (events older than the safe window,
 in global `SortableUniqueId` order) and a **served/unsafe** state (what queries return).
 
+`Project` must treat its input payload as immutable and return a new payload instance. If an existing projector
+deliberately mutates and returns its input, its payload must implement `IMutatesProjectionInput`, and
+`GenerateInitialPayload` must return a fresh instance on every call. The marker makes the dual-state wrapper isolate the
+safe baseline through the registered snapshot serializer before an unsafe fold. This opt-in trades serialization work
+for correctness and is therefore not applied to immutable projectors. Operators can temporarily enable
+`GeneralMultiProjectionActorOptions.VerifySafeStateIsolation` to fail fast when an unmarked projector mutates safe state;
+the diagnostic is off by default because it serializes the safe payload around unsafe folds.
+
 - **Served state is reconciled, not arrival-ordered.** At every safe-window graduation the
   served state is re-derived as `safe baseline + still-buffered events replayed in global
   SortableUniqueId order`, then published atomically. Two events that arrive out of order

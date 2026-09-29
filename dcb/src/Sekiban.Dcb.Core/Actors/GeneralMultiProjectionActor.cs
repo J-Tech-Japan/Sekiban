@@ -466,7 +466,8 @@ public class GeneralMultiProjectionActor
                     safeThreshold,
                     initialVersion: state.Version,
                     initialLastEventId: state.LastEventId,
-                    initialLastSortableUniqueId: state.LastSortableUniqueId)
+                    initialLastSortableUniqueId: state.LastSortableUniqueId,
+                    verifySafeStateIsolation: _options.VerifySafeStateIsolation)
                 : DualStateProjectionWrapperFactory.CreateFromRestoredSnapshot(
                     loadedPayload,
                     _projectorName,
@@ -475,7 +476,8 @@ public class GeneralMultiProjectionActor
                     safeThreshold,
                     initialVersion: state.Version,
                     initialLastEventId: state.LastEventId,
-                    initialLastSortableUniqueId: state.LastSortableUniqueId))
+                    initialLastSortableUniqueId: state.LastSortableUniqueId,
+                    verifySafeStateIsolation: _options.VerifySafeStateIsolation))
                 ?? throw new InvalidOperationException($"Failed to create wrapper for projector {_projectorName}");
         }
 
@@ -1481,7 +1483,8 @@ public class GeneralMultiProjectionActor
                     initialPayload,
                     _projectorName,
                     _types,
-                    _jsonOptions);
+                    _jsonOptions,
+                    _options.VerifySafeStateIsolation);
 
                 if (_singleStateAccessor == null)
                 {

@@ -119,6 +119,12 @@ public class GeneralMultiProjectionActorOptions
     ///     When false, uses the existing byte[] path for backward compatibility.
     /// </summary>
     public bool UseStreamingSnapshotIO { get; set; } = true;
+
+    /// <summary>
+    ///     When true, serializes the safe payload around unsafe folds and fails fast if an unmarked projector mutates it.
+    ///     This diagnostic has serialization overhead and is disabled by default.
+    /// </summary>
+    public bool VerifySafeStateIsolation { get; set; } = false;
 }
 
 public sealed class MultiProjectionPersistenceOverrideOptions
