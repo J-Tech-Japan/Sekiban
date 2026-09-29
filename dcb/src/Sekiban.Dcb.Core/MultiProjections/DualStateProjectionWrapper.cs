@@ -77,8 +77,8 @@ public class DualStateProjectionWrapper<T>
 
     /// <summary>
     ///     Creates a wrapper for a payload that does not implement <see cref="IMutatesProjectionInput" />.
-    ///     Marker payloads require the overload that accepts <see cref="DcbDomainTypes" /> so that the registered
-    ///     snapshot serializer can isolate safe and served state.
+    ///     Marker payloads require the constructor whose first parameter is <see cref="DcbDomainTypes" /> so that the
+    ///     registered snapshot serializer can isolate safe and served state.
     /// </summary>
     public DualStateProjectionWrapper(
         T initialProjector,
@@ -106,11 +106,11 @@ public class DualStateProjectionWrapper<T>
     ///     payloads that implement <see cref="IMutatesProjectionInput" />.
     /// </summary>
     public DualStateProjectionWrapper(
+        DcbDomainTypes domainTypes,
         T initialProjector,
         string projectorName,
         ICoreMultiProjectorTypes types,
         JsonSerializerOptions jsonOptions,
-        DcbDomainTypes domainTypes,
         int initialVersion = 0,
         Guid initialLastEventId = default,
         string? initialLastSortableUniqueId = null)
@@ -148,8 +148,8 @@ public class DualStateProjectionWrapper<T>
         {
             throw new InvalidOperationException(
                 $"Payloads implementing {nameof(IMutatesProjectionInput)} require isolation through the registered " +
-                $"snapshot serializer. Use the {nameof(DualStateProjectionWrapper<T>)} constructor overload that " +
-                $"accepts {nameof(DcbDomainTypes)}.");
+                $"snapshot serializer. Use the {nameof(DualStateProjectionWrapper<T>)} constructor whose first " +
+                $"parameter is {nameof(DcbDomainTypes)}.");
         }
         _unsafeProjector = _isolatesProjectionInput && domainTypes is not null
             ? (T)DualStateProjectionWrapperFactory.ClonePayload(

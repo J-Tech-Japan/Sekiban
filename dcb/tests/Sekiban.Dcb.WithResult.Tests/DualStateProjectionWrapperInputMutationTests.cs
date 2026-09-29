@@ -20,11 +20,11 @@ public class DualStateProjectionWrapperInputMutationTests
         var (types, domain) = CreateDomain<MarkedMutatingCounter>();
         var initial = new MarkedMutatingCounter { Values = new() { ["total"] = 7 } };
         var wrapper = new DualStateProjectionWrapper<MarkedMutatingCounter>(
+            domain,
             initial,
             MarkedMutatingCounter.MultiProjectorName,
             types,
-            domain.JsonSerializerOptions,
-            domain);
+            domain.JsonSerializerOptions);
 
         var safe = GetField(wrapper, "_safeProjector");
         var served = Assert.IsType<MarkedMutatingCounter>(
@@ -63,11 +63,11 @@ public class DualStateProjectionWrapperInputMutationTests
     {
         var (types, domain) = CreateDomain<MarkedMutatingCounter>();
         var wrapper = new DualStateProjectionWrapper<MarkedMutatingCounter>(
+            domain,
             MarkedMutatingCounter.GenerateInitialPayload(),
             MarkedMutatingCounter.MultiProjectorName,
             types,
-            domain.JsonSerializerOptions,
-            domain);
+            domain.JsonSerializerOptions);
 
         ApplyReportedTrace(wrapper, domain);
 
@@ -82,11 +82,11 @@ public class DualStateProjectionWrapperInputMutationTests
     {
         var (types, domain) = CreateDomain<MarkedMutatingCounter>();
         var wrapper = new DualStateProjectionWrapper<IMultiProjectionPayload>(
+            domain,
             MarkedMutatingCounter.GenerateInitialPayload(),
             MarkedMutatingCounter.MultiProjectorName,
             types,
-            domain.JsonSerializerOptions,
-            domain);
+            domain.JsonSerializerOptions);
 
         ApplyReportedTrace(wrapper, domain);
 
@@ -101,11 +101,11 @@ public class DualStateProjectionWrapperInputMutationTests
     {
         var (types, domain) = CreateDomain<MarkedMutatingCounter>();
         var wrapper = new DualStateProjectionWrapper<MarkedMutatingCounter>(
+            domain,
             MarkedMutatingCounter.GenerateInitialPayload(),
             MarkedMutatingCounter.MultiProjectorName,
             types,
-            domain.JsonSerializerOptions,
-            domain);
+            domain.JsonSerializerOptions);
         var zero = ReportedEvents().Safe;
 
         wrapper.ProcessEvent(zero, Threshold(), domain);
@@ -116,11 +116,11 @@ public class DualStateProjectionWrapperInputMutationTests
         Assert.NotSame(safe, served);
 
         var accessorWrapper = new DualStateProjectionWrapper<MarkedMutatingCounter>(
+            domain,
             MarkedMutatingCounter.GenerateInitialPayload(),
             MarkedMutatingCounter.MultiProjectorName,
             types,
-            domain.JsonSerializerOptions,
-            domain);
+            domain.JsonSerializerOptions);
         accessorWrapper.ProcessEvent(zero, Threshold(), domain);
         var accessor = (IDualStateAccessor)accessorWrapper;
         accessor.PromoteBufferedEvents(Threshold(), domain);
@@ -277,6 +277,28 @@ public class DualStateProjectionWrapperInputMutationTests
     }
 
     [Fact]
+    public void LegacyTrailingPositionalDefault_BindsToInitialVersion()
+    {
+        var (types, domain) = CreateDomain<UnmarkedMutatingCounter>();
+        var constructor = new DualStateProjectionWrapper<UnmarkedMutatingCounter>(
+            UnmarkedMutatingCounter.GenerateInitialPayload(),
+            UnmarkedMutatingCounter.MultiProjectorName,
+            types,
+            domain.JsonSerializerOptions,
+            default);
+        var factory = Assert.IsType<DualStateProjectionWrapper<UnmarkedMutatingCounter>>(
+            DualStateProjectionWrapperFactory.Create(
+                UnmarkedMutatingCounter.GenerateInitialPayload(),
+                UnmarkedMutatingCounter.MultiProjectorName,
+                types,
+                domain.JsonSerializerOptions,
+                default));
+
+        Assert.Equal(0, constructor.SafeVersion);
+        Assert.Equal(0, factory.SafeVersion);
+    }
+
+    [Fact]
     public async Task Actor_VerificationAllowsPureProjector()
     {
         var (_, domain) = CreateDomain<PureCounter>();
@@ -363,7 +385,7 @@ public class DualStateProjectionWrapperInputMutationTests
         SimpleMultiProjectorTypes types,
         DcbDomainTypes domain)
         => Assert.IsType<DualStateProjectionWrapper<MarkedMutatingCounter>>(
-            DualStateProjectionWrapperFactory.Create(
+            DualStateProjectionWrapperFactory.CreateWithDomainTypes(
                 initial,
                 MarkedMutatingCounter.MultiProjectorName,
                 types,

@@ -1480,7 +1480,7 @@ public class GeneralMultiProjectionActor
             else
             {
                 // Wrap traditional projections in DualStateProjectionWrapper via factory
-                _singleStateAccessor = DualStateProjectionWrapperFactory.Create(
+                _singleStateAccessor = DualStateProjectionWrapperFactory.CreateWithDomainTypesAndVerification(
                     initialPayload,
                     _projectorName,
                     _types,

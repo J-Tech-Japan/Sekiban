@@ -13,7 +13,7 @@ public static class DualStateProjectionWrapperFactory
 {
     /// <summary>
     ///     Creates a wrapper for a payload that does not implement <see cref="IMutatesProjectionInput" />.
-    ///     Marker payloads require the overload that accepts <see cref="DcbDomainTypes" />.
+    ///     Marker payloads require <see cref="CreateWithDomainTypes" />.
     /// </summary>
     public static IMultiProjectionPayload? Create(
         IMultiProjectionPayload payload,
@@ -28,7 +28,7 @@ public static class DualStateProjectionWrapperFactory
         {
             throw new InvalidOperationException(
                 $"Payloads implementing {nameof(IMutatesProjectionInput)} require isolation through the registered " +
-                $"snapshot serializer. Use the {nameof(Create)} overload that accepts {nameof(DcbDomainTypes)}.");
+                $"snapshot serializer. Use {nameof(CreateWithDomainTypes)} with {nameof(DcbDomainTypes)}.");
         }
 
         return CreateCore(
@@ -47,7 +47,7 @@ public static class DualStateProjectionWrapperFactory
     ///     Creates a wrapper and uses the registered snapshot serializer from <paramref name="domainTypes" /> to isolate
     ///     payloads that implement <see cref="IMutatesProjectionInput" />.
     /// </summary>
-    public static IMultiProjectionPayload? Create(
+    public static IMultiProjectionPayload? CreateWithDomainTypes(
         IMultiProjectionPayload payload,
         string projectorName,
         ICoreMultiProjectorTypes multiProjectorTypes,
@@ -67,7 +67,7 @@ public static class DualStateProjectionWrapperFactory
             verifySafeStateIsolation: false,
             domainTypes);
 
-    internal static IMultiProjectionPayload? Create(
+    internal static IMultiProjectionPayload? CreateWithDomainTypesAndVerification(
         IMultiProjectionPayload payload,
         string projectorName,
         ICoreMultiProjectorTypes multiProjectorTypes,
