@@ -31,8 +31,6 @@ public class DualStateProjectionWrapper<T>
     private readonly bool _isolatesProjectionInput;
     private readonly bool _verifySafeStateIsolation;
     private byte[]? _safeStateFingerprint;
-    // Marker payloads always keep distinct safe and served backing instances, even while their logical values match.
-    private bool _servedMirrorsSafe;
     private bool _useIncrementalSafePromotion;
 
     // In the fresh (pre-compaction) path an out-of-order safe arrival is retained but not folded. Subsequent arrivals
@@ -128,7 +126,6 @@ public class DualStateProjectionWrapper<T>
                 domainTypes,
                 ZeroThreshold.Value)
             : CloneProjector(initialProjector, jsonOptions);
-        _servedMirrorsSafe = false;
         _verifySafeStateIsolation = verifySafeStateIsolation;
         _useIncrementalSafePromotion = false;
         if (_isolatesProjectionInput && domainTypes is not null)
@@ -184,7 +181,6 @@ public class DualStateProjectionWrapper<T>
                 safeWindowThreshold ?? ZeroThreshold.Value);
         }
         _unsafeProjector = unsafeProjector;
-        _servedMirrorsSafe = false;
         _verifySafeStateIsolation = verifySafeStateIsolation;
         _useIncrementalSafePromotion = true;
         if (_isolatesProjectionInput && domainTypes is not null)
@@ -213,7 +209,6 @@ public class DualStateProjectionWrapper<T>
     {
         _lastDomainTypes = domainTypes;
         ConsumeServedState(_lastSafeWindowThreshold ?? ZeroThreshold, domainTypes);
-        MaterializeServedStateIfNeeded(_lastSafeWindowThreshold ?? ZeroThreshold, domainTypes);
         return new UnsafeProjection<T>(_unsafeProjector, _unsafeLastSortableUniqueId, _unsafeLastEventId, _unsafeVersion);
     }
 
@@ -326,7 +321,6 @@ public class DualStateProjectionWrapper<T>
     object IDualStateAccessor.GetUnsafeProjectorPayload()
     {
         ConsumeUsingRememberedContext();
-        MaterializeServedStateForExposure();
         return _unsafeProjector!;
     }
 
@@ -501,7 +495,6 @@ public class DualStateProjectionWrapper<T>
             _unsafeVersion,
             _unsafeLastEventId,
             _unsafeLastSortableUniqueId,
-            _servedMirrorsSafe,
             _safeStateFingerprint);
 
         try
@@ -541,7 +534,6 @@ public class DualStateProjectionWrapper<T>
             _unsafeVersion = published.UnsafeVersion;
             _unsafeLastEventId = published.UnsafeLastEventId;
             _unsafeLastSortableUniqueId = published.UnsafeLastSortableUniqueId;
-            _servedMirrorsSafe = false;
             _safeStateFingerprint = published.SafeStateFingerprint;
             _servedStateDirty = true;
             AttachDeferredRepairDirtyAttribution(exception);
@@ -603,7 +595,6 @@ public class DualStateProjectionWrapper<T>
     private void ProjectUnsafeInOrder(Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
         VerifySafeStateUnchanged(domainTypes, "before unsafe fold");
-        MaterializeServedStateIfNeeded(safeWindowThreshold, domainTypes);
         var served = _types.Project(
             _projectorName,
             _unsafeProjector,
@@ -619,7 +610,6 @@ public class DualStateProjectionWrapper<T>
         VerifySafeStateUnchanged(domainTypes, "after unsafe fold");
 
         _unsafeProjector = (T)served.GetValue();
-        _servedMirrorsSafe = false;
         _unsafeLastEventId = evt.Id;
         _unsafeLastSortableUniqueId = evt.SortableUniqueIdValue;
         _unsafeVersion = _safeVersion + _bufferedEvents.Count;
@@ -627,31 +617,6 @@ public class DualStateProjectionWrapper<T>
 
     private static List<ITag> ResolveTags(Event evt, DcbDomainTypes domainTypes) =>
         evt.Tags.Select(tagString => domainTypes.TagTypes.GetTag(tagString)).ToList();
-
-    private void MaterializeServedStateForExposure()
-    {
-        if (!_servedMirrorsSafe)
-        {
-            return;
-        }
-
-        var domainTypes = _lastDomainTypes ?? throw new InvalidOperationException(
-            "Lazy served-state isolation has no domain context. Promote events or use GetUnsafeProjection first.");
-        MaterializeServedStateIfNeeded(_lastSafeWindowThreshold ?? ZeroThreshold, domainTypes);
-    }
-
-    private void MaterializeServedStateIfNeeded(
-        SortableUniqueId safeWindowThreshold,
-        DcbDomainTypes domainTypes)
-    {
-        if (!_servedMirrorsSafe)
-        {
-            return;
-        }
-
-        _unsafeProjector = CloneSafeProjector(safeWindowThreshold, domainTypes);
-        _servedMirrorsSafe = false;
-    }
 
     private T CloneSafeProjector(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes) =>
         (T)DualStateProjectionWrapperFactory.ClonePayload(
@@ -734,7 +699,6 @@ public class DualStateProjectionWrapper<T>
             _lastDomainTypes = domainTypes;
             _lastSafeWindowThreshold = safeWindowThreshold;
             _unsafeProjector = CloneSafeProjector(safeWindowThreshold, domainTypes);
-            _servedMirrorsSafe = false;
             _unsafeLastEventId = _safeLastEventId;
             _unsafeLastSortableUniqueId = _safeLastSortableUniqueId;
             _unsafeVersion = _safeVersion;
@@ -775,7 +739,6 @@ public class DualStateProjectionWrapper<T>
         }
 
         _unsafeProjector = served;
-        _servedMirrorsSafe = false;
         _unsafeLastEventId = lastEventId;
         _unsafeLastSortableUniqueId = lastSortableId;
         _unsafeVersion = _safeVersion + _bufferedEvents.Count;
@@ -821,7 +784,6 @@ public class DualStateProjectionWrapper<T>
         int UnsafeVersion,
         Guid UnsafeLastEventId,
         string UnsafeLastSortableUniqueId,
-        bool ServedMirrorsSafe,
         byte[]? SafeStateFingerprint);
 
     private void RebuildProcessedEventIdsFromBufferedEvents()

@@ -187,11 +187,12 @@ in global `SortableUniqueId` order) and a **served/unsafe** state (what queries 
 `Project` must treat its input payload as immutable and return a new payload instance. If an existing projector
 deliberately mutates and returns its input, its payload must implement `IMutatesProjectionInput`, and
 `GenerateInitialPayload` must return a fresh instance on every call. The marker makes the dual-state wrapper isolate the
-safe baseline through the registered snapshot serializer before an unsafe fold. When served state logically equals safe,
-the wrapper keeps a lazy mirror instead of cloning after every safe-window graduation; it materializes an independent
-clone only at the first unsafe fold or when served state is exposed. Catch-up with no reads therefore avoids a clone per
-event, while the first fold/read after a mirror pays one snapshot serialization round trip. This opt-in trades that work
-for correctness and is therefore not applied to immutable projectors. Operators can temporarily enable
+safe baseline through the snapshot serializer. Every reconcile, including the reconcile after each safe in-order event
+during catch-up or rebuild, creates an independent clone of safe. Every unsafe fold also starts from an independently
+cloned safe baseline, so each reconcile costs O(state size). This opt-in trades throughput for safety; prefer a
+non-mutating (immutable or copy-on-write) projector for large states. The fresh factory path clones the initial payload
+once through the registered serializer, while direct use of the public constructor falls back to `System.Text.Json`.
+Operators can temporarily enable
 `GeneralMultiProjectionActorOptions.VerifySafeStateIsolation` to fail fast when an unmarked projector mutates safe state;
 the diagnostic is off by default because it serializes the safe payload around unsafe folds and compares the serialized
 bytes. Serialization must be deterministic: output whose byte order can vary (for example, an unordered collection) can

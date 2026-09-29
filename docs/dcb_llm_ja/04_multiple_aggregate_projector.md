@@ -183,11 +183,12 @@ Sekiban 内部だけで完結する読み取りならマルチプロジェクシ
 `Project` は入力 payload を不変として扱い、新しい payload インスタンスを返す必要があります。既存の
 projector が意図的に入力を変更して同じインスタンスを返す場合、payload に `IMutatesProjectionInput` を
 実装し、`GenerateInitialPayload` も呼び出しごとに新しいインスタンスを返してください。この marker により、
-dual-state wrapper は unsafe fold の前に登録済み snapshot serializer を使って safe baseline を分離します。
-served 状態が論理的に safe と同じ間は、safe-window 昇格ごとに clone せず lazy mirror として保持し、最初の
-unsafe fold または served 状態の公開時にだけ独立した clone を生成します。このため read のない catch-up では
-イベントごとの clone を避けられますが、mirror 後の最初の fold/read では snapshot serialization 1 往復分の
-コストが発生します。この opt-in は正しさのためにそのコストを伴うため、不変 projector には適用されません。運用時に
+dual-state wrapper は snapshot serializer を使って safe baseline を分離します。catch-up または rebuild 中に
+safe なイベントを順序どおり反映した直後を含め、reconcile のたびに safe から独立した clone を生成します。
+unsafe fold の baseline も毎回 safe から独立して clone されるため、各 reconcile のコストは O(state size) です。
+この opt-in は throughput と引き換えに安全性を得るものです。大きな state では、入力を変更しない immutable または
+copy-on-write projector を推奨します。fresh factory 経路では初期 payload を登録済み serializer で一度 clone し、
+公開 constructor を直接使う場合は `System.Text.Json` に fallback します。運用時に
 未宣言の入力変更を検出するには `GeneralMultiProjectionActorOptions.VerifySafeStateIsolation` を一時的に有効化
 できます。unsafe fold の前後で safe payload を serialize し、その byte 列を比較するため、既定値は無効です。
 serialization は決定的である必要があり、順序なし collection など出力 byte 順が変動し得る payload では、論理値が
