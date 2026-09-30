@@ -125,7 +125,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         InvokePrivate(grain, "ObserveCatchUpRestart", [release.Task]);
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => (Task)InvokePrivate(grain, "AwaitFirstQueryCatchUpAsync", [])!);
-        Assert.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, error.Message);
+        Assert.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, error.Message, StringComparison.Ordinal);
         Assert.Null(GetPrivateFieldValue(grain, "_lastBackgroundCatchUpError"));
         Assert.Null(GetPrivateFieldValue(grain, "_catchUpTimer"));
         release.SetResult();
@@ -153,7 +153,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             (Task)InvokePrivate(grain, "AwaitFirstQueryCatchUpAsync", [])!);
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5));
-        Assert.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, error.Message);
+        Assert.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, error.Message, StringComparison.Ordinal);
         Assert.True(error.Message.Contains("store down"), error.Message);
         Assert.Empty(host.AppliedEventIds);
         Assert.Null(GetPrivateFieldValue(grain, "_lastError"));

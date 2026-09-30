@@ -105,7 +105,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
                 }
                 catch (InvalidOperationException ex) { error = ex; }
             }
-            Assert.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, error.Message);
+            Assert.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, error.Message, StringComparison.Ordinal);
             Assert.Contains("current position", error.Message);
             Assert.Contains("target position", error.Message);
             Assert.Contains("events processed", error.Message);
@@ -154,8 +154,8 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             Assert.All(polls, result =>
             {
                 Assert.False(result.IsSuccess);
-                Assert.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,
-                    result.GetException().Message);
+                Assert.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,
+                    result.GetException().Message, StringComparison.Ordinal);
             });
             Assert.Equal(1, Volatile.Read(ref starts));
             Assert.Equal(1, Volatile.Read(ref settlements));
@@ -168,6 +168,40 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             Assert.Equal(1, Volatile.Read(ref starts));
         }
         finally { release.TrySetResult(); }
+    }
+
+    [Fact]
+    public async Task AlreadyRefreshedToHead_GetStateSettlesWithinBudget_WithoutBackgroundRestart()
+    {
+        Env.WaitMs = 2000;
+        IMultiProjectionGrain grain;
+        // Stop the activation timer deterministically, leaving the first-query gate pending for RefreshAsync.
+        using (CatchUpProductionTestHooks.Register(
+            Sekiban.Dcb.ServiceId.DefaultServiceIdProvider.DefaultServiceId, CountProjector.MultiProjectorName,
+            (point, _) => point == CatchUpProductionHookPoint.BackgroundEnteredGate
+                ? Task.FromException(new InvalidOperationException("stop activation catch-up before manual refresh"))
+                : Task.CompletedTask))
+        {
+            grain = await FreshAsync();
+            await PollUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
+        }
+        await grain.RefreshAsync();
+        Assert.True((await grain.GetStatusAsync()).FirstQueryCatchUpPending);
+        var starts = 0;
+        using var hook = CatchUpProductionTestHooks.Register(
+            Sekiban.Dcb.ServiceId.DefaultServiceIdProvider.DefaultServiceId, CountProjector.MultiProjectorName,
+            (point, _) =>
+            {
+                if (point == CatchUpProductionHookPoint.BackgroundStarted) Interlocked.Increment(ref starts);
+                return Task.CompletedTask;
+            });
+        var sw = Stopwatch.StartNew();
+        var result = await grain.GetStateAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
+        Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(Env.WaitMs), sw.Elapsed.ToString());
+        Assert.Equal(3, ((CountProjector)result.GetValue().Payload).Count);
+        Assert.False((await grain.GetStatusAsync()).FirstQueryCatchUpPending);
+        Assert.Equal(0, Volatile.Read(ref starts));
     }
 
     [Fact]
@@ -224,7 +258,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
         await PollUntilAsync(async () =>
         {
             var result = await grain.GetStateAsync();
-            return !result.IsSuccess && !result.GetException().Message.StartsWith(
+            return !result.IsSuccess && !result.GetException().Message.Contains(
                 MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, StringComparison.Ordinal);
         });
         int runs;
@@ -266,6 +300,13 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             Sekiban.Dcb.ServiceId.DefaultServiceIdProvider.DefaultServiceId, CountProjector.MultiProjectorName,
             async (point, observation) =>
             {
+                // An inactive bounded poll now retries through background Ensure instead of a timer restart.
+                if (point == CatchUpProductionHookPoint.InvocationBeforeRead && failed.Task.IsCompleted)
+                {
+                    lock (starts) starts.Add(observation.Start!);
+                    await release.Task;
+                    return;
+                }
                 if (point != CatchUpProductionHookPoint.BackgroundEnteredGate) return;
                 lock (starts) starts.Add(observation.Start!);
                 if (Interlocked.Increment(ref calls) == 2)

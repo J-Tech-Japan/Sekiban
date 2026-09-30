@@ -315,6 +315,12 @@ SEK-G21 の authoritative start position 契約は維持します。background s
 クエリ到着前の場合があり、成功時には通常の projection lag semantics が適用されます。
 受付時点の freshness は保証されません。既存の 30 秒 `waitForCatchUp` helper は変更しません。
 
+定数は grain が生成するメッセージの先頭を表します。transport や ResultBox の wrapper が
+文字列を前置するため、host は `Contains(prefix, StringComparison.Ordinal)` で判定します。
+catch-up が非アクティブで initiation と settlement が進行中でなければ、poll は共有 background
+Ensure を直ちに開始します。Refresh 済みの host は timer の空 batch 閾値を待たずに N 内で
+settle できます。クエリ内で Ensure を inline 実行することはありません。
+
 ASP.NET Core host の 503 と Retry-After マッピング例（error の取得元は query surface に合わせます）:
 
 ```csharp
@@ -323,9 +329,9 @@ using Sekiban.Dcb.Orleans.Grains;
 // Map both ResultBox.GetException() and thrown scalar/list query exceptions.
 static IResult MapProjectionError(Exception error, HttpResponse response)
 {
-    if (error.Message.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,
+    if (error.Message.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,
             StringComparison.Ordinal) ||
-        error.Message.StartsWith(MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix,
+        error.Message.Contains(MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix,
             StringComparison.Ordinal))
     {
         response.Headers["Retry-After"] = "2";

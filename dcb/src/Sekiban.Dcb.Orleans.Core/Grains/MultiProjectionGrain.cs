@@ -144,6 +144,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private int _tombstoneFailClosedArmGeneration;
     private int _boundedWaitArmGeneration;
     private Task? _boundedCatchUpInitiation;
+    private Task? _boundedGateSettlement;
     private int _firstQueryCatchUpMaxWaitMs;
     private string? _lastBackgroundCatchUpError;
     private int _backgroundErrorArmGeneration;
@@ -3629,11 +3630,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // Bounded polls must observe that attempt rather than recover it as stale and replace its run.
         if (!forceFull && (HasLiveProjectionFault ||
             (IsBoundedWaitEpisode && (_firstQueryGate.IsInFlight ||
+                _boundedGateSettlement is { IsCompleted: false } ||
                 _boundedCatchUpInitiation is { IsCompleted: false })))) return;
         RecoverStaleCatchUpIfNeeded(GetProjectorName());
 
         if (_catchUpProgress.IsActive)
         {
+            return;
+        }
+
+        if (!forceFull && BoundedWaitPending)
+        {
+            // An inactive host may already be at head after RefreshAsync. Prove it with the shared background
+            // Ensure now rather than restart a timer and wait for its consecutive empty batches.
+            ObserveEnsureAsync(EnsureFirstQuerySyncCatchUpAsync);
             return;
         }
 
@@ -3646,7 +3656,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         ObserveEnsureAsync(EnsureFirstQuerySyncCatchUpAsync);
     }
 
-    private void ObserveEnsureAsync(Func<Task> ensureWork) => _ = ObserveEnsureInnerAsync(ensureWork);
+    private void ObserveEnsureAsync(Func<Task> ensureWork)
+    {
+        if (BoundedWaitPending)
+        {
+            // Cover the Task.Yield scheduling window before Ensure publishes the gate's in-flight task.
+            if (_boundedGateSettlement is { IsCompleted: false } || _firstQueryGate.IsInFlight) return;
+            _boundedGateSettlement = ObserveEnsureInnerAsync(ensureWork);
+            return;
+        }
+        _ = ObserveEnsureInnerAsync(ensureWork);
+    }
 
     private async Task ObserveEnsureInnerAsync(Func<Task> ensureWork)
     {

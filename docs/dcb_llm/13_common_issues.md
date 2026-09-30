@@ -647,6 +647,12 @@ an authoritative head read before the query arrived, so successful opt-in querie
 ordinary projection lag semantics, rather than guaranteed freshness at admission.
 The existing 30-second `waitForCatchUp` helpers are unchanged.
 
+The constants identify the start of the grain-generated message. Transport or ResultBox
+wrappers may prepend text, so hosts must match with `Contains(prefix, StringComparison.Ordinal)`.
+When catch-up is inactive and no initiation or settlement is in flight, a poll schedules the
+shared background Ensure immediately. An already refreshed host can settle within N without
+waiting for the timer's empty-batch threshold; the query never runs Ensure inline.
+
 A minimal ASP.NET Core host mapping (adapt the error source to your query surface):
 
 ```csharp
@@ -655,9 +661,9 @@ using Sekiban.Dcb.Orleans.Grains;
 // Map both ResultBox.GetException() and thrown scalar/list query exceptions.
 static IResult MapProjectionError(Exception error, HttpResponse response)
 {
-    if (error.Message.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,
+    if (error.Message.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,
             StringComparison.Ordinal) ||
-        error.Message.StartsWith(MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix,
+        error.Message.Contains(MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix,
             StringComparison.Ordinal))
     {
         response.Headers["Retry-After"] = "2";
