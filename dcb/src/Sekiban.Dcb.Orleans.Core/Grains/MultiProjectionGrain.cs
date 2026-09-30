@@ -2345,9 +2345,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _catchUpTimer?.Dispose();
             _catchUpTimer = null;
 
-            // A null FullReplay timer START may belong to a host that has since applied events. Resume only from SAFE,
-            // never from the timer's fetched cursor (which can include the unsafe window).
-            var startLease = inheritedStart is { Source: CatchUpStartPositionSource.FullReplay, StartPosition: null } && !_hostIsPristine
+            // A null non-restored timer START may belong to a host that has since gained a safe checkpoint. Resume only
+            // from SAFE, never from the timer's fetched cursor (which can include the unsafe window). A restored record
+            // remains authoritative even when its START is null.
+            var startLease = inheritedStart is { Source: not CatchUpStartPositionSource.RestoredCheckpoint, StartPosition: null } && !_hostIsPristine
                 ? await _catchUpStartPositions.AcquireAsync(false, GetCurrentPositionAsync)
                 : inheritedStart
                 ?? await _catchUpStartPositions.AcquireAsync(
