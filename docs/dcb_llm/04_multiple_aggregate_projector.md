@@ -295,6 +295,13 @@ null inherits, and zero or negative restores blocking behaviour for that project
 Choose N well below Orleans `ResponseTimeout` and client/HTTP timeouts. N excludes
 activation and request queuing; it is not a total response-time guarantee.
 
+With this option enabled, the first query after activation joins the activation's background
+catch-up and the gate settles only after that run completes. By default, completion requires
+`MaxConsecutiveEmptyBatches` (5) empty batches at the catch-up interval (1 s). Even a short
+tail can therefore take about 5 s before the gate settles, while the default in-call path
+takes milliseconds. Choose N accordingly (for example, ≥ 10 s, within the timeouts above),
+or expect an initial "catching up" response for a small N. Reducing this latency is a follow-up.
+
 On a fresh activation against an empty event store, a small N can still return the
 catching-up error until idle settlement completes (about `MaxConsecutiveEmptyBatches`
 × the catch-up interval). Concurrent polls are serialized by the non-reentrant grain;

@@ -191,12 +191,13 @@ public class TombstoneFailClosedTests : IAsyncLifetime
 
     private async Task<IMultiProjectionGrain> PrepareFreshActivationWithOpenTombstoneAsync()
     {
+        var t0 = DateTime.UtcNow;
         const int persistedEvents = 30;
         const int tailEvents = 20;
         var grain = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
 
         var baseline = Enumerable.Range(0, persistedEvents)
-            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), DateTime.UtcNow.AddSeconds(-60 + i))))
+            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(-60 + i))))
             .ToArray();
         await Env.EventStore.WriteSerializableEventsAsync(baseline);
         await grain.RefreshAsync();
@@ -212,7 +213,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
         Assert.Equal(CheckpointCasStatus.Committed, tombstone.Status);
 
         var tail = Enumerable.Range(persistedEvents, tailEvents)
-            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), DateTime.UtcNow.AddSeconds(-60 + i))))
+            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(-60 + i))))
             .ToArray();
         await Env.EventStore.WriteSerializableEventsAsync(tail);
 

@@ -59,10 +59,11 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
                 }
             });
 
-    private async Task<IMultiProjectionGrain> FreshAsync()
+    private async Task<IMultiProjectionGrain> FreshAsync(DateTime? timestamp = null)
     {
+        var t0 = timestamp ?? DateTime.UtcNow;
         await Env.EventStore.WriteSerializableEventsAsync(Enumerable.Range(0, 3)
-            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), DateTime.UtcNow.AddSeconds(-60 + i)))).ToArray());
+            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(-60 + i)))).ToArray());
         return _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
     }
 
@@ -259,6 +260,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
     [Fact]
     public async Task TailPoison_FaultPrecedesCatchUpError_AndDoesNotStartNewRun()
     {
+        var t0 = DateTime.UtcNow;
         var leases = new HashSet<CatchUpStartPositionLease>(ReferenceEqualityComparer.Instance);
         using var hook = CatchUpProductionTestHooks.Register(
             Sekiban.Dcb.ServiceId.DefaultServiceIdProvider.DefaultServiceId, CountProjector.MultiProjectorName,
@@ -268,9 +270,9 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
                     lock (leases) leases.Add(observation.Start!);
                 return Task.CompletedTask;
             });
-        var grain = await FreshAsync();
+        var grain = await FreshAsync(t0);
         await Env.EventStore.WriteSerializableEventsAsync([
-            ToSerializable(CreateEvent(new Counted("poison"), DateTime.UtcNow.AddSeconds(-50)))]);
+            ToSerializable(CreateEvent(new Counted("poison"), t0.AddSeconds(-50)))]);
         await PollUntilAsync(async () =>
         {
             var result = await grain.GetStateAsync();
@@ -295,8 +297,9 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
     [InlineData(true, true)]
     public async Task FailedAttempt_RestartsIncrementally_WithoutDoubleApplying(bool restoredSnapshot, bool restoreFailure)
     {
+        var t0 = DateTime.UtcNow;
         Env.WaitMs = 20_000;
-        var grain = await FreshAsync();
+        var grain = await FreshAsync(t0);
         if (restoredSnapshot)
         {
             Assert.True((await grain.GetStateAsync()).IsSuccess);
@@ -304,7 +307,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             await grain.RequestDeactivationAsync();
             await Task.Delay(1000);
             await Env.EventStore.WriteSerializableEventsAsync([
-                ToSerializable(CreateEvent(new Counted("tail"), DateTime.UtcNow.AddSeconds(-40)))]);
+                ToSerializable(CreateEvent(new Counted("tail"), t0.AddSeconds(-40)))]);
         }
         Env.WaitMs = 100;
         Env.GatingStore.FailRestore = restoreFailure;
@@ -359,14 +362,15 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
     [Fact]
     public async Task RestoredSnapshot_BackgroundEnsureFailure_PollRetriesWithoutDoubleApplying()
     {
+        var t0 = DateTime.UtcNow;
         Env.WaitMs = 20_000;
-        var grain = await FreshAsync();
+        var grain = await FreshAsync(t0);
         Assert.Equal(3, ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
         await grain.RequestDeactivationAsync();
         await Task.Delay(1000);
         await Env.EventStore.WriteSerializableEventsAsync([
-            ToSerializable(CreateEvent(new Counted("tail"), DateTime.UtcNow.AddSeconds(-40)))]);
+            ToSerializable(CreateEvent(new Counted("tail"), t0.AddSeconds(-40)))]);
 
         Env.WaitMs = 100;
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

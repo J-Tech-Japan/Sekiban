@@ -570,6 +570,13 @@ null は全体設定を継承し、0 以下は当該 projector の blocking 動�
 N は Orleans `ResponseTimeout` と HTTP/client timeout より十分短く設定してください。
 activation と request queue の時間は含まれず、応答全体の上限ではありません。
 
+この設定を有効にすると、activation 後の初回クエリは activation の background catch-up を共有し、
+その実行が完了してから gate が settle します。既定では catch-up interval（1 秒）ごとに
+`MaxConsecutiveEmptyBatches`（5）回の空 batch を確認して完了します。このため短い tail でも
+settle まで約 5 秒かかる場合があり、既定の in-call path ではミリ秒で完了します。
+N はこの遅延を考慮して設定してください（例: 上記 timeout の範囲内で 10 秒以上）。
+N が小さい場合は初回に「catching up」応答が返ることを想定してください。この遅延の短縮は後続課題です。
+
 対象は durable rebuild marker が pending でない activation の generic arm のみです。
 snapshot restore 失敗後に host を再作成してから行う activation generic arm も対象です。
 checkpoint tombstone は SEK-G85、durable marker は SEK-G18 の動作を維持します。
