@@ -122,6 +122,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     // Projection host - engine-agnostic abstraction over the projection actor
     private IProjectionActorHost? _host;
+    // Host-instance lifetime, independent of query-gate arm generations. Failed restoration without a known
+    // record leaves a fresh host pristine, preserving the activation's replay from zero.
+    private bool _hostIsPristine = true;
 
     // Simple tracking
     private bool _isInitialized;
@@ -1270,7 +1273,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         if (newEvents.Count > 0)
         {
-            await _host.AddSerializableEventsAsync(newEvents, finishedCatchUp);
+            await ApplyHostEventsAsync(newEvents, finishedCatchUp);
             _eventsProcessed += newEvents.Count;
 
             var lastApplied = newEvents
@@ -1318,6 +1321,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // establishes the G14 persisted fault via the existing per-event boundary.
     private async Task TriggerDurableFullRebuildAsync()
     {
+        await CatchUpProductionTestHooks.PublishAsync(
+            CatchUpProductionHookPoint.RebuildRequiredDetected,
+            new CatchUpProductionObservation(_serviceId, GetProjectorName(), _catchUpProgress.StartLease, _catchUpProgress.CurrentPosition));
         // Block queries in THIS activation before touching any durable state.
         _firstQueryGate.Arm();
 
@@ -2339,7 +2345,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _catchUpTimer?.Dispose();
             _catchUpTimer = null;
 
-            var startLease = inheritedStart
+            // A null timer START may belong to a host that has since applied events. Resume only from SAFE,
+            // never from the timer's fetched cursor (which can include the unsafe window).
+            var startLease = inheritedStart is { StartPosition: null } && !_hostIsPristine
+                ? await _catchUpStartPositions.AcquireAsync(false, GetCurrentPositionAsync)
+                : inheritedStart
                 ?? await _catchUpStartPositions.AcquireAsync(
                     forceFullReplay: false,
                     GetCurrentPositionAsync);
@@ -2364,7 +2374,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (inheritedStart is null)
             {
                 // A fresh invocation owns a new logical window. A forced first-query invocation with an inherited
-                // active run deliberately keeps the prior window's applied/fetched/time progress.
+                // active run deliberately keeps the prior window's applied/fetched/time progress, including when
+                // its null lease is replaced by a safe-checkpoint START. Re-reading does not reset persist cadence.
                 ResetCatchUpPersistWindow(resetReadPath: true);
             }
             _catchUpBatchSkipCount = 0;
@@ -2478,6 +2489,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 mergedOptions,
                 _logger);
 
+            _hostIsPristine = true;
             CaptureProjectionStatusWriterIdentity(projectorName);
             var projectorVersion = _projectionStatusWriterIdentity!.ProjectorVersion;
             bool restoredFromExternalStore = false;
@@ -2619,6 +2631,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             }
                             else
                             {
+                                _hostIsPristine = false;
                                 _eventsProcessed = record.EventsProcessed;
                                 MarkProjectionStatusDirty(record.LastSortableUniqueId, record.LastSortableUniqueId);
                                 ClearProcessedEventCache();
@@ -3131,6 +3144,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         ResetCatchUpPersistWindow(resetReadPath: true);
 
         _host = _actorHostFactory.Create(GetProjectorName(), _mergedActorOptions ?? DefaultActorOptions, _logger);
+        _hostIsPristine = true;
+        // Recreation is synchronous; friend observers for this notification must complete synchronously.
+        CatchUpProductionTestHooks.PublishSynchronous(
+            CatchUpProductionHookPoint.HostRecreated,
+            new CatchUpProductionObservation(_serviceId, GetProjectorName(), null, null));
         VerifyPinnedProjectionStatusWriterIdentityAfterHostRecreation();
         _firstQueryGate.Arm();
     }
@@ -4326,7 +4344,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             // Both background and first-query paths acquire START from the same one-shot resolver. The restored record
             // wins over host-payload inference and is consumed exactly once.
-            var startLease = await _catchUpStartPositions.AcquireAsync(forceFull, GetCurrentPositionAsync);
+            // Forced replay is valid only on a fresh host. With no safe checkpoint a non-pristine host still
+            // starts at null (InferredCheckpoint), relying on native host deduplication.
+            var startLease = await _catchUpStartPositions.AcquireAsync(forceFull && _hostIsPristine, GetCurrentPositionAsync);
             var currentPosition = startLease.StartPosition;
             MarkProjectionStatusDirty(currentPosition?.Value);
 
@@ -4488,6 +4508,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             CatchUpBatchSemaphore.Release();
         }
+    }
+
+    private async Task<int> ApplyHostEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp)
+    {
+        if (_host is NativeProjectionActorHost)
+        {
+            using var receipts = ProjectionEventApplicationScope.Begin(() => _hostIsPristine = false);
+            await _host.AddSerializableEventsAsync(events, finishedCatchUp);
+            // Successful non-empty applications also cover native projectors that supply their own accessor.
+            // Wrapper receipts additionally clear pristine as each event succeeds, before a later event can fail.
+            if (events.Count > 0) _hostIsPristine = false;
+            // Custom accessors outside the native wrapper retain their existing submitted-count semantics.
+            return receipts.ObservedNativeWrapper ? receipts.AppliedCount : events.Count;
+        }
+
+        // Non-native hosts retain their existing submitted-count semantics.
+        await _host!.AddSerializableEventsAsync(events, finishedCatchUp);
+        if (events.Count > 0) _hostIsPristine = false;
+        return events.Count;
     }
 
     private async Task<CatchUpBatchResult> ProcessSingleCatchUpBatch()
@@ -4690,10 +4729,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 null);
         }
 
+        int appliedCount;
         var applyStopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            await _host!.AddSerializableEventsAsync(filtered, finishedCatchUp: false);
+            appliedCount = await ApplyHostEventsAsync(filtered, finishedCatchUp: false);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("Unknown event type", StringComparison.Ordinal))
         {
@@ -4717,7 +4757,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             batchSize,
             fetchedCount: events.Count,
             filteredCount,
-            appliedCount: filtered.Count,
+            appliedCount: appliedCount,
             readElapsedMs: readStopwatch.ElapsedMilliseconds,
             applyElapsedMs: applyStopwatch.ElapsedMilliseconds,
             pendingStreamEventsBefore,
@@ -4727,7 +4767,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         return new CatchUpBatchResult(
             events.Count,
-            filtered.Count,
+            appliedCount,
             new SortableUniqueId(events[^1].SortableUniqueIdValue),
             new SortableUniqueId(filtered[^1].SortableUniqueIdValue));
     }
@@ -4775,7 +4815,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            await _host.AddSerializableEventsAsync(buffer, finishedCatchUp: false);
+            await ApplyHostEventsAsync(buffer, finishedCatchUp: false);
             sw.Stop();
             applyElapsedMs += sw.ElapsedMilliseconds;
 
@@ -5216,7 +5256,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // finishedCatchUp:false.
             if (_host is not null)
             {
-                await _host.AddSerializableEventsAsync([], finishedCatchUp: true);
+                await ApplyHostEventsAsync([], finishedCatchUp: true);
             }
 
             CompactRetainedCollections();
@@ -5317,7 +5357,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var allEvents = events.OrderBy(e => e.SortableUniqueIdValue).ToList();
         if (allEvents.Count > 0 && _host != null)
         {
-            await _host.AddSerializableEventsAsync(allEvents, finishedCatchUp: false);
+            await ApplyHostEventsAsync(allEvents, finishedCatchUp: false);
             _eventsProcessed += allEvents.Count;
             _catchUpProgress.HadNewEvents |= _catchUpProgress.IsActive;
             foreach (var ev in allEvents)
@@ -5542,7 +5582,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             if (newEvents.Count > 0)
             {
                 // Delegate to host - host handles safe/unsafe internally
-                await _host.AddSerializableEventsAsync(newEvents, true);
+                await ApplyHostEventsAsync(newEvents, true);
                 _eventsProcessed += newEvents.Count;
 
                 // Mark all events as processed
@@ -5662,7 +5702,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 "[{ProjectorName}] Processing {EventCount} buffered events",
                 projectorName,
                 events.Count);
-            await _host.AddSerializableEventsAsync(events, finishedCatchUp);
+            await ApplyHostEventsAsync(events, finishedCatchUp);
             _eventsProcessed += events.Count;
             _catchUpProgress.HadNewEvents |= _catchUpProgress.IsActive;
             _lastEventTime = DateTime.UtcNow;
