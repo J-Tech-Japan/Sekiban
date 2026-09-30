@@ -5221,7 +5221,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // completion decision covers every state mutation accepted during this catch-up window.
             await ProcessPendingStreamEvents();
 
-            var shouldPersist = _catchUpProgress.HadNewEvents;
+            var shouldPersist = _catchUpProgress.HadNewEvents ||
+                (_checkpointMutation is { PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true } &&
+                 !_hostIsPristine && _host is not IRebuildSignalingHost { RebuildRequired: true });
 
             // Every successful completion, including empty and duplicate-only refreshes, must perform the final
             // promotion stage while catch-up is still active. No later stage may run after promotion fails.

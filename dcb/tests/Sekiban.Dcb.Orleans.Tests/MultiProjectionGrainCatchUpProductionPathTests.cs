@@ -4,6 +4,8 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Dcb.Orleans;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
+using Sekiban.Dcb.Storage.Checkpoints;
 using Microsoft.Extensions.Options;
 using ResultBoxes;
 using Sekiban.Dcb;
@@ -31,6 +33,62 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// </summary>
 public sealed class MultiProjectionGrainCatchUpProductionPathTests
 {
+    [Fact]
+    public async Task Empty_completion_commits_pending_tombstone_once_then_skips_final_persist()
+    {
+        var store = new Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore();
+        var log = new CatchUpCompletionLogger();
+        var host = new ProductionCatchUpProjectionHost { FailInitialStateRead = false, SafeVersion = 50 };
+        var grain = CreateGrain(new ProductionCatchUpEventStore([0]), host,
+            checkpointStore: store, logger: log,
+            actorOptions: new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = false });
+        SetPrivateField(grain, "_hostIsPristine", false);
+        var persisted = await grain.PersistStateAsync();
+        Assert.True(persisted.IsSuccess, persisted.IsSuccess ? "" : persisted.GetException().ToString());
+        Assert.True(persisted.GetValue());
+        var active = (await store.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue();
+        Assert.True(active.IsActive);
+        var invalidated = await store.InvalidateWithTombstoneAsync("production-catch-up", "v1",
+            CheckpointExpectation.FromSlot(active));
+        Assert.Equal(CheckpointCasStatus.Committed, invalidated.Status);
+        var coordinator = GetPrivateFieldValue(grain, "_checkpointMutation")!;
+        coordinator.GetType().GetMethod("AdoptTombstone")!.Invoke(coordinator, [invalidated.ResultingSlot!]);
+
+        await grain.RefreshAsync();
+
+        Assert.Equal(new[] { "catch_up_complete" }, log.Reasons);
+        Assert.True((await store.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue().IsActive);
+        Assert.False((bool)coordinator.GetType().GetProperty("PendingRebuiltCommit")!.GetValue(coordinator)!);
+
+        await grain.RefreshAsync();
+        Assert.Equal(new[] { "catch_up_complete", "none" }, log.Reasons);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Empty_completion_does_not_attempt_persist_without_a_pending_tombstone(bool pendingWithActiveSlot)
+    {
+        var log = new CatchUpCompletionLogger();
+        var host = new ProductionCatchUpProjectionHost { FailInitialStateRead = false };
+        var grain = CreateGrain(new ProductionCatchUpEventStore([0]), host,
+            checkpointStore: new Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore(), logger: log);
+        SetPrivateField(grain, "_hostIsPristine", false);
+        var coordinator = GetPrivateFieldValue(grain, "_checkpointMutation")!;
+        if (pendingWithActiveSlot)
+        {
+            // Manufacture the inconsistent pending flag after a peer's Active slot was adopted. Testing the
+            // decision directly here also proves the tombstone predicate, even when persistence could skip writes.
+            coordinator.GetType().GetMethod("AdoptTombstone")!.Invoke(coordinator, [new CheckpointSlot(
+                true, 2, "peer-revision", CheckpointLifecycle.Active, null)]);
+            Assert.True((bool)coordinator.GetType().GetProperty("PendingRebuiltCommit")!.GetValue(coordinator)!);
+        }
+
+        await grain.RefreshAsync();
+
+        Assert.Equal(new[] { "none" }, log.Reasons);
+    }
+
     [Fact]
     public async Task Native_unsafe_only_restart_null_inferred_lease_reacquires_safe_checkpoint_before_Ensure()
     {
@@ -1475,7 +1533,8 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         IEnumerable<SerializableEvent>? processedEvents = null,
         RecordingPersistentState<MultiProjectionGrainState>? persistentState = null,
         TempFileSnapshotManager? tempFileSnapshotManager = null,
-        IMultiProjectionStateStore? checkpointStore = null)
+        IMultiProjectionStateStore? checkpointStore = null,
+        ILogger<MultiProjectionGrain>? logger = null)
     {
         host ??= new ProductionCatchUpProjectionHost();
         persistentState ??= new RecordingPersistentState<MultiProjectionGrainState>
@@ -1496,7 +1555,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
                 SkipPersistWhenSafeCheckpointUnchanged = true
             },
             tempFileSnapshotManager: tempFileSnapshotManager,
-            logger: NullLogger<MultiProjectionGrain>.Instance,
+            logger: logger ?? NullLogger<MultiProjectionGrain>.Instance,
             eventStoreFactory: null,
             serviceIdProvider: new DefaultServiceIdProvider());
 
