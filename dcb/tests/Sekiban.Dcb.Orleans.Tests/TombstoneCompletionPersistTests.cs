@@ -53,8 +53,14 @@ public class TombstoneCompletionPersistTests : IAsyncLifetime
     {
         var grain = await PrepareFreshActivationWithOpenTombstoneAsync();
         Env.Wrapped.ThrowOnceOnEmpty = injectFailure;
-        await PollUntilAsync(async () => !(await grain.GetStatusAsync()).TombstoneFailClosedPending,
-            30_000, "tombstone gate clearing");
+        // Status reads never kick progress; after CatchUpMaxConsecutiveFailures stops the run, only a fail-closed
+        // query (TryTombstoneFailClosedBlock -> KickTombstoneGateProgressIfNeeded) restarts it, as a real reader would.
+        await PollUntilAsync(async () =>
+        {
+            if (!(await grain.GetStatusAsync()).TombstoneFailClosedPending) return true;
+            _ = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            return false;
+        }, 20_000, "tombstone gate clearing");
 
         // No deactivation or explicit persist after gate settlement: completion itself must commit within seconds.
         await PollUntilAsync(async () => (await ReadSlotAsync()).IsActive,
@@ -65,6 +71,9 @@ public class TombstoneCompletionPersistTests : IAsyncLifetime
         Assert.Equal(injectFailure ? 1 : 0, Env.Wrapped.Thrown);
 
         // Once committed, an empty completion must not even attempt another final persist.
+        // The post-gate query above can start a background catch-up; RefreshAsync is a no-op while one is active.
+        await PollUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive,
+            15_000, "background catch-up to finish before the empty refresh");
         var completionsBefore = Env.Log.Reasons.Count;
         await grain.RefreshAsync();
         Assert.Equal(new[] { "none" }, Env.Log.Reasons.Skip(completionsBefore));
