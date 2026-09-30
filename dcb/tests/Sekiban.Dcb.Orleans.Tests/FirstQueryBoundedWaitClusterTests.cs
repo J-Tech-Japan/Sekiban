@@ -191,12 +191,20 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
         }
         await grain.RefreshAsync();
         Assert.True((await grain.GetStatusAsync()).FirstQueryCatchUpPending);
-        var starts = 0;
+        var startsBeforeSettlement = 0;
+        var settlementCompleted = false;
+        var observationGate = new object();
         using var hook = CatchUpProductionTestHooks.Register(
             Sekiban.Dcb.ServiceId.DefaultServiceIdProvider.DefaultServiceId, CountProjector.MultiProjectorName,
             (point, _) =>
             {
-                if (point == CatchUpProductionHookPoint.BackgroundStarted) Interlocked.Increment(ref starts);
+                lock (observationGate)
+                {
+                    if (point == CatchUpProductionHookPoint.InvocationCompleted) settlementCompleted = true;
+                    // GetStateAsync may start its standard background catch-up after Ensure settles.
+                    if (point == CatchUpProductionHookPoint.BackgroundStarted && !settlementCompleted)
+                        startsBeforeSettlement++;
+                }
                 return Task.CompletedTask;
             });
         var sw = Stopwatch.StartNew();
@@ -205,7 +213,11 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
         Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(Env.WaitMs), sw.Elapsed.ToString());
         Assert.Equal(3, ((CountProjector)result.GetValue().Payload).Count);
         Assert.False((await grain.GetStatusAsync()).FirstQueryCatchUpPending);
-        Assert.Equal(0, Volatile.Read(ref starts));
+        lock (observationGate)
+        {
+            Assert.True(settlementCompleted);
+            Assert.Equal(0, startsBeforeSettlement);
+        }
     }
 
     [Fact]
@@ -401,7 +413,7 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
         finally { release.TrySetResult(); }
     }
 
-    private static async Task PollUntilAsync(Func<Task<bool>> predicate)
+    internal static async Task PollUntilAsync(Func<Task<bool>> predicate)
     {
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < TimeSpan.FromSeconds(60))

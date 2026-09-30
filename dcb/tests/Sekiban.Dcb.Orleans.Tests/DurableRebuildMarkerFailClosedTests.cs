@@ -82,6 +82,8 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
         var externalWritesBefore = Env.StateStore.WriteCount;
         Assert.Equal(1, ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
+        // The setup query can start background catch-up; deliver the retrograde event only after it is idle.
+        await FirstQueryBoundedWaitClusterTests.PollUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
 
         // Arm the marker-write failure, then deliver a globally-EARLIER already-safe event out of order -> RebuildRequired.
         // It is also persisted to the authoritative event store so the eventual full rebuild re-reads BOTH events.
@@ -122,6 +124,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         await grain.RefreshAsync();
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
         Assert.True((await Env.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue().HasValue);
+        await FirstQueryBoundedWaitClusterTests.PollUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
 
         // The DURABLE MARKER commits, but the external-snapshot invalidate (SEK-G20 tombstone CAS) fails. Per the
         // fail-first protocol the marker stays durable while the stale external snapshot is left intact — a crash here
