@@ -284,3 +284,62 @@ scalar, or list query. The barrier uses two deliberately different positions:
 A short read that does not reach the fixed head still fails closed and remains retryable. A failed
 read preserves the original exception. The safe checkpoint, SafeWindow behavior, public API, and
 storage schema are unchanged.
+
+### Optional bounded first-query wait (SEK-G90; #1253 item 5)
+
+`GeneralMultiProjectionActorOptions.FirstQueryCatchUpMaxWaitMs` defaults to `0`.
+Values ≤ 0 preserve the blocking first-query barrier. Set a positive value, for example
+`1000`, to bound the gate wait after query admission. A nullable
+`ProjectorPersistenceOverrides[projectorName].FirstQueryCatchUpMaxWaitMs` overrides it;
+null inherits, and zero or negative restores blocking behaviour for that projector.
+Choose N well below Orleans `ResponseTimeout` and client/HTTP timeouts. N excludes
+activation and request queuing; it is not a total response-time guarantee.
+
+Only the generic activation arm without a pending durable rebuild marker is eligible,
+including activation after snapshot restore failure and host recreation. Tombstones keep
+SEK-G85 fail-closed behaviour; durable markers keep SEK-G18 behaviour. Checkpoint mutation,
+operator reset/rebuild and in-activation host recreation re-arms remain blocking. Any
+re-arm ends the bounded episode; extending bounded waits to those sites is a follow-up.
+
+The query observes the activation's in-flight timer catch-up, or kicks a shared incremental
+restart (`forceFull: false`) and background gate settlement. It never performs the full
+replay inside an eligible query. Timer batches interleave, but global catch-up concurrency
+limits can skip batches, so progress within N is not guaranteed. When the gate settles,
+queries succeed; otherwise state/snapshot return `ResultBox.Error`, while scalar/list queries
+throw `InvalidOperationException` with `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
+(`Projection catch-up is in progress:`), current/target position and events processed.
+A later query succeeds after background completion. Live projection faults take precedence
+(SEK-G14), including faults discovered during the wait. The fail-closed query does not
+change `LastError`; actual background failures still can.
+
+`GetStatusAsync` exposes `FirstQueryCatchUpPending`, `CatchUpTargetPosition` (possibly null
+before the first batch), and `LastBackgroundCatchUpError` (message and UTC timestamp, scoped
+to the episode generation). The last background failure is also included in the catching-up
+error, so an outage remains visible. The appended status constructor parameters have defaults.
+`MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix` (`Projection rebuild is pending:`)
+covers SEK-G18 and SEK-G85; `checkpoint tombstone` identifies the latter.
+
+SEK-G21's authoritative start-position contract still holds. A background settle can use
+an authoritative head read before the query arrived, so successful opt-in queries have
+ordinary projection lag semantics, rather than guaranteed freshness at admission.
+The existing 30-second `waitForCatchUp` helpers are unchanged.
+
+A minimal ASP.NET Core host mapping (adapt the error source to your query surface):
+
+```csharp
+using Sekiban.Dcb.Orleans.Grains;
+
+// Map both ResultBox.GetException() and thrown scalar/list query exceptions.
+static IResult MapProjectionError(Exception error, HttpResponse response)
+{
+    if (error.Message.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,
+            StringComparison.Ordinal) ||
+        error.Message.StartsWith(MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix,
+            StringComparison.Ordinal))
+    {
+        response.Headers["Retry-After"] = "2";
+        return Results.Problem(statusCode: 503, detail: error.Message);
+    }
+    return Results.Problem(statusCode: 500);
+}
+```

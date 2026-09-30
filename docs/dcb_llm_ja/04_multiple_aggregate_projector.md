@@ -273,3 +273,60 @@ barrier を置きます。この barrier は意図的に異なる 2 種類の位
 
 固定 head に届かない short read は引き続き fail-closed で retryable です。read failure は元の
 例外を保持します。safe チェックポイント、SafeWindow の動作、公開 API、storage schema は変更しません。
+
+### 初回クエリの待機時間を制限する設定 (SEK-G90; #1253 item 5)
+
+`GeneralMultiProjectionActorOptions.FirstQueryCatchUpMaxWaitMs` の既定値は `0` です。
+0 以下では従来の blocking barrier を維持します。正の値（例: `1000`）で、
+クエリ受付後の gate 待機を N ms に制限します。
+`ProjectorPersistenceOverrides[projectorName].FirstQueryCatchUpMaxWaitMs` は nullable override です。
+null は全体設定を継承し、0 以下は当該 projector の blocking 動作を復元します。
+N は Orleans `ResponseTimeout` と HTTP/client timeout より十分短く設定してください。
+activation と request queue の時間は含まれず、応答全体の上限ではありません。
+
+対象は durable rebuild marker が pending でない activation の generic arm のみです。
+snapshot restore 失敗後に host を再作成してから行う activation generic arm も対象です。
+checkpoint tombstone は SEK-G85、durable marker は SEK-G18 の動作を維持します。
+checkpoint mutation、operator reset/rebuild、activation 中の host recreation の re-arm は
+blocking のままです。re-arm は現在の bounded episode を終了します。他の arm への拡張は後続課題です。
+
+クエリは activation の進行中 timer catch-up を共有し、必要なら incremental restart
+(`forceFull: false`) と background gate settlement を開始します。対象クエリの中で
+full replay は実行しません。timer は interleave しますが、全体の同時実行制限で batch が
+skip される可能性があるため N 内の進捗は保証されません。gate が完了すれば成功し、
+未完了なら state/snapshot は `ResultBox.Error`、scalar/list は `InvalidOperationException` を返します。
+メッセージは `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
+(`Projection catch-up is in progress:`) で始まり、現在位置・target 位置・処理イベント数を含みます。
+background 完了後のクエリは成功します。待機中に検出した live projection fault も SEK-G14 が優先します。
+fail-closed クエリは `LastError` を変更しませんが、実際の background failure は従来どおり更新します。
+
+`GetStatusAsync` の `FirstQueryCatchUpPending`、`CatchUpTargetPosition`（初回 batch 前は null 可）、
+`LastBackgroundCatchUpError`（message と UTC timestamp）で状態を確認できます。
+background error は episode generation に限定され、catching-up メッセージにも含まれるので障害を把握できます。
+追加 status constructor 引数には既定値があります。
+`MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix` (`Projection rebuild is pending:`) は
+SEK-G18 と SEK-G85 共通です。後者は `checkpoint tombstone` で区別できます。
+
+SEK-G21 の authoritative start position 契約は維持します。background settle の head read は
+クエリ到着前の場合があり、成功時には通常の projection lag semantics が適用されます。
+受付時点の freshness は保証されません。既存の 30 秒 `waitForCatchUp` helper は変更しません。
+
+ASP.NET Core host の 503 と Retry-After マッピング例（error の取得元は query surface に合わせます）:
+
+```csharp
+using Sekiban.Dcb.Orleans.Grains;
+
+// Map both ResultBox.GetException() and thrown scalar/list query exceptions.
+static IResult MapProjectionError(Exception error, HttpResponse response)
+{
+    if (error.Message.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,
+            StringComparison.Ordinal) ||
+        error.Message.StartsWith(MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix,
+            StringComparison.Ordinal))
+    {
+        response.Headers["Retry-After"] = "2";
+        return Results.Problem(statusCode: 503, detail: error.Message);
+    }
+    return Results.Problem(statusCode: 500);
+}
+```
