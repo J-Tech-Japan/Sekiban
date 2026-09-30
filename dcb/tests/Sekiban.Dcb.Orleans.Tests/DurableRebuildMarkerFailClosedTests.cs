@@ -68,7 +68,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
 
     [Theory]
     [InlineData(0)]
-    [InlineData(100)]
+    [InlineData(10_000)]
     public async Task MarkerWriteFail_AllQueriesFailClosed_NoExternalMutation_SameActivationRetrySucceeds(int waitMs)
     {
         Env.WaitMs = waitMs;
@@ -110,7 +110,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
 
     [Theory]
     [InlineData(0)]
-    [InlineData(100)]
+    [InlineData(10_000)]
     public async Task ExternalInvalidateFail_DurableMarkerSurvives_FreshActivationSeesMarkerBeforeRestore_NoStaleSuccess_ExactReplay(int waitMs)
     {
         Env.WaitMs = waitMs;

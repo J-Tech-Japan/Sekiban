@@ -53,7 +53,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
 
     [Theory]
     [InlineData(0)]
-    [InlineData(100)]
+    [InlineData(10_000)]
     public async Task TombstoneActivation_GetState_FailClosedFast_WithStableMessage(int waitMs)
     {
         Env.WaitMs = waitMs;

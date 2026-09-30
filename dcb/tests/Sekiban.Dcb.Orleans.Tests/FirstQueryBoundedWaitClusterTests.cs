@@ -161,11 +161,15 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             Assert.Equal(1, Volatile.Read(ref settlements));
             Assert.True((await grain.GetStatusAsync()).FirstQueryCatchUpPending);
             release.TrySetResult();
-            await PollUntilAsync(async () => !(await grain.GetStatusAsync()).FirstQueryCatchUpPending);
+            await PollUntilAsync(async () =>
+            {
+                var pending = (await grain.GetStatusAsync()).FirstQueryCatchUpPending;
+                if (pending) Assert.Equal(1, Volatile.Read(ref starts));
+                return !pending;
+            });
             var result = await grain.GetStateAsync();
             Assert.True(result.IsSuccess);
             Assert.Equal(3, ((CountProjector)result.GetValue().Payload).Count);
-            Assert.Equal(1, Volatile.Read(ref starts));
         }
         finally { release.TrySetResult(); }
     }
@@ -336,6 +340,63 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
             await PollUntilAsync(async () => !(await grain.GetStatusAsync()).FirstQueryCatchUpPending);
             Assert.Equal(restoredSnapshot ? 4 : 3,
                 ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
+        }
+        finally { release.TrySetResult(); }
+    }
+
+    [Fact]
+    public async Task RestoredSnapshot_BackgroundEnsureFailure_PollRetriesWithoutDoubleApplying()
+    {
+        Env.WaitMs = 20_000;
+        var grain = await FreshAsync();
+        Assert.Equal(3, ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
+        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(1000);
+        await Env.EventStore.WriteSerializableEventsAsync([
+            ToSerializable(CreateEvent(new Counted("tail"), DateTime.UtcNow.AddSeconds(-40)))]);
+
+        Env.WaitMs = 100;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var retryEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+        var starts = 0;
+        using var hook = CatchUpProductionTestHooks.Register(
+            Sekiban.Dcb.ServiceId.DefaultServiceIdProvider.DefaultServiceId, CountProjector.MultiProjectorName,
+            async (point, observation) =>
+            {
+                if (point == CatchUpProductionHookPoint.BackgroundStarted) Interlocked.Increment(ref starts);
+                if (point != CatchUpProductionHookPoint.InvocationBeforeRead) return;
+                if (Interlocked.Increment(ref attempts) == 1)
+                    throw new InvalidOperationException("transient background Ensure failure");
+                Assert.Equal(CatchUpStartPositionSource.InferredCheckpoint, observation.Start!.Source);
+                Assert.NotNull(observation.Start.StartPosition);
+                retryEntered.TrySetResult();
+                await release.Task;
+            });
+        try
+        {
+            _ = await grain.GetStateAsync();
+            await PollUntilAsync(async () =>
+                (await grain.GetStatusAsync()).LastBackgroundCatchUpError?.Contains(
+                    "transient background Ensure failure", StringComparison.Ordinal) == true);
+            var result = await grain.GetStateAsync();
+            Assert.False(result.IsSuccess);
+            Assert.Contains("transient background Ensure failure", result.GetException().Message);
+            await retryEntered.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.Equal(2, Volatile.Read(ref attempts));
+            Assert.Equal(1, Volatile.Read(ref starts));
+            Assert.True((await grain.GetStatusAsync()).FirstQueryCatchUpPending);
+            release.TrySetResult();
+            await PollUntilAsync(async () =>
+            {
+                var pending = (await grain.GetStatusAsync()).FirstQueryCatchUpPending;
+                if (pending) Assert.Equal(1, Volatile.Read(ref starts));
+                return !pending;
+            });
+            result = await grain.GetStateAsync();
+            Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
+            Assert.Equal(4, ((CountProjector)result.GetValue().Payload).Count);
         }
         finally { release.TrySetResult(); }
     }

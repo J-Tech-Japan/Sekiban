@@ -2400,6 +2400,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     }
                 }
             }
+            catch
+            {
+                // A failed bounded Ensure has no timer to resume this invocation. Leave the host's position
+                // intact and release active progress so a later poll can retry the shared Ensure incrementally.
+                if (forceEvenIfCatchUpActive && BoundedWaitPending) _catchUpProgress.IsActive = false;
+                throw;
+            }
             finally
             {
                 // RefreshAsync's in-call loop can fault the actor without going through the background failure handlers,
@@ -3632,18 +3639,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             (IsBoundedWaitEpisode && (_firstQueryGate.IsInFlight ||
                 _boundedGateSettlement is { IsCompleted: false } ||
                 _boundedCatchUpInitiation is { IsCompleted: false })))) return;
+
+        if (!forceFull && BoundedWaitPending)
+        {
+            // Observe an active run without stale recovery. Otherwise the shared background Ensure resumes
+            // from the host's current position, including after a transient failure on a restored snapshot.
+            if (!_catchUpProgress.IsActive) ObserveEnsureAsync(EnsureFirstQuerySyncCatchUpAsync);
+            return;
+        }
+
         RecoverStaleCatchUpIfNeeded(GetProjectorName());
 
         if (_catchUpProgress.IsActive)
         {
-            return;
-        }
-
-        if (!forceFull && BoundedWaitPending)
-        {
-            // An inactive host may already be at head after RefreshAsync. Prove it with the shared background
-            // Ensure now rather than restart a timer and wait for its consecutive empty batches.
-            ObserveEnsureAsync(EnsureFirstQuerySyncCatchUpAsync);
             return;
         }
 
