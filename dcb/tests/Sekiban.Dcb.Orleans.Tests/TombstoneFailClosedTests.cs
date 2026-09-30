@@ -51,9 +51,12 @@ public class TombstoneFailClosedTests : IAsyncLifetime
         _cluster.Dispose();
     }
 
-    [Fact]
-    public async Task TombstoneActivation_GetState_FailClosedFast_WithStableMessage()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(100)]
+    public async Task TombstoneActivation_GetState_FailClosedFast_WithStableMessage(int waitMs)
     {
+        Env.WaitMs = waitMs;
         var grain = await PrepareFreshActivationWithOpenTombstoneAsync();
         await AssertFailClosedFastAsync(() => grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false));
     }
@@ -316,12 +319,14 @@ public class TombstoneFailClosedTests : IAsyncLifetime
 
     internal static class Env
     {
+        public static int WaitMs { get; set; }
         public static DcbDomainTypes Domain { get; private set; } = BuildDomain();
         public static InMemoryEventStore EventStore { get; private set; } = new(Domain.EventTypes);
         public static GatingCheckpointStore GatingStore { get; private set; } = new(new InMemoryMultiProjectionStateStore());
 
         public static void Reset()
         {
+            WaitMs = 0;
             Domain = BuildDomain();
             EventStore = new InMemoryEventStore(Domain.EventTypes);
             GatingStore = new GatingCheckpointStore(new InMemoryMultiProjectionStateStore());
@@ -355,7 +360,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IBlobStorageSnapshotAccessor, MockBlobStorageSnapshotAccessor>();
                     services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
-                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000 });
+                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000, FirstQueryCatchUpMaxWaitMs = Env.WaitMs });
                     services.AddSekibanDcbNativeRuntime();
                 })
                 .AddMemoryGrainStorageAsDefault()

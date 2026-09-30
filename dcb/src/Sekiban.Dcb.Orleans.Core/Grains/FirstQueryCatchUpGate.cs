@@ -87,6 +87,21 @@ internal sealed class FirstQueryCatchUpGate
         }
     }
 
+    /// <summary>
+    ///     A live projection fault already proves the barrier's fail-closed outcome. Settle only the observed arm,
+    ///     without joining a potentially parked background Ensure; the query will surface the host's fault.
+    /// </summary>
+    public void SatisfyForFault(int generation)
+    {
+        lock (_sync)
+        {
+            if (_armGeneration == generation && _armed)
+            {
+                _satisfied = true;
+            }
+        }
+    }
+
     private async Task SettleAsync(Func<Task> work, int capturedGeneration)
     {
         await work(); // throws on failure -> this task faults, _satisfied stays false, so the next call retries

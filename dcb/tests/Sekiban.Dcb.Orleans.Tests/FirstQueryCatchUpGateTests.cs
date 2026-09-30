@@ -11,6 +11,25 @@ namespace Sekiban.Dcb.Orleans.Tests;
 public class FirstQueryCatchUpGateTests
 {
     [Fact]
+    public async Task LiveFault_SettlesCurrentArmWithoutJoiningParkedEnsure_AndCannotSettleRearm()
+    {
+        var gate = new FirstQueryCatchUpGate();
+        gate.Arm();
+        var generation = gate.ArmGeneration;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ensure = gate.EnsureAsync(() => release.Task);
+        gate.SatisfyForFault(generation);
+        Assert.False(gate.IsPending);
+        Assert.False(ensure.IsCompleted);
+        gate.Arm();
+        gate.SatisfyForFault(generation);
+        Assert.True(gate.IsPending);
+        release.SetResult();
+        await ensure;
+        Assert.True(gate.IsPending);
+    }
+
+    [Fact]
     public async Task Concurrent_first_callers_run_the_work_once_share_one_task_and_all_observe_success()
     {
         var gate = new FirstQueryCatchUpGate();

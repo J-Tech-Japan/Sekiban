@@ -28,6 +28,157 @@ namespace Sekiban.Dcb.Orleans.Tests;
 public sealed class MultiProjectionGrainCatchUpProductionPathTests
 {
     [Theory]
+    [InlineData(100, false, true)]
+    [InlineData(100, true, false)]
+    [InlineData(0, false, false)]
+    [InlineData(-1, false, false)]
+    public void BoundedWait_ActivationArmEligibility(int waitMs, bool durableMarker, bool expected)
+    {
+        var grain = CreateGrain(new ProductionCatchUpEventStore([1]),
+            state: new MultiProjectionGrainState { RebuildRequired = durableMarker });
+        SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", waitMs);
+        InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
+        Assert.Equal(expected, IsBounded(grain));
+        Assert.True(GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate").IsPending);
+    }
+
+    [Theory]
+    [InlineData("recreate")]
+    [InlineData("rebuild")]
+    [InlineData("rearm")]
+    public async Task BoundedWait_ExcludedRearmsEndEpisode_AndCannotReportOldError(string site)
+    {
+        var grain = CreateGrain(new ProductionCatchUpEventStore([1]));
+        SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", 100);
+        InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
+        var gate = GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate");
+        InvokePrivate(grain, "RecordBackgroundCatchUpFailure", [new Exception("old episode"), gate.ArmGeneration]);
+        Assert.True(IsBounded(grain));
+        if (site == "recreate") InvokePrivate(grain, "RecreateHostForFullRebuild", []);
+        else if (site == "rebuild") await (Task)InvokePrivate(grain, "TriggerDurableFullRebuildAsync", [])!;
+        else gate.Arm();
+        Assert.False(IsBounded(grain));
+        Assert.Null(grain.GetType().GetProperty("LastBackgroundCatchUpError", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(grain));
+        // Restore-failure recreation precedes the activation generic arm: that NEW arm is eligible.
+        if (site == "recreate")
+        {
+            InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
+            Assert.True(IsBounded(grain));
+        }
+    }
+
+    [Fact]
+    public async Task BoundedWait_RearmDuringWait_UsesNewBlockingGate()
+    {
+        var grain = CreateGrain(new ProductionCatchUpEventStore([1]));
+        SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", 100);
+        InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
+        SetActiveCatchUp(grain, new CatchUpStartPositionLease(null, CatchUpStartPositionSource.InferredCheckpoint));
+        var query = (Task)InvokePrivate(grain, "AwaitFirstQueryCatchUpAsync", [])!;
+        var gate = GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate");
+        gate.Arm();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ensure = gate.EnsureAsync(() => release.Task);
+        await Task.Delay(150);
+        Assert.False(query.IsCompleted);
+        release.SetResult();
+        await Task.WhenAll(query, ensure).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(IsBounded(grain));
+    }
+
+    [Fact]
+    public void BoundedWait_CheckpointCoordinatorRearm_IsExcluded()
+    {
+        var grain = CreateGrain(new ProductionCatchUpEventStore([1]),
+            checkpointStore: new Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore());
+        SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", 100);
+        InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
+        var coordinator = GetPrivateFieldValue(grain, "_checkpointMutation")!;
+        InvokePrivate(coordinator, "AdoptAfterRejection", [new Sekiban.Dcb.Storage.Checkpoints.CheckpointSlot(
+            true, 2, "revision", Sekiban.Dcb.Storage.Checkpoints.CheckpointLifecycle.Tombstoned, null)]);
+        Assert.False(IsBounded(grain));
+        Assert.True(GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate").IsPending);
+    }
+
+    [Fact]
+    public async Task BoundedWait_OperatorResetRearm_IsExcluded()
+    {
+        var id = Guid.NewGuid().ToString();
+        var grain = CreateGrain(new ProductionCatchUpEventStore([1]), state: new MultiProjectionGrainState
+        {
+            ProjectorName = "production-catch-up", FaultEventId = id, FaultPosition = "position"
+        });
+        SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", 100);
+        InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
+        var result = await grain.ResetProjectionFaultAsync(new ResetProjectionFaultRequest("production-catch-up", id, "position"));
+        Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
+        Assert.False(IsBounded(grain));
+        Assert.True(GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate").IsPending);
+    }
+
+    [Fact]
+    public async Task BoundedWait_ObservesParkedInitiation_WithNoTimer_WithoutStartingAnotherRun()
+    {
+        var grain = CreateGrain(new ProductionCatchUpEventStore([1]));
+        SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", 50);
+        InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        InvokePrivate(grain, "ObserveCatchUpRestart", [release.Task]);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => (Task)InvokePrivate(grain, "AwaitFirstQueryCatchUpAsync", [])!);
+        Assert.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, error.Message);
+        Assert.Null(GetPrivateFieldValue(grain, "_lastBackgroundCatchUpError"));
+        Assert.Null(GetPrivateFieldValue(grain, "_catchUpTimer"));
+        release.SetResult();
+    }
+
+    private static bool IsBounded(MultiProjectionGrain grain) =>
+        (bool)grain.GetType().GetProperty("BoundedWaitPending", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(grain)!;
+
+    [Fact]
+    public async Task BoundedWait_ParkedExecutionGate_DoesNotAcquireItOrReplay_AndReportsEpisodeError()
+    {
+        var store = new ProductionCatchUpEventStore([1]);
+        var host = new ProductionCatchUpProjectionHost { AllowApply = true };
+        var grain = CreateGrain(store, host);
+        var gate = GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate");
+        gate.Arm();
+        SetPrivateField(grain, "_boundedWaitArmGeneration", gate.ArmGeneration);
+        SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", 50);
+        SetActiveCatchUp(grain, new CatchUpStartPositionLease(null, CatchUpStartPositionSource.InferredCheckpoint));
+        InvokePrivate(grain, "RecordBackgroundCatchUpFailure", [new Exception("store down"), gate.ArmGeneration]);
+        Assert.Contains("store down", GetPrivateField<string>(grain, "_lastBackgroundCatchUpError"));
+        var execution = GetPrivateField<CatchUpRunExecutionGate>(grain, "_catchUpExecutionGate");
+        await using var parked = await execution.EnterAsync();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            (Task)InvokePrivate(grain, "AwaitFirstQueryCatchUpAsync", [])!);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5));
+        Assert.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, error.Message);
+        Assert.True(error.Message.Contains("store down"), error.Message);
+        Assert.Empty(host.AppliedEventIds);
+        Assert.Null(GetPrivateFieldValue(grain, "_lastError"));
+        gate.Arm();
+        Assert.Null(grain.GetType().GetProperty("LastBackgroundCatchUpError", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(grain));
+    }
+
+    [Fact]
+    public async Task BoundedWait_BackgroundSettlementBeforeDeadline_SucceedsWithoutReplay()
+    {
+        var store = new ProductionCatchUpEventStore([1]);
+        var grain = CreateGrain(store);
+        var gate = GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate");
+        gate.Arm();
+        SetPrivateField(grain, "_boundedWaitArmGeneration", gate.ArmGeneration);
+        SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", 5000);
+        SetActiveCatchUp(grain, new CatchUpStartPositionLease(null, CatchUpStartPositionSource.InferredCheckpoint));
+        var query = (Task)InvokePrivate(grain, "AwaitFirstQueryCatchUpAsync", [])!;
+        Assert.False(query.IsCompleted);
+        await gate.EnsureAsync(() => Task.CompletedTask);
+        await query.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(gate.IsPending);
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(-1)]
     public async Task Disabled_hot_checkpoints_still_persist_completion_with_new_events(int disabled)
@@ -1059,7 +1210,8 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         GeneralMultiProjectionActorOptions? actorOptions = null,
         IEnumerable<SerializableEvent>? processedEvents = null,
         RecordingPersistentState<MultiProjectionGrainState>? persistentState = null,
-        TempFileSnapshotManager? tempFileSnapshotManager = null)
+        TempFileSnapshotManager? tempFileSnapshotManager = null,
+        IMultiProjectionStateStore? checkpointStore = null)
     {
         host ??= new ProductionCatchUpProjectionHost();
         persistentState ??= new RecordingPersistentState<MultiProjectionGrainState>
@@ -1072,7 +1224,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
             new ProductionCatchUpProjectionHostFactory(host),
             store,
             new DefaultOrleansEventSubscriptionResolver(),
-            multiProjectionStateStore: null,
+            multiProjectionStateStore: checkpointStore,
             eventStats: null,
             actorOptions: actorOptions ?? new GeneralMultiProjectionActorOptions
             {

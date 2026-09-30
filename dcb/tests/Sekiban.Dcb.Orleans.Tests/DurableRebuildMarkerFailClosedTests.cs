@@ -66,9 +66,12 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         _cluster.Dispose();
     }
 
-    [Fact]
-    public async Task MarkerWriteFail_AllQueriesFailClosed_NoExternalMutation_SameActivationRetrySucceeds()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(100)]
+    public async Task MarkerWriteFail_AllQueriesFailClosed_NoExternalMutation_SameActivationRetrySucceeds(int waitMs)
     {
+        Env.WaitMs = waitMs;
         var grain = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         var executor = new OrleansDcbExecutor(_client, Env.EventStore, Env.Domain);
 
@@ -105,9 +108,12 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         Assert.Equal(2, ((CountProjector)recovered.GetValue().Payload).Count);
     }
 
-    [Fact]
-    public async Task ExternalInvalidateFail_DurableMarkerSurvives_FreshActivationSeesMarkerBeforeRestore_NoStaleSuccess_ExactReplay()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(100)]
+    public async Task ExternalInvalidateFail_DurableMarkerSurvives_FreshActivationSeesMarkerBeforeRestore_NoStaleSuccess_ExactReplay(int waitMs)
     {
+        Env.WaitMs = waitMs;
         var grain = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         var executor = new OrleansDcbExecutor(_client, Env.EventStore, Env.Domain);
 
@@ -313,12 +319,14 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
 
     internal static class Env
     {
+        public static int WaitMs { get; set; }
         public static DcbDomainTypes Domain { get; private set; } = BuildDomain();
         public static InMemoryEventStore EventStore { get; private set; } = new(Domain.EventTypes);
         public static CountingStateStore StateStore { get; private set; } = new();
 
         public static void Reset()
         {
+            WaitMs = 0;
             Domain = BuildDomain();
             EventStore = new InMemoryEventStore(Domain.EventTypes);
             StateStore = new CountingStateStore();
@@ -352,7 +360,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IBlobStorageSnapshotAccessor, MockBlobStorageSnapshotAccessor>();
                     services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
-                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000 });
+                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000, FirstQueryCatchUpMaxWaitMs = Env.WaitMs });
                     services.AddSekibanDcbNativeRuntime();
                     services.AddGrainStorage("OrleansStorage", (sp, name) => new MarkerFailingGrainStorage());
                 })

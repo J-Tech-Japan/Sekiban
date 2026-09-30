@@ -142,6 +142,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     // SEK-G85: tombstone arm episode generation. Fail-closed queries apply only while this matches the live gate generation.
     private int _tombstoneFailClosedArmGeneration;
+    private int _boundedWaitArmGeneration;
+    private Task? _boundedCatchUpInitiation;
+    private int _firstQueryCatchUpMaxWaitMs;
+    private string? _lastBackgroundCatchUpError;
+    private int _backgroundErrorArmGeneration;
 
     // The last event-store read exception the in-call catch-up swallowed (ProcessSerializableBatch launders a failed
     // read into an empty batch for the resilient background path). The first-query barrier consults it to fail closed
@@ -261,13 +266,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         TimeSpan PersistInterval,
         bool SkipPersistWhenSafeCheckpointUnchanged,
         int HotCatchUpPersistMaxFetchedEvents = GeneralMultiProjectionActorOptions.DefaultHotCatchUpPersistMaxFetchedEvents,
-        int HotCatchUpPersistMaxIntervalSeconds = GeneralMultiProjectionActorOptions.DefaultHotCatchUpPersistMaxIntervalSeconds);
+        int HotCatchUpPersistMaxIntervalSeconds = GeneralMultiProjectionActorOptions.DefaultHotCatchUpPersistMaxIntervalSeconds,
+        int FirstQueryCatchUpMaxWaitMs = 0);
 
     internal static GeneralMultiProjectionActorOptions MergeActorOptions(
         GeneralMultiProjectionActorOptions baseOptions,
         PersistPolicySettings persistPolicy) =>
         new()
         {
+            FirstQueryCatchUpMaxWaitMs = baseOptions.FirstQueryCatchUpMaxWaitMs,
             SafeWindowMs = baseOptions.SafeWindowMs,
             MaxSnapshotSerializedSizeBytes = baseOptions.MaxSnapshotSerializedSizeBytes,
             MaxPendingStreamEvents = baseOptions.MaxPendingStreamEvents,
@@ -447,12 +454,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var persistBatchSize = options.PersistBatchSize;
         var persistIntervalSeconds = options.PersistIntervalSeconds;
         var skipPersistWhenUnchanged = options.SkipPersistWhenSafeCheckpointUnchanged;
+        var firstQueryMaxWaitMs = options.FirstQueryCatchUpMaxWaitMs;
         var hotMaxFetchedEvents = options.HotCatchUpPersistMaxFetchedEvents;
         var hotMaxIntervalSeconds = options.HotCatchUpPersistMaxIntervalSeconds;
 
         if (options.ProjectorPersistenceOverrides != null &&
             options.ProjectorPersistenceOverrides.TryGetValue(projectorName, out var projectorOverride))
         {
+            firstQueryMaxWaitMs = projectorOverride.FirstQueryCatchUpMaxWaitMs ?? firstQueryMaxWaitMs;
             hotMaxFetchedEvents = projectorOverride.HotCatchUpPersistMaxFetchedEvents ?? hotMaxFetchedEvents;
             hotMaxIntervalSeconds = projectorOverride.HotCatchUpPersistMaxIntervalSeconds ?? hotMaxIntervalSeconds;
 
@@ -482,12 +491,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 : TimeSpan.Zero,
             SkipPersistWhenSafeCheckpointUnchanged: skipPersistWhenUnchanged,
             HotCatchUpPersistMaxFetchedEvents: hotMaxFetchedEvents,
-            HotCatchUpPersistMaxIntervalSeconds: hotMaxIntervalSeconds);
+            HotCatchUpPersistMaxIntervalSeconds: hotMaxIntervalSeconds,
+            FirstQueryCatchUpMaxWaitMs: firstQueryMaxWaitMs);
     }
 
     private void ApplyPersistPolicySettings(string projectorName)
     {
         var settings = ResolvePersistPolicySettings(projectorName);
+        _firstQueryCatchUpMaxWaitMs = settings.FirstQueryCatchUpMaxWaitMs;
         _persistBatchSize = settings.PersistBatchSize;
         _persistInterval = settings.PersistInterval;
         _skipPersistWhenSafeCheckpointUnchanged = settings.SkipPersistWhenSafeCheckpointUnchanged;
@@ -679,7 +690,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
-            await EnsureFirstQuerySyncCatchUpAsync();
+            await AwaitFirstQueryCatchUpAsync();
         }
         catch (Exception ex)
         {
@@ -1218,7 +1229,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         try
         {
-            await EnsureFirstQuerySyncCatchUpAsync();
+            await AwaitFirstQueryCatchUpAsync();
         }
         catch (Exception ex)
         {
@@ -1417,7 +1428,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (_host is IRebuildSignalingHost { RebuildRequired: true })
         {
             return new InvalidOperationException(
-                "Projection rebuild is pending: the durable rebuild marker is not yet committed, so the query fails "
+                MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix + " the durable rebuild marker is not yet committed, so the query fails "
                 + "closed rather than serve a stale pre-rebuild result.");
         }
 
@@ -1468,7 +1479,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _lastError,
             TombstoneFailClosedPending,
             _catchUpProgress.IsActive,
-            _catchUpProgress.BatchesProcessed);
+            _catchUpProgress.BatchesProcessed,
+            _firstQueryGate.IsPending,
+            _catchUpProgress.TargetPosition?.Value,
+            LastBackgroundCatchUpError);
     }
 
     // Threshold for forcing GC before serialization (10MB payload)
@@ -2090,7 +2104,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 throw tombstoneBlock;
             }
 
-            await EnsureFirstQuerySyncCatchUpAsync();
+            await AwaitFirstQueryCatchUpAsync();
 
             var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
 
@@ -2117,7 +2131,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
-            if (!IsTombstoneFailClosedException(ex))
+            if (!IsQueryFailClosedException(ex))
             {
                 _lastError = $"Query failed: {ex.Message}";
             }
@@ -2165,7 +2179,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 throw tombstoneBlock;
             }
 
-            await EnsureFirstQuerySyncCatchUpAsync();
+            await AwaitFirstQueryCatchUpAsync();
 
             var queryMetadata = await GetQueryExecutionMetadataAsync(waitForCatchUp);
 
@@ -2192,7 +2206,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
-            if (!IsTombstoneFailClosedException(ex))
+            if (!IsQueryFailClosedException(ex))
             {
                 _lastError = $"List query failed: {ex.Message}";
             }
@@ -2762,12 +2776,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // clear TombstoneFailClosedPending before queries can observe the fail-closed window.
         if (_projectionFault is null && !_restoreRetirementFailed && _tombstoneFailClosedArmGeneration == 0)
         {
-            _firstQueryGate.Arm();
+            ArmActivationFirstQueryGate();
         }
 
         if (!_restoreRetirementFailed)
         {
-            _ = CatchUpFromEventStoreAsync(forceFullCatchUp);
+            if (BoundedWaitPending)
+            {
+                ObserveCatchUpRestart(CatchUpFromEventStoreAsync(forceFullCatchUp));
+            }
+            else
+            {
+                _ = CatchUpFromEventStoreAsync(forceFullCatchUp);
+            }
         }
 
         // Auto-start subscription so stream-only projections resume after crashes/restarts.
@@ -3501,13 +3522,87 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private static InvalidOperationException CreateTombstoneRebuildPendingException() =>
         new(
-            "Projection rebuild is pending: checkpoint tombstone force-full catch-up is still in progress; "
+            MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix + " checkpoint tombstone force-full catch-up is still in progress; "
             + "the query fails closed rather than await the forced full replay.");
 
     private static bool IsTombstoneFailClosedException(Exception ex) =>
         ex is InvalidOperationException
-        && ex.Message.StartsWith("Projection rebuild is pending:", StringComparison.Ordinal)
+        && ex.Message.StartsWith(MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix, StringComparison.Ordinal)
         && ex.Message.Contains("checkpoint tombstone", StringComparison.Ordinal);
+
+    private static bool IsQueryFailClosedException(Exception ex) =>
+        IsTombstoneFailClosedException(ex) ||
+        (ex is InvalidOperationException && ex.Message.StartsWith(
+            MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, StringComparison.Ordinal));
+
+    // Called only at the generic activation arm. Every other arm invalidates this generation naturally.
+    private void ArmActivationFirstQueryGate()
+    {
+        _firstQueryGate.Arm();
+        if (_firstQueryCatchUpMaxWaitMs > 0 &&
+            _stateStore.Committed is not IRebuildMarkerState { RebuildRequired: true })
+        {
+            _boundedWaitArmGeneration = _firstQueryGate.ArmGeneration;
+        }
+    }
+
+    private bool IsBoundedWaitEpisode => _boundedWaitArmGeneration != 0 &&
+        _boundedWaitArmGeneration == _firstQueryGate.ArmGeneration;
+    private bool BoundedWaitPending => IsBoundedWaitEpisode && _firstQueryGate.IsPending;
+    private bool HasLiveProjectionFault => _host?.CurrentFault is not null || _projectionFault is not null;
+    private string? LastBackgroundCatchUpError => IsBoundedWaitEpisode &&
+        _backgroundErrorArmGeneration == _boundedWaitArmGeneration ? _lastBackgroundCatchUpError : null;
+
+    private void RecordBackgroundCatchUpFailure(Exception ex, int generation)
+    {
+        if (IsBoundedWaitEpisode && generation == _boundedWaitArmGeneration)
+        {
+            _backgroundErrorArmGeneration = generation;
+            _lastBackgroundCatchUpError = $"{DateTime.UtcNow:O}: {ex.Message}";
+        }
+    }
+
+    private async Task AwaitFirstQueryCatchUpAsync()
+    {
+        if (!BoundedWaitPending)
+        {
+            await EnsureFirstQuerySyncCatchUpAsync();
+            return;
+        }
+
+        var generation = _firstQueryGate.ArmGeneration;
+        var deadline = System.Diagnostics.Stopwatch.StartNew();
+        if (!HasLiveProjectionFault)
+        {
+            KickGateProgressIfNeeded(forceFull: false);
+        }
+        while (BoundedWaitPending && !HasLiveProjectionFault &&
+               deadline.ElapsedMilliseconds < _firstQueryCatchUpMaxWaitMs)
+        {
+            await Task.Delay((int)Math.Max(1, Math.Min(20, _firstQueryCatchUpMaxWaitMs - deadline.ElapsedMilliseconds)));
+        }
+
+        // A re-arm ends this episode; the new arm retains its blocking contract.
+        if (generation != _firstQueryGate.ArmGeneration)
+        {
+            await EnsureFirstQuerySyncCatchUpAsync();
+            return;
+        }
+        if (HasLiveProjectionFault)
+        {
+            _firstQueryGate.SatisfyForFault(generation);
+            return;
+        }
+        if (!BoundedWaitPending)
+        {
+            return;
+        }
+        throw new InvalidOperationException(
+            $"{MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix} projector '{GetProjectorName()}', " +
+            $"current position '{_catchUpProgress.CurrentPosition?.Value ?? "beginning"}', " +
+            $"target position '{_catchUpProgress.TargetPosition?.Value ?? "unknown"}', events processed {_eventsProcessed}" +
+            (LastBackgroundCatchUpError is { } error ? $"; last background attempt failed: {error}" : "."));
+    }
 
     private Exception? TryTombstoneFailClosedBlock()
     {
@@ -3523,8 +3618,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private bool ForcedCatchUpReachedAuthoritativeHead() =>
         _catchUpProgress.ConsecutiveEmptyBatches >= MaxConsecutiveEmptyBatches;
 
-    private void KickTombstoneGateProgressIfNeeded()
+    private void KickTombstoneGateProgressIfNeeded() => KickGateProgressIfNeeded(forceFull: true);
+
+    private void KickGateProgressIfNeeded(bool forceFull)
     {
+        if (!forceFull && (HasLiveProjectionFault || _boundedCatchUpInitiation is { IsCompleted: false })) return;
         RecoverStaleCatchUpIfNeeded(GetProjectorName());
 
         if (_catchUpProgress.IsActive)
@@ -3534,7 +3632,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         if (!ForcedCatchUpReachedAuthoritativeHead())
         {
-            ObserveCatchUpRestart(CatchUpFromEventStoreAsync(forceFull: true));
+            ObserveCatchUpRestart(CatchUpFromEventStoreAsync(forceFull));
             return;
         }
 
@@ -3545,39 +3643,55 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task ObserveEnsureInnerAsync(Func<Task> ensureWork)
     {
+        var generation = _firstQueryGate.ArmGeneration;
+        if (BoundedWaitPending)
+        {
+            // Even stores whose reads complete synchronously must not replay inline in the poll's kick.
+            await Task.Yield();
+            if (generation != _firstQueryGate.ArmGeneration) return;
+        }
         try
         {
             await ensureWork();
         }
         catch (Exception ex)
         {
+            RecordBackgroundCatchUpFailure(ex, generation);
             _logger.LogWarning(
                 ex,
-                "[{ProjectorName}] Tombstone fail-closed Ensure kick faulted",
+                "[{ProjectorName}] First-query fail-closed Ensure kick faulted",
                 GetProjectorName());
         }
     }
 
-    private void ObserveCatchUpRestart(Task catchUpTask) => _ = ObserveCatchUpRestartInnerAsync(catchUpTask);
+    private void ObserveCatchUpRestart(Task catchUpTask)
+    {
+        // Initiation can be awaiting its checkpoint with no timer registered yet. Polls observe that run instead of
+        // treating its temporarily missing timer as stale and starting another initiation.
+        if (IsBoundedWaitEpisode) _boundedCatchUpInitiation = catchUpTask;
+        _ = ObserveCatchUpRestartInnerAsync(catchUpTask);
+    }
 
     private async Task ObserveCatchUpRestartInnerAsync(Task catchUpTask)
     {
+        var generation = _firstQueryGate.ArmGeneration;
         try
         {
             await catchUpTask;
         }
         catch (Exception ex)
         {
+            RecordBackgroundCatchUpFailure(ex, generation);
             _logger.LogWarning(
                 ex,
-                "[{ProjectorName}] Tombstone fail-closed catch-up restart faulted",
+                "[{ProjectorName}] First-query fail-closed catch-up restart faulted",
                 GetProjectorName());
         }
     }
 
     private void KickTombstoneIdleEnsureIfNeededAfterTimerCompleteCatchUp()
     {
-        if (TombstoneFailClosedPending)
+        if (TombstoneFailClosedPending || BoundedWaitPending)
         {
             ObserveEnsureAsync(EnsureFirstQuerySyncCatchUpAsync);
         }
@@ -4130,7 +4244,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task CatchUpFromEventStoreAsync(bool forceFull = false)
     {
-        if (_restoreRetirementFailed)
+        if (_restoreRetirementFailed || (IsBoundedWaitEpisode && HasLiveProjectionFault))
         {
             return;
         }
@@ -4250,6 +4364,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task ProcessCatchUpBatchAsync()
     {
+        var generation = _firstQueryGate.ArmGeneration;
         var scheduledRun = _catchUpProgress;
         if (!scheduledRun.IsActive)
         {
@@ -4297,7 +4412,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             // Process one batch
+            if (BoundedWaitPending) _catchUpReadException = null;
             var batch = await ProcessSingleCatchUpBatch();
+            if (_catchUpReadException is { } readError)
+            {
+                RecordBackgroundCatchUpFailure(readError, generation);
+            }
             ResetCatchUpFailureTracking();
 
             if (batch.FetchedCount == 0)
@@ -4319,6 +4439,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
+            RecordBackgroundCatchUpFailure(ex, generation);
             await HandleCatchUpBatchFailureAsync(ex, projectorName);
         }
         finally
