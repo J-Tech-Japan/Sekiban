@@ -149,6 +149,10 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.True(observation.RealAllSafeEventsCountBeforeCompaction > 0);
         Assert.Equal(0, observation.RealAllSafeEventsCountAfterCompaction);
 
+        await WaitUntilAsync(
+            () => _harness.StateStore.Records.Any(record => record.EventsProcessed > 0),
+            TimeSpan.FromSeconds(10),
+            () => $"Expected an intermediate checkpoint with processed events; records={string.Join(" | ", _harness.StateStore.Records.Select(record => record.EventsProcessed))}");
         var intermediate = Assert.Single(
             _harness.StateStore.Records,
             record => record.EventsProcessed > 0);
@@ -192,7 +196,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             () => _harness.StateStore.Records.Any(record => record.EventsProcessed > 0),
             TimeSpan.FromSeconds(10));
 
-        AssertRetiredCommittedState(projectorName);
+        await AssertRetiredCommittedStateAsync(projectorName);
         var intermediate = Assert.Single(
             _harness.StateStore.Records,
             record => record.EventsProcessed > 0);
@@ -224,7 +228,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             () => _harness.StateStore.Records.Any(record => record.EventsProcessed > 0),
             TimeSpan.FromSeconds(10));
 
-        AssertRetiredCommittedState(projectorName);
+        await AssertRetiredCommittedStateAsync(projectorName);
         var intermediate = Assert.Single(
             _harness.StateStore.Records,
             record => record.EventsProcessed > 0);
@@ -256,6 +260,9 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.Equal(701, provider.LastGoodPayloadBytes);
         Assert.Equal(702, provider.LastGoodOriginalSizeBytes);
         Assert.Equal(703, provider.LastGoodEventsProcessed);
+        await WaitUntilAsync(
+            () => _harness.Hosts.Any(host => host.ProjectorName == projectorName),
+            TimeSpan.FromSeconds(10));
         Assert.Empty(_harness.Hosts.Single(host => host.ProjectorName == projectorName).AppliedEventIds);
         Assert.False((await grain.GetHealthStatusAsync()).IsHealthy);
     }
@@ -271,6 +278,10 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         await grain.GetStatusAsync();
         await Task.Delay(300);
 
+        await WaitUntilAsync(
+            () => _harness.ProviderStorage.CommittedStates.Any(
+                state => string.Equals(state.ProjectorName, projectorName, StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10));
         var committed = Assert.Single(
             _harness.ProviderStorage.CommittedStates,
             state => string.Equals(state.ProjectorName, projectorName, StringComparison.Ordinal));
@@ -309,6 +320,9 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             TimeSpan.FromSeconds(10));
         await Task.Delay(300);
 
+        await WaitUntilAsync(
+            () => _harness.Hosts.Any(candidate => candidate.ProjectorName == projectorName),
+            TimeSpan.FromSeconds(10));
         var host = Assert.Single(_harness.Hosts, candidate => candidate.ProjectorName == projectorName);
         Assert.Empty(host.AppliedEventIds);
         Assert.Equal(0, _harness.StateStore.UpsertCalls);
@@ -367,6 +381,9 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         var zeroCheckpoint = _harness.StateStore.Records.Last(record => record.EventsProcessed == 0);
         Assert.Equal(0, zeroCheckpoint.EventsProcessed);
         Assert.NotEqual(700, zeroCheckpoint.EventsProcessed);
+        await WaitUntilAsync(
+            () => _harness.Hosts.Any(host => host.ProjectorName == projectorName),
+            TimeSpan.FromSeconds(10));
         Assert.Empty(_harness.Hosts.First(host => host.ProjectorName == projectorName).AppliedEventIds);
 
         var hostsBeforeFreshActivation = _harness.Hosts.ToHashSet();
@@ -419,6 +436,9 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             .Last(record => record.EventsProcessed > 0);
         Assert.InRange(replacementCheckpoint.EventsProcessed, 1, 699);
         Assert.Equal(freshEvents[^1].SortableUniqueIdValue, replacementCheckpoint.LastSortableUniqueId);
+        await WaitUntilAsync(
+            () => replacementHost.AppliedEventIds.SequenceEqual(freshEvents.Select(item => item.Id)),
+            TimeSpan.FromSeconds(10));
         Assert.Equal(
             freshEvents.Select(item => item.Id),
             replacementHost.AppliedEventIds);
@@ -485,6 +505,9 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
 
         var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(projectorName);
         await grain.GetStatusAsync();
+        await WaitUntilAsync(
+            () => _harness.Hosts.Any(candidate => candidate.ProjectorName == projectorName),
+            TimeSpan.FromSeconds(10));
         var host = Assert.Single(_harness.Hosts, candidate => candidate.ProjectorName == projectorName);
         host.ForceSafeVersion(699);
         var writesBefore = _harness.ProviderStorage.WriteCalls;
@@ -516,6 +539,9 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         var w2 = _harness.StateStore.LatestRecord!.EventsProcessed;
         Assert.True(w2 > 0);
 
+        await WaitUntilAsync(
+            () => _harness.Hosts.Any(candidate => candidate.ProjectorName == projectorName),
+            TimeSpan.FromSeconds(10));
         var host = _harness.Hosts
             .Where(candidate => candidate.ProjectorName == projectorName)
             .OrderByDescending(candidate => candidate.AppliedEventIds.Count)
@@ -563,11 +589,11 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.Equal(0, provider.LastGoodPayloadBytes);
         Assert.Equal(0, provider.LastGoodOriginalSizeBytes);
         Assert.Equal(0, provider.LastGoodEventsProcessed);
-        AssertRetiredWatermark(projectorName);
+        await AssertRetiredWatermarkAsync(projectorName);
         Assert.False((await grain.GetHealthStatusAsync()).IsHealthy);
     }
 
-    private void AssertRetiredWatermark(string projectorName)
+    private async Task AssertRetiredWatermarkAsync(string projectorName)
     {
         var provider = _harness.ProviderStorage.Get(projectorName);
         Assert.NotNull(provider);
@@ -576,11 +602,16 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.Equal(0, provider.LastGoodOriginalSizeBytes);
         Assert.Equal(0, provider.LastGoodEventsProcessed);
 
-        AssertRetiredCommittedState(projectorName);
+        await AssertRetiredCommittedStateAsync(projectorName);
     }
 
-    private void AssertRetiredCommittedState(string projectorName)
+    private async Task AssertRetiredCommittedStateAsync(string projectorName)
     {
+        await WaitUntilAsync(
+            () => _harness.ProviderStorage.CommittedStates.Any(
+                state => string.Equals(state.ProjectorName, projectorName, StringComparison.Ordinal) &&
+                         IsRetiredState(state)),
+            TimeSpan.FromSeconds(10));
         var committed = Assert.Single(
             _harness.ProviderStorage.CommittedStates,
             state => string.Equals(state.ProjectorName, projectorName, StringComparison.Ordinal) &&
@@ -977,19 +1008,32 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
 
     private sealed class WatermarkProjectionHost(WatermarkHarness harness, string projectorName) : IProjectionActorHost
     {
+        private readonly object _gate = new();
         private readonly List<Guid> _appliedEventIds = [];
         private string? _safePosition;
         private int _forcedSafeVersion = -1;
 
         public string ProjectorName { get; } = projectorName;
         public int RestoreCalls { get; private set; }
-        public List<Guid> AppliedEventIds => _appliedEventIds;
+        public IReadOnlyList<Guid> AppliedEventIds
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _appliedEventIds.ToArray();
+                }
+            }
+        }
 
         public void ForceSafeVersion(int version) => _forcedSafeVersion = version;
 
         public Task AddSerializableEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp = true)
         {
-            _appliedEventIds.AddRange(events.Select(item => item.Id));
+            lock (_gate)
+            {
+                _appliedEventIds.AddRange(events.Select(item => item.Id));
+            }
             if (events.Count > 0)
             {
                 _safePosition = events[^1].SortableUniqueIdValue;
@@ -1209,7 +1253,17 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         private readonly object _gate = new();
         private int _upsertCalls;
         public int UpsertCalls => Volatile.Read(ref _upsertCalls);
-        public List<MultiProjectionStateRecord> Records { get; } = [];
+        private readonly List<MultiProjectionStateRecord> _records = [];
+        public IReadOnlyList<MultiProjectionStateRecord> Records
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _records.ToArray();
+                }
+            }
+        }
         public List<MultiProjectionStateRecord> OpenedRecords { get; } = [];
         public MultiProjectionStateRecord? LatestRecord { get; private set; }
         public GetLatestBehavior GetLatestBehavior { get; set; }
@@ -1221,7 +1275,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             lock (_gate)
             {
                 Volatile.Write(ref _upsertCalls, 0);
-                Records.Clear();
+                _records.Clear();
                 OpenedRecords.Clear();
                 LatestRecord = null;
             }
@@ -1272,7 +1326,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             Interlocked.Increment(ref _upsertCalls);
             lock (_gate)
             {
-                Records.Add(record);
+                _records.Add(record);
                 LatestRecord = record;
             }
             return _inner.UpsertAsync(record, offloadThresholdBytes, cancellationToken);
@@ -1325,7 +1379,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             var record = request.ToRecord();
             lock (_gate)
             {
-                Records.Add(record);
+                _records.Add(record);
                 LatestRecord = record;
             }
             return _inner.UpsertFromStreamAsync(request, stream, offloadThresholdBytes, cancellationToken);
@@ -1421,16 +1475,36 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         public int WriteCalls => Volatile.Read(ref _writeCalls);
         public int WriteAttempts => Volatile.Read(ref _writeAttempts);
         public int RetirementMetadataMaintenanceCommitCount => Volatile.Read(ref _retirementMetadataMaintenanceCommitCount);
-        public List<MultiProjectionGrainState> CommittedStates { get; } = [];
-        public List<MultiProjectionGrainState> ReadStates { get; } = [];
+        private readonly List<MultiProjectionGrainState> _committedStates = [];
+        private readonly List<MultiProjectionGrainState> _readStates = [];
+        public IReadOnlyList<MultiProjectionGrainState> CommittedStates
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _committedStates.ToArray();
+                }
+            }
+        }
+        public IReadOnlyList<MultiProjectionGrainState> ReadStates
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _readStates.ToArray();
+                }
+            }
+        }
 
         public void Reset()
         {
             lock (_gate)
             {
                 _states.Clear();
-                CommittedStates.Clear();
-                ReadStates.Clear();
+                _committedStates.Clear();
+                _readStates.Clear();
                 Volatile.Write(ref _writeCalls, 0);
                 Volatile.Write(ref _writeAttempts, 0);
                 Volatile.Write(ref _retirementMetadataMaintenanceCommitCount, 0);
@@ -1443,7 +1517,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             lock (_gate)
             {
                 _states[grainKey] = state.Clone();
-                CommittedStates.Add(state.Clone());
+                _committedStates.Add(state.Clone());
             }
         }
 
@@ -1478,7 +1552,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
                 {
                     grainState.State = (T)(object)state.Clone();
                     grainState.RecordExists = true;
-                    ReadStates.Add(state.Clone());
+                    _readStates.Add(state.Clone());
                 }
                 else
                 {
@@ -1502,7 +1576,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
                 lock (_gate)
                 {
                     _states[grainId.ToString()] = state.Clone();
-                    CommittedStates.Add(state.Clone());
+                    _committedStates.Add(state.Clone());
                     if (IsRetiredState(state))
                     {
                         Interlocked.Increment(ref _retirementMetadataMaintenanceCommitCount);
