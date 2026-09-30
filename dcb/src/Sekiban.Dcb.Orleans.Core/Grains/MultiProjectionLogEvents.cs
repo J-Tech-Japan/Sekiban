@@ -91,4 +91,7 @@ public static class MultiProjectionLogEvents
 
     /// <summary>The durable version-mismatch fault clear failed; activation must not begin catch-up or serve requests.</summary>
     public static readonly EventId ProjectionFaultVersionClearFailed = new(1028, "ProjectionFaultVersionClearFailed");
+
+    /// <summary>A projector version change has no snapshot yet; rebuild from events after resetting the integrity guard.</summary>
+    public static readonly EventId VersionChangeRebuildFromEvents = new(1029, "VersionChangeRebuildFromEvents");
 }
