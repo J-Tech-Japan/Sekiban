@@ -5,6 +5,9 @@ namespace Sekiban.Dcb.Actors;
 /// </summary>
 public class GeneralMultiProjectionActorOptions
 {
+    public const int DefaultHotCatchUpPersistMaxFetchedEvents = 5000;
+    public const int DefaultHotCatchUpPersistMaxIntervalSeconds = 300;
+
     /// <summary>
     ///     The safe window time in milliseconds to wait before processing events
     ///     to ensure consistency. Events within this window may arrive out of order.
@@ -59,6 +62,20 @@ public class GeneralMultiProjectionActorOptions
     ///     Set to 0 or negative to disable the periodic persistence timer.
     /// </summary>
     public int PersistIntervalSeconds { get; set; } = 60 * 60;
+
+    /// <summary>
+    ///     Hot-only catch-up event checkpoint cadence, default 5000. Drives both the cumulative
+    ///     applied-event modulo and the fetched-event window. Set to 0 or negative to disable both.
+    ///     Larger values reduce full-state snapshot writes but increase replay after interruption.
+    /// </summary>
+    public int HotCatchUpPersistMaxFetchedEvents { get; set; } = DefaultHotCatchUpPersistMaxFetchedEvents;
+
+    /// <summary>
+    ///     Hot-only catch-up checkpoint interval in seconds, default 300.
+    ///     Set to 0 or negative to disable the time trigger. Larger values reduce full-state
+    ///     snapshot writes but increase replay after interruption. Completion still persists new events.
+    /// </summary>
+    public int HotCatchUpPersistMaxIntervalSeconds { get; set; } = DefaultHotCatchUpPersistMaxIntervalSeconds;
 
     /// <summary>
     ///     When true (default), skips persistence when the safe checkpoint has not
@@ -141,6 +158,20 @@ public sealed class MultiProjectionPersistenceOverrideOptions
     ///     Set to 0 or negative to disable periodic persistence for that projector.
     /// </summary>
     public int? PersistIntervalSeconds { get; set; }
+
+    /// <summary>
+    ///     Overrides the hot-only cumulative modulo and fetched-event cadence for this projector.
+    ///     Null inherits the global value; 0 or negative disables both event triggers.
+    ///     Larger values reduce full-state snapshot writes but increase replay after interruption.
+    /// </summary>
+    public int? HotCatchUpPersistMaxFetchedEvents { get; set; }
+
+    /// <summary>
+    ///     Overrides the hot-only checkpoint interval in seconds for this projector.
+    ///     Null inherits the global value; 0 or negative disables the time trigger.
+    ///     Larger values reduce full-state snapshot writes but increase replay after interruption.
+    /// </summary>
+    public int? HotCatchUpPersistMaxIntervalSeconds { get; set; }
 
     /// <summary>
     ///     Overrides GeneralMultiProjectionActorOptions.SkipPersistWhenSafeCheckpointUnchanged

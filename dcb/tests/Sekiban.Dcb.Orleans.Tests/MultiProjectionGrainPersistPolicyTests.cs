@@ -279,6 +279,102 @@ public class MultiProjectionGrainPersistPolicyTests
     }
 
     [Fact]
+    public void Configured_hot_thresholds_preserve_order_and_are_independent_of_live_policy()
+    {
+        var grain = CreateGrain(new GeneralMultiProjectionActorOptions
+        {
+            PersistBatchSize = 7,
+            PersistIntervalSeconds = 11,
+            HotCatchUpPersistMaxFetchedEvents = 20,
+            HotCatchUpPersistMaxIntervalSeconds = 30
+        });
+        InvokePrivate(grain, "ApplyPersistPolicySettings", ["projection"]);
+        Assert.Equal(7, GetPrivateField<int>(grain, "_persistBatchSize"));
+        Assert.Equal(TimeSpan.FromSeconds(11), GetPrivateField<TimeSpan>(grain, "_persistInterval"));
+
+        SetPrivateField(grain, "_eventsProcessed", 19L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 19L);
+        SetPrivateField(grain, "_lastCatchUpPersistUtc", DateTime.UtcNow - TimeSpan.FromSeconds(20));
+        AssertDecision(grain, null, null, false, "none");
+        SetPrivateField(grain, "_lastCatchUpPersistUtc", DateTime.UtcNow - TimeSpan.FromSeconds(31));
+        AssertDecision(grain, null, null, true, "time_checkpoint");
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 20L);
+        AssertDecision(grain, null, null, true, "fetched_count_checkpoint");
+        SetPrivateField(grain, "_eventsProcessed", 20L);
+        AssertDecision(grain, null, null, true, "event_count_checkpoint");
+    }
+
+    [Theory]
+    [InlineData(0, 30, "time_checkpoint")]
+    [InlineData(-1, 30, "time_checkpoint")]
+    [InlineData(20, 0, "fetched_count_checkpoint")]
+    [InlineData(20, -1, "fetched_count_checkpoint")]
+    public void Hot_event_and_time_triggers_can_be_disabled_independently(int events, int seconds, string reason)
+    {
+        var grain = CreateGrain(new GeneralMultiProjectionActorOptions
+        {
+            HotCatchUpPersistMaxFetchedEvents = events,
+            HotCatchUpPersistMaxIntervalSeconds = seconds,
+            PersistBatchSize = 0,
+            PersistIntervalSeconds = 0
+        });
+        InvokePrivate(grain, "ApplyPersistPolicySettings", ["projection"]);
+        SetPrivateField(grain, "_eventsProcessed", 19L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 20L);
+        SetPrivateField(grain, "_lastCatchUpPersistUtc", DateTime.UtcNow - TimeSpan.FromSeconds(31));
+        AssertDecision(grain, null, null, true, reason);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Disabled_hot_triggers_do_not_change_live_or_cold_policy(int disabled)
+    {
+        var grain = CreateGrain(new GeneralMultiProjectionActorOptions
+        {
+            HotCatchUpPersistMaxFetchedEvents = disabled,
+            HotCatchUpPersistMaxIntervalSeconds = disabled
+        });
+        InvokePrivate(grain, "ApplyPersistPolicySettings", ["projection"]);
+        Assert.Equal(10000, GetPrivateField<int>(grain, "_persistBatchSize"));
+        Assert.Equal(TimeSpan.FromHours(1), GetPrivateField<TimeSpan>(grain, "_persistInterval"));
+        SetPrivateField(grain, "_eventsProcessed", 5000L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 5000L);
+        SetPrivateField(grain, "_lastCatchUpPersistUtc", DateTime.UtcNow - TimeSpan.FromDays(1));
+        AssertDecision(grain, null, null, false, "none");
+        AssertDecision(grain, CreateHybrid(maxEvents: 100),
+            new HybridReadBatchMetadata("cold", true, false, true, 100, 0, 1),
+            true, "cold_segment_boundary");
+    }
+
+    [Fact]
+    public void Hot_overrides_win_and_null_or_unmatched_overrides_inherit_base_values()
+    {
+        var grain = CreateGrain(new GeneralMultiProjectionActorOptions
+        {
+            HotCatchUpPersistMaxFetchedEvents = 42,
+            HotCatchUpPersistMaxIntervalSeconds = 60,
+            ProjectorPersistenceOverrides = new(StringComparer.Ordinal)
+            {
+                ["override"] = new() { HotCatchUpPersistMaxFetchedEvents = 17, HotCatchUpPersistMaxIntervalSeconds = 0 },
+                ["inherit"] = new()
+            }
+        });
+        foreach (var name in new[] { "inherit", "unmatched" })
+        {
+            var settings = InvokePrivate(grain, "ResolvePersistPolicySettings", [name])!;
+            Assert.Equal(42, GetProperty<int>(settings, "HotCatchUpPersistMaxFetchedEvents"));
+            Assert.Equal(60, GetProperty<int>(settings, "HotCatchUpPersistMaxIntervalSeconds"));
+        }
+        InvokePrivate(grain, "ApplyPersistPolicySettings", ["override"]);
+        SetPrivateField(grain, "_eventsProcessed", 17L);
+        AssertDecision(grain, null, null, true, "event_count_checkpoint");
+        SetPrivateField(grain, "_eventsProcessed", 18L);
+        SetPrivateField(grain, "_lastCatchUpPersistUtc", DateTime.UtcNow - TimeSpan.FromDays(1));
+        AssertDecision(grain, null, null, false, "none");
+    }
+
+    [Fact]
     public void Hot_thresholds_are_inclusive_and_preserve_legacy_modulo_precedence()
     {
         var grain = CreateGrain();

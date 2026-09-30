@@ -240,12 +240,30 @@ all filtered (`AppliedCount == 0`) still advances the traversal cursor and reach
 same progress, persist-decision, and telemetry seam as an applied batch. This prevents a
 filtered tail from ending catch-up before its checkpoint fallback can run.
 
-The existing `event_count_checkpoint` trigger remains first on the hot-only path. The
-additive fallbacks report `PersistReason=fetched_count_checkpoint` after 5,000 fetched
-events or `PersistReason=time_checkpoint` after five minutes. Cold reads retain their
-configured segment, applied-count, and interval triggers, plus the fetched-count fallback;
-the cold/hot choice is taken from the read metadata's `UsedCold` value. A hybrid store
-with `UsedCold=false` therefore uses the hot-only constants. The summary reports
+Hot-only checkpoint cadence is configurable through `GeneralMultiProjectionActorOptions`
+(SEK-G89, related to #1253):
+
+- `HotCatchUpPersistMaxFetchedEvents` defaults to `5000`. It drives both the legacy
+  cumulative applied-event modulo (`event_count_checkpoint`, evaluated first) and the
+  fetched-event window (`fetched_count_checkpoint`, evaluated second).
+- `HotCatchUpPersistMaxIntervalSeconds` defaults to `300` and controls the elapsed-time
+  fallback (`time_checkpoint`, evaluated last).
+- A value ≤ 0 disables the corresponding trigger(s). Nullable properties with the same
+  names in `MultiProjectionPersistenceOverrideOptions`, under
+  `ProjectorPersistenceOverrides[projectorName]`, override global values; null inherits them.
+
+The fetched window resets on each persist attempt, whereas the applied count is cumulative.
+When fetched and applied counts differ, these triggers can drift out of phase, so the effective
+cadence can approach half the configured event threshold. Raising the thresholds reduces
+full-state snapshot/blob writes and storage I/O, at the cost of more replay after interruption.
+Every hot checkpoint persist also compacts safe history and retained collections (`CompactSafeHistory` / `CompactRetainedCollections`), so larger thresholds, or disabling the triggers, let catch-up memory grow until the next checkpoint or completion.
+Disabling both allows completion-only checkpoints; completion still performs final persistence
+when catch-up has new events. Defaults preserve the existing 5,000-event / five-minute behavior.
+These knobs are independent of live-path `PersistBatchSize` and `PersistIntervalSeconds`.
+
+Cold reads retain their configured segment, applied-count, and interval triggers, plus the
+fetched-count fallback. The cold/hot choice comes from read metadata's `UsedCold` value;
+a hybrid store with `UsedCold=false` uses the hot-only settings. The summary reports
 `PersistTriggered` (the decision) separately from `PersistOutcome` (`durable_write`,
 `no_durable_write`, or `not_attempted`); a trigger is not evidence that a durable
 checkpoint was committed.

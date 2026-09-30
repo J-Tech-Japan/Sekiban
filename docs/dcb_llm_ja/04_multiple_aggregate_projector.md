@@ -232,14 +232,32 @@ filter されて `AppliedCount == 0` になった場合も、traversal cursor �
 batch と同じ progress・persist decision・telemetry の共通 seam を通ります。これにより
 filter 済み tail が checkpoint fallback より前に catch-up を終了させません。
 
-既存の hot-only `event_count_checkpoint` trigger が最初に評価されます。追加 fallback は
-5,000 fetched events 到達時の `PersistReason=fetched_count_checkpoint` と、5 分経過時の
-`PersistReason=time_checkpoint` です。cold read は既存の設定された segment・applied-count・
-interval trigger を維持し、fetched-count fallback も使います。cold/hot の選択は read metadata
-の `UsedCold` だけで決まり、`UsedCold=false` の hybrid store は hot-only の定数を使います。
-summary では `PersistTriggered` (decision) と `PersistOutcome` (`durable_write`,
-`no_durable_write`, `not_attempted`) を分けて報告します。trigger されたこと自体は、
-durable checkpoint が commit された証明ではありません。
+Hot-only checkpoint cadence は `GeneralMultiProjectionActorOptions` で設定できます
+(SEK-G89、関連 issue #1253)。
+
+- `HotCatchUpPersistMaxFetchedEvents` の既定値は `5000` です。累積適用イベント数の
+  modulo (`event_count_checkpoint`、最初に評価) と、前回の永続化からの読み取り数
+  (`fetched_count_checkpoint`、2 番目に評価) の両方に使われます。
+- `HotCatchUpPersistMaxIntervalSeconds` の既定値は `300` です。経過時間の fallback
+  (`time_checkpoint`、最後に評価) を制御します。
+- 値が ≤ 0 なら対応する trigger を無効にします。`ProjectorPersistenceOverrides[projectorName]`
+  の `MultiProjectionPersistenceOverrideOptions` にある同名の nullable プロパティで
+  projector ごとに上書きできます。null はグローバル値を継承します。
+
+読み取り数の window は永続化の試行ごとにリセットされますが、適用数は累積値です。
+読み取り数と適用数が異なると両 trigger の位相がずれ、実効 cadence が設定イベント数の
+約半分になる場合があります。しきい値を増やすと full-state snapshot/blob の書き込みと
+storage I/O を減らせますが、中断後に再実行するイベント数が増えます。両方を無効にすれば
+完了時のみの checkpoint にできます。catch-up に新しいイベントがあれば、完了時の最終
+永続化は引き続き実行されます。既定の 5,000 イベント / 5 分の動作は変わりません。
+これらの設定は live-path の `PersistBatchSize` と `PersistIntervalSeconds` とは独立しています。
+hot checkpoint の永続化ごとに safe history と保持中のコレクションも圧縮されるため (`CompactSafeHistory` / `CompactRetainedCollections`)、しきい値を増やす、または trigger を無効にすると、次の checkpoint または完了まで catch-up のメモリ使用量が増え続けます。
+
+cold read は既存の設定された segment・applied-count・interval trigger と fetched-count
+fallback を維持します。cold/hot の選択は read metadata の `UsedCold` で決まり、
+`UsedCold=false` の hybrid store は hot-only 設定を使います。summary では
+`PersistTriggered` (decision) と `PersistOutcome` (`durable_write`, `no_durable_write`,
+`not_attempted`) を分けて報告します。trigger 自体は durable checkpoint の commit の証明ではありません。
 
 ### 初回クエリ catch-up の位置契約 (SEK-G21 / 10.8.1)
 
