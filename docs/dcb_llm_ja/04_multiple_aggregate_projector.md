@@ -313,7 +313,8 @@ fail-closed クエリは `LastError` を変更しませんが、実際の backgr
 
 `GetStatusAsync` の `FirstQueryCatchUpPending`、`CatchUpTargetPosition`（初回 batch 前は null 可）、
 `LastBackgroundCatchUpError`（message と UTC timestamp）で状態を確認できます。
-background error は episode generation に限定され、catching-up メッセージにも含まれるので障害を把握できます。
+background error は episode generation に限定され、settle が成功した後も次の arm まで status に残る場合があります。
+catching-up メッセージにも含まれるので障害を把握できます。
 追加 status constructor 引数には既定値があります。
 `MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix` (`Projection rebuild is pending:`) は
 SEK-G18 と SEK-G85 共通です。後者は `checkpoint tombstone` で区別できます。

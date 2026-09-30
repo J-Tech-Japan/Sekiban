@@ -326,8 +326,9 @@ change `LastError`; actual background failures still can.
 
 `GetStatusAsync` exposes `FirstQueryCatchUpPending`, `CatchUpTargetPosition` (possibly null
 before the first batch), and `LastBackgroundCatchUpError` (message and UTC timestamp, scoped
-to the episode generation). The last background failure is also included in the catching-up
-error, so an outage remains visible. The appended status constructor parameters have defaults.
+to the episode generation). It can remain visible in status after a successful settle until
+the next arm. The last background failure is also included in the catching-up error, so an
+outage remains visible. The appended status constructor parameters have defaults.
 `MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix` (`Projection rebuild is pending:`)
 covers SEK-G18 and SEK-G85; `checkpoint tombstone` identifies the latter.
 

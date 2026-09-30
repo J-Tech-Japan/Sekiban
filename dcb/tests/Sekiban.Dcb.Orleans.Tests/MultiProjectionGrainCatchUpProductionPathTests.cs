@@ -134,6 +134,94 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
     private static bool IsBounded(MultiProjectionGrain grain) =>
         (bool)grain.GetType().GetProperty("BoundedWaitPending", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(grain)!;
 
+    [Theory]
+    [InlineData("timer")]
+    [InlineData("ensure")]
+    [InlineData("settlement")]
+    [InlineData("initiation")]
+    public async Task BoundedWait_OwnerlessActiveProgress_ResumesAfterOwnerLeaves_WithoutDuplicateCatchUp(string owner)
+    {
+        var readStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new HeadAwareProductionCatchUpEventStore(readStarted, releaseRead);
+        var host = new ProductionCatchUpProjectionHost { AllowApply = true, FailInitialStateRead = false };
+        var grain = CreateGrain(store, host, processedEvents: Array.Empty<SerializableEvent>());
+        SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", 50);
+        InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
+        var gate = GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate");
+        SetActiveCatchUp(grain, new CatchUpStartPositionLease(null, CatchUpStartPositionSource.InferredCheckpoint));
+        var progress = GetPrivateFieldValue(grain, "_catchUpProgress");
+        var releaseOwner = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task? ensure = null;
+        if (owner != "timer") SetPrivateField(grain, "_catchUpTimer", null);
+        if (owner == "ensure")
+            ensure = gate.EnsureAsync(async () => { await releaseOwner.Task; throw new InvalidOperationException("owner failed"); });
+        else if (owner == "settlement") SetPrivateField(grain, "_boundedGateSettlement", releaseOwner.Task);
+        else if (owner == "initiation") InvokePrivate(grain, "ObserveCatchUpRestart", [releaseOwner.Task]);
+
+        var pending = await grain.GetSnapshotJsonAsync();
+        Assert.False(pending.IsSuccess);
+        Assert.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, pending.GetException().Message);
+        Assert.Same(progress, GetPrivateFieldValue(grain, "_catchUpProgress"));
+        Assert.True((await grain.GetCatchUpStatusAsync()).IsActive);
+        Assert.Equal(0, store.HeadReadCalls);
+        Assert.Equal(0, store.ReadCalls);
+
+        SetPrivateField(grain, "_catchUpTimer", null);
+        releaseOwner.SetResult();
+        if (ensure is not null) await Assert.ThrowsAsync<InvalidOperationException>(() => ensure);
+        Assert.True(IsBounded(grain));
+        Assert.True((await grain.GetCatchUpStatusAsync()).IsActive); // recent but now ownerless
+        Assert.False(gate.IsInFlight);
+        Assert.False(GetPrivateFieldValue(grain, "_boundedGateSettlement") is Task { IsCompleted: false });
+        Assert.False(GetPrivateFieldValue(grain, "_boundedCatchUpInitiation") is Task { IsCompleted: false });
+        InvokePrivate(grain, "RecordBackgroundCatchUpFailure", [new Exception("previous attempt"), gate.ArmGeneration]);
+
+        var poll = grain.GetSnapshotJsonAsync();
+        await readStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(gate.IsInFlight);
+        Assert.NotSame(progress, GetPrivateFieldValue(grain, "_catchUpProgress"));
+        var resumedProgress = GetPrivateFieldValue(grain, "_catchUpProgress");
+        Assert.False((await poll).IsSuccess);
+        // The resumed Ensure has removed the timer and is parked inside its authoritative read. Repeated polls
+        // must retain that owner rather than release progress and start another catch-up.
+        Assert.False((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.Same(resumedProgress, GetPrivateFieldValue(grain, "_catchUpProgress"));
+        Assert.True((await grain.GetCatchUpStatusAsync()).IsActive);
+        Assert.Equal(1, store.HeadReadCalls);
+        Assert.Empty(host.AppliedEventIds);
+
+        releaseRead.SetResult();
+        await GetPrivateField<Task>(grain, "_boundedGateSettlement").WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(gate.IsPending);
+        Assert.False((await grain.GetCatchUpStatusAsync()).IsActive);
+        Assert.Single(host.AppliedEventIds);
+        Assert.True((await grain.GetSnapshotJsonAsync()).IsSuccess);
+        Assert.Equal(1, store.HeadReadCalls);
+        Assert.Contains("previous attempt", (await grain.GetStatusAsync()).LastBackgroundCatchUpError);
+        InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
+        Assert.Null((await grain.GetStatusAsync()).LastBackgroundCatchUpError);
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(-1, true)]
+    [InlineData(50, false)]
+    public async Task Public_refresh_ExceptionReleasesActiveProgress_OnlyDuringBoundedEpisode(int waitMs, bool remainsActive)
+    {
+        var store = new ProductionCatchUpEventStore([1]);
+        var host = new ProductionCatchUpProjectionHost { AllowApply = true, ThrowOnApply = true };
+        var grain = CreateGrain(store, host, processedEvents: Array.Empty<SerializableEvent>());
+        SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", waitMs);
+        InvokePrivate(grain, "ArmActivationFirstQueryGate", []);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => grain.RefreshAsync());
+        Assert.Equal("pending event application failed", error.Message);
+        Assert.Equal(remainsActive, (await grain.GetCatchUpStatusAsync()).IsActive);
+        Assert.Null(GetPrivateFieldValue(grain, "_catchUpTimer"));
+        Assert.True(GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate").IsPending);
+    }
+
     [Fact]
     public async Task BoundedWait_ParkedExecutionGate_DoesNotAcquireItOrReplay_AndReportsEpisodeError()
     {
@@ -1682,7 +1770,20 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(
             IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
 
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+        public virtual Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+    }
+
+    private sealed class HeadAwareProductionCatchUpEventStore(
+        TaskCompletionSource readStarted,
+        TaskCompletionSource releaseRead) : ProductionCatchUpEventStore([1], readStarted, releaseRead)
+    {
+        public int HeadReadCalls { get; private set; }
+
+        public override Task<ResultBox<string>> GetLatestSortableUniqueIdAsync()
+        {
+            HeadReadCalls++;
+            return Task.FromResult(ResultBox.FromValue(Events[^1].SortableUniqueIdValue));
+        }
     }
 
     private sealed class ProductionStreamingCatchUpEventStore : ProductionCatchUpEventStore, IStreamingSerializableEventStore

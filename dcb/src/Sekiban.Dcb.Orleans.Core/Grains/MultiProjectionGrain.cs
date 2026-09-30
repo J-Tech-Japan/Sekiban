@@ -2400,15 +2400,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     }
                 }
             }
-            catch
-            {
-                // A failed bounded Ensure has no timer to resume this invocation. Leave the host's position
-                // intact and release active progress so a later poll can retry the shared Ensure incrementally.
-                if (forceEvenIfCatchUpActive && BoundedWaitPending) _catchUpProgress.IsActive = false;
-                throw;
-            }
             finally
             {
+                // The in-call loop removed its timer. During a bounded episode, release progress on every exit
+                // (including the batch limit and public RefreshAsync failures) so the next poll can resume.
+                // Keep the default blocking path's behavior unchanged.
+                if (BoundedWaitPending && _catchUpTimer is null) _catchUpProgress.IsActive = false;
+
                 // RefreshAsync's in-call loop can fault the actor without going through the background failure handlers,
                 // so capture and persist the fault on this production path while preserving the original exception.
                 await CaptureAndPersistProjectionFaultIfAnyAsync();
@@ -3642,8 +3640,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         if (!forceFull && BoundedWaitPending)
         {
-            // Observe an active run without stale recovery. Otherwise the shared background Ensure resumes
-            // from the host's current position, including after a transient failure on a restored snapshot.
+            // The guards above exclude Ensure, settlement and initiation owners. A timer still owns an active
+            // run; only timerless, ownerless progress may be released, even if its last attempt was recent.
+            if (_catchUpProgress.IsActive && _catchUpTimer is null)
+            {
+                RecoverStaleCatchUpIfNeeded(GetProjectorName());
+            }
+            // The shared background Ensure resumes from the host's current position after a transient failure
+            // or an invocation that exhausted its batch limit without reaching the authoritative head.
             if (!_catchUpProgress.IsActive) ObserveEnsureAsync(EnsureFirstQuerySyncCatchUpAsync);
             return;
         }
