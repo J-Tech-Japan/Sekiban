@@ -77,7 +77,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         await WaitUntilAsync(
             () => _harness.StateStore.Records.Any(record => record.EventsProcessed > 0),
             TimeSpan.FromSeconds(15),
-            () => $"hosts={_harness.Hosts.Count}, writes={_harness.ProviderStorage.WriteCalls}, attempts={_harness.ProviderStorage.WriteAttempts}, upserts={_harness.StateStore.UpsertCalls}, records={_harness.StateStore.Records.Count}, reads={_harness.EventStore.ReadSinceValues.Count}");
+            () => $"hosts={_harness.Hosts.Count}, writes={_harness.ProviderStorage.WriteCalls}, attempts={_harness.ProviderStorage.WriteAttempts}, upserts={_harness.StateStore.UpsertCalls}, records={_harness.StateStore.Records.Count}, reads={_harness.EventStore.SnapshotReadSinceValues().Count}");
 
         var intermediate = Assert.Single(
             _harness.StateStore.Records,
@@ -86,6 +86,10 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.True(intermediate.EventsProcessed < seed.OldSafeVersion);
         Assert.Equal(intermediate.LastSortableUniqueId, _harness.StateStore.LatestRecord!.LastSortableUniqueId);
 
+        await WaitUntilAsync(
+            () => _harness.Hosts.Any(host => host.AppliedEventIds.Count > 0),
+            TimeSpan.FromSeconds(10),
+            () => $"Expected a host with applied events; hosts={_harness.Hosts.Count}");
         var firstCheckpointHost = _harness.Hosts.First(host => host.AppliedEventIds.Count > 0);
         Assert.True(firstCheckpointHost.AppliedEventIds.Count > 0);
 
@@ -103,8 +107,13 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
 
         var replacementHost = _harness.Hosts.Skip(1).First(host => host.RestoreCalls > 0);
         Assert.True(replacementHost.RestoreCalls > 0);
+        await WaitUntilAsync(
+            () => _harness.EventStore.SnapshotReadSinceValues()
+                .Any(since => string.Equals(since, intermediate.LastSortableUniqueId, StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10),
+            () => $"Expected read-since position {intermediate.LastSortableUniqueId}; observed={string.Join(" | ", _harness.EventStore.SnapshotReadSinceValues())}");
         Assert.Contains(
-            _harness.EventStore.ReadSinceValues,
+            _harness.EventStore.SnapshotReadSinceValues(),
             since => string.Equals(since, intermediate.LastSortableUniqueId, StringComparison.Ordinal));
         Assert.NotEqual(seed.OldSafeVersion, intermediate.EventsProcessed);
         Assert.True(_harness.ProviderStorage.WriteCalls > 0);
@@ -188,6 +197,10 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             _harness.StateStore.Records,
             record => record.EventsProcessed > 0);
         Assert.True(intermediate.EventsProcessed < 700);
+        await WaitUntilAsync(
+            () => _harness.Hosts.Any(host => host.ProjectorName == projectorName && host.AppliedEventIds.Count > 0),
+            TimeSpan.FromSeconds(10),
+            () => $"Expected applied events for {projectorName}; hosts={_harness.Hosts.Count}");
         Assert.Contains(
             _harness.Hosts,
             host => host.ProjectorName == projectorName && host.AppliedEventIds.Count > 0);
@@ -216,6 +229,10 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             _harness.StateStore.Records,
             record => record.EventsProcessed > 0);
         Assert.True(intermediate.EventsProcessed < 700);
+        await WaitUntilAsync(
+            () => _harness.Hosts.Any(host => host.ProjectorName == projectorName && host.AppliedEventIds.Count > 0),
+            TimeSpan.FromSeconds(10),
+            () => $"Expected applied events for {projectorName}; hosts={_harness.Hosts.Count}");
         Assert.Contains(
             _harness.Hosts,
             host => host.ProjectorName == projectorName && host.AppliedEventIds.Count > 0);
@@ -303,6 +320,12 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         var health = await grain.GetHealthStatusAsync();
         Assert.False(health.IsHealthy);
         Assert.Contains("retirement", health.LastError ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        await WaitUntilAsync(
+            () => _harness.LoggerProvider.Messages.Any(
+                message => message.Contains("Integrity watermark retirement failed", StringComparison.Ordinal) &&
+                           message.Contains("no durable checkpoint", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10),
+            () => $"Expected retirement failure log; logs={string.Join(" | ", _harness.LoggerProvider.Messages)}");
         Assert.Contains(
             _harness.LoggerProvider.Messages,
             message => message.Contains("Integrity watermark retirement failed", StringComparison.Ordinal) &&
@@ -407,6 +430,13 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.True(provider.LastGoodPayloadBytes > 0);
         Assert.True(provider.LastGoodOriginalSizeBytes > 0);
         Assert.True(_harness.ProviderStorage.WriteCalls > providerWritesBeforeReplacement);
+        await WaitUntilAsync(
+            () => _harness.ProviderStorage.CommittedStates.Skip(committedStatesBeforeReplacement)
+                .Any(state => state.EventsProcessed == replacementCheckpoint.EventsProcessed &&
+                              state.LastGoodSafeVersion == provider.LastGoodSafeVersion &&
+                              state.LastGoodEventsProcessed == provider.LastGoodEventsProcessed),
+            TimeSpan.FromSeconds(10),
+            () => $"Expected committed replacement checkpoint with events={replacementCheckpoint.EventsProcessed}, safeVersion={provider.LastGoodSafeVersion}, lastGoodEvents={provider.LastGoodEventsProcessed}; commits={_harness.ProviderStorage.CommittedStates.Count}");
         Assert.Contains(
             _harness.ProviderStorage.CommittedStates.Skip(committedStatesBeforeReplacement),
             state => state.EventsProcessed == replacementCheckpoint.EventsProcessed &&
@@ -431,6 +461,12 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.Equal(0, provider.LastGoodPayloadBytes);
         Assert.Equal(0, provider.LastGoodOriginalSizeBytes);
         Assert.Equal(0, provider.LastGoodEventsProcessed);
+        await WaitUntilAsync(
+            () => _harness.LoggerProvider.Messages.Any(
+                message => message.Contains("Resetting integrity guard", StringComparison.Ordinal) &&
+                           message.Contains("external snapshot is missing", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10),
+            () => $"Expected missing snapshot reset log; logs={string.Join(" | ", _harness.LoggerProvider.Messages)}");
         Assert.Contains(
             _harness.LoggerProvider.Messages,
             message => message.Contains("Resetting integrity guard", StringComparison.Ordinal) &&
@@ -1067,6 +1103,14 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         private TaskCompletionSource<bool> _blockedReadStarted = CreateSignal();
         private TaskCompletionSource<bool> _releaseBlockedRead = CreateSignal();
         public List<string?> ReadSinceValues { get; } = [];
+        public IReadOnlyList<string?> SnapshotReadSinceValues()
+        {
+            lock (_gate)
+            {
+                return ReadSinceValues.ToArray();
+            }
+        }
+
         public bool BlockReads { get; set; }
         public bool ReturnEmptyAfterBlockedRead { get; set; }
 
