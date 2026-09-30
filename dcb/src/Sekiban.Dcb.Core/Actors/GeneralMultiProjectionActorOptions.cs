@@ -5,6 +5,12 @@ namespace Sekiban.Dcb.Actors;
 /// </summary>
 public class GeneralMultiProjectionActorOptions
 {
+    /// <summary>
+    ///     Bounds the first-query gate wait after admission on a generic activation, in milliseconds.
+    ///     Zero or negative preserves blocking catch-up. Does not bound activation or request queuing.
+    /// </summary>
+    public int FirstQueryCatchUpMaxWaitMs { get; set; } = 0;
+
     public const int DefaultHotCatchUpPersistMaxFetchedEvents = 5000;
     public const int DefaultHotCatchUpPersistMaxIntervalSeconds = 300;
 
@@ -147,6 +153,9 @@ public class GeneralMultiProjectionActorOptions
 
 public sealed class MultiProjectionPersistenceOverrideOptions
 {
+    /// <summary>Null inherits the global first-query wait; zero or negative preserves blocking catch-up.</summary>
+    public int? FirstQueryCatchUpMaxWaitMs { get; set; }
+
     /// <summary>
     ///     Overrides GeneralMultiProjectionActorOptions.PersistBatchSize for a specific projector.
     ///     Set to 0 or negative to disable batch-triggered persistence for that projector.

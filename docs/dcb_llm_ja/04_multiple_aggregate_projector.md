@@ -273,3 +273,78 @@ barrier を置きます。この barrier は意図的に異なる 2 種類の位
 
 固定 head に届かない short read は引き続き fail-closed で retryable です。read failure は元の
 例外を保持します。safe チェックポイント、SafeWindow の動作、公開 API、storage schema は変更しません。
+
+### 初回クエリの待機時間を制限する設定 (SEK-G90; #1253 item 5)
+
+`GeneralMultiProjectionActorOptions.FirstQueryCatchUpMaxWaitMs` の既定値は `0` です。
+0 以下では従来の blocking barrier を維持します。正の値（例: `1000`）で、
+クエリ受付後の gate 待機を N ms に制限します。
+`ProjectorPersistenceOverrides[projectorName].FirstQueryCatchUpMaxWaitMs` は nullable override です。
+null は全体設定を継承し、0 以下は当該 projector の blocking 動作を復元します。
+N は Orleans `ResponseTimeout` と HTTP/client timeout より十分短く設定してください。
+activation と request queue の時間は含まれず、応答全体の上限ではありません。
+
+この設定を有効にすると、activation 後の初回クエリは activation の background catch-up を共有し、
+その実行が完了してから gate が settle します。既定では catch-up interval（1 秒）ごとに
+`MaxConsecutiveEmptyBatches`（5）回の空 batch を確認して完了します。このため短い tail でも
+settle まで約 5 秒かかる場合があり、既定の in-call path ではミリ秒で完了します。
+N はこの遅延を考慮して設定してください（例: 上記 timeout の範囲内で 10 秒以上）。
+N が小さい場合は初回に「catching up」応答が返ることを想定してください。この遅延の短縮は後続課題です。
+
+空のイベントストアに対する新しい activation でも、N が小さい場合は idle settle が完了するまで
+catching-up エラーが返ることがあります（約 `MaxConsecutiveEmptyBatches` × catch-up interval）。
+同時に送った poll は non-reentrant grain により直列化され、各 poll は受付後に最大 N ms 待機します。
+
+対象は durable rebuild marker が pending でない activation の generic arm のみです。
+snapshot restore 失敗後に host を再作成してから行う activation generic arm も対象です。
+checkpoint tombstone は SEK-G85、durable marker は SEK-G18 の動作を維持します。
+checkpoint mutation、operator reset/rebuild、activation 中の host recreation の re-arm は
+blocking のままです。re-arm は現在の bounded episode を終了します。他の arm への拡張は後続課題です。
+
+クエリは activation の進行中 timer catch-up を共有し、必要なら incremental restart
+(`forceFull: false`) と background gate settlement を開始します。対象クエリの中で
+full replay は実行しません。timer は interleave しますが、全体の同時実行制限で batch が
+skip される可能性があるため N 内の進捗は保証されません。gate が完了すれば成功し、
+未完了なら state/snapshot は `ResultBox.Error`、scalar/list は `InvalidOperationException` を返します。
+メッセージは `MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix`
+(`Projection catch-up is in progress:`) で始まり、現在位置・target 位置・処理イベント数を含みます。
+background 完了後のクエリは成功します。待機中に検出した live projection fault も SEK-G14 が優先します。
+fail-closed クエリは `LastError` を変更しませんが、実際の background failure は従来どおり更新します。
+
+`GetStatusAsync` の `FirstQueryCatchUpPending`、`CatchUpTargetPosition`（初回 batch 前は null 可）、
+`LastBackgroundCatchUpError`（message と UTC timestamp）で状態を確認できます。
+background error は episode generation に限定され、settle が成功した後も次の arm まで status に残る場合があります。
+catching-up メッセージにも含まれるので障害を把握できます。
+追加 status constructor 引数には既定値があります。
+`MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix` (`Projection rebuild is pending:`) は
+SEK-G18 と SEK-G85 共通です。後者は `checkpoint tombstone` で区別できます。
+
+SEK-G21 の authoritative start position 契約は維持します。background settle の head read は
+クエリ到着前の場合があり、成功時には通常の projection lag semantics が適用されます。
+受付時点の freshness は保証されません。既存の 30 秒 `waitForCatchUp` helper は変更しません。
+
+定数は grain が生成するメッセージの先頭を表します。transport や ResultBox の wrapper が
+文字列を前置するため、host は `Contains(prefix, StringComparison.Ordinal)` で判定します。
+catch-up が非アクティブで initiation と settlement が進行中でなければ、poll は共有 background
+Ensure を直ちに開始します。Refresh 済みの host は timer の空 batch 閾値を待たずに N 内で
+settle できます。クエリ内で Ensure を inline 実行することはありません。
+
+ASP.NET Core host の 503 と Retry-After マッピング例（error の取得元は query surface に合わせます）:
+
+```csharp
+using Sekiban.Dcb.Orleans.Grains;
+
+// Map both ResultBox.GetException() and thrown scalar/list query exceptions.
+static IResult MapProjectionError(Exception error, HttpResponse response)
+{
+    if (error.Message.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,
+            StringComparison.Ordinal) ||
+        error.Message.Contains(MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix,
+            StringComparison.Ordinal))
+    {
+        response.Headers["Retry-After"] = "2";
+        return Results.Problem(statusCode: 503, detail: error.Message);
+    }
+    return Results.Problem(statusCode: 500);
+}
+```

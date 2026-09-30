@@ -51,9 +51,12 @@ public class TombstoneFailClosedTests : IAsyncLifetime
         _cluster.Dispose();
     }
 
-    [Fact]
-    public async Task TombstoneActivation_GetState_FailClosedFast_WithStableMessage()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10_000)]
+    public async Task TombstoneActivation_GetState_FailClosedFast_WithStableMessage(int waitMs)
     {
+        Env.WaitMs = waitMs;
         var grain = await PrepareFreshActivationWithOpenTombstoneAsync();
         await AssertFailClosedFastAsync(() => grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false));
     }
@@ -188,12 +191,13 @@ public class TombstoneFailClosedTests : IAsyncLifetime
 
     private async Task<IMultiProjectionGrain> PrepareFreshActivationWithOpenTombstoneAsync()
     {
+        var t0 = DateTime.UtcNow;
         const int persistedEvents = 30;
         const int tailEvents = 20;
         var grain = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
 
         var baseline = Enumerable.Range(0, persistedEvents)
-            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), DateTime.UtcNow.AddSeconds(-60 + i))))
+            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(-60 + i))))
             .ToArray();
         await Env.EventStore.WriteSerializableEventsAsync(baseline);
         await grain.RefreshAsync();
@@ -209,7 +213,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
         Assert.Equal(CheckpointCasStatus.Committed, tombstone.Status);
 
         var tail = Enumerable.Range(persistedEvents, tailEvents)
-            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), DateTime.UtcNow.AddSeconds(-60 + i))))
+            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(-60 + i))))
             .ToArray();
         await Env.EventStore.WriteSerializableEventsAsync(tail);
 
@@ -316,12 +320,14 @@ public class TombstoneFailClosedTests : IAsyncLifetime
 
     internal static class Env
     {
+        public static int WaitMs { get; set; }
         public static DcbDomainTypes Domain { get; private set; } = BuildDomain();
         public static InMemoryEventStore EventStore { get; private set; } = new(Domain.EventTypes);
         public static GatingCheckpointStore GatingStore { get; private set; } = new(new InMemoryMultiProjectionStateStore());
 
         public static void Reset()
         {
+            WaitMs = 0;
             Domain = BuildDomain();
             EventStore = new InMemoryEventStore(Domain.EventTypes);
             GatingStore = new GatingCheckpointStore(new InMemoryMultiProjectionStateStore());
@@ -355,7 +361,7 @@ public class TombstoneFailClosedTests : IAsyncLifetime
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IBlobStorageSnapshotAccessor, MockBlobStorageSnapshotAccessor>();
                     services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
-                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000 });
+                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000, FirstQueryCatchUpMaxWaitMs = Env.WaitMs });
                     services.AddSekibanDcbNativeRuntime();
                 })
                 .AddMemoryGrainStorageAsDefault()

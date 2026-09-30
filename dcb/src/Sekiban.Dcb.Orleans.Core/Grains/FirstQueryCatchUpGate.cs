@@ -57,6 +57,18 @@ internal sealed class FirstQueryCatchUpGate
         }
     }
 
+    /// <summary>True while the current arm's shared Ensure attempt has not completed.</summary>
+    public bool IsInFlight
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _inFlight is { IsCompleted: false };
+            }
+        }
+    }
+
     /// <summary>
     ///     Runs <paramref name="work" /> at most once across all concurrent callers while it is in flight. A no-op
     ///     (completed task) when the gate is not armed or already satisfied. If the previous attempt has completed but
@@ -84,6 +96,21 @@ internal sealed class FirstQueryCatchUpGate
             var capturedGeneration = _armGeneration;
             _inFlight = SettleAsync(work, capturedGeneration);
             return _inFlight;
+        }
+    }
+
+    /// <summary>
+    ///     A live projection fault already proves the barrier's fail-closed outcome. Settle only the observed arm,
+    ///     without joining a potentially parked background Ensure; the query will surface the host's fault.
+    /// </summary>
+    public void SatisfyForFault(int generation)
+    {
+        lock (_sync)
+        {
+            if (_armGeneration == generation && _armed)
+            {
+                _satisfied = true;
+            }
         }
     }
 

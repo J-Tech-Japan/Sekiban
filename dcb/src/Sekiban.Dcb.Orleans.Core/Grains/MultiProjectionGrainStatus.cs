@@ -34,4 +34,10 @@ public record MultiProjectionGrainStatus(
     [property: Id(13)]
     bool IsCatchUpActive,
     [property: Id(14)]
-    int CatchUpBatchesProcessed);
+    int CatchUpBatchesProcessed,
+    [property: Id(15)]
+    bool FirstQueryCatchUpPending = false,
+    [property: Id(16)]
+    string? CatchUpTargetPosition = null,
+    [property: Id(17)]
+    string? LastBackgroundCatchUpError = null);

@@ -66,24 +66,31 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         _cluster.Dispose();
     }
 
-    [Fact]
-    public async Task MarkerWriteFail_AllQueriesFailClosed_NoExternalMutation_SameActivationRetrySucceeds()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10_000)]
+    public async Task MarkerWriteFail_AllQueriesFailClosed_NoExternalMutation_SameActivationRetrySucceeds(int waitMs)
     {
+        var t0 = DateTime.UtcNow;
+        Env.WaitMs = waitMs;
         var grain = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         var executor = new OrleansDcbExecutor(_client, Env.EventStore, Env.Domain);
 
         // Seed a later already-safe event, graduate + persist (compaction -> incremental promotion path).
-        var later = ToSerializable(CreateEvent(new Counted("later"), DateTime.UtcNow.AddSeconds(-30)));
+        var later = ToSerializable(CreateEvent(new Counted("later"), t0.AddSeconds(-30)));
         await Env.EventStore.WriteSerializableEventsAsync(new[] { later });
         await grain.RefreshAsync();
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
         var externalWritesBefore = Env.StateStore.WriteCount;
         Assert.Equal(1, ((CountProjector)(await grain.GetStateAsync()).GetValue().Payload).Count);
+        // The setup query can start background catch-up; deliver the retrograde event only after it is idle.
+        await FirstQueryBoundedWaitClusterTests.PollUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
 
         // Arm the marker-write failure, then deliver a globally-EARLIER already-safe event out of order -> RebuildRequired.
         // It is also persisted to the authoritative event store so the eventual full rebuild re-reads BOTH events.
         MarkerFailingGrainStorage.FailMarkerWrites = true;
-        var earlier = ToSerializable(CreateEvent(new Counted("earlier"), DateTime.UtcNow.AddSeconds(-31)));
+        var earlier = ToSerializable(CreateEvent(new Counted("earlier"), t0.AddSeconds(-31)));
+        Assert.True(string.CompareOrdinal(earlier.SortableUniqueIdValue, later.SortableUniqueIdValue) < 0);
         await Env.EventStore.WriteSerializableEventsAsync(new[] { earlier });
         await grain.AddEventsAsync(new[] { earlier });
 
@@ -105,23 +112,29 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
         Assert.Equal(2, ((CountProjector)recovered.GetValue().Payload).Count);
     }
 
-    [Fact]
-    public async Task ExternalInvalidateFail_DurableMarkerSurvives_FreshActivationSeesMarkerBeforeRestore_NoStaleSuccess_ExactReplay()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10_000)]
+    public async Task ExternalInvalidateFail_DurableMarkerSurvives_FreshActivationSeesMarkerBeforeRestore_NoStaleSuccess_ExactReplay(int waitMs)
     {
+        var t0 = DateTime.UtcNow;
+        Env.WaitMs = waitMs;
         var grain = _client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
         var executor = new OrleansDcbExecutor(_client, Env.EventStore, Env.Domain);
 
-        var later = ToSerializable(CreateEvent(new Counted("later"), DateTime.UtcNow.AddSeconds(-30)));
+        var later = ToSerializable(CreateEvent(new Counted("later"), t0.AddSeconds(-30)));
         await Env.EventStore.WriteSerializableEventsAsync(new[] { later });
         await grain.RefreshAsync();
         Assert.True((await grain.PersistStateAsync()).IsSuccess);
         Assert.True((await Env.StateStore.GetLatestForVersionAsync(CountProjector.MultiProjectorName, "1.0.0")).GetValue().HasValue);
+        await FirstQueryBoundedWaitClusterTests.PollUntilAsync(async () => !(await grain.GetStatusAsync()).IsCatchUpActive);
 
         // The DURABLE MARKER commits, but the external-snapshot invalidate (SEK-G20 tombstone CAS) fails. Per the
         // fail-first protocol the marker stays durable while the stale external snapshot is left intact — a crash here
         // must still rebuild.
         Env.StateStore.FailInvalidate = true;
-        var earlier = ToSerializable(CreateEvent(new Counted("earlier"), DateTime.UtcNow.AddSeconds(-31)));
+        var earlier = ToSerializable(CreateEvent(new Counted("earlier"), t0.AddSeconds(-31)));
+        Assert.True(string.CompareOrdinal(earlier.SortableUniqueIdValue, later.SortableUniqueIdValue) < 0);
         await Env.EventStore.WriteSerializableEventsAsync(new[] { earlier });
         await grain.AddEventsAsync(new[] { earlier });
 
@@ -313,12 +326,14 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
 
     internal static class Env
     {
+        public static int WaitMs { get; set; }
         public static DcbDomainTypes Domain { get; private set; } = BuildDomain();
         public static InMemoryEventStore EventStore { get; private set; } = new(Domain.EventTypes);
         public static CountingStateStore StateStore { get; private set; } = new();
 
         public static void Reset()
         {
+            WaitMs = 0;
             Domain = BuildDomain();
             EventStore = new InMemoryEventStore(Domain.EventTypes);
             StateStore = new CountingStateStore();
@@ -352,7 +367,7 @@ public class DurableRebuildMarkerFailClosedTests : IAsyncLifetime
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IBlobStorageSnapshotAccessor, MockBlobStorageSnapshotAccessor>();
                     services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
-                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000 });
+                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000, FirstQueryCatchUpMaxWaitMs = Env.WaitMs });
                     services.AddSekibanDcbNativeRuntime();
                     services.AddGrainStorage("OrleansStorage", (sp, name) => new MarkerFailingGrainStorage());
                 })

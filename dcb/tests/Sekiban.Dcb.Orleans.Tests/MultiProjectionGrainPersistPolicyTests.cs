@@ -20,6 +20,22 @@ namespace Sekiban.Dcb.Orleans.Tests;
 
 public class MultiProjectionGrainPersistPolicyTests
 {
+    [Theory]
+    [InlineData(null, 250)]
+    [InlineData(0, 0)]
+    [InlineData(-1, -1)]
+    [InlineData(50, 50)]
+    public void FirstQueryWait_ResolvesOverrideAndAppliesToGrain(int? overrideMs, int expected)
+    {
+        var grain = CreateGrain(new GeneralMultiProjectionActorOptions
+        {
+            FirstQueryCatchUpMaxWaitMs = 250,
+            ProjectorPersistenceOverrides = new() { ["test"] = new() { FirstQueryCatchUpMaxWaitMs = overrideMs } }
+        });
+        InvokePrivate(grain, "ApplyPersistPolicySettings", ["test"]);
+        Assert.Equal(expected, GetPrivateField<int>(grain, "_firstQueryCatchUpMaxWaitMs"));
+    }
+
     [Fact]
     public void ResolvePersistPolicySettings_ShouldUseStorageFriendlyDefaults()
     {
