@@ -97,7 +97,9 @@ internal enum CatchUpProductionHookPoint
     InvocationBeforeGate,
     InvocationEnteredGate,
     InvocationBeforeRead,
-    InvocationCompleted
+    InvocationCompleted,
+    RebuildRequiredDetected,
+    HostRecreated
 }
 
 internal sealed record CatchUpProductionObservation(
@@ -134,6 +136,15 @@ internal static class CatchUpProductionTestHooks
         Observers.TryGetValue(Key(observation.ServiceId, observation.ProjectorName), out var observer)
             ? observer(point, observation)
             : Task.CompletedTask;
+
+    // Notification from synchronous host recreation. Never block the Orleans scheduler on an async observer.
+    internal static void PublishSynchronous(CatchUpProductionHookPoint point, CatchUpProductionObservation observation)
+    {
+        var notification = PublishAsync(point, observation);
+        if (!notification.IsCompleted)
+            throw new InvalidOperationException($"Observer for synchronous hook '{point}' must complete synchronously.");
+        notification.GetAwaiter().GetResult();
+    }
 
     private static string Key(string serviceId, string projectorName) => $"{serviceId}\n{projectorName}";
 

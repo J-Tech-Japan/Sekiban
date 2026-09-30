@@ -251,6 +251,7 @@ public class DualStateProjectionWrapper<T>
         DcbDomainTypes domainTypes)
     {
         RememberConsumptionContext(safeWindowThreshold, domainTypes);
+        Sekiban.Dcb.Runtime.ProjectionEventApplicationScope.ObserveNativeWrapper();
 
         // Check if this event has already been processed (duplicate prevention)
         var eventTime = new SortableUniqueId(evt.SortableUniqueIdValue);
@@ -287,6 +288,7 @@ public class DualStateProjectionWrapper<T>
                 _servedStateDirty = true;
             }
 
+            Sekiban.Dcb.Runtime.ProjectionEventApplicationScope.RecordAppliedEvent();
             return this;
         }
 
@@ -311,6 +313,7 @@ public class DualStateProjectionWrapper<T>
                 SignalRebuild(evt);
                 _servedStateDirty = true;
             }
+            if (!_rebuildRequired) Sekiban.Dcb.Runtime.ProjectionEventApplicationScope.RecordAppliedEvent();
             return this;
         }
 
@@ -319,6 +322,7 @@ public class DualStateProjectionWrapper<T>
             // A dirty fresh history is repaired only at a consumption boundary. Do not fold a later in-order arrival onto
             // the stale safe payload and do not reconcile at the end of this ProcessEvent.
             _servedStateDirty = true;
+            Sekiban.Dcb.Runtime.ProjectionEventApplicationScope.RecordAppliedEvent();
             return this;
         }
 
@@ -330,12 +334,14 @@ public class DualStateProjectionWrapper<T>
             _safeVersion++;
             ReconcileServedState(safeWindowThreshold, domainTypes);
             _servedStateDirty = false;
+            Sekiban.Dcb.Runtime.ProjectionEventApplicationScope.RecordAppliedEvent();
             return this;
         }
 
         // Fresh path retains the complete ordered history. Marking dirty is O(log N) insertion plus constant metadata;
         // crucially, do not rebuild or reconcile here. The next real consume performs the single repair.
         MarkSafeHistoryDirty(evt);
+        Sekiban.Dcb.Runtime.ProjectionEventApplicationScope.RecordAppliedEvent();
         return this;
     }
 

@@ -1,4 +1,8 @@
 using System.Reflection;
+using System.Text;
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Dcb.Orleans;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using ResultBoxes;
@@ -27,6 +31,178 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// </summary>
 public sealed class MultiProjectionGrainCatchUpProductionPathTests
 {
+    [Fact]
+    public async Task Native_unsafe_only_restart_null_inferred_lease_reacquires_safe_checkpoint_before_Ensure()
+    {
+        ForceFullResumeClusterTests.Env.Reset();
+        using var services = new ServiceCollection().AddSingleton(ForceFullResumeClusterTests.Env.Domain)
+            .AddSekibanDcbNativeRuntime().BuildServiceProvider();
+        var options = new GeneralMultiProjectionActorOptions { SafeWindowMs = 300_000 };
+        var host = services.GetRequiredService<IProjectionActorHostFactory>().Create(
+            ForceFullResumeClusterTests.CountProjector.MultiProjectorName, options);
+        var events = Enumerable.Range(0, 20).Select(i => new SerializableEvent(
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new ForceFullResumeClusterTests.Counted($"e{i}"))),
+            SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-10).AddMilliseconds(i), Guid.NewGuid()),
+            Guid.NewGuid(), new EventMetadata("aggregate", "command", "test"), [], "Counted")).ToArray();
+        var store = new CursorAwareProductionCatchUpEventStore(events);
+        var grain = CreateGrain(store, host, processedEvents: []);
+        SetPrivateField(grain, "_eventsProcessed", 0L);
+        await grain.RefreshAsync();
+        Assert.False(GetPrivateField<bool>(grain, "_hostIsPristine"));
+        Assert.Null(await (Task<SortableUniqueId?>)InvokePrivate(grain, "GetCurrentPositionAsync", [])!);
+
+        CatchUpProductionObservation? restart = null;
+        CatchUpProductionObservation? ensure = null;
+        var rebuilds = 0;
+        var recreates = 0;
+        using var hook = CatchUpProductionTestHooks.Register(DefaultServiceIdProvider.DefaultServiceId,
+            "production-catch-up", (point, observation) =>
+            {
+                if (point == CatchUpProductionHookPoint.BackgroundStarted) restart = observation;
+                if (point == CatchUpProductionHookPoint.InvocationBeforeRead) ensure = observation;
+                if (point == CatchUpProductionHookPoint.RebuildRequiredDetected) rebuilds++;
+                if (point == CatchUpProductionHookPoint.HostRecreated) recreates++;
+                return Task.CompletedTask;
+            });
+        // Leave timer scheduling inert while driving the real restart acquisition and first-query invocation.
+        typeof(Grain).GetField("<Runtime>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(grain, DispatchProxy.Create<IGrainRuntime, DeactivationOnlyRuntime>());
+        SetPrivateField(grain, "_catchUpTimer", new NoOpDisposable());
+        await InvokePrivateTaskAsync(grain, "CatchUpFromEventStoreAsync", [true]);
+        Assert.NotNull(restart);
+        Assert.Null(restart!.Start!.StartPosition);
+        Assert.Equal(CatchUpStartPositionSource.InferredCheckpoint, restart.Start.Source);
+
+        // Promote the unsafe range deterministically, then discard both layers of historical id deduplication.
+        options.SafeWindowMs = 0;
+        var safe = (await host.GetStateAsync(canGetUnsafeState: false)).GetValue();
+        Assert.Equal(events[^1].SortableUniqueIdValue, safe.LastSortableUniqueId);
+        GetPrivateField<GeneralMultiProjectionActor>(host, "_actor").CompactSafeHistory();
+        InvokePrivate(grain, "ClearProcessedEventCache", []);
+        var readsBeforeEnsure = store.ReadSinceValues.Count;
+        await InvokePrivateTaskAsync(grain, "RefreshWithAuthoritativeCursorAsync", [true]);
+
+        Assert.NotNull(ensure);
+        Assert.Equal(CatchUpStartPositionSource.InferredCheckpoint, ensure!.Start!.Source);
+        Assert.Equal(safe.LastSortableUniqueId, ensure.Start.StartPosition?.Value);
+        Assert.All(store.ReadSinceValues.Skip(readsBeforeEnsure), since => Assert.Equal(safe.LastSortableUniqueId, since));
+        Assert.Equal(20L, GetPrivateField<long>(grain, "_eventsProcessed"));
+        Assert.Equal(20, ((ForceFullResumeClusterTests.CountProjector)(await host.GetStateAsync()).GetValue().Payload).Count);
+        Assert.Equal(0, rebuilds);
+        Assert.Equal(0, recreates);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Native_host_dedup_with_no_safe_checkpoint_counts_only_distinct_applies(bool inferred)
+    {
+        ForceFullResumeClusterTests.Env.Reset();
+        var domain = ForceFullResumeClusterTests.Env.Domain;
+        using var services = new ServiceCollection().AddSingleton(domain).AddSekibanDcbNativeRuntime().BuildServiceProvider();
+        var host = services.GetRequiredService<IProjectionActorHostFactory>().Create(
+            ForceFullResumeClusterTests.CountProjector.MultiProjectorName,
+            new GeneralMultiProjectionActorOptions { SafeWindowMs = 300_000 });
+        var events = Enumerable.Range(0, 20).Select(i => new SerializableEvent(
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new ForceFullResumeClusterTests.Counted($"e{i}"))),
+            SortableUniqueId.Generate(DateTime.UtcNow.AddSeconds(-10).AddMilliseconds(i), Guid.NewGuid()),
+            Guid.NewGuid(), new EventMetadata("aggregate", "command", "test"), [], "Counted")).ToArray();
+        var store = new ProductionCatchUpEventStore([20], events: events);
+        var grain = CreateGrain(store, host, processedEvents: []);
+        SetPrivateField(grain, "_eventsProcessed", 0L);
+        await grain.RefreshAsync();
+        Assert.False(GetPrivateField<bool>(grain, "_hostIsPristine"));
+        Assert.Null(await (Task<SortableUniqueId?>)InvokePrivate(grain, "GetCurrentPositionAsync", [])!);
+        Assert.Equal(20L, GetPrivateField<long>(grain, "_eventsProcessed"));
+
+        // Model a retry beyond the grain id cache: native unsafe ids still dedup the submitted range.
+        GetPrivateField<HashSet<Guid>>(grain, "_processedEventIds").Clear();
+        SetPrivateField(store, "_readCalls", 0);
+        SetActiveCatchUp(grain, new CatchUpStartPositionLease(null,
+            inferred ? CatchUpStartPositionSource.InferredCheckpoint : CatchUpStartPositionSource.FullReplay));
+        CatchUpProductionObservation? read = null;
+        using var hook = CatchUpProductionTestHooks.Register(DefaultServiceIdProvider.DefaultServiceId,
+            "production-catch-up", (point, observation) =>
+            {
+                if (point == CatchUpProductionHookPoint.InvocationBeforeRead) read = observation;
+                return Task.CompletedTask;
+            });
+        await InvokePrivateTaskAsync(grain, "RefreshWithAuthoritativeCursorAsync", [true]);
+        Assert.NotNull(read);
+        Assert.Null(read!.Start!.StartPosition);
+        Assert.Equal(CatchUpStartPositionSource.InferredCheckpoint, read.Start.Source);
+        Assert.Equal(20L, GetPrivateField<long>(grain, "_eventsProcessed"));
+        Assert.Equal(20, ((ForceFullResumeClusterTests.CountProjector)(await host.GetStateAsync()).GetValue().Payload).Count);
+    }
+
+    [Fact]
+    public async Task Native_partial_application_failure_still_clears_pristine()
+    {
+        ForceFullResumeClusterTests.Env.Reset();
+        using var services = new ServiceCollection().AddSingleton(ForceFullResumeClusterTests.Env.Domain)
+            .AddSekibanDcbNativeRuntime().BuildServiceProvider();
+        var host = services.GetRequiredService<IProjectionActorHostFactory>().Create(
+            ForceFullResumeClusterTests.CountProjector.MultiProjectorName);
+        var events = new[] { "ok", "poison" }.Select((tag, i) => new SerializableEvent(
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new ForceFullResumeClusterTests.Counted(tag))),
+            SortableUniqueId.Generate(DateTime.UtcNow.AddHours(-1).AddMilliseconds(i), Guid.NewGuid()),
+            Guid.NewGuid(), new EventMetadata("aggregate", "command", "test"), [], "Counted")).ToArray();
+        var grain = CreateGrain(new ProductionCatchUpEventStore([2], events: events), host, processedEvents: []);
+        await Assert.ThrowsAnyAsync<Exception>(() => InvokePrivateTaskAsync(grain, "ApplyHostEventsAsync", [events, false]));
+        Assert.False(GetPrivateField<bool>(grain, "_hostIsPristine"));
+    }
+
+    [Theory]
+    [InlineData(false, nameof(CatchUpStartPositionSource.FullReplay))]
+    [InlineData(true, nameof(CatchUpStartPositionSource.FullReplay))]
+    [InlineData(false, nameof(CatchUpStartPositionSource.InferredCheckpoint))]
+    [InlineData(true, nameof(CatchUpStartPositionSource.InferredCheckpoint))]
+    [InlineData(false, nameof(CatchUpStartPositionSource.RestoredCheckpoint))]
+    [InlineData(true, nameof(CatchUpStartPositionSource.RestoredCheckpoint))]
+    public async Task Applied_host_rearm_does_not_restore_pristine_and_null_inheritance_preserves_persist_window(bool rearm, string source)
+    {
+        var safe = CreatePendingEvent(DateTime.UtcNow.AddHours(-1).Ticks).SortableUniqueIdValue;
+        var host = new ProductionCatchUpProjectionHost { AllowApply = true, SafePosition = safe, FailInitialStateRead = false };
+        var readStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new ProductionCatchUpEventStore([], readStarted, release);
+        var grain = CreateGrain(store, host, processedEvents: []);
+        await InvokePrivateTaskAsync(grain, "ApplyHostEventsAsync", [new[] { CreatePendingEvent(20_000) }, false]);
+        if (rearm) GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate").Arm();
+        Assert.False(GetPrivateField<bool>(grain, "_hostIsPristine"));
+        var leaseSource = Enum.Parse<CatchUpStartPositionSource>(source);
+        var inherited = new CatchUpStartPositionLease(null, leaseSource);
+        SetActiveCatchUp(grain, inherited);
+        CatchUpProductionObservation? read = null;
+        using var hook = CatchUpProductionTestHooks.Register(DefaultServiceIdProvider.DefaultServiceId,
+            "production-catch-up", (point, observation) =>
+            {
+                if (point == CatchUpProductionHookPoint.InvocationBeforeRead) read = observation;
+                return Task.CompletedTask;
+            });
+        var time = DateTime.UtcNow.AddMinutes(-2);
+        SeedWindow(grain, time, true);
+        var run = InvokePrivateTaskAsync(grain, "RefreshWithAuthoritativeCursorAsync", [true]);
+        try
+        {
+            await readStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.NotNull(read);
+            if (leaseSource == CatchUpStartPositionSource.RestoredCheckpoint)
+            {
+                Assert.Same(inherited, read!.Start);
+                Assert.Null(store.ReadSinceValues[0]);
+            }
+            else
+            {
+                Assert.Equal(CatchUpStartPositionSource.InferredCheckpoint, read!.Start!.Source);
+                Assert.Equal(safe, store.ReadSinceValues[0]);
+            }
+            AssertWindowPreserved(grain, time, true);
+        }
+        finally { release.TrySetResult(); }
+        await run;
+    }
+
     [Theory]
     [InlineData(100, false, true)]
     [InlineData(100, true, false)]
@@ -1293,7 +1469,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
 
     private static MultiProjectionGrain CreateGrain(
         ProductionCatchUpEventStore store,
-        ProductionCatchUpProjectionHost? host = null,
+        IProjectionActorHost? host = null,
         MultiProjectionGrainState? state = null,
         GeneralMultiProjectionActorOptions? actorOptions = null,
         IEnumerable<SerializableEvent>? processedEvents = null,
@@ -1474,7 +1650,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         public void Dispose() { }
     }
 
-    private sealed class ProductionCatchUpProjectionHostFactory(ProductionCatchUpProjectionHost host) : IProjectionActorHostFactory
+    private sealed class ProductionCatchUpProjectionHostFactory(IProjectionActorHost host) : IProjectionActorHostFactory
     {
         public IProjectionActorHost Create(
             string projectorName,
@@ -1737,10 +1913,10 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
             return Events.Skip(offset).Take(_batchSizes[batchIndex]).ToArray();
         }
 
-        public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+        public virtual async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             ResultBox.FromValue<IEnumerable<SerializableEvent>>(await ReadNextBatchAsync(since));
 
-        public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+        public virtual async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
             SortableUniqueId? since,
             int? maxCount) =>
             ResultBox.FromValue<IEnumerable<SerializableEvent>>(await ReadNextBatchAsync(since));
@@ -1771,6 +1947,29 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
             IEnumerable<SerializableEvent> events) => throw new NotSupportedException();
 
         public virtual Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => throw new NotSupportedException();
+    }
+
+    public class DeactivationOnlyRuntime : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            if (targetMethod?.Name == nameof(IGrainRuntime.DelayDeactivation)) return null;
+            throw new NotSupportedException(targetMethod?.Name);
+        }
+    }
+
+    private sealed class CursorAwareProductionCatchUpEventStore(IReadOnlyList<SerializableEvent> events)
+        : ProductionCatchUpEventStore([], events: events)
+    {
+        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+            ReadAllSerializableEventsAsync(since, null);
+
+        public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
+        {
+            ReadSinceValuesStorage.Add(since?.Value);
+            var remaining = Events.Where(ev => since is null || new SortableUniqueId(ev.SortableUniqueIdValue).IsLaterThan(since));
+            return Task.FromResult(ResultBox.FromValue<IEnumerable<SerializableEvent>>(remaining.Take(maxCount ?? int.MaxValue).ToArray()));
+        }
     }
 
     private sealed class HeadAwareProductionCatchUpEventStore(
