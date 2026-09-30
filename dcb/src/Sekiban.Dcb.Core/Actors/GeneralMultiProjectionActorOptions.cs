@@ -5,6 +5,9 @@ namespace Sekiban.Dcb.Actors;
 /// </summary>
 public class GeneralMultiProjectionActorOptions
 {
+    public const int DefaultHotCatchUpPersistMaxFetchedEvents = 5000;
+    public const int DefaultHotCatchUpPersistMaxIntervalSeconds = 300;
+
     /// <summary>
     ///     The safe window time in milliseconds to wait before processing events
     ///     to ensure consistency. Events within this window may arrive out of order.
@@ -65,14 +68,14 @@ public class GeneralMultiProjectionActorOptions
     ///     applied-event modulo and the fetched-event window. Set to 0 or negative to disable both.
     ///     Larger values reduce full-state snapshot writes but increase replay after interruption.
     /// </summary>
-    public int HotCatchUpPersistMaxFetchedEvents { get; set; } = 5000;
+    public int HotCatchUpPersistMaxFetchedEvents { get; set; } = DefaultHotCatchUpPersistMaxFetchedEvents;
 
     /// <summary>
     ///     Hot-only catch-up checkpoint interval in seconds, default 300.
     ///     Set to 0 or negative to disable the time trigger. Larger values reduce full-state
     ///     snapshot writes but increase replay after interruption. Completion still persists new events.
     /// </summary>
-    public int HotCatchUpPersistMaxIntervalSeconds { get; set; } = 300;
+    public int HotCatchUpPersistMaxIntervalSeconds { get; set; } = DefaultHotCatchUpPersistMaxIntervalSeconds;
 
     /// <summary>
     ///     When true (default), skips persistence when the safe checkpoint has not

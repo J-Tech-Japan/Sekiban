@@ -260,8 +260,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         int PersistBatchSize,
         TimeSpan PersistInterval,
         bool SkipPersistWhenSafeCheckpointUnchanged,
-        int HotCatchUpPersistMaxFetchedEvents = 5000,
-        int HotCatchUpPersistMaxIntervalSeconds = 300);
+        int HotCatchUpPersistMaxFetchedEvents = GeneralMultiProjectionActorOptions.DefaultHotCatchUpPersistMaxFetchedEvents,
+        int HotCatchUpPersistMaxIntervalSeconds = GeneralMultiProjectionActorOptions.DefaultHotCatchUpPersistMaxIntervalSeconds);
 
     internal static GeneralMultiProjectionActorOptions MergeActorOptions(
         GeneralMultiProjectionActorOptions baseOptions,
@@ -2447,6 +2447,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _largeSnapshotGcThresholdBytes = Math.Max(1_000_000, mergedOptions.LargeSnapshotGcThresholdBytes);
             _useStreamingSnapshotIO = mergedOptions.UseStreamingSnapshotIO;
 
+            // Merged host options carry the base hot-only values; the grain uses the resolved _hotCatchUpPersist* fields instead.
             _mergedActorOptions = mergedOptions; // retained so an operator reset can recreate a fresh host in-activation
 
             _host = _actorHostFactory.Create(

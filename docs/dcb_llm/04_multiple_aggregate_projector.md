@@ -256,6 +256,7 @@ The fetched window resets on each persist attempt, whereas the applied count is 
 When fetched and applied counts differ, these triggers can drift out of phase, so the effective
 cadence can approach half the configured event threshold. Raising the thresholds reduces
 full-state snapshot/blob writes and storage I/O, at the cost of more replay after interruption.
+Every hot checkpoint persist also compacts safe history and retained collections (`CompactSafeHistory` / `CompactRetainedCollections`), so larger thresholds, or disabling the triggers, let catch-up memory grow until the next checkpoint or completion.
 Disabling both allows completion-only checkpoints; completion still performs final persistence
 when catch-up has new events. Defaults preserve the existing 5,000-event / five-minute behavior.
 These knobs are independent of live-path `PersistBatchSize` and `PersistIntervalSeconds`.

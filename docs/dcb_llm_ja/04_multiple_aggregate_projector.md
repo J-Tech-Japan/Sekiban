@@ -251,6 +251,7 @@ storage I/O を減らせますが、中断後に再実行するイベント数�
 完了時のみの checkpoint にできます。catch-up に新しいイベントがあれば、完了時の最終
 永続化は引き続き実行されます。既定の 5,000 イベント / 5 分の動作は変わりません。
 これらの設定は live-path の `PersistBatchSize` と `PersistIntervalSeconds` とは独立しています。
+hot checkpoint の永続化ごとに safe history と保持中のコレクションも圧縮されるため (`CompactSafeHistory` / `CompactRetainedCollections`)、しきい値を増やす、または trigger を無効にすると、次の checkpoint または完了まで catch-up のメモリ使用量が増え続けます。
 
 cold read は既存の設定された segment・applied-count・interval trigger と fetched-count
 fallback を維持します。cold/hot の選択は read metadata の `UsedCold` で決まり、
