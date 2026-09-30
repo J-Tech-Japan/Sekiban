@@ -184,6 +184,26 @@ must live in a relational database. See [Materialized View Basics](20_materializ
 Multi-projections keep two states: a **safe** state (events older than the safe window,
 in global `SortableUniqueId` order) and a **served/unsafe** state (what queries return).
 
+`Project` must treat its input payload as immutable and return a new payload instance. If an existing projector
+deliberately mutates and returns its input, its payload must implement `IMutatesProjectionInput`, and
+`GenerateInitialPayload` must return a fresh instance on every call. The marker makes the dual-state wrapper isolate the
+safe baseline through the snapshot serializer. Every reconcile, including the reconcile after each safe in-order event
+during catch-up or rebuild, creates an independent clone of safe and therefore costs O(state size). In-order unsafe
+folds apply to the already-independent served instance without another clone. This opt-in trades throughput for safety;
+prefer a non-mutating (immutable or copy-on-write) projector for large states. The public
+`DualStateProjectionWrapper<T>` constructor whose first parameter is `DcbDomainTypes` and
+`DualStateProjectionWrapperFactory.CreateWithDomainTypes` clone the initial marker payload once through the registered
+snapshot serializer. Their legacy
+overloads without `DcbDomainTypes` fail fast for marker payloads because they cannot guarantee serializer-correct
+isolation; they retain their existing `System.Text.Json` behavior for non-marker payloads. Operators can temporarily enable
+`GeneralMultiProjectionActorOptions.VerifySafeStateIsolation` to fail fast when an unmarked projector mutates safe state;
+the diagnostic is off by default because it serializes the safe payload around unsafe folds and compares the serialized
+bytes. Serialization must be deterministic: output whose byte order can vary (for example, an unordered collection) can
+raise a false positive even when the logical payload did not change.
+
+For marker payloads, the served instance returned by `GetUnsafeProjection` or `GetUnsafeProjectorPayload` is mutated in
+place by later in-order unsafe folds. Callers must not retain that instance across calls.
+
 - **Served state is reconciled, not arrival-ordered.** At every safe-window graduation the
   served state is re-derived as `safe baseline + still-buffered events replayed in global
   SortableUniqueId order`, then published atomically. Two events that arrive out of order

@@ -180,6 +180,26 @@ Sekiban 内部だけで完結する読み取りならマルチプロジェクシ
 マルチプロジェクションは 2 つの状態を保持します。**safe** 状態(セーフウィンドウより古い
 イベントをグローバルな `SortableUniqueId` 順で反映)と、**served/unsafe** 状態(クエリが返す値)です。
 
+`Project` は入力 payload を不変として扱い、新しい payload インスタンスを返す必要があります。既存の
+projector が意図的に入力を変更して同じインスタンスを返す場合、payload に `IMutatesProjectionInput` を
+実装し、`GenerateInitialPayload` も呼び出しごとに新しいインスタンスを返してください。この marker により、
+dual-state wrapper は snapshot serializer を使って safe baseline を分離します。catch-up または rebuild 中に
+safe なイベントを順序どおり反映した直後を含め、reconcile のたびに safe から独立した clone を生成します。
+したがって各 reconcile のコストは O(state size) です。順序どおりの unsafe fold は、すでに独立している served
+instance に適用され、追加の clone は行いません。この opt-in は throughput と引き換えに安全性を得るものです。
+大きな state では、入力を変更しない immutable または copy-on-write projector を推奨します。
+第 1 parameter に `DcbDomainTypes` を受け取る公開 `DualStateProjectionWrapper<T>` constructor と
+`DualStateProjectionWrapperFactory.CreateWithDomainTypes` は、登録済み snapshot serializer で初期 marker payload を
+一度 clone します。`DcbDomainTypes` を受け取らない従来の overload は serializer に即した分離を保証できないため、marker
+payload に対して fail-fast します。non-marker payload では従来どおり `System.Text.Json` を使用します。運用時に
+未宣言の入力変更を検出するには `GeneralMultiProjectionActorOptions.VerifySafeStateIsolation` を一時的に有効化
+できます。unsafe fold の前後で safe payload を serialize し、その byte 列を比較するため、既定値は無効です。
+serialization は決定的である必要があり、順序なし collection など出力 byte 順が変動し得る payload では、論理値が
+変化していなくても false positive が発生する可能性があります。
+
+marker payload では、`GetUnsafeProjection` または `GetUnsafeProjectorPayload` が返す served instance は、その後の
+順序どおりの unsafe fold によってその場で変更されます。呼び出しをまたいでその instance を保持しないでください。
+
 - **served 状態は到着順ではなく再構成される。** セーフウィンドウ昇格のたびに、served 状態は
   `safe ベースライン + まだバッファ中のイベントをグローバル SortableUniqueId 順で再適用` として
   導出し、原子的に公開します。順序が入れ替わって到着した 2 イベント(例: インスタンス間の重複
