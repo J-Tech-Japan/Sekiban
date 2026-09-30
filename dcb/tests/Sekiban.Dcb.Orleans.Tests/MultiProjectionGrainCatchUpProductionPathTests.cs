@@ -27,6 +27,66 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// </summary>
 public sealed class MultiProjectionGrainCatchUpProductionPathTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task Disabled_hot_checkpoints_still_persist_completion_with_new_events(int disabled)
+    {
+        var store = new ProductionCatchUpEventStore([1]);
+        var host = new ProductionCatchUpProjectionHost { AllowApply = true };
+        var grain = CreateGrain(store, host,
+            actorOptions: new GeneralMultiProjectionActorOptions
+            {
+                PersistIntervalSeconds = 0,
+                HotCatchUpPersistMaxFetchedEvents = disabled,
+                HotCatchUpPersistMaxIntervalSeconds = disabled
+            }, processedEvents: Array.Empty<SerializableEvent>());
+        InvokePrivate(grain, "ApplyPersistPolicySettings", ["production-catch-up"]);
+        SetPrivateField(grain, "_lastCatchUpPersistUtc", DateTime.UtcNow - TimeSpan.FromDays(1));
+
+        await grain.RefreshAsync();
+
+        Assert.Single(host.AppliedEventIds);
+        Assert.Equal(2, host.StateMetadataCalls); // safe promotion and the single final persist
+        Assert.Equal(1, host.SnapshotWriteCalls);
+        Assert.Equal(1, store.PersistentState.WriteCalls);
+        Assert.False((await grain.GetProjectionHeadStatusAsync()).IsCatchUpInProgress);
+    }
+
+    [Fact]
+    public async Task Activation_host_creation_retains_hot_override_for_persist_decisions()
+    {
+        var store = new ProductionCatchUpEventStore([1]);
+        var grain = CreateGrain(store, actorOptions: new GeneralMultiProjectionActorOptions
+        {
+            PersistIntervalSeconds = 0,
+            HotCatchUpPersistMaxFetchedEvents = 5000,
+            HotCatchUpPersistMaxIntervalSeconds = 300,
+            ProjectorPersistenceOverrides = new(StringComparer.Ordinal)
+            {
+                ["production-catch-up"] = new()
+                {
+                    HotCatchUpPersistMaxFetchedEvents = 17,
+                    HotCatchUpPersistMaxIntervalSeconds = 0
+                }
+            }
+        });
+        SetPrivateField(grain, "_host", null);
+        // Suppress background replay/subscription; exercise the actual activation host creation seam.
+        SetPrivateField(grain, "_restoreRetirementFailed", true);
+        await grain.OnActivateAsync(CancellationToken.None);
+
+        var merged = GetPrivateField<GeneralMultiProjectionActorOptions>(grain, "_mergedActorOptions");
+        Assert.Equal(5000, merged.HotCatchUpPersistMaxFetchedEvents);
+        SetPrivateField(grain, "_eventsProcessed", 17L);
+        var decision = InvokePrivate(grain, "GetCatchUpPersistDecision", [null, null])!;
+        Assert.Equal("event_count_checkpoint", decision.GetType().GetProperty("Reason")!.GetValue(decision));
+        SetPrivateField(grain, "_eventsProcessed", 18L);
+        SetPrivateField(grain, "_eventsFetchedSinceLastCatchUpPersist", 17L);
+        decision = InvokePrivate(grain, "GetCatchUpPersistDecision", [null, null])!;
+        Assert.Equal("fetched_count_checkpoint", decision.GetType().GetProperty("Reason")!.GetValue(decision));
+    }
+
     [Fact]
     public async Task Enumerable_zero_applied_batches_stay_active_and_trigger_once_on_fetched_batch_ten()
     {
@@ -988,6 +1048,9 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
                 CatchUpPersistMaxInterval = TimeSpan.FromHours(1)
             }),
             NullLogger<HybridEventStore>.Instance);
+
+    private static object? InvokePrivate(object target, string methodName, object?[] args) =>
+        target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
 
     private static MultiProjectionGrain CreateGrain(
         ProductionCatchUpEventStore store,

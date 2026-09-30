@@ -34,8 +34,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private const string EmptyLogValue = "empty";
     private const int CatchUpEventTypeSummaryTopN = 5;
     private const long CatchUpInformationElapsedThresholdMs = 1000;
-    private const int HotCatchUpPersistMaxFetchedEvents = 5_000;
-    private static readonly TimeSpan HotCatchUpPersistMaxInterval = TimeSpan.FromMinutes(5);
     private const string PersistOutcomeNotAttempted = "not_attempted";
     private const string PersistOutcomeDurableWrite = "durable_write";
     private const string PersistOutcomeNoDurableWrite = "no_durable_write";
@@ -212,6 +210,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private int _persistBatchSize = DefaultActorOptions.PersistBatchSize; // Persist less frequently to avoid blocking deliveries
     private TimeSpan _persistInterval = TimeSpan.FromSeconds(DefaultActorOptions.PersistIntervalSeconds);
     private bool _skipPersistWhenSafeCheckpointUnchanged = true;
+    private int _hotCatchUpPersistMaxFetchedEvents = DefaultActorOptions.HotCatchUpPersistMaxFetchedEvents;
+    private TimeSpan _hotCatchUpPersistMaxInterval = TimeSpan.FromSeconds(DefaultActorOptions.HotCatchUpPersistMaxIntervalSeconds);
     private readonly TimeSpan _fallbackCheckInterval = TimeSpan.FromSeconds(30);
     private int _maxPendingStreamEvents = 50000;
     private int _catchUpBatchSize = DefaultCatchUpBatchSize;
@@ -259,7 +259,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     internal sealed record PersistPolicySettings(
         int PersistBatchSize,
         TimeSpan PersistInterval,
-        bool SkipPersistWhenSafeCheckpointUnchanged);
+        bool SkipPersistWhenSafeCheckpointUnchanged,
+        int HotCatchUpPersistMaxFetchedEvents = 5000,
+        int HotCatchUpPersistMaxIntervalSeconds = 300);
 
     internal static GeneralMultiProjectionActorOptions MergeActorOptions(
         GeneralMultiProjectionActorOptions baseOptions,
@@ -273,6 +275,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             CatchUpDeactivationDelayMinutes = baseOptions.CatchUpDeactivationDelayMinutes,
             CatchUpMaxConsecutiveFailures = baseOptions.CatchUpMaxConsecutiveFailures,
             CatchUpMaxFailureDurationSeconds = baseOptions.CatchUpMaxFailureDurationSeconds,
+            HotCatchUpPersistMaxFetchedEvents = baseOptions.HotCatchUpPersistMaxFetchedEvents,
+            HotCatchUpPersistMaxIntervalSeconds = baseOptions.HotCatchUpPersistMaxIntervalSeconds,
             PersistBatchSize = persistPolicy.PersistBatchSize,
             PersistIntervalSeconds = persistPolicy.PersistInterval > TimeSpan.Zero
                 ? (int)persistPolicy.PersistInterval.TotalSeconds
@@ -443,10 +447,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var persistBatchSize = options.PersistBatchSize;
         var persistIntervalSeconds = options.PersistIntervalSeconds;
         var skipPersistWhenUnchanged = options.SkipPersistWhenSafeCheckpointUnchanged;
+        var hotMaxFetchedEvents = options.HotCatchUpPersistMaxFetchedEvents;
+        var hotMaxIntervalSeconds = options.HotCatchUpPersistMaxIntervalSeconds;
 
         if (options.ProjectorPersistenceOverrides != null &&
             options.ProjectorPersistenceOverrides.TryGetValue(projectorName, out var projectorOverride))
         {
+            hotMaxFetchedEvents = projectorOverride.HotCatchUpPersistMaxFetchedEvents ?? hotMaxFetchedEvents;
+            hotMaxIntervalSeconds = projectorOverride.HotCatchUpPersistMaxIntervalSeconds ?? hotMaxIntervalSeconds;
+
             if (projectorOverride.PersistBatchSize.HasValue)
             {
                 persistBatchSize = projectorOverride.PersistBatchSize.Value;
@@ -471,7 +480,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             PersistInterval: persistIntervalSeconds > 0
                 ? TimeSpan.FromSeconds(persistIntervalSeconds)
                 : TimeSpan.Zero,
-            SkipPersistWhenSafeCheckpointUnchanged: skipPersistWhenUnchanged);
+            SkipPersistWhenSafeCheckpointUnchanged: skipPersistWhenUnchanged,
+            HotCatchUpPersistMaxFetchedEvents: hotMaxFetchedEvents,
+            HotCatchUpPersistMaxIntervalSeconds: hotMaxIntervalSeconds);
     }
 
     private void ApplyPersistPolicySettings(string projectorName)
@@ -480,6 +491,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _persistBatchSize = settings.PersistBatchSize;
         _persistInterval = settings.PersistInterval;
         _skipPersistWhenSafeCheckpointUnchanged = settings.SkipPersistWhenSafeCheckpointUnchanged;
+        _hotCatchUpPersistMaxFetchedEvents = settings.HotCatchUpPersistMaxFetchedEvents;
+        _hotCatchUpPersistMaxInterval = settings.HotCatchUpPersistMaxIntervalSeconds > 0
+            ? TimeSpan.FromSeconds(settings.HotCatchUpPersistMaxIntervalSeconds)
+            : TimeSpan.Zero;
     }
 
     private static string FormatLogValue(string? value)
@@ -2420,11 +2435,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var baseOptions = _injectedActorOptions ?? DefaultActorOptions;
             var persistPolicySettings = ResolvePersistPolicySettings(projectorName);
             var mergedOptions = MergeActorOptions(baseOptions, persistPolicySettings);
-            _persistBatchSize = mergedOptions.PersistBatchSize;
-            _persistInterval = mergedOptions.PersistIntervalSeconds > 0
-                ? TimeSpan.FromSeconds(mergedOptions.PersistIntervalSeconds)
-                : TimeSpan.Zero;
-            _skipPersistWhenSafeCheckpointUnchanged = mergedOptions.SkipPersistWhenSafeCheckpointUnchanged;
+            // Resolve grain cadence separately: merged host options retain the base hot-only values.
+            ApplyPersistPolicySettings(projectorName);
             _maxPendingStreamEvents = mergedOptions.MaxPendingStreamEvents;
             _catchUpBatchSize = Math.Max(1, mergedOptions.CatchUpBatchSize);
             _catchUpDeactivationDelay = TimeSpan.FromMinutes(Math.Max(1, mergedOptions.CatchUpDeactivationDelayMinutes));
@@ -4959,17 +4971,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return new CatchUpPersistDecision(false, "none");
         }
 
-        if (_eventsProcessed > 0 && _eventsProcessed % HotCatchUpPersistMaxFetchedEvents == 0)
+        if (_hotCatchUpPersistMaxFetchedEvents > 0 && _eventsProcessed > 0 &&
+            _eventsProcessed % _hotCatchUpPersistMaxFetchedEvents == 0)
         {
             return new CatchUpPersistDecision(true, "event_count_checkpoint");
         }
 
-        if (_eventsFetchedSinceLastCatchUpPersist >= HotCatchUpPersistMaxFetchedEvents)
+        if (_hotCatchUpPersistMaxFetchedEvents > 0 &&
+            _eventsFetchedSinceLastCatchUpPersist >= _hotCatchUpPersistMaxFetchedEvents)
         {
             return new CatchUpPersistDecision(true, "fetched_count_checkpoint");
         }
 
-        if (DateTime.UtcNow - _lastCatchUpPersistUtc >= HotCatchUpPersistMaxInterval)
+        if (_hotCatchUpPersistMaxInterval > TimeSpan.Zero &&
+            DateTime.UtcNow - _lastCatchUpPersistUtc >= _hotCatchUpPersistMaxInterval)
         {
             return new CatchUpPersistDecision(true, "time_checkpoint");
         }
