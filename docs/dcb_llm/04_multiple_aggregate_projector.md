@@ -295,6 +295,11 @@ null inherits, and zero or negative restores blocking behaviour for that project
 Choose N well below Orleans `ResponseTimeout` and client/HTTP timeouts. N excludes
 activation and request queuing; it is not a total response-time guarantee.
 
+On a fresh activation against an empty event store, a small N can still return the
+catching-up error until idle settlement completes (about `MaxConsecutiveEmptyBatches`
+× the catch-up interval). Concurrent polls are serialized by the non-reentrant grain;
+each poll waits up to N ms after admission.
+
 Only the generic activation arm without a pending durable rebuild marker is eligible,
 including activation after snapshot restore failure and host recreation. Tombstones keep
 SEK-G85 fail-closed behaviour; durable markers keep SEK-G18 behaviour. Checkpoint mutation,

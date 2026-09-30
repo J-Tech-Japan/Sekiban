@@ -2372,6 +2372,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             try
             {
+                await CatchUpProductionTestHooks.PublishAsync(
+                    CatchUpProductionHookPoint.InvocationBeforeRead,
+                    new CatchUpProductionObservation(_serviceId, projectorName, startLease, currentPosition));
                 const int maxRefreshBatches = 20000;
                 for (var i = 0; i < maxRefreshBatches && _catchUpProgress.IsActive; i++)
                 {
@@ -3555,7 +3558,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private void RecordBackgroundCatchUpFailure(Exception ex, int generation)
     {
-        if (IsBoundedWaitEpisode && generation == _boundedWaitArmGeneration)
+        if (BoundedWaitPending && generation == _boundedWaitArmGeneration)
         {
             _backgroundErrorArmGeneration = generation;
             _lastBackgroundCatchUpError = $"{DateTime.UtcNow:O}: {ex.Message}";
@@ -3622,7 +3625,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private void KickGateProgressIfNeeded(bool forceFull)
     {
-        if (!forceFull && (HasLiveProjectionFault || _boundedCatchUpInitiation is { IsCompleted: false })) return;
+        // The idle Ensure owns progress while its authoritative read is pending, even with no timer.
+        // Bounded polls must observe that attempt rather than recover it as stale and replace its run.
+        if (!forceFull && (HasLiveProjectionFault ||
+            (IsBoundedWaitEpisode && (_firstQueryGate.IsInFlight ||
+                _boundedCatchUpInitiation is { IsCompleted: false })))) return;
         RecoverStaleCatchUpIfNeeded(GetProjectorName());
 
         if (_catchUpProgress.IsActive)
@@ -4329,6 +4336,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             // Start catch-up timer
             StartCatchUpTimer();
+            await CatchUpProductionTestHooks.PublishAsync(
+                CatchUpProductionHookPoint.BackgroundStarted,
+                new CatchUpProductionObservation(_serviceId, projectorName, startLease, currentPosition));
         }
         catch (Exception ex)
         {

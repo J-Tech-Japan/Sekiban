@@ -57,6 +57,18 @@ internal sealed class FirstQueryCatchUpGate
         }
     }
 
+    /// <summary>True while the current arm's shared Ensure attempt has not completed.</summary>
+    public bool IsInFlight
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _inFlight is { IsCompleted: false };
+            }
+        }
+    }
+
     /// <summary>
     ///     Runs <paramref name="work" /> at most once across all concurrent callers while it is in flight. A no-op
     ///     (completed task) when the gate is not armed or already satisfied. If the previous attempt has completed but

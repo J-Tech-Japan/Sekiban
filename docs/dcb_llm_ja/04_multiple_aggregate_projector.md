@@ -284,6 +284,10 @@ null は全体設定を継承し、0 以下は当該 projector の blocking 動�
 N は Orleans `ResponseTimeout` と HTTP/client timeout より十分短く設定してください。
 activation と request queue の時間は含まれず、応答全体の上限ではありません。
 
+空のイベントストアに対する新しい activation でも、N が小さい場合は idle settle が完了するまで
+catching-up エラーが返ることがあります（約 `MaxConsecutiveEmptyBatches` × catch-up interval）。
+同時に送った poll は non-reentrant grain により直列化され、各 poll は受付後に最大 N ms 待機します。
+
 対象は durable rebuild marker が pending でない activation の generic arm のみです。
 snapshot restore 失敗後に host を再作成してから行う activation generic arm も対象です。
 checkpoint tombstone は SEK-G85、durable marker は SEK-G18 の動作を維持します。

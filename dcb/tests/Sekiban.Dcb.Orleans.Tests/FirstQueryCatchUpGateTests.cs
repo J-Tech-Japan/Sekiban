@@ -52,12 +52,14 @@ public class FirstQueryCatchUpGateTests
         Assert.Same(first, second);      // all callers literally await the same in-flight task
         Assert.Same(first, third);
         Assert.True(gate.IsPending);     // still running, not yet satisfied
+        Assert.True(gate.IsInFlight);
 
         release.SetResult();
         await Task.WhenAll(first, second, third);
 
         Assert.Equal(1, runs);
         Assert.False(gate.IsPending);    // satisfied
+        Assert.False(gate.IsInFlight);
 
         // A later caller is a no-op — the work does not run again.
         await gate.EnsureAsync(work);
@@ -96,6 +98,7 @@ public class FirstQueryCatchUpGateTests
         }
 
         Assert.Equal(1, runs);       // ran once for the whole failed batch
+        Assert.False(gate.IsInFlight);
         Assert.True(gate.IsPending); // NOT satisfied — a failure is retryable, nobody succeeded on empty state
 
         // A later caller retries the work; this time it succeeds and the gate becomes satisfied.
@@ -138,6 +141,7 @@ public class FirstQueryCatchUpGateTests
         var ensure = gate.EnsureAsync(async () => await release.Task);
 
         gate.Arm(); // bumps generation — the in-flight settle must not satisfy this episode
+        Assert.False(gate.IsInFlight); // old work is not the current arm's attempt
         Assert.NotEqual(generationAtArm, gate.ArmGeneration);
         Assert.True(gate.IsPending);
 

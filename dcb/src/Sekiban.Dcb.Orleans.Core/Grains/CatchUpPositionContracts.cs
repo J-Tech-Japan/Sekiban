@@ -90,11 +90,13 @@ internal readonly record struct CatchUpBatchResult(
 internal enum CatchUpProductionHookPoint
 {
     ActivationLifecycleStarted,
+    BackgroundStarted,
     BackgroundBeforeGate,
     BackgroundEnteredGate,
     BackgroundRejectedAsSuperseded,
     InvocationBeforeGate,
     InvocationEnteredGate,
+    InvocationBeforeRead,
     InvocationCompleted
 }
 

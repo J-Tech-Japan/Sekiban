@@ -125,6 +125,52 @@ public class FirstQueryBoundedWaitClusterTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ParkedIdleSettlement_PollsDoNotRestartCatchUp_AndLaterQuerySucceeds()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var parked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var starts = 0;
+        var settlements = 0;
+        using var hook = CatchUpProductionTestHooks.Register(
+            Sekiban.Dcb.ServiceId.DefaultServiceIdProvider.DefaultServiceId, CountProjector.MultiProjectorName,
+            async (point, _) =>
+            {
+                if (point == CatchUpProductionHookPoint.BackgroundStarted) Interlocked.Increment(ref starts);
+                if (point == CatchUpProductionHookPoint.InvocationBeforeRead)
+                {
+                    Interlocked.Increment(ref settlements);
+                    parked.TrySetResult();
+                    await release.Task;
+                }
+            });
+        try
+        {
+            var grain = await FreshAsync();
+            _ = await grain.GetStateAsync();
+            // The timer has completed; Ensure now owns the execution gate and active progress, with no timer.
+            await parked.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.Equal(1, Volatile.Read(ref starts));
+            var polls = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => grain.GetStateAsync()));
+            Assert.All(polls, result =>
+            {
+                Assert.False(result.IsSuccess);
+                Assert.StartsWith(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix,
+                    result.GetException().Message);
+            });
+            Assert.Equal(1, Volatile.Read(ref starts));
+            Assert.Equal(1, Volatile.Read(ref settlements));
+            Assert.True((await grain.GetStatusAsync()).FirstQueryCatchUpPending);
+            release.TrySetResult();
+            await PollUntilAsync(async () => !(await grain.GetStatusAsync()).FirstQueryCatchUpPending);
+            var result = await grain.GetStateAsync();
+            Assert.True(result.IsSuccess);
+            Assert.Equal(3, ((CountProjector)result.GetValue().Payload).Count);
+            Assert.Equal(1, Volatile.Read(ref starts));
+        }
+        finally { release.TrySetResult(); }
+    }
+
+    [Fact]
     public async Task FastBackground_SucceedsWithinLargeBudget()
     {
         Env.WaitMs = 20_000;
