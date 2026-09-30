@@ -256,10 +256,40 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _lastCatchUpUsedCold = usedCold;
     }
 
-    private sealed record PersistPolicySettings(
+    internal sealed record PersistPolicySettings(
         int PersistBatchSize,
         TimeSpan PersistInterval,
         bool SkipPersistWhenSafeCheckpointUnchanged);
+
+    internal static GeneralMultiProjectionActorOptions MergeActorOptions(
+        GeneralMultiProjectionActorOptions baseOptions,
+        PersistPolicySettings persistPolicy) =>
+        new()
+        {
+            SafeWindowMs = baseOptions.SafeWindowMs,
+            MaxSnapshotSerializedSizeBytes = baseOptions.MaxSnapshotSerializedSizeBytes,
+            MaxPendingStreamEvents = baseOptions.MaxPendingStreamEvents,
+            CatchUpBatchSize = baseOptions.CatchUpBatchSize,
+            CatchUpDeactivationDelayMinutes = baseOptions.CatchUpDeactivationDelayMinutes,
+            CatchUpMaxConsecutiveFailures = baseOptions.CatchUpMaxConsecutiveFailures,
+            CatchUpMaxFailureDurationSeconds = baseOptions.CatchUpMaxFailureDurationSeconds,
+            PersistBatchSize = persistPolicy.PersistBatchSize,
+            PersistIntervalSeconds = persistPolicy.PersistInterval > TimeSpan.Zero
+                ? (int)persistPolicy.PersistInterval.TotalSeconds
+                : 0,
+            SkipPersistWhenSafeCheckpointUnchanged = persistPolicy.SkipPersistWhenSafeCheckpointUnchanged,
+            EnableDynamicSafeWindow = baseOptions.EnableDynamicSafeWindow,
+            MaxExtraSafeWindowMs = baseOptions.MaxExtraSafeWindowMs,
+            LagEmaAlpha = baseOptions.LagEmaAlpha,
+            LagDecayPerSecond = baseOptions.LagDecayPerSecond,
+            FailOnUnhealthyActivation = baseOptions.FailOnUnhealthyActivation,
+            ProcessedEventIdCacheSize = baseOptions.ProcessedEventIdCacheSize,
+            ForceGcAfterLargeSnapshotPersist = baseOptions.ForceGcAfterLargeSnapshotPersist,
+            LargeSnapshotGcThresholdBytes = baseOptions.LargeSnapshotGcThresholdBytes,
+            UseStreamingSnapshotIO = baseOptions.UseStreamingSnapshotIO,
+            VerifySafeStateIsolation = baseOptions.VerifySafeStateIsolation,
+            ProjectorPersistenceOverrides = baseOptions.ProjectorPersistenceOverrides
+        };
 
     private sealed record CatchUpPersistDecision(
         bool ShouldPersist,
@@ -2389,31 +2419,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Merge injected options - snapshot offload is handled by IMultiProjectionStateStore
             var baseOptions = _injectedActorOptions ?? DefaultActorOptions;
             var persistPolicySettings = ResolvePersistPolicySettings(projectorName);
-            var mergedOptions = new GeneralMultiProjectionActorOptions
-            {
-                SafeWindowMs = baseOptions.SafeWindowMs,
-                MaxSnapshotSerializedSizeBytes = baseOptions.MaxSnapshotSerializedSizeBytes,
-                MaxPendingStreamEvents = baseOptions.MaxPendingStreamEvents,
-                CatchUpBatchSize = baseOptions.CatchUpBatchSize,
-                CatchUpDeactivationDelayMinutes = baseOptions.CatchUpDeactivationDelayMinutes,
-                CatchUpMaxConsecutiveFailures = baseOptions.CatchUpMaxConsecutiveFailures,
-                CatchUpMaxFailureDurationSeconds = baseOptions.CatchUpMaxFailureDurationSeconds,
-                PersistBatchSize = persistPolicySettings.PersistBatchSize,
-                PersistIntervalSeconds = persistPolicySettings.PersistInterval > TimeSpan.Zero
-                    ? (int)persistPolicySettings.PersistInterval.TotalSeconds
-                    : 0,
-                SkipPersistWhenSafeCheckpointUnchanged = persistPolicySettings.SkipPersistWhenSafeCheckpointUnchanged,
-                EnableDynamicSafeWindow = baseOptions.EnableDynamicSafeWindow,
-                MaxExtraSafeWindowMs = baseOptions.MaxExtraSafeWindowMs,
-                LagEmaAlpha = baseOptions.LagEmaAlpha,
-                LagDecayPerSecond = baseOptions.LagDecayPerSecond,
-                FailOnUnhealthyActivation = baseOptions.FailOnUnhealthyActivation,
-                ProcessedEventIdCacheSize = baseOptions.ProcessedEventIdCacheSize,
-                ForceGcAfterLargeSnapshotPersist = baseOptions.ForceGcAfterLargeSnapshotPersist,
-                LargeSnapshotGcThresholdBytes = baseOptions.LargeSnapshotGcThresholdBytes,
-                UseStreamingSnapshotIO = baseOptions.UseStreamingSnapshotIO,
-                ProjectorPersistenceOverrides = baseOptions.ProjectorPersistenceOverrides
-            };
+            var mergedOptions = MergeActorOptions(baseOptions, persistPolicySettings);
             _persistBatchSize = mergedOptions.PersistBatchSize;
             _persistInterval = mergedOptions.PersistIntervalSeconds > 0
                 ? TimeSpan.FromSeconds(mergedOptions.PersistIntervalSeconds)
