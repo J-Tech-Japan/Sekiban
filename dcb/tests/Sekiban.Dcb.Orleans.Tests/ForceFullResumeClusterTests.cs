@@ -274,7 +274,15 @@ public class ForceFullResumeClusterTests : IAsyncLifetime
                 Interlocked.Increment(ref _thrown);
                 throw new TimeoutException($"SEK-G92 transient read #{read}");
             }
-            return inner.ReadAllSerializableEventsAsync(since, maxCount);
+            return ReadSortedAsync(since, maxCount);
+        }
+        private async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSortedAsync(SortableUniqueId? since, int? maxCount)
+        {
+            var all = await inner.ReadAllSerializableEventsAsync(since, null);
+            if (!all.IsSuccess) return all;
+            // Real stores sort globally before limiting, so late commits must not be skipped by insertion-order batches.
+            var sorted = all.GetValue().OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal);
+            return ResultBox.FromValue<IEnumerable<SerializableEvent>>((maxCount is { } m ? sorted.Take(m) : sorted).ToList());
         }
         public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
         public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
