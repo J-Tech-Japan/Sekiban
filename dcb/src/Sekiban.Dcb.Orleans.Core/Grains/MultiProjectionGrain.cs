@@ -2705,11 +2705,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         // permanently blocks persist because catch-up starts at safeVersion=0.
                         if (_stateStore.Committed.LastGoodSafeVersion > 0)
                         {
-                            _logger.LogWarning(
-                                "Resetting integrity guard: LastGoodSafeVersion was {LastGood} but external snapshot is missing. "
-                                + "This allows catch-up to rebuild and persist a new snapshot. {ProjectorName}",
-                                _stateStore.Committed.LastGoodSafeVersion,
-                                projectorName);
+                            var previousVersion = _stateStore.Committed.ProjectorVersion;
+                            if (!string.IsNullOrWhiteSpace(previousVersion) &&
+                                !string.Equals(previousVersion, projectorVersion, StringComparison.Ordinal))
+                            {
+                                _logger.LogInformation(
+                                    MultiProjectionLogEvents.VersionChangeRebuildFromEvents,
+                                    "No snapshot for {ProjectorName} v{CurrentVersion} yet (previous committed version {PreviousVersion}); "
+                                    + "resetting the integrity guard and rebuilding from events.",
+                                    projectorName,
+                                    projectorVersion,
+                                    previousVersion);
+                            }
+                            else
+                            {
+                                _logger.LogWarning(
+                                    "Resetting integrity guard: LastGoodSafeVersion was {LastGood} but external snapshot is missing. "
+                                    + "This allows catch-up to rebuild and persist a new snapshot. {ProjectorName}",
+                                    _stateStore.Committed.LastGoodSafeVersion,
+                                    projectorName);
+                            }
                             await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.MetadataMaintenance, s =>
                             {
                                 s.LastGoodSafeVersion = 0;

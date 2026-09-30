@@ -496,6 +496,70 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             message => message.Contains("Integrity watermark retired", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("v0")]
+    [InlineData("v2")]
+    public async Task Absent_external_snapshot_after_version_change_logs_informational_rebuild(string previousVersion)
+    {
+        const string projectorName = "g93-version-change";
+        await _harness.SeedKnownPresentCheckpointAsync(
+            projectorName, oldSafeVersion: 700, BuildEvents(0), previousVersion);
+        _harness.GetLatestBehavior = GetLatestBehavior.Absent;
+
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(projectorName);
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(() => _harness.ProviderStorage.WriteCalls > 0, TimeSpan.FromSeconds(10));
+
+        var provider = _harness.ProviderStorage.Get(projectorName);
+        Assert.NotNull(provider);
+        Assert.Equal(0, provider.LastGoodSafeVersion);
+        Assert.Equal(0, provider.LastGoodPayloadBytes);
+        Assert.Equal(0, provider.LastGoodOriginalSizeBytes);
+        Assert.Equal(0, provider.LastGoodEventsProcessed);
+        Assert.True(_harness.ProviderStorage.WriteCalls > 0);
+        var entry = Assert.Single(
+            _harness.LoggerProvider.Entries,
+            entry => entry.LogLevel == LogLevel.Information && entry.EventId.Id == 1029);
+        Assert.Equal("VersionChangeRebuildFromEvents", entry.EventId.Name);
+        Assert.Contains($"No snapshot for {projectorName} vv1 yet", entry.Message, StringComparison.Ordinal);
+        Assert.Contains($"previous committed version {previousVersion}", entry.Message, StringComparison.Ordinal);
+        Assert.Contains("rebuilding from events", entry.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            _harness.LoggerProvider.Entries,
+            entry => entry.LogLevel == LogLevel.Warning &&
+                     entry.Message.Contains("external snapshot is missing", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task Absent_external_snapshot_with_unknown_previous_version_keeps_warning(string? previousVersion)
+    {
+        const string projectorName = "g93-unknown-version";
+        await _harness.SeedKnownPresentCheckpointAsync(
+            projectorName, oldSafeVersion: 700, BuildEvents(0), previousVersion);
+        _harness.GetLatestBehavior = GetLatestBehavior.Absent;
+
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(projectorName);
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(() => _harness.ProviderStorage.WriteCalls > 0, TimeSpan.FromSeconds(10));
+
+        var provider = _harness.ProviderStorage.Get(projectorName);
+        Assert.NotNull(provider);
+        Assert.Equal(0, provider.LastGoodSafeVersion);
+        Assert.Equal(0, provider.LastGoodPayloadBytes);
+        Assert.Equal(0, provider.LastGoodOriginalSizeBytes);
+        Assert.Equal(0, provider.LastGoodEventsProcessed);
+        Assert.True(_harness.ProviderStorage.WriteCalls > 0);
+        Assert.Contains(
+            _harness.LoggerProvider.Entries,
+            entry => entry.LogLevel == LogLevel.Warning &&
+                     entry.Message == $"Resetting integrity guard: LastGoodSafeVersion was 700 but external snapshot is missing. "
+                         + $"This allows catch-up to rebuild and persist a new snapshot. {projectorName}");
+        Assert.DoesNotContain(_harness.LoggerProvider.Entries, entry => entry.EventId.Id == 1029);
+    }
+
     [Fact]
     public async Task Normal_regression_still_uses_the_unchanged_guard_without_a_provider_write()
     {
@@ -780,7 +844,8 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         public async Task<SeededCheckpoint> SeedKnownPresentCheckpointAsync(
             string projectorName,
             int oldSafeVersion,
-            IReadOnlyList<SerializableEvent> events)
+            IReadOnlyList<SerializableEvent> events,
+            string? previousVersion = "v1")
         {
             EventStore.SetEvents(events);
             var oldPosition = SortableUniqueId.GetTickString(10_000) + SortableUniqueId.GetIdString(Guid.Empty);
@@ -806,7 +871,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
                 new MultiProjectionGrainState
                 {
                     ProjectorName = projectorName,
-                    ProjectorVersion = "v1",
+                    ProjectorVersion = previousVersion,
                     LastSortableUniqueId = oldPosition,
                     EventsProcessed = oldSafeVersion,
                     LastGoodSafeVersion = oldSafeVersion,
@@ -1389,18 +1454,24 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
     private sealed class RecordingLoggerProvider : ILoggerProvider
     {
         public ConcurrentQueue<string> Messages { get; } = new();
+        public ConcurrentQueue<RecordedLog> Entries { get; } = new();
 
-        public ILogger CreateLogger(string categoryName) => new RecordingLogger(Messages);
+        public ILogger CreateLogger(string categoryName) => new RecordingLogger(Messages, Entries);
 
         public void Clear()
         {
             while (Messages.TryDequeue(out _)) { }
+            while (Entries.TryDequeue(out _)) { }
         }
 
         public void Dispose() { }
     }
 
-    private sealed class RecordingLogger(ConcurrentQueue<string> messages) : ILogger
+    private sealed record RecordedLog(LogLevel LogLevel, EventId EventId, string Message);
+
+    private sealed class RecordingLogger(
+        ConcurrentQueue<string> messages,
+        ConcurrentQueue<RecordedLog> entries) : ILogger
     {
         public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
 
@@ -1413,7 +1484,9 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
-            messages.Enqueue(formatter(state, exception));
+            var message = formatter(state, exception);
+            messages.Enqueue(message);
+            entries.Enqueue(new RecordedLog(logLevel, eventId, message));
         }
 
         private sealed class NullScope : IDisposable

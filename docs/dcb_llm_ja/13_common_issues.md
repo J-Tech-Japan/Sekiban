@@ -630,3 +630,27 @@ static IResult MapProjectionError(Exception error, HttpResponse response)
     return Results.Problem(statusCode: 500);
 }
 ```
+
+### Projector version 変更後の snapshot 不在 (SEK-G93; #1253 item 7)
+
+Activation 時に現在の projector version の external snapshot が見つからず、
+`LastGoodSafeVersion > 0` の場合、保存済み grain state の `ProjectorVersion` に応じてログを分類します。
+以前の version が空白でなく現在の version と異なる場合（アップグレード・ロールバックの両方）は、
+想定された再構築です。**Information**、event **1029** (`VersionChangeRebuildFromEvents`) で記録します。
+
+```text
+No snapshot for {ProjectorName} v{CurrentVersion} yet (previous committed version {PreviousVersion}); resetting the integrity guard and rebuilding from events.
+```
+
+同じ version、または以前の version が不明（null・空文字・空白）の場合は、従来の **Warning** を
+文言変更なしで記録します。snapshot が見つからない原因を調査してください。
+
+```text
+Resetting integrity guard: LastGoodSafeVersion was {LastGood} but external snapshot is missing. This allows catch-up to rebuild and persist a new snapshot. {ProjectorName}
+```
+
+どちらも同じ write で `LastGoodSafeVersion`、`LastGoodPayloadBytes`、`LastGoodOriginalSizeBytes`、
+`LastGoodEventsProcessed` をゼロにリセットし、catch-up によるイベントからの再構築を可能にします。
+リセットの write が commit されず、その後の write で保存済み projector version が更新された場合にも、
+同じ version の Warning が出ることがあります。この分類は Warning 側に倒す方針です。
+[#1253](https://github.com/J-Tech-Japan/Sekiban/issues/1253) item 7 を参照してください。
