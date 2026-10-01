@@ -145,15 +145,20 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
 
     private static async Task AssertCountAndIdleAsync(IMultiProjectionGrain grain)
     {
-        // Status reads do not kick progress. Fail-closed queries restart/settle the catch-up gate.
+        // Fail-closed queries kick progress, but every successful query also starts a background catch-up pass.
+        // So query until the result is correct, then settle with status reads only (they never kick catch-up).
         await PollUntilAsync(async () =>
         {
             var state = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
             if (!state.IsSuccess) return false;
             Assert.Equal(50, ((CountProjector)state.GetValue().Payload).Count);
+            return true;
+        }, 30_000, "correct query");
+        await PollUntilAsync(async () =>
+        {
             var status = await grain.GetStatusAsync();
             return !status.IsCatchUpActive && !status.TombstoneFailClosedPending && !status.FirstQueryCatchUpPending;
-        }, 30_000, "correct query and completed catch-up");
+        }, 30_000, "completed catch-up");
     }
 
     private static async Task PollUntilAsync(Func<Task<bool>> predicate, int timeoutMs, string label)
