@@ -847,11 +847,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             SafeThresholdTime: safeThresholdTime);
     }
 
+    private static void ClearDurableRebuildMarker(MultiProjectionGrainState s)
+    {
+        s.RebuildRequired = false;
+        s.RebuildOffendingEventId = null;
+        s.RebuildOffendingPosition = null;
+    }
+
     private bool ShouldSkipPersistForUnchangedSafeCheckpoint(
         string projectorVersion,
         string? safePosition,
-        int? safeVersion)
+        int? safeVersion,
+        bool snapshotHostClean)
     {
+        // A clean host can repair a durable marker left behind by an earlier persist, even without new events.
+        if (_stateStore.Committed is IRebuildMarkerState { RebuildRequired: true } &&
+            snapshotHostClean)
+        {
+            return false;
+        }
+
         if (!_skipPersistWhenSafeCheckpointUnchanged)
         {
             return false;
@@ -894,7 +909,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return fresh;
     }
 
-    private ResultBox<bool>? TryShortCircuitPersist(string projectorName, PersistCheckpoint checkpoint)
+    private ResultBox<bool>? TryShortCircuitPersist(string projectorName, PersistCheckpoint checkpoint, bool snapshotHostClean)
     {
         var lastGoodSafeVersion = _stateStore.Committed.LastGoodSafeVersion;
         if (checkpoint.SafeVersion.HasValue && lastGoodSafeVersion > 0 && checkpoint.SafeVersion.Value < lastGoodSafeVersion)
@@ -913,7 +928,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (!ShouldSkipPersistForUnchangedSafeCheckpoint(
                 checkpoint.ProjectorVersion,
                 checkpoint.SafePosition,
-                checkpoint.SafeVersion))
+                checkpoint.SafeVersion,
+                snapshotHostClean))
         {
             return null;
         }
@@ -1546,7 +1562,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             var checkpoint = await CapturePersistCheckpointAsync(projectorName);
-            var shortCircuit = TryShortCircuitPersist(projectorName, checkpoint);
+            // Bind marker repair to the host whose snapshot is written, before any save awaits.
+            var snapshotHost = _host;
+            var snapshotHostClean = snapshotHost is not IRebuildSignalingHost { RebuildRequired: true };
+            var shortCircuit = TryShortCircuitPersist(projectorName, checkpoint, snapshotHostClean);
             if (shortCircuit is not null)
             {
                 _lastPersistOutcome = PersistOutcomeNoDurableWrite;
@@ -1556,12 +1575,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Use streaming path when enabled and temp file manager is available
             if (_useStreamingSnapshotIO && _tempFileSnapshotManager is not null)
             {
-                return await PersistStateStreamingAsync(projectorName, checkpoint);
+                return await PersistStateStreamingAsync(projectorName, checkpoint, snapshotHost, snapshotHostClean);
             }
 
             // Get snapshot as opaque bytes from the host
             await using var snapshotStream = new MemoryStream();
-            var snapshotWriteResult = await _host.WriteSnapshotForPersistenceToStreamAsync(
+            var snapshotWriteResult = await snapshotHost.WriteSnapshotForPersistenceToStreamAsync(
                 snapshotStream,
                 canGetUnsafeState: false,
                 offloadThresholdBytes: GetSnapshotPayloadOffloadThresholdBytes(),
@@ -1700,11 +1719,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         }
                         s.LastGoodEventsProcessed = _eventsProcessed;
 
-                        // SEK-G18 #6: the rebuilt checkpoint is now durably committed to the external store, so the durable
-                        // rebuild marker can be cleared — a subsequent activation may safely restore this fresh checkpoint.
-                        s.RebuildRequired = false;
-                        s.RebuildOffendingEventId = null;
-                        s.RebuildOffendingPosition = null;
+                        if (snapshotHostClean && ReferenceEquals(_host, snapshotHost) &&
+                            _host is not IRebuildSignalingHost { RebuildRequired: true })
+                        {
+                            ClearDurableRebuildMarker(s);
+                        }
                     }
                 }
 
@@ -1754,7 +1773,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     ///     Streaming persist path: writes snapshot to a temp file, then streams to external store.
     ///     Avoids holding the entire serialized snapshot in a byte[] simultaneously.
     /// </summary>
-    private async Task<ResultBox<bool>> PersistStateStreamingAsync(string projectorName, PersistCheckpoint checkpoint)
+    private async Task<ResultBox<bool>> PersistStateStreamingAsync(
+        string projectorName, PersistCheckpoint checkpoint, IProjectionActorHost snapshotHost, bool snapshotHostClean)
     {
         var buildStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
         string? tempFilePath = null;
@@ -1766,7 +1786,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             try
             {
-                var writeResult = await _host!.WriteSnapshotForPersistenceToStreamAsync(
+                var writeResult = await snapshotHost.WriteSnapshotForPersistenceToStreamAsync(
                     tempStream,
                     canGetUnsafeState: false,
                     offloadThresholdBytes: GetSnapshotPayloadOffloadThresholdBytes(),
@@ -1820,18 +1840,23 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                     if (externalStoreSaved)
                     {
-                    if (safeVersion is > 0)
-                    {
-                        s.LastGoodSafeVersion = safeVersion.Value;
-                    }
-                    if (!_retiredWatermarkAwaitingFreshSafeCheckpoint || safeVersion is > 0)
-                    {
-                        if (tempFileSize > 0)
-                            s.LastGoodPayloadBytes = tempFileSize;
-                        if (tempFileSize > 0)
-                            s.LastGoodOriginalSizeBytes = tempFileSize;
-                        s.LastGoodEventsProcessed = _eventsProcessed;
-                    }
+                        if (safeVersion is > 0)
+                        {
+                            s.LastGoodSafeVersion = safeVersion.Value;
+                        }
+                        if (!_retiredWatermarkAwaitingFreshSafeCheckpoint || safeVersion is > 0)
+                        {
+                            if (tempFileSize > 0)
+                                s.LastGoodPayloadBytes = tempFileSize;
+                            if (tempFileSize > 0)
+                                s.LastGoodOriginalSizeBytes = tempFileSize;
+                            s.LastGoodEventsProcessed = _eventsProcessed;
+                            if (snapshotHostClean && ReferenceEquals(_host, snapshotHost) &&
+                                _host is not IRebuildSignalingHost { RebuildRequired: true })
+                            {
+                                ClearDurableRebuildMarker(s);
+                            }
+                        }
                     }
 
                     s.SerializedState = null;

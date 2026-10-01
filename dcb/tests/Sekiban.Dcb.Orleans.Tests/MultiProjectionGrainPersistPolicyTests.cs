@@ -10,6 +10,7 @@ using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Serialization;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Runtime;
+using Sekiban.Dcb.Runtime.Native;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
@@ -120,9 +121,32 @@ public class MultiProjectionGrainPersistPolicyTests
             InvokePrivate(
                 grain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v1", "safe-001", 10]));
+                ["v1", "safe-001", 10, true]));
 
         Assert.True(result);
+    }
+
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, true)]
+    public void UnchangedCheckpoint_MarkerBypassUsesCapturedHostCleanliness(
+        bool durableMarker, bool snapshotRebuildRequired, bool expectedSkip)
+    {
+        var grain = CreateGrain(
+            new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = true },
+            new MultiProjectionGrainState
+            {
+                ProjectorVersion = "v1",
+                LastSortableUniqueId = "safe-001",
+                LastGoodSafeVersion = 10,
+                RebuildRequired = durableMarker
+            });
+        // Model a host swap: the live host has the opposite cleanliness from the snapshot host.
+        SetPrivateField(grain, "_host", new RebuildSignalingHost(!snapshotRebuildRequired));
+        Assert.Equal(expectedSkip, Assert.IsType<bool>(InvokePrivate(
+            grain, "ShouldSkipPersistForUnchangedSafeCheckpoint", ["v1", "safe-001", 10, !snapshotRebuildRequired])));
     }
 
     [Fact]
@@ -141,7 +165,7 @@ public class MultiProjectionGrainPersistPolicyTests
             InvokePrivate(
                 grain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v1", "safe-001", null]));
+                ["v1", "safe-001", null, true]));
 
         Assert.True(result);
     }
@@ -162,7 +186,7 @@ public class MultiProjectionGrainPersistPolicyTests
             InvokePrivate(
                 disabledGrain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v1", "safe-001", 10])));
+                ["v1", "safe-001", 10, true])));
 
         var changedCheckpointGrain = CreateGrain(
             new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = true },
@@ -177,19 +201,19 @@ public class MultiProjectionGrainPersistPolicyTests
             InvokePrivate(
                 changedCheckpointGrain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v2", "safe-001", 10])));
+                ["v2", "safe-001", 10, true])));
 
         Assert.False(Assert.IsType<bool>(
             InvokePrivate(
                 changedCheckpointGrain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v1", "safe-002", 10])));
+                ["v1", "safe-002", 10, true])));
 
         Assert.False(Assert.IsType<bool>(
             InvokePrivate(
                 changedCheckpointGrain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v1", "safe-001", 11])));
+                ["v1", "safe-001", 11, true])));
     }
 
     [Fact]
@@ -727,6 +751,13 @@ public class MultiProjectionGrainPersistPolicyTests
             Stream target,
             string newVersion,
             CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class RebuildSignalingHost(bool rebuildRequired) : StubProjectionActorHost, IRebuildSignalingHost
+    {
+        public bool RebuildRequired => rebuildRequired;
+        public string? RebuildOffendingEventId => null;
+        public string? RebuildOffendingPosition => null;
     }
 
     private sealed class MutableProjectionActorHost(string projectorVersion) : StubProjectionActorHost
