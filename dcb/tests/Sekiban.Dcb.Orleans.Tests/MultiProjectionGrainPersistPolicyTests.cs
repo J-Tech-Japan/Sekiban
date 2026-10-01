@@ -195,15 +195,35 @@ public class MultiProjectionGrainPersistPolicyTests
         var progress = GetPrivateField(grain, "_catchUpProgress")!;
         progress.GetType().GetProperty("IsActive")!.SetValue(progress, active);
         InvokePrivate(grain, "CompletePersistErrorState",
-            ["projection", obligation, saved, faultBlocked, completion]);
+            ["projection", obligation, saved, faultBlocked, completion, null]);
         Assert.Equal(expectedError ? "external save failed" : null, GetPrivateField(grain, "_lastError"));
         Assert.Equal(expectedError ? 1 : 0, log.Entries.Count(e => e == (LogLevel.Warning, 1030)));
         if (expectedError)
         {
             // A subsequent successful save clears the prior failure.
-            InvokePrivate(grain, "CompletePersistErrorState", ["projection", true, true, false, completion]);
+            InvokePrivate(grain, "CompletePersistErrorState", ["projection", true, true, false, completion, "external save failed"]);
             Assert.Null(GetPrivateField(grain, "_lastError"));
         }
+    }
+
+    [Theory]
+    [InlineData(null, "external save failed")]
+    [InlineData("pre-existing error", null)]
+    [InlineData("pre-existing error", "external save failed")]
+    public void DurableObligation_IntermediateUnmetPersistPreservesPreviousError(
+        string? lastErrorBeforePersist, string? currentError)
+    {
+        var log = new DurableRebuildMarkerPersistTests.ObligationLogger();
+        var grain = CreateGrain(logger: log);
+        SetPrivateField(grain, "_lastError", currentError);
+        var progress = GetPrivateField(grain, "_catchUpProgress")!;
+        progress.GetType().GetProperty("IsActive")!.SetValue(progress, true);
+
+        InvokePrivate(grain, "CompletePersistErrorState",
+            ["projection", true, false, false, false, lastErrorBeforePersist]);
+
+        Assert.Equal(lastErrorBeforePersist, GetPrivateField(grain, "_lastError"));
+        Assert.DoesNotContain((LogLevel.Warning, 1030), log.Entries);
     }
 
     [Fact]

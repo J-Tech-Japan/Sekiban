@@ -1522,12 +1522,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private void CompletePersistErrorState(
         string projectorName, bool durableObligationPending, bool externalStoreSaved,
-        bool externalSaveBlockedByFault, bool isCompletionPersist)
+        bool externalSaveBlockedByFault, bool isCompletionPersist, string? lastErrorBeforePersist)
     {
         // Completion runs while catch-up is still active. All other callers are intermediate during replay.
-        if (durableObligationPending && !externalStoreSaved && !externalSaveBlockedByFault &&
-            (!_catchUpProgress.IsActive || isCompletionPersist))
+        if (durableObligationPending && !externalStoreSaved && !externalSaveBlockedByFault)
         {
+            if (_catchUpProgress.IsActive && !isCompletionPersist)
+            {
+                // Intermediate persists neither set nor clear an unmet-obligation error.
+                _lastError = lastErrorBeforePersist;
+                return;
+            }
+
             _lastError ??= "External store did not save the pending durable rebuild obligation";
             _logger.LogWarning(
                 MultiProjectionLogEvents.DurableRebuildObligationNotSaved,
@@ -1547,6 +1553,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task<ResultBox<bool>> PersistStateCoreAsync(bool isCompletionPersist)
     {
+        var lastErrorBeforePersist = _lastError;
         _lastPersistOutcome = PersistOutcomeNotAttempted;
         if (_restoreRetirementFailed)
         {
@@ -1609,7 +1616,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Use streaming path when enabled and temp file manager is available
             if (_useStreamingSnapshotIO && _tempFileSnapshotManager is not null)
             {
-                return await PersistStateStreamingAsync(projectorName, checkpoint, snapshotHost, snapshotHostClean, isCompletionPersist);
+                return await PersistStateStreamingAsync(
+                    projectorName, checkpoint, snapshotHost, snapshotHostClean, isCompletionPersist, lastErrorBeforePersist);
             }
 
             // Get snapshot as opaque bytes from the host
@@ -1779,7 +1787,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _host.CompactSafeHistory();
             CompactRetainedCollections();
             CompletePersistErrorState(projectorName, durableObligationPending, externalStoreSaved,
-                externalSaveBlockedByFault, isCompletionPersist);
+                externalSaveBlockedByFault, isCompletionPersist, lastErrorBeforePersist);
             var finishUtc = DateTime.UtcNow;
             _logger.LogDebug(
                 "[{ProjectorName}] Persistence completed in {ElapsedMs:F0}ms - {EnvelopeSize:N0} bytes, {EventsProcessed:N0} events saved",
@@ -1812,7 +1820,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     ///     Avoids holding the entire serialized snapshot in a byte[] simultaneously.
     /// </summary>
     private async Task<ResultBox<bool>> PersistStateStreamingAsync(
-        string projectorName, PersistCheckpoint checkpoint, IProjectionActorHost snapshotHost, bool snapshotHostClean, bool isCompletionPersist)
+        string projectorName, PersistCheckpoint checkpoint, IProjectionActorHost snapshotHost, bool snapshotHostClean,
+        bool isCompletionPersist, string? lastErrorBeforePersist)
     {
         var buildStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
         string? tempFilePath = null;
@@ -1913,7 +1922,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 CompactRetainedCollections();
 
                 CompletePersistErrorState(projectorName, durableObligationPending, externalStoreSaved,
-                    externalStorePersistResult.BlockedByFault, isCompletionPersist);
+                    externalStorePersistResult.BlockedByFault, isCompletionPersist, lastErrorBeforePersist);
 
                 var metrics = new SnapshotPersistMetrics(
                     SnapshotBuildMs: (long)buildElapsedMs,

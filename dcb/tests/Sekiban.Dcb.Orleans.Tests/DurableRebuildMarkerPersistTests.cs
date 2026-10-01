@@ -721,7 +721,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         {
             Interlocked.Increment(ref _writeCount);
             Interlocked.Increment(ref RebuiltAttempts);
-            if (FailCommitRebuilt) throw new InvalidOperationException("injected: rebuilt commit failure");
+            if (FailCommitRebuilt) return Task.FromResult(CheckpointCasOutcome.ProviderFailed(new InvalidOperationException("injected: rebuilt commit failure")));
             return _inner.CommitRebuiltAsync(req, s, e, off, ct);
         }
     }
