@@ -654,3 +654,60 @@ Resetting integrity guard: LastGoodSafeVersion was {LastGood} but external snaps
 リセットの write が commit されず、その後の write で保存済み projector version が更新された場合にも、
 同じ version の Warning が出ることがあります。この分類は Warning 側に倒す方針です。
 [#1253](https://github.com/J-Tech-Japan/Sekiban/issues/1253) item 7 を参照してください。
+
+### store-ahead チェックで恒久的に tombstone のままになる checkpoint (SEK-G97)
+
+**症状。** Catch-up 完了後も Warning **1030** (`DurableRebuildObligationNotSaved`) と
+`GetStatusAsync().LastError` に
+`External store has newer safe state (X) than local (Y)` が残ります。Checkpoint slot は
+`Tombstoned` のままで、activation のたびに全イベントを replay します。Fail-closed の
+catch-up gate が解除されればクエリ結果は正しいものの、再構築した checkpoint を保存できません。
+永続 slot の lifecycle は multi-projection state store で確認してください。Gate 解除後の
+Grain status からは永続 slot の lifecycle を確認できません。
+
+**一時的な差か、恒久的な差か。** 新規書き込みを止め、設定した `SafeWindow` と既知の clock skew
+より長く待ち、catch-up と保存の再試行を完了させます。Status の読み取りだけでは catch-up は進みません。
+Fail-closed クエリ (`GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false)`) で進行を促します。
+より多くのイベントが safe になり Y が X に届けば checkpoint は回復できます。Clock skew、peer の
+小さい SafeWindow、到達可能な legacy count による差は一時的です。Y が replay 可能なイベントの
+総数で止まり、それでも X > Y なら、待つだけでは回復しません。
+
+**考えられる原因。** Projection store を残したまま event store をリセット・復元した場合や、
+legacy checkpoint の `EventsProcessed` が過大な場合です。Tombstone 化は payload と count を保持し、
+store-ahead の整合性チェックは再構築した safe count と比較し続けます。この runbook は上記の
+store-ahead 診断を対象とします。Orleans に保持された `LastGoodSafeVersion` によって、1030 や
+store-ahead エラーより先に `Integrity guard blocked persist` (1021) で保存が止まる別のケースは、
+このテストの検証対象外です。
+
+**対象 checkpoint の復旧。** **ServiceId、projector name、projector version** を特定します。
+Service scope も checkpoint の識別情報の一部です。
+
+1. Multi-projection state table/container の対象 checkpoint 行・document を **provider レベル**で
+   削除します。PostgreSQL と Cosmos DB では、その service、projector name、version の checkpoint
+   だけを lifecycle/generation metadata ごと削除します。イベントは削除しません。テストは test service
+   に明示的に scope を固定した store の `IMultiProjectionStateStore.DeleteAsync(projectorName,
+   projectorVersion)` を使います。
+   Checkpoint payload が blob storage に offload されている（行に `OffloadKey` がある）場合、行を削除しても
+   blob は削除されず、キーも行と一緒に失われます。削除前に `OffloadKey` を記録し、他の checkpoint
+   から参照されていないことを確認したうえで、blob の保持方針に従って片付けてください。
+   `IBlobStorageSnapshotAccessor` には削除 API がなく、PostgreSQL/Cosmos の `DeleteAsync` も blob の
+   cleanup は運用側に委ねています。
+2. 直ちに `RequestDeactivationAsync` で grain を deactivate し、次のリクエストを新しい activation で
+   処理させます。Host の再起動も activation を置き換える方法ですが、検証テストは grain deactivation
+   を実行します。Provider 削除直後の deactivation 中に古い token の保存が拒否されるのは想定内で、
+   ログに保存失敗として現れる場合があります。
+3. 上記の fail-closed オプションでクエリを実行し、catch-up 完了を待ちます。正しいクエリ結果と、
+   再構築したイベント数を持つ **Active** checkpoint を provider store で確認します。さらに一度
+   deactivate/reactivate すると、全 replay なしでその checkpoint を restore できます。
+
+`DeleteExternalStateAsync` は手順 1 の provider 削除ではありません。対応 store では Active 行を
+削除せず tombstone 化し、すでに tombstone の行は既存の tombstone を保持します（generation は変わりません）。
+この stuck 状態の解消にはなりません。
+
+End-to-end の契約は
+[`PermanentlyTombstonedCheckpointRunbookTests`](../../dcb/tests/Sekiban.Dcb.Orleans.Tests/PermanentlyTombstonedCheckpointRunbookTests.cs)
+にあります。Safe な replay 可能イベント 50 件に対して retained count を 100 とし、複数 activation で
+正しいクエリ結果と 1030、`DeleteExternalStateAsync` 後も同じ tombstone、provider 削除と deactivation、
+新しい Active checkpoint、その後の全 replay なしの restore を確認します。In-memory provider を使うため、
+PostgreSQL/Cosmos の管理操作と host 全体の再起動はこのテストでは実行しません。
+製品の store-ahead チェックは変更していません。
