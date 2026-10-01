@@ -121,7 +121,7 @@ public class MultiProjectionGrainPersistPolicyTests
             InvokePrivate(
                 grain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v1", "safe-001", 10]));
+                ["v1", "safe-001", 10, true]));
 
         Assert.True(result);
     }
@@ -131,8 +131,8 @@ public class MultiProjectionGrainPersistPolicyTests
     [InlineData(false, true, true)]
     [InlineData(true, false, false)]
     [InlineData(true, true, true)]
-    public void UnchangedCheckpoint_MarkerBypassRequiresCleanLiveHost(
-        bool durableMarker, bool liveRebuildRequired, bool expectedSkip)
+    public void UnchangedCheckpoint_MarkerBypassUsesCapturedHostCleanliness(
+        bool durableMarker, bool snapshotRebuildRequired, bool expectedSkip)
     {
         var grain = CreateGrain(
             new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = true },
@@ -143,9 +143,10 @@ public class MultiProjectionGrainPersistPolicyTests
                 LastGoodSafeVersion = 10,
                 RebuildRequired = durableMarker
             });
-        SetPrivateField(grain, "_host", new RebuildSignalingHost(liveRebuildRequired));
+        // Model a host swap: the live host has the opposite cleanliness from the snapshot host.
+        SetPrivateField(grain, "_host", new RebuildSignalingHost(!snapshotRebuildRequired));
         Assert.Equal(expectedSkip, Assert.IsType<bool>(InvokePrivate(
-            grain, "ShouldSkipPersistForUnchangedSafeCheckpoint", ["v1", "safe-001", 10])));
+            grain, "ShouldSkipPersistForUnchangedSafeCheckpoint", ["v1", "safe-001", 10, !snapshotRebuildRequired])));
     }
 
     [Fact]
@@ -164,7 +165,7 @@ public class MultiProjectionGrainPersistPolicyTests
             InvokePrivate(
                 grain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v1", "safe-001", null]));
+                ["v1", "safe-001", null, true]));
 
         Assert.True(result);
     }
@@ -185,7 +186,7 @@ public class MultiProjectionGrainPersistPolicyTests
             InvokePrivate(
                 disabledGrain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v1", "safe-001", 10])));
+                ["v1", "safe-001", 10, true])));
 
         var changedCheckpointGrain = CreateGrain(
             new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = true },
@@ -200,19 +201,19 @@ public class MultiProjectionGrainPersistPolicyTests
             InvokePrivate(
                 changedCheckpointGrain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v2", "safe-001", 10])));
+                ["v2", "safe-001", 10, true])));
 
         Assert.False(Assert.IsType<bool>(
             InvokePrivate(
                 changedCheckpointGrain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v1", "safe-002", 10])));
+                ["v1", "safe-002", 10, true])));
 
         Assert.False(Assert.IsType<bool>(
             InvokePrivate(
                 changedCheckpointGrain,
                 "ShouldSkipPersistForUnchangedSafeCheckpoint",
-                ["v1", "safe-001", 11])));
+                ["v1", "safe-001", 11, true])));
     }
 
     [Fact]
