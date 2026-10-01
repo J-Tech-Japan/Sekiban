@@ -349,7 +349,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private sealed record StreamingExternalStorePersistResult(
         bool ExternalStoreSaved,
-        long UploadElapsedMs);
+        long UploadElapsedMs,
+        bool BlockedByFault = false);
 
     // Keep the pre-SEK-G24 constructor metadata intact for existing binary consumers. Orleans uses the annotated
     // constructor below when the optional status services are registered; direct callers can continue using this
@@ -867,6 +868,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return false;
         }
 
+        if (_checkpointMutation is { PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true } &&
+            snapshotHostClean && !_hostIsPristine)
+        {
+            return false;
+        }
+
         if (!_skipPersistWhenSafeCheckpointUnchanged)
         {
             return false;
@@ -1118,7 +1125,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             return new StreamingExternalStorePersistResult(
                 ExternalStoreSaved: false,
-                UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds);
+                UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds,
+                BlockedByFault: saveResult.GetException() is ExternalPersistenceBlockedByFaultException);
         }
 
         return new StreamingExternalStorePersistResult(
@@ -1508,10 +1516,36 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             LastBackgroundCatchUpError);
     }
 
+    private bool HasPendingDurableRebuildObligation() =>
+        _stateStore.Committed is IRebuildMarkerState { RebuildRequired: true } ||
+        _checkpointMutation is { PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true };
+
+    private void CompletePersistErrorState(
+        string projectorName, bool durableObligationPending, bool externalStoreSaved,
+        bool externalSaveBlockedByFault, bool isCompletionPersist)
+    {
+        // Completion runs while catch-up is still active. All other callers are intermediate during replay.
+        if (durableObligationPending && !externalStoreSaved && !externalSaveBlockedByFault &&
+            (!_catchUpProgress.IsActive || isCompletionPersist))
+        {
+            _lastError ??= "External store did not save the pending durable rebuild obligation";
+            _logger.LogWarning(
+                MultiProjectionLogEvents.DurableRebuildObligationNotSaved,
+                "[{ProjectorName}] Durable rebuild obligation was not saved: {LastError}",
+                projectorName, _lastError);
+        }
+        else
+        {
+            _lastError = null;
+        }
+    }
+
     // Threshold for forcing GC before serialization (10MB payload)
     private const long LargePayloadThresholdBytes = 10_000_000;
 
-    public async Task<ResultBox<bool>> PersistStateAsync()
+    public Task<ResultBox<bool>> PersistStateAsync() => PersistStateCoreAsync(isCompletionPersist: false);
+
+    private async Task<ResultBox<bool>> PersistStateCoreAsync(bool isCompletionPersist)
     {
         _lastPersistOutcome = PersistOutcomeNotAttempted;
         if (_restoreRetirementFailed)
@@ -1575,7 +1609,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Use streaming path when enabled and temp file manager is available
             if (_useStreamingSnapshotIO && _tempFileSnapshotManager is not null)
             {
-                return await PersistStateStreamingAsync(projectorName, checkpoint, snapshotHost, snapshotHostClean);
+                return await PersistStateStreamingAsync(projectorName, checkpoint, snapshotHost, snapshotHostClean, isCompletionPersist);
             }
 
             // Get snapshot as opaque bytes from the host
@@ -1628,6 +1662,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 envelopeSize,
                 safeThresholdTime);
 
+            var durableObligationPending = HasPendingDurableRebuildObligation();
+            var externalSaveBlockedByFault = false;
             var externalStoreSaved = _multiProjectionStateStore == null;
             var allowExternalStoreSave = _multiProjectionStateStore is not null &&
                                          await CanSaveToExternalStoreAsync(projectorName, projectorVersion, ResolveSafeEventsProcessed(checkpoint));
@@ -1665,6 +1701,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     // A fault-block is a deliberate skip, not a store failure — log accordingly and never report saved.
                     if (saveResult.GetException() is ExternalPersistenceBlockedByFaultException)
                     {
+                        externalSaveBlockedByFault = true;
                         _logger.LogDebug(
                             "[{ProjectorName}] External store save skipped: projection is faulted",
                             projectorName);
@@ -1741,7 +1778,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
             _host.CompactSafeHistory();
             CompactRetainedCollections();
-            _lastError = null;
+            CompletePersistErrorState(projectorName, durableObligationPending, externalStoreSaved,
+                externalSaveBlockedByFault, isCompletionPersist);
             var finishUtc = DateTime.UtcNow;
             _logger.LogDebug(
                 "[{ProjectorName}] Persistence completed in {ElapsedMs:F0}ms - {EnvelopeSize:N0} bytes, {EventsProcessed:N0} events saved",
@@ -1774,7 +1812,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     ///     Avoids holding the entire serialized snapshot in a byte[] simultaneously.
     /// </summary>
     private async Task<ResultBox<bool>> PersistStateStreamingAsync(
-        string projectorName, PersistCheckpoint checkpoint, IProjectionActorHost snapshotHost, bool snapshotHostClean)
+        string projectorName, PersistCheckpoint checkpoint, IProjectionActorHost snapshotHost, bool snapshotHostClean, bool isCompletionPersist)
     {
         var buildStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
         string? tempFilePath = null;
@@ -1819,6 +1857,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 var safePosition = checkpoint.SafePosition;
 
                 // Step 3: Stream to external store
+                var durableObligationPending = HasPendingDurableRebuildObligation();
                 var externalStorePersistResult = await SaveStreamingSnapshotToExternalStoreAsync(
                     projectorName,
                     checkpoint,
@@ -1873,7 +1912,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _host.CompactSafeHistory();
                 CompactRetainedCollections();
 
-                _lastError = null;
+                CompletePersistErrorState(projectorName, durableObligationPending, externalStoreSaved,
+                    externalStorePersistResult.BlockedByFault, isCompletionPersist);
 
                 var metrics = new SnapshotPersistMetrics(
                     SnapshotBuildMs: (long)buildElapsedMs,
@@ -2540,7 +2580,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // on the exact tombstone token. An ACTIVE slot is ADOPTED so the first persist CASes on its exact token, so a
             // stale writer is rejected rather than re-contaminating the shared row.
             var checkpointTombstoned = false;
-            if (_checkpointMutation is { IsCapable: true } && !durableRebuildPending)
+            if (_checkpointMutation is { IsCapable: true })
             {
                 var slotResult = await _checkpointMutation.ReadSlotAsync(projectorName, projectorVersion, cancellationToken);
                 if (slotResult.IsSuccess)
@@ -2552,10 +2592,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             "Checkpoint tombstone observed on activation: {ProjectorName} — forcing full ordered replay (rebuilt commit pending)",
                             projectorName);
                         _checkpointMutation.AdoptTombstone(slot);
-                        _firstQueryGate.Arm();
-                        _tombstoneFailClosedArmGeneration = _firstQueryGate.ArmGeneration;
-                        forceFullCatchUp = true;
-                        checkpointTombstoned = true;
+                        if (!durableRebuildPending)
+                        {
+                            _firstQueryGate.Arm();
+                            _tombstoneFailClosedArmGeneration = _firstQueryGate.ArmGeneration;
+                            forceFullCatchUp = true;
+                            checkpointTombstoned = true;
+                        }
                     }
                     else if (slot.IsActive)
                     {
@@ -5276,7 +5319,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             {
                 // Final persistence
                 var persistStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                var persistResult = await PersistStateAsync();
+                var persistResult = await PersistStateCoreAsync(isCompletionPersist: true);
                 if (!persistResult.IsSuccess)
                 {
                     throw new InvalidOperationException(

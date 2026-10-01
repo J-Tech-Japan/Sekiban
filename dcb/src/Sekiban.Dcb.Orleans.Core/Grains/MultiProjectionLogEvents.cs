@@ -94,4 +94,7 @@ public static class MultiProjectionLogEvents
 
     /// <summary>A projector version change has no snapshot yet; rebuild from events after resetting the integrity guard.</summary>
     public static readonly EventId VersionChangeRebuildFromEvents = new(1029, "VersionChangeRebuildFromEvents");
+
+    /// <summary>A completed persist could not satisfy a pending durable rebuild obligation.</summary>
+    public static readonly EventId DurableRebuildObligationNotSaved = new(1030, "DurableRebuildObligationNotSaved");
 }

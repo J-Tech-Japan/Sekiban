@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,12 +32,13 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
     private IClusterClient Client => _cluster!.Client;
     public Task InitializeAsync() => Task.CompletedTask;
 
-    private async Task StartAsync(bool streaming, int persistIntervalSeconds = 3600, bool skipUnchanged = true)
+    private async Task StartAsync(bool streaming, int persistIntervalSeconds = 3600, bool skipUnchanged = true, int catchUpBatchSize = 1000)
     {
         Env.Reset();
         Env.Streaming = streaming;
         Env.PersistIntervalSeconds = persistIntervalSeconds;
         Env.SkipUnchanged = skipUnchanged;
+        Env.CatchUpBatchSize = catchUpBatchSize;
         MarkerGrainStorage.Reset();
         var builder = new TestClusterBuilder();
         builder.Options.InitialSilosCount = 1;
@@ -107,6 +110,8 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         var grain = await SeedAsync(DateTime.UtcNow);
         AssertMarkerCleared();
         await AssertUnchangedPersistDoesNotWriteAsync(grain);
+        Assert.Null((await grain.GetStatusAsync()).LastError);
+        Assert.DoesNotContain(Env.Log.Entries, e => e.Item2 == 1030);
     }
 
     [Theory]
@@ -218,6 +223,209 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         }
     }
 
+    // SEK-G96 B/D: leave the durable marker and tombstone across a failed rebuilt commit.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MarkerAndTombstone_ReactivationAdoptsAndCommits_ThenRestores(bool streaming)
+    {
+        await StartAsync(streaming);
+        var t0 = DateTime.UtcNow;
+        var grain = await SeedAsync(t0);
+        Env.StateStore.FailCommitRebuilt = true;
+        await AddEarlierAsync(grain, t0);
+        await AssertCountAndIdleAsync(grain, 2);
+        Assert.True((await grain.PersistStateAsync()).IsSuccess); // Return contract is unchanged.
+        Assert.True(MarkerGrainStorage.Read().RebuildRequired);
+        Assert.True((await SlotAsync()).IsTombstoned);
+        Assert.NotNull((await grain.GetStatusAsync()).LastError);
+        Assert.Contains(Env.Log.Entries, e => e == (LogLevel.Warning, 1030));
+
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(1000);
+        Env.StateStore.FailCommitRebuilt = false;
+        var commits = Env.StateStore.RebuiltAttempts;
+        grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
+        await AssertCountAndIdleAsync(grain, 2);
+        Assert.True(Env.StateStore.RebuiltAttempts > commits);
+        Assert.True((await SlotAsync()).IsActive);
+        AssertMarkerCleared();
+        Assert.Null((await grain.GetStatusAsync()).LastError);
+        await AssertReactivationWithoutFullReplayAsync(grain, 2);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FailedRebuiltSave_RetainsError_SuccessClearsItInSameActivation(bool streaming)
+    {
+        await StartAsync(streaming);
+        var t0 = DateTime.UtcNow;
+        var grain = await SeedAsync(t0);
+        Env.StateStore.FailCommitRebuilt = true;
+        await AddEarlierAsync(grain, t0);
+        await AssertCountAndIdleAsync(grain, 2);
+        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        var status = await grain.GetStatusAsync();
+        Assert.NotNull(status.LastError);
+        Assert.True(status.HasError);
+        Assert.True((await grain.GetHealthStatusAsync()).IsHealthy);
+        Assert.Contains(Env.Log.Entries, e => e == (LogLevel.Warning, 1030));
+        Env.StateStore.FailCommitRebuilt = false;
+        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.Null((await grain.GetStatusAsync()).LastError);
+        Assert.True((await SlotAsync()).IsActive);
+        AssertMarkerCleared();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MarkerAndActive_ReactivationUsesAdoptedToken_WithoutRestoringPayload(bool streaming)
+    {
+        await StartAsync(streaming);
+        MarkerGrainStorage.RetainMarkerOnCheckpointWrites = true;
+        var grain = await SeedAsync(DateTime.UtcNow);
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(1000);
+        var active = await SlotAsync();
+        Assert.True(active.IsActive);
+        MarkerGrainStorage.RetainMarkerOnCheckpointWrites = false;
+        Env.StateStore.Expectations.Clear();
+        var fullReads = Env.Counting.FullReads;
+        var slotReads = Env.StateStore.SlotReads;
+        Env.Counting.SlotReadsAtFullReplay.Clear();
+        grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
+        await AssertCountAndIdleAsync(grain, 1);
+        Assert.Contains(Env.Counting.SlotReadsAtFullReplay, reads => reads > slotReads);
+        Assert.True(Env.Counting.FullReads > fullReads); // Marker skips payload restore.
+        Assert.Contains(CheckpointExpectation.FromSlot(active), Env.StateStore.Expectations);
+        AssertMarkerCleared();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TombstoneWithoutNewEvents_CommitsUnchangedCheckpoint_ThenRestores(bool streaming)
+    {
+        await StartAsync(streaming);
+        var grain = await SeedAsync(DateTime.UtcNow);
+        var active = await SlotAsync();
+        Assert.Equal(CheckpointCasStatus.Committed, (await Env.StateStore.InvalidateWithTombstoneAsync(
+            CountProjector.MultiProjectorName, CountProjector.MultiProjectorVersion,
+            CheckpointExpectation.FromSlot(active))).Status);
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(1000);
+        Assert.True((await SlotAsync()).IsTombstoned);
+        var commits = Env.StateStore.RebuiltAttempts;
+        grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
+        await AssertCountAndIdleAsync(grain, 1);
+        Assert.True(Env.StateStore.RebuiltAttempts > commits);
+        Assert.True((await SlotAsync()).IsActive);
+        Assert.Equal(active.Record!.LastSortableUniqueId, (await SlotAsync()).Record!.LastSortableUniqueId);
+        await AssertReactivationWithoutFullReplayAsync(grain, 1, assertNoTombstoneGate: true);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ContaminatedCapturedHost_DoesNotBypassUnchangedTombstoneSkip(bool streaming)
+    {
+        await StartAsync(streaming);
+        var t0 = DateTime.UtcNow;
+        var grain = await SeedAsync(t0);
+        MarkerGrainStorage.FailResetWrites = true;
+        await AddEarlierAsync(grain, t0);
+        Assert.False((await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false)).IsSuccess);
+        Assert.True(MarkerGrainStorage.ResetFailures > 0);
+        Assert.True((await SlotAsync()).IsTombstoned);
+        var writes = Env.StateStore.WriteCount;
+        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        Assert.Equal(writes, Env.StateStore.WriteCount);
+        Assert.True((await SlotAsync()).IsTombstoned);
+        Assert.DoesNotContain(Env.Log.Entries, e => e.Item2 == 1030);
+    }
+
+    [Theory]
+    [InlineData(true, true, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, false, true)]
+    public async Task AheadDuringReplay_TimerAndBatchPersistsAreIntermediate_CompletionSettlesObligation(
+        bool streaming, bool marker, bool aheadAtCompletion)
+    {
+        await StartAsync(streaming, persistIntervalSeconds: 1, catchUpBatchSize: 2);
+        var t0 = DateTime.UtcNow;
+        // Retain a marker with an Active row, or adopt a plain tombstone.
+        MarkerGrainStorage.RetainMarkerOnCheckpointWrites = marker;
+        var events = Enumerable.Range(0, 8)
+            .Select(i => ToSerializable(CreateEvent(new Counted($"e{i}"), t0.AddSeconds(-60 + i)))).ToArray();
+        await Env.EventStore.WriteSerializableEventsAsync(events);
+        var grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
+        await AssertCountAndIdleAsync(grain, 8);
+        Assert.True((await grain.PersistStateAsync()).IsSuccess);
+        await grain.RequestDeactivationAsync();
+        await Task.Delay(1000);
+        var active = await SlotAsync();
+        if (!marker)
+            Assert.Equal(CheckpointCasStatus.Committed, (await Env.StateStore.InvalidateWithTombstoneAsync(
+                CountProjector.MultiProjectorName, CountProjector.MultiProjectorVersion,
+                CheckpointExpectation.FromSlot(active))).Status);
+        MarkerGrainStorage.RetainMarkerOnCheckpointWrites = false;
+        // Model already-retired grain metadata at the crash boundary, keeping the shared row ahead.
+        // This isolates external-store ordering from G14's separate local watermark regression guard.
+        MarkerGrainStorage.RetireSafeWatermark();
+        // Expose the retained row under a tombstone too. Normal replay catches up to eight;
+        // the retrograde control stays ahead at completion and must surface the unmet obligation.
+        Env.StateStore.AheadRecord = active.Record! with { EventsProcessed = aheadAtCompletion ? 9 : 8 };
+        var pause = Env.Counting.PauseNextContinuation();
+        Env.Log.Entries.Clear();
+        try
+        {
+            grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
+            // Marker queries can wait for the first-query gate; keep that request in flight while
+            // the interleaving timer persists the partially rebuilt host.
+            var query = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            await pause.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            Assert.True((await grain.GetStatusAsync()).IsCatchUpActive);
+            Assert.Equal(!marker, (await grain.GetStatusAsync()).TombstoneFailClosedPending);
+            var metadataWrites = MarkerGrainStorage.WriteCount;
+            // The interleaving timer must actually complete a persist while the replay read is parked.
+            await FirstQueryBoundedWaitClusterTests.PollUntilAsync(() =>
+                Task.FromResult(MarkerGrainStorage.WriteCount > metadataWrites));
+            Assert.True((await grain.GetStatusAsync()).IsCatchUpActive);
+            Assert.Null((await grain.GetStatusAsync()).LastError);
+            Assert.DoesNotContain(Env.Log.Entries, e => e.Item2 == 1030);
+            pause.Release.TrySetResult();
+            await query.WaitAsync(TimeSpan.FromSeconds(20));
+            await AssertCountAndIdleAsync(grain, 8);
+            if (aheadAtCompletion)
+            {
+                Assert.NotNull((await grain.GetStatusAsync()).LastError);
+                Assert.Contains(Env.Log.Entries, e => e == (LogLevel.Warning, 1030));
+            }
+            else
+            {
+                Assert.Null((await grain.GetStatusAsync()).LastError);
+                Assert.DoesNotContain(Env.Log.Entries, e => e.Item2 == 1030);
+            }
+            Env.StateStore.AheadRecord = null;
+            Assert.True((await grain.PersistStateAsync()).IsSuccess);
+            Assert.Null((await grain.GetStatusAsync()).LastError);
+            Assert.True((await SlotAsync()).IsActive);
+            AssertMarkerCleared();
+        }
+        finally
+        {
+            pause.Release.TrySetResult();
+            Env.StateStore.AheadRecord = null;
+        }
+    }
+
     private async Task<IMultiProjectionGrain> SeedAsync(DateTime t0)
     {
         var grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
@@ -274,13 +482,19 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         Assert.Equal(metadata, MarkerGrainStorage.WriteCount);
     }
 
-    private async Task AssertReactivationWithoutFullReplayAsync(IMultiProjectionGrain grain, int count)
+    private async Task AssertReactivationWithoutFullReplayAsync(IMultiProjectionGrain grain, int count, bool assertNoTombstoneGate = false)
     {
         var readsBeforeDeactivation = MarkerGrainStorage.ReadCount;
         await grain.RequestDeactivationAsync();
         await Task.Delay(1000);
         var before = Env.Counting.FullReads;
         grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
+        if (assertNoTombstoneGate)
+        {
+            var first = await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            Assert.True(first.IsSuccess);
+            Assert.False((await grain.GetStatusAsync()).TombstoneFailClosedPending);
+        }
         await AssertCountAndIdleAsync(grain, count);
         Assert.True(MarkerGrainStorage.ReadCount > readsBeforeDeactivation, "Expected a fresh activation.");
         Assert.Equal(before, Env.Counting.FullReads);
@@ -329,6 +543,18 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             WriteCount = 0;
             ReadCount = 0;
             ResetFailures = 0;
+        }
+
+        public static void RetireSafeWatermark()
+        {
+            lock (Gate)
+            {
+                foreach (var state in Store.Values)
+                {
+                    state.LastGoodSafeVersion = 0;
+                    state.LastGoodEventsProcessed = 0;
+                }
+            }
         }
 
         public static MultiProjectionGrainState Read()
@@ -386,15 +612,34 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
     {
         private int _fullReads;
         public int FullReads => Volatile.Read(ref _fullReads);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null)
+        public ConcurrentQueue<int> SlotReadsAtFullReplay { get; } = new();
+        private CountingStateStore.SaveGate? _pause;
+        public CountingStateStore.SaveGate PauseNextContinuation()
         {
-            if (since is null) Interlocked.Increment(ref _fullReads);
-            return inner.ReadAllSerializableEventsAsync(since);
+            var pause = new CountingStateStore.SaveGate();
+            _pause = pause;
+            return pause;
         }
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
+            ReadAllSerializableEventsAsync(since, null);
+        public async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? maxCount)
         {
-            if (since is null) Interlocked.Increment(ref _fullReads);
-            return inner.ReadAllSerializableEventsAsync(since, maxCount);
+            if (since is null)
+            {
+                SlotReadsAtFullReplay.Enqueue(Env.StateStore.SlotReads);
+                Interlocked.Increment(ref _fullReads);
+            }
+            else if (Interlocked.Exchange(ref _pause, null) is { } pause)
+            {
+                pause.Entered.TrySetResult();
+                await pause.Release.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            }
+            // In-memory storage returns insertion order; full G18 replay must read event position order.
+            var result = await inner.ReadAllSerializableEventsAsync(since, null);
+            if (!result.IsSuccess) return result;
+            var sorted = result.GetValue().OrderBy(e => e.SortableUniqueIdValue, StringComparer.Ordinal);
+            return ResultBox.FromValue<IEnumerable<SerializableEvent>>(
+                (maxCount is { } count ? sorted.Take(count) : sorted).ToArray());
         }
         public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
         public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
@@ -415,6 +660,11 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         public int WriteCount => Volatile.Read(ref _writeCount);
         public int InvalidateCount => Volatile.Read(ref _invalidateCount);
 
+        public volatile bool FailCommitRebuilt;
+        public int RebuiltAttempts;
+        public int SlotReads;
+        public MultiProjectionStateRecord? AheadRecord;
+        public ConcurrentQueue<CheckpointExpectation> Expectations { get; } = new();
         private SaveGate? _nextSave;
         public volatile bool RejectOtherSaves;
         internal sealed class SaveGate
@@ -430,6 +680,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         }
         public async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default)
         {
+            if (AheadRecord is { } ahead) return ResultBox.FromValue(OptionalValue<MultiProjectionStateRecord>.FromValue(ahead));
             var gate = Interlocked.Exchange(ref _nextSave, null);
             if (gate is not null)
             {
@@ -454,8 +705,12 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         public Task<ResultBox<bool>> UpsertFromStreamAsync(MultiProjectionStateWriteRequest req, Stream s, int off, CancellationToken ct = default) { Interlocked.Increment(ref _writeCount); return _inner.UpsertFromStreamAsync(req, s, off, ct); }
 
         public CheckpointStoreCapabilityDescriptor DescribeCheckpointCapability() => _inner.DescribeCheckpointCapability();
-        public Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default) => _inner.ReadCheckpointSlotAsync(p, v, ct);
-        public Task<CheckpointCasOutcome> ConditionalUpsertAsync(MultiProjectionStateWriteRequest req, Stream s, CheckpointExpectation e, int off, CancellationToken ct = default) { Interlocked.Increment(ref _writeCount); return _inner.ConditionalUpsertAsync(req, s, e, off, ct); }
+        public Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref SlotReads);
+            return _inner.ReadCheckpointSlotAsync(p, v, ct);
+        }
+        public Task<CheckpointCasOutcome> ConditionalUpsertAsync(MultiProjectionStateWriteRequest req, Stream s, CheckpointExpectation e, int off, CancellationToken ct = default) { Expectations.Enqueue(e); Interlocked.Increment(ref _writeCount); return _inner.ConditionalUpsertAsync(req, s, e, off, ct); }
         public async Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(string p, string v, CheckpointExpectation e, CancellationToken ct = default)
         {
             var outcome = await _inner.InvalidateWithTombstoneAsync(p, v, e, ct);
@@ -465,14 +720,18 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         public Task<CheckpointCasOutcome> CommitRebuiltAsync(MultiProjectionStateWriteRequest req, Stream s, CheckpointExpectation e, int off, CancellationToken ct = default)
         {
             Interlocked.Increment(ref _writeCount);
+            Interlocked.Increment(ref RebuiltAttempts);
+            if (FailCommitRebuilt) throw new InvalidOperationException("injected: rebuilt commit failure");
             return _inner.CommitRebuiltAsync(req, s, e, off, ct);
         }
     }
 
     internal static class Env
     {
+        public static ObligationLogger Log { get; private set; } = new();
         public static bool Streaming { get; set; }
         public static int PersistIntervalSeconds { get; set; } = 3600;
+        public static int CatchUpBatchSize { get; set; } = 1000;
         public static bool SkipUnchanged { get; set; } = true;
         public static DcbDomainTypes Domain { get; private set; } = BuildDomain();
         public static InMemoryEventStore EventStore { get; private set; } = new(Domain.EventTypes);
@@ -481,6 +740,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
 
         public static void Reset()
         {
+            Log = new ObligationLogger();
             SkipUnchanged = true;
             Domain = BuildDomain();
             EventStore = new InMemoryEventStore(Domain.EventTypes);
@@ -500,11 +760,22 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         }
     }
 
+    internal sealed class ObligationLogger : ILoggerProvider, ILogger<MultiProjectionGrain>
+    {
+        public ConcurrentQueue<(LogLevel, int)> Entries { get; } = new();
+        public ILogger CreateLogger(string categoryName) => this;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel level) => true;
+        public void Dispose() { }
+        public void Log<TState>(LogLevel level, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => Entries.Enqueue((level, eventId.Id));
+    }
+
     private class Configurator : ISiloConfigurator
     {
         public void Configure(ISiloBuilder siloBuilder)
         {
-            siloBuilder
+            siloBuilder.ConfigureLogging(logging => logging.AddProvider(Env.Log))
                 .ConfigureServices(services =>
                 {
                     services.AddSingleton<DcbDomainTypes>(Env.Domain);
@@ -514,7 +785,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IBlobStorageSnapshotAccessor, MockBlobStorageSnapshotAccessor>();
                     services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
-                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000, FirstQueryCatchUpMaxWaitMs = 0, UseStreamingSnapshotIO = Env.Streaming, SkipPersistWhenSafeCheckpointUnchanged = Env.SkipUnchanged, PersistIntervalSeconds = Env.PersistIntervalSeconds });
+                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000, FirstQueryCatchUpMaxWaitMs = 0, CatchUpBatchSize = Env.CatchUpBatchSize, HotCatchUpPersistMaxFetchedEvents = Env.CatchUpBatchSize, UseStreamingSnapshotIO = Env.Streaming, SkipPersistWhenSafeCheckpointUnchanged = Env.SkipUnchanged, PersistIntervalSeconds = Env.PersistIntervalSeconds });
                     services.AddSekibanDcbNativeRuntime();
                     services.AddGrainStorage("OrleansStorage", (sp, name) => new MarkerGrainStorage());
                 })

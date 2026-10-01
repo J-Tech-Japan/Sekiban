@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Sekiban.Dcb.Storage.Checkpoints;
+using Sekiban.Dcb.Testing;
 using Microsoft.Extensions.Options;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
@@ -147,6 +150,60 @@ public class MultiProjectionGrainPersistPolicyTests
         SetPrivateField(grain, "_host", new RebuildSignalingHost(!snapshotRebuildRequired));
         Assert.Equal(expectedSkip, Assert.IsType<bool>(InvokePrivate(
             grain, "ShouldSkipPersistForUnchangedSafeCheckpoint", ["v1", "safe-001", 10, !snapshotRebuildRequired])));
+    }
+
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, true, true)]
+    public void UnchangedTombstone_BypassRequiresCleanCapturedHostAndNonPristineHost(
+        bool snapshotHostClean, bool pristine, bool expectedSkip)
+    {
+        var grain = CreateGrain(state: new MultiProjectionGrainState
+        {
+            ProjectorVersion = "v1", LastSortableUniqueId = "safe-001", LastGoodSafeVersion = 10
+        });
+        var mutationType = typeof(CheckpointSlot).Assembly.GetType(
+            "Sekiban.Dcb.Storage.Checkpoints.CheckpointMutationCoordinator", throwOnError: true)!;
+        var mutation = Activator.CreateInstance(mutationType,
+            new InMemoryMultiProjectionStateStore(), (Action)(() => { }))!;
+        mutationType.GetMethod("AdoptTombstone")!.Invoke(mutation,
+            [new CheckpointSlot(true, 1, "2", CheckpointLifecycle.Tombstoned, null)]);
+        SetPrivateField(grain, "_checkpointMutation", mutation);
+        SetPrivateField(grain, "_hostIsPristine", pristine);
+        // Live-host cleanliness differs, proving the decision uses the captured snapshot host.
+        SetPrivateField(grain, "_host", new RebuildSignalingHost(snapshotHostClean));
+        Assert.Equal(expectedSkip, InvokePrivate(grain, "ShouldSkipPersistForUnchangedSafeCheckpoint",
+            ["v1", "safe-001", 10, snapshotHostClean]));
+    }
+
+    [Theory]
+    [InlineData(true, false, false, false, false, true)]
+    [InlineData(true, false, true, false, false, false)]
+    [InlineData(true, false, true, true, false, true)]
+    [InlineData(true, false, false, false, true, false)]
+    [InlineData(true, false, true, true, true, false)]
+    [InlineData(true, true, false, false, false, false)]
+    [InlineData(false, false, false, false, false, false)]
+    public void DurableObligation_ErrorAndWarningOnlyForUnmetNonIntermediateSave(
+        bool obligation, bool saved, bool active, bool completion, bool faultBlocked, bool expectedError)
+    {
+        var log = new DurableRebuildMarkerPersistTests.ObligationLogger();
+        var grain = CreateGrain(logger: log);
+        SetPrivateField(grain, "_lastError", "external save failed");
+        var progress = GetPrivateField(grain, "_catchUpProgress")!;
+        progress.GetType().GetProperty("IsActive")!.SetValue(progress, active);
+        InvokePrivate(grain, "CompletePersistErrorState",
+            ["projection", obligation, saved, faultBlocked, completion]);
+        Assert.Equal(expectedError ? "external save failed" : null, GetPrivateField(grain, "_lastError"));
+        Assert.Equal(expectedError ? 1 : 0, log.Entries.Count(e => e == (LogLevel.Warning, 1030)));
+        if (expectedError)
+        {
+            // A subsequent successful save clears the prior failure.
+            InvokePrivate(grain, "CompletePersistErrorState", ["projection", true, true, false, completion]);
+            Assert.Null(GetPrivateField(grain, "_lastError"));
+        }
     }
 
     [Fact]
@@ -602,7 +659,8 @@ public class MultiProjectionGrainPersistPolicyTests
         IProjectionActorHostFactory? actorHostFactory = null,
         IProjectionStatusStore? projectionStatusStore = null,
         ProjectionStatusOptions? projectionStatusOptions = null,
-        TestPersistentState<MultiProjectionGrainState>? persistentState = null) =>
+        TestPersistentState<MultiProjectionGrainState>? persistentState = null,
+        ILogger<MultiProjectionGrain>? logger = null) =>
         new(
             persistentState ?? new TestPersistentState<MultiProjectionGrainState>(state ?? new MultiProjectionGrainState()),
             actorHostFactory ?? new StubProjectionActorHostFactory(),
@@ -612,7 +670,7 @@ public class MultiProjectionGrainPersistPolicyTests
             new NoOpMultiProjectionEventStatistics(),
             actorOptions: options ?? new GeneralMultiProjectionActorOptions(),
             tempFileSnapshotManager: null,
-            logger: NullLogger<MultiProjectionGrain>.Instance,
+            logger: logger ?? NullLogger<MultiProjectionGrain>.Instance,
             eventStoreFactory: null,
             serviceIdProvider: new DefaultServiceIdProvider(),
             projectionStatusStore: projectionStatusStore,
