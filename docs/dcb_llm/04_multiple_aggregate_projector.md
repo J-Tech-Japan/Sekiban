@@ -102,6 +102,35 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 The Orleans grain detects the accessor and periodically checkpoints state, reducing silo memory usage
 (`src/Sekiban.Dcb.Orleans/Grains/MultiProjectionGrainState.cs`).
 
+### Enumerating referenced offload keys
+
+Snapshot blobs can be referenced in two places: the row's `IsOffloaded` / `OffloadKey` / `OffloadProvider` fields, and the `OffloadedState.OffloadKey` / `StorageProvider` fields inside a `SerializableMultiProjectionStateEnvelope`. If the row itself is offloaded, its blob contains the envelope, so both references matter. Current writers store envelopes as plain JSON; gzip support is read-side tolerance only. Orleans `MultiProjectionGrainState` stores no offload key; its dead legacy `SerializedState` field is only cleared. The store row remains the reference source.
+
+Use the additive Core helper `Sekiban.Dcb.Snapshots.OffloadKeyEnumerator`:
+
+```csharp
+await foreach (var reference in OffloadKeyEnumerator.EnumerateAsync(
+    store, domainTypes.JsonSerializerOptions, cancellationToken))
+{
+    // Kind: Row, Envelope, or Undecodable.
+    // Lifecycle: Active / Tombstoned when available; otherwise null.
+    // Collect keys as a union; any Undecodable must stop deletion.
+}
+```
+
+The helper scans every listed projector version, including tombstoned rows, and resolves row blobs before inspecting envelopes. Pass the application's `JsonSerializerOptions` when using a non-default naming policy. It reads forward-only without deserializing `InlineState`; the buffer can grow to fit the largest single JSON token, so memory is not constant. A lookup, open, or decode failure produces `Undecodable` with `Detail`; list failures and caller cancellation propagate. A missing or unreadable checkpoint slot leaves `Lifecycle` null with `Detail`, while preserving keys.
+
+Enumeration is **observational**: absence of a key does not by itself authorize deletion. Some stores list with eventually consistent reads (for example Dynamo `ListAllAsync`), so even a successful scan may miss a row. Run the helper once per ServiceId sharing a blob container, because each store scan is scoped to its current ServiceId and blob keys carry no ServiceId.
+
+A safe external GC must follow all of these rules:
+
+- Never delete a key referenced by any row of any version or service, including tombstoned rows. Treat the output as a union: version rewrites copy keys and content addressing de-duplicates blobs, so several rows can reference the same key.
+- Any `Undecodable` means **delete nothing**. A row deleted between list and lookup appears as `Undecodable`; a re-run usually clears that observation.
+- Obtain a complete, consistent reference view, and apply a grace period. Blobs are uploaded before their row commits, and a failed CAS can leave an orphan.
+- Re-check references at deletion time and use coordination or a conditional delete that protects concurrent uploads and commits. Content-addressed keys can be re-uploaded by a writer between a GC's check and delete; re-checking alone does not close that race.
+
+The deletion API and coordination protocol are #1253 item 3 and are **not provided here**.
+
 ### Streaming restore for offloaded snapshots
 
 When an offloaded snapshot is restored, Sekiban opens the blob payload once and carries that non-seekable stream through
