@@ -847,11 +847,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             SafeThresholdTime: safeThresholdTime);
     }
 
+    private static void ClearDurableRebuildMarker(MultiProjectionGrainState s)
+    {
+        s.RebuildRequired = false;
+        s.RebuildOffendingEventId = null;
+        s.RebuildOffendingPosition = null;
+    }
+
     private bool ShouldSkipPersistForUnchangedSafeCheckpoint(
         string projectorVersion,
         string? safePosition,
         int? safeVersion)
     {
+        // A clean host can repair a durable marker left behind by an earlier persist, even without new events.
+        if (_stateStore.Committed is IRebuildMarkerState { RebuildRequired: true } &&
+            _host is not IRebuildSignalingHost { RebuildRequired: true })
+        {
+            return false;
+        }
+
         if (!_skipPersistWhenSafeCheckpointUnchanged)
         {
             return false;
@@ -1672,6 +1686,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // v9: Update Orleans state with key info only (auxiliary/monitoring). Assignment runs UNDER the write gate
             // (inside WriteOrleansStateWithRetryAsync -> ExecuteWriteAsync), so it commits atomically with the write and
             // cannot interleave with a concurrent fault-descriptor persist.
+            var liveHostIsClean = _host is not IRebuildSignalingHost { RebuildRequired: true };
             void ApplyPersistFields(MultiProjectionGrainState s)
             {
                 s.ProjectorName = projectorName;
@@ -1700,11 +1715,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         }
                         s.LastGoodEventsProcessed = _eventsProcessed;
 
-                        // SEK-G18 #6: the rebuilt checkpoint is now durably committed to the external store, so the durable
-                        // rebuild marker can be cleared — a subsequent activation may safely restore this fresh checkpoint.
-                        s.RebuildRequired = false;
-                        s.RebuildOffendingEventId = null;
-                        s.RebuildOffendingPosition = null;
+                        if (liveHostIsClean)
+                        {
+                            ClearDurableRebuildMarker(s);
+                        }
                     }
                 }
 
@@ -1810,6 +1824,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                 // Step 4: Update Orleans state. Assignment runs UNDER the write gate (via ExecuteWriteAsync) so it
                 // commits atomically with the write and cannot interleave with a concurrent fault-descriptor persist.
+                var liveHostIsClean = _host is not IRebuildSignalingHost { RebuildRequired: true };
                 void ApplyPersistFields(MultiProjectionGrainState s)
                 {
                     s.ProjectorName = projectorName;
@@ -1820,18 +1835,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                     if (externalStoreSaved)
                     {
-                    if (safeVersion is > 0)
-                    {
-                        s.LastGoodSafeVersion = safeVersion.Value;
-                    }
-                    if (!_retiredWatermarkAwaitingFreshSafeCheckpoint || safeVersion is > 0)
-                    {
-                        if (tempFileSize > 0)
-                            s.LastGoodPayloadBytes = tempFileSize;
-                        if (tempFileSize > 0)
-                            s.LastGoodOriginalSizeBytes = tempFileSize;
-                        s.LastGoodEventsProcessed = _eventsProcessed;
-                    }
+                        if (safeVersion is > 0)
+                        {
+                            s.LastGoodSafeVersion = safeVersion.Value;
+                        }
+                        if (!_retiredWatermarkAwaitingFreshSafeCheckpoint || safeVersion is > 0)
+                        {
+                            if (tempFileSize > 0)
+                                s.LastGoodPayloadBytes = tempFileSize;
+                            if (tempFileSize > 0)
+                                s.LastGoodOriginalSizeBytes = tempFileSize;
+                            s.LastGoodEventsProcessed = _eventsProcessed;
+                            if (liveHostIsClean)
+                            {
+                                ClearDurableRebuildMarker(s);
+                            }
+                        }
                     }
 
                     s.SerializedState = null;
