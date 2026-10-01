@@ -738,6 +738,11 @@ projector version**; the service scope is part of the checkpoint identity.
    projector name, and version, including its lifecycle/generation metadata. Do not delete events.
    The test uses `IMultiProjectionStateStore.DeleteAsync(projectorName, projectorVersion)` with
    a store explicitly scoped to the test service.
+   If the checkpoint payload is offloaded to blob storage (an `OffloadKey` is set on the row), deleting
+   the row does not delete the blob, and the key is lost with the row. Record the `OffloadKey` before
+   deleting, confirm no other checkpoint references it, and clean it up under your blob retention
+   policy; `IBlobStorageSnapshotAccessor` has no delete API, and the PostgreSQL/Cosmos `DeleteAsync`
+   leave blob cleanup to the operator.
 2. Immediately deactivate the grain with `RequestDeactivationAsync` so the next request uses a
    fresh activation. Restarting the host is an alternative way to replace the activation; the
    verification test exercises grain deactivation. A stale-token save rejection during deactivation

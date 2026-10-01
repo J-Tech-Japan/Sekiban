@@ -687,6 +687,11 @@ Service scope も checkpoint の識別情報の一部です。
    だけを lifecycle/generation metadata ごと削除します。イベントは削除しません。テストは test service
    に明示的に scope を固定した store の `IMultiProjectionStateStore.DeleteAsync(projectorName,
    projectorVersion)` を使います。
+   Checkpoint payload が blob storage に offload されている（行に `OffloadKey` がある）場合、行を削除しても
+   blob は削除されず、キーも行と一緒に失われます。削除前に `OffloadKey` を記録し、他の checkpoint
+   から参照されていないことを確認したうえで、blob の保持方針に従って片付けてください。
+   `IBlobStorageSnapshotAccessor` には削除 API がなく、PostgreSQL/Cosmos の `DeleteAsync` も blob の
+   cleanup は運用側に委ねています。
 2. 直ちに `RequestDeactivationAsync` で grain を deactivate し、次のリクエストを新しい activation で
    処理させます。Host の再起動も activation を置き換える方法ですが、検証テストは grain deactivation
    を実行します。Provider 削除直後の deactivation 中に古い token の保存が拒否されるのは想定内で、
