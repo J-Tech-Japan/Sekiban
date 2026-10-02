@@ -198,10 +198,11 @@ public class CoreGeneralSekibanExecutor
     public CoreGeneralSekibanExecutor(
         IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
         TagConsistencyFenceOptions tagConsistencyFenceOptions, ExecutorSizeGateOptions? executorSizeGateOptions = null,
-        IEventPublisher? eventPublisher = null, IExecutedUserProvider? executedUserProvider = null)
+        IEventPublisher? eventPublisher = null, IExecutedUserProvider? executedUserProvider = null,
+        IServiceIdProvider? serviceIdProvider = null)
         : this(eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider,
             ProcessSharedSortableUniqueIdServices.Generator, ProcessSharedSortableUniqueIdServices.SeedCoordinator,
-            new DefaultServiceIdProvider(), SortableUniqueIdWaitPolicy.System,
+            serviceIdProvider ?? new DefaultServiceIdProvider(), SortableUniqueIdWaitPolicy.System,
             executorSizeGateOptions, tagConsistencyFenceOptions)
     {
     }

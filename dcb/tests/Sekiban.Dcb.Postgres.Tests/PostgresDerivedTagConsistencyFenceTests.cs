@@ -22,29 +22,23 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
     private sealed record Command : ICommand;
 
     [Theory]
-    [InlineData(false, TagConsistencyFenceMode.DeriveFromReservations)]
-    [InlineData(true, TagConsistencyFenceMode.DeriveFromReservations)]
-    [InlineData(false, TagConsistencyFenceMode.Off)]
-    [InlineData(true, TagConsistencyFenceMode.Off)]
-    public async Task SeparateReservationCaches_OnlyFencedWritersConflict(bool update, TagConsistencyFenceMode mode)
+    [InlineData(false, TagConsistencyFenceMode.DeriveFromReservations, Service)]
+    [InlineData(false, TagConsistencyFenceMode.DeriveFromReservations, "tenant-x")]
+    [InlineData(true, TagConsistencyFenceMode.DeriveFromReservations, "tenant-x")]
+    [InlineData(true, TagConsistencyFenceMode.DeriveFromReservations, Service)]
+    [InlineData(false, TagConsistencyFenceMode.Off, Service)]
+    [InlineData(true, TagConsistencyFenceMode.Off, Service)]
+    public async Task SeparateReservationCaches_OnlyFencedWritersConflict(bool update, TagConsistencyFenceMode mode, string serviceId)
     {
-        // Provision the same enablement epoch for both the fenced case and the legacy mutant.
-        await using (var connection = new NpgsqlConnection(Fixture.ConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var epoch = new NpgsqlCommand(
-                "INSERT INTO dcb_tag_head_enablement_epochs (\"ServiceId\", \"EnabledAtUtc\") VALUES (@service, @enabled)", connection);
-            epoch.Parameters.AddWithValue("service", Service);
-            epoch.Parameters.AddWithValue("enabled", DateTime.UtcNow);
-            await epoch.ExecuteNonQueryAsync();
-        }
-        var store = new PostgresEventStore(Fixture.DbContextFactory, Fixture.DomainTypes.EventTypes, new DefaultServiceIdProvider());
+        var serviceIdProvider = new FixedServiceIdProvider(serviceId);
+        await ProvisionEpochAsync(serviceId);
+        var store = new PostgresEventStore(Fixture.DbContextFactory, Fixture.DomainTypes.EventTypes, serviceIdProvider);
         var id = Guid.NewGuid();
         var tag = new StudentTag(id);
         string? initialPosition = null;
         if (update)
         {
-            var seed = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, Fixture.DomainTypes), Fixture.DomainTypes);
+            var seed = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, Fixture.DomainTypes), Fixture.DomainTypes, new TagConsistencyFenceOptions(), serviceIdProvider: serviceIdProvider);
             var seedResult = await seed.ExecuteCommandAsync(ctx => ctx.AppendEvent(new StudentCreated(id, "seed"), tag));
             Assert.True(seedResult.IsSuccess, seedResult.IsSuccess ? "" : seedResult.GetException().ToString());
             initialPosition = seedResult.GetValue().SortableUniqueId;
@@ -52,8 +46,8 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
 
         var barrier = new WriteBarrierStore(store);
         // One store, two independent actor caches. DI enables the option through its public registration surface.
-        using var firstProvider = Provider(barrier, mode);
-        using var secondProvider = Provider(barrier, mode);
+        using var firstProvider = Provider(barrier, mode, serviceIdProvider);
+        using var secondProvider = Provider(barrier, mode, serviceIdProvider);
         var first = firstProvider.GetRequiredService<GeneralSekibanExecutor>();
         var second = secondProvider.GetRequiredService<GeneralSekibanExecutor>();
         async Task<ResultBox<EventOrNone>> Handler(Command _, ICommandContext context)
@@ -83,13 +77,14 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
         {
             var conflict = Assert.IsType<ExpectedTagPositionConflictException>(Assert.Single(results, r => !r.IsSuccess).GetException());
             var pair = Assert.Single(conflict.Pairs);
+            Assert.Equal(serviceId, pair.ServiceId);
             Assert.Equal(tag.GetTag(), pair.Tag);
             Assert.Equal(update ? TagHeadExpectation.Exact(initialPosition!) : TagHeadExpectation.AssertEmpty(), pair.Expected);
             Assert.Equal(Assert.Single(results, r => r.IsSuccess).GetValue().SortableUniqueId, pair.ObservedPosition);
         }
         Assert.Equal(fenced ? 2 : 0, barrier.FencedArrivals);
         Assert.Equal(fenced ? 0 : 2, barrier.LegacyArrivals);
-        await VerifyRowsAsync(tag.GetTag(), (update ? 1 : 0) + (fenced ? 1 : 2));
+        await VerifyRowsAsync(serviceId, tag.GetTag(), (update ? 1 : 0) + (fenced ? 1 : 2));
 
         if (fenced && update)
         {
@@ -97,14 +92,26 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
             var loser = results[0].IsSuccess ? second : first;
             var retry = await loser.ExecuteAsync(new Command(), Handler);
             Assert.True(retry.IsSuccess, retry.IsSuccess ? "" : retry.GetException().ToString());
-            await VerifyRowsAsync(tag.GetTag(), 3);
+            await VerifyRowsAsync(serviceId, tag.GetTag(), 3);
         }
     }
 
-    private ServiceProvider Provider(IEventStore store, TagConsistencyFenceMode mode)
+    private async Task ProvisionEpochAsync(string serviceId)
+    {
+        await using var connection = new NpgsqlConnection(Fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var epoch = new NpgsqlCommand(
+            "INSERT INTO dcb_tag_head_enablement_epochs (\"ServiceId\", \"EnabledAtUtc\") VALUES (@service, @enabled)", connection);
+        epoch.Parameters.AddWithValue("service", serviceId);
+        epoch.Parameters.AddWithValue("enabled", DateTime.UtcNow);
+        await epoch.ExecuteNonQueryAsync();
+    }
+
+    private ServiceProvider Provider(IEventStore store, TagConsistencyFenceMode mode, IServiceIdProvider serviceIdProvider)
     {
         var services = new ServiceCollection();
         services.AddSingleton(Fixture.DomainTypes);
+        services.AddSingleton(serviceIdProvider);
         services.AddSingleton(store);
         services.AddSingleton<IActorObjectAccessor>(new InMemoryObjectAccessor(store, Fixture.DomainTypes));
         services.AddSekibanDcbTagConsistencyFence(o => o.Mode = mode);
@@ -112,7 +119,7 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
         return services.BuildServiceProvider();
     }
 
-    private async Task VerifyRowsAsync(string tag, int expectedCount)
+    private async Task VerifyRowsAsync(string serviceId, string tag, int expectedCount)
     {
         // Fresh physical connection: observe committed rows independently of the executors and their actor caches.
         await using var connection = new NpgsqlConnection(Fixture.ConnectionString);
@@ -123,7 +130,7 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
                    (SELECT "HeadPosition" FROM dcb_tag_heads WHERE "ServiceId" = @service AND "Tag" = @tag)
             FROM dcb_tags WHERE "ServiceId" = @service AND "Tag" = @tag
             """, connection);
-        command.Parameters.AddWithValue("service", Service);
+        command.Parameters.AddWithValue("service", serviceId);
         command.Parameters.AddWithValue("tag", tag);
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());

@@ -60,14 +60,11 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
 
     public InMemoryDcbExecutor(
         DcbDomainTypes domainTypes, IEventStore eventStore, TagConsistencyFenceOptions tagConsistencyFenceOptions,
-        ExecutorSizeGateOptions? executorSizeGateOptions = null, IExecutedUserProvider? executedUserProvider = null)
+        ExecutorSizeGateOptions? executorSizeGateOptions = null, IExecutedUserProvider? executedUserProvider = null,
+        IServiceIdProvider? serviceIdProvider = null)
+        : this(InMemoryExecutorConstruction.WithFence(domainTypes, eventStore, tagConsistencyFenceOptions,
+            executorSizeGateOptions, executedUserProvider, serviceIdProvider))
     {
-        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
-        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
-        _accessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-        var publisher = new InMemoryMultiProjectionEventPublisher(_accessor);
-        _inner = new GeneralSekibanExecutor(eventStore, _accessor, domainTypes,
-            tagConsistencyFenceOptions, executorSizeGateOptions, publisher, executedUserProvider);
     }
 
     public InMemoryDcbExecutor(
@@ -75,14 +72,18 @@ public class InMemoryDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecut
         ISortableUniqueIdGenerator sortableUniqueIdGenerator, SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
         IServiceIdProvider serviceIdProvider, TagConsistencyFenceOptions tagConsistencyFenceOptions,
         ExecutorSizeGateOptions? executorSizeGateOptions = null)
+        : this(InMemoryExecutorConstruction.WithFence(domainTypes, eventStore, tagConsistencyFenceOptions,
+            executorSizeGateOptions, executedUserProvider, serviceIdProvider,
+            sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator))
     {
-        _domainTypes = domainTypes ?? throw new ArgumentNullException(nameof(domainTypes));
-        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
-        _accessor = new InMemoryObjectAccessor(_eventStore, _domainTypes);
-        var publisher = new InMemoryMultiProjectionEventPublisher(_accessor);
-        _inner = new GeneralSekibanExecutor(eventStore, _accessor, domainTypes, publisher, executedUserProvider,
-            sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator, serviceIdProvider,
-            executorSizeGateOptions, tagConsistencyFenceOptions);
+    }
+
+    private InMemoryDcbExecutor(InMemoryExecutorConstruction construction)
+    {
+        _domainTypes = construction.DomainTypes;
+        _eventStore = construction.EventStore;
+        _accessor = construction.Accessor;
+        _inner = new GeneralSekibanExecutor(construction.General);
     }
 
     /// <summary>Creates an in-memory executor using the supplied monotonic allocator and ambient service identity.</summary>

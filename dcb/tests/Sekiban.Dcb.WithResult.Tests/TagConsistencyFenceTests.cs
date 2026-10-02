@@ -41,6 +41,13 @@ public sealed class TagConsistencyFenceTests
     private static GeneralSekibanExecutor Executor(RecordingStore store, RecordingAccessor accessor, bool on = true) =>
         new(store, accessor, Domain, on ? On : new TagConsistencyFenceOptions());
 
+    private static (RecordingStore Store, RecordingAccessor Accessor, GeneralSekibanExecutor Executor) Setup()
+    {
+        var store = new RecordingStore();
+        var accessor = new RecordingAccessor();
+        return (store, accessor, Executor(store, accessor));
+    }
+
     [Theory]
     [InlineData(false, "", TagHeadExpectationKind.NoEnforcement)]
     [InlineData(true, "", TagHeadExpectationKind.AssertEmpty)]
@@ -87,10 +94,9 @@ public sealed class TagConsistencyFenceTests
     [Fact]
     public async Task DifferingVersionsForSameTag_RejectBeforeAnyReservation()
     {
-        var store = new RecordingStore();
-        var accessor = new RecordingAccessor();
+        var (store, accessor, executor) = Setup();
         var inner = new Tag("ambiguous");
-        var result = await Executor(store, accessor).ExecuteCommandAsync(async ctx =>
+        var result = await executor.ExecuteCommandAsync(async ctx =>
         {
             await ctx.AppendEvent(Payload(), [inner]);
             await ctx.AppendEvent(Payload(), [ConsistencyTag.FromTagWithSortableUniqueId(inner, SortableUniqueId.GenerateNew())]);
@@ -208,9 +214,7 @@ public sealed class TagConsistencyFenceTests
             return EventOrNone.Event(Payload(), tag);
         });
         Assert.Same(conflict, result.GetException());
-        Assert.Equal(1, accessor.Cancelled);
-        Assert.Equal(0, accessor.Confirmed);
-        Assert.Equal(1, accessor.Notified);
+        AssertConflictCleanup(accessor);
     }
 
     [Fact]
@@ -254,9 +258,7 @@ public sealed class TagConsistencyFenceTests
         var accessor = new RecordingAccessor();
         var result = await Executor(store, accessor).CommitSerializableEventsAsync(Request());
         Assert.Same(conflict, result.GetException());
-        Assert.Equal(1, accessor.Cancelled);
-        Assert.Equal(0, accessor.Confirmed);
-        Assert.Equal(1, accessor.Notified);
+        AssertConflictCleanup(accessor);
     }
 
     [Theory]
@@ -281,9 +283,8 @@ public sealed class TagConsistencyFenceTests
     [InlineData("0001")]
     public async Task SerializedV1_DerivesFromReservationInputs(string position)
     {
-        var store = new RecordingStore();
-        var accessor = new RecordingAccessor();
-        var result = await Executor(store, accessor).CommitSerializableEventsAsync(Request(position));
+        var (store, accessor, executor) = Setup();
+        var result = await executor.CommitSerializableEventsAsync(Request(position));
         Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.Equal(position == "" ? TagHeadExpectation.AssertEmpty() : TagHeadExpectation.Exact(position),
             Assert.Single(store.Specification!.Entries).Expectation);
@@ -293,9 +294,7 @@ public sealed class TagConsistencyFenceTests
     [Fact]
     public async Task SerializedV1_PreservesNullAndDuplicateRejection_AndNoOp()
     {
-        var store = new RecordingStore();
-        var accessor = new RecordingAccessor();
-        var executor = Executor(store, accessor);
+        var (store, accessor, executor) = Setup();
         Assert.IsType<ArgumentException>((await executor.CommitSerializableEventsAsync(Request(null))).GetException());
         var req = Request();
         Assert.IsType<InvalidOperationException>((await executor.CommitSerializableEventsAsync(req with
@@ -311,9 +310,7 @@ public sealed class TagConsistencyFenceTests
         var req = Request();
         var entries = new TagHeadExpectationEntry[] { new(Service, "Fence:serialized", TagHeadExpectation.NoEnforcement()) };
         var request = new VersionedExpectedTagPositionSerializedCommitRequest(2, req.EventCandidates, req.ConsistencyTags, entries);
-        var store = new RecordingStore();
-        var accessor = new RecordingAccessor();
-        var executor = Executor(store, accessor);
+        var (store, accessor, executor) = Setup();
         Assert.True((await executor.CommitSerializableEventsWithExpectedTagPositionsAsync(request)).IsSuccess);
         Assert.Equal(TagHeadExpectation.NoEnforcement(), Assert.Single(store.Specification!.Entries).Expectation);
         store.Enabled = false;
@@ -344,35 +341,51 @@ public sealed class TagConsistencyFenceTests
         foreach (var fence in new[] { false, true })
         foreach (var allocator in new[] { false, true })
         foreach (var optionalServices in new[] { false, true })
-            yield return [type, gate, fence, allocator, optionalServices];
+        foreach (var customService in new[] { false, true })
+            yield return [type, gate, fence, allocator, optionalServices, customService];
     }
 
     [Theory]
     [MemberData(nameof(DiCases))]
-    public void DiResolution_HonorsFenceAndGate_WithAndWithoutAllocatorServices(Type type, bool gate, bool fence, bool allocator, bool optionalServices)
+    public async Task DiResolution_HonorsFenceGateAndServiceId(
+        Type type, bool gate, bool fence, bool allocator, bool optionalServices, bool customService)
+    {
+        var store = new RecordingStore();
+        using var provider = DiProvider(type, store, gate, fence, allocator, optionalServices, customService);
+        var executor = provider.GetRequiredService(type);
+        var result = executor is CoreGeneralSekibanExecutor core
+            ? await core.CommitSerializableEventsAsync(Request(), default)
+            : await ((ISerializedSekibanDcbExecutor)executor).CommitSerializableEventsAsync(Request());
+        Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
+        Assert.Equal(fence, store.Specification is not null);
+        if (fence)
+            Assert.Equal(customService ? "tenant-x" : Service, Assert.Single(store.Specification!.Entries).ServiceId);
+
+        store.Supported = false;
+        if (fence)
+            Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService(type));
+        else
+            Assert.NotNull(provider.GetRequiredService(type));
+    }
+
+    private static ServiceProvider DiProvider(
+        Type type, RecordingStore store, bool gate, bool fence, bool allocator, bool optionalServices, bool customService)
     {
         var services = new ServiceCollection();
         services.AddSingleton(Domain);
-        services.AddSingleton<IEventStore>(new Sekiban.Dcb.Testing.InMemoryEventStore(Domain.EventTypes));
+        services.AddSingleton<IEventStore>(store);
         services.AddSingleton<IActorObjectAccessor>(new RecordingAccessor());
         if (optionalServices)
         {
             services.AddSingleton<IEventPublisher, NoPublisher>();
             services.AddSingleton<IExecutedUserProvider, NoUser>();
         }
-        if (allocator)
-        {
-            services.AddSekibanDcbSortableUniqueIdGenerator();
-            services.AddSingleton<IServiceIdProvider, DefaultServiceIdProvider>();
-        }
+        if (allocator) services.AddSekibanDcbSortableUniqueIdGenerator();
+        if (customService) services.AddSingleton<IServiceIdProvider>(new FixedServiceIdProvider("tenant-x"));
         if (gate) services.AddSekibanDcbExecutorSizeGate(_ => { });
         if (fence) services.AddSekibanDcbTagConsistencyFence(o => o.Mode = TagConsistencyFenceMode.DeriveFromReservations);
         services.AddTransient(type);
-        using var provider = services.BuildServiceProvider();
-        if (fence)
-            Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService(type));
-        else
-            Assert.NotNull(provider.GetRequiredService(type));
+        return services.BuildServiceProvider();
     }
 
     private sealed class NoPublisher : IEventPublisher
@@ -380,6 +393,13 @@ public sealed class TagConsistencyFenceTests
         public Task PublishAsync(IReadOnlyCollection<(Event Event, IReadOnlyCollection<ITag> Tags)> events, CancellationToken ct = default) => Task.CompletedTask;
     }
     private sealed class NoUser : IExecutedUserProvider { public string GetExecutedUser() => "test"; }
+
+    private static void AssertConflictCleanup(RecordingAccessor accessor)
+    {
+        Assert.Equal(1, accessor.Cancelled);
+        Assert.Equal(0, accessor.Confirmed);
+        Assert.Equal(1, accessor.Notified);
+    }
 
     private sealed class RecordingAccessor : IActorObjectAccessor, ITagConsistentActorCommon
     {

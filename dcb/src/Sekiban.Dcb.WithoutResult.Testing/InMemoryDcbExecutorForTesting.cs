@@ -51,8 +51,9 @@ public class InMemoryDcbExecutorForTesting : InMemoryDcbExecutor, IExecutorRunti
 
     public InMemoryDcbExecutorForTesting(
         DcbDomainTypes domainTypes, IEventStore eventStore, TagConsistencyFenceOptions tagConsistencyFenceOptions,
-        ExecutorSizeGateOptions? executorSizeGateOptions = null, IExecutedUserProvider? executedUserProvider = null)
-        : base(domainTypes, eventStore, tagConsistencyFenceOptions, executorSizeGateOptions, executedUserProvider)
+        ExecutorSizeGateOptions? executorSizeGateOptions = null, IExecutedUserProvider? executedUserProvider = null,
+        IServiceIdProvider? serviceIdProvider = null)
+        : base(domainTypes, eventStore, tagConsistencyFenceOptions, executorSizeGateOptions, executedUserProvider, serviceIdProvider)
     {
     }
 

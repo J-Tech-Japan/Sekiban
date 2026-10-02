@@ -117,11 +117,11 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     public GeneralSekibanExecutor(
         IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
         TagConsistencyFenceOptions tagConsistencyFenceOptions, ExecutorSizeGateOptions? executorSizeGateOptions = null,
-        IEventPublisher? eventPublisher = null, IExecutedUserProvider? executedUserProvider = null)
-        : this(CreateResultConstruction(actorAccessor, () => CoreGeneralSekibanExecutorFactory.CreateWithFence(
+        IEventPublisher? eventPublisher = null, IExecutedUserProvider? executedUserProvider = null,
+        IServiceIdProvider? serviceIdProvider = null)
+        : this(GeneralSekibanExecutorConstruction.WithFence(
             eventStore, actorAccessor, domainTypes, tagConsistencyFenceOptions, executorSizeGateOptions,
-            eventPublisher, executedUserProvider, ProcessSharedSortableUniqueIdServices.Generator,
-            ProcessSharedSortableUniqueIdServices.SeedCoordinator, new DefaultServiceIdProvider())))
+            eventPublisher, executedUserProvider, serviceIdProvider))
     {
     }
 
@@ -131,13 +131,14 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
         ISortableUniqueIdGenerator sortableUniqueIdGenerator, SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
         IServiceIdProvider serviceIdProvider, ExecutorSizeGateOptions? executorSizeGateOptions = null,
         TagConsistencyFenceOptions? tagConsistencyFenceOptions = null)
-        : this(CreateResultConstruction(actorAccessor, () => CoreGeneralSekibanExecutorFactory.CreateWithFence(
+        : this(GeneralSekibanExecutorConstruction.WithFence(
             eventStore, actorAccessor, domainTypes, tagConsistencyFenceOptions, executorSizeGateOptions,
-            eventPublisher, executedUserProvider, sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator, serviceIdProvider)))
+            eventPublisher, executedUserProvider, serviceIdProvider,
+            sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator))
     {
     }
 
-    private GeneralSekibanExecutor(GeneralSekibanExecutorConstruction construction)
+    internal GeneralSekibanExecutor(GeneralSekibanExecutorConstruction construction)
     {
         _actorAccessor = construction.ActorAccessor;
         _core = construction.Core;
