@@ -491,10 +491,13 @@ non-conflict observation resets the sequence. The hosted worker waits its normal
 `MvApplySource.Stream` skips only the position comparison and Superseded handling. It still locks registry rows before
 target rows, but duplicate stream payloads require idempotent projector SQL. The Orleans grain uses stream hints only
 to wake catch-up. This guard does not reject stale active generations; generation fencing remains a follow-up.
-Custom `IMvRegistryStore` implementations must implement the additive `LockEntriesForApplyAsync` operation; its default
-throws rather than silently applying without a lock. Existing protected executor signatures remain available. Derived
-callers using `CompleteCatchUpAsync` with only a status snapshot still lock an empty-batch write, but cannot perform its
-original-snapshot comparison; the built-in catch-up paths carry the raw snapshot internally.
+`IMvRegistryStore.SupportsApplyLocking` is false by default and true for all four built-in providers. A store that
+does not support locking degrades to unguarded apply, with one warning per executor; concurrent appliers can then
+double-apply events. Implement `LockEntriesForApplyAsync` and report `SupportsApplyLocking = true` to retain the guard.
+Decorators MUST forward both `SupportsApplyLocking` and `LockEntriesForApplyAsync`; otherwise they silently lose the
+guard. Existing protected executor signatures remain available. The protected `CompleteCatchUpAsync` path compares
+against the snapshot's `OriginalEntries`. A manually constructed snapshot supplies its checkpoint as the expectation;
+actual registry entries are always read separately for table bindings.
 
 Materialized views must be safe to replay. The usual pattern is:
 

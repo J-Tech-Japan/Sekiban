@@ -1062,45 +1062,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
             new MvTransitionIdentity(serviceId, host.ViewName, host.ViewVersion));
         if (!readResult.IsSuccess)
         {
-            var exception = readResult.GetException();
-            if (!classifyFailures)
-            {
-                throw exception;
-            }
-
-            if (exception is MvStateReadingBatchNotSupportedException batchException)
-            {
-                return CatchUpFailure(
-                    MvCatchUpOutcome.PermanentUnsupported,
-                    MvStateReadingBatchNotSupportedException.CatchUpErrorCode,
-                    MvStateReadingBatchNotSupportedException.CatchUpErrorMessage,
-                    isRetryable: false,
-                    eventCount: batchException.EventCount);
-            }
-
-            if (exception is NotSupportedException)
-            {
-                return CatchUpFailure(
-                    MvCatchUpOutcome.PermanentUnsupported,
-                    "unsupported-read",
-                    "The event store does not support the required catch-up read.",
-                    isRetryable: false);
-            }
-
-            _logger.LogWarning(
-                exception,
-                "Failed to read events for materialized view {ViewName}/{ViewVersion}.",
-                host.ViewName,
-                host.ViewVersion);
-            return new MvCatchUpResult(0, false)
-            {
-                Outcome = MvCatchUpOutcome.FailedRead,
-                ErrorCode = "event-read-failed",
-                ErrorMessage = "The event store read failed; the catch-up cycle remains incomplete.",
-                IsRetryable = true,
-                ObservedAtUtc = DateTimeOffset.UtcNow,
-                ProjectionStatus = currentStatus with { Status = MvStatus.Faulted }
-            };
+            return HandleCatchUpReadFailure(host, readResult.GetException(), currentStatus, classifyFailures);
         }
 
         var safeThreshold = CreateSafeThreshold(_options.SafeWindowMs);
@@ -1121,48 +1083,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
 
         if (batch.Count == 0)
         {
-            var emptyTruth = currentStatus.CurrentCheckpointTruth.IsKnown &&
-                !currentStatus.CurrentCheckpointTruth.IsKnownZero
-                    ? currentStatus.CurrentCheckpointTruth
-                    : MvCheckpointTruth.KnownZero();
-            // An empty read only establishes known-zero when no authoritative current checkpoint exists. Replaying
-            // an already caught-up projection must be a pure observation: writing MinValue here would update the
-            // registry timestamp and can make a valid non-zero checkpoint look like a silent-zero transition.
-            if (!currentStatus.CurrentCheckpointTruth.IsKnown)
-            {
-                await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-                await MvLifecycleTestHooks.InvokeBeforeApplyTransactionAsync(connection, cancellationToken).ConfigureAwait(false);
-                await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-                if (!await LockAndCheckApplyAsync(host, serviceId, transaction,
-                        NormalizeRegistryPosition(originalEntries ?? []), originalEntries is not null, cancellationToken).ConfigureAwait(false))
-                {
-                    await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                    return Superseded(host, serviceId, NormalizeRegistryPosition(originalEntries ?? []), currentStatus);
-                }
-                await _registryStore.UpdatePositionAsync(
-                        new MvPositionUpdate(
-                            serviceId,
-                            host.ViewName,
-                            host.ViewVersion,
-                            SortableUniqueId.MinValue.Value,
-                            MvApplySource.CatchUp,
-                            AppliedEventVersionDelta: 0)
-                        {
-                            CheckpointTruth = emptyTruth
-                        },
-                        transaction, cancellationToken)
-                    .ConfigureAwait(false);
-                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            }
-            return new MvCatchUpResult(0, false)
-            {
-                Outcome = MvCatchUpOutcome.Empty,
-                ProjectionStatus = currentStatus with
-                {
-                    CurrentCheckpointTruth = emptyTruth,
-                    Status = catchUpStatus
-                }
-            };
+            return await CompleteEmptyCatchUpAsync(host, serviceId, currentStatus, catchUpStatus,
+                originalEntries, cancellationToken).ConfigureAwait(false);
         }
 
         var safeBatch = new List<SerializableEvent>(batch.Count);
@@ -1222,6 +1144,97 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
         };
     }
 
+    private async Task<MvCatchUpResult> CompleteEmptyCatchUpAsync(
+        IMvApplyHost host, string serviceId, MvProjectionStatusSnapshot currentStatus, MvStatus catchUpStatus,
+        IReadOnlyList<MvRegistryEntry>? originalEntries, CancellationToken cancellationToken)
+    {
+        var emptyTruth = currentStatus.CurrentCheckpointTruth.IsKnown &&
+            !currentStatus.CurrentCheckpointTruth.IsKnownZero
+                ? currentStatus.CurrentCheckpointTruth
+                : MvCheckpointTruth.KnownZero();
+        // An empty read only establishes known-zero when no authoritative current checkpoint exists. Replaying
+        // an already caught-up projection must be a pure observation: writing MinValue here would update the
+        // registry timestamp and can make a valid non-zero checkpoint look like a silent-zero transition.
+        if (!currentStatus.CurrentCheckpointTruth.IsKnown)
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await MvLifecycleTestHooks.InvokeBeforeApplyTransactionAsync(connection, cancellationToken).ConfigureAwait(false);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            if (!await LockAndCheckApplyAsync(host, serviceId, transaction,
+                    NormalizeRegistryPosition(originalEntries ?? []), originalEntries is not null, cancellationToken).ConfigureAwait(false))
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return Superseded(host, serviceId, NormalizeRegistryPosition(originalEntries ?? []), currentStatus);
+            }
+            await _registryStore.UpdatePositionAsync(
+                    new MvPositionUpdate(
+                        serviceId,
+                        host.ViewName,
+                        host.ViewVersion,
+                        SortableUniqueId.MinValue.Value,
+                        MvApplySource.CatchUp,
+                        AppliedEventVersionDelta: 0)
+                    {
+                        CheckpointTruth = emptyTruth
+                    },
+                    transaction, cancellationToken)
+                .ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        return new MvCatchUpResult(0, false)
+        {
+            Outcome = MvCatchUpOutcome.Empty,
+            ProjectionStatus = currentStatus with
+            {
+                CurrentCheckpointTruth = emptyTruth,
+                Status = catchUpStatus
+            }
+        };
+    }
+
+    private MvCatchUpResult HandleCatchUpReadFailure(
+        IMvApplyHost host, Exception exception, MvProjectionStatusSnapshot currentStatus, bool classifyFailures)
+    {
+        if (!classifyFailures)
+        {
+            throw exception;
+        }
+
+        if (exception is MvStateReadingBatchNotSupportedException batchException)
+        {
+            return CatchUpFailure(
+                MvCatchUpOutcome.PermanentUnsupported,
+                MvStateReadingBatchNotSupportedException.CatchUpErrorCode,
+                MvStateReadingBatchNotSupportedException.CatchUpErrorMessage,
+                isRetryable: false,
+                eventCount: batchException.EventCount);
+        }
+
+        if (exception is NotSupportedException)
+        {
+            return CatchUpFailure(
+                MvCatchUpOutcome.PermanentUnsupported,
+                "unsupported-read",
+                "The event store does not support the required catch-up read.",
+                isRetryable: false);
+        }
+
+        _logger.LogWarning(
+            exception,
+            "Failed to read events for materialized view {ViewName}/{ViewVersion}.",
+            host.ViewName,
+            host.ViewVersion);
+        return new MvCatchUpResult(0, false)
+        {
+            Outcome = MvCatchUpOutcome.FailedRead,
+            ErrorCode = "event-read-failed",
+            ErrorMessage = "The event store read failed; the catch-up cycle remains incomplete.",
+            IsRetryable = true,
+            ObservedAtUtc = DateTimeOffset.UtcNow,
+            ProjectionStatus = currentStatus with { Status = MvStatus.Faulted }
+        };
+    }
+
     protected async Task<int> ApplySerializableEventsCoreAsync(
         IMvApplyHost host,
         IReadOnlyList<SerializableEvent> events,
@@ -1244,9 +1257,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
         {
             ThrowIfLifecycleDmlIsNotAllowed(capabilities, _options.InitializationMode, transition, identity);
         }
-        var entries = originalEntries ?? await ReadRegistryEntriesAtOperationBoundaryAsync(
-                host, serviceId, cancellationToken).ConfigureAwait(false);
-        var currentPosition = NormalizeRegistryPosition(entries);
+        // Binding rows must come from the registry, independently of the observed checkpoint expectation.
+        var entries = originalEntries is null
+            ? await ReadRegistryEntriesAtOperationBoundaryAsync(host, serviceId, cancellationToken).ConfigureAwait(false)
+            : await ReadRegistryEntriesAsync(serviceId, host.ViewName, host.ViewVersion, cancellationToken).ConfigureAwait(false);
+        var currentPosition = NormalizeRegistryPosition(originalEntries ?? entries);
         var orderedEvents = events
             .GroupBy(serializableEvent => serializableEvent.SortableUniqueIdValue)
             .Select(group => group.First())
@@ -1265,13 +1280,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
         if (capabilities.RequiresWholeBatchPolicyAuthorization)
         {
             return await ApplyVerifiedExecutionBatchAsync(
-                    host,
-                    serviceId,
-                    CreateBindings(host, entries),
+                    new ApplyContext(host, serviceId, CreateBindings(host, entries), source, capabilities, currentPosition),
                     orderedEvents,
-                    source,
-                    capabilities,
-                    currentPosition,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -1284,13 +1294,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
         {
             var applied = await ApplySerializableEventAsync(
                     connection,
-                    host,
-                    serviceId,
-                    bindings,
+                    new ApplyContext(host, serviceId, bindings, source, capabilities, currentPosition),
                     serializableEvent,
-                    currentPosition,
-                    source,
-                    capabilities,
                     cancellationToken)
                 .ConfigureAwait(false);
             if (applied is null)
@@ -1304,11 +1309,20 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
 
             appliedEvents += 1;
             lastApplied = serializableEvent.SortableUniqueIdValue;
-            currentPosition = lastApplied;
+            // Stream replay keeps the original durable checkpoint for the entire batch, including
+            // zero-row idempotent events. Only catch-up commits advance the next guard expectation.
+            if (source == MvApplySource.CatchUp)
+            {
+                currentPosition = lastApplied;
+            }
         }
 
         return new ApplyResult(appliedEvents, lastApplied);
     }
+
+    private sealed record ApplyContext(
+        IMvApplyHost Host, string ServiceId, MvTableBindings Bindings,
+        MvApplySource Source, MvModeCapabilities Capabilities, string? ExpectedPosition);
 
     /// <summary>
     ///     Mode 2 is the execution path for a pre-provisioned database. Every projector statement in the requested
@@ -1316,15 +1330,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
     ///     later policy denial atomic: no earlier event in the batch can have committed a row or checkpoint.
     /// </summary>
     private async Task<ApplyResult> ApplyVerifiedExecutionBatchAsync(
-        IMvApplyHost host,
-        string serviceId,
-        MvTableBindings bindings,
+        ApplyContext context,
         IReadOnlyList<SerializableEvent> events,
-        MvApplySource source,
-        MvModeCapabilities capabilities,
-        string? expectedPosition,
         CancellationToken cancellationToken)
     {
+        var (host, serviceId, bindings, source, capabilities, expectedPosition) = context;
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await MvLifecycleTestHooks.InvokeBeforeApplyTransactionAsync(connection, cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -1431,15 +1441,11 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
 
     private async Task<bool?> ApplySerializableEventAsync(
         TConnection connection,
-        IMvApplyHost host,
-        string serviceId,
-        MvTableBindings bindings,
+        ApplyContext context,
         SerializableEvent serializableEvent,
-        string? currentPosition,
-        MvApplySource source,
-        MvModeCapabilities capabilities,
         CancellationToken cancellationToken)
     {
+        var (host, serviceId, bindings, source, capabilities, currentPosition) = context;
         await MvLifecycleTestHooks.InvokeBeforeApplyTransactionAsync(connection, cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         if (!await LockAndCheckApplyAsync(host, serviceId, transaction, currentPosition,

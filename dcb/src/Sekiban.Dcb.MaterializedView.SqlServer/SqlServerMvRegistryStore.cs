@@ -506,22 +506,7 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
         CancellationToken cancellationToken = default) =>
         ReadEntriesWithConnectionAsync(_connectionString, serviceId, viewName, viewVersion, cancellationToken);
 
-    public bool SupportsApplyLocking => true;
-
-    public Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(
-        string serviceId, string viewName, int viewVersion, IDbTransaction transaction,
-        CancellationToken cancellationToken = default) =>
-        MvApplyRegistryLockReader.ReadAsync(serviceId, viewName, viewVersion, transaction,
-            MapEntry, cancellationToken, tableHint: "WITH (UPDLOCK, HOLDLOCK)");
-
-    private async Task<IReadOnlyList<MvRegistryEntry>> ReadEntriesWithConnectionAsync(
-        string connectionString,
-        string serviceId,
-        string viewName,
-        int viewVersion,
-        CancellationToken cancellationToken)
-    {
-        const string sql = """
+    private const string RegistryEntriesSql = """
             SELECT service_id AS ServiceId,
                    view_name AS ViewName,
                    view_version AS ViewVersion,
@@ -548,6 +533,54 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
               AND view_version = @ViewVersion
             ORDER BY logical_table;
             """;
+
+    private const string ApplyLockSql = """
+            SELECT service_id AS ServiceId,
+                   view_name AS ViewName,
+                   view_version AS ViewVersion,
+                   logical_table AS LogicalTable,
+                   physical_table AS PhysicalTable,
+                   status AS Status,
+                   current_position AS CurrentPosition,
+                   target_position AS TargetPosition,
+                   current_checkpoint_truth AS CurrentCheckpointTruth,
+                   target_checkpoint_truth AS TargetCheckpointTruth,
+                   last_sortable_unique_id AS LastSortableUniqueId,
+                   applied_event_version AS AppliedEventVersion,
+                   last_applied_source AS LastAppliedSource,
+                   last_applied_at AS LastAppliedAt,
+                   last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
+                   last_stream_received_at AS LastStreamReceivedAt,
+                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                   last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId,
+                   last_updated AS LastUpdated,
+                   metadata AS Metadata
+            FROM sekiban_mv_registry WITH (UPDLOCK, HOLDLOCK)
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ViewVersion
+            ORDER BY logical_table;
+            """;
+
+    private static readonly MvApplyRegistryLockReader.ReadOptions ApplyLockOptions =
+        new(ApplyLockSql, RegistryEntriesSql);
+
+    public bool SupportsApplyLocking => true;
+
+    public Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(
+        string serviceId, string viewName, int viewVersion, IDbTransaction transaction,
+        CancellationToken cancellationToken = default) =>
+        MvApplyRegistryLockReader.ReadAsync(serviceId, viewName, viewVersion, transaction,
+            MapEntry, cancellationToken, ApplyLockOptions);
+
+    private async Task<IReadOnlyList<MvRegistryEntry>> ReadEntriesWithConnectionAsync(
+        string connectionString,
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        CancellationToken cancellationToken)
+    {
+        const string sql = RegistryEntriesSql;
 
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);

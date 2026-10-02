@@ -17,7 +17,7 @@ internal static class GuardApiBaseline
         var registry = candidate.GetType(ns + "IMvRegistryStore", throwOnError: true)!;
         var capability = registry.GetProperty("SupportsApplyLocking");
         if (capability?.PropertyType.FullName != "System.Boolean" ||
-            capability?.GetMethod is not { IsAbstract: false })
+            capability.GetMethod is not { IsAbstract: false })
             throw new InvalidOperationException("The default SupportsApplyLocking capability is missing.");
 
         var method = registry.GetMethod("LockEntriesForApplyAsync");
@@ -27,7 +27,7 @@ internal static class GuardApiBaseline
         };
         if (method is null || method.IsAbstract ||
             !method.GetParameters().Select(parameter => parameter.ParameterType.FullName).SequenceEqual(expectedParameters) ||
-            method.GetParameters()[^1].IsOptional != true ||
+            !method.GetParameters()[^1].IsOptional ||
             method.ReturnType.GetGenericTypeDefinition().FullName != "System.Threading.Tasks.Task`1" ||
             method.ReturnType.GenericTypeArguments[0].GetGenericTypeDefinition().FullName != "System.Collections.Generic.IReadOnlyList`1" ||
             method.ReturnType.GenericTypeArguments[0].GenericTypeArguments[0].FullName != ns + "MvRegistryEntry")

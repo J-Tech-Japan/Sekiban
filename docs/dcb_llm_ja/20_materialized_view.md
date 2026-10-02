@@ -483,10 +483,15 @@ reset します。hosted worker は Superseded 後も通常の poll interval を
 
 `MvApplySource.Stream` は位置比較と Superseded 処理のみを省略します。レジストリ行を対象行より先にロックする順序は
 同じですが、stream payload の重複には冪等 SQL が必要です。Orleans grain の stream は catch-up を起こす hint のみです。
-stale active generation の拒否は別の follow-up です。独自 `IMvRegistryStore` は追加された `LockEntriesForApplyAsync` を
-実装してください。既定実装はロックなしで処理せず例外を投げます。既存の protected executor signature は維持します。
-status snapshot のみで `CompleteCatchUpAsync` を呼ぶ派生実装では、empty-batch 更新のロックは取得しますが元 snapshot
-との比較はできません。組み込み catch-up path は内部で raw snapshot を渡します。
+stale active generation の拒否は別の follow-up です。
+`IMvRegistryStore.SupportsApplyLocking` の既定値は false で、4 つの組み込み provider では true です。
+ロック非対応の store は executor ごとに 1 回警告を出し、ロックによるガードなしで適用します。この場合、
+並行 applier がイベントを二重適用する可能性があります。ガードを維持するため、`LockEntriesForApplyAsync` を
+実装し、`SupportsApplyLocking = true` を返すことを推奨します。decorator は `SupportsApplyLocking` と
+`LockEntriesForApplyAsync` の両方を必ず転送してください。転送しないとガードを暗黙に失います。
+既存の protected executor signature は維持します。protected `CompleteCatchUpAsync` path は snapshot の
+`OriginalEntries` と比較します。手動で構築した snapshot では、その checkpoint を期待値にします。
+テーブル binding 用の実際のレジストリ行は、常に期待値とは別に読み取ります。
 
 マテリアライズドビューはリプレイ可能である必要があります。基本パターンは次の通りです。
 

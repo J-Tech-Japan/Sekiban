@@ -452,22 +452,7 @@ public sealed partial class SqliteMvRegistryStore : MvForcedReverseRegistryStore
         CancellationToken cancellationToken = default) =>
         ReadEntriesWithConnectionAsync(_connectionString, serviceId, viewName, viewVersion, cancellationToken);
 
-    public bool SupportsApplyLocking => true;
-
-    public Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(
-        string serviceId, string viewName, int viewVersion, IDbTransaction transaction,
-        CancellationToken cancellationToken = default) =>
-        MvApplyRegistryLockReader.ReadAsync(serviceId, viewName, viewVersion, transaction,
-            MapEntry, cancellationToken, fenceSql: "UPDATE sekiban_mv_registry SET last_updated = last_updated WHERE service_id = @ServiceId AND view_name = @ViewName;");
-
-    private async Task<IReadOnlyList<MvRegistryEntry>> ReadEntriesWithConnectionAsync(
-        string connectionString,
-        string serviceId,
-        string viewName,
-        int viewVersion,
-        CancellationToken cancellationToken)
-    {
-        const string sql = """
+    private const string RegistryEntriesSql = """
             SELECT service_id AS ServiceId,
                    view_name AS ViewName,
                    view_version AS ViewVersion,
@@ -494,6 +479,26 @@ public sealed partial class SqliteMvRegistryStore : MvForcedReverseRegistryStore
               AND view_version = @ViewVersion
             ORDER BY logical_table;
             """;
+
+    private static readonly MvApplyRegistryLockReader.ReadOptions ApplyLockOptions =
+        new(RegistryEntriesSql, RegistryEntriesSql, "UPDATE sekiban_mv_registry SET last_updated = last_updated WHERE service_id = @ServiceId AND view_name = @ViewName;");
+
+    public bool SupportsApplyLocking => true;
+
+    public Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(
+        string serviceId, string viewName, int viewVersion, IDbTransaction transaction,
+        CancellationToken cancellationToken = default) =>
+        MvApplyRegistryLockReader.ReadAsync(serviceId, viewName, viewVersion, transaction,
+            MapEntry, cancellationToken, ApplyLockOptions);
+
+    private async Task<IReadOnlyList<MvRegistryEntry>> ReadEntriesWithConnectionAsync(
+        string connectionString,
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        CancellationToken cancellationToken)
+    {
+        const string sql = RegistryEntriesSql;
 
         await using var connection = new SqliteConnection(connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
