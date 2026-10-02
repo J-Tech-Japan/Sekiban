@@ -452,8 +452,8 @@ package の既定値は `CreateOrEnsure`、`Legacy`、`MvAllowAllSqlStatementPol
 
 ## 順序保証と冪等性
 
-同じ Orleans クラスタ内でも、Grain の重複活性化やイベントの再配信に対してプロジェクター SQL は冪等でなければ
-なりません（[Grain ディレクトリと重複活性化](10_orleans_setup.md#grain-ディレクトリと重複活性化)参照）。下記の
+リプレイやイベントの再配信に備える追加の防御として、プロジェクター SQL の冪等性を維持してください。同じ Orleans
+クラスタ内にも適用されます（[Grain ディレクトリと重複活性化](10_orleans_setup.md#grain-ディレクトリと重複活性化)参照）。下記の
 2種類の行を区別してください。
 
 - **最新値で上書きする行**（最新イベントの状態を表す行）: 古いイベントの再配信が新しい状態を上書きしないよう、
@@ -463,9 +463,30 @@ package の既定値は `CreateOrEnsure`、`Legacy`、`MvAllowAllSqlStatementPol
   適用したときに古いイベントの加算が欠落します。同じトランザクション内で適用済みイベント ID を台帳テーブルに
   記録して記録済みのイベントをスキップするか、`count = count + 1` のような加算ではなく元の行から集計を再計算して
   ください。
-バッチごとにトランザクションが
-あっても、別の活性化による再適用は防げません。行更新を冪等にしても MV レジストリの位置・状態の競合は防げず、
-レジストリのガードは別の課題（SEK-G103）です。
+
+catch-up のトランザクションは、対象行の SQL より先にレジストリ行を `logical_table` 順にロックします。
+PostgreSQL / MySQL は `FOR UPDATE`、SQL Server は `UPDLOCK, HOLDLOCK`、SQLite は activation と同じ
+no-op UPDATE の write fence 後に読み取ります。activation の `ORDER BY view_version, logical_table` と整合する順序です
+（SQLite は service/view 全体を fence します）。projector SQL と checkpoint 更新は同じトランザクションで実行します。
+
+ロック中の位置とバッチの開始位置を、共通の正規化で比較します。Unknown / LegacyNull は null、KnownZero は
+`SortableUniqueId.MinValue`、それ以外は最初の non-null の既知位置です。最初の empty-batch 更新も、空バッチの判断に
+使った元のレジストリ snapshot にこの helper を適用して期待値を作ります。新しい logical table が Unknown で、
+他の行が KnownZero の場合にも更新が一度で収束します。
+
+Mode 2 (`VerifyAndExecute`) の敗者はバッチ全体を rollback し、適用件数 0 の `MvCatchUpOutcome.Superseded` を返します。
+Mode 1 (`CreateOrEnsure`) は各イベントで、自分が直前に commit した位置を期待値にします。途中で競合した場合は
+commit 済みの件数と最後の ID を `Progressed` として報告します。最初の commit 前の競合は `Superseded` です。
+Superseded は failure counter と stall budget を消費しません。同じ正規化済み開始位置で 3 回連続すると、
+`apply-superseded-without-progress` の retryable failure に昇格します。位置の変化または競合以外の結果で回数を
+reset します。hosted worker は Superseded 後も通常の poll interval を待ちます。
+
+`MvApplySource.Stream` は位置比較と Superseded 処理のみを省略します。レジストリ行を対象行より先にロックする順序は
+同じですが、stream payload の重複には冪等 SQL が必要です。Orleans grain の stream は catch-up を起こす hint のみです。
+stale active generation の拒否は別の follow-up です。独自 `IMvRegistryStore` は追加された `LockEntriesForApplyAsync` を
+実装してください。既定実装はロックなしで処理せず例外を投げます。既存の protected executor signature は維持します。
+status snapshot のみで `CompleteCatchUpAsync` を呼ぶ派生実装では、empty-batch 更新のロックは取得しますが元 snapshot
+との比較はできません。組み込み catch-up path は内部で raw snapshot を渡します。
 
 マテリアライズドビューはリプレイ可能である必要があります。基本パターンは次の通りです。
 

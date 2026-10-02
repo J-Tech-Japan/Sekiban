@@ -459,7 +459,7 @@ callers that do not opt into the new boundary.
 
 ## Idempotency and Ordering
 
-Projector SQL must be idempotent under duplicate grain activation or event redelivery, including within one Orleans
+Idempotent projector SQL remains defence in depth for replay and event redelivery, including within one Orleans
 cluster (see [Grain directory and duplicate activations](10_orleans_setup.md#grain-directory-and-duplicate-activations)).
 Distinguish two kinds of rows:
 
@@ -470,9 +470,31 @@ Distinguish two kinds of rows:
   when overlapping activations apply events out of order. Record applied event IDs in a ledger table in the same
   transaction (and skip events already recorded), or recompute the aggregate from source rows instead of applying
   blind increments such as `count = count + 1`.
- Each batch having its own transaction does not
-prevent another activation from applying it again. Idempotent row updates do not fence races on the MV registry
-position/state; that registry guard is separate work (SEK-G103).
+
+Catch-up transactions lock the view's registry rows in `logical_table` order before any target-row SQL. PostgreSQL
+and MySQL use `FOR UPDATE`, SQL Server uses `UPDLOCK, HOLDLOCK`, and SQLite uses the activation-style no-op UPDATE
+write fence before reading. This order matches activation's `ORDER BY view_version, logical_table` registry locks
+(SQLite fences the whole service/view). Projector SQL and checkpoint updates share the locked transaction.
+
+The locked position must equal the batch's starting position. Both use the same normalization: Unknown/LegacyNull
+become null, KnownZero becomes `SortableUniqueId.MinValue`, and the first non-null known position wins. An initial
+empty-batch write compares against that helper applied to the original registry snapshot that drove the empty decision,
+even when status truth is Unknown because a newly added logical table has no checkpoint.
+
+A losing Mode 2 (`VerifyAndExecute`) batch rolls back and reports `MvCatchUpOutcome.Superseded` with zero applied events.
+Mode 1 (`CreateOrEnsure`) checks each event against the position it last committed. A conflict after a committed prefix
+reports `Progressed`, that prefix's count, and its last applied ID; a conflict before the first commit is `Superseded`.
+Superseded consumes neither the failure counter nor the stall budget. Three consecutive conflicts with the same
+normalized starting position become a retryable failure (`apply-superseded-without-progress`); a position change or a
+non-conflict observation resets the sequence. The hosted worker waits its normal poll interval after Superseded.
+
+`MvApplySource.Stream` skips only the position comparison and Superseded handling. It still locks registry rows before
+target rows, but duplicate stream payloads require idempotent projector SQL. The Orleans grain uses stream hints only
+to wake catch-up. This guard does not reject stale active generations; generation fencing remains a follow-up.
+Custom `IMvRegistryStore` implementations must implement the additive `LockEntriesForApplyAsync` operation; its default
+throws rather than silently applying without a lock. Existing protected executor signatures remain available. Derived
+callers using `CompleteCatchUpAsync` with only a status snapshot still lock an empty-batch write, but cannot perform its
+original-snapshot comparison; the built-in catch-up paths carry the raw snapshot internally.
 
 Materialized views must be safe to replay. The usual pattern is:
 

@@ -33,5 +33,6 @@ internal static class MvLifecycleTestHooks
 internal enum MvLifecycleLockPoint
 {
     ActivationRegistry = 0,
-    ForcedReverseRegistry = 1
+    ForcedReverseRegistry = 1,
+    ApplyRegistry = 2
 }

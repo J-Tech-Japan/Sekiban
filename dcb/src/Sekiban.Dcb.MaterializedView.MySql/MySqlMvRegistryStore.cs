@@ -425,6 +425,44 @@ public sealed partial class MySqlMvRegistryStore : MvForcedReverseRegistryStoreB
         CancellationToken cancellationToken = default) =>
         ReadEntriesWithConnectionAsync(_connectionString, readOnly: false, serviceId, viewName, viewVersion, cancellationToken);
 
+    public async Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(
+        string serviceId, string viewName, int viewVersion, IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT service_id AS ServiceId,
+                   view_name AS ViewName,
+                   view_version AS ViewVersion,
+                   logical_table AS LogicalTable,
+                   physical_table AS PhysicalTable,
+                   status AS Status,
+                   current_position AS CurrentPosition,
+                   target_position AS TargetPosition,
+                   current_checkpoint_truth AS CurrentCheckpointTruth,
+                   target_checkpoint_truth AS TargetCheckpointTruth,
+                   last_sortable_unique_id AS LastSortableUniqueId,
+                   applied_event_version AS AppliedEventVersion,
+                   last_applied_source AS LastAppliedSource,
+                   last_applied_at AS LastAppliedAt,
+                   last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
+                   last_stream_received_at AS LastStreamReceivedAt,
+                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
+                   last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId,
+                   last_updated AS LastUpdated,
+                   metadata AS Metadata
+            FROM sekiban_mv_registry
+            WHERE service_id = @ServiceId
+              AND view_name = @ViewName
+              AND view_version = @ViewVersion
+            ORDER BY logical_table
+            FOR UPDATE;
+            """;
+        var rows = await transaction.Connection!.QueryAsync(new CommandDefinition(
+            sql, new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion },
+            transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        return rows.Select(row => (MvRegistryEntry)MapEntry(ToDictionary(row))).ToList();
+    }
+
     private async Task<IReadOnlyList<MvRegistryEntry>> ReadEntriesWithConnectionAsync(
         string connectionString,
         bool readOnly,

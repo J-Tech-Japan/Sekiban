@@ -18,6 +18,8 @@ using var candidateContext = CreateMetadataContext(candidatePath, baselinePath);
 var baseline = baselineContext.LoadFromAssemblyPath(baselinePath);
 var candidate = candidateContext.LoadFromAssemblyPath(candidatePath);
 
+GuardApiBaseline.Verify(candidate);
+
 var baselineSurface = ApiSurface.Read(baseline);
 var candidateSurface = ApiSurface.Read(candidate);
 var removedTypes = baselineSurface.Keys.Except(candidateSurface.Keys, StringComparer.Ordinal).OrderBy(value => value).ToList();
