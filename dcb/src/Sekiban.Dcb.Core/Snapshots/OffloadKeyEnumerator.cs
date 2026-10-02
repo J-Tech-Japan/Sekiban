@@ -32,16 +32,18 @@ public static class OffloadKeyEnumerator
         ct.ThrowIfCancellationRequested();
         if (!listed.IsSuccess) throw listed.GetException();
         var entries = listed.GetValue();
+        // Slot reads go through the sole checkpoint owner (SEK-G20); this read-only coordinator never mutates or adopts.
+        var checkpoints = new CheckpointMutationCoordinator(store, static () => { });
         foreach (var entry in entries)
         {
             ct.ThrowIfCancellationRequested();
             CheckpointLifecycle? lifecycle = null;
             string? detail = null;
-            if (store is IGenerationAwareCheckpointStore checkpoints)
+            if (checkpoints.IsCapable)
             {
                 try
                 {
-                    var result = await checkpoints.ReadCheckpointSlotAsync(entry.ProjectorName, entry.ProjectorVersion, ct).ConfigureAwait(false);
+                    var result = await checkpoints.ReadSlotAsync(entry.ProjectorName, entry.ProjectorVersion, ct).ConfigureAwait(false);
                     ct.ThrowIfCancellationRequested();
                     if (!result.IsSuccess) throw result.GetException();
                     var slot = result.GetValue();
