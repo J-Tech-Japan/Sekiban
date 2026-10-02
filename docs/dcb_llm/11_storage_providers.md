@@ -785,12 +785,60 @@ capability. It is a durable DCB fence beneath Orleans reservations: it prevents 
 heads from appending after a partitioned/retired writer has bypassed the in-memory reservation layer. It is **not** a
 replacement for reservations, and it does not make arbitrary external effects exactly-once.
 
+### Derived fence (TagConsistencyFenceOptions)
+
+`Sekiban.Dcb.TagConsistencyFence.TagConsistencyFenceOptions.Mode` defaults to `Off`. Set it to
+`DeriveFromReservations` to apply the PostgreSQL expected-position protocol automatically to command reservation inputs,
+including serialized V1 commits. Both Orleans executor facades accept `tagConsistencyFenceOptions:`; DI uses the same
+registration as Core, General and InMemory executors:
+
+```csharp
+services.AddSekibanDcbTagConsistencyFence(
+    o => o.Mode = TagConsistencyFenceMode.DeriveFromReservations);
+services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
+```
+
+Import `Sekiban.Dcb.TagConsistencyFence`. Orleans supports global mode only; it has no typed
+`CommandExecutionOptions` overload. Non-Orleans executors also accept the nullable per-command
+`CommandExecutionOptions.TagConsistencyFence` selector: null inherits the global mode, and `Off` or
+`DeriveFromReservations` overrides it. Explicit `ExpectedTagPositions` takes precedence over derivation;
+`ConditionalAppend` is unchanged. Making the derived mode the default has not been decided.
+
+| Reservation version for an emitted consistency tag | Derived expectation |
+|---|---|
+| Empty string (read found no head) | `AssertEmpty` |
+| SortableUniqueId (including an explicit `ConsistencyTag` position) | `Exact` |
+| null (unread tag) | `NoEnforcement` |
+
+Non-consistency tags receive no expectation entry. Multi-event entries group by `GetTag()`; identical expectations
+merge, while differing expectations fail before reservation with `TagHeadExpectationValidationException`. No-op
+commands produce no specification. Derived entries use the store's `ExpectedTagPositionServiceId`, falling back to the
+executor's registered `IServiceIdProvider` only when the store supplies null.
+
+Mode on fails closed: construction rejects a store unless its capability descriptor supports `ExpectedTagPosition`
+and it implements `IExpectedTagPositionEventStore` (including a Hybrid store's hot-store capability). Every call
+checks support too (`ConditionNotSupportedException`). A missing enablement epoch raises
+`TagHeadEnforcementNotEnabledException` before the handler, even when all derived entries would be `NoEnforcement`.
+Roll out in this order: mode off → drain all old/bypassing writers → provision the service epoch → mode on.
+
+On `ExpectedTagPositionConflictException`, reservations are cancelled, never confirmed, and conflicting tag actors
+receive a best-effort refresh notification. Re-run the command to read current state and reserve again. Do not retry
+not-enabled failures; fix the rollout/configuration first.
+
+The fence does not cover unread emitted tags and is not a read-set guarantee. Reads through a `ConsistencyTag`
+wrapper can miss the accessed-state lookup (a pre-existing limitation). PostgreSQL additionally requires each event's
+SortableUniqueId to exceed the heads of that event's own tags, including non-consistency tags. The deterministic
+out-of-order characterization commits the larger id first on a shared non-consistency tag: mode on rejects the later
+smaller id with `TagHeadPositionValidationException`; mode off accepts both. Retry this position failure by re-running
+with fresh ids. Process-local monotonic allocation and startup seeding do not ensure commit order across writers;
+no product mitigation is added here.
+
 ### Additive contract and the three explicit states
 
 `IEventStore` and every existing write/result shape remain unchanged. The opt-in `CommandExecutionOptions` has an
 `ExpectedTagPositions` value, and the WASM boundary has a new V2
 `VersionedExpectedTagPositionSerializedCommitRequest` plus optional
-`ISerializedExpectedTagPositionSekibanDcbExecutor`. V1 and unversioned serialized payloads keep their old omission =
+`ISerializedExpectedTagPositionSekibanDcbExecutor`. With derived mode Off, V1 and unversioned serialized payloads keep their old omission =
 no-enforcement semantics byte-for-byte. WithResult returns typed errors in `ResultBox`; WithoutResult rethrows the same
 typed exception through its guarded boundary.
 
@@ -872,7 +920,7 @@ violation count is monitoring evidence, never clean-cutover proof.
 `CommandExecutionOptions.ExpectedTagPositions` and its `AssertEmpty` / `Exact` policies are available for an
 application that explicitly adopts the expected-tag-position protocol. They are **not enabled automatically** by a
 DCB template: a deployment must provision its store, establish the service enablement epoch, and deliberately use
-the conditional command/write APIs. A template must not seed `TagHeadEnablementEpochs`, run a migration at startup,
+the conditional command/write APIs or register the derived fence explicitly. A template must not seed `TagHeadEnablementEpochs`, run a migration at startup,
 or add CAS write usage merely because the package graph contains the capability. Those are production consistency
 decisions with a rollout and writer-drain requirement.
 

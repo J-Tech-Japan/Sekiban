@@ -228,7 +228,7 @@ Redis、Azure Table、ADO.NET のディレクトリは、それぞれ独自の�
 
 | 機能 | 残るリスクと保護 |
 |------|----------------|
-| `TagConsistentGrain` / `GeneralTagConsistentActor` | 正しさに関わるリスク。予約とキャッシュ済みタグ先頭は活性化ごとに独立しており、2つの活性化が同じ期待先頭で予約し、既定の書き込み経路で両方とも追記し得ます。 |
+| `TagConsistentGrain` / `GeneralTagConsistentActor` | 正しさに関わるリスク。予約とキャッシュ済みタグ先頭は活性化ごとに独立しており、2つの活性化が同じ期待先頭で予約し、既定の書き込み経路で両方とも追記し得ます。 PostgreSQL の [derived fence](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions) を有効にすると、読み取った予約入力を活性化間でも耐久的に比較します。未読タグはフェンスされません。 |
 | `MultiProjectionGrain` のチェックポイント | CAS 対応ストア（InMemory、SQLite、DynamoDB、PostgreSQL、Cosmos）では [SEK-G20 generation-aware checkpoint CAS](11_storage_providers.md#sek-g20-generation-aware-checkpoint-cas) が保護します。イベント ID による重複排除がリプレイを保護し、チェックポイントの採用後に追加の catch-up が必要になる場合があります。無条件書き込みを行うカスタムストアには、この CAS 保護がありません。 |
 | `MaterializedViewGrain` | 重複活性化や再配信により、非冪等な SQL が二重適用され得ます。[冪等なプロジェクター SQL](20_materialized_view.md#順序保証と冪等性)を使ってください。活性化間のレジストリ位置・状態の競合は残り、レジストリのガードは別の課題（SEK-G103）です。 |
 | `TagStateGrain`、ストリーム・イベント配信 | 内部キャッシュとリプレイの正しさは、ETag による Grain ストレージとイベント ID の重複排除で自己修復されます。少なくとも1回の配信では、任意のコンシューマーの副作用にも冪等性が必要です。 |

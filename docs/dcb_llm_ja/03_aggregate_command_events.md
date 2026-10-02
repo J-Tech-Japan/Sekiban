@@ -108,7 +108,9 @@ public record StudentTag(Guid StudentId) : IGuidTagGroup<StudentTag>
 厳密な保証にはストレージ層のフェンスが必要です。同じ冪等性キーを使う単一イベントの一度限りの作成には
 [条件付きユニーク追記（G15/G16）](11_storage_providers.md#条件付きユニークキー追記--sek-g15)、タグの正確なバージョンには
 PostgreSQL のオプトイン機能 [`ExpectedTagPositions`（SEK-G40）](11_storage_providers.md#postgresql-の耐久-multi-tag-expected-position-cas--sek-g40)
-を使い、enablement epoch と全 writer のプロトコルに従ってください。どちらも既定の書き込み経路で自動的に有効には
+または予約入力を自動導出する [derived fence](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions)
+を使ってください（Orleans は global mode のみ）。両方とも enablement epoch と全 writer のプロトコルが必要で、
+未読の出力タグはフェンスされません。どちらも既定の書き込み経路で自動的に有効には
 なりません。Cosmos DB、DynamoDB、SQLite が現在持つフェンスは単一イベントのユニークキーのみで、
 期待するタグ先頭の検査はありません。通常の `InMemoryEventStore` は条件付き追記を拒否します（`ConditionNotSupportedException`）。
 テスト用の `InMemoryConditionalEventStore` は実装していますが、その claim はインスタンス内かつ揮発的なので、

@@ -791,12 +791,60 @@ DCB fence であり、パーティション／retire 後の writer が in-memory
 consistency-tag head を読んだ command の追記を防ぎます。reservation の置換ではなく、任意の外部副作用を
 exactly-once にするものでもありません。
 
+### Derived fence (TagConsistencyFenceOptions)
+
+`Sekiban.Dcb.TagConsistencyFence.TagConsistencyFenceOptions.Mode` の既定値は `Off` です。
+`DeriveFromReservations` にすると、予約入力から PostgreSQL の expected-position 検査を自動導出します。
+serialized V1 commit も対象です。Orleans の両 facade は `tagConsistencyFenceOptions:` を受け取り、
+DI は Core、General、InMemory と共通の登録を使います。
+
+```csharp
+services.AddSekibanDcbTagConsistencyFence(
+    o => o.Mode = TagConsistencyFenceMode.DeriveFromReservations);
+services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
+```
+
+`Sekiban.Dcb.TagConsistencyFence` を import してください。Orleans は global mode のみで、型付き
+`CommandExecutionOptions` overload はありません。非 Orleans executor では nullable な
+`CommandExecutionOptions.TagConsistencyFence` が使えます。null は global 設定を継承し、`Off` または
+`DeriveFromReservations` は上書きします。明示的な `ExpectedTagPositions` が導出に優先し、
+`ConditionalAppend` は変わりません。導出モードを既定にするかは未決定です。
+
+| 出力する整合性タグの予約バージョン | 導出する期待値 |
+|---|---|
+| 空文字（読み取りで先頭なし） | `AssertEmpty` |
+| SortableUniqueId（明示的な `ConsistencyTag` 位置を含む） | `Exact` |
+| null（未読タグ） | `NoEnforcement` |
+
+非整合性タグには期待値エントリを付けません。複数イベントは `GetTag()` でまとめ、同じ期待値は統合し、
+異なる期待値は予約前に `TagHeadExpectationValidationException` で拒否します。no-op は specification を
+作りません。ServiceId はストアの `ExpectedTagPositionServiceId` を使い、null のときだけ executor に登録された
+`IServiceIdProvider` にフォールバックします。
+
+モード on は fail-closed です。構築時に capability が `ExpectedTagPosition` をサポートし、かつストアが
+`IExpectedTagPositionEventStore` を実装することを要求します（Hybrid は hot store の capability も確認）。
+各呼び出しでも確認し、非対応なら `ConditionNotSupportedException` になります。epoch がなければ、全導出値が
+`NoEnforcement` でも handler 前に `TagHeadEnforcementNotEnabledException` で失敗します。
+導入順は mode off → 古い／検査を迂回する writer をすべて drain → service epoch を設定 → mode on です。
+
+`ExpectedTagPositionConflictException` では予約をキャンセルし、confirm せず、競合タグの actor に best-effort の
+refresh 通知を送ります。コマンド全体を再実行して最新状態を読み直し、予約し直してください。
+not-enabled はリトライせず、導入手順や設定を修正してください。
+
+未読の出力タグはフェンスされず、read-set の保証もありません。`ConsistencyTag` wrapper 経由の読み取りは
+accessed-state lookup に一致しない場合があります（既存の制約）。PostgreSQL は各イベントの SortableUniqueId が
+そのイベント自身の全タグの先頭を超えることも要求し、非整合性タグも含みます。決定的な順序逆転テストでは、
+共有する非整合性タグで大きい ID を先に commit すると、mode on は後から commit する小さい ID を
+`TagHeadPositionValidationException` で拒否し、mode off は両方を受理します。この失敗は新しい ID でコマンドを
+再実行してください。プロセス内の単調な ID 発行と起動時 seed は writer 間の commit 順序を保証しません。
+この slice には製品側の緩和策を追加しません。
+
 ### 追加契約と3つの明示状態
 
 `IEventStore` と既存の write/result shape は不変です。opt-in の `CommandExecutionOptions` に
 `ExpectedTagPositions` を追加し、WASM 境界には新しい V2
 `VersionedExpectedTagPositionSerializedCommitRequest` と任意の
-`ISerializedExpectedTagPositionSekibanDcbExecutor` があります。V1 と unversioned serialized payload は従来の
+`ISerializedExpectedTagPositionSekibanDcbExecutor` があります。導出モード Off では V1 と unversioned serialized payload は従来の
 「省略 = no enforcement」セマンティクスを byte-for-byte で維持します。WithResult は `ResultBox` の型付き失敗、
 WithoutResult は同じ型付き例外を guarded boundary から再送出します。
 
@@ -879,7 +927,7 @@ drain-before-epoch です。violation 0 件は monitoring evidence であって 
 `CommandExecutionOptions.ExpectedTagPositions` と `AssertEmpty` / `Exact` policy は、expected-tag-position
 protocol を明示的に採用した application のために利用できます。DCB template がこれらを**自動**で enable することは
 ありません。deployment は store を provision し、service の enablement epoch を確立し、conditional command/write API を
-意図して使用する必要があります。package graph に capability が含まれるだけで、template が
+意図して使用するか、derived fence を明示的に登録する必要があります。package graph に capability が含まれるだけで、template が
 `TagHeadEnablementEpochs` を seed したり、startup で migration を実行したり、CAS write usage を追加したりしてはなりません。
 これらは rollout と writer-drain を必要とする本番整合性の判断です。
 

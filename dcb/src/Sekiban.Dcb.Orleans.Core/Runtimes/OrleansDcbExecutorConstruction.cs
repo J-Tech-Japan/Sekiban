@@ -4,6 +4,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.TagConsistencyFence;
 
 namespace Sekiban.Dcb.Orleans;
 
@@ -20,7 +21,8 @@ internal sealed class OrleansDcbExecutorConstructionInputs
         ISortableUniqueIdGenerator sortableUniqueIdGenerator,
         SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
         SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy,
-        ExecutorSizeGateOptions? executorSizeGateOptions)
+        ExecutorSizeGateOptions? executorSizeGateOptions,
+        TagConsistencyFenceOptions? tagConsistencyFenceOptions = null)
     {
         ClusterClient = clusterClient;
         EventStore = eventStore;
@@ -32,6 +34,7 @@ internal sealed class OrleansDcbExecutorConstructionInputs
         SortableUniqueIdSeedCoordinator = sortableUniqueIdSeedCoordinator;
         SortableUniqueIdWaitPolicy = sortableUniqueIdWaitPolicy;
         ExecutorSizeGateOptions = executorSizeGateOptions;
+        TagConsistencyFenceOptions = tagConsistencyFenceOptions;
     }
 
     internal IClusterClient ClusterClient { get; }
@@ -53,6 +56,8 @@ internal sealed class OrleansDcbExecutorConstructionInputs
     internal SortableUniqueIdWaitPolicy SortableUniqueIdWaitPolicy { get; }
 
     internal ExecutorSizeGateOptions? ExecutorSizeGateOptions { get; }
+
+    internal TagConsistencyFenceOptions? TagConsistencyFenceOptions { get; }
 }
 
 /// <summary>
