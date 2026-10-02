@@ -153,18 +153,21 @@ public class TagReservationStaleCacheAfterConfirmTests
     {
         var f = new Fixture();
         var reservation = (await f.Actor.MakeReservationAsync(string.Empty)).GetValue();
-        Assert.True(await f.Actor.ConfirmReservationAsync(reservation)); // Catch-up completes here on the fix.
+        // The confirm invalidates under the lock, so the next access does a lock-free catch-up read (which succeeds
+        // here) and then the authoritative under-lock read (which fails).
+        Assert.True(await f.Actor.ConfirmReservationAsync(reservation));
         var calls = f.Store.Calls;
         f.Store.AfterRead = result => ReservationLock(f.Actor).CurrentCount == 0
             ? ResultBox.Error<TagState>(new IOException("under-lock failure")) : result;
         var failed = await f.Actor.MakeReservationAsync(string.Empty);
         Assert.False(failed.IsSuccess);
         Assert.Equal("under-lock failure", failed.GetException().InnerException!.Message);
-        Assert.Equal(calls + 1, f.Store.Calls);
+        Assert.Equal(calls + 2, f.Store.Calls);
         Assert.Empty(await f.Actor.GetActiveReservationsAsync());
         f.Store.AfterRead = null;
+        // Catch-up is already complete for this generation; only the under-lock read is retried.
         Assert.True((await f.Actor.MakeReservationAsync(string.Empty)).IsSuccess);
-        Assert.Equal(calls + 2, f.Store.Calls);
+        Assert.Equal(calls + 3, f.Store.Calls);
     }
 
     [Fact]
@@ -201,6 +204,18 @@ public class TagReservationStaleCacheAfterConfirmTests
             Assert.True(await f.Actor.CancelReservationAsync(reservation));
         }
         Assert.Equal(calls, f.Store.Calls);
+    }
+
+    [Fact]
+    public async Task Confirm_LeavesCatchUpIncomplete_SoAnUnnotifiedLaterWriteIsObserved()
+    {
+        // Another cluster's write is never notified to this actor; the first access after a confirm must re-read.
+        var f = new Fixture();
+        var reservation = (await f.Actor.MakeReservationAsync(string.Empty)).GetValue();
+        await f.WriteAsync("own");
+        Assert.True(await f.Actor.ConfirmReservationAsync(reservation));
+        var other = await f.WriteAsync("other-cluster");
+        Assert.Equal(other, (await f.Actor.GetLatestSortableUniqueIdAsync()).GetValue());
     }
 
     [Fact]

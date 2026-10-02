@@ -240,8 +240,11 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
 
     public async Task<bool> ConfirmReservationAsync(TagWriteReservation reservation)
     {
-        Interlocked.Increment(ref _invalidationGeneration);
-        if (reservation == null) return false;
+        if (reservation == null)
+        {
+            Interlocked.Increment(ref _invalidationGeneration);
+            return false;
+        }
 
         // Ensure catch-up is completed before acquiring lock
         await EnsureCatchUpCompletedAsync();
@@ -249,6 +252,11 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
         await _reservationLock.WaitAsync();
         try
         {
+            // #1276: invalidate under the lock, before the reservation is removed, on every confirm call (matched or not).
+            // A reservation that later observes the removal therefore also observes this bump and refreshes. Bumping
+            // here, not before the catch-up above, keeps that catch-up from marking the post-write generation complete,
+            // so the next access still re-reads the store (other clusters' writes are never notified to this actor).
+            Interlocked.Increment(ref _invalidationGeneration);
 
             if (_activeReservations.TryRemove(reservation.ReservationCode, out var existingReservation))
             {
