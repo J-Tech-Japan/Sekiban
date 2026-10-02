@@ -117,7 +117,7 @@ await foreach (var reference in OffloadKeyEnumerator.EnumerateAsync(
 }
 ```
 
-このヘルパーは tombstone を含む、一覧にある全 projector version を走査し、行の blob を解決してからエンベロープを調べます。標準以外の命名ポリシーを使う場合は、アプリケーションの `JsonSerializerOptions` を渡してください。`InlineState` をデシリアライズせず前方のみ読み進めますが、バッファは単一の最大 JSON トークンに合わせて拡張されるため、メモリ使用量は一定ではありません。行の検索、ストリームの取得、デコードに失敗すると `Detail` 付きの `Undecodable` を返します。一覧取得の失敗と呼び出し元のキャンセルは伝播します。checkpoint slot が存在しない、または読めない場合は `Lifecycle` が null となり `Detail` に理由を記録しますが、キーは引き続き返します。
+このヘルパーは tombstone を含む、一覧にある全 projector version を走査し、行の blob を解決してからエンベロープを調べます。標準以外の命名ポリシーを使う場合は、アプリケーションの `JsonSerializerOptions` を渡してください。`InlineState` をデシリアライズせず前方のみ読み進めますが、デコーダーのバッファのピークメモリ使用量は、単一の最大 JSON トークンとその直前の意味を持たない空白（プロパティの場合は名前、コロン、および値の開始位置までの周囲の空白を含む）のサイズの約2倍に、小さな定数分を加えた量です。実際の Sekiban の書き込み処理はコンパクトな JSON を出力します。この上限はデコーダー自身のバッファだけが対象であり、プロバイダーはレコードの読み取り時に inline の `StateData` byte[] など、状態データ全体をメモリに展開する場合があります。行の検索、ストリームの取得、デコードに失敗すると `Detail` 付きの `Undecodable` を返します。一覧取得の失敗と呼び出し元のキャンセルは伝播します。checkpoint slot が存在しない、または読めない場合は `Lifecycle` が null となり `Detail` に理由を記録しますが、キーは引き続き返します。
 
 列挙は **観測** です。キーが出力されなかったことだけでは削除を許可できません。一覧取得が結果整合性のストアもあり（例: Dynamo の `ListAllAsync`）、正常終了しても行を見落とす可能性があります。走査はストアの現在の ServiceId に限定され、blob キー自体には ServiceId が含まれません。同じ blob コンテナを共有する ServiceId ごとに一度ずつ実行してください。
 

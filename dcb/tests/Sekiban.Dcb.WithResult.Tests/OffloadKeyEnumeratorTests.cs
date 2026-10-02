@@ -122,6 +122,41 @@ public class OffloadKeyEnumeratorTests
     }
 
     [Theory]
+    [InlineData("{\"isOffloaded\":false,\"inlineState\":\"~\"}")]
+    [InlineData("{\"isOffloaded\":false,\"inlineState\":{\"~\":0}}")]
+    [InlineData("{\"isOffloaded\":true,\"offloadedState\":{\"offloadKey\":\"~\"}}")]
+    public async Task Invalid_utf8_in_every_string_token_is_undecodable(string json)
+    {
+        var bytes = Encoding.UTF8.GetBytes(json);
+        bytes[Array.IndexOf(bytes, (byte)'~')] = 0xff;
+        var reference = Assert.Single(await Scan(new Wrapper(await Saved(bytes)) { ShortReads = true }));
+        Assert.Equal(OffloadKeyReferenceKind.Undecodable, reference.Kind);
+        Assert.Null(reference.OffloadKey);
+        Assert.Equal("invalid UTF-8", reference.Detail);
+    }
+
+    [Fact]
+    public async Task Valid_utf8_in_skipped_strings_and_keys_survives_short_reads()
+    {
+        var json = "{\"inlineState\":{\"日本語\":\"é😀\"},\"isOffloaded\":true," +
+            "\"offloadedState\":{\"offloadKey\":\"日本語😀\"}}";
+        Assert.Equal("日本語😀", Assert.Single(await Scan(new Wrapper(await Saved(Encoding.UTF8.GetBytes(json)))
+            { ShortReads = true })).OffloadKey);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Megabyte_whitespace_between_property_name_and_colon_decodes(bool offloaded)
+    {
+        var json = "{\"isOffloaded\"" + new string(' ', 1_000_000) +
+            (offloaded ? ":true,\"offloadedState\":{\"offloadKey\":\"whitespace-key\"}}" : ":false}");
+        var references = await Scan(await Saved(Encoding.UTF8.GetBytes(json)));
+        if (offloaded) Assert.Equal("whitespace-key", Assert.Single(references).OffloadKey);
+        else Assert.Empty(references);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Multi_megabyte_inline_refills_without_materializing(bool manyTokens)
@@ -173,6 +208,16 @@ public class OffloadKeyEnumeratorTests
     }
 
     [Fact]
+    public async Task Cancellation_after_successful_open_disposes_stream()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var store = new Wrapper(await Saved(Envelope())) { Fault = "open-success-cancel", Cancellation = cancellation };
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Scan(store, ct: cancellation.Token));
+        Assert.NotNull(store.OpenedStream);
+        Assert.True(store.OpenedStream.Disposed);
+    }
+
+    [Fact]
     public async Task Already_cancelled_caller_propagates()
     {
         using var cancellation = new CancellationTokenSource();
@@ -205,6 +250,7 @@ public class OffloadKeyEnumeratorTests
         public Blob? Blobs;
         public string? RowKey;
         public CancellationTokenSource? Cancellation;
+        public ShortReadStream? OpenedStream;
         private Exception Error(string step)
         {
             if (Fault == step + "-cancel") { Cancellation!.Cancel(); return new OperationCanceledException(Cancellation.Token); }
@@ -229,6 +275,12 @@ public class OffloadKeyEnumeratorTests
             if (Fault is "open-error" or "open-cancel") return ResultBox.Error<Stream>(Error("open"));
             var stream = RowKey is null ? (await Inner.OpenStateDataReadStreamAsync(r, ct)).GetValue()
                 : await Blobs!.OpenReadAsync(r.OffloadKey!, ct);
+            if (Fault == "open-success-cancel")
+            {
+                OpenedStream = new ShortReadStream(stream);
+                Cancellation!.Cancel();
+                return ResultBox.FromValue<Stream>(OpenedStream);
+            }
             return ResultBox.FromValue<Stream>(ShortReads ? new ShortReadStream(stream) : stream);
         }
         public override Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default)
@@ -243,10 +295,15 @@ public class OffloadKeyEnumeratorTests
     private sealed class ShortReadStream(Stream source) : Stream
     {
         private int _read;
+        public bool Disposed { get; private set; }
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default) =>
             source.ReadAsync(buffer[..Math.Min(buffer.Length, 1 + _read++ % 7)], ct);
         public override int Read(byte[] buffer, int offset, int count) => source.Read(buffer, offset, Math.Min(count, 1 + _read++ % 7));
-        protected override void Dispose(bool disposing) { if (disposing) source.Dispose(); base.Dispose(disposing); }
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) { source.Dispose(); Disposed = true; }
+            base.Dispose(disposing);
+        }
         public override bool CanRead => true;
         public override bool CanSeek => false;
         public override bool CanWrite => false;

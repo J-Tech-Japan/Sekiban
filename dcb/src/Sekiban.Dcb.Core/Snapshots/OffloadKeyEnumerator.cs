@@ -1,6 +1,8 @@
+using System.Buffers;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Unicode;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Storage.Checkpoints;
@@ -14,7 +16,10 @@ public static class OffloadKeyEnumerator
     /// Enumerates row and envelope references. Absence alone never authorizes deletion; reads may be eventually
     /// consistent. Any Undecodable requires a GC to delete nothing. Pass the application's naming options.
     /// The forward-only decoder never materializes InlineState. Its buffer grows to accommodate the largest
-    /// single JSON token, so peak memory is bounded by that token's size (plus a fixed initial buffer), not constant.
+    /// single JSON token plus the insignificant whitespace immediately before it; for a property this includes
+    /// the name, colon and surrounding whitespace up to the start of the value. Peak decoder buffer memory is
+    /// about twice that size plus a small constant. Real Sekiban writers emit compact JSON. This bound covers
+    /// only the decoder's buffer; providers may materialize the whole state data when reading a record.
     /// List failures and caller cancellation propagate; other per-row failures become observations.
     /// </summary>
     public static async IAsyncEnumerable<OffloadKeyReference> EnumerateAsync(
@@ -78,12 +83,18 @@ public static class OffloadKeyEnumerator
             try
             {
                 var result = await store.OpenStateDataReadStreamAsync(record, ct).ConfigureAwait(false);
+                if (result.IsSuccess) stream = result.GetValue();
                 ct.ThrowIfCancellationRequested();
                 if (!result.IsSuccess) throw result.GetException();
-                stream = result.GetValue();
                 if (stream is null) failure = "Open returned no stream.";
             }
-            catch (Exception ex) { ct.ThrowIfCancellationRequested(); failure = "Open: " + ex.Message; }
+            catch (Exception ex)
+            {
+                if (stream is not null) await stream.DisposeAsync().ConfigureAwait(false);
+                ct.ThrowIfCancellationRequested();
+                failure = "Open: " + ex.Message;
+                stream = null;
+            }
             if (stream is null)
             {
                 yield return Reference(OffloadKeyReferenceKind.Undecodable, error: failure);
@@ -99,7 +110,12 @@ public static class OffloadKeyEnumerator
                 }
                 ct.ThrowIfCancellationRequested();
             }
-            catch (Exception ex) { ct.ThrowIfCancellationRequested(); failure = "Decode: " + ex.Message; decoded = null; }
+            catch (Exception ex)
+            {
+                ct.ThrowIfCancellationRequested();
+                failure = ex is JsonException && ex.Message == "invalid UTF-8" ? ex.Message : "Decode: " + ex.Message;
+                decoded = null;
+            }
             if (decoded is null) yield return Reference(OffloadKeyReferenceKind.Undecodable, error: failure);
             else if (decoded.IsOffloaded == true) yield return Reference(OffloadKeyReferenceKind.Envelope, decoded.Key, decoded.Provider);
         }
@@ -159,6 +175,9 @@ public static class OffloadKeyEnumerator
             var reader = new Utf8JsonReader(bytes, final, state);
             while (reader.Read())
             {
+                if (reader.TokenType is JsonTokenType.String or JsonTokenType.PropertyName &&
+                    !(reader.HasValueSequence ? IsValidUtf8(reader.ValueSequence) : Utf8.IsValid(reader.ValueSpan)))
+                    throw new JsonException("invalid UTF-8");
                 if (!_started)
                 {
                     if (reader.TokenType != JsonTokenType.StartObject) throw new JsonException("Envelope must be an object.");
@@ -215,6 +234,37 @@ public static class OffloadKeyEnumerator
             }
             state = reader.CurrentState;
             return checked((int)reader.BytesConsumed);
+        }
+
+        private static bool IsValidUtf8(ReadOnlySequence<byte> bytes)
+        {
+            var reader = new SequenceReader<byte>(bytes);
+            while (!reader.End)
+            {
+                var span = reader.UnreadSpan;
+                // Validate each segment in place, leaving only a possible split scalar for the sequence reader.
+                var start = span.Length - 1;
+                while (start > 0 && (span[start] & 0xc0) == 0x80 && span.Length - start < 4) start--;
+                var first = span[start];
+                var length = first < 0x80 ? 1 : first is >= 0xc2 and <= 0xdf ? 2
+                    : first is >= 0xe0 and <= 0xef ? 3 : first is >= 0xf0 and <= 0xf4 ? 4 : 0;
+                if (length <= span.Length - start)
+                {
+                    if (!Utf8.IsValid(span)) return false;
+                    reader.Advance(span.Length);
+                    continue;
+                }
+                if (!Utf8.IsValid(span[..start])) return false;
+                reader.Advance(start + 1);
+                // Check continuation bytes across segment boundaries without copying them.
+                for (var i = 1; i < length; i++)
+                {
+                    if (!reader.TryRead(out var next) || (next & 0xc0) != 0x80) return false;
+                    if (i == 1 && (first == 0xe0 && next < 0xa0 || first == 0xed && next >= 0xa0 ||
+                        first == 0xf0 && next < 0x90 || first == 0xf4 && next >= 0x90)) return false;
+                }
+            }
+            return true;
         }
 
         public void Validate()
