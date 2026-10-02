@@ -1,4 +1,5 @@
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.TagConsistencyFence;
 
 namespace Sekiban.Dcb.Commands;
 
@@ -22,6 +23,9 @@ public sealed record CommandExecutionOptions
     ///     one explicitly discriminated entry. Unsupported stores fail closed before their write path is invoked.
     /// </summary>
     public ExpectedTagPositionSpecification? ExpectedTagPositions { get; init; }
+
+    /// <summary>Null uses the global mode. An explicit expected-position specification takes precedence.</summary>
+    public TagConsistencyFenceMode? TagConsistencyFence { get; init; }
 }
 
 /// <summary>

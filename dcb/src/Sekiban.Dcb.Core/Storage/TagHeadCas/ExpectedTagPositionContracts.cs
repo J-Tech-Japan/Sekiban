@@ -201,6 +201,9 @@ public sealed record ExpectedTagPositionWriteResult(
 /// </summary>
 public interface IExpectedTagPositionEventStore
 {
+    /// <summary>The service id this store validates expected-tag-position entries against; null if not exposed.</summary>
+    string? ExpectedTagPositionServiceId => null;
+
     /// <summary>Checks the service's provisioning-plane enablement epoch without creating or advancing a head.</summary>
     Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken cancellationToken = default);
 

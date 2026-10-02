@@ -173,6 +173,8 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
 
     private string CurrentServiceId => _serviceIdProvider.GetCurrentServiceId();
 
+    public string? ExpectedTagPositionServiceId => CurrentServiceId;
+
     public async Task<ResultBox<IEnumerable<Event>>> ReadAllEventsAsync(SortableUniqueId? since = null, int? maxCount = null)
     {
         try

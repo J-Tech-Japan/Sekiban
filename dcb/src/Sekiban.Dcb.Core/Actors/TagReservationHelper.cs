@@ -77,6 +77,18 @@ public static class TagReservationHelper
         await Task.WhenAll(notifyTasks);
     }
 
+    public static Task NotifyConflictingTagsAsync(
+        IActorObjectAccessor actorAccessor, IEnumerable<ITag> tags,
+        Sekiban.Dcb.Storage.ExpectedTagPositionConflictException conflict)
+    {
+        var conflicting = conflict.Pairs.Where(p => p.Expected.Kind != Sekiban.Dcb.Storage.TagHeadExpectationKind.NoEnforcement &&
+            (p.Expected.Kind == Sekiban.Dcb.Storage.TagHeadExpectationKind.AssertEmpty ? p.ObservedPosition is not null :
+                !string.Equals(p.Expected.Position, p.ObservedPosition, StringComparison.Ordinal)))
+            .Select(p => p.Tag).ToHashSet(StringComparer.Ordinal);
+        return Task.WhenAll(tags.Where(t => conflicting.Contains(t.GetTag()))
+            .DistinctBy(t => t.GetTag()).Select(t => NotifyTagAsync(actorAccessor, t)));
+    }
+
     private static async Task CancelReservationAsync(
         IActorObjectAccessor actorAccessor,
         ITag tag,
@@ -133,6 +145,10 @@ public static class TagReservationHelper
             if (actorResult.IsSuccess)
             {
                 await actorResult.GetValue().NotifyEventWrittenAsync();
+            }
+            else
+            {
+                Debug.WriteLine($"Failed to resolve tag {tag.GetTag()} for notification: {actorResult.GetException()}");
             }
         }
         catch (Exception ex)

@@ -8,6 +8,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.SizeGates;
+using Sekiban.Dcb.TagConsistencyFence;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Actors;
@@ -114,7 +115,31 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
     {
     }
 
-    private GeneralSekibanExecutor(GeneralSekibanExecutorConstruction construction)
+    public GeneralSekibanExecutor(
+        IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        TagConsistencyFenceOptions tagConsistencyFenceOptions, ExecutorSizeGateOptions? executorSizeGateOptions = null,
+        IEventPublisher? eventPublisher = null, IExecutedUserProvider? executedUserProvider = null,
+        IServiceIdProvider? serviceIdProvider = null)
+        : this(GeneralSekibanExecutorConstruction.WithFence(
+            eventStore, actorAccessor, domainTypes, tagConsistencyFenceOptions, executorSizeGateOptions,
+            eventPublisher, executedUserProvider, serviceIdProvider))
+    {
+    }
+
+    public GeneralSekibanExecutor(
+        IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher, IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator, SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider, ExecutorSizeGateOptions? executorSizeGateOptions = null,
+        TagConsistencyFenceOptions? tagConsistencyFenceOptions = null)
+        : this(GeneralSekibanExecutorConstruction.WithFence(
+            eventStore, actorAccessor, domainTypes, tagConsistencyFenceOptions, executorSizeGateOptions,
+            eventPublisher, executedUserProvider, serviceIdProvider,
+            sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator))
+    {
+    }
+
+    internal GeneralSekibanExecutor(GeneralSekibanExecutorConstruction construction)
     {
         _actorAccessor = construction.ActorAccessor;
         _core = construction.Core;

@@ -5,6 +5,8 @@ using Sekiban.Dcb.InMemory;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.TagConsistencyFence;
+using Sekiban.Dcb.SizeGates;
 namespace Sekiban.Dcb.Testing;
 
 #pragma warning disable CS0618 // the base type is [Obsolete] on purpose, and this is where it points
@@ -44,6 +46,24 @@ public class InMemoryDcbExecutorForTesting : InMemoryDcbExecutor, IExecutorRunti
         IEventStore eventStore,
         IExecutedUserProvider? executedUserProvider = null)
         : base(domainTypes, eventStore, executedUserProvider)
+    {
+    }
+
+    public InMemoryDcbExecutorForTesting(
+        DcbDomainTypes domainTypes, IEventStore eventStore, TagConsistencyFenceOptions tagConsistencyFenceOptions,
+        ExecutorSizeGateOptions? executorSizeGateOptions = null, IExecutedUserProvider? executedUserProvider = null,
+        IServiceIdProvider? serviceIdProvider = null)
+        : base(domainTypes, eventStore, tagConsistencyFenceOptions, executorSizeGateOptions, executedUserProvider, serviceIdProvider)
+    {
+    }
+
+    public InMemoryDcbExecutorForTesting(
+        DcbDomainTypes domainTypes, IEventStore eventStore, IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator, SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider, TagConsistencyFenceOptions tagConsistencyFenceOptions,
+        ExecutorSizeGateOptions? executorSizeGateOptions = null)
+        : base(domainTypes, eventStore, executedUserProvider, sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator,
+            serviceIdProvider, tagConsistencyFenceOptions, executorSizeGateOptions)
     {
     }
 
