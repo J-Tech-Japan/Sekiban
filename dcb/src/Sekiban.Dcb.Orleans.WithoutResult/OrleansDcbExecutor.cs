@@ -12,6 +12,7 @@ using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.SizeGates;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.TagConsistencyFence;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Orleans.Serialization;
 namespace Sekiban.Dcb.Orleans;
@@ -57,9 +58,9 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         IClusterClient clusterClient,
         IEventStore eventStore,
         DcbDomainTypes domainTypes,
-        IEventPublisher? eventPublisher = null,
-        IServiceIdProvider? serviceIdProvider = null,
-        IExecutedUserProvider? executedUserProvider = null)
+        IEventPublisher? eventPublisher,
+        IServiceIdProvider? serviceIdProvider,
+        IExecutedUserProvider? executedUserProvider)
         : this(
             clusterClient,
             eventStore,
@@ -70,6 +71,25 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
             ProcessSharedSortableUniqueIdServices.Generator,
             ProcessSharedSortableUniqueIdServices.SeedCoordinator,
             SortableUniqueIdWaitPolicy.System)
+    {
+    }
+
+    /// <summary>Universal DI constructor. A partial allocator pair uses the process-shared pair.</summary>
+    public OrleansDcbExecutor(
+        IClusterClient clusterClient, IEventStore eventStore, DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher = null, IServiceIdProvider? serviceIdProvider = null,
+        IExecutedUserProvider? executedUserProvider = null,
+        ISortableUniqueIdGenerator? sortableUniqueIdGenerator = null,
+        SortableUniqueIdSeedCoordinator? sortableUniqueIdSeedCoordinator = null,
+        ExecutorSizeGateOptions? sizeGateOptions = null,
+        TagConsistencyFenceOptions? tagConsistencyFenceOptions = null)
+        : this(CreateExceptionConstruction(new OrleansDcbExecutorConstructionInputs(
+            clusterClient, eventStore, domainTypes, eventPublisher, serviceIdProvider, executedUserProvider,
+            sortableUniqueIdGenerator is not null && sortableUniqueIdSeedCoordinator is not null
+                ? sortableUniqueIdGenerator : ProcessSharedSortableUniqueIdServices.Generator,
+            sortableUniqueIdGenerator is not null && sortableUniqueIdSeedCoordinator is not null
+                ? sortableUniqueIdSeedCoordinator : ProcessSharedSortableUniqueIdServices.SeedCoordinator,
+            SortableUniqueIdWaitPolicy.System, sizeGateOptions, tagConsistencyFenceOptions)))
     {
     }
 
@@ -130,22 +150,30 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         OrleansDcbExecutorConstructionInputs inputs) =>
         OrleansDcbExecutorConstruction<GeneralSekibanExecutor>.Create(inputs, CreateExceptionGeneralExecutor);
 
+    // Public Orleans construction uses the system wait policy. The existing public General constructor
+    // carries the fence without changing the custom-wait internal construction path.
     private static GeneralSekibanExecutor CreateExceptionGeneralExecutor(
         OrleansDcbExecutorConstructionInputs inputs,
         IActorObjectAccessor actorAccessor,
         IServiceIdProvider serviceIdProvider,
         SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy) =>
-        new(
-            inputs.EventStore,
-            actorAccessor,
-            inputs.DomainTypes,
-            inputs.EventPublisher,
-            inputs.ExecutedUserProvider,
-            inputs.SortableUniqueIdGenerator,
-            inputs.SortableUniqueIdSeedCoordinator,
-            serviceIdProvider,
-            sortableUniqueIdWaitPolicy,
-            inputs.ExecutorSizeGateOptions);
+        inputs.TagConsistencyFenceOptions is not null
+            ? new GeneralSekibanExecutor(
+                inputs.EventStore, actorAccessor, inputs.DomainTypes, inputs.EventPublisher,
+                inputs.ExecutedUserProvider, inputs.SortableUniqueIdGenerator,
+                inputs.SortableUniqueIdSeedCoordinator, serviceIdProvider,
+                inputs.ExecutorSizeGateOptions, inputs.TagConsistencyFenceOptions)
+            : new(
+                inputs.EventStore,
+                actorAccessor,
+                inputs.DomainTypes,
+                inputs.EventPublisher,
+                inputs.ExecutedUserProvider,
+                inputs.SortableUniqueIdGenerator,
+                inputs.SortableUniqueIdSeedCoordinator,
+                serviceIdProvider,
+                sortableUniqueIdWaitPolicy,
+                inputs.ExecutorSizeGateOptions);
 
     /// <summary>
     ///     Execute a command with its built-in handler

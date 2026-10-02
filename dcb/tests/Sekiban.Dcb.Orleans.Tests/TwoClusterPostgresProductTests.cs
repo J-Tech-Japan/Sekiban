@@ -1,4 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using ResultBoxes;
+using Sekiban.Dcb.Capabilities;
+using Sekiban.Dcb.Commands;
+using Sekiban.Dcb.Common;
+using Sekiban.Dcb.Events;
+using Sekiban.Dcb.TagConsistencyFence;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.TestingHost;
 using Sekiban.Dcb.Actors;
@@ -117,6 +124,122 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
     {
         var ev = CreateEvent(new CreatedWithId(id, value), DateTime.UtcNow.AddSeconds(-secondsAgo));
         await _rootSp.GetRequiredService<IEventStore>().WriteSerializableEventsAsync(new[] { ToSerializable(ev) });
+    }
+
+    [Theory]
+    [InlineData(false, TagConsistencyFenceMode.DeriveFromReservations)]
+    [InlineData(true, TagConsistencyFenceMode.DeriveFromReservations)]
+    [InlineData(false, TagConsistencyFenceMode.Off)]
+    [InlineData(true, TagConsistencyFenceMode.Off)]
+    public async Task DerivedFence_TwoIndependentClusters_OnlyFencedWritersConflict(bool update, TagConsistencyFenceMode mode)
+    {
+        var domain = G20Shared.BuildDomain();
+        var store = (PostgresEventStore)_rootSp.GetRequiredService<IEventStore>();
+        var service = new DefaultServiceIdProvider().GetCurrentServiceId();
+        await using var connection = new NpgsqlConnection(_conn);
+        await connection.OpenAsync();
+        await using (var epoch = new NpgsqlCommand(
+            "INSERT INTO dcb_tag_head_enablement_epochs (\"ServiceId\", \"EnabledAtUtc\") VALUES (@service, @enabled)", connection))
+        {
+            epoch.Parameters.AddWithValue("service", service);
+            epoch.Parameters.AddWithValue("enabled", DateTime.UtcNow);
+            await epoch.ExecuteNonQueryAsync();
+        }
+        var id = Guid.NewGuid();
+        var tag = new G22ReservationTag(id);
+        string? initial = null;
+        if (update)
+        {
+            var seed = await new OrleansDcbExecutor(_clusterA.Client, store, domain).ExecuteAsync(new G22UpsertCommand(id, "seed"));
+            Assert.True(seed.IsSuccess, seed.IsSuccess ? "" : seed.GetException().ToString());
+            initial = seed.GetValue().SortableUniqueId;
+        }
+        var barrier = new WriteBarrierStore(store);
+        var fence = new TagConsistencyFenceOptions { Mode = mode };
+        var a = new OrleansDcbExecutor(_clusterA.Client, barrier, domain, tagConsistencyFenceOptions: fence);
+        var b = new OrleansDcbExecutor(_clusterB.Client, barrier, domain, tagConsistencyFenceOptions: fence);
+        var first = a.ExecuteAsync(new G22UpsertCommand(id, "A"));
+        var second = b.ExecuteAsync(new G22UpsertCommand(id, "B"));
+        try
+        {
+            await barrier.BothArrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            Assert.Equal(2, barrier.Arrivals); // Both distinct TagConsistentGrain activations reserved before release.
+            Assert.False(first.IsCompleted);
+            Assert.False(second.IsCompleted);
+        }
+        finally { barrier.Release.TrySetResult(); }
+        var results = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(30));
+        var fenced = mode == TagConsistencyFenceMode.DeriveFromReservations;
+        Assert.Equal(fenced ? 1 : 2, results.Count(r => r.IsSuccess));
+        if (fenced)
+        {
+            var conflict = Assert.IsType<ExpectedTagPositionConflictException>(Assert.Single(results, r => !r.IsSuccess).GetException());
+            var pair = Assert.Single(conflict.Pairs);
+            Assert.Equal(service, pair.ServiceId);
+            Assert.Equal(tag.GetTag(), pair.Tag);
+            Assert.Equal(update ? TagHeadExpectation.Exact(initial!) : TagHeadExpectation.AssertEmpty(), pair.Expected);
+            Assert.Equal(Assert.Single(results, r => r.IsSuccess).GetValue().SortableUniqueId, pair.ObservedPosition);
+        }
+        Assert.Equal(fenced ? 2 : 0, barrier.FencedArrivals);
+        Assert.Equal(fenced ? 0 : 2, barrier.LegacyArrivals);
+        // An independent database read verifies committed events, tag rows and durable head.
+        await using var rows = new NpgsqlCommand("""
+            SELECT (SELECT COUNT(*) FROM dcb_events WHERE "ServiceId" = @service),
+                   COUNT(*), MAX("SortableUniqueId"),
+                   (SELECT "HeadPosition" FROM dcb_tag_heads WHERE "ServiceId" = @service AND "Tag" = @tag)
+            FROM dcb_tags WHERE "ServiceId" = @service AND "Tag" = @tag
+            """, connection);
+        rows.Parameters.AddWithValue("service", service);
+        rows.Parameters.AddWithValue("tag", tag.GetTag());
+        await using var reader = await rows.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        var count = (update ? 1 : 0) + (fenced ? 1 : 2);
+        Assert.Equal(count, reader.GetInt64(0));
+        Assert.Equal(count, reader.GetInt64(1));
+        Assert.Equal(reader.GetString(2), reader.GetString(3));
+    }
+
+    private sealed class WriteBarrierStore(PostgresEventStore inner) : IEventStore, IExpectedTagPositionEventStore,
+        IWriteConditionCapabilityProvider
+    {
+        private int _arrivals, _fenced, _legacy;
+        public int Arrivals => Volatile.Read(ref _arrivals);
+        public int FencedArrivals => Volatile.Read(ref _fenced);
+        public int LegacyArrivals => Volatile.Read(ref _legacy);
+        public TaskCompletionSource BothArrived { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private async Task ArriveAsync()
+        {
+            if (Interlocked.Increment(ref _arrivals) == 2) BothArrived.TrySetResult();
+            await Release.Task.WaitAsync(TimeSpan.FromSeconds(25));
+        }
+        public string? ExpectedTagPositionServiceId => inner.ExpectedTagPositionServiceId;
+        public WriteConditionCapabilityDescriptor DescribeWriteConditions() => inner.DescribeWriteConditions();
+        public Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken ct = default) =>
+            inner.EnsureExpectedTagPositionEnforcementEnabledAsync(ct);
+        public async Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
+            IReadOnlyList<SerializableEvent> events, ExpectedTagPositionSpecification specification, CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _fenced);
+            await ArriveAsync();
+            return await inner.WriteSerializableEventsWithExpectedTagPositionsAsync(events, specification, ct);
+        }
+        public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
+        {
+            Interlocked.Increment(ref _legacy);
+            await ArriveAsync();
+            return await inner.WriteSerializableEventsAsync(events);
+        }
+        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => inner.ReadTagsAsync(tag);
+        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => inner.GetLatestTagAsync(tag);
+        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => inner.TagExistsAsync(tag);
+        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => inner.GetEventCountAsync(since);
+        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? group = null) => inner.GetAllTagsAsync(group);
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => inner.ReadAllSerializableEventsAsync(since);
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? count) => inner.ReadAllSerializableEventsAsync(since, count);
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid id) => inner.ReadSerializableEventAsync(id);
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => inner.ReadSerializableEventsByTagAsync(tag, since);
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => inner.GetLatestSortableUniqueIdAsync();
     }
 
     [Fact]

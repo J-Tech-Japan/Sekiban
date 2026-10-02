@@ -238,7 +238,7 @@ See [Orleans cluster management](https://learn.microsoft.com/en-us/dotnet/orlean
 
 | Surface | Residual risk and protection |
 |---------|------------------------------|
-| `TagConsistentGrain` / `GeneralTagConsistentActor` | Correctness risk: reservations and cached tag heads are per activation. Two activations can both reserve the same expected head and append on the default write path. |
+| `TagConsistentGrain` / `GeneralTagConsistentActor` | Correctness risk: reservations and cached tag heads are per activation. Two activations can both reserve the same expected head and append on the default write path. Opt into the PostgreSQL [derived fence](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions) to durably compare read reservation inputs across activations; unread tags remain unfenced. |
 | `MultiProjectionGrain` checkpoints | Protected by [SEK-G20 generation-aware checkpoint CAS](11_storage_providers.md#sek-g20-generation-aware-checkpoint-cas) on CAS-capable stores (InMemory, SQLite, DynamoDB, PostgreSQL, Cosmos). Event-ID de-duplication protects replay; adopting a checkpoint can require extra catch-up. Custom stores with unconditional writes do not have this CAS protection. |
 | `MaterializedViewGrain` | Duplicate activation or redelivery can double-apply non-idempotent SQL. Use [idempotent projector SQL](20_materialized_view.md#idempotency-and-ordering). Registry position/state can still race between activations; the registry guard is separate work (SEK-G103). |
 | `TagStateGrain`, streams/event delivery | Internal cache/replay correctness is self-healing through ETag grain storage and event-ID de-duplication. At-least-once delivery still requires idempotency for arbitrary consumer side effects. |

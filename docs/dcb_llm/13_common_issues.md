@@ -441,7 +441,9 @@ See [Grain directory and duplicate activations](10_orleans_setup.md#grain-direct
 Hard guarantees require a storage-layer fence: [conditional unique-append (G15/G16)](11_storage_providers.md#conditional-unique-key-append--sek-g15)
 for single-event create-once operations using the same idempotency key, or PostgreSQL's opt-in
 [`ExpectedTagPositions` (SEK-G40)](11_storage_providers.md#postgresql-durable-multi-tag-expected-position-cas--sek-g40)
-for exact tag versions, with its enablement epoch and all-writer protocol. Neither is automatic on the default write
+for exact tag versions, or the [derived fence](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions)
+which maps reservation inputs automatically, including on Orleans (global mode only). Both PostgreSQL modes require
+the enablement epoch and all-writer protocol; unread emitted tags remain unfenced. Neither is automatic on the default write
 path. Cosmos DB, DynamoDB and SQLite currently support only the single-event unique-key fence, not an
 expected-tag-head fence. The ordinary `InMemoryEventStore` rejects conditional append (`ConditionNotSupportedException`);
 the testing-only `InMemoryConditionalEventStore` implements it, but its claims are instance-local and volatile, so it

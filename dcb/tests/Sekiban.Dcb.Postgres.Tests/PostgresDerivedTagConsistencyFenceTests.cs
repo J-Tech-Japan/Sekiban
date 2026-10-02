@@ -105,6 +105,67 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
         }
     }
 
+    private sealed record SharedNonConsistencyTag(string Content) : ITag
+    {
+        public bool IsConsistencyTag() => false;
+        public string GetTagGroup() => "SharedOrder";
+        public string GetTagContent() => Content;
+    }
+    private sealed class FixedTime(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    [Theory]
+    [InlineData(TagConsistencyFenceMode.DeriveFromReservations)]
+    [InlineData(TagConsistencyFenceMode.Off)]
+    public async Task SharedNonConsistencyTag_SmallerIdCommitsLast_FencedPathRejects_LegacyAccepts(TagConsistencyFenceMode mode)
+    {
+        await ProvisionEpochAsync(Service);
+        var store = new PostgresEventStore(Fixture.DbContextFactory, Fixture.DomainTypes.EventTypes, new DefaultServiceIdProvider());
+        var parked = new WriteBarrierStore(store, 1);
+        var shared = new SharedNonConsistencyTag(Guid.NewGuid().ToString());
+        var lowId = Guid.NewGuid(); var highId = Guid.NewGuid();
+        var lowTag = new StudentTag(lowId); var highTag = new StudentTag(highId);
+        var lowGenerator = new MonotonicSortableUniqueIdGenerator(new FixedTime(new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+        var highGenerator = new MonotonicSortableUniqueIdGenerator(new FixedTime(new DateTimeOffset(2021, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+        GeneralSekibanExecutor Executor(IEventStore target, ISortableUniqueIdGenerator generator) => new(
+            target, new InMemoryObjectAccessor(target, Fixture.DomainTypes), Fixture.DomainTypes, null, null,
+            generator, new SortableUniqueIdSeedCoordinator(generator), new DefaultServiceIdProvider(),
+            tagConsistencyFenceOptions: new TagConsistencyFenceOptions { Mode = mode });
+        var low = Executor(parked, lowGenerator);
+        var high = Executor(store, highGenerator);
+        async Task<ResultBox<EventOrNone>> Emit(ICommandContext ctx, Guid id, StudentTag own)
+        {
+            Assert.False((await ctx.TagExistsAsync(own)).GetValue());
+            return await ctx.AppendEvent(new StudentCreated(id, "ordered"), own, shared);
+        }
+        // Allocate the smaller id and reserve its own tag while the store is empty, then park its commit.
+        var lowWrite = low.ExecuteCommandAsync(ctx => Emit(ctx, lowId, lowTag));
+        ResultBox<ExecutionResult> highResult;
+        try
+        {
+            await parked.BothArrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            Assert.False(lowWrite.IsCompleted);
+            highResult = await high.ExecuteCommandAsync(ctx => Emit(ctx, highId, highTag));
+            Assert.True(highResult.IsSuccess, highResult.IsSuccess ? "" : highResult.GetException().ToString());
+        }
+        finally { parked.Release.TrySetResult(); }
+        var lowResult = await lowWrite.WaitAsync(TimeSpan.FromSeconds(30));
+        var fenced = mode == TagConsistencyFenceMode.DeriveFromReservations;
+        if (fenced) Assert.IsType<TagHeadPositionValidationException>(lowResult.GetException());
+        else
+        {
+            Assert.True(lowResult.IsSuccess, lowResult.IsSuccess ? "" : lowResult.GetException().ToString());
+            Assert.True(string.CompareOrdinal(lowResult.GetValue().SortableUniqueId, highResult.GetValue().SortableUniqueId) < 0);
+        }
+        Assert.Equal(fenced ? 1 : 0, parked.FencedArrivals);
+        Assert.Equal(fenced ? 0 : 1, parked.LegacyArrivals);
+        await VerifyRowsAsync(Service, shared.GetTag(), fenced ? 1 : 2);
+        Assert.Equal(fenced ? 0 : 1, (await store.ReadSerializableEventsByTagAsync(lowTag)).GetValue().Count());
+        Assert.Single((await store.ReadSerializableEventsByTagAsync(highTag)).GetValue());
+    }
+
     private async Task ProvisionEpochAsync(string serviceId)
     {
         await using var connection = new NpgsqlConnection(Fixture.ConnectionString);
@@ -148,7 +209,7 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
         Assert.Equal(reader.GetString(2), reader.GetString(3));
     }
 
-    private sealed class WriteBarrierStore(PostgresEventStore inner) : IEventStore, IExpectedTagPositionEventStore,
+    private sealed class WriteBarrierStore(PostgresEventStore inner, int expectedArrivals = 2) : IEventStore, IExpectedTagPositionEventStore,
         IWriteConditionCapabilityProvider
     {
         private int _arrivals, _fenced, _legacy;
@@ -159,7 +220,7 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private async Task ArriveAsync()
         {
-            if (Interlocked.Increment(ref _arrivals) == 2) BothArrived.TrySetResult();
+            if (Interlocked.Increment(ref _arrivals) == expectedArrivals) BothArrived.TrySetResult();
             await Release.Task.WaitAsync(TimeSpan.FromSeconds(25));
         }
         public string? ExpectedTagPositionServiceId => inner.ExpectedTagPositionServiceId;
