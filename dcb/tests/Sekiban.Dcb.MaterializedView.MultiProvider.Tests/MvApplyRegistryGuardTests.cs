@@ -346,7 +346,10 @@ public abstract class MvApplyRegistryGuardTests(MultiProviderFixtureBase fixture
             MvDbType.SqlServer => "SELECT COUNT(*) FROM sys.dm_exec_requests WHERE session_id = @Session AND blocking_session_id <> 0;",
             _ => throw new NotSupportedException()
         };
-        await using var observer = await fixture.OpenConnectionAsync();
+        // MySQL's innodb_trx catalog requires PROCESS, which the app user does not have.
+        await using var observer = fixture is MySqlMvFixture mysql
+            ? await mysql.OpenAdminConnectionAsync()
+            : await fixture.OpenConnectionAsync();
         using var waitTimeout = CancellationTokenSource.CreateLinkedTokenSource(Token);
         waitTimeout.CancelAfter(TimeSpan.FromSeconds(10));
         while (await observer.ExecuteScalarAsync<int>(new CommandDefinition(sql, new { Session = session }, cancellationToken: waitTimeout.Token)) == 0)
@@ -366,6 +369,9 @@ public abstract class MvApplyRegistryGuardTests(MultiProviderFixtureBase fixture
         var projector = new VerifiedBatchCounterProjector(VerifiedBatchQuerySurface.Rows, false);
         var host = VerifiedBatchSafetySupport.CreateHost(projector, fixture.DomainTypes, fixture.DatabaseTypeForTests);
         await CreateExecutor(MvInitializationMode.CreateOrEnsure).InitializeAsync(host);
+        // Keep concurrent mutant appliers on the increment path, avoiding an unrelated insert race.
+        await using (var connection = await fixture.OpenConnectionAsync())
+            await connection.ExecuteAsync($"INSERT INTO {VerifiedBatchSafetySupport.CounterTableName()} (id, value) VALUES ('counter', 0);");
         var events = new[]
         {
             VerifiedBatchSafetySupport.CreateEvent(fixture.DomainTypes, DateTime.UtcNow.AddMinutes(-2)),
