@@ -101,6 +101,35 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 
 `MultiProjectionGrain` がアクセサを検出すると、定期的にスナップショットを保存しメモリ使用量を抑えます。
 
+### 参照されている退避キーの列挙
+
+スナップショットの blob 参照には二つの形式があります。行の `IsOffloaded` / `OffloadKey` / `OffloadProvider` と、`SerializableMultiProjectionStateEnvelope` 内の `OffloadedState.OffloadKey` / `StorageProvider` です。行自体が退避されている場合、その blob にエンベロープが入っているため、両方の参照を保持する必要があります。現在の writer はエンベロープを通常の JSON として保存します。gzip 対応は読み取り側の許容のみです。Orleans の `MultiProjectionGrainState` は退避キーを保持せず、使われなくなった旧 `SerializedState` フィールドはクリアされるだけです。参照元はストアの行です。
+
+Core の追加 API `Sekiban.Dcb.Snapshots.OffloadKeyEnumerator` を使用します。
+
+```csharp
+await foreach (var reference in OffloadKeyEnumerator.EnumerateAsync(
+    store, domainTypes.JsonSerializerOptions, cancellationToken))
+{
+    // Kind: Row、Envelope、または Undecodable。
+    // Lifecycle: 取得できれば Active / Tombstoned、それ以外は null。
+    // キーの和集合を収集し、Undecodable が一つでもあれば削除を中止する。
+}
+```
+
+このヘルパーは tombstone を含む、一覧にある全 projector version を走査し、行の blob を解決してからエンベロープを調べます。標準以外の命名ポリシーを使う場合は、アプリケーションの `JsonSerializerOptions` を渡してください。`InlineState` をデシリアライズせず前方のみ読み進めますが、デコーダーのバッファのピークメモリ使用量は、単一の最大 JSON トークンとその直前の意味を持たない空白（プロパティの場合は名前、コロン、および値の開始位置までの周囲の空白を含む）のサイズの約2倍に、小さな定数分を加えた量です。実際の Sekiban の書き込み処理はコンパクトな JSON を出力します。この上限はデコーダー自身のバッファだけが対象であり、プロバイダーはレコードの読み取り時に inline の `StateData` byte[] など、状態データ全体をメモリに展開する場合があります。行の検索、ストリームの取得、デコードに失敗すると `Detail` 付きの `Undecodable` を返します。一覧取得の失敗と呼び出し元のキャンセルは伝播します。checkpoint slot が存在しない、または読めない場合は `Lifecycle` が null となり `Detail` に理由を記録しますが、キーは引き続き返します。
+
+列挙は **観測** です。キーが出力されなかったことだけでは削除を許可できません。一覧取得が結果整合性のストアもあり（例: Dynamo の `ListAllAsync`）、正常終了しても行を見落とす可能性があります。走査はストアの現在の ServiceId に限定され、blob キー自体には ServiceId が含まれません。同じ blob コンテナを共有する ServiceId ごとに一度ずつ実行してください。
+
+安全な外部 GC には、以下のすべてが必要です。
+
+- 全サービス、全バージョンのどの行からでも参照されているキーを削除しないこと。tombstone の行も対象です。出力は和集合として扱ってください。version rewrite はキーをコピーし、内容アドレス方式は重複を排除するため、複数の行が同じキーを参照できます。
+- `Undecodable` が一つでもあれば **何も削除しない** こと。一覧取得と検索の間に削除された行も `Undecodable` となります。通常は再実行で解消します。
+- 完全で整合性のある参照ビューと猶予期間を確保すること。blob は行のコミットより先にアップロードされ、CAS 失敗時には孤立した blob が残る場合があります。
+- 削除時に参照を再確認し、並行アップロードとコミットを保護する協調制御または条件付き削除を使うこと。内容アドレス方式のキーは GC の確認と削除の間に writer が再アップロードできます。再確認だけではこの競合を防げません。
+
+削除 API と協調プロトコルは #1253 item 3 の範囲であり、**ここでは提供しません**。
+
 ### 退避済みスナップショットのストリーミング復元
 
 退避済みスナップショットを復元する際、Sekiban は Blob ペイロードを 1 回だけ開き、その非 seekable stream を
