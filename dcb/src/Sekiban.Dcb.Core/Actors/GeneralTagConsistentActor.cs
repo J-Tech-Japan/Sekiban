@@ -24,7 +24,10 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
     private readonly TagConsistentActorOptions _options;
     private readonly SemaphoreSlim _reservationLock = new(1, 1);
     private readonly string _tagName;
-    private volatile bool _catchUpCompleted;
+    private long _catchUpGeneration = -1;
+    // Both generations start at zero: fresh activation relies on catch-up, whose errors remain swallowed.
+    private long _invalidationGeneration;
+    private long _validatedGeneration; // Written only under _reservationLock.
     private string _latestSortableUniqueId = "";
 
     public GeneralTagConsistentActor(
@@ -105,24 +108,21 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
             var expectedVersion = string.IsNullOrEmpty(lastSortableUniqueId) ? string.Empty : lastSortableUniqueId;
             var currentVersion = string.IsNullOrEmpty(_latestSortableUniqueId) ? string.Empty : _latestSortableUniqueId;
 
-            // SEK-G22: a different cluster may have committed after this actor successfully cached an empty tag. The
-            // command-side fold then carries a real non-empty expected version while this activation still sees empty.
-            // Re-read authoritatively only for that one anomalous shape. This helper assumes _reservationLock is held: it
-            // must never enter the ordinary catch-up path, which would try to acquire the same lock again. A successful
-            // read is reconciled into the cache before the exact-match decision, including a conflicting other version,
-            // so a later expect-empty reservation cannot reopen G19's first-write hole.
-            if (expectedVersion.Length > 0 && currentVersion.Length == 0)
+            // One generation-validated read serves both invalidation and SEK-G22's stale-empty reconciliation.
+            if (_eventStore != null &&
+                (Volatile.Read(ref _invalidationGeneration) != _validatedGeneration ||
+                    (expectedVersion.Length > 0 && currentVersion.Length == 0)))
             {
-                var refreshResult = await RefreshLatestTagUnderReservationLockAsync();
-                if (refreshResult.IsSuccess)
+                var refreshResult = await ReadValidatedUnderLockAsync();
+                if (!refreshResult.IsSuccess)
                 {
-                    currentVersion = string.IsNullOrEmpty(_latestSortableUniqueId)
-                        ? string.Empty
-                        : _latestSortableUniqueId;
+                    return ResultBox.Error<TagWriteReservation>(refreshResult.GetException());
                 }
-                // A failed read changes no cache state. The unchanged empty current then reaches the ordinary exact-match
-                // conflict below, preserving the existing public failure channel while still failing closed.
+                currentVersion = _latestSortableUniqueId;
             }
+
+            // Store-side conditional append (G15/G16) is still required for the reservation-expiry window and
+            // writes on non-consistency tags whose notification arrives after an accepted refresh.
 
             if (!string.Equals(expectedVersion, currentVersion, StringComparison.Ordinal))
             {
@@ -135,7 +135,7 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
             // the empty current untouched. The authoritative version advance happens on the durable commit, not here.
             if (!string.IsNullOrEmpty(lastSortableUniqueId))
             {
-                _latestSortableUniqueId = lastSortableUniqueId;
+                PublishLatestUnderReservationLock(lastSortableUniqueId);
             }
 
             return ResultBox.FromValue(await CreateReservationAsync());
@@ -159,7 +159,7 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
     }
 
     /// <summary>
-    ///     Performs the bounded SEK-G22 authoritative re-check while <see cref="_reservationLock" /> is already held.
+    ///     Performs an authoritative read for invalidation or SEK-G22 reconciliation while <see cref="_reservationLock" /> is already held.
     ///     This method deliberately does not call the catch-up path or acquire the reservation lock.
     /// </summary>
     private async Task<ResultBox<string>> RefreshLatestTagUnderReservationLockAsync()
@@ -181,15 +181,8 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
 
             var authoritativeVersion = latestTagResult.GetValue().LastSortedUniqueId ?? string.Empty;
 
-            // The reservation lock makes the normal entry condition (cached empty) stable across the await. Keep this
-            // monotonic guard as part of the primitive's contract so a future caller can never replace a newer non-empty
-            // cache value with an older/empty store observation.
-            if (string.IsNullOrEmpty(_latestSortableUniqueId) ||
-                (!string.IsNullOrEmpty(authoritativeVersion) &&
-                    string.Compare(authoritativeVersion, _latestSortableUniqueId, StringComparison.Ordinal) > 0))
-            {
-                _latestSortableUniqueId = authoritativeVersion;
-            }
+            // Refresh can reconcile empty or non-empty caches; never lower a newer cached observation.
+            PublishLatestUnderReservationLock(authoritativeVersion);
 
             return ResultBox.FromValue(_latestSortableUniqueId);
         }
@@ -200,8 +193,54 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
         }
     }
 
+    // All callers hold _reservationLock, including catch-up publication.
+    private void PublishLatestUnderReservationLock(string? version)
+    {
+        version ??= string.Empty;
+        if (string.Compare(version, _latestSortableUniqueId, StringComparison.Ordinal) > 0)
+        {
+            _latestSortableUniqueId = version;
+        }
+    }
+
+    private async Task<ResultBox<string>> ReadValidatedUnderLockAsync()
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var generation = Volatile.Read(ref _invalidationGeneration);
+            var result = await RefreshLatestTagUnderReservationLockAsync();
+            if (!result.IsSuccess)
+            {
+                return ResultBox.Error<string>(new Exception(
+                    $"Tag {_tagName} has been modified or could not be refreshed authoritatively",
+                    result.GetException()));
+            }
+            if (Volatile.Read(ref _invalidationGeneration) == generation)
+            {
+                _validatedGeneration = generation;
+                return ResultBox.FromValue(_latestSortableUniqueId);
+            }
+        }
+        return ResultBox.Error<string>(new Exception($"Tag {_tagName} is being written concurrently; retry"));
+    }
+
+    private bool IsCatchUpComplete =>
+        Volatile.Read(ref _catchUpGeneration) == Volatile.Read(ref _invalidationGeneration);
+
+    private void RaiseCatchUpGeneration(long generation)
+    {
+        var current = Volatile.Read(ref _catchUpGeneration);
+        while (current < generation)
+        {
+            var observed = Interlocked.CompareExchange(ref _catchUpGeneration, generation, current);
+            if (observed == current) return;
+            current = observed;
+        }
+    }
+
     public async Task<bool> ConfirmReservationAsync(TagWriteReservation reservation)
     {
+        Interlocked.Increment(ref _invalidationGeneration);
         if (reservation == null) return false;
 
         // Ensure catch-up is completed before acquiring lock
@@ -216,8 +255,6 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
                 // Verify it's the same reservation
                 if (existingReservation.Equals(reservation))
                 {
-                    // After confirming reservation, force a re-catch up to get the latest state
-                    _catchUpCompleted = false;
                     return true;
                 }
                 else
@@ -257,14 +294,14 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
 
     public Task NotifyEventWrittenAsync()
     {
-        // Simply mark catch-up as incomplete to force refresh on next access
-        _catchUpCompleted = false;
+        Interlocked.Increment(ref _invalidationGeneration);
         return Task.CompletedTask;
     }
 
     private async Task EnsureCatchUpCompletedAsync()
     {
-        if (_catchUpCompleted)
+        var generation = Volatile.Read(ref _invalidationGeneration);
+        if (IsCatchUpComplete)
         {
             return;
         }
@@ -273,20 +310,19 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
         try
         {
             // Double-check after acquiring lock
-            if (_catchUpCompleted)
+            if (IsCatchUpComplete)
             {
                 return;
             }
 
             if (_eventStore == null)
             {
-                _catchUpCompleted = true;
+                RaiseCatchUpGeneration(generation);
                 return;
             }
 
             // Catch up from event store
             await CatchUpFromEventStoreAsync();
-            _catchUpCompleted = true;
         }
         finally
         {
@@ -296,6 +332,7 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
 
     private async Task CatchUpFromEventStoreAsync()
     {
+        var generation = Volatile.Read(ref _invalidationGeneration);
         try
         {
             // Parse tag name using ITagTypes instead of GenericTag
@@ -311,15 +348,15 @@ public class GeneralTagConsistentActor : ITagConsistentActorCommon
                 await _reservationLock.WaitAsync();
                 try
                 {
-                    _latestSortableUniqueId = tagState.LastSortedUniqueId;
+                    PublishLatestUnderReservationLock(tagState.LastSortedUniqueId);
+                    RaiseCatchUpGeneration(generation);
                 }
                 finally
                 {
                     _reservationLock.Release();
                 }
             }
-            // No tag exists yet or error reading, which is fine
-            // The actor starts with empty state
+            // Failed reads publish no completion, so the next call retries (one catch-up read per failing call).
         }
         catch (Exception ex)
         {
