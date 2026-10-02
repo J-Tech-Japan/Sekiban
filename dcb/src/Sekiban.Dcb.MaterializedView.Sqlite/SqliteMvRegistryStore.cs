@@ -452,46 +452,13 @@ public sealed partial class SqliteMvRegistryStore : MvForcedReverseRegistryStore
         CancellationToken cancellationToken = default) =>
         ReadEntriesWithConnectionAsync(_connectionString, serviceId, viewName, viewVersion, cancellationToken);
 
-    public async Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(
+    public bool SupportsApplyLocking => true;
+
+    public Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(
         string serviceId, string viewName, int viewVersion, IDbTransaction transaction,
-        CancellationToken cancellationToken = default)
-    {
-        // Same coarse write fence as activation: SQLite serializes writers before reading the checkpoint.
-        await transaction.Connection!.ExecuteAsync(new CommandDefinition(
-            "UPDATE sekiban_mv_registry SET last_updated = last_updated WHERE service_id = @ServiceId AND view_name = @ViewName;",
-            new { ServiceId = serviceId, ViewName = viewName }, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
-        const string sql = """
-            SELECT service_id AS ServiceId,
-                   view_name AS ViewName,
-                   view_version AS ViewVersion,
-                   logical_table AS LogicalTable,
-                   physical_table AS PhysicalTable,
-                   status AS Status,
-                   current_position AS CurrentPosition,
-                   target_position AS TargetPosition,
-                   current_checkpoint_truth AS CurrentCheckpointTruth,
-                   target_checkpoint_truth AS TargetCheckpointTruth,
-                   last_sortable_unique_id AS LastSortableUniqueId,
-                   applied_event_version AS AppliedEventVersion,
-                   last_applied_source AS LastAppliedSource,
-                   last_applied_at AS LastAppliedAt,
-                   last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
-                   last_stream_received_at AS LastStreamReceivedAt,
-                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
-                   last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId,
-                   last_updated AS LastUpdated,
-                   metadata AS Metadata
-            FROM sekiban_mv_registry
-            WHERE service_id = @ServiceId
-              AND view_name = @ViewName
-              AND view_version = @ViewVersion
-            ORDER BY logical_table;
-            """;
-        var rows = await transaction.Connection!.QueryAsync(new CommandDefinition(
-            sql, new { ServiceId = serviceId, ViewName = viewName, ViewVersion = viewVersion },
-            transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
-        return rows.Select(row => (MvRegistryEntry)MapEntry(ToDictionary(row))).ToList();
-    }
+        CancellationToken cancellationToken = default) =>
+        MvApplyRegistryLockReader.ReadAsync(serviceId, viewName, viewVersion, transaction,
+            MapEntry, cancellationToken, fenceSql: "UPDATE sekiban_mv_registry SET last_updated = last_updated WHERE service_id = @ServiceId AND view_name = @ViewName;");
 
     private async Task<IReadOnlyList<MvRegistryEntry>> ReadEntriesWithConnectionAsync(
         string connectionString,

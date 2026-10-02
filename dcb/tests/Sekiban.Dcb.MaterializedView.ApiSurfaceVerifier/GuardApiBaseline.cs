@@ -15,6 +15,11 @@ internal static class GuardApiBaseline
         }
 
         var registry = candidate.GetType(ns + "IMvRegistryStore", throwOnError: true)!;
+        var capability = registry.GetProperty("SupportsApplyLocking");
+        if (capability?.PropertyType.FullName != "System.Boolean" ||
+            capability?.GetMethod is not { IsAbstract: false })
+            throw new InvalidOperationException("The default SupportsApplyLocking capability is missing.");
+
         var method = registry.GetMethod("LockEntriesForApplyAsync");
         var expectedParameters = new[]
         {

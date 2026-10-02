@@ -397,6 +397,8 @@ internal sealed class CountingRegistryStore(IMvRegistryStore inner) : IMvRegistr
     public Task UpdatePositionAsync(MvPositionUpdate update, IDbTransaction? transaction = null, CancellationToken cancellationToken = default) =>
         inner.UpdatePositionAsync(update, transaction, cancellationToken);
 
+    public bool SupportsApplyLocking => inner.SupportsApplyLocking;
+
     public Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(
         string serviceId, string viewName, int viewVersion, IDbTransaction transaction,
         CancellationToken cancellationToken = default) =>

@@ -1018,6 +1018,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
             cancellationToken,
             classifyFailures: true);
 
+    // FromEntries retains the observed registry rows. A manually constructed legacy status still supplies
+    // its observed checkpoint as the expectation; never replace it with a fresh read after the empty decision.
     protected async Task<MvCatchUpResult> CompleteCatchUpAsync(
         IMvApplyHost host,
         string serviceId,
@@ -1025,7 +1027,13 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
         MvProjectionStatusSnapshot currentStatus,
         CancellationToken cancellationToken,
         bool classifyFailures) => await CompleteCatchUpInternalAsync(
-            host, serviceId, readResult, currentStatus, cancellationToken, classifyFailures, null).ConfigureAwait(false);
+            host, serviceId, readResult, currentStatus, cancellationToken, classifyFailures,
+            currentStatus.OriginalEntries ?? [new MvRegistryEntry
+            {
+                ServiceId = serviceId, ViewName = host.ViewName, ViewVersion = host.ViewVersion,
+                LogicalTable = string.Empty, PhysicalTable = string.Empty, Status = currentStatus.Status,
+                CurrentCheckpointTruth = currentStatus.CurrentCheckpointTruth
+            }]).ConfigureAwait(false);
 
     internal async Task<MvCatchUpResult> CompleteCatchUpInternalAsync(
         IMvApplyHost host, string serviceId, ResultBox<IEnumerable<SerializableEvent>> readResult,
@@ -1123,8 +1131,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
             if (!currentStatus.CurrentCheckpointTruth.IsKnown)
             {
                 await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+                await MvLifecycleTestHooks.InvokeBeforeApplyTransactionAsync(connection, cancellationToken).ConfigureAwait(false);
                 await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-                // Legacy protected callers supply only a status snapshot; they still lock, but cannot re-check R8.
                 if (!await LockAndCheckApplyAsync(host, serviceId, transaction,
                         NormalizeRegistryPosition(originalEntries ?? []), originalEntries is not null, cancellationToken).ConfigureAwait(false))
                 {
@@ -1318,6 +1326,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await MvLifecycleTestHooks.InvokeBeforeApplyTransactionAsync(connection, cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         if (!await LockAndCheckApplyAsync(host, serviceId, transaction, expectedPosition,
                 source != MvApplySource.Stream, cancellationToken).ConfigureAwait(false))
@@ -1431,6 +1440,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
         MvModeCapabilities capabilities,
         CancellationToken cancellationToken)
     {
+        await MvLifecycleTestHooks.InvokeBeforeApplyTransactionAsync(connection, cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         if (!await LockAndCheckApplyAsync(host, serviceId, transaction, currentPosition,
                 source != MvApplySource.Stream, cancellationToken).ConfigureAwait(false))
@@ -1530,11 +1540,20 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
     private async Task<bool> LockAndCheckApplyAsync(IMvApplyHost host, string serviceId, DbTransaction transaction,
         string? expected, bool guardEnabled, CancellationToken cancellationToken)
     {
+        if (!_registryStore.SupportsApplyLocking)
+        {
+            if (Interlocked.Exchange(ref _unsupportedApplyLockWarning, 1) == 0)
+                _logger.LogWarning("Registry store {RegistryStore} does not support apply locking; view {ViewName} uses unguarded compatibility apply.",
+                    _registryStore.GetType().FullName, host.ViewName);
+            return true;
+        }
         var locked = await _registryStore.LockEntriesForApplyAsync(
             serviceId, host.ViewName, host.ViewVersion, transaction, cancellationToken).ConfigureAwait(false);
         await MvLifecycleTestHooks.InvokeAfterRegistryLockAsync(MvLifecycleLockPoint.ApplyRegistry, cancellationToken).ConfigureAwait(false);
         return !guardEnabled || string.Equals(NormalizeRegistryPosition(locked), expected, StringComparison.Ordinal);
     }
+
+    private int _unsupportedApplyLockWarning;
 
     private readonly Dictionary<(string Service, string View, int Version), (string? Position, int Count)> _superseded = new();
 

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Sekiban.Dcb.ServiceId;
@@ -46,6 +47,25 @@ public sealed record MvProjectionStatusSnapshot(
     MvStatus Status,
     long AppliedEventCount)
 {
+    // Keep execution metadata outside the record's public value equality and serialized status payload.
+    private static readonly ConditionalWeakTable<MvProjectionStatusSnapshot, IReadOnlyList<MvRegistryEntry>> EntrySnapshots = new();
+    internal IReadOnlyList<MvRegistryEntry>? OriginalEntries
+    {
+        get => EntrySnapshots.TryGetValue(this, out var entries) ? entries : null;
+        init { if (value is not null) EntrySnapshots.Add(this, value); }
+    }
+
+    private MvProjectionStatusSnapshot(MvProjectionStatusSnapshot original)
+    {
+        CurrentCheckpointTruth = original.CurrentCheckpointTruth;
+        Status = original.Status;
+        AppliedEventCount = original.AppliedEventCount;
+        SwitchKind = original.SwitchKind;
+        SwitchReason = original.SwitchReason;
+        SwitchedAtUtc = original.SwitchedAtUtc;
+        OriginalEntries = original.OriginalEntries;
+    }
+
     public MvSwitchKind? SwitchKind { get; init; }
     public string? SwitchReason { get; init; }
     public DateTimeOffset? SwitchedAtUtc { get; init; }
@@ -57,7 +77,7 @@ public sealed record MvProjectionStatusSnapshot(
     {
         if (entries.Count == 0)
         {
-            return Unknown();
+            return Unknown() with { OriginalEntries = entries.ToArray() };
         }
 
         var applied = entries.Max(entry => entry.AppliedEventVersion);
@@ -75,14 +95,14 @@ public sealed record MvProjectionStatusSnapshot(
         var unknown = entries.FirstOrDefault(entry => !entry.CurrentCheckpointTruth.IsKnown);
         if (unknown is not null)
         {
-            return new(unknown.CurrentCheckpointTruth, status, applied);
+            return new(unknown.CurrentCheckpointTruth, status, applied) { OriginalEntries = entries.ToArray() };
         }
 
         var truth = entries
             .Select(entry => entry.CurrentCheckpointTruth)
             .OrderBy(entry => entry.PositionValue, StringComparer.Ordinal)
             .First();
-        return new(truth, status, applied);
+        return new(truth, status, applied) { OriginalEntries = entries.ToArray() };
     }
 }
 
