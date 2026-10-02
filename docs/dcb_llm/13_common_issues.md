@@ -442,8 +442,10 @@ Hard guarantees require a storage-layer fence: [conditional unique-append (G15/G
 for single-event create-once operations using the same idempotency key, or PostgreSQL's opt-in
 [`ExpectedTagPositions` (SEK-G40)](11_storage_providers.md#postgresql-durable-multi-tag-expected-position-cas--sek-g40)
 for exact tag versions, with its enablement epoch and all-writer protocol. Neither is automatic on the default write
-path. Cosmos DB, DynamoDB, SQLite and InMemory currently support only the single-event unique-key fence, not an
-expected-tag-head fence; the Cosmos tag-head fence is under design (SEK-G101). Multi-projection convergence over
+path. Cosmos DB, DynamoDB and SQLite currently support only the single-event unique-key fence, not an
+expected-tag-head fence. The ordinary `InMemoryEventStore` rejects conditional append (`ConditionNotSupportedException`);
+the testing-only `InMemoryConditionalEventStore` implements it, but its claims are instance-local and volatile, so it
+is not a guarantee across silo processes; the Cosmos tag-head fence is under design (SEK-G101). Multi-projection convergence over
 durable duplicate events (SEK-G18) does not turn duplicate creates into a uniqueness guarantee.
 
 **Behavior change**: from 10.8.0, competing asserted-empty creates handled by the same activation result in a

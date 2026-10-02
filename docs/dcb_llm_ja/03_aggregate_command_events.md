@@ -109,8 +109,10 @@ public record StudentTag(Guid StudentId) : IGuidTagGroup<StudentTag>
 [条件付きユニーク追記（G15/G16）](11_storage_providers.md#条件付きユニークキー追記--sek-g15)、タグの正確なバージョンには
 PostgreSQL のオプトイン機能 [`ExpectedTagPositions`（SEK-G40）](11_storage_providers.md#postgresql-の耐久-multi-tag-expected-position-cas--sek-g40)
 を使い、enablement epoch と全 writer のプロトコルに従ってください。どちらも既定の書き込み経路で自動的に有効には
-なりません。Cosmos DB、DynamoDB、SQLite、InMemory が現在持つフェンスは単一イベントのユニークキーのみで、
-期待するタグ先頭の検査はありません。Cosmos のタグ先頭フェンスは設計中です（SEK-G101）。永続化された重複イベントの
+なりません。Cosmos DB、DynamoDB、SQLite が現在持つフェンスは単一イベントのユニークキーのみで、
+期待するタグ先頭の検査はありません。通常の `InMemoryEventStore` は条件付き追記を拒否します（`ConditionNotSupportedException`）。
+テスト用の `InMemoryConditionalEventStore` は実装していますが、その claim はインスタンス内かつ揮発的なので、
+silo プロセスをまたぐ保証にはなりません。Cosmos のタグ先頭フェンスは設計中です（SEK-G101）。永続化された重複イベントの
 マルチプロジェクションによる収束（SEK-G18）は、重複作成に対する一意性保証にはなりません。
 
 **10.11.0 リリースノート**: 未読の整合性タグは 10.1.x と同じ比較なし動作へ戻り、既存の副次タグを読み取らず付与

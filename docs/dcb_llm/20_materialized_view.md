@@ -461,8 +461,16 @@ callers that do not opt into the new boundary.
 
 Projector SQL must be idempotent under duplicate grain activation or event redelivery, including within one Orleans
 cluster (see [Grain directory and duplicate activations](10_orleans_setup.md#grain-directory-and-duplicate-activations)).
-Use the `_last_sortable_unique_id` guard below, or upserts whose repeated execution has the same result. Avoid blind
-increments such as `count = count + 1` without an event/version guard. Each batch having its own transaction does not
+Distinguish two kinds of rows:
+
+- **Last-write-wins rows** (the row reflects the latest event): use the `_last_sortable_unique_id` guard below so that
+  an older redelivery cannot overwrite newer state. An upsert that is idempotent only for the same event is not
+  enough.
+- **Accumulating rows** (counters, sums, appended lists): a latest-sortable-ID guard alone can drop an older increment
+  when overlapping activations apply events out of order. Record applied event IDs in a ledger table in the same
+  transaction (and skip events already recorded), or recompute the aggregate from source rows instead of applying
+  blind increments such as `count = count + 1`.
+ Each batch having its own transaction does not
 prevent another activation from applying it again. Idempotent row updates do not fence races on the MV registry
 position/state; that registry guard is separate work (SEK-G103).
 
