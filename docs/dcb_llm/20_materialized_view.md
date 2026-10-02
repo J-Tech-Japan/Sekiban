@@ -459,6 +459,13 @@ callers that do not opt into the new boundary.
 
 ## Idempotency and Ordering
 
+Projector SQL must be idempotent under duplicate grain activation or event redelivery, including within one Orleans
+cluster (see [Grain directory and duplicate activations](10_orleans_setup.md#grain-directory-and-duplicate-activations)).
+Use the `_last_sortable_unique_id` guard below, or upserts whose repeated execution has the same result. Avoid blind
+increments such as `count = count + 1` without an event/version guard. Each batch having its own transaction does not
+prevent another activation from applying it again. Idempotent row updates do not fence races on the MV registry
+position/state; that registry guard is separate work (SEK-G103).
+
 Materialized views must be safe to replay. The usual pattern is:
 
 - keep `_last_sortable_unique_id` on every row

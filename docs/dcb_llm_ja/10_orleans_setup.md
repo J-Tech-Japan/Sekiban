@@ -168,6 +168,71 @@ builder.Services.AddSingleton<ISekibanExecutor, OrleansDcbExecutor>();
 ### 共通
 - サイロを水平スケールするとタグ Grain が自動で再配置されます
 
+## Grain ディレクトリと重複活性化
+
+Orleans 10.3.1 の既定値は、結果整合性を持つ `LocalGrainDirectory` です。Sekiban のホストとテンプレートは
+Grain ディレクトリを構成していないため、この既定値を使います。メンバーシップの変動時には一時的に重複活性化が
+発生し得ます。Orleans は重複側を非活性化して解消しますが、共存期間中の書き込みには影響があります。Azure Table や
+Cosmos による**クラスタリング**はメンバーシップの構成であり、Grain ディレクトリやイベントストアのフェンスの構成では
+ありません。[Orleans の Grain ディレクトリガイド](https://learn.microsoft.com/en-us/dotnet/orleans/host/grain-directory)も参照してください。
+
+### 強整合ディレクトリの試験的なオプトイン
+
+`TagConsistentGrain` と `MaterializedViewGrain` の重複活性化リスクを減らすため、クラスタ内の強整合ディレクトリを
+検討してください。10.3.1 の `AddDistributedGrainDirectory` は `Orleans.Hosting.CoreHostingExtensions` の拡張メソッド
+（`Microsoft.Orleans.Runtime`）で、`ORLEANSEXP003` が付いた試験的 API です。オプトイン機能であり、テンプレートの
+既定値でも、そのまま本番に導入できる既定構成でもありません。名前を省略するとクラスタ全体の既定値になります。
+
+```csharp
+using Orleans.Hosting;
+
+#pragma warning disable ORLEANSEXP003
+siloBuilder.AddDistributedGrainDirectory(); // 試験的機能。クラスタ全体の既定値
+#pragma warning restore ORLEANSEXP003
+```
+
+別の方法として、名前付きディレクトリを登録し、Grain の実装クラスに
+`[GrainDirectory("ConsistencyDirectory")]` を付けて選択できます。
+
+```csharp
+#pragma warning disable ORLEANSEXP003
+siloBuilder.AddDistributedGrainDirectory("ConsistencyDirectory");
+#pragma warning restore ORLEANSEXP003
+```
+
+属性には `Orleans.GrainDirectory` 名前空間を使います。インターフェースではなく Grain クラスに付けます。
+Sekiban の組み込み Grain に型ごとの設定を適用するには、実装クラスの変更が必要です。ホストで名前付きディレクトリを登録するだけでは、それらの Grain は選択しません。
+[10.3.1 の登録 API ソース](https://github.com/dotnet/orleans/blob/v10.3.1/src/Orleans.Runtime/Hosting/CoreHostingExtensions.cs)を参照してください。
+異常終了後の復旧には範囲リース（`RangeLeaseDuration`、30秒）が使われるため、この復旧待ち時間を考慮してください。
+
+### 外部ディレクトリと残る保証境界
+
+Redis、Azure Table、ADO.NET のディレクトリは、それぞれ独自の整合性を持ちます。型ごと、または既定値として
+登録できます（例: `UseRedisGrainDirectoryAsDefault`、`UseAzureTableGrainDirectoryAsDefault`。対応するプロバイダの
+パッケージとオプションが必要です）。同じ正しさの保証を提供するわけではありません。Azure Table の実装には登録時の
+競合があり、Redis の `EntryExpiry` は重複活性化を引き起こし得ます。
+
+どのディレクトリも、死亡判定済みでも動作を続けているサイロをフェンスできません。Orleans がプロセスを終了するのは、
+そのサイロが自身の死亡状態を認識したときです。それまでは、同居する API、キャッシュされた経路、処理中の呼び出しを
+通じて活性化が要求を処理し続ける場合があります。強整合ディレクトリは競合の範囲を狭めますが、最終的なフェンスは
+ストレージ側の条件付き検査です。[Orleans のクラスタ管理](https://learn.microsoft.com/en-us/dotnet/orleans/implementation/cluster-management)を参照してください。
+
+- ディレクトリ構成を混在させるローリング更新ではなく、クラスタ全体を切り替えてください。ローリング切り替えの手順は
+  文書化されていません。試験的ディレクトリを採用する前に、展開とロールバックの計画を準備し、検証してください。
+- メンバーシップと障害検出を環境に合わせて調整し、迅速な検出と誤検知のバランスを取ってください。古いサイロを終了し、
+  メンバーシップの変動を監視して、ホスト基盤が終了したプロセスを再起動できるようにしてください。
+- 厳密な保証にはストレージのフェンスを使ってください。[予約の保証境界](03_aggregate_command_events.md)で G15/G16 の
+  ユニーク追記と PostgreSQL のオプトイン `ExpectedTagPositions` を説明しています。通常の書き込みにはフェンスがありません。
+
+### 重複活性化時の Sekiban 各機能のリスク
+
+| 機能 | 残るリスクと保護 |
+|------|----------------|
+| `TagConsistentGrain` / `GeneralTagConsistentActor` | 正しさに関わるリスク。予約とキャッシュ済みタグ先頭は活性化ごとに独立しており、2つの活性化が同じ期待先頭で予約し、既定の書き込み経路で両方とも追記し得ます。 |
+| `MultiProjectionGrain` のチェックポイント | CAS 対応ストア（InMemory、SQLite、DynamoDB、PostgreSQL、Cosmos）では [SEK-G20 generation-aware checkpoint CAS](11_storage_providers.md#sek-g20-generation-aware-checkpoint-cas) が保護します。イベント ID による重複排除がリプレイを保護し、チェックポイントの採用後に追加の catch-up が必要になる場合があります。無条件書き込みを行うカスタムストアには、この CAS 保護がありません。 |
+| `MaterializedViewGrain` | 重複活性化や再配信により、非冪等な SQL が二重適用され得ます。[冪等なプロジェクター SQL](20_materialized_view.md#順序保証と冪等性)を使ってください。活性化間のレジストリ位置・状態の競合は残り、レジストリのガードは別の課題（SEK-G103）です。 |
+| `TagStateGrain`、ストリーム・イベント配信 | 内部キャッシュとリプレイの正しさは、ETag による Grain ストレージとイベント ID の重複排除で自己修復されます。少なくとも1回の配信では、任意のコンシューマーの副作用にも冪等性が必要です。 |
+
 ## Orleans なしでのテスト
 
 `InMemorySekibanExecutor` を使えばサイロ無しでもコマンド処理を試せます。

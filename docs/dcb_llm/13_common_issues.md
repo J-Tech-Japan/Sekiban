@@ -414,7 +414,7 @@ hazard**: on SQLite the legacy `INSERT OR REPLACE` upsert resets the control col
 WRITER can erase a tombstone — protection is complete only when every writer is upgraded to 10.8.0.
 The release gate for the full fix is G18 + G19 + G20.
 
-## Duplicate first-writes on one cluster — CLOSED in G19 (10.8.0)
+## Duplicate first-writes within one activation — CLOSED in G19 (10.8.0)
 
 **Symptom.** Two create commands for the *same* consistency tag both succeed on a single cluster (non-overlapping
 reservations), so applications cannot rely on a "this ID already exists" command error and every create projector must be
@@ -424,16 +424,31 @@ duplicate-tolerant.
 non-empty. An empty expected version (a first write) skipped the check, so a second first write against a tag that already
 had committed state passed.
 
-**How G19 closes it.** In the actor lock and after catch-up, an empty expected version means "expect the tag to be empty",
+**How G19 closes the single-activation race.** In the actor lock and after catch-up, an empty expected version means
+"expect the tag to be empty",
 so a second non-overlapping first write **conflicts** through the existing `ResultBox.Error` channel (no new public
 exception type). SEK-G30 subsequently separated an unobserved tag (`null`, Unspecified: reserve without comparison) from
 an observed-empty tag (`""`, AssertEmpty); non-empty versions remain ExactMatch. See
 [Three-state reservation semantics](03_aggregate_command_events.md#three-state-reservation-semantics-sek-g19--sek-g30-10110).
 
-**Boundary (per cluster).** This holds **at-most-one first write per cluster** (one Orleans actor activation per tag).
-Independent clusters do not coordinate through the actor — cross-cluster uniqueness is the storage layer's conditional
-unique-append (G15/G16), and convergence over durable duplicates is SEK-G18. **Behavior change**: from 10.8.0 one side of
-a racing create now fails with a consistency error. The release gate for the full fix is G18 + G19 + G20.
+**Guarantee boundary.** Reservations serialize competing writes within one `TagConsistentGrain` activation,
+but are not a hard guarantee even inside one cluster. Orleans 10.3.1's default directory can briefly run two
+activations of the same grain during membership churn, or while a partitioned silo has not yet learned that it was
+declared dead. Each activation has its own reservation lock and cached tag head; both can reserve and append.
+Independent clusters also do not coordinate through the actor and can each reserve-empty and append a duplicate create.
+See [Grain directory and duplicate activations](10_orleans_setup.md#grain-directory-and-duplicate-activations).
+
+Hard guarantees require a storage-layer fence: [conditional unique-append (G15/G16)](11_storage_providers.md#conditional-unique-key-append--sek-g15)
+for single-event create-once operations using the same idempotency key, or PostgreSQL's opt-in
+[`ExpectedTagPositions` (SEK-G40)](11_storage_providers.md#postgresql-durable-multi-tag-expected-position-cas--sek-g40)
+for exact tag versions, with its enablement epoch and all-writer protocol. Neither is automatic on the default write
+path. Cosmos DB, DynamoDB, SQLite and InMemory currently support only the single-event unique-key fence, not an
+expected-tag-head fence; the Cosmos tag-head fence is under design (SEK-G101). Multi-projection convergence over
+durable duplicate events (SEK-G18) does not turn duplicate creates into a uniqueness guarantee.
+
+**Behavior change**: from 10.8.0, competing asserted-empty creates handled by the same activation result in a
+consistency error for one side. The G18 + G19 + G20 release gate addressed convergence, the single-activation
+first-write check and checkpoint CAS; it did not add a storage fence to normal command writes.
 
 ## Valid cross-cluster update is rejected against an empty actor cache — CLOSED in 10.8.2 (SEK-G22)
 
