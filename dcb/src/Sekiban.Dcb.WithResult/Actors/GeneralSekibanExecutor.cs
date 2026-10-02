@@ -7,6 +7,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.SizeGates;
+using Sekiban.Dcb.TagConsistencyFence;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Actors;
@@ -110,6 +111,29 @@ public class GeneralSekibanExecutor : ISekibanExecutor, ISerializedSekibanDcbExe
                 eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider,
                 sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator, serviceIdProvider,
                 sortableUniqueIdWaitPolicy, executorSizeGateOptions)))
+    {
+    }
+
+    public GeneralSekibanExecutor(
+        IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        TagConsistencyFenceOptions tagConsistencyFenceOptions, ExecutorSizeGateOptions? executorSizeGateOptions = null,
+        IEventPublisher? eventPublisher = null, IExecutedUserProvider? executedUserProvider = null)
+        : this(CreateResultConstruction(actorAccessor, () => CoreGeneralSekibanExecutorFactory.CreateWithFence(
+            eventStore, actorAccessor, domainTypes, tagConsistencyFenceOptions, executorSizeGateOptions,
+            eventPublisher, executedUserProvider, ProcessSharedSortableUniqueIdServices.Generator,
+            ProcessSharedSortableUniqueIdServices.SeedCoordinator, new DefaultServiceIdProvider())))
+    {
+    }
+
+    public GeneralSekibanExecutor(
+        IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher, IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator, SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider, ExecutorSizeGateOptions? executorSizeGateOptions = null,
+        TagConsistencyFenceOptions? tagConsistencyFenceOptions = null)
+        : this(CreateResultConstruction(actorAccessor, () => CoreGeneralSekibanExecutorFactory.CreateWithFence(
+            eventStore, actorAccessor, domainTypes, tagConsistencyFenceOptions, executorSizeGateOptions,
+            eventPublisher, executedUserProvider, sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator, serviceIdProvider)))
     {
     }
 

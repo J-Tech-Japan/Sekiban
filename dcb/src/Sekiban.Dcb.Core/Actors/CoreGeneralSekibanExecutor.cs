@@ -6,6 +6,7 @@ using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.SizeGates;
+using Sekiban.Dcb.TagConsistencyFence;
 using Sekiban.Dcb.Storage;
 using Sekiban.Dcb.Tags;
 using Sekiban.Dcb.Validation;
@@ -32,6 +33,7 @@ public class CoreGeneralSekibanExecutor
     private readonly SortableUniqueIdSeedCoordinator _sortableUniqueIdSeedCoordinator;
     private readonly SortableUniqueIdWaitPolicy _sortableUniqueIdWaitPolicy;
     private readonly ExecutorSizeGateOptions? _executorSizeGateOptions;
+    private readonly TagConsistencyFenceOptions? _tagConsistencyFenceOptions;
 
     /// <summary>
     ///     Test seam ONLY (never set in production): the EventId / SortableUniqueId generators used by the serialized
@@ -161,6 +163,18 @@ public class CoreGeneralSekibanExecutor
         IServiceIdProvider serviceIdProvider,
         SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy,
         ExecutorSizeGateOptions? executorSizeGateOptions)
+        : this(eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider,
+            sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator, serviceIdProvider,
+            sortableUniqueIdWaitPolicy, executorSizeGateOptions, null)
+    {
+    }
+
+    internal CoreGeneralSekibanExecutor(
+        IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher, IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator, SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider, SortableUniqueIdWaitPolicy sortableUniqueIdWaitPolicy,
+        ExecutorSizeGateOptions? executorSizeGateOptions, TagConsistencyFenceOptions? tagConsistencyFenceOptions)
     {
         _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _actorAccessor = actorAccessor ?? throw new ArgumentNullException(nameof(actorAccessor));
@@ -176,6 +190,68 @@ public class CoreGeneralSekibanExecutor
                                       throw new ArgumentNullException(nameof(sortableUniqueIdWaitPolicy));
         _executorSizeGateOptions = executorSizeGateOptions;
         _executorSizeGateOptions?.Validate();
+        _tagConsistencyFenceOptions = tagConsistencyFenceOptions;
+        if (_tagConsistencyFenceOptions?.Mode == TagConsistencyFenceMode.DeriveFromReservations && !SupportsExpectedPositions())
+            throw new InvalidOperationException("The tag consistency fence requires a store supporting ExpectedTagPosition.");
+    }
+
+    public CoreGeneralSekibanExecutor(
+        IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        TagConsistencyFenceOptions tagConsistencyFenceOptions, ExecutorSizeGateOptions? executorSizeGateOptions = null,
+        IEventPublisher? eventPublisher = null, IExecutedUserProvider? executedUserProvider = null)
+        : this(eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider,
+            ProcessSharedSortableUniqueIdServices.Generator, ProcessSharedSortableUniqueIdServices.SeedCoordinator,
+            new DefaultServiceIdProvider(), SortableUniqueIdWaitPolicy.System,
+            executorSizeGateOptions, tagConsistencyFenceOptions)
+    {
+    }
+
+    public CoreGeneralSekibanExecutor(
+        IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        IEventPublisher? eventPublisher, IExecutedUserProvider? executedUserProvider,
+        ISortableUniqueIdGenerator sortableUniqueIdGenerator, SortableUniqueIdSeedCoordinator sortableUniqueIdSeedCoordinator,
+        IServiceIdProvider serviceIdProvider, ExecutorSizeGateOptions? executorSizeGateOptions = null,
+        TagConsistencyFenceOptions? tagConsistencyFenceOptions = null)
+        : this(eventStore, actorAccessor, domainTypes, eventPublisher, executedUserProvider,
+            sortableUniqueIdGenerator, sortableUniqueIdSeedCoordinator, serviceIdProvider,
+            SortableUniqueIdWaitPolicy.System, executorSizeGateOptions, tagConsistencyFenceOptions)
+    {
+    }
+
+    private bool SupportsExpectedPositions() =>
+        Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(_eventStore, "event store")
+            .Supports(Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition) &&
+        _eventStore is IExpectedTagPositionEventStore;
+
+    private static string? ResolveReservationPosition(ITag tag, IReadOnlyDictionary<ITag, TagState> accessedStates)
+    {
+        if (tag is ConsistencyTag explicitTag && explicitTag.SortableUniqueId.HasValue)
+            return explicitTag.SortableUniqueId.GetValue().Value;
+        var lookupTag = tag is ConsistencyTag wrapper ? wrapper.InnerTag : tag;
+        return accessedStates.TryGetValue(lookupTag, out var state) ? state.LastSortedUniqueId : null;
+    }
+
+    private static TagHeadExpectation ReservationExpectation(string? position) => position switch
+    {
+        null => TagHeadExpectation.NoEnforcement(),
+        "" => TagHeadExpectation.AssertEmpty(),
+        _ => TagHeadExpectation.Exact(position)
+    };
+
+    private ExpectedTagPositionSpecification? DeriveExpectedPositions(IEnumerable<(string Tag, string? Position)> inputs)
+    {
+        var expectations = new Dictionary<string, TagHeadExpectation>(StringComparer.Ordinal);
+        foreach (var (tag, position) in inputs)
+        {
+            var expectation = ReservationExpectation(position);
+            if (expectations.TryGetValue(tag, out var previous) && previous != expectation)
+                throw new TagHeadExpectationValidationException($"Conflicting reservation expectations for '{tag}'.");
+            expectations[tag] = expectation;
+        }
+        if (expectations.Count == 0) return null;
+        var serviceId = ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId());
+        return new ExpectedTagPositionSpecification(expectations.Select(e =>
+            new TagHeadExpectationEntry(serviceId, e.Key, e.Value)).ToArray());
     }
 
     private Task EnsureSortableUniqueIdSeededAsync(CancellationToken cancellationToken)
@@ -231,15 +307,14 @@ public class CoreGeneralSekibanExecutor
         ExecuteAsyncCore(command, handlerFunc, null, cancellationToken);
 
     /// <summary>
-    ///     Shared ordinary-batch pipeline. The legacy public call enters with <paramref name="expectedTagPositions" />
-    ///     null and therefore preserves its unconditional semantics; the additive options call enters with a total
-    ///     expected-head specification.
+    ///     Shared ordinary-batch pipeline. Explicit expected positions take precedence over the optional reservation
+    ///     fence. With the default Off mode, legacy calls retain unconditional semantics.
     /// </summary>
     private async Task<ResultBox<ExecutionResult>> ExecuteAsyncCore<TCommand>(
         TCommand command,
         Func<TCommand, ICoreCommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
         ExpectedTagPositionSpecification? expectedTagPositions,
-        CancellationToken cancellationToken) where TCommand : ICommand
+        CancellationToken cancellationToken, TagConsistencyFenceMode? fenceOverride = null) where TCommand : ICommand
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -254,11 +329,12 @@ public class CoreGeneralSekibanExecutor
 
             // Expected-position is optional, but never best-effort. Validate its discriminated shape and the live
             // descriptor before the handler can allocate ids, reserve a tag, or reach any provider write method.
+            var deriveFence = (fenceOverride ?? _tagConsistencyFenceOptions?.Mode) == TagConsistencyFenceMode.DeriveFromReservations;
             IExpectedTagPositionEventStore? expectedPositionStore = null;
-            if (expectedTagPositions is not null)
+            if (expectedTagPositions is not null || deriveFence)
             {
                 var currentServiceId = ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId());
-                expectedTagPositions.ValidateEntryShapes(currentServiceId);
+                expectedTagPositions?.ValidateEntryShapes(currentServiceId);
 
                 var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(
                     _eventStore, "event store");
@@ -272,13 +348,15 @@ public class CoreGeneralSekibanExecutor
                 }
 
                 expectedPositionStore = resolvedExpectedPositionStore;
-                if (expectedTagPositions.RequiresEnforcement)
+                if (deriveFence || expectedTagPositions?.RequiresEnforcement == true)
                 {
                     var enabled = await expectedPositionStore
                         .EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken);
-                    if (!enabled.IsSuccess)
+                    if (!enabled.IsSuccess || !enabled.GetValue())
                     {
-                        return ResultBox.Error<ExecutionResult>(enabled.GetException());
+                        return ResultBox.Error<ExecutionResult>(enabled.IsSuccess
+                            ? new TagHeadEnforcementNotEnabledException(currentServiceId)
+                            : enabled.GetException());
                     }
                 }
             }
@@ -339,6 +417,15 @@ public class CoreGeneralSekibanExecutor
             // Step 3.1: Validate all tags
             TagValidator.ValidateTagsAndThrow(allTags);
 
+            var accessedStates = commandContext.GetAccessedTagStates();
+            var reservationInputs = new Dictionary<ITag, string?>();
+            foreach (var tag in allTags.Where(t => t.IsConsistencyTag()))
+            {
+                reservationInputs[tag] = ResolveReservationPosition(tag, accessedStates);
+            }
+            if (deriveFence && expectedTagPositions is null)
+                expectedTagPositions = DeriveExpectedPositions(reservationInputs.Select(e => (e.Key.GetTag(), e.Value)));
+
             if (expectedTagPositions is not null)
             {
                 expectedTagPositions.ValidateFor(
@@ -356,7 +443,6 @@ public class CoreGeneralSekibanExecutor
             //       look up accessed tag state via ICommandContext (GeneralCommandContext) and use its LastSortableUniqueId
             var reservations = new Dictionary<ITag, TagWriteReservation>();
             var reservationTasks = new List<Task<(ITag Tag, ResultBox<TagWriteReservation> Result)>>();
-            var accessedStates = commandContext.GetAccessedTagStates();
 
             foreach (var tag in allTags)
             {
@@ -365,21 +451,7 @@ public class CoreGeneralSekibanExecutor
                     continue; // skip non-consistency tags (no reservation)
                 }
 
-                string? lastSortableUniqueId = null;
-
-                if (tag is ConsistencyTag ctWithVersion && ctWithVersion.SortableUniqueId.HasValue)
-                {
-                    lastSortableUniqueId = ctWithVersion.SortableUniqueId.GetValue().Value;
-                }
-                else
-                {
-                    var lookupTag = tag is ConsistencyTag ct ? ct.InnerTag : tag;
-                    if (accessedStates.TryGetValue(lookupTag, out var state))
-                    {
-                        lastSortableUniqueId = state.LastSortedUniqueId;
-                    }
-                }
-
+                var lastSortableUniqueId = reservationInputs[tag];
                 var task = TagReservationHelper.RequestReservationAsync(_actorAccessor, tag, lastSortableUniqueId)
                     .ContinueWith(t => (tag, t.Result), cancellationToken);
                 reservationTasks.Add(task);
@@ -452,6 +524,8 @@ public class CoreGeneralSekibanExecutor
                     if (!writeResult.IsSuccess)
                     {
                         await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                        if (writeResult.GetException() is ExpectedTagPositionConflictException conflict)
+                            await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
                         return ResultBox.Error<ExecutionResult>(writeResult.GetException());
                     }
 
@@ -506,10 +580,12 @@ public class CoreGeneralSekibanExecutor
                         metadata,
                         firstEvent.SortableUniqueIdValue));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // If anything fails after reservations, cancel them
+                // If anything fails after reservations, cancel them.
                 await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                if (ex is ExpectedTagPositionConflictException conflict)
+                    await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
                 throw;
             }
         }
@@ -671,11 +747,12 @@ public class CoreGeneralSekibanExecutor
 
         try
         {
+            var deriveFence = _tagConsistencyFenceOptions?.Mode == TagConsistencyFenceMode.DeriveFromReservations;
             IExpectedTagPositionEventStore? expectedPositionStore = null;
-            if (expectedTagPositions is not null)
+            if (expectedTagPositions is not null || deriveFence)
             {
                 var currentServiceId = ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId());
-                expectedTagPositions.ValidateEntryShapes(currentServiceId);
+                expectedTagPositions?.ValidateEntryShapes(currentServiceId);
                 var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(
                     _eventStore, "event store");
                 if (!capability.Supports(Sekiban.Dcb.Capabilities.WriteConditionKind.ExpectedTagPosition) ||
@@ -688,13 +765,15 @@ public class CoreGeneralSekibanExecutor
                 }
 
                 expectedPositionStore = resolvedExpectedPositionStore;
-                if (expectedTagPositions.RequiresEnforcement)
+                if (deriveFence || expectedTagPositions?.RequiresEnforcement == true)
                 {
                     var enabled = await expectedPositionStore
                         .EnsureExpectedTagPositionEnforcementEnabledAsync(cancellationToken);
-                    if (!enabled.IsSuccess)
+                    if (!enabled.IsSuccess || !enabled.GetValue())
                     {
-                        return ResultBox.Error<SerializedCommitResult>(enabled.GetException());
+                        return ResultBox.Error<SerializedCommitResult>(enabled.IsSuccess
+                            ? new TagHeadEnforcementNotEnabledException(currentServiceId)
+                            : enabled.GetException());
                     }
                 }
             }
@@ -749,6 +828,9 @@ public class CoreGeneralSekibanExecutor
                     new InvalidOperationException(
                         $"Consistency tags must exist in event candidate tags. Unknown tags: {string.Join(", ", unknownConsistencyTags)}"));
             }
+
+            if (deriveFence && expectedTagPositions is null)
+                expectedTagPositions = DeriveExpectedPositions(request.ConsistencyTags.Select(e => (e.Tag, (string?)e.LastSortableUniqueId)));
 
             if (expectedTagPositions is not null)
             {
@@ -848,7 +930,7 @@ public class CoreGeneralSekibanExecutor
                 }
                 var sizeEvaluation = EvaluateSizeGate(preparedEvents);
 
-                // Step 5: V2 is store-enforced; legacy/V1 keeps the exact old unconditional call and result shape.
+                // Step 5: Explicit V2 and opt-in derived V1 use the same store-enforced write path.
                 IReadOnlyList<SerializableEvent> writtenEvents;
                 IReadOnlyList<TagWriteResult> tagWriteResults;
                 if (expectedPositionStore is not null && expectedTagPositions is not null)
@@ -858,6 +940,8 @@ public class CoreGeneralSekibanExecutor
                     if (!writeResult.IsSuccess)
                     {
                         await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                        if (writeResult.GetException() is ExpectedTagPositionConflictException conflict)
+                            await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
                         return ResultBox.Error<SerializedCommitResult>(writeResult.GetException());
                     }
 
@@ -899,11 +983,13 @@ public class CoreGeneralSekibanExecutor
                 };
                 return ResultBox.FromValue(result);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 if (!reservationsConfirmed && reservations.Count > 0)
                 {
                     await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
+                    if (ex is ExpectedTagPositionConflictException conflict)
+                        await TagReservationHelper.NotifyConflictingTagsAsync(_actorAccessor, allTags, conflict);
                 }
                 throw;
             }
@@ -1310,16 +1396,17 @@ public class CoreGeneralSekibanExecutor
         // The two independently additive protocols deliberately do not silently compose: conditional append has a
         // single-event idempotency receipt contract while expected positions are a complete multi-tag conflict contract.
         // Reject the ambiguous combination before the handler/provider path rather than dropping the requested fence.
-        if (options?.ConditionalAppend is not null && options.ExpectedTagPositions is not null)
+        if (options?.ConditionalAppend is not null &&
+            (options.ExpectedTagPositions is not null || options.TagConsistencyFence == TagConsistencyFenceMode.DeriveFromReservations))
         {
             return Task.FromResult(ResultBox.Error<ExecutionResult>(
                 new TagHeadExpectationValidationException(
-                    "ConditionalAppend and ExpectedTagPositions cannot be combined in one command. Use one explicit write-condition protocol.")));
+                    "ConditionalAppend and an explicit tag consistency fence cannot be combined in one command. Use one explicit write-condition protocol.")));
         }
 
         return options?.ConditionalAppend is { } conditional
             ? ExecuteConditionalAppendAsync(command, handlerFunc, conditional, cancellationToken)
-            : ExecuteAsyncCore(command, handlerFunc, options?.ExpectedTagPositions, cancellationToken);
+            : ExecuteAsyncCore(command, handlerFunc, options?.ExpectedTagPositions, cancellationToken, options?.TagConsistencyFence);
     }
 
     private async Task<ResultBox<ExecutionResult>> ExecuteConditionalAppendAsync<TCommand>(

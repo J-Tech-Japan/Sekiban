@@ -9,6 +9,14 @@ namespace Sekiban.Dcb.Actors;
 
 internal static class CoreGeneralSekibanExecutorFactory
 {
+    internal static CoreGeneralSekibanExecutor CreateWithFence(
+        IEventStore eventStore, IActorObjectAccessor actorAccessor, DcbDomainTypes domainTypes,
+        Sekiban.Dcb.TagConsistencyFence.TagConsistencyFenceOptions? fence, ExecutorSizeGateOptions? gate,
+        IEventPublisher? publisher, IExecutedUserProvider? user,
+        ISortableUniqueIdGenerator generator, SortableUniqueIdSeedCoordinator seed, IServiceIdProvider serviceId) =>
+        new(eventStore, actorAccessor, domainTypes, publisher, user, generator, seed, serviceId,
+            SortableUniqueIdWaitPolicy.System, gate, fence);
+
     internal static CoreGeneralSekibanExecutor CreateWithGate(
         IEventStore eventStore,
         IActorObjectAccessor actorAccessor,

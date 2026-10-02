@@ -152,7 +152,7 @@ public sealed class ExpectedTagPositionCompatibilityInventoryTests
         Assert.Equal(typeof(ExpectedTagPositionSpecification), optionsProperty.PropertyType);
         Assert.True(optionsProperty.SetMethod is not null);
         Assert.Equal(
-            ["ConditionalAppend", "ExpectedTagPositions"],
+            ["ConditionalAppend", "ExpectedTagPositions", "TagConsistencyFence"],
             typeof(CommandExecutionOptions).GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
                 .Select(property => property.Name));
         Assert.Equal(typeof(ConditionalAppendSpecification),
