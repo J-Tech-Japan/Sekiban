@@ -16,6 +16,9 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
 {
     private const string ReadAllSerializableEventsCall = nameof(ReadAllSerializableEventsAsync);
 
+    public string? ExpectedTagPositionServiceId =>
+        (_hotStore as IExpectedTagPositionEventStore)?.ExpectedTagPositionServiceId;
+
     /// <summary>
     ///     A wrapper is not a durability. Writes land in the hot store, so the hot store's answer is the answer — and if
     ///     the hot store will not say, neither will we. Reporting "Durable" because a durable-sounding decorator was

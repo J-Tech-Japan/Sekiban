@@ -135,6 +135,87 @@ public sealed class TagConsistencyFenceTests
         Assert.Equal(fenced, store.Specification is not null);
     }
 
+    [Theory]
+    [InlineData("with-result", false)]
+    [InlineData("without-result", false)]
+    [InlineData("core", false)]
+    [InlineData("with-result", true)]
+    [InlineData("without-result", true)]
+    [InlineData("core", true)]
+    public async Task PerCommandFence_UsesStoreServiceId_WithLegacyConstructionOrDi(string facade, bool di)
+    {
+        var store = new RecordingStore { ExpectedTagPositionServiceId = "tenant-x" };
+        var accessor = new RecordingAccessor();
+        var type = facade switch
+        {
+            "with-result" => typeof(GeneralSekibanExecutor),
+            "without-result" => typeof(WithoutGeneral),
+            _ => typeof(CoreGeneralSekibanExecutor)
+        };
+        // No fence options or service-id provider are registered: DI must use a legacy constructor.
+        using var provider = DiProvider(type, store, false, false, false, false, false);
+        var executor = di ? provider.GetRequiredService(type) : facade switch
+        {
+            "with-result" => (object)new GeneralSekibanExecutor(store, accessor, Domain),
+            "without-result" => new WithoutGeneral(store, accessor, Domain),
+            _ => new CoreGeneralSekibanExecutor(store, accessor, Domain)
+        };
+        var options = new CommandExecutionOptions { TagConsistencyFence = TagConsistencyFenceMode.DeriveFromReservations };
+        var tag = new Tag("store-service");
+        switch (executor)
+        {
+            case GeneralSekibanExecutor withResult:
+                Assert.True((await withResult.ExecuteAsync(new Command(),
+                    (_, _) => Task.FromResult(EventOrNone.Event(Payload(), tag)), options)).IsSuccess);
+                break;
+            case WithoutGeneral withoutResult:
+                await withoutResult.ExecuteAsync(new Command(),
+                    (_, _) => Task.FromResult(EventOrNone.Event(Payload(), tag).GetValue()), options);
+                break;
+            case CoreGeneralSekibanExecutor core:
+                Assert.True((await core.ExecuteAsync(new Command(),
+                    (_, _) => Task.FromResult(EventOrNone.Event(Payload(), tag)), options)).IsSuccess);
+                break;
+        }
+        Assert.Equal("tenant-x", Assert.Single(store.Specification!.Entries).ServiceId);
+        Assert.Equal(0, store.LegacyWrites);
+    }
+
+    [Theory]
+    [InlineData("TENANT-X", "tenant-x")]
+    [InlineData(null, Service)]
+    public async Task SerializedFence_NormalizesStoreServiceId_OrFallsBackWhenNotExposed(string? exposed, string expected)
+    {
+        var store = new RecordingStore { ExpectedTagPositionServiceId = exposed };
+        var result = await Executor(store, new()).CommitSerializableEventsAsync(Request());
+        Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
+        Assert.Equal(expected, Assert.Single(store.Specification!.Entries).ServiceId);
+    }
+
+    [Fact]
+    public async Task InvalidExposedStoreServiceId_DoesNotFallBackOrWrite()
+    {
+        var store = new RecordingStore { ExpectedTagPositionServiceId = "invalid/service" };
+        var result = await Executor(store, new()).CommitSerializableEventsAsync(Request());
+        Assert.IsType<ArgumentException>(result.GetException());
+        Assert.Null(store.Specification);
+        Assert.Equal(0, store.LegacyWrites);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Hybrid_ExposesHotStoreServiceIdOnly(bool supported)
+    {
+        IEventStore hot = supported
+            ? new RecordingStore { ExpectedTagPositionServiceId = "tenant-x" }
+            : new Sekiban.Dcb.Testing.InMemoryEventStore(Domain.EventTypes);
+        var hybrid = new HybridEventStore(hot, new UnusedColdStorage(), new JsonlColdSegmentFormatHandler(),
+            new FixedServiceIdProvider("hybrid-service"), Options.Create(new ColdEventStoreOptions()),
+            NullLogger<HybridEventStore>.Instance);
+        Assert.Equal(supported ? "tenant-x" : null, hybrid.ExpectedTagPositionServiceId);
+    }
+
     [Fact]
     public async Task ExplicitSpecification_WinsOverDerivedReservation()
     {
@@ -424,6 +505,7 @@ public sealed class TagConsistencyFenceTests
     private sealed class RecordingStore : IEventStore, IExpectedTagPositionEventStore, IWriteConditionCapabilityProvider, IConditionalEventStore
     {
         private readonly InMemoryConditionalEventStore _inner = new(Domain.EventTypes);
+        public string? ExpectedTagPositionServiceId { get; init; }
         public bool Enabled = true, Supported = true;
         public bool Throws, ReturnFalse;
         public Exception? Failure;

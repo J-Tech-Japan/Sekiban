@@ -28,7 +28,10 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
     [InlineData(true, TagConsistencyFenceMode.DeriveFromReservations, Service)]
     [InlineData(false, TagConsistencyFenceMode.Off, Service)]
     [InlineData(true, TagConsistencyFenceMode.Off, Service)]
-    public async Task SeparateReservationCaches_OnlyFencedWritersConflict(bool update, TagConsistencyFenceMode mode, string serviceId)
+    [InlineData(false, TagConsistencyFenceMode.DeriveFromReservations, "tenant-x", true)]
+    [InlineData(true, TagConsistencyFenceMode.DeriveFromReservations, "tenant-x", true)]
+    public async Task SeparateReservationCaches_OnlyFencedWritersConflict(
+        bool update, TagConsistencyFenceMode mode, string serviceId, bool perCommandOnly = false)
     {
         var serviceIdProvider = new FixedServiceIdProvider(serviceId);
         await ProvisionEpochAsync(serviceId);
@@ -48,8 +51,14 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
         // One store, two independent actor caches. DI enables the option through its public registration surface.
         using var firstProvider = Provider(barrier, mode, serviceIdProvider);
         using var secondProvider = Provider(barrier, mode, serviceIdProvider);
-        var first = firstProvider.GetRequiredService<GeneralSekibanExecutor>();
-        var second = secondProvider.GetRequiredService<GeneralSekibanExecutor>();
+        // The per-command path deliberately uses legacy constructors with the default executor service id.
+        var first = perCommandOnly
+            ? new GeneralSekibanExecutor(barrier, new InMemoryObjectAccessor(barrier, Fixture.DomainTypes), Fixture.DomainTypes)
+            : firstProvider.GetRequiredService<GeneralSekibanExecutor>();
+        var second = perCommandOnly
+            ? new GeneralSekibanExecutor(barrier, new InMemoryObjectAccessor(barrier, Fixture.DomainTypes), Fixture.DomainTypes)
+            : secondProvider.GetRequiredService<GeneralSekibanExecutor>();
+        var options = new CommandExecutionOptions { TagConsistencyFence = perCommandOnly ? mode : null };
         async Task<ResultBox<EventOrNone>> Handler(Command _, ICommandContext context)
         {
             var exists = await context.TagExistsAsync(tag);
@@ -57,8 +66,8 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
             Assert.Equal(update, exists.GetValue());
             return await context.AppendEvent(new StudentCreated(id, "racing"), tag);
         }
-        var firstWrite = first.ExecuteAsync(new Command(), Handler);
-        var secondWrite = second.ExecuteAsync(new Command(), Handler);
+        var firstWrite = first.ExecuteAsync(new Command(), Handler, options);
+        var secondWrite = second.ExecuteAsync(new Command(), Handler, options);
         try
         {
             await barrier.BothArrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
@@ -90,7 +99,7 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
         {
             // Cancel alone leaves the loser's cached head stale. Conflict notification must make this retry refresh.
             var loser = results[0].IsSuccess ? second : first;
-            var retry = await loser.ExecuteAsync(new Command(), Handler);
+            var retry = await loser.ExecuteAsync(new Command(), Handler, options);
             Assert.True(retry.IsSuccess, retry.IsSuccess ? "" : retry.GetException().ToString());
             await VerifyRowsAsync(serviceId, tag.GetTag(), 3);
         }
@@ -153,6 +162,7 @@ public sealed class PostgresDerivedTagConsistencyFenceTests(PostgresTestFixture 
             if (Interlocked.Increment(ref _arrivals) == 2) BothArrived.TrySetResult();
             await Release.Task.WaitAsync(TimeSpan.FromSeconds(25));
         }
+        public string? ExpectedTagPositionServiceId => inner.ExpectedTagPositionServiceId;
         public WriteConditionCapabilityDescriptor DescribeWriteConditions() => inner.DescribeWriteConditions();
         public Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken ct = default) =>
             inner.EnsureExpectedTagPositionEnforcementEnabledAsync(ct);

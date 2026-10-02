@@ -239,6 +239,11 @@ public class CoreGeneralSekibanExecutor
         _ => TagHeadExpectation.Exact(position)
     };
 
+    private string ResolveExpectedTagPositionServiceId() =>
+        ServiceIdValidator.NormalizeAndValidate(
+            (_eventStore as IExpectedTagPositionEventStore)?.ExpectedTagPositionServiceId ??
+            _serviceIdProvider.GetCurrentServiceId());
+
     private ExpectedTagPositionSpecification? DeriveExpectedPositions(IEnumerable<(string Tag, string? Position)> inputs)
     {
         var expectations = new Dictionary<string, TagHeadExpectation>(StringComparer.Ordinal);
@@ -250,7 +255,7 @@ public class CoreGeneralSekibanExecutor
             expectations[tag] = expectation;
         }
         if (expectations.Count == 0) return null;
-        var serviceId = ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId());
+        var serviceId = ResolveExpectedTagPositionServiceId();
         return new ExpectedTagPositionSpecification(expectations.Select(e =>
             new TagHeadExpectationEntry(serviceId, e.Key, e.Value)).ToArray());
     }
@@ -334,7 +339,7 @@ public class CoreGeneralSekibanExecutor
             IExpectedTagPositionEventStore? expectedPositionStore = null;
             if (expectedTagPositions is not null || deriveFence)
             {
-                var currentServiceId = ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId());
+                var currentServiceId = ResolveExpectedTagPositionServiceId();
                 expectedTagPositions?.ValidateEntryShapes(currentServiceId);
 
                 var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(
@@ -405,7 +410,7 @@ public class CoreGeneralSekibanExecutor
                 if (expectedTagPositions is not null)
                 {
                     expectedTagPositions.ValidateFor(
-                        ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
+                        ResolveExpectedTagPositionServiceId(),
                         Array.Empty<string>());
                 }
                 return ResultBox.FromValue(
@@ -430,7 +435,7 @@ public class CoreGeneralSekibanExecutor
             if (expectedTagPositions is not null)
             {
                 expectedTagPositions.ValidateFor(
-                    ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
+                    ResolveExpectedTagPositionServiceId(),
                     allTags.Where(tag => tag.IsConsistencyTag()).Select(tag => tag.GetTag()));
             }
 
@@ -752,7 +757,7 @@ public class CoreGeneralSekibanExecutor
             IExpectedTagPositionEventStore? expectedPositionStore = null;
             if (expectedTagPositions is not null || deriveFence)
             {
-                var currentServiceId = ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId());
+                var currentServiceId = ResolveExpectedTagPositionServiceId();
                 expectedTagPositions?.ValidateEntryShapes(currentServiceId);
                 var capability = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(
                     _eventStore, "event store");
@@ -792,7 +797,7 @@ public class CoreGeneralSekibanExecutor
                 if (expectedTagPositions is not null)
                 {
                     expectedTagPositions.ValidateFor(
-                        ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
+                        ResolveExpectedTagPositionServiceId(),
                         Array.Empty<string>());
                 }
                 return ResultBox.FromValue(
@@ -836,7 +841,7 @@ public class CoreGeneralSekibanExecutor
             if (expectedTagPositions is not null)
             {
                 expectedTagPositions.ValidateFor(
-                    ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId()),
+                    ResolveExpectedTagPositionServiceId(),
                     request.ConsistencyTags.Select(entry => entry.Tag));
             }
 
