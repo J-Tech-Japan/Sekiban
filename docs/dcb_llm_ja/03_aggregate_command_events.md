@@ -98,15 +98,25 @@ public record StudentTag(Guid StudentId) : IGuidTagGroup<StudentTag>
   変換することはありません。
 - `ConsistencyTag.FromTagWithSortableUniqueId(...)` は明示的な期待バージョンをそのまま使用します。
 
-**保証境界（クラスタ単位）**。Orleans ではこれは**クラスタあたり最大1回の初回書き込み**を保証します（タグごとに
-1つのアクター活性化が予約を直列化）。独立したクラスタはアクターを介して協調しません。2つのクラスタがそれぞれ
-expect-empty で予約し、同じタグに重複した作成を永続追加し得ます。クラスタ間の一意性は**ストレージ層**の役割で、
-条件付きユニーク追加コントラクト（[ストレージプロバイダ](11_storage_providers.md)参照）が担い、永続化された重複の
-収束はマルチプロジェクション層（SEK-G18）が扱います。クラスタ間で「このIDは既に存在する」を厳密に保証するには、
-アクター予約ではなくストレージのユニーク追加に依存してください。
+**保証境界**。予約は1つの `TagConsistentGrain` 活性化内で競合する書き込みを直列化しますが、単一クラスタ内でも
+厳密な保証ではありません。Orleans 10.3.1 の既定ディレクトリでは、メンバーシップの変動時や、ネットワーク分断された
+サイロが自身の死亡判定をまだ認識していない間に、同じ Grain の2つの活性化が一時的に共存し得ます。予約ロックと
+キャッシュ済みタグ先頭は活性化ごとに独立しているため、両方が予約して追記できてしまいます。独立したクラスタも
+アクターを介して協調せず、それぞれ expect-empty で予約し、重複した作成を追記し得ます。
+[Grain ディレクトリと重複活性化](10_orleans_setup.md#grain-ディレクトリと重複活性化)を参照してください。
+
+厳密な保証にはストレージ層のフェンスが必要です。同じ冪等性キーを使う単一イベントの一度限りの作成には
+[条件付きユニーク追記（G15/G16）](11_storage_providers.md#条件付きユニークキー追記--sek-g15)、タグの正確なバージョンには
+PostgreSQL のオプトイン機能 [`ExpectedTagPositions`（SEK-G40）](11_storage_providers.md#postgresql-の耐久-multi-tag-expected-position-cas--sek-g40)
+を使い、enablement epoch と全 writer のプロトコルに従ってください。どちらも既定の書き込み経路で自動的に有効には
+なりません。Cosmos DB、DynamoDB、SQLite が現在持つフェンスは単一イベントのユニークキーのみで、
+期待するタグ先頭の検査はありません。通常の `InMemoryEventStore` は条件付き追記を拒否します（`ConditionNotSupportedException`）。
+テスト用の `InMemoryConditionalEventStore` は実装していますが、その claim はインスタンス内かつ揮発的なので、
+silo プロセスをまたぐ保証にはなりません。Cosmos のタグ先頭フェンスは設計中です（SEK-G101）。永続化された重複イベントの
+マルチプロジェクションによる収束（SEK-G18）は、重複作成に対する一意性保証にはなりません。
 
 **10.11.0 リリースノート**: 未読の整合性タグは 10.1.x と同じ比較なし動作へ戻り、既存の副次タグを読み取らず付与
-するコマンドを修復します。明示的に空を観測した初回書き込みは 10.8.0 の衝突保証を維持します。nullable metadata で
+するコマンドを修復します。明示的に空を観測した初回書き込みは、単一活性化内の 10.8.0 の衝突検査を維持します。nullable metadata で
 Unspecified と AssertEmpty を区別するため minor release ですが、CLR シグネチャは
 `MakeReservationAsync(System.String)` のままです。
 

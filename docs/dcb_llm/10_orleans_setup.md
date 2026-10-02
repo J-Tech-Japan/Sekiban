@@ -177,6 +177,72 @@ Dashboard. Add `app.MapHealthChecks("/health")` for readiness probes.
 ### Common
 - Scale out silos horizontally; Orleans handles tag grain placement automatically
 
+## Grain directory and duplicate activations
+
+Orleans 10.3.1 defaults to the eventually consistent `LocalGrainDirectory`. Sekiban's hosts and templates do not
+configure a grain directory, so they use this default. Membership churn can briefly produce duplicate activations;
+Orleans resolves directory duplicates by deactivating the duplicate, but the overlap matters for writes. Azure Table
+or Cosmos **clustering** configures membership, not the grain directory or an event-store fence.
+See the [Orleans grain directory guide](https://learn.microsoft.com/en-us/dotnet/orleans/host/grain-directory).
+
+### Experimental strongly consistent directory (opt-in)
+
+Consider the strongly consistent in-cluster directory to reduce duplicate-activation risk for `TagConsistentGrain`
+and `MaterializedViewGrain`. In 10.3.1, `AddDistributedGrainDirectory` is an experimental extension in
+`Orleans.Hosting.CoreHostingExtensions` (`Microsoft.Orleans.Runtime`), marked `ORLEANSEXP003`.
+It is an opt-in, not a template or drop-in production default. With no name, it becomes the cluster-wide default:
+
+```csharp
+using Orleans.Hosting;
+
+#pragma warning disable ORLEANSEXP003
+siloBuilder.AddDistributedGrainDirectory(); // experimental; cluster-wide default
+#pragma warning restore ORLEANSEXP003
+```
+
+Alternatively, register a named directory and select it on a grain implementation class with
+`[GrainDirectory("ConsistencyDirectory")]`:
+
+```csharp
+#pragma warning disable ORLEANSEXP003
+siloBuilder.AddDistributedGrainDirectory("ConsistencyDirectory");
+#pragma warning restore ORLEANSEXP003
+```
+
+Import `Orleans.GrainDirectory` for the attribute. It belongs on the grain class, not its interface. Applying this
+per-type option to Sekiban's built-in grains requires changing their implementation classes; host registration alone
+does not select the named directory for them.
+See the [10.3.1 registration API source](https://github.com/dotnet/orleans/blob/v10.3.1/src/Orleans.Runtime/Hosting/CoreHostingExtensions.cs).
+After an ungraceful failure, recovery uses range leases (`RangeLeaseDuration`, 30 seconds). Plan for this recovery delay.
+
+### External directories and the remaining boundary
+
+Redis, Azure Table and ADO.NET directories own their consistency. They can be registered per type or as the default
+(for example, `UseRedisGrainDirectoryAsDefault` or `UseAzureTableGrainDirectoryAsDefault`, with the corresponding
+provider package and options). They are not interchangeable correctness guarantees: the Azure Table implementation has
+a registration race, and Redis `EntryExpiry` can cause duplicate activations.
+
+No directory fences a silo that has been declared dead but is still running. Orleans terminates that process only
+when it learns its dead status; until then it may still serve an activation through a co-hosted API, cached routes or
+in-flight calls. A stronger directory narrows races; a storage-side conditional check is still the final fence.
+See [Orleans cluster management](https://learn.microsoft.com/en-us/dotnet/orleans/implementation/cluster-management).
+
+- Switch the whole cluster rather than mixing directory configurations in a rolling upgrade. A rolling switch is
+  undocumented; prepare and test a rollout and rollback plan before adopting the experimental directory.
+- Tune membership and failure detection for the deployment, balancing prompt detection with false suspicions, and
+  terminate stale silos. Monitor membership churn and make sure the host infrastructure restarts terminated processes.
+- Use storage fences for hard guarantees. The [reservation guarantee boundary](03_aggregate_command_events.md)
+  describes G15/G16 unique-append and PostgreSQL's opt-in `ExpectedTagPositions`; normal writes remain unfenced.
+
+### Sekiban surfaces under duplicate activation
+
+| Surface | Residual risk and protection |
+|---------|------------------------------|
+| `TagConsistentGrain` / `GeneralTagConsistentActor` | Correctness risk: reservations and cached tag heads are per activation. Two activations can both reserve the same expected head and append on the default write path. |
+| `MultiProjectionGrain` checkpoints | Protected by [SEK-G20 generation-aware checkpoint CAS](11_storage_providers.md#sek-g20-generation-aware-checkpoint-cas) on CAS-capable stores (InMemory, SQLite, DynamoDB, PostgreSQL, Cosmos). Event-ID de-duplication protects replay; adopting a checkpoint can require extra catch-up. Custom stores with unconditional writes do not have this CAS protection. |
+| `MaterializedViewGrain` | Duplicate activation or redelivery can double-apply non-idempotent SQL. Use [idempotent projector SQL](20_materialized_view.md#idempotency-and-ordering). Registry position/state can still race between activations; the registry guard is separate work (SEK-G103). |
+| `TagStateGrain`, streams/event delivery | Internal cache/replay correctness is self-healing through ETag grain storage and event-ID de-duplication. At-least-once delivery still requires idempotency for arbitrary consumer side effects. |
+
 ## Testing Without Orleans
 
 Use `InMemorySekibanExecutor` (`src/Sekiban.Dcb/InMemory/InMemorySekibanExecutor.cs`) to run commands locally without a
