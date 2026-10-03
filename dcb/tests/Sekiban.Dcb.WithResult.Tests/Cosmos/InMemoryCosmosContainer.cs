@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using Sekiban.Dcb.CosmosDb;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections;
@@ -456,6 +457,12 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             .ToDictionary(parameter => parameter.Name, parameter => parameter.Value, StringComparer.Ordinal);
 
         var rows = Execute(text, parameters);
+        if (text.StartsWith("SELECT c.eventId, c.documentType FROM", StringComparison.Ordinal))
+        {
+            rows = rows.Select(row => new JObject(row.Properties()
+                .Where(property => property.Name is "eventId" or "documentType")
+                .Select(property => new JProperty(property.Name, property.Value.DeepClone())))).ToList();
+        }
 
         // A query with an item cap pages; the store and the repair both follow continuation tokens.
         var pageSize = requestOptions?.MaxItemCount is > 0 ? requestOptions.MaxItemCount!.Value : rows.Count;
@@ -494,9 +501,23 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         return text.Contains("sortableUniqueId >= @since", StringComparison.Ordinal) ? cmp >= 0 : cmp > 0;
     }
 
+    /// <summary>Over-returns documents to exercise the client guard independently of server filtering.</summary>
+    public bool IgnoreTagRowPredicate { get; set; }
+
     private List<JObject> Execute(string text, IReadOnlyDictionary<string, object> parameters)
     {
         var rows = _items.Values.AsEnumerable();
+
+        var tagsQuery = text.Contains(CosmosTagQueryFilters.RowsOnly, StringComparison.Ordinal) &&
+            !text.Contains("c.documentType =", StringComparison.Ordinal);
+        if (tagsQuery && !IgnoreTagRowPredicate)
+        {
+            rows = rows.Where(row => row.Property("documentType") == null);
+        }
+        if (parameters.TryGetValue("@tagGroup", out var tagGroup))
+        {
+            rows = rows.Where(row => row["tagGroup"]?.Value<string>() == (string)tagGroup);
+        }
 
         // --- tags container -------------------------------------------------------------------------
         if (text.Contains("c.pk = @pk", StringComparison.Ordinal))
@@ -504,7 +525,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             var pk = (string)parameters["@pk"];
             rows = rows.Where(row => Pk(row) == pk);
 
-            if (text.Contains("documentType", StringComparison.Ordinal))
+            if (!tagsQuery && text.Contains("documentType", StringComparison.Ordinal))
             {
                 rows = FilterDocumentKind(rows, text, parameters);
                 if (text.Contains("eventsProcessed DESC", StringComparison.Ordinal))
@@ -531,14 +552,14 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             {
                 rows = rows.Where(row => SinceMatches(
                     text,
-                    row["sortableUniqueId"]!.Value<string>() ?? string.Empty,
+                    row["sortableUniqueId"]?.Value<string>() ?? string.Empty,
                     (string)since));
             }
 
             if (parameters.TryGetValue("@until", out var until))
             {
                 rows = rows.Where(row =>
-                    string.CompareOrdinal(row["sortableUniqueId"]!.Value<string>(), (string)until) <= 0);
+                    string.CompareOrdinal(row["sortableUniqueId"]?.Value<string>(), (string)until) <= 0);
             }
 
             if (text.Contains("COUNT(1)", StringComparison.Ordinal))
@@ -547,8 +568,8 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             }
 
             rows = text.Contains("DESC", StringComparison.Ordinal)
-                ? rows.OrderByDescending(row => row["sortableUniqueId"]!.Value<string>(), StringComparer.Ordinal)
-                : rows.OrderBy(row => row["sortableUniqueId"]!.Value<string>(), StringComparer.Ordinal);
+                ? rows.OrderByDescending(row => row["sortableUniqueId"]?.Value<string>(), StringComparer.Ordinal)
+                : rows.OrderBy(row => row["sortableUniqueId"]?.Value<string>(), StringComparer.Ordinal);
 
             return rows.ToList();
         }
@@ -559,7 +580,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             var serviceId = (string)parameters["@serviceId"];
             rows = rows.Where(row => row["serviceId"]?.Value<string>() == serviceId);
 
-            if (text.Contains("documentType", StringComparison.Ordinal))
+            if (!tagsQuery && text.Contains("documentType", StringComparison.Ordinal))
             {
                 rows = FilterDocumentKind(rows, text, parameters);
                 if (parameters.TryGetValue("@projectorName", out var projectorName) && projectorName is string name)
@@ -579,20 +600,20 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             {
                 rows = rows.Where(row => SinceMatches(
                     text,
-                    row["sortableUniqueId"]!.Value<string>() ?? string.Empty,
+                    row["sortableUniqueId"]?.Value<string>() ?? string.Empty,
                     (string)since));
             }
 
             if (parameters.TryGetValue("@from", out var from))
             {
                 rows = rows.Where(row =>
-                    string.CompareOrdinal(row["sortableUniqueId"]!.Value<string>(), (string)from) > 0);
+                    string.CompareOrdinal(row["sortableUniqueId"]?.Value<string>(), (string)from) > 0);
             }
 
             if (parameters.TryGetValue("@to", out var to))
             {
                 rows = rows.Where(row =>
-                    string.CompareOrdinal(row["sortableUniqueId"]!.Value<string>(), (string)to) <= 0);
+                    string.CompareOrdinal(row["sortableUniqueId"]?.Value<string>(), (string)to) <= 0);
             }
 
             if (text.Contains("COUNT(1)", StringComparison.Ordinal))
@@ -601,8 +622,8 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             }
 
             rows = text.Contains("DESC", StringComparison.Ordinal)
-                ? rows.OrderByDescending(row => row["sortableUniqueId"]!.Value<string>(), StringComparer.Ordinal)
-                : rows.OrderBy(row => row["sortableUniqueId"]!.Value<string>(), StringComparer.Ordinal);
+                ? rows.OrderByDescending(row => row["sortableUniqueId"]?.Value<string>(), StringComparer.Ordinal)
+                : rows.OrderBy(row => row["sortableUniqueId"]?.Value<string>(), StringComparer.Ordinal);
 
             if (text.Contains("TOP 1 VALUE c.sortableUniqueId", StringComparison.Ordinal))
             {

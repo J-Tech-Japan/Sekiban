@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using Newtonsoft.Json.Linq;
 using Sekiban.Dcb.CosmosDb.Models;
 using Sekiban.Dcb.CosmosDb.Repair;
 using System.Net;
@@ -39,13 +40,13 @@ internal sealed class CosmosContainerMigrationStore : ICosmosTagMigrationStore
             MaxItemCount = maxRows + 1
         };
 
-        using var iterator = _container.GetItemQueryIterator<CosmosTag>(query, requestOptions: requestOptions);
+        using var iterator = _container.GetItemQueryIterator<JObject>(query, requestOptions: requestOptions);
 
         var rows = new List<CosmosTag>();
         while (iterator.HasMoreResults && rows.Count <= maxRows)
         {
             var response = await iterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
-            rows.AddRange(response.Where(row => CosmosRepairRowQuery.IsRowForEvent(row, eventId)));
+            rows.AddRange(CosmosTagQueryFilters.ReadRows(response).Where(row => CosmosRepairRowQuery.IsRowForEvent(row, eventId)));
         }
 
         return rows.Count > maxRows
