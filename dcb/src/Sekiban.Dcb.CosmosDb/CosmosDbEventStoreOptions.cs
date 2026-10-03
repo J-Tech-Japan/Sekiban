@@ -26,10 +26,21 @@ public class CosmosDbEventStoreOptions
     public bool UseTransactionalBatchForTags { get; set; } = true;
 
     /// <summary>
-    ///     Maximum operations per TransactionalBatch (Cosmos DB limit: 100).
+    ///     Maximum operations per TransactionalBatch, clamped to Cosmos DB's limit of 100.
+    ///     Off normalizes non-positive values to 1; Advance requires at least 2 and reserves a head slot.
     ///     Default: 100
     /// </summary>
     public int MaxBatchOperations { get; set; } = 100;
+
+    /// <summary>Opt-in head maintenance; does not enforce a write fence.</summary>
+    public CosmosTagHeadMode TagHeadMode { get; set; } = CosmosTagHeadMode.Off;
+
+    internal void ValidateTagHeadOptions()
+    {
+        if (TagHeadMode == CosmosTagHeadMode.Advance &&
+            (!UseTransactionalBatchForTags || MaxBatchOperations < 2))
+            throw new InvalidOperationException("TagHeadMode Advance requires UseTransactionalBatchForTags and MaxBatchOperations >= 2.");
+    }
 
     /// <summary>
     ///     Whether to attempt rollback (delete written events) on failure.

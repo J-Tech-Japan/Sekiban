@@ -66,13 +66,13 @@ public sealed class EngineSemanticsTests(CosmosEmulatorFixture fixture, ITestOut
         if (scenario == "conflict") await c.CreateItemAsync(Row(pk, 2), new PartitionKey(pk));
         var before = await CountAsync(c, pk);
         using var response = await c.CreateTransactionalBatch(new PartitionKey(pk))
-            .CreateItem(Row(pk, 1)).CreateItem(Row(pk, 2))
-            .PatchItem("$head", SetPosition(2), Compare(scenario == "fails" ? 99 : 0)).ExecuteAsync();
+            .PatchItem("$head", SetPosition(2), Compare(scenario == "fails" ? 99 : 0))
+            .CreateItem(Row(pk, 1)).CreateItem(Row(pk, 2)).ExecuteAsync();
         var ops = scenario switch
         {
-            "holds" => new[] { HttpStatusCode.Created, HttpStatusCode.Created, HttpStatusCode.OK },
-            "conflict" => [HttpStatusCode.FailedDependency, HttpStatusCode.Conflict, HttpStatusCode.FailedDependency],
-            _ => [HttpStatusCode.FailedDependency, HttpStatusCode.FailedDependency, status]
+            "holds" => new[] { HttpStatusCode.OK, HttpStatusCode.Created, HttpStatusCode.Created },
+            "conflict" => [HttpStatusCode.FailedDependency, HttpStatusCode.FailedDependency, HttpStatusCode.Conflict],
+            _ => [status, HttpStatusCode.FailedDependency, HttpStatusCode.FailedDependency]
         };
         AssertStatuses(response, status, ops);
         Assert.Equal(before + (scenario == "holds" ? 2 : 0), await CountAsync(c, pk));

@@ -70,6 +70,10 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     /// <summary>Every document currently stored, newest last.</summary>
     public IReadOnlyList<JObject> Items => _items.Values.ToList();
 
+    public List<string[]> BatchInventory { get; } = new();
+    public List<string?> BatchHeadPositions { get; } = new();
+    public Action<IReadOnlyList<string>>? BeforeBatch { get; set; }
+
     public int Creates { get; private set; }
     public int Deletes { get; private set; }
     public int Queries { get; private set; }
@@ -333,6 +337,31 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         }
     }
 
+    public override Task<ItemResponse<T>> PatchItemAsync<T>(string id, PartitionKey partitionKey,
+        IReadOnlyList<PatchOperation> patchOperations, PatchItemRequestOptions? requestOptions = null,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            ThrowIfFaulted();
+            var key = (UnwrapPartitionKey(partitionKey), id);
+            if (!_items.TryGetValue(key, out var live)) throw CosmosFailures.NotFound();
+            if (!PositionMatches(live, requestOptions?.FilterPredicate)) throw CosmosFailures.PreconditionFailed();
+            ApplyPatch(live, patchOperations);
+            return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(live.ToObject<T>()!, HttpStatusCode.OK));
+        }
+    }
+
+    private static bool PositionMatches(JObject live, string? predicate) => predicate is null ||
+        string.CompareOrdinal(live["position"]?.Value<string>(), predicate.Split('\'')[1]) < 0;
+
+    private void ApplyPatch(JObject live, IReadOnlyList<PatchOperation> patches)
+    {
+        foreach (var patch in patches)
+            live[patch.Path.TrimStart('/')] = JToken.FromObject(patch.GetType().GetProperty("Value")!.GetValue(patch)!);
+        Stamp(live);
+    }
+
     public override TransactionalBatch CreateTransactionalBatch(PartitionKey partitionKey) =>
         new InMemoryTransactionalBatch(this, UnwrapPartitionKey(partitionKey));
 
@@ -358,6 +387,12 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         {
             ThrowIfFaulted();
 
+            var inventory = operations.Select(o => o.Kind + ":" + o.Id).ToArray();
+            BeforeBatch?.Invoke(inventory);
+            BatchInventory.Add(inventory);
+            var head = operations.FirstOrDefault(o => o.Id == "$head");
+            BatchHeadPositions.Add(head?.Predicate?.Split('\'')[1] ?? head?.Document?["position"]?.Value<string>());
+            if (operations.Count > 100) return new FakeBatchResponse(HttpStatusCode.BadRequest, []);
             var statuses = new List<HttpStatusCode>();
             var rejected = false;
 
@@ -372,12 +407,15 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
                 }
 
                 statuses.Add(status);
+                if (rejected) break;
             }
 
             if (rejected)
             {
                 // Not one write. This is the guarantee the migration is built on.
-                return new FakeBatchResponse(HttpStatusCode.FailedDependency, statuses);
+                var failed = statuses.Count - 1;
+                return new FakeBatchResponse(statuses[failed], Enumerable.Range(0, operations.Count)
+                    .Select(i => i == failed ? statuses[failed] : HttpStatusCode.FailedDependency).ToArray());
             }
 
             // Pass 2 — every condition held, so commit. Always against the batch's own partition.
@@ -387,6 +425,9 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
                 switch (operation.Kind)
                 {
+                    case InMemoryTransactionalBatch.Kind.Patch:
+                        ApplyPatch(_items[key], operation.Patches!);
+                        break;
                     case InMemoryTransactionalBatch.Kind.Delete:
                         Deletes++;
                         _items.Remove(key);
@@ -420,6 +461,8 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
         return operation.Kind switch
         {
+            InMemoryTransactionalBatch.Kind.Patch => !exists ? HttpStatusCode.NotFound :
+                PositionMatches(live!, operation.Predicate) ? HttpStatusCode.OK : HttpStatusCode.PreconditionFailed,
             InMemoryTransactionalBatch.Kind.Create =>
                 exists ? HttpStatusCode.Conflict : HttpStatusCode.Created,
 
@@ -679,9 +722,10 @@ public static class CosmosFailures
 /// </summary>
 internal sealed class InMemoryTransactionalBatch : TransactionalBatch
 {
-    internal enum Kind { Create, Replace, Delete }
+    internal enum Kind { Create, Replace, Delete, Patch }
 
-    internal sealed record Operation(Kind Kind, string Id, JObject? Document, string? IfMatchEtag);
+    internal sealed record Operation(Kind Kind, string Id, JObject? Document, string? IfMatchEtag,
+        IReadOnlyList<PatchOperation>? Patches = null, string? Predicate = null);
 
     private readonly InMemoryCosmosContainer _container;
     private readonly List<Operation> _operations = new();
@@ -744,7 +788,11 @@ internal sealed class InMemoryTransactionalBatch : TransactionalBatch
     public override TransactionalBatch PatchItem(
         string id,
         IReadOnlyList<PatchOperation> patchOperations,
-        TransactionalBatchPatchItemRequestOptions? requestOptions = null) => throw new NotSupportedException();
+        TransactionalBatchPatchItemRequestOptions? requestOptions = null)
+    {
+        _operations.Add(new Operation(Kind.Patch, id, null, null, patchOperations, requestOptions?.FilterPredicate));
+        return this;
+    }
 
     public override TransactionalBatch ReadItem(string id, TransactionalBatchItemRequestOptions? requestOptions = null) =>
         throw new NotSupportedException();

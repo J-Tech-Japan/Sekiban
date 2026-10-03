@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json.Linq;
 using Sekiban.Dcb.CosmosDb.Models;
+using Sekiban.Dcb.CosmosDb.Tags;
 using System.Net;
 namespace Sekiban.Dcb.CosmosDb.Repair;
 
@@ -77,7 +78,13 @@ internal sealed class CosmosContainerRepairStore : ICosmosTagRepairStore
 {
     private readonly Container _container;
 
-    public CosmosContainerRepairStore(Container container) => _container = container;
+    private readonly CosmosDbEventStoreOptions _options;
+    public CosmosContainerRepairStore(Container container, CosmosDbEventStoreOptions? options = null)
+    {
+        _container = container;
+        _options = options ?? new();
+        _options.ValidateTagHeadOptions();
+    }
 
     public async Task<CosmosRepairRowLookup> ReadRowsForEventAsync(
         string partitionKey,
@@ -124,16 +131,23 @@ internal sealed class CosmosContainerRepairStore : ICosmosTagRepairStore
         CosmosTag row,
         CancellationToken cancellationToken)
     {
+        _options.ValidateTagHeadOptions();
+        // Head maintenance is part of the repair's cost: its request charges are reported with the row create.
+        var headCharge = 0d;
+        if (_options.TagHeadMode == CosmosTagHeadMode.Advance)
+            await CosmosTagHead.AdvanceHeadAsync(
+                    _container, partitionKey, row, row.SortableUniqueId, cancellationToken, charge => headCharge += charge)
+                .ConfigureAwait(false);
         try
         {
             var response = await _container
                 .CreateItemAsync(row, new PartitionKey(partitionKey), cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            return (true, response.RequestCharge);
+            return (true, headCharge + response.RequestCharge);
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
         {
-            return (false, ex.RequestCharge);
+            return (false, headCharge + ex.RequestCharge);
         }
     }
 

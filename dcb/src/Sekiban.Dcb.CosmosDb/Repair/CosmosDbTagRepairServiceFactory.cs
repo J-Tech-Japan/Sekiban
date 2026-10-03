@@ -42,7 +42,7 @@ public sealed class CosmosDbTagRepairServiceFactory
         return new CosmosDbTagRepairService(
             serviceId,
             new CosmosContainerRepairEventSource(eventsContainer, serviceId),
-            new CosmosContainerRepairStore(tagsContainer),
+            new CosmosContainerRepairStore(tagsContainer, _context.Options),
             _logger);
     }
 }

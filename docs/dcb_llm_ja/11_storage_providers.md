@@ -62,6 +62,30 @@ services.AddSekibanDcbCosmosDbWithAspire();
 
 Cosmos の書き込みはベストエフォート トランザクションです。整合性は Executor の予約と Cosmos の設定に依存します。
 
+### Cosmos タグ head の維持（オプトイン）
+
+`CosmosDbEventStoreOptions.TagHeadMode` の既定値は `CosmosTagHeadMode.Off` です。
+`Advance` を指定すると、各タグのパーティションに `{ id: "$head", pk: "{serviceId}|{tag}",
+serviceId, tag, documentType: "tagHead", position }` を保存し、`position` にそのタグへ書いた
+最大の SortableUniqueId を維持します。Advance は head を維持するだけで、head に基づく
+書き込み拒否、フェンス、epoch は提供しません。
+
+有効化前に **すべての reader を SEK-G106 以降へ更新**してください。この reader は行以外の
+ドキュメントを除外します。`UseTransactionalBatchForTags = true` と `MaxBatchOperations >= 2`
+が必須で、構築時および使用時に検証します。両モードともバッチ上限を 100 に制限します
+（Off の非正値は従来どおり 1）。Advance は head 用に 1 操作を予約し、最初のチャンクに
+全チャンクの最大値を設定します。fallback や後続の行だけのチャンクの前に、head がその
+最大値以上であることを確認します。head がない場合は既存の最上位行と新しい最大値の
+大きい方で初期化します。repair と sweep も同じ規則で、行作成前に head を進めます。
+
+コストはタグパーティションごとの書き込みにつき追加 1 操作で、初回は初期化の read と
+再試行が必要です。競合時は追加の head リクエストが必要になる場合があります。
+古いパッケージ、Off のインスタンス（repair/sweep を含む）、外部 export/import ツールが
+行を追加している間は head が真の最大値より遅れることがあります。export/import ツールは
+head を維持しません。将来の enforcement 導入前にそれらの writer を停止してください。
+運用者が設定する epoch は後続スライスの対象です。旧形式の migration reduction は
+イベントとタグの組を変えないため、head を維持しません。
+
 ### Cosmos event document サイズ admission（opt-in）
 
 `AddSekibanDcbCosmosEventDocumentSizeGate()` は、event ごとの既定 quota `2_000_000` byte を持つ strict な
