@@ -785,6 +785,8 @@ capability. It is a durable DCB fence beneath Orleans reservations: it prevents 
 heads from appending after a partitioned/retired writer has bypassed the in-memory reservation layer. It is **not** a
 replacement for reservations, and it does not make arbitrary external effects exactly-once.
 
+A store may declare enforcement limits through `ExpectedTagPositionLimits`; PostgreSQL declares none, and the executor rejects commands that exceed a store's limits before reserving.
+
 ### Derived fence (TagConsistencyFenceOptions)
 
 `Sekiban.Dcb.TagConsistencyFence.TagConsistencyFenceOptions.Mode` defaults to `Off`. Set it to

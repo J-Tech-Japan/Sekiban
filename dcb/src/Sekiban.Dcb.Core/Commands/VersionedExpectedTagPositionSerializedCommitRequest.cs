@@ -4,9 +4,9 @@ using Sekiban.Dcb.Storage;
 namespace Sekiban.Dcb.Commands;
 
 /// <summary>
-///     Additive V2 serialized commit envelope for PostgreSQL's store-enforced multi-tag expected-position CAS. V1 and
+///     Additive V2 serialized commit envelope for the store's durable multi-tag expected-position CAS. V1 and
 ///     the legacy unversioned payload deliberately remain untouched: their omission semantics continue to mean the
-///     existing reservation-only, no-enforcement flow.
+///     existing reservation-only, no-enforcement flow when derived fence mode is Off.
 /// </summary>
 public sealed record VersionedExpectedTagPositionSerializedCommitRequest(
     int Version,
