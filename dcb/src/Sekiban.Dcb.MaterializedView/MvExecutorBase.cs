@@ -1066,7 +1066,6 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
         }
 
         var safeThreshold = CreateSafeThreshold(_options.SafeWindowMs);
-        var reachedUnsafeWindow = false;
         var currentPosition = currentStatus.CurrentCheckpointTruth.IsKnown
             ? currentStatus.CurrentCheckpointTruth.PositionValue
             : null;
@@ -1087,17 +1086,7 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
                 originalEntries, cancellationToken).ConfigureAwait(false);
         }
 
-        var safeBatch = new List<SerializableEvent>(batch.Count);
-        foreach (var serializableEvent in batch)
-        {
-            if (!new SortableUniqueId(serializableEvent.SortableUniqueIdValue).IsEarlierThanOrEqual(safeThreshold))
-            {
-                reachedUnsafeWindow = true;
-                break;
-            }
-
-            safeBatch.Add(serializableEvent);
-        }
+        var (safeBatch, reachedUnsafeWindow) = GetSafeCatchUpBatch(batch, safeThreshold);
 
         if (safeBatch.Count == 0)
         {
@@ -1142,6 +1131,25 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
                 AppliedEventCount = currentStatus.AppliedEventCount + appliedEvents
             }
         };
+    }
+
+    private static (List<SerializableEvent> SafeBatch, bool ReachedUnsafeWindow) GetSafeCatchUpBatch(
+        IReadOnlyList<SerializableEvent> batch, SortableUniqueId safeThreshold)
+    {
+        var reachedUnsafeWindow = false;
+        var safeBatch = new List<SerializableEvent>(batch.Count);
+        foreach (var serializableEvent in batch)
+        {
+            if (!new SortableUniqueId(serializableEvent.SortableUniqueIdValue).IsEarlierThanOrEqual(safeThreshold))
+            {
+                reachedUnsafeWindow = true;
+                break;
+            }
+
+            safeBatch.Add(serializableEvent);
+        }
+
+        return (safeBatch, reachedUnsafeWindow);
     }
 
     private async Task<MvCatchUpResult> CompleteEmptyCatchUpAsync(
