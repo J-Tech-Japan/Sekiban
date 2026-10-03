@@ -39,6 +39,7 @@ on:
       - 'dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.MaterializedView.Postgres.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.WithResult.Tests/**'
+      - 'dcb/tests/Sekiban.Dcb.CosmosDb.Emulator.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.WithoutResult.Tests/**'
       - 'dcb/tests/Sekiban.Dcb.TagStateCancellation.Legacy1018Fixture/**'
       - 'dcb/tests/Sekiban.Dcb.ColdEvents.Tests/**'
@@ -243,3 +244,45 @@ jobs:
       - name: Stop pinned DynamoDB Local
         if: always()
         run: docker rm -f sekiban-g67-dynamodb-local || true
+
+  dcbCosmosEmulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SEKIBAN_COSMOS_EMULATOR_REQUIRED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build Cosmos emulator tests
+        run: dotnet build dcb/tests/Sekiban.Dcb.CosmosDb.Emulator.Tests/Sekiban.Dcb.CosmosDb.Emulator.Tests.csproj -c Release -p:GenerateSBOM=false -p:GeneratePackageOnBuild=false
+      - name: Run Cosmos emulator tests on both frameworks
+        run: |
+          for tfm in net9.0 net10.0; do
+            dotnet test dcb/tests/Sekiban.Dcb.CosmosDb.Emulator.Tests/Sekiban.Dcb.CosmosDb.Emulator.Tests.csproj -c Release --no-build -f "$tfm" --logger "trx;LogFileName=$tfm.trx" --results-directory "$RUNNER_TEMP/cosmos-emulator-trx"
+          done
+      - name: Require executed and passed emulator tests with no skips
+        if: always()
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          import pathlib
+          import xml.etree.ElementTree as ET
+          ns = {'t': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+          for tfm in ('net9.0', 'net10.0'):
+              path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'cosmos-emulator-trx' / (tfm + '.trx')
+              root = ET.parse(path).getroot()
+              counters = root.find('t:ResultSummary/t:Counters', ns)
+              assert counters is not None, f'{tfm}: missing counters'
+              total, executed, passed, failed, skipped = (int(counters.get(k, '0')) for k in ('total', 'executed', 'passed', 'failed', 'notExecuted'))
+              results = root.findall('t:Results/t:UnitTestResult', ns)
+              assert executed > 0 and total == executed == passed and failed == skipped == 0, f'{tfm}: {counters.attrib}'
+              assert len(results) == total and all(r.get('outcome') == 'Passed' for r in results), f'{tfm}: non-passing or missing results'
+              print(f'{tfm}: {passed} emulator tests passed, zero skipped')
+          PYTHON
