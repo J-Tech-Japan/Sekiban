@@ -688,6 +688,14 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
             }
 
             _consecutiveCatchUpFailures = 0;
+            if (result.Outcome == MvCatchUpOutcome.Superseded)
+            {
+                RequeueStreamHint(consumedStreamHint);
+                _missingHintStallBudget.PauseAfterFailure();
+                _safeNoProgressSince = null;
+                _safeNoProgressPosition = null;
+                return false;
+            }
             if (result.AppliedEvents > 0)
             {
                 _consecutiveEmptyBatches = 0;

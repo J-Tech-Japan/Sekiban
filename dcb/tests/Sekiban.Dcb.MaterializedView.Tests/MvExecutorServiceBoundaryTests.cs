@@ -15,6 +15,17 @@ namespace Sekiban.Dcb.MaterializedView.Tests;
 public sealed class MvExecutorServiceBoundaryTests
 {
     [Fact]
+    public void AllBuiltInRegistryStores_ReportApplyLockingSupport()
+    {
+        IMvRegistryStore[] stores =
+        [
+            new PostgresMvRegistryStore("Host=unused"), new MySqlMvRegistryStore("Server=unused"),
+            new SqlServerMvRegistryStore("Server=unused"), new SqliteMvRegistryStore("Data Source=unused")
+        ];
+        Assert.All(stores, store => Assert.True(store.SupportsApplyLocking));
+    }
+
+    [Fact]
     public async Task AllTargetExecutors_RejectInvalidServiceBeforeRegistryOrSourceIo()
     {
         var sourceFactory = new ThrowingEventStoreFactory();

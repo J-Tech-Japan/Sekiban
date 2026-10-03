@@ -54,7 +54,9 @@ internal sealed class VerifiedBatchCounterProjector(
     {
         Counters = ctx.RegisterTable("counters");
         await ctx.ExecuteAsync(
-                $"CREATE TABLE IF NOT EXISTS {Counters.PhysicalName} (id TEXT NOT NULL PRIMARY KEY, value INTEGER NOT NULL);",
+                ctx.DatabaseType == MvDbType.SqlServer
+                    ? $"IF OBJECT_ID('{Counters.PhysicalName}', 'U') IS NULL CREATE TABLE {Counters.PhysicalName} (id VARCHAR(100) NOT NULL PRIMARY KEY, value INTEGER NOT NULL);"
+                    : $"CREATE TABLE IF NOT EXISTS {Counters.PhysicalName} (id VARCHAR(100) NOT NULL PRIMARY KEY, value INTEGER NOT NULL);",
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
     }
@@ -68,8 +70,12 @@ internal sealed class VerifiedBatchCounterProjector(
         {
             return [
                 new MvSqlStatement(
-                    $"INSERT INTO {Counters.PhysicalName} (id, value) VALUES ('counter', 1) " +
-                    $"ON CONFLICT (id) DO UPDATE SET value = {Counters.PhysicalName}.value + 1;")
+                    ctx.DatabaseType switch
+                    {
+                        MvDbType.MySql => $"INSERT INTO {Counters.PhysicalName} (id, value) VALUES ('counter', 1) ON DUPLICATE KEY UPDATE value = value + 1;",
+                        MvDbType.SqlServer => $"UPDATE {Counters.PhysicalName} SET value = value + 1 WHERE id = 'counter'; IF @@ROWCOUNT = 0 INSERT INTO {Counters.PhysicalName} (id, value) VALUES ('counter', 1);",
+                        _ => $"INSERT INTO {Counters.PhysicalName} (id, value) VALUES ('counter', 1) ON CONFLICT (id) DO UPDATE SET value = {Counters.PhysicalName}.value + 1;"
+                    })
             ];
         }
 

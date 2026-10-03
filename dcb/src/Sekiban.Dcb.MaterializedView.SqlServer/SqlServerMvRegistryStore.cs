@@ -506,6 +506,12 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
         CancellationToken cancellationToken = default) =>
         ReadEntriesWithConnectionAsync(_connectionString, serviceId, viewName, viewVersion, cancellationToken);
 
+    private const string RegistryEntriesSql = MvApplyRegistryLockReader.SqlServerRegistryEntriesSql;
+    private static readonly MvApplyRegistryLockReader.ReadOptions ApplyLockOptions = new(MvApplyRegistryLockReader.SqlServerApplyLockSql, RegistryEntriesSql, AllowStringTimestamps: true);
+
+    public bool SupportsApplyLocking => true;
+    public Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(string serviceId, string viewName, int viewVersion, IDbTransaction transaction, CancellationToken cancellationToken = default) => MvApplyRegistryLockReader.ReadAsync(serviceId, viewName, viewVersion, transaction, cancellationToken, ApplyLockOptions);
+
     private async Task<IReadOnlyList<MvRegistryEntry>> ReadEntriesWithConnectionAsync(
         string connectionString,
         string serviceId,
@@ -513,33 +519,7 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
         int viewVersion,
         CancellationToken cancellationToken)
     {
-        const string sql = """
-            SELECT service_id AS ServiceId,
-                   view_name AS ViewName,
-                   view_version AS ViewVersion,
-                   logical_table AS LogicalTable,
-                   physical_table AS PhysicalTable,
-                   status AS Status,
-                   current_position AS CurrentPosition,
-                   target_position AS TargetPosition,
-                   current_checkpoint_truth AS CurrentCheckpointTruth,
-                   target_checkpoint_truth AS TargetCheckpointTruth,
-                   last_sortable_unique_id AS LastSortableUniqueId,
-                   applied_event_version AS AppliedEventVersion,
-                   last_applied_source AS LastAppliedSource,
-                   last_applied_at AS LastAppliedAt,
-                   last_stream_received_sortable_unique_id AS LastStreamReceivedSortableUniqueId,
-                   last_stream_received_at AS LastStreamReceivedAt,
-                   last_stream_applied_sortable_unique_id AS LastStreamAppliedSortableUniqueId,
-                   last_catch_up_sortable_unique_id AS LastCatchUpSortableUniqueId,
-                   last_updated AS LastUpdated,
-                   metadata AS Metadata
-            FROM sekiban_mv_registry
-            WHERE service_id = @ServiceId
-              AND view_name = @ViewName
-              AND view_version = @ViewVersion
-            ORDER BY logical_table;
-            """;
+        const string sql = RegistryEntriesSql;
 
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -891,34 +871,7 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
             new CommandDefinition(sql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    private static MvRegistryEntry MapEntry(IReadOnlyDictionary<string, object?> row)
-    {
-        var currentCheckpointTruth = MvCheckpointTruthCodec.Decode(ReadNullableString(row, "CurrentCheckpointTruth"));
-        var targetCheckpointTruth = MvCheckpointTruthCodec.Decode(ReadNullableString(row, "TargetCheckpointTruth"));
-        return new()
-        {
-            ServiceId = ReadRequiredString(row, "ServiceId"),
-            ViewName = ReadRequiredString(row, "ViewName"),
-            ViewVersion = ReadRequiredInt(row, "ViewVersion"),
-            LogicalTable = ReadRequiredString(row, "LogicalTable"),
-            PhysicalTable = ReadRequiredString(row, "PhysicalTable"),
-            Status = Enum.Parse<MvStatus>(ReadRequiredString(row, "Status"), ignoreCase: true),
-            CurrentPosition = ReadNullableString(row, "CurrentPosition") ?? currentCheckpointTruth.PositionValue,
-            TargetPosition = ReadNullableString(row, "TargetPosition") ?? targetCheckpointTruth.PositionValue,
-            CurrentCheckpointTruth = currentCheckpointTruth,
-            TargetCheckpointTruth = targetCheckpointTruth,
-            LastSortableUniqueId = ReadNullableString(row, "LastSortableUniqueId"),
-            AppliedEventVersion = ReadRequiredLong(row, "AppliedEventVersion"),
-            LastAppliedSource = ReadNullableString(row, "LastAppliedSource"),
-            LastAppliedAt = ReadNullableDateTimeOffset(row, "LastAppliedAt"),
-            LastStreamReceivedSortableUniqueId = ReadNullableString(row, "LastStreamReceivedSortableUniqueId"),
-            LastStreamReceivedAt = ReadNullableDateTimeOffset(row, "LastStreamReceivedAt"),
-            LastStreamAppliedSortableUniqueId = ReadNullableString(row, "LastStreamAppliedSortableUniqueId"),
-            LastCatchUpSortableUniqueId = ReadNullableString(row, "LastCatchUpSortableUniqueId"),
-            LastUpdated = ReadRequiredDateTimeOffset(row, "LastUpdated"),
-            Metadata = ReadNullableString(row, "Metadata")
-        };
-    }
+    private static MvRegistryEntry MapEntry(IReadOnlyDictionary<string, object?> row) => MvApplyRegistryLockReader.MapEntry(row, allowStringTimestamps: true);
 
     private static MvActiveEntry MapActiveEntry(IReadOnlyDictionary<string, object?> row) => ReadActiveEntry(row);
 
@@ -955,67 +908,4 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
             .ToDictionary(property => property.Name, property => property.GetValue(row), StringComparer.OrdinalIgnoreCase);
     }
 
-    private static string ReadRequiredString(IReadOnlyDictionary<string, object?> row, string key) =>
-        TryGetValue(row, key, out var value) && value is not null
-            ? value.ToString()!
-            : throw new InvalidOperationException($"Registry row is missing required value '{key}'.");
-
-    private static string? ReadNullableString(IReadOnlyDictionary<string, object?> row, string key) =>
-        TryGetValue(row, key, out var value) && value is not null
-            ? value.ToString()
-            : null;
-
-    private static int ReadRequiredInt(IReadOnlyDictionary<string, object?> row, string key) =>
-        Convert.ToInt32(TryGetValue(row, key, out var value)
-            ? value
-            : throw new InvalidOperationException($"Registry row is missing required value '{key}'."));
-
-    private static long ReadRequiredLong(IReadOnlyDictionary<string, object?> row, string key) =>
-        Convert.ToInt64(TryGetValue(row, key, out var value)
-            ? value
-            : throw new InvalidOperationException($"Registry row is missing required value '{key}'."));
-
-    private static DateTimeOffset ReadRequiredDateTimeOffset(IReadOnlyDictionary<string, object?> row, string key) =>
-        ReadDateTimeOffsetCore(
-            TryGetValue(row, key, out var value)
-                ? value
-                : throw new InvalidOperationException($"Registry row is missing required value '{key}'."),
-            key) ??
-        throw new InvalidOperationException($"Registry row is missing required timestamp '{key}'.");
-
-    private static DateTimeOffset? ReadNullableDateTimeOffset(IReadOnlyDictionary<string, object?> row, string key) =>
-        TryGetValue(row, key, out var value) ? ReadDateTimeOffsetCore(value, key) : null;
-
-    private static bool TryGetValue(IReadOnlyDictionary<string, object?> row, string key, out object? value)
-    {
-        if (row.TryGetValue(key, out value))
-        {
-            return true;
-        }
-
-        foreach (var pair in row)
-        {
-            if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
-            {
-                value = pair.Value;
-                return true;
-            }
-        }
-
-        value = null;
-        return false;
-    }
-
-    private static DateTimeOffset? ReadDateTimeOffsetCore(object? value, string key) =>
-        value switch
-        {
-            null or DBNull => null,
-            DateTimeOffset dateTimeOffset => dateTimeOffset,
-            DateTime dateTime => Normalize(dateTime),
-            string text when DateTimeOffset.TryParse(text, out var parsed) => parsed,
-            _ => throw new InvalidOperationException($"Registry row value '{key}' must be a timestamp.")
-        };
-
-    private static DateTimeOffset Normalize(DateTime value) =>
-        new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 }

@@ -206,10 +206,14 @@ public sealed class MvCatchUpWorker : BackgroundService
         try
         {
             var result = await _executor.CatchUpOnceAsync(host, _serviceId, stoppingToken).ConfigureAwait(false);
+            if (result.IsFailure)
+            {
+                throw new InvalidOperationException(result.ErrorMessage);
+            }
             _failureCounts.Remove(GetProjectorKey(registration));
             var snapshot = result.ProjectionStatus ?? GetSnapshot(registration);
             _publicationSnapshots[GetProjectorKey(registration)] = snapshot;
-            return new CatchUpCycleResult(result.AppliedEvents, result.ReachedUnsafeWindow, ShouldStop: false, snapshot);
+            return new CatchUpCycleResult(result.AppliedEvents, result.ReachedUnsafeWindow || result.Outcome == MvCatchUpOutcome.Superseded, ShouldStop: false, snapshot);
         }
         catch (NotSupportedException ex)
         {

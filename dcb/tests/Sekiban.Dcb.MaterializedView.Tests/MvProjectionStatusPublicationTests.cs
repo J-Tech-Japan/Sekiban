@@ -26,6 +26,20 @@ public class MvProjectionStatusPublicationTests
     private const string ViewName = "Order:Summary/日本語";
     private const int ViewVersion = 7;
 
+    [Fact]
+    public void RegistryObservation_DoesNotChangeStatusValueEquality()
+    {
+        var entry = new MvRegistryEntry
+        {
+            CurrentCheckpointTruth = MvCheckpointTruth.Unknown(), Status = MvStatus.Initializing
+        };
+        var observed = MvProjectionStatusSnapshot.FromEntries([entry]);
+        var value = new MvProjectionStatusSnapshot(entry.CurrentCheckpointTruth, entry.Status, 0);
+        Assert.Equal(value, observed);
+        Assert.Equal(value.GetHashCode(), observed.GetHashCode());
+        Assert.Equal(value, observed with { });
+    }
+
     public static IEnumerable<object[]> ProductionMappingCases()
     {
         var nonzero = SortableUniqueId.Generate(DateTime.UnixEpoch.AddHours(1), Guid.Empty);

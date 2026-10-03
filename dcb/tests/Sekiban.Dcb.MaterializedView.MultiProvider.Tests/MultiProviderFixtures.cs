@@ -535,6 +535,15 @@ public sealed class MySqlMvFixture : MultiProviderFixtureBase
 
     protected override MvDbType DatabaseType => MvDbType.MySql;
 
+    public async Task<DbConnection> OpenAdminConnectionAsync()
+    {
+        // Testcontainers' WithPassword configures both the app and root passwords.
+        var connectionString = new MySqlConnectionStringBuilder(ConnectionString) { UserID = "root" };
+        var connection = new MySqlConnection(connectionString.ConnectionString);
+        await connection.OpenAsync().ConfigureAwait(false);
+        return connection;
+    }
+
     protected override async Task<string> CreateConnectionStringAsync()
     {
         _container = new MySqlBuilder("mysql:8.4")

@@ -443,6 +443,16 @@ internal sealed class CountingDelegatingMvRegistryStore : IMvRegistryStore
         return _inner.UpdatePositionAsync(update, transaction, cancellationToken);
     }
 
+    public bool SupportsApplyLocking => _inner.SupportsApplyLocking;
+
+    public Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(
+        string serviceId, string viewName, int viewVersion, IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        Count(query: true);
+        return _inner.LockEntriesForApplyAsync(serviceId, viewName, viewVersion, transaction, cancellationToken);
+    }
+
     public Task MarkStreamReceivedAsync(
         string serviceId,
         string viewName,

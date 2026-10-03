@@ -300,6 +300,18 @@ public interface IMvRegistryStore
     Task RegisterAsync(MvRegistryEntry entry, IDbTransaction? transaction = null, CancellationToken cancellationToken = default);
     Task UpdatePositionAsync(MvPositionUpdate update, IDbTransaction? transaction = null, CancellationToken cancellationToken = default);
 
+    /// <summary>Whether apply transactions can serialize and re-check registry checkpoints.</summary>
+    bool SupportsApplyLocking => false;
+
+    /// <summary>Locks registry rows in logical-table order on the apply transaction before projector SQL.</summary>
+    Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(
+        string serviceId,
+        string viewName,
+        int viewVersion,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This registry store does not support materialized-view apply locking.");
+
     Task MarkStreamReceivedAsync(
         string serviceId,
         string viewName,
@@ -464,7 +476,8 @@ public enum MvCatchUpOutcome
     NoProgress = 3,
     FailedRead = 4,
     PermanentUnsupported = 5,
-    RetryableFailure = 6
+    RetryableFailure = 6,
+    Superseded = 7
 }
 
 /// <summary>
