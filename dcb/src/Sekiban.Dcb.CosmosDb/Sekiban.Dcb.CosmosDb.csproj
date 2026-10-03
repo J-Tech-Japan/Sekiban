@@ -51,9 +51,6 @@
 
     <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-            <_Parameter1>Sekiban.Dcb.CosmosDb.Emulator.Tests</_Parameter1>
-        </AssemblyAttribute>
-        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>Sekiban.Dcb.WithResult.Tests</_Parameter1>
         </AssemblyAttribute>
     </ItemGroup>

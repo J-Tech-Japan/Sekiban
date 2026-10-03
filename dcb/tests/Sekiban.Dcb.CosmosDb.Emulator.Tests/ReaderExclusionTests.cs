@@ -110,7 +110,7 @@ public sealed class ReaderExclusionTests(CosmosEmulatorFixture fixture)
         Assert.Equal(0, report.Missing);
         Assert.Equal(before, await SnapshotAsync(tags));
 
-        // Use the public registration path; friend access only awaits the internal completion task.
+        // Use the public registration path and wait for the sweep's terminal log event (no internals access).
         var services = new ServiceCollection();
         var logs = new SweepLog();
         services.AddSingleton<ILogger<CosmosTagSweepService>>(logs);
@@ -127,7 +127,7 @@ public sealed class ReaderExclusionTests(CosmosEmulatorFixture fixture)
         using var provider = services.BuildServiceProvider();
         var sweep = provider.GetServices<IHostedService>().OfType<CosmosTagSweepService>().Single();
         await sweep.StartAsync(CancellationToken.None);
-        try { await sweep.Sweeping!.WaitAsync(TimeSpan.FromSeconds(60)); }
+        try { await logs.Finished.Task.WaitAsync(TimeSpan.FromSeconds(60)); }
         finally { await sweep.StopAsync(CancellationToken.None); }
         Assert.Contains(1, logs.EventIds); // Completed, not a swallowed repair failure or budget expiry.
         Assert.DoesNotContain(4, logs.EventIds);
@@ -140,9 +140,17 @@ public sealed class ReaderExclusionTests(CosmosEmulatorFixture fixture)
 
     private sealed class SweepLog : ILogger<CosmosTagSweepService>
     {
-        public List<int> EventIds { get; } = [];
+        // Event IDs 1-4 are the sweep's terminal outcomes: completed, needs attention, budget exhausted, failed.
+        private readonly object _gate = new();
+        private readonly List<int> _eventIds = [];
+        public TaskCompletionSource Finished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public IReadOnlyList<int> EventIds { get { lock (_gate) return _eventIds.ToArray(); } }
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) => EventIds.Add(eventId.Id);
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            lock (_gate) _eventIds.Add(eventId.Id);
+            if (eventId.Id is >= 1 and <= 4) Finished.TrySetResult();
+        }
     }
 }

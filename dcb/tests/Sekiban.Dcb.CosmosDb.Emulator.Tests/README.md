@@ -44,6 +44,7 @@ with the full pinned reference both succeeded.
   production agreement is inferred. Neither classic nor Azure is run in this slice.
 - HTTP status codes are pinned, not substatus codes or ETag formats.
 
-The provider grants friend access solely to await the sweep's completion task
-without sleeps. The sweep is constructed through its public DI registration,
-uses the real repair runner, and the test requires a completed sweep log event.
+The tests use public APIs only; the provider grants this project no friend
+access. The sweep is constructed through its public DI registration and uses
+the real repair runner. The test waits, without sleeps, for the sweep's
+terminal log event and requires it to be the completed event.
