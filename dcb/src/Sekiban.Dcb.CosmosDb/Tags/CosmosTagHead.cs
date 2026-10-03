@@ -26,8 +26,10 @@ internal static class CosmosTagHead
 
     internal static PatchOperation[] PositionPatch(string position) => [PatchOperation.Set("/position", position)];
 
+    // onCharge receives the request charge of every head-related request, including handled 404/412/409 responses.
     internal static async Task<JObject> BootstrapAsync(
-        Container container, string partition, CosmosTag row, string maximum, CancellationToken token)
+        Container container, string partition, CosmosTag row, string maximum, CancellationToken token,
+        Action<double>? onCharge = null)
     {
         ValidatePosition(maximum);
         var query = new QueryDefinition(
@@ -38,6 +40,7 @@ internal static class CosmosTagHead
         while (iterator.HasMoreResults)
         {
             var page = await iterator.ReadNextAsync(token).ConfigureAwait(false);
+            onCharge?.Invoke(page.RequestCharge);
             var top = page.FirstOrDefault();
             if (top is null) continue;
             ValidatePosition(top.SortableUniqueId);
@@ -52,27 +55,39 @@ internal static class CosmosTagHead
     }
 
     internal static async Task AdvanceHeadAsync(
-        Container container, string partition, CosmosTag row, string maximum, CancellationToken token)
+        Container container, string partition, CosmosTag row, string maximum, CancellationToken token,
+        Action<double>? onCharge = null)
     {
         var predicate = BuildValidatedPositionPredicate(maximum);
         for (var attempt = 0; attempt < RetryLimit; attempt++)
         {
             try
             {
-                await container.PatchItemAsync<JObject>(Id, new PartitionKey(partition), PositionPatch(maximum),
+                var patched = await container.PatchItemAsync<JObject>(Id, new PartitionKey(partition), PositionPatch(maximum),
                     new PatchItemRequestOptions { FilterPredicate = predicate }, token).ConfigureAwait(false);
+                onCharge?.Invoke(patched.RequestCharge);
                 return;
             }
-            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed) { return; }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
+            {
+                onCharge?.Invoke(ex.RequestCharge);
+                return;
+            }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {
-                var head = await BootstrapAsync(container, partition, row, maximum, token).ConfigureAwait(false);
+                onCharge?.Invoke(ex.RequestCharge);
+                var head = await BootstrapAsync(container, partition, row, maximum, token, onCharge).ConfigureAwait(false);
                 try
                 {
-                    await container.CreateItemAsync(head, new PartitionKey(partition), cancellationToken: token).ConfigureAwait(false);
+                    var created = await container.CreateItemAsync(head, new PartitionKey(partition), cancellationToken: token)
+                        .ConfigureAwait(false);
+                    onCharge?.Invoke(created.RequestCharge);
                     return;
                 }
-                catch (CosmosException conflict) when (conflict.StatusCode == HttpStatusCode.Conflict) { }
+                catch (CosmosException conflict) when (conflict.StatusCode == HttpStatusCode.Conflict)
+                {
+                    onCharge?.Invoke(conflict.RequestCharge);
+                }
             }
         }
         throw new CosmosException("Tag head bootstrap retries exhausted.", HttpStatusCode.Conflict, 409, "", 0);

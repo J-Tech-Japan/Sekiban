@@ -126,6 +126,16 @@ public sealed class CosmosTagHeadTests
         await scenario.OldRepairAsync(fallback);
     }
     [Fact]
+    public async Task RepairReportsHeadRequestCharge()
+    {
+        using var off = new CosmosTagHeadScenarios(new InMemoryCosmosClient(), "test");
+        using var advance = new CosmosTagHeadScenarios(new InMemoryCosmosClient(), "test");
+        var offCharge = await off.RepairChargeAsync(CosmosTagHeadMode.Off);
+        var advanceCharge = await advance.RepairChargeAsync(CosmosTagHeadMode.Advance);
+        // Advance adds the head patch, the bootstrap read and the head create to the reported cost.
+        Assert.True(advanceCharge > offCharge, $"advance {advanceCharge} must exceed off {offCharge}");
+    }
+    [Fact]
     public async Task ConcurrentBootstrap()
     {
         var client = new InMemoryCosmosClient();

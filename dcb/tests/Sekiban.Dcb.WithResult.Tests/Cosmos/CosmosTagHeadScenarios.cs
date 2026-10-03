@@ -109,6 +109,20 @@ internal sealed class CosmosTagHeadScenarios : IDisposable
         }
         await AssertAsync([old, top]);
     }
+    // Repairs one missing old row on a tag that has rows but no head, and returns the reported request charge.
+    public async Task<double> RepairChargeAsync(CosmosTagHeadMode mode)
+    {
+        await InitializeAsync();
+        _options.TagHeadMode = CosmosTagHeadMode.Off;
+        var top = Event(10); var old = Event(1);
+        await WriteAsync([top, old]);
+        await _tags.DeleteItemAsync<JObject>(old.Id.ToString(), new PartitionKey(Pk));
+        _options.TagHeadMode = mode;
+        var repair = await new CosmosDbTagRepairServiceFactory(_context, _resolver).CreateAsync("svc");
+        var report = await repair.RepairAsync(new CosmosTagRepairOptions { DryRun = false });
+        Assert.Equal(1, report.Repaired);
+        return report.RequestCharge;
+    }
     public async Task InvalidPositionAsync(bool serialized)
     {
         var invalid = Event(1) with { SortableUniqueIdValue = "123' OR true" };
