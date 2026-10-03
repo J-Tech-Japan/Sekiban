@@ -1180,14 +1180,12 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             var tagsContainer = await _context.GetTagsContainerAsync(settings).ConfigureAwait(false);
 
             // Query all tags and group in memory (Cosmos DB doesn't support complex GROUP BY with aggregations)
-            var query = new QueryDefinition(
-                "SELECT * FROM c WHERE c.serviceId = @serviceId AND " + CosmosTagQueryFilters.RowsOnly +
-                (string.IsNullOrEmpty(tagGroup) ? string.Empty : " AND c.tagGroup = @tagGroup"))
-                .WithParameter("@serviceId", serviceId);
-            if (!string.IsNullOrEmpty(tagGroup))
-            {
-                query = query.WithParameter("@tagGroup", tagGroup);
-            }
+            var query = string.IsNullOrEmpty(tagGroup)
+                ? new QueryDefinition(CosmosTagQueryFilters.AllRowsByService)
+                    .WithParameter("@serviceId", serviceId)
+                : new QueryDefinition(CosmosTagQueryFilters.AllRowsByServiceAndGroup)
+                    .WithParameter("@serviceId", serviceId)
+                    .WithParameter("@tagGroup", tagGroup);
 
             var allTags = new List<CosmosTag>();
             using var iterator = tagsContainer.GetItemQueryIterator<JObject>(query);

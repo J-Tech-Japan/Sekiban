@@ -8,6 +8,11 @@ internal static class CosmosTagQueryFilters
 {
     public const string RowsOnly = "NOT IS_DEFINED(c.documentType)";
 
+    // Constant query texts: values are always passed as parameters, never formatted into the SQL.
+    public const string AllRowsByService = "SELECT * FROM c WHERE c.serviceId = @serviceId AND " + RowsOnly;
+
+    public const string AllRowsByServiceAndGroup = AllRowsByService + " AND c.tagGroup = @tagGroup";
+
     public static string? EventId(JObject document) =>
         document.Property("documentType") == null &&
         !string.IsNullOrEmpty(document["eventId"]?.Value<string>())
