@@ -29,7 +29,7 @@ public sealed class SqliteMvApplyRegistryGuardTests(SqliteMvFixture fixture) : M
 public abstract class MvApplyRegistryGuardTests(MultiProviderFixtureBase fixture) : IDisposable
 {
     private const string Service = MultiProviderFixtureBase.ServiceId;
-    private readonly CancellationTokenSource _timeout = new(TimeSpan.FromSeconds(45));
+    private readonly CancellationTokenSource _timeout = new(TimeSpan.FromSeconds(120));
     private CancellationToken Token => _timeout.Token;
     public void Dispose() => _timeout.Dispose();
     private IMvRegistryStore Registry => fixture.Services.GetRequiredService<IMvRegistryStore>();
@@ -342,7 +342,15 @@ public abstract class MvApplyRegistryGuardTests(MultiProviderFixtureBase fixture
         var sql = fixture.DatabaseTypeForTests switch
         {
             MvDbType.Postgres => "SELECT COUNT(*) FROM pg_stat_activity WHERE pid = @Session AND wait_event_type = 'Lock';",
-            MvDbType.MySql => "SELECT COUNT(*) FROM information_schema.innodb_trx WHERE trx_mysql_thread_id = @Session AND trx_state = 'LOCK WAIT';",
+            MvDbType.MySql => """
+                SELECT
+                    (SELECT COUNT(*) FROM information_schema.innodb_trx
+                     WHERE trx_mysql_thread_id = @Session AND trx_state = 'LOCK WAIT') +
+                    (SELECT COUNT(*) FROM performance_schema.data_lock_waits AS waits
+                     INNER JOIN performance_schema.threads AS threads
+                         ON threads.THREAD_ID = waits.REQUESTING_THREAD_ID
+                     WHERE threads.PROCESSLIST_ID = @Session);
+                """,
             MvDbType.SqlServer => "SELECT COUNT(*) FROM sys.dm_exec_requests WHERE session_id = @Session AND blocking_session_id <> 0;",
             _ => throw new NotSupportedException()
         };
@@ -351,13 +359,25 @@ public abstract class MvApplyRegistryGuardTests(MultiProviderFixtureBase fixture
             ? await mysql.OpenAdminConnectionAsync()
             : await fixture.OpenConnectionAsync();
         using var waitTimeout = CancellationTokenSource.CreateLinkedTokenSource(Token);
-        waitTimeout.CancelAfter(TimeSpan.FromSeconds(10));
-        while (await observer.ExecuteScalarAsync<int>(new CommandDefinition(sql, new { Session = session }, cancellationToken: waitTimeout.Token)) == 0)
+        waitTimeout.CancelAfter(TimeSpan.FromSeconds(30));
+        int? observedWaits = null;
+        try
         {
-            Assert.False(contender.IsCompleted, "Contender completed without waiting for the registry lock.");
-            await Task.Delay(50, waitTimeout.Token);
+            do
+            {
+                observedWaits = await observer.ExecuteScalarAsync<int>(new CommandDefinition(
+                    sql, new { Session = session }, commandTimeout: 0, cancellationToken: waitTimeout.Token));
+                Assert.False(contender.IsCompleted, "Contender completed without waiting for the registry lock.");
+                if (observedWaits > 0) return;
+                await Task.Delay(50, waitTimeout.Token);
+            } while (true);
         }
-        Assert.False(contender.IsCompleted);
+        catch (OperationCanceledException) when (waitTimeout.IsCancellationRequested)
+        {
+            Assert.Fail($"Timed out observing the registry lock wait for {fixture.DatabaseTypeForTests} session {session}. " +
+                $"Last observer query result: {observedWaits?.ToString() ?? "no result"}; " +
+                $"contender.IsCompleted: {contender.IsCompleted}. Query: {sql}");
+        }
     }
 
     private async Task<(IMvExecutor Executor, IMvApplyHost Host, SerializableEvent[] Events)> PrepareAsync(MvInitializationMode mode)

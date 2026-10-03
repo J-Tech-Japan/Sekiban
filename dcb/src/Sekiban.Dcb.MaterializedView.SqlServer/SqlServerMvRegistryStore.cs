@@ -506,27 +506,11 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
         CancellationToken cancellationToken = default) =>
         ReadEntriesWithConnectionAsync(_connectionString, serviceId, viewName, viewVersion, cancellationToken);
 
-    private const string RegistrySelectSql =
-        MvApplyRegistryLockReader.RegistrySelectPrefix +
-        "current_checkpoint_truth AS CurrentCheckpointTruth, target_checkpoint_truth AS TargetCheckpointTruth, " + MvApplyRegistryLockReader.RegistrySelectSuffix +
-        "metadata AS Metadata";
-
-    private const string RegistryEntriesSql = RegistrySelectSql + " FROM sekiban_mv_registry" +
-        MvApplyRegistryLockReader.RegistryFilterAndOrder + ";";
-
-    private const string ApplyLockSql = RegistrySelectSql + " FROM sekiban_mv_registry WITH (UPDLOCK, HOLDLOCK)" +
-        MvApplyRegistryLockReader.RegistryFilterAndOrder + ";";
-
-    private static readonly MvApplyRegistryLockReader.ReadOptions ApplyLockOptions =
-        new(ApplyLockSql, RegistryEntriesSql, AllowStringTimestamps: true);
+    private const string RegistryEntriesSql = MvApplyRegistryLockReader.SqlServerRegistryEntriesSql;
+    private static readonly MvApplyRegistryLockReader.ReadOptions ApplyLockOptions = new(MvApplyRegistryLockReader.SqlServerApplyLockSql, RegistryEntriesSql, AllowStringTimestamps: true);
 
     public bool SupportsApplyLocking => true;
-
-    public Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(
-        string serviceId, string viewName, int viewVersion, IDbTransaction transaction,
-        CancellationToken cancellationToken = default) =>
-        MvApplyRegistryLockReader.ReadAsync(serviceId, viewName, viewVersion, transaction,
-            cancellationToken, ApplyLockOptions);
+    public Task<IReadOnlyList<MvRegistryEntry>> LockEntriesForApplyAsync(string serviceId, string viewName, int viewVersion, IDbTransaction transaction, CancellationToken cancellationToken = default) => MvApplyRegistryLockReader.ReadAsync(serviceId, viewName, viewVersion, transaction, cancellationToken, ApplyLockOptions);
 
     private async Task<IReadOnlyList<MvRegistryEntry>> ReadEntriesWithConnectionAsync(
         string connectionString,
@@ -887,8 +871,7 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
             new CommandDefinition(sql, parameters, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
-    private static MvRegistryEntry MapEntry(IReadOnlyDictionary<string, object?> row) =>
-        MvApplyRegistryLockReader.MapEntry(row, allowStringTimestamps: true);
+    private static MvRegistryEntry MapEntry(IReadOnlyDictionary<string, object?> row) => MvApplyRegistryLockReader.MapEntry(row, allowStringTimestamps: true);
 
     private static MvActiveEntry MapActiveEntry(IReadOnlyDictionary<string, object?> row) => ReadActiveEntry(row);
 

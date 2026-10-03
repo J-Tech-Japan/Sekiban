@@ -40,6 +40,21 @@ internal static class MvApplyRegistryLockReader
         ORDER BY logical_table
         """;
 
+    private const string RegistryFrom = " FROM sekiban_mv_registry";
+    private const string NativeRegistrySelect = RegistrySelectPrefix +
+        "current_checkpoint_truth AS CurrentCheckpointTruth, target_checkpoint_truth AS TargetCheckpointTruth, " +
+        RegistrySelectSuffix + "metadata AS Metadata";
+    private const string PostgresRegistrySelect = RegistrySelectPrefix +
+        "current_checkpoint_truth::text AS CurrentCheckpointTruth, target_checkpoint_truth::text AS TargetCheckpointTruth, " +
+        RegistrySelectSuffix + "metadata::text AS Metadata";
+    private const string PostgresRegistryRead = PostgresRegistrySelect + RegistryFrom + RegistryFilterAndOrder;
+
+    internal const string PostgresRegistryEntriesSql = PostgresRegistryRead + ";";
+    internal const string PostgresApplyLockSql = PostgresRegistryRead + " FOR UPDATE;";
+    internal const string SqlServerRegistryEntriesSql = NativeRegistrySelect + RegistryFrom + RegistryFilterAndOrder + ";";
+    internal const string SqlServerApplyLockSql = NativeRegistrySelect + RegistryFrom +
+        " WITH (UPDLOCK, HOLDLOCK)" + RegistryFilterAndOrder + ";";
+
     internal sealed record ReadOptions(
         string Sql, string UnlockedSql, string? FenceSql = null, bool AllowStringTimestamps = false);
 
@@ -93,94 +108,73 @@ internal static class MvApplyRegistryLockReader
     internal static MvRegistryEntry MapEntry(
         IReadOnlyDictionary<string, object?> row, bool allowStringTimestamps = false)
     {
-        var currentCheckpointTruth = MvCheckpointTruthCodec.Decode(ReadNullableString(row, "CurrentCheckpointTruth"));
-        var targetCheckpointTruth = MvCheckpointTruthCodec.Decode(ReadNullableString(row, "TargetCheckpointTruth"));
+        var values = new RegistryRow(row, allowStringTimestamps);
+        var currentCheckpointTruth = MvCheckpointTruthCodec.Decode(values.NullableString("CurrentCheckpointTruth"));
+        var targetCheckpointTruth = MvCheckpointTruthCodec.Decode(values.NullableString("TargetCheckpointTruth"));
         return new()
         {
-            ServiceId = ReadRequiredString(row, "ServiceId"),
-            ViewName = ReadRequiredString(row, "ViewName"),
-            ViewVersion = ReadRequiredInt(row, "ViewVersion"),
-            LogicalTable = ReadRequiredString(row, "LogicalTable"),
-            PhysicalTable = ReadRequiredString(row, "PhysicalTable"),
-            Status = Enum.Parse<MvStatus>(ReadRequiredString(row, "Status"), ignoreCase: true),
-            CurrentPosition = ReadNullableString(row, "CurrentPosition") ?? currentCheckpointTruth.PositionValue,
-            TargetPosition = ReadNullableString(row, "TargetPosition") ?? targetCheckpointTruth.PositionValue,
+            ServiceId = values.RequiredString("ServiceId"),
+            ViewName = values.RequiredString("ViewName"),
+            ViewVersion = values.RequiredInt("ViewVersion"),
+            LogicalTable = values.RequiredString("LogicalTable"),
+            PhysicalTable = values.RequiredString("PhysicalTable"),
+            Status = Enum.Parse<MvStatus>(values.RequiredString("Status"), ignoreCase: true),
+            CurrentPosition = values.NullableString("CurrentPosition") ?? currentCheckpointTruth.PositionValue,
+            TargetPosition = values.NullableString("TargetPosition") ?? targetCheckpointTruth.PositionValue,
             CurrentCheckpointTruth = currentCheckpointTruth,
             TargetCheckpointTruth = targetCheckpointTruth,
-            LastSortableUniqueId = ReadNullableString(row, "LastSortableUniqueId"),
-            AppliedEventVersion = ReadRequiredLong(row, "AppliedEventVersion"),
-            LastAppliedSource = ReadNullableString(row, "LastAppliedSource"),
-            LastAppliedAt = ReadNullableDateTimeOffset(row, "LastAppliedAt", allowStringTimestamps),
-            LastStreamReceivedSortableUniqueId = ReadNullableString(row, "LastStreamReceivedSortableUniqueId"),
-            LastStreamReceivedAt = ReadNullableDateTimeOffset(row, "LastStreamReceivedAt", allowStringTimestamps),
-            LastStreamAppliedSortableUniqueId = ReadNullableString(row, "LastStreamAppliedSortableUniqueId"),
-            LastCatchUpSortableUniqueId = ReadNullableString(row, "LastCatchUpSortableUniqueId"),
-            LastUpdated = ReadRequiredDateTimeOffset(row, "LastUpdated", allowStringTimestamps),
-            Metadata = ReadNullableString(row, "Metadata")
+            LastSortableUniqueId = values.NullableString("LastSortableUniqueId"),
+            AppliedEventVersion = values.RequiredLong("AppliedEventVersion"),
+            LastAppliedSource = values.NullableString("LastAppliedSource"),
+            LastAppliedAt = values.NullableTimestamp("LastAppliedAt"),
+            LastStreamReceivedSortableUniqueId = values.NullableString("LastStreamReceivedSortableUniqueId"),
+            LastStreamReceivedAt = values.NullableTimestamp("LastStreamReceivedAt"),
+            LastStreamAppliedSortableUniqueId = values.NullableString("LastStreamAppliedSortableUniqueId"),
+            LastCatchUpSortableUniqueId = values.NullableString("LastCatchUpSortableUniqueId"),
+            LastUpdated = values.RequiredTimestamp("LastUpdated"),
+            Metadata = values.NullableString("Metadata")
         };
     }
 
-    private static string ReadRequiredString(IReadOnlyDictionary<string, object?> row, string key) =>
-        TryGetValue(row, key, out var value) && value is not null
-            ? value.ToString()!
-            : throw new InvalidOperationException($"Registry row is missing required value '{key}'.");
-
-    private static string? ReadNullableString(IReadOnlyDictionary<string, object?> row, string key) =>
-        TryGetValue(row, key, out var value) && value is not null
-            ? value.ToString()
-            : null;
-
-    private static int ReadRequiredInt(IReadOnlyDictionary<string, object?> row, string key) =>
-        Convert.ToInt32(TryGetValue(row, key, out var value)
-            ? value
-            : throw new InvalidOperationException($"Registry row is missing required value '{key}'."));
-
-    private static long ReadRequiredLong(IReadOnlyDictionary<string, object?> row, string key) =>
-        Convert.ToInt64(TryGetValue(row, key, out var value)
-            ? value
-            : throw new InvalidOperationException($"Registry row is missing required value '{key}'."));
-
-    private static DateTimeOffset ReadRequiredDateTimeOffset(IReadOnlyDictionary<string, object?> row, string key, bool allowStringTimestamps) =>
-        ReadDateTimeOffsetCore(
-            TryGetValue(row, key, out var value)
-                ? value
-                : throw new InvalidOperationException($"Registry row is missing required value '{key}'."),
-            key, allowStringTimestamps) ??
-        throw new InvalidOperationException($"Registry row is missing required timestamp '{key}'.");
-
-    private static DateTimeOffset? ReadNullableDateTimeOffset(IReadOnlyDictionary<string, object?> row, string key, bool allowStringTimestamps) =>
-        TryGetValue(row, key, out var value) ? ReadDateTimeOffsetCore(value, key, allowStringTimestamps) : null;
-
-    private static bool TryGetValue(IReadOnlyDictionary<string, object?> row, string key, out object? value)
+    private readonly struct RegistryRow(IReadOnlyDictionary<string, object?> row, bool allowStringTimestamps)
     {
-        if (row.TryGetValue(key, out value))
-        {
-            return true;
-        }
+        internal string RequiredString(string key) =>
+            GetRequiredValue(key) is { } value ? value.ToString()! : throw MissingValue(key);
 
-        foreach (var pair in row)
+        internal string? NullableString(string key) => GetValue(key)?.ToString();
+        internal int RequiredInt(string key) => Convert.ToInt32(GetRequiredValue(key));
+        internal long RequiredLong(string key) => Convert.ToInt64(GetRequiredValue(key));
+        internal DateTimeOffset? NullableTimestamp(string key) => ReadTimestamp(GetValue(key), key);
+        internal DateTimeOffset RequiredTimestamp(string key) =>
+            ReadTimestamp(GetRequiredValue(key), key) ??
+            throw new InvalidOperationException($"Registry row is missing required timestamp '{key}'.");
+
+        private object? GetRequiredValue(string key) =>
+            TryRead(key, out var value) ? value : throw MissingValue(key);
+        private object? GetValue(string key) => TryRead(key, out var value) ? value : null;
+        private static InvalidOperationException MissingValue(string key) =>
+            new($"Registry row is missing required value '{key}'.");
+
+        private bool TryRead(string key, out object? value)
         {
-            if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
+            if (row.TryGetValue(key, out value)) return true;
+            foreach (var pair in row)
             {
+                if (!string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase)) continue;
                 value = pair.Value;
                 return true;
             }
+            value = null;
+            return false;
         }
 
-        value = null;
-        return false;
-    }
-
-    private static DateTimeOffset? ReadDateTimeOffsetCore(object? value, string key, bool allowStringTimestamps) =>
-        value switch
+        private DateTimeOffset? ReadTimestamp(object? value, string key) => value switch
         {
             null or DBNull => null,
-            DateTimeOffset dateTimeOffset => dateTimeOffset,
-            DateTime dateTime => Normalize(dateTime),
+            DateTimeOffset offset => offset,
+            DateTime timestamp => new DateTimeOffset(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)),
             string text when allowStringTimestamps && DateTimeOffset.TryParse(text, out var parsed) => parsed,
             _ => throw new InvalidOperationException($"Registry row value '{key}' must be a timestamp.")
         };
-
-    private static DateTimeOffset Normalize(DateTime value) =>
-        new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+    }
 }
