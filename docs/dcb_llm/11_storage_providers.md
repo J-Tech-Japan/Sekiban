@@ -86,6 +86,30 @@ services.AddSekibanDcbCosmosDbWithAspire();
 // falls back to ConnectionStrings:SekibanDcbCosmos if Aspire client not found
 ```
 
+### Cosmos tag head maintenance (opt-in)
+
+`CosmosDbEventStoreOptions.TagHeadMode` defaults to `CosmosTagHeadMode.Off`. Set it to
+`Advance` to maintain a `{ id: "$head", pk: "{serviceId}|{tag}", serviceId, tag,
+documentType: "tagHead", position }` document in each tag partition. `position` is the largest
+SortableUniqueId written for that tag. Advance only maintains heads; it does not reject writes
+based on the head and provides no fence or epoch yet.
+
+Enable Advance only after **every reader has upgraded to SEK-G106 or later**, which excludes
+non-row documents. It requires `UseTransactionalBatchForTags = true` and
+`MaxBatchOperations >= 2`; invalid settings fail at construction and again when used. Batch
+sizes are clamped to 100 in both modes (Off still normalizes non-positive settings to 1).
+Advance reserves one operation and places the head in the first chunk with the maximum across
+all chunks. Before fallback or later rows-only chunks, the writer confirms head >= that maximum.
+Missing heads bootstrap to max(existing top row, incoming maximum). Repair and sweep use the
+same rule and advance the head before creating a row.
+
+Cost: one extra operation per tag partition per write, with a bootstrap read and retry on the
+first write to a tag. Conflicts can require additional head requests. Heads can lag while older
+packages, Off instances (including repair/sweep), or the out-of-process export/import tool append
+rows. The export/import tool does not maintain heads. Drain those writers before any future
+enforcement rollout; an operator-set epoch belongs to a later slice. Legacy migration reduction
+preserves the event/tag pairs and does not maintain heads.
+
 ### Cosmos event-document size admission (opt-in)
 
 `AddSekibanDcbCosmosEventDocumentSizeGate()` adds a strict `StorageItem` policy with a default per-event quota of

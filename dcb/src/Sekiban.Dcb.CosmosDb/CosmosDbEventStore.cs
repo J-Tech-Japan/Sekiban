@@ -55,6 +55,9 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
     {
         var serviceId = CurrentServiceId;
         var options = _context.Options;
+        options.ValidateTagHeadOptions();
+        if (options.TagHeadMode == CosmosTagHeadMode.Advance)
+            CosmosTagHead.ValidatePosition(claimEvent.SortableUniqueIdValue);
         var eventsSettings = _containerResolver.ResolveEventsContainer(serviceId);
         var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
         var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
@@ -204,6 +207,7 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         ILogger<CosmosDbEventStore>? logger = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _context.Options.ValidateTagHeadOptions();
         _eventTypes = eventTypes ?? throw new ArgumentNullException(nameof(eventTypes));
         _serviceIdProvider = serviceIdProvider ?? throw new ArgumentNullException(nameof(serviceIdProvider));
         _containerResolver = containerResolver ?? throw new ArgumentNullException(nameof(containerResolver));
@@ -631,7 +635,10 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
             var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
 
+            options.ValidateTagHeadOptions();
             var eventsList = events.ToList();
+            if (options.TagHeadMode == CosmosTagHeadMode.Advance)
+                foreach (var item in eventsList) CosmosTagHead.ValidatePosition(item.SortableUniqueIdValue);
             if (eventsList.Count == 0)
             {
                 return ResultBox.FromValue(
@@ -1474,7 +1481,10 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
             var tagsContainer = await _context.GetTagsContainerAsync(tagsSettings).ConfigureAwait(false);
 
+            options.ValidateTagHeadOptions();
             var eventsList = events.ToList();
+            if (options.TagHeadMode == CosmosTagHeadMode.Advance)
+                foreach (var item in eventsList) CosmosTagHead.ValidatePosition(item.SortableUniqueIdValue);
             if (eventsList.Count == 0)
             {
                 return ResultBox.FromValue(

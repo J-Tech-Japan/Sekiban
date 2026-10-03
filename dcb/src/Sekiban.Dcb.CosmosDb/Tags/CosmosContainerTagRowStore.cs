@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using Newtonsoft.Json.Linq;
 using Sekiban.Dcb.CosmosDb.Models;
 using System.Net;
 namespace Sekiban.Dcb.CosmosDb.Tags;
@@ -41,6 +42,51 @@ internal sealed class CosmosContainerTagRowStore : ICosmosTagRowStore
             (int)response.StatusCode,
             response.ActivityId,
             response.RequestCharge);
+    }
+
+    public async Task<CosmosTagBatchOutcome> CreateHeadBatchAsync(
+        string partitionKey, IReadOnlyList<CosmosTag> rows, string maximum,
+        CancellationToken cancellationToken = default)
+    {
+        var predicate = CosmosTagHead.BuildValidatedPositionPredicate(maximum);
+        JObject? bootstrap = null;
+        for (var attempt = 0; attempt < CosmosTagHead.RetryLimit; attempt++)
+        {
+            var batch = _container.CreateTransactionalBatch(new PartitionKey(partitionKey));
+            if (bootstrap is null)
+                batch.PatchItem(CosmosTagHead.Id, CosmosTagHead.PositionPatch(maximum),
+                    new TransactionalBatchPatchItemRequestOptions { FilterPredicate = predicate });
+            else
+                batch.CreateItem(bootstrap);
+            foreach (var row in rows) batch.CreateItem(row);
+            using var response = await batch.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+            if (response.IsSuccessStatusCode) return CosmosTagBatchOutcome.Created;
+
+            if (response.Count == 0)
+                throw new CosmosException("Tag head batch failed without operation results.", response.StatusCode,
+                    (int)response.StatusCode, response.ActivityId, response.RequestCharge);
+            var headStatus = response[0].StatusCode;
+            if (headStatus == HttpStatusCode.PreconditionFailed)
+                return await CreateBatchAsync(partitionKey, rows, cancellationToken).ConfigureAwait(false);
+            if (headStatus == HttpStatusCode.NotFound)
+            {
+                bootstrap = await CosmosTagHead.BootstrapAsync(_container, partitionKey, rows[0], maximum, cancellationToken)
+                    .ConfigureAwait(false);
+                continue;
+            }
+            // Any rolled-back head-bearing batch must confirm the WHOLE call's maximum before fallback.
+            await CosmosTagHead.AdvanceHeadAsync(_container, partitionKey, rows[0], maximum, cancellationToken)
+                .ConfigureAwait(false);
+            if (ContainsConflict(response))
+            {
+                if (headStatus != HttpStatusCode.Conflict) return CosmosTagBatchOutcome.Conflict;
+                bootstrap = null;
+                continue;
+            }
+            throw new CosmosException("Tag head batch failed.", response.StatusCode, (int)response.StatusCode,
+                response.ActivityId, response.RequestCharge);
+        }
+        throw new CosmosException("Tag head batch retries exhausted.", HttpStatusCode.Conflict, 409, "", 0);
     }
 
     public async Task<bool> TryCreateRowAsync(string partitionKey, CosmosTag row, CancellationToken cancellationToken = default)

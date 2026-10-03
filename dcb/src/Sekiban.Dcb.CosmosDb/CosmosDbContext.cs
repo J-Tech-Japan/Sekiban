@@ -47,6 +47,7 @@ public class CosmosDbContext : IDisposable
         ArgumentNullException.ThrowIfNull(configuration);
         _logger = logger;
         _options = options ?? new CosmosDbEventStoreOptions();
+        _options.ValidateTagHeadOptions();
         // Try multiple connection string keys for backward compatibility
         _connectionString = configuration.GetConnectionString("SekibanDcbCosmos")
             ?? configuration.GetConnectionString("SekibanDcbCosmosDb")
@@ -71,6 +72,7 @@ public class CosmosDbContext : IDisposable
     {
         _logger = logger;
         _options = options ?? new CosmosDbEventStoreOptions();
+        _options.ValidateTagHeadOptions();
         _connectionString = connectionString;
         _databaseName = databaseName;
         _ownsCosmosClient = true;
@@ -87,6 +89,7 @@ public class CosmosDbContext : IDisposable
     {
         _logger = logger;
         _options = options ?? new CosmosDbEventStoreOptions();
+        _options.ValidateTagHeadOptions();
         _cosmosClient = cosmosClient ?? throw new ArgumentNullException(nameof(cosmosClient));
         _databaseName = databaseName;
         _ownsCosmosClient = false;

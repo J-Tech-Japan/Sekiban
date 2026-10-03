@@ -59,6 +59,8 @@ public sealed class CosmosEmulatorFixture : IAsyncLifetime
         SerializerOptions = new CosmosSerializationOptions { PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase },
         HttpClientFactory = () => new HttpClient(new HttpClientHandler
         {
+            // Cosmos uses authorization headers, not cookies. Avoid unnecessary host-domain discovery in sandboxes.
+            UseCookies = false,
             ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
         })
     });

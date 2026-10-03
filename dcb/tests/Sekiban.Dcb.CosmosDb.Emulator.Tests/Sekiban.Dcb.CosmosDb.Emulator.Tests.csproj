@@ -12,6 +12,7 @@
     <PackageReference Include="Xunit.SkippableFact" Version="1.5.61" />
     <PackageReference Include="Testcontainers" Version="4.10.0" />
     <Using Include="Xunit" />
+    <Compile Include="../Sekiban.Dcb.WithResult.Tests/Cosmos/CosmosTagHeadScenarios.cs" Link="CosmosTagHeadScenarios.cs" />
     <ProjectReference Include="../../src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj" />
     <ProjectReference Include="../../internalUsages/Dcb.Domain/Dcb.Domain.csproj" />
   </ItemGroup>
