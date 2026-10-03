@@ -83,6 +83,39 @@ public sealed class ExpectedTagPositionCompatibilityInventoryTests
     }
 
     [Fact]
+    public void StoreLimitsAndDeterministicLimitExceptionShapes_AreFrozen()
+    {
+        AssertRecordShape<ExpectedTagPositionLimits>(
+            ["MaxEnforcedTagsPerWrite", "MaxTagsPerWrite"], [typeof(int?), typeof(int?)],
+            ["MaxEnforcedTagsPerWrite", "MaxTagsPerWrite"]);
+        Assert.True(typeof(ExpectedTagPositionLimits).IsSealed);
+        var unlimited = typeof(ExpectedTagPositionLimits).GetProperty(nameof(ExpectedTagPositionLimits.Unlimited),
+            BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
+        Assert.NotNull(unlimited);
+        Assert.Equal(typeof(ExpectedTagPositionLimits), unlimited.PropertyType);
+        Assert.Null(unlimited.SetMethod);
+        Assert.Equal(new ExpectedTagPositionLimits(null, null), ExpectedTagPositionLimits.Unlimited);
+        AssertProperty(typeof(IExpectedTagPositionEventStore), nameof(IExpectedTagPositionEventStore.ExpectedTagPositionLimits),
+            typeof(ExpectedTagPositionLimits));
+        var getter = typeof(IExpectedTagPositionEventStore).GetProperty(nameof(IExpectedTagPositionEventStore.ExpectedTagPositionLimits))!.GetMethod!;
+        Assert.False(getter.IsAbstract);
+        Assert.False(typeof(TagHeadExpectationValidationException).IsSealed);
+        Assert.True(typeof(TagHeadEnforcementLimitExceededException).IsSealed);
+        Assert.Equal(typeof(TagHeadExpectationValidationException), typeof(TagHeadEnforcementLimitExceededException).BaseType);
+        AssertConstructor(typeof(TagHeadEnforcementLimitExceededException),
+            [typeof(string), typeof(string), typeof(int), typeof(int), typeof(IReadOnlyList<string>)],
+            ["providerName", "limitName", "limit", "actual", "tags"]);
+        Assert.Equal(["ProviderName", "LimitName", "Limit", "Actual", "Tags"],
+            typeof(TagHeadEnforcementLimitExceededException).GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Select(property => property.Name));
+        AssertProperty(typeof(TagHeadEnforcementLimitExceededException), "ProviderName", typeof(string));
+        AssertProperty(typeof(TagHeadEnforcementLimitExceededException), "LimitName", typeof(string));
+        AssertProperty(typeof(TagHeadEnforcementLimitExceededException), "Limit", typeof(int));
+        AssertProperty(typeof(TagHeadEnforcementLimitExceededException), "Actual", typeof(int));
+        AssertProperty(typeof(TagHeadEnforcementLimitExceededException), "Tags", typeof(IReadOnlyList<string>));
+    }
+
+    [Fact]
     public void CapabilityDescriptorAndOptionalStoreContract_AreFrozen()
     {
         Assert.Equal(

@@ -157,15 +157,37 @@ public sealed record TagHeadExpectedObserved(
 public sealed class ExpectedTagPositionConflictException : Exception
 {
     public ExpectedTagPositionConflictException(IReadOnlyList<TagHeadExpectedObserved> pairs)
-        : base("One or more expected tag positions do not match the durable PostgreSQL heads.") => Pairs = pairs;
+        : base("One or more expected tag positions do not match the durable store heads.") => Pairs = pairs;
 
     public IReadOnlyList<TagHeadExpectedObserved> Pairs { get; }
 }
 
 /// <summary>Typed malformed-request failure raised before a write or lazy head creation.</summary>
-public sealed class TagHeadExpectationValidationException : ArgumentException
+public class TagHeadExpectationValidationException : ArgumentException
 {
     public TagHeadExpectationValidationException(string message) : base(message) { }
+}
+
+/// <summary>Deterministic store-limit rejection; retrying the same request cannot make it valid.</summary>
+public sealed class TagHeadEnforcementLimitExceededException : TagHeadExpectationValidationException
+{
+    public TagHeadEnforcementLimitExceededException(
+        string providerName, string limitName, int limit, int actual, IReadOnlyList<string> tags)
+        : base($"Provider '{providerName}' expected-tag-position limit '{limitName}' is {limit}, but the write requires {actual} tags: {string.Join(", ", tags)}.")
+    {
+        ProviderName = providerName;
+        LimitName = limitName;
+        Limit = limit;
+        Actual = actual;
+        Tags = tags;
+    }
+
+    public string ProviderName { get; }
+    public string LimitName { get; }
+    public int Limit { get; }
+    public int Actual { get; }
+    /// <summary>Enforced tags for an enforced-count violation, or all distinct event tags for a total-count violation.</summary>
+    public IReadOnlyList<string> Tags { get; }
 }
 
 /// <summary>Typed position invariant failure raised before command rows are materialized.</summary>
@@ -176,12 +198,12 @@ public sealed class TagHeadPositionValidationException : ArgumentException
 
 /// <summary>
 ///     The durable expected-position fence is unavailable until an operator has provisioned the schema, drained every
-///     pre-epoch PostgreSQL writer, and set the enablement epoch marker for this service.
+///     pre-epoch writer, and set the enablement epoch marker for this service.
 /// </summary>
 public sealed class TagHeadEnforcementNotEnabledException : InvalidOperationException
 {
     public TagHeadEnforcementNotEnabledException(string serviceId)
-        : base($"Expected tag-position enforcement is not enabled for service '{serviceId}'. Provision, drain pre-10.19 writers, then set the enablement epoch before requesting enforcement.")
+        : base($"Expected tag-position enforcement is not enabled for service '{serviceId}'. Provision, drain writers that bypass the fence, then set the enablement epoch before requesting enforcement.")
     {
         ServiceId = serviceId;
     }
@@ -194,8 +216,16 @@ public sealed record ExpectedTagPositionWriteResult(
     IReadOnlyList<SerializableEvent> Events,
     IReadOnlyList<Sekiban.Dcb.Tags.TagWriteResult> TagWrites);
 
+/// <summary>Per-write expected-tag-position enforcement limits; null means no limit.</summary>
+/// <param name="MaxEnforcedTagsPerWrite">Maximum entries whose expectation is not NoEnforcement.</param>
+/// <param name="MaxTagsPerWrite">Maximum distinct event tags, including non-consistency tags.</param>
+public sealed record ExpectedTagPositionLimits(int? MaxEnforcedTagsPerWrite, int? MaxTagsPerWrite)
+{
+    public static ExpectedTagPositionLimits Unlimited { get; } = new(null, null);
+}
+
 /// <summary>
-///     OPTIONAL additive store capability for PostgreSQL's durable multi-tag expected-position protocol. It is kept off
+///     OPTIONAL additive store capability for the store's durable expected-position protocol. It is kept off
 ///     <see cref="IEventStore" /> so existing providers remain binary/source compatible. A supporting store must advertise
 ///     <c>WriteConditionKind.ExpectedTagPosition</c>; callers feature-detect it and fail closed before any provider write.
 /// </summary>
@@ -203,6 +233,12 @@ public interface IExpectedTagPositionEventStore
 {
     /// <summary>The service id this store validates expected-tag-position entries against; null if not exposed.</summary>
     string? ExpectedTagPositionServiceId => null;
+
+    /// <summary>
+    ///     Limits checked by the executor before reservation. Decorators that do not forward this member report
+    ///     Unlimited, so a limited store must also reject over-limit writes itself.
+    /// </summary>
+    ExpectedTagPositionLimits ExpectedTagPositionLimits => ExpectedTagPositionLimits.Unlimited;
 
     /// <summary>Checks the service's provisioning-plane enablement epoch without creating or advancing a head.</summary>
     Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken cancellationToken = default);

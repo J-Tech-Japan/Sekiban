@@ -244,6 +244,31 @@ public class CoreGeneralSekibanExecutor
             (_eventStore as IExpectedTagPositionEventStore)?.ExpectedTagPositionServiceId ??
             _serviceIdProvider.GetCurrentServiceId());
 
+    private void EnsureWithinStoreLimits(
+        ExpectedTagPositionSpecification? specification, IEnumerable<string>? eventTags = null)
+    {
+        var limits = (_eventStore as IExpectedTagPositionEventStore)?.ExpectedTagPositionLimits
+            ?? ExpectedTagPositionLimits.Unlimited;
+        if (limits.MaxEnforcedTagsPerWrite is null && limits.MaxTagsPerWrite is null) return;
+
+        var enforcedTags = specification?.Entries
+            .Where(entry => entry.Expectation.Kind != TagHeadExpectationKind.NoEnforcement)
+            .Select(entry => entry.Tag).ToArray() ?? [];
+        var totalTags = eventTags?.Distinct(StringComparer.Ordinal).ToArray();
+        var exceeded = limits.MaxEnforcedTagsPerWrite is int enforcedLimit && enforcedTags.Length > enforcedLimit
+            ? (Name: nameof(ExpectedTagPositionLimits.MaxEnforcedTagsPerWrite), Limit: enforcedLimit, Tags: enforcedTags)
+            : limits.MaxTagsPerWrite is int totalLimit && totalTags is not null && totalTags.Length > totalLimit
+                ? (Name: nameof(ExpectedTagPositionLimits.MaxTagsPerWrite), Limit: totalLimit, Tags: totalTags)
+                : default;
+        if (exceeded.Tags is null) return;
+
+        var provider = Sekiban.Dcb.Capabilities.SekibanDcbCapabilityResolver.DescribeWriteConditions(
+            _eventStore, "event store").ProviderName;
+        throw new TagHeadEnforcementLimitExceededException(
+            provider, exceeded.Name, exceeded.Limit, exceeded.Tags.Length,
+            exceeded.Tags.Order(StringComparer.Ordinal).ToArray());
+    }
+
     private ExpectedTagPositionSpecification? DeriveExpectedPositions(IEnumerable<(string Tag, string? Position)> inputs)
     {
         var expectations = new Dictionary<string, TagHeadExpectation>(StringComparer.Ordinal);
@@ -353,6 +378,7 @@ public class CoreGeneralSekibanExecutor
                             capability.ProviderName));
                 }
 
+                EnsureWithinStoreLimits(expectedTagPositions);
                 expectedPositionStore = resolvedExpectedPositionStore;
                 if (deriveFence || expectedTagPositions?.RequiresEnforcement == true)
                 {
@@ -438,6 +464,9 @@ public class CoreGeneralSekibanExecutor
                     ResolveExpectedTagPositionServiceId(),
                     allTags.Where(tag => tag.IsConsistencyTag()).Select(tag => tag.GetTag()));
             }
+
+            if (expectedTagPositions is not null || deriveFence)
+                EnsureWithinStoreLimits(expectedTagPositions, allTags.Select(tag => tag.GetTag()));
 
             // Establish the persisted floor before any reservation, id allocation, or write.
             await EnsureSortableUniqueIdSeededAsync(cancellationToken);
@@ -770,6 +799,7 @@ public class CoreGeneralSekibanExecutor
                             capability.ProviderName));
                 }
 
+                EnsureWithinStoreLimits(expectedTagPositions);
                 expectedPositionStore = resolvedExpectedPositionStore;
                 if (deriveFence || expectedTagPositions?.RequiresEnforcement == true)
                 {
@@ -844,6 +874,9 @@ public class CoreGeneralSekibanExecutor
                     ResolveExpectedTagPositionServiceId(),
                     request.ConsistencyTags.Select(entry => entry.Tag));
             }
+
+            if (expectedTagPositions is not null || deriveFence)
+                EnsureWithinStoreLimits(expectedTagPositions, allTagStrings);
 
             // Step 2: Build FallbackTag objects for non-consistency tags and reservation
             var consistencyEntryMap = request.ConsistencyTags.ToDictionary(

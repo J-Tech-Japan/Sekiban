@@ -19,7 +19,7 @@ public sealed record CommandExecutionOptions
     public ConditionalAppendSpecification? ConditionalAppend { get; init; }
 
     /// <summary>
-    ///     Opts into PostgreSQL's durable expected-tag-position protocol. Every derived consistency tag must have exactly
+    ///     Opts into the store's durable expected-tag-position protocol. Every derived consistency tag must have exactly
     ///     one explicitly discriminated entry. Unsupported stores fail closed before their write path is invoked.
     /// </summary>
     public ExpectedTagPositionSpecification? ExpectedTagPositions { get; init; }

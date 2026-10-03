@@ -791,6 +791,8 @@ DCB fence であり、パーティション／retire 後の writer が in-memory
 consistency-tag head を読んだ command の追記を防ぎます。reservation の置換ではなく、任意の外部副作用を
 exactly-once にするものでもありません。
 
+ストアは `ExpectedTagPositionLimits` で強制検査の制限を宣言でき、PostgreSQL は制限を宣言せず、executor はストアの制限を超える command を予約前に拒否します。
+
 ### Derived fence (TagConsistencyFenceOptions)
 
 `Sekiban.Dcb.TagConsistencyFence.TagConsistencyFenceOptions.Mode` の既定値は `Off` です。

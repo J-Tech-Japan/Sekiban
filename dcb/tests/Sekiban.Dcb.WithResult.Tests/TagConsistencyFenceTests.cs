@@ -49,6 +49,172 @@ public sealed class TagConsistencyFenceTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EnforcedTagLimit_RejectsBeforeReservation_AndExplicitBeforeHandler(bool explicitSpec)
+    {
+        var store = new RecordingStore { Limits = new(1, null) };
+        var accessor = new RecordingAccessor();
+        var tags = new[] { new Tag("first"), new Tag("second") };
+        var specification = new ExpectedTagPositionSpecification(tags.Select(tag =>
+            new TagHeadExpectationEntry(Service, ((ITag)tag).GetTag(), TagHeadExpectation.AssertEmpty())).ToArray());
+        var handled = false;
+        var result = await Executor(store, accessor).ExecuteAsync(new Command(), async (_, ctx) =>
+        {
+            handled = true;
+            foreach (var tag in tags) await ctx.TagExistsAsync(tag);
+            return EventOrNone.EventWithTags(Payload(), tags);
+        }, new CommandExecutionOptions { ExpectedTagPositions = explicitSpec ? specification : null });
+
+        AssertLimitRejection(result.GetException(), store, accessor,
+            nameof(ExpectedTagPositionLimits.MaxEnforcedTagsPerWrite), 1, ["Fence:first", "Fence:second"]);
+        Assert.Equal(!explicitSpec, handled);
+        Assert.Equal(explicitSpec ? 0 : 1, store.EpochChecks);
+    }
+
+    [Fact]
+    public async Task NoEnforcementEntries_DoNotConsumeEnforcedTagLimit()
+    {
+        var store = new RecordingStore { Limits = new(1, null) };
+        var tags = Enumerable.Range(0, 4).Select(i => new Tag($"tag-{i}")).ToArray();
+        var specification = new ExpectedTagPositionSpecification(tags.Select((tag, i) =>
+            new TagHeadExpectationEntry(Service, ((ITag)tag).GetTag(),
+                i == 0 ? TagHeadExpectation.AssertEmpty() : TagHeadExpectation.NoEnforcement())).ToArray());
+        var result = await Executor(store, new()).ExecuteAsync(new Command(),
+            (_, _) => Task.FromResult(EventOrNone.EventWithTags(Payload(), tags)),
+            new CommandExecutionOptions { ExpectedTagPositions = specification });
+        Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
+        Assert.Same(specification, store.Specification);
+        Assert.Equal(1, store.WrittenCount);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task TotalTagLimit_IncludesNonConsistencyTags_EvenWithoutDerivedSpecification(
+        bool explicitSpec, bool consistencyTag)
+    {
+        var store = new RecordingStore { Limits = new(null, 1) };
+        var accessor = new RecordingAccessor();
+        var tag = new Tag("first", consistencyTag);
+        var specification = new ExpectedTagPositionSpecification(
+            [new(Service, ((ITag)tag).GetTag(), TagHeadExpectation.NoEnforcement())]);
+        var handled = false;
+        var result = await Executor(store, accessor).ExecuteAsync(new Command(), (_, _) =>
+        {
+            handled = true;
+            return Task.FromResult(EventOrNone.Event(Payload(), tag, new Tag("index", false)));
+        }, new CommandExecutionOptions { ExpectedTagPositions = explicitSpec ? specification : null });
+        Assert.True(handled);
+        AssertLimitRejection(result.GetException(), store, accessor,
+            nameof(ExpectedTagPositionLimits.MaxTagsPerWrite), 1, ["Fence:first", "Fence:index"]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TotalTagLimit_CountsDistinctTagStringsAcrossEvents(bool serialized)
+    {
+        var store = new RecordingStore { Limits = new(null, 1) };
+        var executor = Executor(store, new());
+        if (serialized)
+        {
+            var request = Request();
+            var result = await executor.CommitSerializableEventsAsync(request with
+            { EventCandidates = [request.EventCandidates[0], request.EventCandidates[0]] });
+            Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
+        }
+        else
+        {
+            var result = await executor.ExecuteCommandAsync(async ctx =>
+            {
+                await ctx.AppendEvent(Payload(), [new Tag("same")]);
+                await ctx.AppendEvent(Payload(), [new Tag("same")]);
+                return EventOrNone.None;
+            });
+            Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
+        }
+        Assert.Equal(2, store.WrittenCount);
+    }
+
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, true, false)]
+    public async Task SerializedLimits_RejectBeforeReservation(bool v2, bool totalLimit, bool consistencyTags)
+    {
+        var store = new RecordingStore { Limits = totalLimit ? new(null, 1) : new(1, null) };
+        var accessor = new RecordingAccessor();
+        var request = Request();
+        request = request with
+        {
+            EventCandidates = [request.EventCandidates[0] with { Tags = ["Fence:serialized", "Fence:second"] }],
+            ConsistencyTags = !consistencyTags ? [] : totalLimit
+                ? request.ConsistencyTags
+                : [request.ConsistencyTags[0], new("Fence:second", "")]
+        };
+        var executor = Executor(store, accessor);
+        var result = v2
+            ? await executor.CommitSerializableEventsWithExpectedTagPositionsAsync(new(2,
+                request.EventCandidates, request.ConsistencyTags, request.ConsistencyTags.Select(entry =>
+                    new TagHeadExpectationEntry(Service, entry.Tag, TagHeadExpectation.AssertEmpty())).ToArray()))
+            : await executor.CommitSerializableEventsAsync(request);
+        AssertLimitRejection(result.GetException(), store, accessor,
+            totalLimit ? nameof(ExpectedTagPositionLimits.MaxTagsPerWrite) : nameof(ExpectedTagPositionLimits.MaxEnforcedTagsPerWrite),
+            1, ["Fence:second", "Fence:serialized"]);
+        Assert.Equal(v2 && !totalLimit ? 0 : 1, store.EpochChecks);
+    }
+
+    [Fact]
+    public async Task WithoutResult_LimitRejectionPreservesTypedException()
+    {
+        var store = new RecordingStore { Limits = new(0, null) };
+        var accessor = new RecordingAccessor();
+        var executor = new WithoutGeneral(store, accessor, Domain);
+        var specification = new ExpectedTagPositionSpecification(
+            [new(Service, "Fence:limited", TagHeadExpectation.AssertEmpty())]);
+        var exception = await Assert.ThrowsAsync<TagHeadEnforcementLimitExceededException>(() =>
+            executor.ExecuteAsync(new Command(), (_, _) => throw new Exception("handler must not run"),
+                new CommandExecutionOptions { ExpectedTagPositions = specification }));
+        AssertLimitRejection(exception, store, accessor,
+            nameof(ExpectedTagPositionLimits.MaxEnforcedTagsPerWrite), 0, ["Fence:limited"]);
+        Assert.Equal(0, store.EpochChecks);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Hybrid_ForwardsHotStoreLimitsOrUnlimited(bool supported)
+    {
+        var limits = new ExpectedTagPositionLimits(1, 10);
+        IEventStore hot = supported ? new RecordingStore { Limits = limits }
+            : new Sekiban.Dcb.Testing.InMemoryEventStore(Domain.EventTypes);
+        var hybrid = new HybridEventStore(hot, new UnusedColdStorage(), new JsonlColdSegmentFormatHandler(),
+            new DefaultServiceIdProvider(), Options.Create(new ColdEventStoreOptions()),
+            NullLogger<HybridEventStore>.Instance);
+        Assert.Same(supported ? limits : ExpectedTagPositionLimits.Unlimited, hybrid.ExpectedTagPositionLimits);
+    }
+
+    private static void AssertLimitRejection(Exception exception, RecordingStore store, RecordingAccessor accessor,
+        string limitName, int limit, string[] tags)
+    {
+        var exceeded = Assert.IsType<TagHeadEnforcementLimitExceededException>(exception);
+        Assert.Equal("Recording", exceeded.ProviderName);
+        Assert.Equal(limitName, exceeded.LimitName);
+        Assert.Equal(limit, exceeded.Limit);
+        Assert.Equal(tags.Length, exceeded.Actual);
+        Assert.Equal(tags, exceeded.Tags);
+        Assert.Empty(accessor.Inputs);
+        Assert.Null(store.Specification);
+        Assert.Equal(0, store.WrittenCount);
+        Assert.Equal(0, store.LegacyWrites);
+        Assert.Equal(0, store.ConditionalWrites);
+    }
+
+    [Theory]
     [InlineData(false, "", TagHeadExpectationKind.NoEnforcement)]
     [InlineData(true, "", TagHeadExpectationKind.AssertEmpty)]
     [InlineData(true, "0001", TagHeadExpectationKind.Exact)]
@@ -506,6 +672,8 @@ public sealed class TagConsistencyFenceTests
     {
         private readonly InMemoryConditionalEventStore _inner = new(Domain.EventTypes);
         public string? ExpectedTagPositionServiceId { get; init; }
+        public ExpectedTagPositionLimits Limits { get; init; } = ExpectedTagPositionLimits.Unlimited;
+        public ExpectedTagPositionLimits ExpectedTagPositionLimits => Limits;
         public bool Enabled = true, Supported = true;
         public bool Throws, ReturnFalse;
         public Exception? Failure;
