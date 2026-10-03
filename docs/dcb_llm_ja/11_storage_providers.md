@@ -46,6 +46,8 @@ DCB は複数のストレージプロバイダーをサポートしています�
 
 ### Cosmos DB イベントストア
 
+Cosmos の tags コンテナーのリーダーは、`documentType` を持つ行以外のドキュメントを無視します。今後タグのヘッドドキュメントを書き込むリリースを有効にする前に、すべてのリーダーをこの除外対応リリース以降に更新してください。
+
 `Sekiban.Dcb.CosmosDb` (`src/Sekiban.Dcb.CosmosDb`). コンテナー構成:
 
 - `events` (PartitionKey: `/pk`)

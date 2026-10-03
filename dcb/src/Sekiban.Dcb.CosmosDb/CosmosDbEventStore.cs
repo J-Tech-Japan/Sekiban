@@ -1,5 +1,5 @@
 using Microsoft.Azure.Cosmos;
-using Microsoft.Azure.Cosmos.Linq;
+using Newtonsoft.Json.Linq;
 using Microsoft.Extensions.Logging;
 using ResultBoxes;
 using Sekiban.Dcb.Common;
@@ -453,12 +453,7 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         SortableUniqueId? since)
     {
         var tagPk = GetTagPartitionKey(tagString, serviceId);
-        var queryDefinitionV2 = since != null
-            ? new QueryDefinition($"SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > {ParamSince} ORDER BY c.sortableUniqueId")
-                .WithParameter("@pk", tagPk)
-                .WithParameter(ParamSince, since.Value)
-            : new QueryDefinition("SELECT c.eventId FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId")
-                .WithParameter("@pk", tagPk);
+        var queryDefinitionV2 = CreateTaggedStreamIndexQuery(tagPk, since, null);
 
         var requestOptionsV2 = new QueryRequestOptions
         {
@@ -474,13 +469,16 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         QueryRequestOptions? requestOptions)
     {
         var eventIds = new List<string>();
-        using var tagIterator = tagsContainer.GetItemQueryIterator<dynamic>(queryDefinition, requestOptions: requestOptions);
+        using var tagIterator = tagsContainer.GetItemQueryIterator<JObject>(queryDefinition, requestOptions: requestOptions);
         while (tagIterator.HasMoreResults)
         {
             var response = await tagIterator.ReadNextAsync().ConfigureAwait(false);
             foreach (var item in response)
             {
-                eventIds.Add((string)item.eventId);
+                if (CosmosTagQueryFilters.EventId(item) is { } eventId)
+                {
+                    eventIds.Add(eventId);
+                }
             }
         }
 
@@ -931,7 +929,7 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
 
             var tagPk = GetTagPartitionKey(tagString, serviceId);
             var queryDefinition = new QueryDefinition(
-                    "SELECT * FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId")
+                    $"SELECT * FROM c WHERE c.pk = @pk AND {CosmosTagQueryFilters.RowsOnly} ORDER BY c.sortableUniqueId")
                 .WithParameter("@pk", tagPk);
             var requestOptions = new QueryRequestOptions
             {
@@ -939,14 +937,14 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             };
 
             var tagStreams = new List<TagStream>();
-            using var iterator = tagsContainer.GetItemQueryIterator<CosmosTag>(
+            using var iterator = tagsContainer.GetItemQueryIterator<JObject>(
                 queryDefinition,
                 requestOptions: requestOptions);
 
             while (iterator.HasMoreResults)
             {
                 var response = await iterator.ReadNextAsync().ConfigureAwait(false);
-                foreach (var cosmosTag in response)
+                foreach (var cosmosTag in CosmosTagQueryFilters.ReadRows(response))
                 {
                     tagStreams.Add(new TagStream(
                         cosmosTag.Tag,
@@ -993,7 +991,7 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
 
             var tagPk = GetTagPartitionKey(tagString, serviceId);
             var queryDefinition = new QueryDefinition(
-                    "SELECT * FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId DESC")
+                    $"SELECT * FROM c WHERE c.pk = @pk AND {CosmosTagQueryFilters.RowsOnly} ORDER BY c.sortableUniqueId DESC")
                 .WithParameter("@pk", tagPk);
             var requestOptions = new QueryRequestOptions
             {
@@ -1002,14 +1000,14 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             };
 
             CosmosTag? latestTag = null;
-            using var iterator = tagsContainer.GetItemQueryIterator<CosmosTag>(
+            using var iterator = tagsContainer.GetItemQueryIterator<JObject>(
                 queryDefinition,
                 requestOptions: requestOptions);
 
-            if (iterator.HasMoreResults)
+            while (latestTag == null && iterator.HasMoreResults)
             {
                 var response = await iterator.ReadNextAsync().ConfigureAwait(false);
-                latestTag = response.FirstOrDefault();
+                latestTag = CosmosTagQueryFilters.ReadRows(response).FirstOrDefault();
             }
 
             if (latestTag == null)
@@ -1066,7 +1064,7 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             var tagsContainer = await _context.GetTagsContainerAsync(settings).ConfigureAwait(false);
 
             var tagPk = GetTagPartitionKey(tagString, serviceId);
-            var queryDefinition = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.pk = @pk")
+            var queryDefinition = new QueryDefinition($"SELECT VALUE COUNT(1) FROM c WHERE c.pk = @pk AND {CosmosTagQueryFilters.RowsOnly}")
                 .WithParameter("@pk", tagPk);
             var requestOptions = new QueryRequestOptions
             {
@@ -1182,19 +1180,21 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
             var tagsContainer = await _context.GetTagsContainerAsync(settings).ConfigureAwait(false);
 
             // Query all tags and group in memory (Cosmos DB doesn't support complex GROUP BY with aggregations)
-            IQueryable<CosmosTag> query = tagsContainer.GetItemLinqQueryable<CosmosTag>()
-                .Where(t => t.ServiceId == serviceId);
+            var query = new QueryDefinition(
+                "SELECT * FROM c WHERE c.serviceId = @serviceId AND " + CosmosTagQueryFilters.RowsOnly +
+                (string.IsNullOrEmpty(tagGroup) ? string.Empty : " AND c.tagGroup = @tagGroup"))
+                .WithParameter("@serviceId", serviceId);
             if (!string.IsNullOrEmpty(tagGroup))
             {
-                query = query.Where(t => t.TagGroup == tagGroup);
+                query = query.WithParameter("@tagGroup", tagGroup);
             }
 
             var allTags = new List<CosmosTag>();
-            using var iterator = query.ToFeedIterator();
+            using var iterator = tagsContainer.GetItemQueryIterator<JObject>(query);
             while (iterator.HasMoreResults)
             {
                 var response = await iterator.ReadNextAsync().ConfigureAwait(false);
-                allTags.AddRange(response);
+                allTags.AddRange(CosmosTagQueryFilters.ReadRows(response));
             }
 
             // Group in memory

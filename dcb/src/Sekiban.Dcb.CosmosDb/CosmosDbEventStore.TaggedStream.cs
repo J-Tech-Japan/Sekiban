@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using Newtonsoft.Json.Linq;
 using ResultBoxes;
 using Sekiban.Dcb.Capabilities;
 using Sekiban.Dcb.Common;
@@ -13,17 +14,20 @@ namespace Sekiban.Dcb.CosmosDb;
 
 public partial class CosmosDbEventStore
 {
+    private const string TaggedStreamIndexQueryPrefix =
+        "SELECT c.eventId, c.documentType FROM c WHERE c.pk = @pk AND " + CosmosTagQueryFilters.RowsOnly;
+
     private const string TaggedStreamIndexQueryWithoutBounds =
-        "SELECT c.eventId FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId";
+        TaggedStreamIndexQueryPrefix + " ORDER BY c.sortableUniqueId";
 
     private const string TaggedStreamIndexQuerySinceOnly =
-        "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId";
+        TaggedStreamIndexQueryPrefix + " AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId";
 
     private const string TaggedStreamIndexQueryUntilOnly =
-        "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId";
+        TaggedStreamIndexQueryPrefix + " AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId";
 
     private const string TaggedStreamIndexQuerySinceAndUntil =
-        "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > @since AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId";
+        TaggedStreamIndexQueryPrefix + " AND c.sortableUniqueId > @since AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId";
 
     /// <summary>
     ///     Declares that this store has a callback-native tagged stream. The legacy list member remains intentionally
@@ -125,11 +129,11 @@ public partial class CosmosDbEventStore
             var (queryDefinition, requestOptions) = BuildTaggedStreamIndexQuery(
                 tag.GetTag(), serviceId, since, until, pageSize);
 
-            using var iterator = tagsContainer.GetItemQueryIterator<dynamic>(queryDefinition, requestOptions: requestOptions);
+            using var iterator = tagsContainer.GetItemQueryIterator<JObject>(queryDefinition, requestOptions: requestOptions);
             while (iterator.HasMoreResults)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                FeedResponse<dynamic> page;
+                FeedResponse<JObject> page;
                 try
                 {
                     page = await iterator.ReadNextAsync(cancellationToken).ConfigureAwait(false);
@@ -148,12 +152,17 @@ public partial class CosmosDbEventStore
                 foreach (var row in page)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    var eventId = CosmosTagQueryFilters.EventId(row);
+                    if (eventId == null)
+                    {
+                        continue;
+                    }
+
                     while (pendingReads.Count >= window)
                     {
                         await EmitHeadAsync().ConfigureAwait(false);
                     }
 
-                    var eventId = (string)row.eventId;
                     Interlocked.Increment(ref pointReads);
                     pendingReads.Enqueue(new TaggedStreamPointRead(ReadEventPointAsync(
                         eventsContainer,

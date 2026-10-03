@@ -378,6 +378,8 @@ This section documents the actual atomicity guarantees of `IEventStore.WriteSeri
 
 ### Cosmos DB — current guarantee
 
+Cosmos tags-container readers ignore non-row documents carrying `documentType`. Before enabling a later release that writes tag-head documents, upgrade every reader to this reader-exclusion release or newer.
+
 `CosmosDbEventStore.WriteSerializableEventsAsync` performs a two-phase write with **no transaction spanning the two phases**:
 
 1. Event documents are created in parallel (`CreateItemAsync`), one per event, partitioned by `{serviceId}|{eventId}`.

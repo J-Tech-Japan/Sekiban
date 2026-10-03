@@ -44,7 +44,7 @@ internal static class CosmosRepairRowQuery
     ///     against arrives as a bound parameter.
     /// </summary>
     private const string CandidateQueryText =
-        "SELECT * FROM c WHERE c.pk = @pk AND (" +
+        "SELECT * FROM c WHERE c.pk = @pk AND " + CosmosTagQueryFilters.RowsOnly + " AND (" +
         "STRINGEQUALS(c.eventId, @eventId0, true) OR " +
         "STRINGEQUALS(c.eventId, @eventId1, true) OR " +
         "STRINGEQUALS(c.eventId, @eventId2, true) OR " +

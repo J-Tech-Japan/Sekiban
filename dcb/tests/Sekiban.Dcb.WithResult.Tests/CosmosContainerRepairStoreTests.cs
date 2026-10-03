@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos;
+using Newtonsoft.Json.Linq;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.CosmosDb.Models;
 using Sekiban.Dcb.CosmosDb.Repair;
@@ -27,37 +28,37 @@ public class CosmosContainerRepairStoreTests
     private const string Tag = "Student:1";
     private static string PartitionKey => $"{ServiceId}|{Tag}";
 
-    private sealed class FakeFeedResponse : FeedResponse<CosmosTag>
+    private sealed class FakeFeedResponse : FeedResponse<JObject>
     {
-        private readonly IReadOnlyList<CosmosTag> _rows;
+        private readonly IReadOnlyList<JObject> _rows;
 
-        public FakeFeedResponse(IReadOnlyList<CosmosTag> rows) => _rows = rows;
+        public FakeFeedResponse(IReadOnlyList<JObject> rows) => _rows = rows;
 
         public override string? ContinuationToken => null;
         public override int Count => _rows.Count;
         public override Headers Headers { get; } = new();
-        public override IEnumerable<CosmosTag> Resource => _rows;
+        public override IEnumerable<JObject> Resource => _rows;
         public override double RequestCharge => 1.0;
         public override HttpStatusCode StatusCode => HttpStatusCode.OK;
         public override CosmosDiagnostics Diagnostics => null!;
         public override string IndexMetrics => string.Empty;
 
-        public override IEnumerator<CosmosTag> GetEnumerator() => _rows.GetEnumerator();
+        public override IEnumerator<JObject> GetEnumerator() => _rows.GetEnumerator();
     }
 
-    private sealed class FakeFeedIterator : FeedIterator<CosmosTag>
+    private sealed class FakeFeedIterator : FeedIterator<JObject>
     {
-        private readonly IReadOnlyList<CosmosTag> _rows;
+        private readonly IReadOnlyList<JObject> _rows;
         private bool _served;
 
-        public FakeFeedIterator(IReadOnlyList<CosmosTag> rows) => _rows = rows;
+        public FakeFeedIterator(IReadOnlyList<JObject> rows) => _rows = rows;
 
         public override bool HasMoreResults => !_served;
 
-        public override Task<FeedResponse<CosmosTag>> ReadNextAsync(CancellationToken cancellationToken = default)
+        public override Task<FeedResponse<JObject>> ReadNextAsync(CancellationToken cancellationToken = default)
         {
             _served = true;
-            return Task.FromResult<FeedResponse<CosmosTag>>(new FakeFeedResponse(_rows));
+            return Task.FromResult<FeedResponse<JObject>>(new FakeFeedResponse(_rows));
         }
     }
 
@@ -89,7 +90,7 @@ public class CosmosContainerRepairStoreTests
                 .Where(row => string.Equals(row.Pk, partitionKey, StringComparison.Ordinal))
                 .ToList();
 
-            return (FeedIterator<T>)(object)new FakeFeedIterator(rows);
+            return (FeedIterator<T>)(object)new FakeFeedIterator(rows.Select(JObject.FromObject).ToList());
         }
     }
 
