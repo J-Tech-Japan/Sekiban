@@ -92,6 +92,7 @@
     <Project Path="dcb/internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/DcbOrleansDynamoDB.WithoutResult.ApiService.csproj" />
   </Folder>
   <Folder Name="/dcb/tests/">
+    <Project Path="dcb/tests/Sekiban.Dcb.CosmosDb.Emulator.Tests/Sekiban.Dcb.CosmosDb.Emulator.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/Sekiban.Dcb.MaterializedView.BinaryConsumer.csproj" />
