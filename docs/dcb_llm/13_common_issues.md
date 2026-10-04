@@ -575,6 +575,35 @@ operational requirement.
 and are seeded lazily from the per-service store head after restart. Public legacy constructors and static signatures,
 the 30-digit format, and random-suffix semantics remain compatible.
 
+## Clock skew between processes (SEK-G116)
+
+Previously, a slower process could observe a faster writer's event and commit an id below that observation.
+The tag head then stayed unchanged, so a cached tag state omitted the new event and a later command could lose
+an update without duplicate activation.
+
+The executor now seeds its generator after **all** reservations succeed and before allocating any event ids.
+On typed commands and serialized commits, every allocated id exceeds the reserved positions of consistency tags
+attached to the emitted events. A failed reservation causes no observation-derived seed; the existing once-per-service
+startup seed still runs before reservations. On typed unique-key (`ConditionalAppend`) commands, allocation exceeds
+the last position of every state the handler read through tracked state access, without adding a reservation.
+
+The reserved paths do not cover a tag read but not attached to an event, non-consistency tags, or unobserved tags
+in a multi-tag write. `GetTagLatestSortableUniqueIdAsync` and direct store head reads are not tracked, including on
+the typed unique-key path; callers using those heads must still seed or check the position themselves as described
+in [the interim unique-key pattern](11_storage_providers.md#interim-cosmos-pattern-unique-key-from-tag-and-expected-head).
+Serialized unique-key commits, writers in other clusters or older versions, and already stored inverted events
+are also outside this fix. A cached activation missing an already inverted event does not recover through this change.
+The derived PostgreSQL fence remains the backstop that rejects remaining inversions on enforced tags.
+
+Ids encode **logical time**, at least the allocating generator's wall clock, and no bound on how far they run ahead
+is promised. A real stored far-future position becomes the floor of every process that observes it **without a restart**.
+The floor remains after clocks are corrected because `Seed` never lowers it. Allocation fails when logical ticks reach
+`DateTime.MaxValue`. While ids are ahead of wall time, multi-projection safe-window logic keeps those events unsafe
+and cold-event export waits until wall time catches up. The generator is still not a distributed sequencer;
+configure `SafeWindow` to cover expected clock skew and correct clock drift. This change adds neither a cap nor a warning
+for large jumps. Cache validity for already inverted events and lifting from the reservation actor's latest for
+unobserved writes remain follow-ups.
+
 ## Verify-only materialized-view startup and SQL policy — dcb-v10.14.0 (SEK-G32)
 
 `MvInitializationMode.VerifyOnly` is the explicit BYO-database path. It verifies a versioned declarative schema contract

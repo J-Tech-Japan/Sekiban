@@ -313,6 +313,38 @@ public class CoreGeneralSekibanExecutor
         return _sortableUniqueIdSeedCoordinator.EnsureSeededAsync(serviceId, _eventStore, cancellationToken);
     }
 
+    // Validate before selecting the maximum: a malformed larger value must not hide a valid floor.
+    private void SeedAboveObservedPositions(IEnumerable<string?> positions)
+    {
+        string? largest = null;
+        long largestTicks = 0;
+        foreach (var position in positions)
+        {
+            if (string.IsNullOrEmpty(position) ||
+                position.Length != SortableUniqueId.TickNumberOfLength + SortableUniqueId.IdNumberOfLength ||
+                position.Any(c => c is < '0' or > '9') ||
+                !SortableUniqueId.TryParse(position, out _) ||
+                !long.TryParse(
+                    position.AsSpan(0, SortableUniqueId.TickNumberOfLength),
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var ticks) ||
+                ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks)
+            {
+                continue;
+            }
+
+            if (largest is null || string.CompareOrdinal(position, largest) > 0)
+            {
+                largest = position;
+                largestTicks = ticks;
+            }
+        }
+
+        if (largest is not null)
+            _sortableUniqueIdGenerator.Seed(largestTicks);
+    }
+
     private string GetExecutedUser()
     {
         var value = _executedUserProvider?.GetExecutedUser();
@@ -544,6 +576,8 @@ public class CoreGeneralSekibanExecutor
 
             try
             {
+                SeedAboveObservedPositions(reservationInputs.Values);
+
                 // Step 5: Write event to EventStore (handles both events and tags)
                 // Build Event objects for each collected event payload
                 var executedUser = GetExecutedUser();
@@ -958,6 +992,8 @@ public class CoreGeneralSekibanExecutor
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                SeedAboveObservedPositions(consistencyEntryMap.Values);
 
                 // Step 4: Build SerializableEvent objects with server-generated metadata
                 var serializableEvents = new List<SerializableEvent>();
@@ -1537,6 +1573,8 @@ public class CoreGeneralSekibanExecutor
             TagValidator.ValidateTagsAndThrow(new HashSet<ITag>(single.Tags));
 
             await EnsureSortableUniqueIdSeededAsync(cancellationToken);
+
+            SeedAboveObservedPositions(commandContext.GetAccessedTagStates().Values.Select(state => state.LastSortedUniqueId));
 
             var executedUser = GetExecutedUser();
             var eventId = ConditionalEventIdFactory();

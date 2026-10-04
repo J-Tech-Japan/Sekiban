@@ -773,3 +773,31 @@ End-to-end の契約は
 新しい Active checkpoint、その後の全 replay なしの restore を確認します。In-memory provider を使うため、
 PostgreSQL/Cosmos の管理操作と host 全体の再起動はこのテストでは実行しません。
 製品の store-ahead チェックは変更していません。
+
+## プロセス間の clock skew (SEK-G116)
+
+以前は遅い時計のプロセスが速い writer のイベントを観測しても、その観測位置より小さい ID で commit
+できました。タグ先頭が変わらず、キャッシュしたタグ state が新しいイベントを含まないため、重複 activation
+なしでも後続コマンドで更新が失われる場合がありました。
+
+executor は **すべての予約が成功した後**、最初の ID 割り当て前に generator を seed します。
+typed command と serialized commit の各 ID は、出力イベントに付けた整合性タグの予約済み位置を超えます。
+予約失敗時には観測位置由来の seed を行いません。既存のサービスごとの起動時 seed は予約前のままです。
+typed unique-key (`ConditionalAppend`) 経路は handler の追跡対象 state 読み取りすべての最終位置を超える
+ID を割り当てますが、予約は追加しません。
+
+予約する経路では、読んでも出力イベントに付けなかったタグ、非整合性タグ、複数タグ書き込みの未観測タグは
+対象外です。`GetTagLatestSortableUniqueIdAsync` または store から直接読んだ先頭は typed unique-key 経路でも
+追跡されません。この先頭を使う呼び出し側は [暫定 unique-key パターン](11_storage_providers.md) の説明どおり
+自ら seed または位置を検査する必要があります。serialized unique-key commit、他クラスタや旧バージョンの writer、
+保存済みの逆転イベントも対象外です。逆転イベントを含まないキャッシュ済み activation はこの変更では回復しません。
+導出 PostgreSQL フェンスは有効タグに残る逆転をエラーにする backstop です。
+
+ID は generator の壁時計以上の **論理時刻** を表し、壁時計にどれだけ先行するかの上限は保証しません。
+store に実在する遠い未来の位置は、**再起動なしで**それを観測するすべてのプロセスの下限になります。
+`Seed` は下限を下げないため、時計を修正してもその下限は残ります。論理 ticks が `DateTime.MaxValue` に達すると
+割り当ては失敗します。ID が壁時計より先にある間、multi-projection の safe-window ロジックはそのイベントを
+unsafe window に保持し、cold-event export は壁時計が追いつくまで待ちます。generator は分散 sequencer ではありません。
+想定する clock skew を覆う `SafeWindow` を設定し、時計のずれを修正してください。この変更は大きな jump の cap や
+warning を追加しません。保存済み逆転イベントに対応するキャッシュの妥当性キー変更と、未観測書き込みについて
+予約 actor の最新位置から下限を上げる対応は follow-up です。
