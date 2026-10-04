@@ -28,6 +28,51 @@ public sealed class CosmosEventDocumentSizeGateTests
 {
     private const string ServiceId = "g72-test";
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task ObservedWorstCase_CrossesQuotaOnTypedAndSerializedEntrances(bool serialized)
+    {
+        var domain = DomainType.GetDomainTypes();
+        using var context = NewOwnedContext();
+        var measurement = new CosmosEventDocumentSizeMeasurement(context);
+        var candidate = CreateCandidate(domain);
+        var payload = new WeatherForecastCreated(Guid.Empty, "Tokyo", new DateOnly(2026, 9, 10), 21, "g72");
+        // Fixed-width identifiers and identical metadata make this an exact off-mode quota.
+        var probe = new Event(payload, SortableUniqueId.GenerateNew(), nameof(WeatherForecastCreated),
+            Guid.NewGuid(), new EventMetadata(new string('a', 36), nameof(GateCommand), ""), candidate.Tags.ToList());
+        var probeContext = new ExecutorSizeMeasurementContext(CosmosEventDocumentSizeMeasurement.Scope,
+            ExecutorSizeRepresentation.StorageItem, probe, probe.ToSerializableEvent(domain.EventTypes),
+            DefaultServiceIdProvider.DefaultServiceId, null, null);
+        var offBound = measurement.Measure(probeContext).CertifiedUpperBound!.Value;
+        context.Options.RecordObservedTagPositions = true;
+        var onBound = measurement.Measure(probeContext).CertifiedUpperBound!.Value;
+        Assert.True(onBound > offBound);
+        var quota = offBound + 40; // Covers entrance metadata differences, but less than added evidence.
+        foreach (var enabled in new[] { false, true })
+        {
+            context.Options.RecordObservedTagPositions = enabled;
+            var store = new Sekiban.Dcb.Testing.InMemoryEventStore(domain.EventTypes);
+            var gate = new ExecutorSizeGateOptions().Add(new ExecutorSizePolicy(
+                CosmosEventDocumentSizeMeasurement.Scope, ExecutorSizeRepresentation.StorageItem,
+                maxBytesPerEvent: quota, measurement: measurement));
+            var executor = new GeneralSekibanExecutor(store, new InMemoryObjectAccessor(store, domain), domain, gate);
+            Exception? error;
+            if (serialized)
+            {
+                var result = await executor.CommitSerializableEventsAsync(new SerializedCommitRequest([candidate], []));
+                error = result.IsSuccess ? null : result.GetException();
+            }
+            else
+            {
+                var result = await executor.ExecuteAsync(new GateCommand(Guid.NewGuid()), HandleGateCommand);
+                error = result.IsSuccess ? null : result.GetException();
+            }
+            if (enabled) Assert.IsType<ExecutorSizeLimitExceededException>(error);
+            else Assert.Null(error);
+            Assert.Equal(enabled ? 0 : 1, (await store.GetEventCountAsync()).GetValue());
+        }
+    }
+
     [Fact]
     public void Mapper_PreservesIdentityMetadataTagsAndUtcTimestampAcrossAllAdapters()
     {

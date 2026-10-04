@@ -86,6 +86,18 @@ services.AddSekibanDcbCosmosDbWithAspire();
 // falls back to ConnectionStrings:SekibanDcbCosmos if Aspire client not found
 ```
 
+### Recording observed Cosmos tag positions (opt-in)
+
+`CosmosDbEventStoreOptions.RecordObservedTagPositions` defaults to `false`. When enabled, ordinary command writes record the command's original consistency-tag observations in `observed`, an array aligned with `tags`: null means not read, `""` means read empty, and otherwise the value is a 30-digit position. Invalid nonempty positions fail the write before any event is stored. Explicit consistency-tag positions override the state read. Unique-key writes and expected-position fence writes do not record observations.
+
+Every event with any non-null observation also stores `observedWrite`, one GUID in N format shared by that write. Multiple events keep the original observation without chaining; after a partial event failure, surviving events keep that observation and write id. A caller retry gets a new write id. Both properties are omitted when all observations are null, so an omitted `observed` cannot distinguish recording off from recording on with nothing observed. Off-mode documents retain their previous JSON shape.
+
+This only records evidence: nothing reads it yet, detection follows in SEK-G115, and the field prevents nothing. Readers, tag rows, repair and sweep retain their current behavior. `tools/MigrateDcbCosmosEventsTags` import rebuilds documents from selected fields and drops both properties; cold-event export writes `SerializableEvent` and also drops them. Future detection can therefore only examine hot Cosmos documents.
+
+Estimated compact JSON overhead is about **33 bytes per full position**, **3 bytes per empty position**, or **5 bytes per null entry**, plus about **65 bytes per document** for the property names and write id (including separators). The Cosmos event-document size gate always budgets the worst case when recording is on: 30 digits for every tag plus `observedWrite`, even when observations will be omitted or the write uses a unique key. Measurement reads the option from its `CosmosDbContext.Options`; standard DI shares the store's context. If supplying a context explicitly for measurement, use the same context/options as the store.
+
+The events container indexes every path by default, so `/observed/[]` adds a small write RU charge. It can be added as an excluded indexing path when observation queries are unnecessary (and `/observedWrite/?` can likewise be excluded).
+
 ### Cosmos tag head maintenance (opt-in)
 
 `CosmosDbEventStoreOptions.TagHeadMode` defaults to `CosmosTagHeadMode.Off`. Set it to

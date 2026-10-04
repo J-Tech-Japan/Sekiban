@@ -48,6 +48,137 @@ public sealed class TagConsistencyFenceTests
         return (store, accessor, Executor(store, accessor));
     }
 
+    [Fact]
+    public async Task ObservedTyped_StoreFailureCancelsAndPreservesError()
+    {
+        var failure = new InvalidOperationException("recording failed");
+        var store = new RecordingStore { RecordsObservedTagPositions = true, Failure = failure };
+        var accessor = new RecordingAccessor();
+        var result = await Executor(store, accessor, false).ExecuteAsync(new Command(),
+            (_, _) => Task.FromResult(EventOrNone.EventWithTags(Payload(), [new Tag("failure")])));
+        Assert.Same(failure, result.GetException());
+        Assert.Equal(1, store.ObservedWrites);
+        Assert.Equal(1, accessor.Cancelled);
+        Assert.Equal(0, accessor.Confirmed);
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    [Fact]
+    public async Task ObservedSerialized_FenceBypassesRecording()
+    {
+        var store = new RecordingStore { RecordsObservedTagPositions = true };
+        var result = await Executor(store, new()).CommitSerializableEventsAsync(Request());
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(store.Specification);
+        Assert.Equal(0, store.ObservedWrites);
+        Assert.Equal(0, store.LegacyWrites);
+    }
+
+    [Theory]
+    [InlineData(false, false)] [InlineData(true, false)] [InlineData(true, true)]
+    public async Task ObservedDispatch_UsesOnlyEnabledOrdinaryPath(bool recording, bool fence)
+    {
+        var store = new RecordingStore { RecordsObservedTagPositions = recording };
+        var accessor = new RecordingAccessor();
+        var result = await Executor(store, accessor, fence).ExecuteAsync(new Command(),
+            (_, _) => Task.FromResult(EventOrNone.EventWithTags(Payload(), [new Tag("test")])));
+        Assert.True(result.IsSuccess);
+        Assert.Equal(recording && !fence ? 1 : 0, store.ObservedWrites);
+        Assert.Equal(!recording && !fence ? 1 : 0, store.LegacyWrites);
+        Assert.Equal(fence, store.Specification is not null);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task ObservedTyped_OriginalReadEmptyUnreadAndExplicitPositions(bool empty)
+    {
+        var head = empty ? "" : SortableUniqueId.GenerateNew();
+        var explicitPosition = SortableUniqueId.GenerateNew();
+        var store = new RecordingStore { RecordsObservedTagPositions = true };
+        var accessor = new RecordingAccessor { Head = head };
+        var read = new Tag("read");
+        var result = await Executor(store, accessor, false).ExecuteAsync(new Command(), async (_, ctx) =>
+        {
+            await ctx.TagExistsAsync(read);
+            return EventOrNone.EventWithTags(Payload(), [read, new Tag("unread"),
+                ConsistencyTag.FromTagWithSortableUniqueId(new Tag("explicit"), explicitPosition), new Tag("index", false)]);
+        });
+        Assert.True(result.IsSuccess);
+        Assert.Equal(3, store.Observations!.Count);
+        Assert.Equal(head, store.Observations["Fence:read"]);
+        Assert.Null(store.Observations["Fence:unread"]);
+        Assert.Equal(explicitPosition, store.Observations["Fence:explicit"]);
+    }
+
+    [Fact]
+    public async Task ObservedConflicts_CancelReservationsBeforeWrite()
+    {
+        var store = new RecordingStore { RecordsObservedTagPositions = true };
+        var accessor = new RecordingAccessor();
+        var tag = new Tag("same");
+        var result = await Executor(store, accessor, false).ExecuteAsync(new Command(), (_, _) =>
+            Task.FromResult(EventOrNone.EventWithTags(Payload(), [tag,
+                ConsistencyTag.FromTagWithSortableUniqueId(tag, SortableUniqueId.GenerateNew())])));
+        Assert.IsType<TagHeadExpectationValidationException>(result.GetException());
+        Assert.Equal(0, store.ObservedWrites);
+        Assert.Equal(accessor.Inputs.Count, accessor.Cancelled);
+        Assert.Equal(0, accessor.Confirmed);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task ObservedSerialized_InvalidOrStoreFailureCancels(bool invalid)
+    {
+        var failure = new InvalidOperationException("observed write failed");
+        var store = new RecordingStore { RecordsObservedTagPositions = true, Failure = invalid ? null : failure };
+        var accessor = new RecordingAccessor();
+        var result = await Executor(store, accessor, false).CommitSerializableEventsAsync(Request(invalid ? "bad" : ""));
+        if (invalid) Assert.IsType<TagHeadExpectationValidationException>(result.GetException());
+        else Assert.Same(failure, result.GetException());
+        Assert.Equal(invalid ? 0 : 1, store.ObservedWrites);
+        Assert.Equal(1, accessor.Cancelled);
+        Assert.Equal(0, accessor.Confirmed);
+        Assert.Empty((await store.ReadAllSerializableEventsAsync()).GetValue());
+    }
+
+    [Fact]
+    public async Task ObservedSerialized_PassesCallerPositionAndLeavesOtherTagsAbsent()
+    {
+        var store = new RecordingStore { RecordsObservedTagPositions = true };
+        var request = Request(SortableUniqueId.GenerateNew());
+        request = request with { EventCandidates = [request.EventCandidates[0] with { Tags = ["Fence:serialized", "Fence:index"] }] };
+        var result = await Executor(store, new(), false).CommitSerializableEventsAsync(request);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(request.ConsistencyTags[0].LastSortableUniqueId, Assert.Single(store.Observations!).Value);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task ObservedHybrid_ForwardsOrFallsBack(bool supported)
+    {
+        var recording = new RecordingStore { RecordsObservedTagPositions = true };
+        IEventStore hot = supported ? recording : new Sekiban.Dcb.Testing.InMemoryEventStore(Domain.EventTypes);
+        var hybrid = new HybridEventStore(hot, new UnusedColdStorage(), new JsonlColdSegmentFormatHandler(),
+            new DefaultServiceIdProvider(), Options.Create(new ColdEventStoreOptions()), NullLogger<HybridEventStore>.Instance);
+        Assert.Equal(supported, hybrid.RecordsObservedTagPositions);
+        var observations = new Dictionary<string, string?> { ["Fence:one"] = "" };
+        Assert.True((await hybrid.WriteSerializableEventsWithObservedTagPositionsAsync([], observations)).IsSuccess);
+        Assert.Equal(supported ? 1 : 0, recording.ObservedWrites);
+        if (supported) Assert.Same(observations, recording.Observations);
+    }
+
+    [Fact]
+    public async Task ObservedUniqueKey_DoesNotRecord()
+    {
+        var store = new RecordingStore { RecordsObservedTagPositions = true };
+        var result = await Executor(store, new(), false).ExecuteAsync(new Command(),
+            (_, _) => Task.FromResult(EventOrNone.EventWithTags(Payload(), [new Tag("unique", false)])),
+            new CommandExecutionOptions { ConditionalAppend = new ConditionalAppendSpecification("observed-unique") });
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, store.ConditionalWrites);
+        Assert.Equal(0, store.ObservedWrites);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -668,8 +799,21 @@ public sealed class TagConsistencyFenceTests
         public Task NotifyEventWrittenAsync() { Notified++; if (NotifyThrows) throw new Exception("notify failed"); return Task.CompletedTask; }
     }
 
-    private sealed class RecordingStore : IEventStore, IExpectedTagPositionEventStore, IWriteConditionCapabilityProvider, IConditionalEventStore
+    private sealed class RecordingStore : IObservedTagPositionEventStore, IEventStore, IExpectedTagPositionEventStore, IWriteConditionCapabilityProvider, IConditionalEventStore
     {
+        public bool RecordsObservedTagPositions { get; init; }
+        public int ObservedWrites;
+        public IReadOnlyDictionary<string, string?>? Observations;
+        public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+            WriteSerializableEventsWithObservedTagPositionsAsync(IEnumerable<SerializableEvent> events,
+                IReadOnlyDictionary<string, string?> observations, CancellationToken cancellationToken = default)
+        {
+            ObservedWrites++;
+            Observations = observations;
+            if (Failure is not null)
+                return Task.FromResult(ResultBox.Error<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>(Failure));
+            return _inner.WriteSerializableEventsAsync(events);
+        }
         private readonly InMemoryConditionalEventStore _inner = new(Domain.EventTypes);
         public string? ExpectedTagPositionServiceId { get; init; }
         public ExpectedTagPositionLimits Limits { get; init; } = ExpectedTagPositionLimits.Unlimited;
