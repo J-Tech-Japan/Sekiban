@@ -902,8 +902,12 @@ Cosmos はキーに含まれる先頭とイベント位置を比較しません�
 `GeneralSekibanExecutor` の `ConditionalAppend` 経路では、executor が handler の後に id を生成します。
 既定の monotonic generator はプロセス内で単調に進み、coordinator はサービス全体の永続イベントの最大位置を
 **seed 成功後は coordinator ごとに正規化 ServiceId あたり1回だけ**読みます（失敗した seed は再試行可能です）。
-従来のコンストラクタはプロセス内でその coordinator を共有します。新しく観測したタグ先頭ごとに reseed せず、
-生成した id と呼び出し側が読んだ先頭も比較しません。別ホストの後続書き込みがローカルの下限を超える場合があります。
+従来のコンストラクタはプロセス内でその coordinator を共有します。書き込みごとに store head を再取得しません。
+通常の typed / serialized commit では予約がすべて成功した観測位置より上へ generator の下限を上げます。
+typed `ConditionalAppend` では handler の追跡対象 state 読み取りの最終位置より上へ下限を上げます。
+serialized conditional commit には追跡対象 state がなく、この経路は変更されません。
+store から直接、または `GetTagLatestSortableUniqueIdAsync` で読んだ先頭は追跡されず、どちらの unique-key
+経路にも下限を提供しません。この方法で `expectedHead` を取得する場合は、以下の手動 seed が必要です。
 呼び出し側は **毎回**の `ExecuteAsync` の前に、注入した generator がその試行の `expectedHead` より大きい id を
 生成することを保証してください。上記の `MonotonicSortableUniqueIdGenerator` では、空でない先頭を
 `SortableUniqueId.TryParse` で検証し、`new SortableUniqueId(expectedHead).GetDateTime().Ticks` で ticks を取得して、
@@ -1020,7 +1024,10 @@ accessed-state lookup に一致しない場合があります（既存の制約�
 共有する非整合性タグで大きい ID を先に commit すると、mode on は後から commit する小さい ID を
 `TagHeadPositionValidationException` で拒否し、mode off は両方を受理します。この失敗は新しい ID でコマンドを
 再実行してください。プロセス内の単調な ID 発行と起動時 seed は writer 間の commit 順序を保証しません。
-この slice には製品側の緩和策を追加しません。
+SEK-G116 は通常の typed / serialized commit の予約済み観測位置、および typed unique-key 経路の
+追跡対象 state 位置より上に ID を割り当てます。全 writer の commit 順序や未観測タグは保証しません。
+残る逆転に対して、導出 PostgreSQL フェンスが有効タグの backstop になります。
+正確な保証範囲と論理時刻の影響は [よくある問題](13_common_issues.md) の SEK-G116 節を参照してください。
 
 ### 追加契約と3つの明示状態
 

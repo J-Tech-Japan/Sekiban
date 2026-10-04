@@ -894,10 +894,13 @@ in the key (including in `Advance` mode).
 With `GeneralSekibanExecutor` and `ConditionalAppend`, the executor allocates the id after the handler. Its default
 monotonic generator advances within the process, and its coordinator seeds from the service-wide persisted event
 maximum **once per normalized service ID per coordinator after a successful seed** (failed seeds can retry).
-The legacy constructor shares that coordinator in the process. It neither reseeds from each newly observed tag head
-nor compares the allocated id with the head the caller read; a later write on another host can exceed its local floor.
-Before **each** `ExecuteAsync` attempt, the caller must ensure the injected generator will allocate above that attempt's
-`expectedHead`. For the `MonotonicSortableUniqueIdGenerator` above, validate a non-empty head with
+The legacy constructor shares that coordinator in the process. The executor does not reread the store head per write.
+On ordinary typed and serialized commits it lifts the generator above the successfully reserved observations;
+on typed `ConditionalAppend` it lifts above the last positions of states read through tracked state access in the handler.
+Serialized conditional commits have no tracked states and remain unchanged. A head read directly from the store or
+through `GetTagLatestSortableUniqueIdAsync` is not tracked and supplies no floor to either unique-key path.
+For such an `expectedHead`, before **each** `ExecuteAsync` attempt the caller must ensure the injected generator will
+allocate above that attempt's head. For the `MonotonicSortableUniqueIdGenerator` above, validate a non-empty head with
 `SortableUniqueId.TryParse`, obtain its ticks with `new SortableUniqueId(expectedHead).GetDateTime().Ticks`, and call
 `generator.Seed(ticks)` before execution. Its next allocation advances beyond those ticks, regardless of clock lag;
 reject malformed heads and fail closed if ticks are exhausted. Use the same generator in the coordinator and executor.
@@ -1012,8 +1015,11 @@ wrapper can miss the accessed-state lookup (a pre-existing limitation). PostgreS
 SortableUniqueId to exceed the heads of that event's own tags, including non-consistency tags. The deterministic
 out-of-order characterization commits the larger id first on a shared non-consistency tag: mode on rejects the later
 smaller id with `TagHeadPositionValidationException`; mode off accepts both. Retry this position failure by re-running
-with fresh ids. Process-local monotonic allocation and startup seeding do not ensure commit order across writers;
-no product mitigation is added here.
+with fresh ids. SEK-G116 lifts allocations above successfully reserved observations on typed and serialized commits,
+and above tracked state positions on typed unique-key writes. This does not ensure commit order across all writers
+or cover unobserved tags; the derived PostgreSQL fence remains the backstop for remaining inversions on enforced tags.
+See [clock skew between processes](13_common_issues.md#clock-skew-between-processes-sek-g116) for the exact scope
+and logical-time consequences.
 
 ### Additive contract and the three explicit states
 
