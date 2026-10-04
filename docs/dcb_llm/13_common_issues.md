@@ -431,24 +431,50 @@ exception type). SEK-G30 subsequently separated an unobserved tag (`null`, Unspe
 an observed-empty tag (`""`, AssertEmpty); non-empty versions remain ExactMatch. See
 [Three-state reservation semantics](03_aggregate_command_events.md#three-state-reservation-semantics-sek-g19--sek-g30-10110).
 
-**Guarantee boundary.** Reservations serialize competing writes within one `TagConsistentGrain` activation,
-but are not a hard guarantee even inside one cluster. Orleans 10.3.1's default directory can briefly run two
-activations of the same grain during membership churn, or while a partitioned silo has not yet learned that it was
-declared dead. Each activation has its own reservation lock and cached tag head; both can reserve and append.
-Independent clusters also do not coordinate through the actor and can each reserve-empty and append a duplicate create.
-See [Grain directory and duplicate activations](10_orleans_setup.md#grain-directory-and-duplicate-activations).
+<a id="fast-and-strict-tag-consistency"></a>
 
-Hard guarantees require a storage-layer fence: [conditional unique-append (G15/G16)](11_storage_providers.md#conditional-unique-key-append--sek-g15)
-for single-event create-once operations using the same idempotency key, or PostgreSQL's opt-in
-[`ExpectedTagPositions` (SEK-G40)](11_storage_providers.md#postgresql-durable-multi-tag-expected-position-cas--sek-g40)
-for exact tag versions, or the [derived fence](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions)
-which maps reservation inputs automatically, including on Orleans (global mode only). Both PostgreSQL modes require
-the enablement epoch and all-writer protocol; unread emitted tags remain unfenced. Neither is automatic on the default write
-path. Cosmos DB, DynamoDB and SQLite currently support only the single-event unique-key fence, not an
-expected-tag-head fence. The ordinary `InMemoryEventStore` rejects conditional append (`ConditionNotSupportedException`);
-the testing-only `InMemoryConditionalEventStore` implements it, but its claims are instance-local and volatile, so it
-is not a guarantee across silo processes; the Cosmos tag-head fence is under design (SEK-G101). Multi-projection convergence over
-durable duplicate events (SEK-G18) does not turn duplicate creates into a uniqueness guarantee.
+### Choosing between fast and strict tag consistency
+
+Reservations serialize writes within one `TagConsistentGrain` activation. The default Orleans directory is eventually
+consistent and “Allows occasional duplicate activations during cluster instability.” Microsoft recommends starting
+with it. No probability is published. The opt-in `AddDistributedGrainDirectory()` is available from Orleans 10.0
+and is in preview; Microsoft says it “prevents duplicate grain activations even during cluster instability.”
+See [Orleans grain directory](https://learn.microsoft.com/en-us/dotnet/orleans/host/grain-directory).
+
+A silo declared dead, even mistakenly during a partition, continues running until it reads its status from the membership
+table; “it terminates its process” once it learns that status. See
+[Cluster management in Orleans](https://learn.microsoft.com/en-us/dotnet/orleans/implementation/cluster-management).
+Our inference is that a stronger directory lowers the probability of competing writes, but cannot cancel a command
+already running on that silo. Each Sekiban activation has its own reservation lock and cached head: two activations can
+both reserve the same head and append. Independent clusters also have independent reservations.
+
+- **Fast:** trust Orleans, with the derived storage fence `Off`. A rare stale write can be accepted during membership
+  churn (deployments, scaling, crashes, pauses or partitions). Choose this when the domain can compensate.
+- **Strict:** use PostgreSQL with `DeriveFromReservations`. Stale writes are rejected within the documented boundaries:
+  provision the enablement epoch and follow the all-writer protocol; unread emitted tags and non-consistency tags are
+  unfenced. This does not make external effects exactly-once or promise that mistakes cannot happen.
+
+| Provider | Fast / ordinary writes | Available storage protection and Orleans reachability |
+|---|---|---|
+| PostgreSQL | Reservations; canonical head maintenance still runs | Durable multi-tag expected-position CAS and derived fence; Orleans supports the global derived mode only |
+| Cosmos DB | Reservations; `TagHeadMode.Off` recommended unless diagnostic heads are wanted | `Advance` only maintains heads. Single-event unique-key append is available through a separate General executor or the store, **not** an Orleans executor option |
+| DynamoDB | Reservations | Single-event unique-key append; no expected-position fence, no conditional Orleans overload |
+| SQLite | Reservations | Single-event unique-key append; no expected-position fence, no conditional Orleans overload |
+| InMemory | Reservations; volatile state | Ordinary `InMemoryEventStore` does not support conditional append; testing-only `InMemoryConditionalEventStore` claims are instance-local and volatile |
+
+The Cosmos fence stops at `Advance`; no enforcing mode is planned. Strict workloads should use PostgreSQL.
+Events and tags are in separate Cosmos containers, without a transaction spanning them. The proposed Cosmos enforcement
+work (SEK-G109/G110/G111) was withdrawn. The
+[interim Cosmos unique-key pattern](11_storage_providers.md#cosmos-interim-tag-head-cas) is limited to cooperating
+single-event writers and one fenced tag; it is not general strict tag consistency under Orleans.
+
+Costs here describe code operations, not measured performance: PostgreSQL already inserts, locks, reconciles and advances
+heads with the fence off. Enabling the derived fence adds epoch existence queries and comparison/validation, rather than
+another head transaction. Cosmos `Advance` adds one operation to the existing batch per tag partition; a missing head
+adds a failed batch, a bootstrap query and a retry, and conflicts can add requests. See
+[derived-fence costs and boundaries](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions) and
+[Cosmos head maintenance](11_storage_providers.md#cosmos-tag-head-maintenance-opt-in).
+Projection convergence over durable duplicate events does not provide create uniqueness.
 
 **Behavior change**: from 10.8.0, competing asserted-empty creates handled by the same activation result in a
 consistency error for one side. The G18 + G19 + G20 release gate addressed convergence, the single-activation

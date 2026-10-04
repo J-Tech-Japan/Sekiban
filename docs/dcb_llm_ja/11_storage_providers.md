@@ -68,7 +68,10 @@ Cosmos の書き込みはベストエフォート トランザクションです
 `Advance` を指定すると、各タグのパーティションに `{ id: "$head", pk: "{serviceId}|{tag}",
 serviceId, tag, documentType: "tagHead", position }` を保存し、`position` にそのタグへ書いた
 最大の SortableUniqueId を維持します。Advance は head を維持するだけで、head に基づく
-書き込み拒否、フェンス、epoch は提供しません。
+書き込み拒否、フェンス、epoch は提供しません。書き込みの enforcement にこの head を読む経路はありません。
+Cosmos のフェンスは `Advance` までで、強制検査モードの予定はありません。診断用 head が必要な場合以外は
+`TagHeadMode` を `Off` にしてください。strict なワークロードは PostgreSQL を使ってください。
+[fast と strict の選択](13_common_issues.md#fast-and-strict-tag-consistency)も参照してください。
 
 有効化前に **すべての reader を SEK-G106 以降へ更新**してください。この reader は行以外の
 ドキュメントを除外します。`UseTransactionalBatchForTags = true` と `MaxBatchOperations >= 2`
@@ -78,12 +81,11 @@ serviceId, tag, documentType: "tagHead", position }` を保存し、`position` �
 最大値以上であることを確認します。head がない場合は既存の最上位行と新しい最大値の
 大きい方で初期化します。repair と sweep も同じ規則で、行作成前に head を進めます。
 
-コストはタグパーティションごとの書き込みにつき追加 1 操作で、初回は初期化の read と
-再試行が必要です。競合時は追加の head リクエストが必要になる場合があります。
+コストはタグパーティションごとの書き込みにつき、既存バッチへ追加 1 操作です。初回に head が
+なければ失敗バッチ、初期化クエリ、再試行が加わります。競合時は追加の head リクエストが必要になる場合があります。
 古いパッケージ、Off のインスタンス（repair/sweep を含む）、外部 export/import ツールが
 行を追加している間は head が真の最大値より遅れることがあります。export/import ツールは
-head を維持しません。将来の enforcement 導入前にそれらの writer を停止してください。
-運用者が設定する epoch は後続スライスの対象です。旧形式の migration reduction は
+head を維持しません。旧形式の migration reduction は
 イベントとタグの組を変えないため、head を維持しません。
 
 ### Cosmos event document サイズ admission（opt-in）
@@ -809,6 +811,70 @@ var executor = new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore());
 
 **境界は耐久クレーム1つ。** 本コントラクトはキーごとに高々1つの耐久クレームを保証しますが、マイグレーションの副作用をちょうど1回にはしません。マイグレーション自体が外部副作用（他システムへの書き込み、通知送信）を行う場合は、それらを勝者クレームの背後にアウトボックス／冪等層で置いてください — クレームが伝えるのは*誰が勝ったか*であって、副作用がちょうど1回実行されたことではありません。
 
+<a id="cosmos-interim-tag-head-cas"></a>
+
+## Cosmos の暫定パターン: タグと期待する先頭からユニークキーを作る
+
+まず `IEventStore.GetLatestTagAsync(tag)` でタグの現在の先頭を読みます。Cosmos は `$head` ではなくタグ行を
+検索します。`LastSortedUniqueId` を使い、空タグなら `""` として、handler 実行前にキーを作ってください。
+イベントはその期待先頭の状態から作る必要があります。読み取りエラーを空タグとして扱ってはいけません。
+区切り文字の曖昧さを避けるため、正確なタグ文字列と期待先頭の JSON 配列をハッシュ化します。
+
+```csharp
+using System.Security.Cryptography;
+using System.Text.Json;
+using Sekiban.Dcb.Storage;
+
+static string TagHeadKey(string tag, string expectedHead) =>
+    "tag-head-v1:" + Convert.ToHexString(SHA256.HashData(
+        JsonSerializer.SerializeToUtf8Bytes(new[] { tag, expectedHead })));
+
+// eventStore: IEventStore; tag: ITag; singleEvent: SerializableEvent.
+// Read first; propagate errors instead of treating them as an empty head.
+var headResult = await eventStore.GetLatestTagAsync(tag);
+if (!headResult.IsSuccess) throw headResult.GetException();
+var expectedHead = headResult.GetValue().LastSortedUniqueId; // "" when empty
+var key = TagHeadKey(tag.GetTag(), expectedHead);
+// Construct singleEvent from the state at expectedHead, with a unique request id in its payload.
+var result = await ((IConditionalEventStore)eventStore).AppendIfUniqueAsync(
+    new ConditionalAppendRequest(key, singleEvent));
+```
+
+空でない ASCII キーは `OperationFingerprint.NormalizeKey` の制約（trim、NFC、UTF-8 で512バイト以下）を満たします。
+ServiceId は `ConditionalAppendIdentity.DeriveEventId` に既に含まれます。読み書きは同じサービス範囲で行ってください。
+全 writer がこの同じ導出を使う場合に限り、`(tag, head)` の compare-and-set になります。
+同じ先頭で異なる操作が1つの永続イベント ID を奪い合い、一方が `Appended`、異なる payload の側は
+`KeyReuseConflictException` を持つ `ResultBox.Error` になります。次の書き込みは勝者の `WinnerSortableUniqueId` を
+期待先頭として新しいキーを作ります。これは協調する writer 間の CAS であり、provider が現在の head と比較するものではありません。
+
+コマンドの入口は `CommandExecutionOptions` を受け取る `GeneralSekibanExecutor.ExecuteAsync` overload です。
+`ConditionalAppend = new ConditionalAppendSpecification(key)` を指定します。キーは handler 実行前に必要です。
+または例のように `IConditionalEventStore.AppendIfUniqueAsync` を直接使います。
+両方の `OrleansDcbExecutor` facade は `IConditionalCommandExecutor` も
+`ISerializedConditionalSekibanDcbExecutor` も実装せず、条件付き overload はありません。
+Orleans ホストは Cosmos store を直接呼ぶか、公開の `OrleansActorObjectAccessor` を使って別途
+`GeneralSekibanExecutor(eventStore, orleansActorAccessor, domainTypes)` を構築できます。
+ホストが用意する別経路であり、Orleans executor のオプションではありません。
+
+制限:
+
+- イベントは1つ、フェンスするタグも1つです。他の出力タグの先頭はこのキーでは保護されません。
+- 無条件 writer はキーを迂回します。保護するストリームに混在させないでください。
+- 同じキーでイベント型、正規化 payload、タグが同じなら、新しい EventId/SortableUniqueId でも
+  `AlreadyCommittedSameOperation` にまとまります。異なるコマンドが同じ payload を持つと更新が黙って失われます。
+  一意の command/request id を **payload 内**に含め、再試行では同じ id を使ってください。
+- この経路は予約を取らず、タグアクターへの確認・通知も送りません。Grain のキャッシュ済み先頭は更新されず、
+  同じタグの通常コマンドを混在させると、そのキャッシュ済み先頭が古いままになる場合があります。
+- executor は `ConditionalAppend` と明示的な `ExpectedTagPositions`、またはコマンド単位の
+  `TagConsistencyFence = DeriveFromReservations` の併用を拒否します。global derived 設定だけでは拒否せず、
+  条件付き経路はその設定を迂回するため derived fence は適用されません。
+- イベントとタグ行は別コンテナでコミットします。先頭の読み取りがイベント claim より遅れ、同じキーの競合に
+  なる場合があります。安全に先へ進むには不足したタグ行の修復が必要です。元の操作を再試行して可視性のゲートを
+  完了させてください。[Cosmos タグ修復ゲート](13_common_issues.md#条件付きユニークキー追記-in-doubtキー再利用cosmos-タグ修復ゲート)参照。
+
+例では追記の前に head クエリが1つ加わります。再試行と可視性の修復で追加リクエストがあり得ます。
+これはコード上の経路のコストであり、ベンチマーク結果ではありません。汎用的な strict ワークロードには PostgreSQL を選んでください。
+
 ## PostgreSQL の耐久 multi-tag expected-position CAS — SEK-G40
 
 **バージョン: 10.19.0（minor）。** PostgreSQL は任意の
@@ -836,7 +902,17 @@ services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 `CommandExecutionOptions` overload はありません。非 Orleans executor では nullable な
 `CommandExecutionOptions.TagConsistencyFence` が使えます。null は global 設定を継承し、`Off` または
 `DeriveFromReservations` は上書きします。明示的な `ExpectedTagPositions` が導出に優先し、
-`ConditionalAppend` は変わりません。導出モードを既定にするかは未決定です。
+`ConditionalAppend` は別経路で global derived 設定を迂回します。明示的な fence オプションとの併用はできません
+（[暫定パターン](#cosmos-interim-tag-head-cas)参照）。導出モードを既定にするかは未決定です。
+
+**追加コスト（コード上の操作。実測ではありません）**。通常の型付き・シリアライズ済み書き込みと条件付き claim は、
+fence が Off でも canonical PostgreSQL head トランザクションを使います。タグごとの遅延
+`INSERT ... ON CONFLICT DO NOTHING`、`SELECT ... FOR UPDATE`、`MAX` クエリによる照合・修復
+（空 head の初期最大値の検索を含む）、イベント・タグの挿入、head の更新は既に実行されます。
+`DeriveFromReservations` は handler 前の executor の epoch 存在確認と、specification が enforcement を要求する
+場合のトランザクション前の store の epoch 存在確認を追加します。通常の強制検査コマンドでは、トランザクション外の
+クエリ往復が2回増え、期待先頭の比較とバッチ順序・位置の検証が加わります。head トランザクションがもう1つ
+増えるわけではありません。競合、照合時の修復、再試行によって追加処理があり得ます。以下の範囲と有効化の境界は適用されます。
 
 | 出力する整合性タグの予約バージョン | 導出する期待値 |
 |---|---|

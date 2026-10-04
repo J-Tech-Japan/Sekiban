@@ -92,7 +92,9 @@ services.AddSekibanDcbCosmosDbWithAspire();
 `Advance` to maintain a `{ id: "$head", pk: "{serviceId}|{tag}", serviceId, tag,
 documentType: "tagHead", position }` document in each tag partition. `position` is the largest
 SortableUniqueId written for that tag. Advance only maintains heads; it does not reject writes
-based on the head and provides no fence or epoch yet.
+based on the head. Nothing reads these heads for write enforcement. The Cosmos fence stops at `Advance`;
+no enforcing mode is planned. Leave `TagHeadMode` `Off` unless heads are wanted for diagnostics. For strict
+workloads, use PostgreSQL; see [fast and strict choices](13_common_issues.md#fast-and-strict-tag-consistency).
 
 Enable Advance only after **every reader has upgraded to SEK-G106 or later**, which excludes
 non-row documents. It requires `UseTransactionalBatchForTags = true` and
@@ -103,11 +105,10 @@ all chunks. Before fallback or later rows-only chunks, the writer confirms head 
 Missing heads bootstrap to max(existing top row, incoming maximum). Repair and sweep use the
 same rule and advance the head before creating a row.
 
-Cost: one extra operation per tag partition per write, with a bootstrap read and retry on the
-first write to a tag. Conflicts can require additional head requests. Heads can lag while older
+Cost: one extra operation per tag partition per write in the existing batch. A missing head on the
+first write adds a failed batch, a bootstrap query and a retry. Conflicts can require additional head requests. Heads can lag while older
 packages, Off instances (including repair/sweep), or the out-of-process export/import tool append
-rows. The export/import tool does not maintain heads. Drain those writers before any future
-enforcement rollout; an operator-set epoch belongs to a later slice. Legacy migration reduction
+rows. The export/import tool does not maintain heads. Legacy migration reduction
 preserves the event/tag pairs and does not maintain heads.
 
 ### Cosmos event-document size admission (opt-in)
@@ -804,6 +805,69 @@ The canonical use: N replicas boot and each tries to perform the same one-time m
 
 **One durable claim is the boundary.** The contract guarantees at most one durable claim per key; it does **not** make the migration's side effects exactly-once. If the migration itself performs external effects (writes to another system, sends notifications), gate those behind the winning claim through an outbox / idempotency layer — the claim tells you *who won*, not that the effect ran exactly once.
 
+<a id="cosmos-interim-tag-head-cas"></a>
+
+## Interim Cosmos pattern: unique key from tag and expected head
+
+Read the tag's current head first using `IEventStore.GetLatestTagAsync(tag)` (Cosmos queries tag rows, not `$head`).
+Use `LastSortedUniqueId`, with `""` for an empty tag, and derive the key before running the handler. The caller must
+build the event from state at that expected head. A read error is not an empty tag.
+Hash a JSON array of the exact tag string and expected head to avoid delimiter ambiguity:
+
+```csharp
+using System.Security.Cryptography;
+using System.Text.Json;
+using Sekiban.Dcb.Storage;
+
+static string TagHeadKey(string tag, string expectedHead) =>
+    "tag-head-v1:" + Convert.ToHexString(SHA256.HashData(
+        JsonSerializer.SerializeToUtf8Bytes(new[] { tag, expectedHead })));
+
+// eventStore: IEventStore; tag: ITag; singleEvent: SerializableEvent.
+// Read first; propagate errors instead of treating them as an empty head.
+var headResult = await eventStore.GetLatestTagAsync(tag);
+if (!headResult.IsSuccess) throw headResult.GetException();
+var expectedHead = headResult.GetValue().LastSortedUniqueId; // "" when empty
+var key = TagHeadKey(tag.GetTag(), expectedHead);
+// Construct singleEvent from the state at expectedHead, with a unique request id in its payload.
+var result = await ((IConditionalEventStore)eventStore).AppendIfUniqueAsync(
+    new ConditionalAppendRequest(key, singleEvent));
+```
+
+The non-empty ASCII key satisfies `OperationFingerprint.NormalizeKey` (trim, NFC, at most 512 UTF-8 bytes).
+ServiceId is already included by `ConditionalAppendIdentity.DeriveEventId`; use the same service scope for reading and writing.
+All writers must use this exact derivation. Under that rule, this is a compare-and-set on `(tag, head)`: different
+operations at the same head compete for one durable event identity. One gets `Appended`; a different payload gets
+`ResultBox.Error` with `KeyReuseConflictException`. The successor uses the winner's `WinnerSortableUniqueId` as its
+expected head, yielding a new key. This is cooperating-writer CAS, not a provider-side comparison against the current head.
+
+The command entry point is the `GeneralSekibanExecutor.ExecuteAsync` overload taking `CommandExecutionOptions`, with
+`ConditionalAppend = new ConditionalAppendSpecification(key)`. The key must be supplied before the handler runs.
+Alternatively, use `IConditionalEventStore.AppendIfUniqueAsync` directly as above.
+Both `OrleansDcbExecutor` facades implement neither `IConditionalCommandExecutor` nor
+`ISerializedConditionalSekibanDcbExecutor` and have no conditional overload. An Orleans host can call its Cosmos store
+directly, or separately construct `GeneralSekibanExecutor(eventStore, orleansActorAccessor, domainTypes)` using the public
+`OrleansActorObjectAccessor`; this is a host-owned route, not an option on the Orleans executor.
+
+Limits:
+
+- One event and one fenced tag. Other event tags do not gain a head fence from this key.
+- Unconditional writers bypass the key; do not mix them into the protected stream.
+- Identical event type, canonical payload and tags under the same key alias to `AlreadyCommittedSameOperation`, even
+  with new EventId/SortableUniqueId values. Distinct commands with identical payloads would silently lose an update;
+  carry a unique command/request id **inside the payload**, stable on retry.
+- This path takes no reservation and sends no tag-actor confirmation or notification. Cached grain heads are not
+  refreshed by it; mixing ordinary commands on the same tag can leave their cached heads stale.
+- The executor rejects `ConditionalAppend` combined with explicit `ExpectedTagPositions` or a per-command
+  `TagConsistencyFence = DeriveFromReservations`. A global derived setting alone does not reject conditional append;
+  the conditional path bypasses it and receives no derived fence.
+- Events and tag rows commit in separate containers. A head read can lag the event claim, causing a same-key conflict.
+  Missing tag rows need repair before progressing safely; retry the original operation to complete its visibility gate.
+  See [Cosmos tag-repair gate](13_common_issues.md#conditional-unique-key-append-in-doubt-key-reuse-and-the-cosmos-tag-repair-gate).
+
+The sample adds a head query before append; retries and visibility repair can add requests. These are code-path costs,
+not benchmark results. For general strict workloads, choose PostgreSQL instead.
+
 ## PostgreSQL durable multi-tag expected-position CAS — SEK-G40
 
 **Version: 10.19.0 (minor).** PostgreSQL now offers the optional `WriteConditionKind.ExpectedTagPosition`
@@ -830,7 +894,18 @@ Import `Sekiban.Dcb.TagConsistencyFence`. Orleans supports global mode only; it 
 `CommandExecutionOptions` overload. Non-Orleans executors also accept the nullable per-command
 `CommandExecutionOptions.TagConsistencyFence` selector: null inherits the global mode, and `Off` or
 `DeriveFromReservations` overrides it. Explicit `ExpectedTagPositions` takes precedence over derivation;
-`ConditionalAppend` is unchanged. Making the derived mode the default has not been decided.
+`ConditionalAppend` uses a separate path, bypassing the global derived setting; explicit fence options cannot
+be combined with it (see the [interim pattern](#cosmos-interim-tag-head-cas)). Making the derived mode the default has not been decided.
+
+**Incremental cost (code operations, not measurements).** Ordinary typed and serialized writes and conditional
+claims already use the canonical PostgreSQL head transaction with the fence off: per-tag lazy
+`INSERT ... ON CONFLICT DO NOTHING`, `SELECT ... FOR UPDATE`, reconciliation with a `MAX` query (including initial
+maximum lookup for an empty head), event/tag inserts and head advancement. Turning on `DeriveFromReservations`
+adds the executor's epoch existence query before the handler and, when the specification requires enforcement,
+a second store-side epoch existence query before the transaction. The usual enforcing command therefore adds two
+query round trips outside the transaction, plus expected-head comparisons and strict batch/position validation.
+It does not add a second head transaction. Contention, reconciliation repairs and retries can add work.
+The scope and enablement boundaries below still apply.
 
 | Reservation version for an emitted consistency tag | Derived expectation |
 |---|---|

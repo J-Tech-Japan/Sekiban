@@ -396,24 +396,52 @@ G18 + G19 + G20 です。
 タグ（`""`、AssertEmpty）を区別しました。非空バージョンは引き続き ExactMatch です。
 [3状態の予約セマンティクス](03_aggregate_command_events.md#3状態の予約セマンティクス-sek-g19--sek-g30-10110)参照。
 
-**保証境界**。予約は1つの `TagConsistentGrain` 活性化内で競合する書き込みを直列化しますが、単一クラスタ内でも
-厳密な保証ではありません。Orleans 10.3.1 の既定ディレクトリでは、メンバーシップの変動時や、ネットワーク分断された
-サイロが自身の死亡判定をまだ認識していない間に、同じ Grain の2つの活性化が一時的に共存し得ます。予約ロックと
-キャッシュ済みタグ先頭は活性化ごとに独立しているため、両方が予約して追記できてしまいます。独立したクラスタも
-アクターを介して協調せず、それぞれ expect-empty で予約し、重複した作成を追記し得ます。
-[Grain ディレクトリと重複活性化](10_orleans_setup.md#grain-ディレクトリと重複活性化)を参照してください。
+<a id="fast-and-strict-tag-consistency"></a>
 
-厳密な保証にはストレージ層のフェンスが必要です。同じ冪等性キーを使う単一イベントの一度限りの作成には
-[条件付きユニーク追記（G15/G16）](11_storage_providers.md#条件付きユニークキー追記--sek-g15)、タグの正確なバージョンには
-PostgreSQL のオプトイン機能 [`ExpectedTagPositions`（SEK-G40）](11_storage_providers.md#postgresql-の耐久-multi-tag-expected-position-cas--sek-g40)
-または予約入力を自動導出する [derived fence](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions)
-を使ってください（Orleans は global mode のみ）。両方とも enablement epoch と全 writer のプロトコルが必要で、
-未読の出力タグはフェンスされません。どちらも既定の書き込み経路で自動的に有効には
-なりません。Cosmos DB、DynamoDB、SQLite が現在持つフェンスは単一イベントのユニークキーのみで、
-期待するタグ先頭の検査はありません。通常の `InMemoryEventStore` は条件付き追記を拒否します（`ConditionNotSupportedException`）。
-テスト用の `InMemoryConditionalEventStore` は実装していますが、その claim はインスタンス内かつ揮発的なので、
-silo プロセスをまたぐ保証にはなりません。Cosmos のタグ先頭フェンスは設計中です（SEK-G101）。永続化された重複イベントの
-マルチプロジェクションによる収束（SEK-G18）は、重複作成に対する一意性保証にはなりません。
+### fast と strict のタグ整合性を選ぶ
+
+予約は1つの `TagConsistentGrain` 活性化内の書き込みを直列化します。Orleans の既定ディレクトリは結果整合で、
+公式文書は、クラスタが不安定な時には時折重複活性化を許容すると説明しています。
+Microsoft はまず既定ディレクトリを使うことを推奨しています。発生確率は公開されていません。
+`AddDistributedGrainDirectory()` は Orleans 10.0 から利用できるオプトインのプレビュー機能です。
+公式文書は、クラスタが不安定な時でも重複した Grain の活性化を防ぐと説明しています。
+[Orleans grain directory](https://learn.microsoft.com/en-us/dotnet/orleans/host/grain-directory)を参照してください。
+
+分断などで誤って死亡判定されたサイロも、メンバーシップテーブルから自身の状態を読むまでは動作を続けます。
+公式文書によると、状態を認識してから自身のプロセスを終了します。
+[Cluster management in Orleans](https://learn.microsoft.com/en-us/dotnet/orleans/implementation/cluster-management)参照。
+ここから、強整合ディレクトリは競合する書き込みの確率を下げますが、そのサイロで既に実行中のコマンドを
+取り消せないと推論できます。Sekiban の予約ロックとキャッシュ済み先頭は活性化ごとに独立しているため、
+両方が同じ先頭で予約して追記し得ます。独立したクラスタの予約も協調しません。
+
+- **Fast:** Orleans を信頼し、導出するストレージフェンスを `Off` にします。デプロイ、スケール変更、クラッシュ、
+  長い停止、分断などのメンバーシップ変動時には、まれに古い状態からの書き込みを受け入れ得ます。
+  ドメインで補償できる場合に選んでください。
+- **Strict:** PostgreSQL の `DeriveFromReservations` を使います。文書化された境界内で古い状態からの書き込みを
+  拒否します。enablement epoch の準備と全 writer のプロトコル遵守が必要です。未読の出力タグと非整合性タグは
+  フェンスされません。外部の副作用を exactly-once にしたり、誤りが起きないと保証したりするものではありません。
+
+| Provider | Fast / 通常の書き込み | ストレージの保護と Orleans からの到達経路 |
+|---|---|---|
+| PostgreSQL | 予約。canonical head の維持も実行 | 永続的な複数タグの expected-position CAS と derived fence。Orleans は global derived mode のみ |
+| Cosmos DB | 予約。診断用 head が不要なら `TagHeadMode.Off` を推奨 | `Advance` は head の維持のみ。単一イベントのユニークキー追記は別途 General executor または store を使う。Orleans executor のオプションでは使えない |
+| DynamoDB | 予約 | 単一イベントのユニークキー追記。expected-position fence と Orleans の条件付き overload はない |
+| SQLite | 予約 | 単一イベントのユニークキー追記。expected-position fence と Orleans の条件付き overload はない |
+| InMemory | 予約。状態は揮発性 | 通常の `InMemoryEventStore` は条件付き追記に非対応。テスト用 `InMemoryConditionalEventStore` の claim はインスタンス内かつ揮発的 |
+
+Cosmos のフェンスは `Advance` までです。書き込みを強制的に検査するモードの予定はありません。
+strict なワークロードには PostgreSQL を使ってください。Cosmos のイベントとタグは別コンテナにあり、
+両方にまたがるトランザクションがありません。提案されていた enforcement（SEK-G109/G110/G111）は撤回されました。
+[Cosmos の暫定ユニークキーパターン](11_storage_providers.md#cosmos-interim-tag-head-cas)は、同じ規約を守る
+単一イベント writer と1つのフェンスタグに限定され、Orleans の汎用的な strict タグ整合性ではありません。
+
+ここでのコストはコード上の操作であり、性能の実測ではありません。PostgreSQL は fence が Off でも head の
+挿入、ロック、照合・修復、更新を行います。derived fence は別の head トランザクションではなく、epoch の
+存在確認クエリと比較・検証を追加します。Cosmos `Advance` はタグパーティションごとに既存バッチへ1操作を
+追加します。head がない場合は失敗バッチ、初期化クエリ、再試行が加わり、競合時にも追加リクエストがあり得ます。
+[derived fence のコストと境界](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions)と
+[Cosmos head の維持](11_storage_providers.md#cosmos-タグ-head-の維持オプトイン)を参照してください。
+永続化された重複イベントのプロジェクション収束は、作成の一意性を保証しません。
 
 **動作変更**: 10.8.0 から、同じ活性化が処理する競合した AssertEmpty の作成では、一方が整合性エラーになります。
 G18 + G19 + G20 のリリースゲートは、収束、単一活性化内の初回書き込み検査、チェックポイント CAS を対象とし、
