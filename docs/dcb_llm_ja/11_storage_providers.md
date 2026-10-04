@@ -68,9 +68,9 @@ Cosmos の書き込みはベストエフォート トランザクションです
 `Advance` を指定すると、各タグのパーティションに `{ id: "$head", pk: "{serviceId}|{tag}",
 serviceId, tag, documentType: "tagHead", position }` を保存し、`position` にそのタグへ書いた
 最大の SortableUniqueId を維持します。Advance は head を維持するだけで、head に基づく
-書き込み拒否、フェンス、epoch は提供しません。書き込みの enforcement にこの head を読む経路はありません。
+書き込み拒否は行いません。書き込みの enforcement にこの head を読む経路はありません。
 Cosmos のフェンスは `Advance` までで、強制検査モードの予定はありません。診断用 head が必要な場合以外は
-`TagHeadMode` を `Off` にしてください。strict なワークロードは PostgreSQL を使ってください。
+`TagHeadMode` を `Off` にしてください。strict なワークロードには PostgreSQL を使ってください。
 [fast と strict の選択](13_common_issues.md#fast-and-strict-tag-consistency)も参照してください。
 
 有効化前に **すべての reader を SEK-G106 以降へ更新**してください。この reader は行以外の
@@ -82,7 +82,8 @@ Cosmos のフェンスは `Advance` までで、強制検査モードの予定�
 大きい方で初期化します。repair と sweep も同じ規則で、行作成前に head を進めます。
 
 コストはタグパーティションごとの書き込みにつき、既存バッチへ追加 1 操作です。初回に head が
-なければ失敗バッチ、初期化クエリ、再試行が加わります。競合時は追加の head リクエストが必要になる場合があります。
+なければ失敗バッチ、初期化クエリ、再試行が加わります。head が既に新しい最大値以上で Patch が
+412 を返した場合は、行だけのバッチをもう1回実行します。その他の競合では追加の head リクエストが必要になる場合があります。
 古いパッケージ、Off のインスタンス（repair/sweep を含む）、外部 export/import ツールが
 行を追加している間は head が真の最大値より遅れることがあります。export/import ツールは
 head を維持しません。旧形式の migration reduction は
@@ -836,13 +837,16 @@ if (!headResult.IsSuccess) throw headResult.GetException();
 var expectedHead = headResult.GetValue().LastSortedUniqueId; // "" when empty
 var key = TagHeadKey(tag.GetTag(), expectedHead);
 // Construct singleEvent from the state at expectedHead, with a unique request id in its payload.
+// Allocate its position above expectedHead and reject a stale/equal position BEFORE consuming the key.
+if (StringComparer.Ordinal.Compare(singleEvent.SortableUniqueIdValue, expectedHead) <= 0)
+    throw new InvalidOperationException("The event position must be strictly greater than expectedHead.");
 var result = await ((IConditionalEventStore)eventStore).AppendIfUniqueAsync(
     new ConditionalAppendRequest(key, singleEvent));
 ```
 
 空でない ASCII キーは `OperationFingerprint.NormalizeKey` の制約（trim、NFC、UTF-8 で512バイト以下）を満たします。
 ServiceId は `ConditionalAppendIdentity.DeriveEventId` に既に含まれます。読み書きは同じサービス範囲で行ってください。
-全 writer がこの同じ導出を使う場合に限り、`(tag, head)` の compare-and-set になります。
+全 writer がこの同じ導出を使い、以下の位置の前提条件を満たす場合に限り、`(tag, head)` の compare-and-set になります。
 同じ先頭で異なる操作が1つの永続イベント ID を奪い合い、一方が `Appended`、異なる payload の側は
 `KeyReuseConflictException` を持つ `ResultBox.Error` になります。次の書き込みは勝者の `WinnerSortableUniqueId` を
 期待先頭として新しいキーを作ります。これは協調する writer 間の CAS であり、provider が現在の head と比較するものではありません。
@@ -853,11 +857,55 @@ ServiceId は `ConditionalAppendIdentity.DeriveEventId` に既に含まれます
 両方の `OrleansDcbExecutor` facade は `IConditionalCommandExecutor` も
 `ISerializedConditionalSekibanDcbExecutor` も実装せず、条件付き overload はありません。
 Orleans ホストは Cosmos store を直接呼ぶか、公開の `OrleansActorObjectAccessor` を使って別途
-`GeneralSekibanExecutor(eventStore, orleansActorAccessor, domainTypes)` を構築できます。
-ホストが用意する別経路であり、Orleans executor のオプションではありません。
+以下の overload で executor を構築できます（両方の General facade にあります）。
+
+```csharp
+var generator = new MonotonicSortableUniqueIdGenerator(); // Sekiban.Dcb.Common
+var seedCoordinator = new SortableUniqueIdSeedCoordinator(generator); // Sekiban.Dcb.Actors
+var executor = new GeneralSekibanExecutor(
+    eventStore, orleansActorAccessor, domainTypes,
+    eventPublisher: null, executedUserProvider: null,
+    sortableUniqueIdGenerator: generator,
+    sortableUniqueIdSeedCoordinator: seedCoordinator,
+    serviceIdProvider: serviceIdProvider);
+```
+
+これらのオブジェクトはホストごとに1回作り、再利用してください。
+store と accessor が使う**同じ `IServiceIdProvider`** を渡してください。3 引数のコンストラクタは
+`DefaultServiceIdProvider` を使うため、Orleans の ServiceId をカスタマイズしている場合は store の seed を
+異なるサービスキーでキャッシュし、別サービスの完了済み seed を再利用して、このサービスの永続先頭を
+読まない可能性があります。accessor も Grain キーに ServiceId を使います。
+これはホストが用意する別経路であり、Orleans executor のオプションではありません。
+
+**毎回の試行に必要な位置の前提条件:** 追記するイベントの SortableUniqueId は、ordinal 順で
+**`expectedHead` より厳密に大きい**必要があります。`IConditionalEventStore.AppendIfUniqueAsync` を直接
+呼ぶ場合は、その条件を満たす id でイベントを作り、例のように追記前に検査してください。先頭を読む前に
+生成した id や、別 writer より時計が遅れているホストの id は、この条件を満たさない場合があります。
+Cosmos はキーに含まれる先頭とイベント位置を比較しません（`Advance` モードでも同様です）。
+
+`GeneralSekibanExecutor` の `ConditionalAppend` 経路では、executor が handler の後に id を生成します。
+既定の monotonic generator はプロセス内で単調に進み、coordinator はサービス全体の永続イベントの最大位置を
+**seed 成功後は coordinator ごとに正規化 ServiceId あたり1回だけ**読みます（失敗した seed は再試行可能です）。
+従来のコンストラクタはプロセス内でその coordinator を共有します。新しく観測したタグ先頭ごとに reseed せず、
+生成した id と呼び出し側が読んだ先頭も比較しません。別ホストの後続書き込みがローカルの下限を超える場合があります。
+呼び出し側は **毎回**の `ExecuteAsync` の前に、注入した generator がその試行の `expectedHead` より大きい id を
+生成することを保証してください。上記の `MonotonicSortableUniqueIdGenerator` では、空でない先頭を
+`SortableUniqueId.TryParse` で検証し、`new SortableUniqueId(expectedHead).GetDateTime().Ticks` で ticks を取得して、
+実行前に `generator.Seed(ticks)` を呼びます。次の生成は時計の遅れによらずその ticks を超えます。
+不正な先頭は拒否し、ticks を使い切った場合も書き込まず失敗させてください。coordinator と executor には
+同じ generator を渡します。この試行ごとの生成保証を用意できない場合は、追記前に検査する直接経路を使ってください。
+executor のレシートを後から検査しても、キーの消費を防ぐには遅すぎます。
 
 制限:
 
+- `expectedHead` 以下の位置でも受理され、`key(tag, expectedHead)` が消費される一方で、
+  `GetLatestTagAsync` は元の先頭を返し続ける場合があります。以後の異なる操作は消費済みの同じキーを導出して
+  `KeyReuseConflictException` になり、このパターンは進めなくなります。同一操作の再試行は元のレシートを返すため、
+  その位置を置き換えられません。タグ行の修復や `Advance` もこの順序の誤りを解消しません。
+  このパターンの自動復旧や claim をリセットする API はありません。運用者が復旧するには、受理済みイベントを
+  照合し、writer を停止してから、元の先頭を超える妥当なイベントで意図的にタグを進める必要があります。
+  無条件の `WriteSerializableEventsAsync` API で実行できますが、このパターンの保護を迂回します。
+  新しい先頭が見えることを確認してから再開してください。任意の新しいキーを選ぶだけでは共有 CAS ルールを放棄します。
 - イベントは1つ、フェンスするタグも1つです。他の出力タグの先頭はこのキーでは保護されません。
 - 無条件 writer はキーを迂回します。保護するストリームに混在させないでください。
 - 同じキーでイベント型、正規化 payload、タグが同じなら、新しい EventId/SortableUniqueId でも

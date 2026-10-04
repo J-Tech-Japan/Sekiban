@@ -106,7 +106,8 @@ Missing heads bootstrap to max(existing top row, incoming maximum). Repair and s
 same rule and advance the head before creating a row.
 
 Cost: one extra operation per tag partition per write in the existing batch. A missing head on the
-first write adds a failed batch, a bootstrap query and a retry. Conflicts can require additional head requests. Heads can lag while older
+first write adds a failed batch, a bootstrap query and a retry. If the head patch returns 412 because the head
+is already at or above the incoming maximum, the store executes another rows-only batch. Other conflicts can require additional head requests. Heads can lag while older
 packages, Off instances (including repair/sweep), or the out-of-process export/import tool append
 rows. The export/import tool does not maintain heads. Legacy migration reduction
 preserves the event/tag pairs and does not maintain heads.
@@ -830,14 +831,17 @@ if (!headResult.IsSuccess) throw headResult.GetException();
 var expectedHead = headResult.GetValue().LastSortedUniqueId; // "" when empty
 var key = TagHeadKey(tag.GetTag(), expectedHead);
 // Construct singleEvent from the state at expectedHead, with a unique request id in its payload.
+// Allocate its position above expectedHead and reject a stale/equal position BEFORE consuming the key.
+if (StringComparer.Ordinal.Compare(singleEvent.SortableUniqueIdValue, expectedHead) <= 0)
+    throw new InvalidOperationException("The event position must be strictly greater than expectedHead.");
 var result = await ((IConditionalEventStore)eventStore).AppendIfUniqueAsync(
     new ConditionalAppendRequest(key, singleEvent));
 ```
 
 The non-empty ASCII key satisfies `OperationFingerprint.NormalizeKey` (trim, NFC, at most 512 UTF-8 bytes).
 ServiceId is already included by `ConditionalAppendIdentity.DeriveEventId`; use the same service scope for reading and writing.
-All writers must use this exact derivation. Under that rule, this is a compare-and-set on `(tag, head)`: different
-operations at the same head compete for one durable event identity. One gets `Appended`; a different payload gets
+All writers must use this exact derivation and satisfy the position precondition below. Under those rules, this is a
+compare-and-set on `(tag, head)`: different operations at the same head compete for one durable event identity. One gets `Appended`; a different payload gets
 `ResultBox.Error` with `KeyReuseConflictException`. The successor uses the winner's `WinnerSortableUniqueId` as its
 expected head, yielding a new key. This is cooperating-writer CAS, not a provider-side comparison against the current head.
 
@@ -846,11 +850,54 @@ The command entry point is the `GeneralSekibanExecutor.ExecuteAsync` overload ta
 Alternatively, use `IConditionalEventStore.AppendIfUniqueAsync` directly as above.
 Both `OrleansDcbExecutor` facades implement neither `IConditionalCommandExecutor` nor
 `ISerializedConditionalSekibanDcbExecutor` and have no conditional overload. An Orleans host can call its Cosmos store
-directly, or separately construct `GeneralSekibanExecutor(eventStore, orleansActorAccessor, domainTypes)` using the public
-`OrleansActorObjectAccessor`; this is a host-owned route, not an option on the Orleans executor.
+directly, or separately construct an executor using the public `OrleansActorObjectAccessor` and this overload
+(available on both General facades):
+
+```csharp
+var generator = new MonotonicSortableUniqueIdGenerator(); // Sekiban.Dcb.Common
+var seedCoordinator = new SortableUniqueIdSeedCoordinator(generator); // Sekiban.Dcb.Actors
+var executor = new GeneralSekibanExecutor(
+    eventStore, orleansActorAccessor, domainTypes,
+    eventPublisher: null, executedUserProvider: null,
+    sortableUniqueIdGenerator: generator,
+    sortableUniqueIdSeedCoordinator: seedCoordinator,
+    serviceIdProvider: serviceIdProvider);
+```
+
+Create these objects once per host and reuse them. Pass the **same `IServiceIdProvider`** used by the store and accessor. The three-argument constructor uses
+`DefaultServiceIdProvider`; with a custom Orleans ServiceId it would cache the store's seed under a different service
+key, potentially reusing another service's completed seed instead of reading this service's persisted head.
+The accessor also uses ServiceId for grain keys. This is a host-owned route, not an option on the Orleans executor.
+
+**Position precondition, on every attempt:** the appended event's SortableUniqueId must be **strictly greater than
+`expectedHead`** in ordinal order. With direct `IConditionalEventStore.AppendIfUniqueAsync`, build the event with such
+an id and check it before appending, as in the sample. An id allocated before the head read, or on a host whose clock
+lags another writer, can violate this precondition; Cosmos does not compare the event position with the head encoded
+in the key (including in `Advance` mode).
+
+With `GeneralSekibanExecutor` and `ConditionalAppend`, the executor allocates the id after the handler. Its default
+monotonic generator advances within the process, and its coordinator seeds from the service-wide persisted event
+maximum **once per normalized service ID per coordinator after a successful seed** (failed seeds can retry).
+The legacy constructor shares that coordinator in the process. It neither reseeds from each newly observed tag head
+nor compares the allocated id with the head the caller read; a later write on another host can exceed its local floor.
+Before **each** `ExecuteAsync` attempt, the caller must ensure the injected generator will allocate above that attempt's
+`expectedHead`. For the `MonotonicSortableUniqueIdGenerator` above, validate a non-empty head with
+`SortableUniqueId.TryParse`, obtain its ticks with `new SortableUniqueId(expectedHead).GetDateTime().Ticks`, and call
+`generator.Seed(ticks)` before execution. Its next allocation advances beyond those ticks, regardless of clock lag;
+reject malformed heads and fail closed if ticks are exhausted. Use the same generator in the coordinator and executor.
+If this per-attempt allocation guarantee cannot be supplied, use the direct route with the pre-append check; checking
+an executor receipt afterward is too late to prevent consuming the key.
 
 Limits:
 
+- A position at or below `expectedHead` can be accepted and consume `key(tag, expectedHead)` while
+  `GetLatestTagAsync` still returns the old head. Later distinct operations derive the already consumed key and get
+  `KeyReuseConflictException`, so this pattern is stuck. A same-operation retry returns the original receipt and cannot
+  replace its position; tag-row repair and `Advance` do not solve this ordering error. There is no automatic recovery
+  or claim-reset API for this pattern. Operator recovery must reconcile the accepted event and quiesce writers before
+  deliberately advancing the tag with a valid event above the old head (the unconditional
+  `WriteSerializableEventsAsync` API permits that, but bypasses this pattern's protection). Resume only after verifying
+  the new visible head; choosing an arbitrary new key alone abandons the shared CAS rule.
 - One event and one fenced tag. Other event tags do not gain a head fence from this key.
 - Unconditional writers bypass the key; do not mix them into the protected stream.
 - Identical event type, canonical payload and tags under the same key alias to `AlreadyCommittedSameOperation`, even
