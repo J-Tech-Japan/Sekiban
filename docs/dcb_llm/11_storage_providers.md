@@ -86,46 +86,6 @@ services.AddSekibanDcbCosmosDbWithAspire();
 // falls back to ConnectionStrings:SekibanDcbCosmos if Aspire client not found
 ```
 
-### Recording observed Cosmos tag positions (opt-in)
-
-`CosmosDbEventStoreOptions.RecordObservedTagPositions` defaults to `false`. When enabled, ordinary command writes record the command's original consistency-tag observations in `observed`, an array aligned with `tags`: null means not read, `""` means read empty, and otherwise the value is a 30-digit position. Invalid nonempty positions fail the write before any event is stored. Explicit consistency-tag positions override the state read. Unique-key writes and expected-position fence writes do not record observations.
-
-Every event with any non-null observation also stores `observedWrite`, one GUID in N format shared by that write. Multiple events keep the original observation without chaining; after a partial event failure, surviving events keep that observation and write id. A caller retry gets a new write id. Both properties are omitted when all observations are null, so an omitted `observed` cannot distinguish recording off from recording on with nothing observed. Off-mode documents retain their previous JSON shape.
-
-This only records evidence: nothing reads it yet, detection follows in SEK-G115, and the field prevents nothing. Readers, tag rows, repair and sweep retain their current behavior. `tools/MigrateDcbCosmosEventsTags` import rebuilds documents from selected fields and drops both properties; cold-event export writes `SerializableEvent` and also drops them. Future detection can therefore only examine hot Cosmos documents.
-
-Estimated compact JSON overhead is about **33 bytes per full position**, **3 bytes per empty position**, or **5 bytes per null entry**, plus about **65 bytes per document** for the property names and write id (including separators). The Cosmos event-document size gate always budgets the worst case when recording is on: 30 digits for every tag plus `observedWrite`, even when observations will be omitted or the write uses a unique key. Measurement reads the option from its `CosmosDbContext.Options`; standard DI shares the store's context. If supplying a context explicitly for measurement, use the same context/options as the store.
-
-The events container indexes every path by default, so the `observed` entries add a small write RU charge. When observation queries are unnecessary, add `/observed/[]/?` as an excluded indexing path (and `/observedWrite/?` likewise).
-
-Only command writes through the executor carry an observation. A direct store call (`WriteEventsAsync` or `WriteSerializableEventsAsync` on the event store) has none and records nothing, even when the option is on.
-
-### Cosmos tag head maintenance (opt-in)
-
-`CosmosDbEventStoreOptions.TagHeadMode` defaults to `CosmosTagHeadMode.Off`. Set it to
-`Advance` to maintain a `{ id: "$head", pk: "{serviceId}|{tag}", serviceId, tag,
-documentType: "tagHead", position }` document in each tag partition. `position` is the largest
-SortableUniqueId written for that tag. Advance only maintains heads; it does not reject writes
-based on the head. Nothing reads these heads for write enforcement. The Cosmos fence stops at `Advance`;
-no enforcing mode is planned. Leave `TagHeadMode` `Off` unless heads are wanted for diagnostics. For strict
-workloads, use PostgreSQL; see [fast and strict choices](13_common_issues.md#fast-and-strict-tag-consistency).
-
-Enable Advance only after **every reader has upgraded to SEK-G106 or later**, which excludes
-non-row documents. It requires `UseTransactionalBatchForTags = true` and
-`MaxBatchOperations >= 2`; invalid settings fail at construction and again when used. Batch
-sizes are clamped to 100 in both modes (Off still normalizes non-positive settings to 1).
-Advance reserves one operation and places the head in the first chunk with the maximum across
-all chunks. Before fallback or later rows-only chunks, the writer confirms head >= that maximum.
-Missing heads bootstrap to max(existing top row, incoming maximum). Repair and sweep use the
-same rule and advance the head before creating a row.
-
-Cost: one extra operation per tag partition per write in the existing batch. A missing head on the
-first write adds a failed batch, a bootstrap query and a retry. If the head patch returns 412 because the head
-is already at or above the incoming maximum, the store executes another rows-only batch. Other conflicts can require additional head requests. Heads can lag while older
-packages, Off instances (including repair/sweep), or the out-of-process export/import tool append
-rows. The export/import tool does not maintain heads. Legacy migration reduction
-preserves the event/tag pairs and does not maintain heads.
-
 ### Cosmos event-document size admission (opt-in)
 
 `AddSekibanDcbCosmosEventDocumentSizeGate()` adds a strict `StorageItem` policy with a default per-event quota of
@@ -418,7 +378,6 @@ This section documents the actual atomicity guarantees of `IEventStore.WriteSeri
 
 ### Cosmos DB — current guarantee
 
-Cosmos tags-container readers ignore non-row documents carrying `documentType`. Before enabling a later release that writes tag-head documents, upgrade every reader to this reader-exclusion release or newer.
 
 `CosmosDbEventStore.WriteSerializableEventsAsync` performs a two-phase write with **no transaction spanning the two phases**:
 
@@ -820,128 +779,12 @@ The canonical use: N replicas boot and each tries to perform the same one-time m
 
 **One durable claim is the boundary.** The contract guarantees at most one durable claim per key; it does **not** make the migration's side effects exactly-once. If the migration itself performs external effects (writes to another system, sends notifications), gate those behind the winning claim through an outbox / idempotency layer — the claim tells you *who won*, not that the effect ran exactly once.
 
-<a id="cosmos-interim-tag-head-cas"></a>
-
-## Interim Cosmos pattern: unique key from tag and expected head
-
-Read the tag's current head first using `IEventStore.GetLatestTagAsync(tag)` (Cosmos queries tag rows, not `$head`).
-Use `LastSortedUniqueId`, with `""` for an empty tag, and derive the key before running the handler. The caller must
-build the event from state at that expected head. A read error is not an empty tag.
-Hash a JSON array of the exact tag string and expected head to avoid delimiter ambiguity:
-
-```csharp
-using System.Security.Cryptography;
-using System.Text.Json;
-using Sekiban.Dcb.Storage;
-
-static string TagHeadKey(string tag, string expectedHead) =>
-    "tag-head-v1:" + Convert.ToHexString(SHA256.HashData(
-        JsonSerializer.SerializeToUtf8Bytes(new[] { tag, expectedHead })));
-
-// eventStore: IEventStore; tag: ITag; singleEvent: SerializableEvent.
-// Read first; propagate errors instead of treating them as an empty head.
-var headResult = await eventStore.GetLatestTagAsync(tag);
-if (!headResult.IsSuccess) throw headResult.GetException();
-var expectedHead = headResult.GetValue().LastSortedUniqueId; // "" when empty
-var key = TagHeadKey(tag.GetTag(), expectedHead);
-// Construct singleEvent from the state at expectedHead, with a unique request id in its payload.
-// Allocate its position above expectedHead and reject a stale/equal position BEFORE consuming the key.
-if (StringComparer.Ordinal.Compare(singleEvent.SortableUniqueIdValue, expectedHead) <= 0)
-    throw new InvalidOperationException("The event position must be strictly greater than expectedHead.");
-var result = await ((IConditionalEventStore)eventStore).AppendIfUniqueAsync(
-    new ConditionalAppendRequest(key, singleEvent));
-```
-
-The non-empty ASCII key satisfies `OperationFingerprint.NormalizeKey` (trim, NFC, at most 512 UTF-8 bytes).
-ServiceId is already included by `ConditionalAppendIdentity.DeriveEventId`; use the same service scope for reading and writing.
-All writers must use this exact derivation and satisfy the position precondition below. Under those rules, this is a
-compare-and-set on `(tag, head)`: different operations at the same head compete for one durable event identity. One gets `Appended`; a different payload gets
-`ResultBox.Error` with `KeyReuseConflictException`. The successor uses the winner's `WinnerSortableUniqueId` as its
-expected head, yielding a new key. This is cooperating-writer CAS, not a provider-side comparison against the current head.
-
-The command entry point is the `GeneralSekibanExecutor.ExecuteAsync` overload taking `CommandExecutionOptions`, with
-`ConditionalAppend = new ConditionalAppendSpecification(key)`. The key must be supplied before the handler runs.
-Alternatively, use `IConditionalEventStore.AppendIfUniqueAsync` directly as above.
-Both `OrleansDcbExecutor` facades explicitly implement `IConditionalCommandExecutor` for execution options,
-but always reject `ConditionalAppend` with `ConditionNotSupportedException` before the handler or any actor/store call,
-including when combined with a fence option. Feature detection means "accepts execution options", not unique-key support.
-They still do not implement `ISerializedConditionalSekibanDcbExecutor`. An Orleans host can call its Cosmos store
-directly, or separately construct an executor using the public `OrleansActorObjectAccessor` and this overload
-(available on both General facades):
-
-```csharp
-var generator = new MonotonicSortableUniqueIdGenerator(); // Sekiban.Dcb.Common
-var seedCoordinator = new SortableUniqueIdSeedCoordinator(generator); // Sekiban.Dcb.Actors
-var executor = new GeneralSekibanExecutor(
-    eventStore, orleansActorAccessor, domainTypes,
-    eventPublisher: null, executedUserProvider: null,
-    sortableUniqueIdGenerator: generator,
-    sortableUniqueIdSeedCoordinator: seedCoordinator,
-    serviceIdProvider: serviceIdProvider);
-```
-
-Create these objects once per host and reuse them. Pass the **same `IServiceIdProvider`** used by the store and accessor. The three-argument constructor uses
-`DefaultServiceIdProvider`; with a custom Orleans ServiceId it would cache the store's seed under a different service
-key, potentially reusing another service's completed seed instead of reading this service's persisted head.
-The accessor also uses ServiceId for grain keys. This is a host-owned route, not an option on the Orleans executor.
-
-**Position precondition, on every attempt:** the appended event's SortableUniqueId must be **strictly greater than
-`expectedHead`** in ordinal order. With direct `IConditionalEventStore.AppendIfUniqueAsync`, build the event with such
-an id and check it before appending, as in the sample. An id allocated before the head read, or on a host whose clock
-lags another writer, can violate this precondition; Cosmos does not compare the event position with the head encoded
-in the key (including in `Advance` mode).
-
-With `GeneralSekibanExecutor` and `ConditionalAppend`, the executor allocates the id after the handler. Its default
-monotonic generator advances within the process, and its coordinator seeds from the service-wide persisted event
-maximum **once per normalized service ID per coordinator after a successful seed** (failed seeds can retry).
-The legacy constructor shares that coordinator in the process. The executor does not reread the store head per write.
-On ordinary typed and serialized commits it lifts the generator above the successfully reserved observations;
-on typed `ConditionalAppend` it lifts above the last positions of states read through tracked state access in the handler.
-Serialized conditional commits have no tracked states and remain unchanged. A head read directly from the store or
-through `GetTagLatestSortableUniqueIdAsync` is not tracked and supplies no floor to either unique-key path.
-For such an `expectedHead`, before **each** `ExecuteAsync` attempt the caller must ensure the injected generator will
-allocate above that attempt's head. For the `MonotonicSortableUniqueIdGenerator` above, validate a non-empty head with
-`SortableUniqueId.TryParse`, obtain its ticks with `new SortableUniqueId(expectedHead).GetDateTime().Ticks`, and call
-`generator.Seed(ticks)` before execution. Its next allocation advances beyond those ticks, regardless of clock lag;
-reject malformed heads and fail closed if ticks are exhausted. Use the same generator in the coordinator and executor.
-If this per-attempt allocation guarantee cannot be supplied, use the direct route with the pre-append check; checking
-an executor receipt afterward is too late to prevent consuming the key.
-
-Limits:
-
-- A position at or below `expectedHead` can be accepted and consume `key(tag, expectedHead)` while
-  `GetLatestTagAsync` still returns the old head. Later distinct operations derive the already consumed key and get
-  `KeyReuseConflictException`, so this pattern is stuck. A same-operation retry returns the original receipt and cannot
-  replace its position; tag-row repair and `Advance` do not solve this ordering error. There is no automatic recovery
-  or claim-reset API for this pattern. Operator recovery must reconcile the accepted event and quiesce writers before
-  deliberately advancing the tag with a valid event above the old head (the unconditional
-  `WriteSerializableEventsAsync` API permits that, but bypasses this pattern's protection). Resume only after verifying
-  the new visible head; choosing an arbitrary new key alone abandons the shared CAS rule.
-- One event and one fenced tag. Other event tags do not gain a head fence from this key.
-- Unconditional writers bypass the key; do not mix them into the protected stream.
-- Identical event type, canonical payload and tags under the same key alias to `AlreadyCommittedSameOperation`, even
-  with new EventId/SortableUniqueId values. Distinct commands with identical payloads would silently lose an update;
-  carry a unique command/request id **inside the payload**, stable on retry.
-- This path takes no reservation and sends no tag-actor confirmation or notification. Cached grain heads are not
-  refreshed by it; mixing ordinary commands on the same tag can leave their cached heads stale.
-- The executor rejects `ConditionalAppend` combined with explicit `ExpectedTagPositions` or a per-command
-  `TagConsistencyFence = DeriveFromReservations`. A global derived setting alone does not reject conditional append;
-  the conditional path bypasses it and receives no derived fence.
-- Events and tag rows commit in separate containers. A head read can lag the event claim, causing a same-key conflict.
-  Missing tag rows need repair before progressing safely; retry the original operation to complete its visibility gate.
-  See [Cosmos tag-repair gate](13_common_issues.md#conditional-unique-key-append-in-doubt-key-reuse-and-the-cosmos-tag-repair-gate).
-
-The sample adds a head query before append; retries and visibility repair can add requests. These are code-path costs,
-not benchmark results. For general strict workloads, choose PostgreSQL instead.
-
 ## PostgreSQL durable multi-tag expected-position CAS — SEK-G40
 
 **Version: 10.19.0 (minor).** PostgreSQL now offers the optional `WriteConditionKind.ExpectedTagPosition`
 capability. It is a durable DCB fence beneath Orleans reservations: it prevents a command that read stale consistency-tag
 heads from appending after a partitioned/retired writer has bypassed the in-memory reservation layer. It is **not** a
 replacement for reservations, and it does not make arbitrary external effects exactly-once.
-
-A store may declare enforcement limits through `ExpectedTagPositionLimits`; PostgreSQL declares none, and the executor rejects commands that exceed a store's limits before reserving.
 
 ### Derived fence (TagConsistencyFenceOptions)
 
@@ -975,7 +818,7 @@ if (executor is IConditionalCommandExecutor conditional)
 
 The Orleans executor always rejects `ConditionalAppend` with `ConditionNotSupportedException`, even when combined with
 fence options. Use the store-level `IConditionalEventStore.AppendIfUniqueAsync` API or a separate General executor for
-unique-key append (see the [interim pattern](#cosmos-interim-tag-head-cas)). On the General executor, conditional append
+unique-key append. On the General executor, conditional append
 uses a separate path, bypasses the global derived setting, and cannot be combined with explicit fence options.
 Making the derived mode the default has not been decided.
 

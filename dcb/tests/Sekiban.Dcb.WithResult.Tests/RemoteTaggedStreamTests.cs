@@ -148,22 +148,22 @@ public sealed class RemoteTaggedStreamTests
             null,
             null,
             new[] { P0, P1, P2, P3, P4 },
-            "SELECT c.eventId, c.documentType FROM c WHERE c.pk = @pk AND NOT IS_DEFINED(c.documentType) ORDER BY c.sortableUniqueId");
+            "SELECT c.eventId FROM c WHERE c.pk = @pk ORDER BY c.sortableUniqueId");
         await AssertBoundShapeAsync(
             new SortableUniqueId(P1),
             null,
             new[] { P2, P3, P4 },
-            "SELECT c.eventId, c.documentType FROM c WHERE c.pk = @pk AND NOT IS_DEFINED(c.documentType) AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId");
+            "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > @since ORDER BY c.sortableUniqueId");
         await AssertBoundShapeAsync(
             null,
             new SortableUniqueId(P3),
             new[] { P0, P1, P2, P3 },
-            "SELECT c.eventId, c.documentType FROM c WHERE c.pk = @pk AND NOT IS_DEFINED(c.documentType) AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId");
+            "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId");
         await AssertBoundShapeAsync(
             new SortableUniqueId(P1),
             new SortableUniqueId(P3),
             new[] { P2, P3 },
-            "SELECT c.eventId, c.documentType FROM c WHERE c.pk = @pk AND NOT IS_DEFINED(c.documentType) AND c.sortableUniqueId > @since AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId");
+            "SELECT c.eventId FROM c WHERE c.pk = @pk AND c.sortableUniqueId > @since AND c.sortableUniqueId <= @until ORDER BY c.sortableUniqueId");
 
         async Task AssertBoundShapeAsync(
             SortableUniqueId? since,

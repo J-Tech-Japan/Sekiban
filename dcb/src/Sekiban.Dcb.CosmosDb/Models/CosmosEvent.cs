@@ -58,14 +58,6 @@ public class CosmosEvent
     [JsonProperty("timestamp")]
     public DateTime Timestamp { get; set; }
 
-    /// <summary>Original command observations, aligned with Tags; omitted when all entries are null.</summary>
-    [JsonProperty("observed", NullValueHandling = NullValueHandling.Ignore)]
-    public IReadOnlyList<string?>? Observed { get; set; }
-
-    /// <summary>One store-generated GUID in N format per observed write.</summary>
-    [JsonProperty("observedWrite", NullValueHandling = NullValueHandling.Ignore)]
-    public string? ObservedWrite { get; set; }
-
     // Metadata fields
     /// <summary>
     ///     Causation identifier.

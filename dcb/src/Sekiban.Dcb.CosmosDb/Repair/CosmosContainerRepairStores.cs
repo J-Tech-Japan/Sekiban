@@ -1,7 +1,5 @@
 using Microsoft.Azure.Cosmos;
-using Newtonsoft.Json.Linq;
 using Sekiban.Dcb.CosmosDb.Models;
-using Sekiban.Dcb.CosmosDb.Tags;
 using System.Net;
 namespace Sekiban.Dcb.CosmosDb.Repair;
 
@@ -78,13 +76,7 @@ internal sealed class CosmosContainerRepairStore : ICosmosTagRepairStore
 {
     private readonly Container _container;
 
-    private readonly CosmosDbEventStoreOptions _options;
-    public CosmosContainerRepairStore(Container container, CosmosDbEventStoreOptions? options = null)
-    {
-        _container = container;
-        _options = options ?? new();
-        _options.ValidateTagHeadOptions();
-    }
+    public CosmosContainerRepairStore(Container container) => _container = container;
 
     public async Task<CosmosRepairRowLookup> ReadRowsForEventAsync(
         string partitionKey,
@@ -103,7 +95,7 @@ internal sealed class CosmosContainerRepairStore : ICosmosTagRepairStore
             MaxItemCount = maxRows + 1 // one over the cap, so overflow is detectable
         };
 
-        using var iterator = _container.GetItemQueryIterator<JObject>(query, requestOptions: requestOptions);
+        using var iterator = _container.GetItemQueryIterator<CosmosTag>(query, requestOptions: requestOptions);
 
         var rows = new List<CosmosTag>();
         var requestCharge = 0.0;
@@ -115,7 +107,7 @@ internal sealed class CosmosContainerRepairStore : ICosmosTagRepairStore
 
             // The correctness gate: canonical Guid comparison, client-side. Format and casing cannot change
             // the answer, and anything the prefilter over-returned is rejected here.
-            rows.AddRange(CosmosTagQueryFilters.ReadRows(response).Where(row => CosmosRepairRowQuery.IsRowForEvent(row, eventId)));
+            rows.AddRange(response.Where(row => CosmosRepairRowQuery.IsRowForEvent(row, eventId)));
         }
 
         if (rows.Count > maxRows)
@@ -131,23 +123,16 @@ internal sealed class CosmosContainerRepairStore : ICosmosTagRepairStore
         CosmosTag row,
         CancellationToken cancellationToken)
     {
-        _options.ValidateTagHeadOptions();
-        // Head maintenance is part of the repair's cost: its request charges are reported with the row create.
-        var headCharge = 0d;
-        if (_options.TagHeadMode == CosmosTagHeadMode.Advance)
-            await CosmosTagHead.AdvanceHeadAsync(
-                    _container, partitionKey, row, row.SortableUniqueId, cancellationToken, charge => headCharge += charge)
-                .ConfigureAwait(false);
         try
         {
             var response = await _container
                 .CreateItemAsync(row, new PartitionKey(partitionKey), cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            return (true, headCharge + response.RequestCharge);
+            return (true, response.RequestCharge);
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
         {
-            return (false, headCharge + ex.RequestCharge);
+            return (false, ex.RequestCharge);
         }
     }
 

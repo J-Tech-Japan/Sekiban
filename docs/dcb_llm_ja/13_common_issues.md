@@ -440,23 +440,18 @@ if (executor is IConditionalCommandExecutor conditional)
 | Provider | Fast / 通常の書き込み | ストレージの保護と Orleans からの到達経路 |
 |---|---|---|
 | PostgreSQL | 予約。canonical head の維持も実行 | 永続的な複数タグの expected-position CAS と derived fence。Orleans は global 設定と型付きコマンドごとの選択に対応 |
-| Cosmos DB | 予約。診断用 head が不要なら `TagHeadMode.Off` を推奨 | `Advance` は head の維持のみ。単一イベントのユニークキー追記は別途 General executor または store を使う。Orleans executor のオプションでは使えない |
+| Cosmos DB | 予約 | expected-position fence はなく、導入の予定もない。create-once 操作用の単一イベントのユニークキー追記は別途 General executor または store を使う。Orleans executor のオプションでは使えない |
 | DynamoDB | 予約 | 単一イベントのユニークキー追記。expected-position fence は非対応。Orleans の execution options はユニークキー条件を必ず拒否 |
 | SQLite | 予約 | 単一イベントのユニークキー追記。expected-position fence は非対応。Orleans の execution options はユニークキー条件を必ず拒否 |
 | InMemory | 予約。状態は揮発性 | 通常の `InMemoryEventStore` は条件付き追記に非対応。テスト用 `InMemoryConditionalEventStore` の claim はインスタンス内かつ揮発的 |
 
-Cosmos のフェンスは `Advance` までです。書き込みを強制的に検査するモードの予定はありません。
-strict なワークロードには PostgreSQL を使ってください。Cosmos のイベントとタグは別コンテナにあり、
-両方にまたがるトランザクションがありません。提案されていた enforcement（SEK-G109/G110/G111）は撤回されました。
-[Cosmos の暫定ユニークキーパターン](11_storage_providers.md#cosmos-interim-tag-head-cas)は、同じ規約を守る
-単一イベント writer と1つのフェンスタグに限定され、Orleans の汎用的な strict タグ整合性ではありません。
+Cosmos DB に expected-position fence はなく、導入の予定もありません。strict なワークロードには PostgreSQL を使ってください。
+Cosmos のイベントとタグは別コンテナにあり、両方にまたがるトランザクションがありません。
+create-once 操作には単一イベントのユニークキー追記を使えます。
 
 ここでのコストはコード上の操作であり、性能の実測ではありません。PostgreSQL は fence が Off でも head の
 挿入、ロック、照合・修復、更新を行います。derived fence は別の head トランザクションではなく、epoch の
-存在確認クエリと比較・検証を追加します。Cosmos `Advance` はタグパーティションごとに既存バッチへ1操作を
-追加します。head がない場合は失敗バッチ、初期化クエリ、再試行が加わり、競合時にも追加リクエストがあり得ます。
-[derived fence のコストと境界](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions)と
-[Cosmos head の維持](11_storage_providers.md#cosmos-タグ-head-の維持オプトイン)を参照してください。
+存在確認クエリと比較・検証を追加します。[derived fence のコストと境界](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions)を参照してください。
 永続化された重複イベントのプロジェクション収束は、作成の一意性を保証しません。
 
 **動作変更**: 10.8.0 から、同じ活性化が処理する競合した AssertEmpty の作成では、一方が整合性エラーになります。
@@ -788,8 +783,8 @@ ID を割り当てますが、予約は追加しません。
 
 予約する経路では、読んでも出力イベントに付けなかったタグ、非整合性タグ、複数タグ書き込みの未観測タグは
 対象外です。`GetTagLatestSortableUniqueIdAsync` または store から直接読んだ先頭は typed unique-key 経路でも
-追跡されません。この先頭を使う呼び出し側は [暫定 unique-key パターン](11_storage_providers.md) の説明どおり
-自ら seed または位置を検査する必要があります。serialized unique-key commit、他クラスタや旧バージョンの writer、
+追跡されません。この先頭を使う呼び出し側は自ら generator を seed するか割り当てた位置を検査し、
+イベント ID がその先頭を超えることを確かめる必要があります。serialized unique-key commit、他クラスタや旧バージョンの writer、
 保存済みの逆転イベントも対象外です。逆転イベントを含まないキャッシュ済み activation はこの変更では回復しません。
 導出 PostgreSQL フェンスは有効タグに残る逆転をエラーにする backstop です。
 

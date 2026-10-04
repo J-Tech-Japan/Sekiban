@@ -31,18 +31,13 @@ internal static class CosmosTagWriteStage
         ICosmosTagWriteFaultInjector? faultInjector = null,
         CancellationToken cancellationToken = default)
     {
-        options.ValidateTagHeadOptions();
-        var advance = options.TagHeadMode == CosmosTagHeadMode.Advance;
-        if (advance)
-            foreach (var source in sources) CosmosTagHead.ValidatePosition(source.SortableUniqueId);
         var results = new List<TagWriteResult>();
         if (sources.Count == 0)
         {
             return results;
         }
 
-        var useBatch = options.UseTransactionalBatchForTags;
-        var maxBatchOperations = Math.Clamp(options.MaxBatchOperations, 1, 100) - (advance ? 1 : 0);
+        var maxBatchOperations = options.MaxBatchOperations > 0 ? options.MaxBatchOperations : 1;
         var batchIndex = 0;
 
         // An (event, tag) pair maps to exactly one row, so a tag repeated within one event is one row, not two.
@@ -62,15 +57,10 @@ internal static class CosmosTagWriteStage
                     source.EventType))
                 .ToList();
 
-            var headConfirmed = !advance;
-            var maximum = rows.MaxBy(row => row.SortableUniqueId, StringComparer.Ordinal)!.SortableUniqueId;
-
             for (var offset = 0; offset < rows.Count; offset += maxBatchOperations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var chunk = rows.Skip(offset).Take(maxBatchOperations).ToList();
-                if (offset > 0 && !headConfirmed)
-                    throw new InvalidOperationException("Tag head must be confirmed before a rows-only chunk.");
 
                 if (faultInjector != null)
                 {
@@ -80,22 +70,15 @@ internal static class CosmosTagWriteStage
                 batchIndex++;
 
                 var created = false;
-                if (useBatch)
+                if (options.UseTransactionalBatchForTags)
                 {
-                    // The head batch returns only after confirming head >= the whole partition maximum,
-                    // including when a row conflict rolled its head operation back.
-                    var outcome = advance && offset == 0
-                        ? await store.CreateHeadBatchAsync(partitionKey, chunk, maximum, cancellationToken).ConfigureAwait(false)
-                        : await store.CreateBatchAsync(partitionKey, chunk, cancellationToken).ConfigureAwait(false);
-                    if (advance && offset == 0) headConfirmed = true;
+                    var outcome = await store.CreateBatchAsync(partitionKey, chunk, cancellationToken).ConfigureAwait(false);
                     created = outcome == CosmosTagBatchOutcome.Created;
                 }
 
                 // A conflicting batch creates nothing (it is all-or-nothing), so settle the chunk row by row.
                 if (!created)
                 {
-                    if (!headConfirmed)
-                        throw new InvalidOperationException("Tag head must be confirmed before fallback rows.");
                     foreach (var row in chunk)
                     {
                         await EnsureRowAsync(store, partitionKey, row, serviceId, cancellationToken).ConfigureAwait(false);
