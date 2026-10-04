@@ -98,24 +98,12 @@ How the expected version is chosen for a write:
   not read; failures while reading never become an empty assertion.
 - A `ConsistencyTag.FromTagWithSortableUniqueId(...)` supplies an explicit expected version used verbatim.
 
-**Guarantee boundary.** Reservations serialize competing writes within one `TagConsistentGrain` activation,
-but are not a hard guarantee even inside one cluster. Orleans 10.3.1's default directory can briefly run two
-activations of the same grain during membership churn, or while a partitioned silo has not yet learned that it was
-declared dead. Each activation has its own reservation lock and cached tag head; both can reserve and append.
-Independent clusters also do not coordinate through the actor and can each reserve-empty and append a duplicate create.
-See [Grain directory and duplicate activations](10_orleans_setup.md#grain-directory-and-duplicate-activations).
-
-Hard guarantees require a storage-layer fence: [conditional unique-append (G15/G16)](11_storage_providers.md#conditional-unique-key-append--sek-g15)
-for single-event create-once operations using the same idempotency key, or PostgreSQL's opt-in
-[`ExpectedTagPositions` (SEK-G40)](11_storage_providers.md#postgresql-durable-multi-tag-expected-position-cas--sek-g40)
-for exact tag versions, or the [derived fence](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions)
-which maps reservation inputs automatically, including on Orleans (global mode only). Both PostgreSQL modes require
-the enablement epoch and all-writer protocol; unread emitted tags remain unfenced. Neither is automatic on the default write
-path. Cosmos DB, DynamoDB and SQLite currently support only the single-event unique-key fence, not an
-expected-tag-head fence. The ordinary `InMemoryEventStore` rejects conditional append (`ConditionNotSupportedException`);
-the testing-only `InMemoryConditionalEventStore` implements it, but its claims are instance-local and volatile, so it
-is not a guarantee across silo processes; the Cosmos tag-head fence is under design (SEK-G101). Multi-projection convergence over
-durable duplicate events (SEK-G18) does not turn duplicate creates into a uniqueness guarantee.
+**Guarantee boundary.** Reservations coordinate one activation; duplicate activations can accept stale writes.
+See [Choosing between fast and strict tag consistency](13_common_issues.md#fast-and-strict-tag-consistency)
+for provider choices, costs and the all-writer boundaries. The Cosmos fence stops at `Advance`; no enforcing mode is
+planned. Strict workloads should use PostgreSQL. The
+[interim Cosmos unique-key pattern](11_storage_providers.md#cosmos-interim-tag-head-cas) uses a separate General
+executor or the store; it is not reachable through `OrleansDcbExecutor` today.
 
 **10.11.0 release note.** Unread consistency tags once again use the 10.1.x no-comparison behavior, fixing commands that
 attach existing secondary tags without reading them. Asserted-empty first writes retain the 10.8.0 conflict check within one activation.

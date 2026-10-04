@@ -178,7 +178,7 @@ Cosmos による**クラスタリング**はメンバーシップの構成であ
 
 ### 強整合ディレクトリの試験的なオプトイン
 
-`TagConsistentGrain` と `MaterializedViewGrain` の重複活性化リスクを減らすため、クラスタ内の強整合ディレクトリを
+`TagConsistentGrain` と `MaterializedViewGrain` の競合する書き込みの確率を下げるため、クラスタ内の強整合ディレクトリを
 検討してください。10.3.1 の `AddDistributedGrainDirectory` は `Orleans.Hosting.CoreHostingExtensions` の拡張メソッド
 （`Microsoft.Orleans.Runtime`）で、`ORLEANSEXP003` が付いた試験的 API です。オプトイン機能であり、テンプレートの
 既定値でも、そのまま本番に導入できる既定構成でもありません。名前を省略するとクラスタ全体の既定値になります。
@@ -221,8 +221,8 @@ Redis、Azure Table、ADO.NET のディレクトリは、それぞれ独自の�
   文書化されていません。試験的ディレクトリを採用する前に、展開とロールバックの計画を準備し、検証してください。
 - メンバーシップと障害検出を環境に合わせて調整し、迅速な検出と誤検知のバランスを取ってください。古いサイロを終了し、
   メンバーシップの変動を監視して、ホスト基盤が終了したプロセスを再起動できるようにしてください。
-- 厳密な保証にはストレージのフェンスを使ってください。[予約の保証境界](03_aggregate_command_events.md)で G15/G16 の
-  ユニーク追記と PostgreSQL のオプトイン `ExpectedTagPositions` を説明しています。通常の書き込みにはフェンスがありません。
+- ストレージの保護は [fast と strict のタグ整合性](13_common_issues.md#fast-and-strict-tag-consistency)を参照して
+  選んでください。provider ごとの機能、コスト、既に実行中のコマンドの境界を説明しています。
 
 ### 重複活性化時の Sekiban 各機能のリスク
 

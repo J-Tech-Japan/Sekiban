@@ -187,7 +187,7 @@ See the [Orleans grain directory guide](https://learn.microsoft.com/en-us/dotnet
 
 ### Experimental strongly consistent directory (opt-in)
 
-Consider the strongly consistent in-cluster directory to reduce duplicate-activation risk for `TagConsistentGrain`
+Consider the strongly consistent in-cluster directory: it lowers the probability of competing writes for `TagConsistentGrain`
 and `MaterializedViewGrain`. In 10.3.1, `AddDistributedGrainDirectory` is an experimental extension in
 `Orleans.Hosting.CoreHostingExtensions` (`Microsoft.Orleans.Runtime`), marked `ORLEANSEXP003`.
 It is an opt-in, not a template or drop-in production default. With no name, it becomes the cluster-wide default:
@@ -231,8 +231,8 @@ See [Orleans cluster management](https://learn.microsoft.com/en-us/dotnet/orlean
   undocumented; prepare and test a rollout and rollback plan before adopting the experimental directory.
 - Tune membership and failure detection for the deployment, balancing prompt detection with false suspicions, and
   terminate stale silos. Monitor membership churn and make sure the host infrastructure restarts terminated processes.
-- Use storage fences for hard guarantees. The [reservation guarantee boundary](03_aggregate_command_events.md)
-  describes G15/G16 unique-append and PostgreSQL's opt-in `ExpectedTagPositions`; normal writes remain unfenced.
+- Choose storage protection using [fast and strict tag consistency](13_common_issues.md#fast-and-strict-tag-consistency),
+  including provider availability, costs and the boundary for already-running commands.
 
 ### Sekiban surfaces under duplicate activation
 
