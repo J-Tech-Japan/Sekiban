@@ -1,3 +1,4 @@
+extern alias WithoutResultFacade;
 using System.Reflection;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Storage;
@@ -11,6 +12,39 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// </summary>
 public class ExecutorBinaryCompatibilityTests
 {
+    [Theory]
+    [InlineData(typeof(OrleansDcbExecutor), typeof(Sekiban.Dcb.Commands.IConditionalCommandExecutor))]
+    [InlineData(typeof(WithoutResultFacade::Sekiban.Dcb.Orleans.OrleansDcbExecutor),
+        typeof(WithoutResultFacade::Sekiban.Dcb.Commands.IConditionalCommandExecutor))]
+    public void ExecutionOptions_AreExplicitOnly(Type executor, Type capability)
+    {
+        Assert.True(capability.IsAssignableFrom(executor));
+        var map = executor.GetInterfaceMap(capability);
+        Assert.Equal(2, map.TargetMethods.Length);
+        Assert.All(map.TargetMethods, method => Assert.True(method.IsPrivate));
+        Assert.DoesNotContain(executor.GetMethods(BindingFlags.Instance | BindingFlags.Public),
+            method => method.GetParameters().Any(parameter =>
+                parameter.ParameterType == typeof(Sekiban.Dcb.Commands.CommandExecutionOptions)));
+    }
+
+    // These bodies are compiled but deliberately never invoked: no cluster is needed for source compatibility.
+    private static void ExistingTypedCallShapes(OrleansDcbExecutor executor, G22UpsertCommand command,
+        Func<G22UpsertCommand, Sekiban.Dcb.Commands.ICommandContext,
+            Task<ResultBoxes.ResultBox<Sekiban.Dcb.Events.EventOrNone>>> handler)
+    {
+        _ = executor.ExecuteAsync(command, handler, default);
+        _ = executor.ExecuteAsync(command, default(CancellationToken));
+    }
+
+    private static void ExistingTypedCallShapes(WithoutResultFacade::Sekiban.Dcb.Orleans.OrleansDcbExecutor executor,
+        PerCommandFenceFacade.WithoutCommand command,
+        Func<PerCommandFenceFacade.WithoutCommand, WithoutResultFacade::Sekiban.Dcb.Commands.ICommandContext,
+            Task<Sekiban.Dcb.Events.EventOrNone>> handler)
+    {
+        _ = executor.ExecuteAsync(command, handler, default);
+        _ = executor.ExecuteAsync(command, default(CancellationToken));
+    }
+
     [Fact]
     public void PreSekibanG23_Constructor_Overload_Is_Public()
     {

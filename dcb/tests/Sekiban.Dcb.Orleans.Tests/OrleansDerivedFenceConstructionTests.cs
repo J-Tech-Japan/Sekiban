@@ -196,40 +196,100 @@ public sealed class OrleansDerivedFenceConstructionTests
         Assert.Null(store.Specification);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task PerCommandOptions_RejectUniqueKeyBeforeAnyWork(bool withoutResult, bool suppliedHandler)
+    {
+        var store = new RecordingStore { Supported = false };
+        var facade = new PerCommandFenceFacade(withoutResult, Client(), store);
+        foreach (var selection in new TagConsistencyFenceMode?[] { null, TagConsistencyFenceMode.DeriveFromReservations })
+        {
+            store.StoreCalls = 0;
+            var called = false;
+            var result = await facade.Execute(Guid.NewGuid(), "rejected", new CommandExecutionOptions
+            {
+                ConditionalAppend = new ConditionalAppendSpecification("key"),
+                TagConsistencyFence = selection
+            }, suppliedHandler, () => called = true);
+            var exception = Assert.IsType<ConditionNotSupportedException>(result.GetException());
+            Assert.Equal(WriteConditionKind.SingleEventUniqueKey, exception.RequestedKind);
+            Assert.Equal("OrleansDcbExecutor", exception.ProviderName);
+            Assert.False(called);
+            Assert.Equal(0, store.StoreCalls);
+            Assert.Equal(0, store.EpochChecks);
+            Assert.Equal(0, store.LegacyWrites);
+            Assert.Null(store.Specification);
+            Assert.Equal(0, (await store.GetEventCountAsync()).GetValue());
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task PerCommandDerivation_WithoutGlobalOptions_FailsClosedBeforeHandler(
+        bool withoutResult, bool supported)
+    {
+        var store = new RecordingStore { Supported = supported, Enabled = false };
+        var facade = new PerCommandFenceFacade(withoutResult, Client(), store);
+        var called = false;
+        var result = await facade.Execute(Guid.NewGuid(), "blocked", new CommandExecutionOptions
+        {
+            TagConsistencyFence = TagConsistencyFenceMode.DeriveFromReservations
+        }, true, () => called = true);
+        if (supported) Assert.IsType<TagHeadEnforcementNotEnabledException>(result.GetException());
+        else Assert.IsType<ConditionNotSupportedException>(result.GetException());
+        Assert.False(called);
+        Assert.Equal(supported ? 1 : 0, store.EpochChecks);
+        Assert.Equal(0, store.LegacyWrites);
+        Assert.Null(store.Specification);
+    }
+
     private sealed class RecordingStore : IEventStore, IExpectedTagPositionEventStore, IWriteConditionCapabilityProvider
     {
         private readonly InMemoryEventStore _inner = new(Domain.EventTypes);
         public string? ExpectedTagPositionServiceId { get; init; }
         public bool Enabled = true, Supported = true;
-        public int LegacyWrites, EpochChecks;
+        public int LegacyWrites, EpochChecks, StoreCalls;
+        private Task<T> Record<T>(Task<T> task) { StoreCalls++; return task; }
         public ExpectedTagPositionSpecification? Specification;
-        public WriteConditionCapabilityDescriptor DescribeWriteConditions() => Supported
-            ? WriteConditionCapabilityDescriptor.Supporting("Recording", WriteConditionKind.ExpectedTagPosition)
-            : WriteConditionCapabilityDescriptor.None("Recording");
+        public WriteConditionCapabilityDescriptor DescribeWriteConditions()
+        {
+            StoreCalls++;
+            return Supported
+                ? WriteConditionCapabilityDescriptor.Supporting("Recording", WriteConditionKind.ExpectedTagPosition)
+                : WriteConditionCapabilityDescriptor.None("Recording");
+        }
         public Task<ResultBox<bool>> EnsureExpectedTagPositionEnforcementEnabledAsync(CancellationToken ct = default)
         {
+            StoreCalls++;
             EpochChecks++;
             return Task.FromResult(Enabled ? ResultBox.FromValue(Enabled) : ResultBox.Error<bool>(new TagHeadEnforcementNotEnabledException(Service)));
         }
         public async Task<ResultBox<ExpectedTagPositionWriteResult>> WriteSerializableEventsWithExpectedTagPositionsAsync(
             IReadOnlyList<SerializableEvent> events, ExpectedTagPositionSpecification specification, CancellationToken ct = default)
         {
+            StoreCalls++;
             Specification = specification;
             var result = (await _inner.WriteSerializableEventsAsync(events)).GetValue();
             return ResultBox.FromValue(new ExpectedTagPositionWriteResult(result.Events, result.TagWrites));
         }
-        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
-        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => _inner.GetLatestTagAsync(tag);
-        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => _inner.TagExistsAsync(tag);
-        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => _inner.GetEventCountAsync(since);
-        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? group = null) => _inner.GetAllTagsAsync(group);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => _inner.ReadAllSerializableEventsAsync(since);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? count) => _inner.ReadAllSerializableEventsAsync(since, count);
-        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid id) => _inner.ReadSerializableEventAsync(id);
-        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => _inner.ReadSerializableEventsByTagAsync(tag, since);
-        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => _inner.GetLatestSortableUniqueIdAsync();
+        public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => Record(_inner.ReadTagsAsync(tag));
+        public Task<ResultBox<TagState>> GetLatestTagAsync(ITag tag) => Record(_inner.GetLatestTagAsync(tag));
+        public Task<ResultBox<bool>> TagExistsAsync(ITag tag) => Record(_inner.TagExistsAsync(tag));
+        public Task<ResultBox<long>> GetEventCountAsync(SortableUniqueId? since = null) => Record(_inner.GetEventCountAsync(since));
+        public Task<ResultBox<IEnumerable<TagInfo>>> GetAllTagsAsync(string? group = null) => Record(_inner.GetAllTagsAsync(group));
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) => Record(_inner.ReadAllSerializableEventsAsync(since));
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since, int? count) => Record(_inner.ReadAllSerializableEventsAsync(since, count));
+        public Task<ResultBox<SerializableEvent>> ReadSerializableEventAsync(Guid id) => Record(_inner.ReadSerializableEventAsync(id));
+        public Task<ResultBox<IEnumerable<SerializableEvent>>> ReadSerializableEventsByTagAsync(ITag tag, SortableUniqueId? since = null) => Record(_inner.ReadSerializableEventsByTagAsync(tag, since));
+        public Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() => Record(_inner.GetLatestSortableUniqueIdAsync());
         public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>> WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events)
-        { LegacyWrites++; return _inner.WriteSerializableEventsAsync(events); }
+        { StoreCalls++; LegacyWrites++; return _inner.WriteSerializableEventsAsync(events); }
     }
 
 }

@@ -421,12 +421,28 @@ Microsoft はまず既定ディレクトリを使うことを推奨していま�
   拒否します。enablement epoch の準備と全 writer のプロトコル遵守が必要です。未読の出力タグと非整合性タグは
   フェンスされません。外部の副作用を exactly-once にしたり、誤りが起きないと保証したりするものではありません。
 
+Orleans の両 facade は `IConditionalCommandExecutor` を明示的に実装し、型付き `ExecuteAsync` でコマンドごとの
+`TagConsistencyFence` を選べます。null は global mode を継承し、`Off` / `DeriveFromReservations` は上書きします。
+serialized commit と `ExecuteCommandAsync` は global mode に従います。インターフェースの検出は execution options の受付を
+示しますが、`ConditionalAppend` は必ず `ConditionNotSupportedException` で拒否されます。ユニークキー追記は store-level API
+を使ってください。strict を選ぶ例（[詳細](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions)）:
+
+```csharp
+if (executor is IConditionalCommandExecutor conditional)
+{
+    await conditional.ExecuteAsync(command, new CommandExecutionOptions
+    {
+        TagConsistencyFence = TagConsistencyFenceMode.DeriveFromReservations
+    }, cancellationToken);
+}
+```
+
 | Provider | Fast / 通常の書き込み | ストレージの保護と Orleans からの到達経路 |
 |---|---|---|
-| PostgreSQL | 予約。canonical head の維持も実行 | 永続的な複数タグの expected-position CAS と derived fence。Orleans は global derived mode のみ |
+| PostgreSQL | 予約。canonical head の維持も実行 | 永続的な複数タグの expected-position CAS と derived fence。Orleans は global 設定と型付きコマンドごとの選択に対応 |
 | Cosmos DB | 予約。診断用 head が不要なら `TagHeadMode.Off` を推奨 | `Advance` は head の維持のみ。単一イベントのユニークキー追記は別途 General executor または store を使う。Orleans executor のオプションでは使えない |
-| DynamoDB | 予約 | 単一イベントのユニークキー追記。expected-position fence と Orleans の条件付き overload はない |
-| SQLite | 予約 | 単一イベントのユニークキー追記。expected-position fence と Orleans の条件付き overload はない |
+| DynamoDB | 予約 | 単一イベントのユニークキー追記。expected-position fence は非対応。Orleans の execution options はユニークキー条件を必ず拒否 |
+| SQLite | 予約 | 単一イベントのユニークキー追記。expected-position fence は非対応。Orleans の execution options はユニークキー条件を必ず拒否 |
 | InMemory | 予約。状態は揮発性 | 通常の `InMemoryEventStore` は条件付き追記に非対応。テスト用 `InMemoryConditionalEventStore` の claim はインスタンス内かつ揮発的 |
 
 Cosmos のフェンスは `Advance` までです。書き込みを強制的に検査するモードの予定はありません。

@@ -848,8 +848,10 @@ expected head, yielding a new key. This is cooperating-writer CAS, not a provide
 The command entry point is the `GeneralSekibanExecutor.ExecuteAsync` overload taking `CommandExecutionOptions`, with
 `ConditionalAppend = new ConditionalAppendSpecification(key)`. The key must be supplied before the handler runs.
 Alternatively, use `IConditionalEventStore.AppendIfUniqueAsync` directly as above.
-Both `OrleansDcbExecutor` facades implement neither `IConditionalCommandExecutor` nor
-`ISerializedConditionalSekibanDcbExecutor` and have no conditional overload. An Orleans host can call its Cosmos store
+Both `OrleansDcbExecutor` facades explicitly implement `IConditionalCommandExecutor` for execution options,
+but always reject `ConditionalAppend` with `ConditionNotSupportedException` before the handler or any actor/store call,
+including when combined with a fence option. Feature detection means "accepts execution options", not unique-key support.
+They still do not implement `ISerializedConditionalSekibanDcbExecutor`. An Orleans host can call its Cosmos store
 directly, or separately construct an executor using the public `OrleansActorObjectAccessor` and this overload
 (available on both General facades):
 
@@ -937,12 +939,28 @@ services.AddSekibanDcbTagConsistencyFence(
 services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 ```
 
-Import `Sekiban.Dcb.TagConsistencyFence`. Orleans supports global mode only; it has no typed
-`CommandExecutionOptions` overload. Non-Orleans executors also accept the nullable per-command
-`CommandExecutionOptions.TagConsistencyFence` selector: null inherits the global mode, and `Off` or
-`DeriveFromReservations` overrides it. Explicit `ExpectedTagPositions` takes precedence over derivation;
-`ConditionalAppend` uses a separate path, bypassing the global derived setting; explicit fence options cannot
-be combined with it (see the [interim pattern](#cosmos-interim-tag-head-cas)). Making the derived mode the default has not been decided.
+Import `Sekiban.Dcb.TagConsistencyFence` and `Sekiban.Dcb.Commands`. Both Orleans facades accept the nullable
+per-command `CommandExecutionOptions.TagConsistencyFence` through the explicitly implemented
+`IConditionalCommandExecutor`: null inherits the global mode (also when no fence options were passed at construction),
+and `Off` or `DeriveFromReservations` overrides it in either direction. Explicit `ExpectedTagPositions` takes precedence
+over derivation. This selection applies only to typed `ExecuteAsync` calls through the interface; the serialized commit
+path and `ExecuteCommandAsync` follow the global mode. For example, select strict handling for one command:
+
+```csharp
+if (executor is IConditionalCommandExecutor conditional)
+{
+    await conditional.ExecuteAsync(command, new CommandExecutionOptions
+    {
+        TagConsistencyFence = TagConsistencyFenceMode.DeriveFromReservations
+    }, cancellationToken);
+}
+```
+
+The Orleans executor always rejects `ConditionalAppend` with `ConditionNotSupportedException`, even when combined with
+fence options. Use the store-level `IConditionalEventStore.AppendIfUniqueAsync` API or a separate General executor for
+unique-key append (see the [interim pattern](#cosmos-interim-tag-head-cas)). On the General executor, conditional append
+uses a separate path, bypasses the global derived setting, and cannot be combined with explicit fence options.
+Making the derived mode the default has not been decided.
 
 **Incremental cost (code operations, not measurements).** Ordinary typed and serialized writes and conditional
 claims already use the canonical PostgreSQL head transaction with the fence off: per-tag lazy

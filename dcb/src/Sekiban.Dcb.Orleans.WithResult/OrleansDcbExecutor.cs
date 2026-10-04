@@ -20,7 +20,7 @@ namespace Sekiban.Dcb.Orleans;
 ///     Orleans-specific implementation of ISekibanExecutor
 ///     Uses Orleans grains for distributed command execution and queries
 /// </summary>
-public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecutor,
+public class OrleansDcbExecutor : ISekibanExecutor, IConditionalCommandExecutor, ISerializedSekibanDcbExecutor,
     ISerializedExpectedTagPositionSekibanDcbExecutor, IExecutorRuntimeDescriptorProvider
 {
     /// <summary>Commands are executed by Orleans grains across the cluster.</summary>
@@ -190,6 +190,31 @@ public class OrleansDcbExecutor : ISekibanExecutor, ISerializedSekibanDcbExecuto
         Func<TCommand, ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
         CancellationToken cancellationToken = default) where TCommand : ICommand =>
         _construction.GeneralExecutor.ExecuteAsync(command, handlerFunc, cancellationToken);
+
+    async Task<ResultBox<ExecutionResult>> IConditionalCommandExecutor.ExecuteAsync<TCommand>(
+        TCommand command,
+        Func<TCommand, ICommandContext, Task<ResultBox<EventOrNone>>> handlerFunc,
+        CommandExecutionOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (options?.ConditionalAppend is not null)
+        {
+            return ResultBox.Error<ExecutionResult>(new ConditionNotSupportedException(WriteConditionKind.SingleEventUniqueKey, "OrleansDcbExecutor"));
+        }
+        return await _construction.GeneralExecutor.ExecuteAsync(command, handlerFunc, options, cancellationToken);
+    }
+
+    async Task<ResultBox<ExecutionResult>> IConditionalCommandExecutor.ExecuteAsync<TCommand>(
+        TCommand command,
+        CommandExecutionOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (options?.ConditionalAppend is not null)
+        {
+            return ResultBox.Error<ExecutionResult>(new ConditionNotSupportedException(WriteConditionKind.SingleEventUniqueKey, "OrleansDcbExecutor"));
+        }
+        return await _construction.GeneralExecutor.ExecuteAsync(command, options, cancellationToken);
+    }
 
     /// <summary>
     ///     Execute a handler function without an explicit command
