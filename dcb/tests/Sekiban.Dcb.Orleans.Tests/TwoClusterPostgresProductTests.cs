@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using ResultBoxes;
@@ -101,6 +103,8 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
     private static async Task<TestCluster> BuildClusterAsync(string name)
     {
         var builder = new TestClusterBuilder();
+        // macOS listener enumeration can stall in a sandbox; probe only the ports this fixture needs.
+        if (OperatingSystem.IsMacOS()) builder.PortAllocator = new LoopbackPortAllocator();
         builder.Options.InitialSilosCount = 1;
         var uid = Guid.NewGuid().ToString("N")[..8];
         builder.Options.ClusterId = $"G20-pg-{name}-{uid}";
@@ -110,6 +114,33 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
         var cluster = builder.Build();
         await cluster.DeployAsync();
         return cluster;
+    }
+
+    private sealed class LoopbackPortAllocator : ITestClusterPortAllocator
+    {
+        public (int, int) AllocateConsecutivePortPairs(int numPorts)
+        {
+            for (var attempt = 0; attempt < 100; attempt++)
+            {
+                var first = Random.Shared.Next(20000, 50000 - 2 * numPorts);
+                var probes = new List<Socket>();
+                try
+                {
+                    for (var offset = 0; offset < 2 * numPorts; offset++)
+                    {
+                        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                        probes.Add(socket);
+                        socket.Bind(new IPEndPoint(IPAddress.Loopback, first + offset));
+                    }
+                    return (first, first + numPorts);
+                }
+                catch (SocketException) { }
+                finally { foreach (var probe in probes) probe.Dispose(); }
+            }
+            throw new InvalidOperationException("Could not allocate loopback ports for the PostgreSQL test clusters.");
+        }
+
+        public void Dispose() { }
     }
 
     // A direct (ungated) Postgres checkpoint store for authoritative row/offload assertions, using the SAME serviceId as
@@ -133,13 +164,40 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
     [InlineData(true, TagConsistencyFenceMode.Off)]
     public async Task DerivedFence_TwoIndependentClusters_OnlyFencedWritersConflict(bool update, TagConsistencyFenceMode mode)
     {
+        await AssertFenceRace(update, false, mode, null);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task PerCommandFence_TwoClusters_SelectOverrideOrInherit(bool update, bool withoutResult)
+    {
+        foreach (var global in new TagConsistencyFenceMode?[]
+            { null, TagConsistencyFenceMode.Off, TagConsistencyFenceMode.DeriveFromReservations })
+        {
+            await AssertFenceRace(update, withoutResult, global, null);
+            foreach (var selection in new TagConsistencyFenceMode?[]
+                { null, TagConsistencyFenceMode.Off, TagConsistencyFenceMode.DeriveFromReservations })
+                await AssertFenceRace(update, withoutResult, global,
+                    new CommandExecutionOptions { TagConsistencyFence = selection });
+        }
+        // Explicit expectations take precedence even when the per-command derived mode is Off.
+        await AssertFenceRace(update, withoutResult, TagConsistencyFenceMode.DeriveFromReservations,
+            new CommandExecutionOptions { TagConsistencyFence = TagConsistencyFenceMode.Off }, explicitPositions: true);
+    }
+
+    private async Task AssertFenceRace(bool update, bool withoutResult, TagConsistencyFenceMode? global,
+        CommandExecutionOptions? options, bool explicitPositions = false)
+    {
         var domain = G20Shared.BuildDomain();
         var store = (PostgresEventStore)_rootSp.GetRequiredService<IEventStore>();
         var service = new DefaultServiceIdProvider().GetCurrentServiceId();
         await using var connection = new NpgsqlConnection(_conn);
         await connection.OpenAsync();
         await using (var epoch = new NpgsqlCommand(
-            "INSERT INTO dcb_tag_head_enablement_epochs (\"ServiceId\", \"EnabledAtUtc\") VALUES (@service, @enabled)", connection))
+            "INSERT INTO dcb_tag_head_enablement_epochs (\"ServiceId\", \"EnabledAtUtc\") VALUES (@service, @enabled) ON CONFLICT DO NOTHING", connection))
         {
             epoch.Parameters.AddWithValue("service", service);
             epoch.Parameters.AddWithValue("enabled", DateTime.UtcNow);
@@ -155,11 +213,17 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
             initial = seed.GetValue().SortableUniqueId;
         }
         var barrier = new WriteBarrierStore(store);
-        var fence = new TagConsistencyFenceOptions { Mode = mode };
-        var a = new OrleansDcbExecutor(_clusterA.Client, barrier, domain, tagConsistencyFenceOptions: fence);
-        var b = new OrleansDcbExecutor(_clusterB.Client, barrier, domain, tagConsistencyFenceOptions: fence);
-        var first = a.ExecuteAsync(new G22UpsertCommand(id, "A"));
-        var second = b.ExecuteAsync(new G22UpsertCommand(id, "B"));
+        if (explicitPositions)
+            options = options! with
+            {
+                ExpectedTagPositions = new ExpectedTagPositionSpecification([
+                    new TagHeadExpectationEntry(service, tag.GetTag(),
+                        update ? TagHeadExpectation.Exact(initial!) : TagHeadExpectation.AssertEmpty())])
+            };
+        var a = new PerCommandFenceFacade(withoutResult, _clusterA.Client, barrier, global);
+        var b = new PerCommandFenceFacade(withoutResult, _clusterB.Client, barrier, global);
+        var first = a.Execute(id, "A", options);
+        var second = b.Execute(id, "B", options, suppliedHandler: true);
         try
         {
             await barrier.BothArrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
@@ -169,7 +233,7 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
         }
         finally { barrier.Release.TrySetResult(); }
         var results = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(30));
-        var fenced = mode == TagConsistencyFenceMode.DeriveFromReservations;
+        var fenced = explicitPositions || (options?.TagConsistencyFence ?? global) == TagConsistencyFenceMode.DeriveFromReservations;
         Assert.Equal(fenced ? 1 : 2, results.Count(r => r.IsSuccess));
         if (fenced)
         {
@@ -184,7 +248,9 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
         Assert.Equal(fenced ? 0 : 2, barrier.LegacyArrivals);
         // An independent database read verifies committed events, tag rows and durable head.
         await using var rows = new NpgsqlCommand("""
-            SELECT (SELECT COUNT(*) FROM dcb_events WHERE "ServiceId" = @service),
+            SELECT (SELECT COUNT(*) FROM dcb_events e
+                    WHERE e."ServiceId" = @service AND e."Id" IN
+                        (SELECT t."EventId" FROM dcb_tags t WHERE t."ServiceId" = @service AND t."Tag" = @tag)),
                    COUNT(*), MAX("SortableUniqueId"),
                    (SELECT "HeadPosition" FROM dcb_tag_heads WHERE "ServiceId" = @service AND "Tag" = @tag)
             FROM dcb_tags WHERE "ServiceId" = @service AND "Tag" = @tag

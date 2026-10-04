@@ -454,12 +454,28 @@ both reserve the same head and append. Independent clusters also have independen
   provision the enablement epoch and follow the all-writer protocol; unread emitted tags and non-consistency tags are
   unfenced. This does not make external effects exactly-once or promise that mistakes cannot happen.
 
+Both Orleans facades explicitly implement `IConditionalCommandExecutor` to select `TagConsistencyFence` per typed
+`ExecuteAsync` command: null inherits the global mode, while `Off` / `DeriveFromReservations` overrides it.
+The serialized commit path and `ExecuteCommandAsync` follow the global mode. Interface detection means execution options
+are accepted; `ConditionalAppend` is always rejected with `ConditionNotSupportedException`. Use the store-level API for
+unique-key append. For a strict command ([details](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions)):
+
+```csharp
+if (executor is IConditionalCommandExecutor conditional)
+{
+    await conditional.ExecuteAsync(command, new CommandExecutionOptions
+    {
+        TagConsistencyFence = TagConsistencyFenceMode.DeriveFromReservations
+    }, cancellationToken);
+}
+```
+
 | Provider | Fast / ordinary writes | Available storage protection and Orleans reachability |
 |---|---|---|
-| PostgreSQL | Reservations; canonical head maintenance still runs | Durable multi-tag expected-position CAS and derived fence; Orleans supports the global derived mode only |
+| PostgreSQL | Reservations; canonical head maintenance still runs | Durable multi-tag expected-position CAS and derived fence; Orleans supports global and per-command typed selection |
 | Cosmos DB | Reservations; `TagHeadMode.Off` recommended unless diagnostic heads are wanted | `Advance` only maintains heads. Single-event unique-key append is available through a separate General executor or the store, **not** an Orleans executor option |
-| DynamoDB | Reservations | Single-event unique-key append; no expected-position fence, no conditional Orleans overload |
-| SQLite | Reservations | Single-event unique-key append; no expected-position fence, no conditional Orleans overload |
+| DynamoDB | Reservations | Single-event unique-key append; no expected-position fence; Orleans execution options always reject unique-key conditions |
+| SQLite | Reservations | Single-event unique-key append; no expected-position fence; Orleans execution options always reject unique-key conditions |
 | InMemory | Reservations; volatile state | Ordinary `InMemoryEventStore` does not support conditional append; testing-only `InMemoryConditionalEventStore` claims are instance-local and volatile |
 
 The Cosmos fence stops at `Advance`; no enforcing mode is planned. Strict workloads should use PostgreSQL.

@@ -854,8 +854,10 @@ ServiceId は `ConditionalAppendIdentity.DeriveEventId` に既に含まれます
 コマンドの入口は `CommandExecutionOptions` を受け取る `GeneralSekibanExecutor.ExecuteAsync` overload です。
 `ConditionalAppend = new ConditionalAppendSpecification(key)` を指定します。キーは handler 実行前に必要です。
 または例のように `IConditionalEventStore.AppendIfUniqueAsync` を直接使います。
-両方の `OrleansDcbExecutor` facade は `IConditionalCommandExecutor` も
-`ISerializedConditionalSekibanDcbExecutor` も実装せず、条件付き overload はありません。
+両方の `OrleansDcbExecutor` facade は execution options 用に `IConditionalCommandExecutor` を明示的に実装します。
+ただし `ConditionalAppend` は、fence オプションと併用した場合も、handler や actor/store 呼び出しの前に
+`ConditionNotSupportedException` で必ず拒否します。feature detection は「execution options を受け取れる」ことを示し、
+ユニークキー対応を意味しません。`ISerializedConditionalSekibanDcbExecutor` は引き続き実装しません。
 Orleans ホストは Cosmos store を直接呼ぶか、公開の `OrleansActorObjectAccessor` を使って別途
 以下の overload で executor を構築できます（両方の General facade にあります）。
 
@@ -946,12 +948,27 @@ services.AddSekibanDcbTagConsistencyFence(
 services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 ```
 
-`Sekiban.Dcb.TagConsistencyFence` を import してください。Orleans は global mode のみで、型付き
-`CommandExecutionOptions` overload はありません。非 Orleans executor では nullable な
-`CommandExecutionOptions.TagConsistencyFence` が使えます。null は global 設定を継承し、`Off` または
-`DeriveFromReservations` は上書きします。明示的な `ExpectedTagPositions` が導出に優先し、
-`ConditionalAppend` は別経路で global derived 設定を迂回します。明示的な fence オプションとの併用はできません
-（[暫定パターン](#cosmos-interim-tag-head-cas)参照）。導出モードを既定にするかは未決定です。
+`Sekiban.Dcb.TagConsistencyFence` と `Sekiban.Dcb.Commands` を import してください。Orleans の両 facade は
+明示的に実装した `IConditionalCommandExecutor` 経由で、コマンドごとの nullable な
+`CommandExecutionOptions.TagConsistencyFence` を受け取ります。null は global 設定を継承し（構築時に fence options を
+渡さなかった場合も含む）、`Off` または `DeriveFromReservations` は双方向に上書きします。
+明示的な `ExpectedTagPositions` は導出に優先します。この選択はインターフェース経由の型付き `ExecuteAsync` のみが対象で、
+serialized commit と `ExecuteCommandAsync` は global mode に従います。特定のコマンドを strict にする例:
+
+```csharp
+if (executor is IConditionalCommandExecutor conditional)
+{
+    await conditional.ExecuteAsync(command, new CommandExecutionOptions
+    {
+        TagConsistencyFence = TagConsistencyFenceMode.DeriveFromReservations
+    }, cancellationToken);
+}
+```
+
+Orleans executor は、fence オプションとの併用時も `ConditionalAppend` を `ConditionNotSupportedException` で必ず拒否します。
+ユニークキー追記は store-level の `IConditionalEventStore.AppendIfUniqueAsync` API または別途 General executor を使ってください
+（[暫定パターン](#cosmos-interim-tag-head-cas)参照）。General executor の conditional append は別経路で global derived 設定を
+迂回し、明示的な fence オプションとは併用できません。導出モードを既定にするかは未決定です。
 
 **追加コスト（コード上の操作。実測ではありません）**。通常の型付き・シリアライズ済み書き込みと条件付き claim は、
 fence が Off でも canonical PostgreSQL head トランザクションを使います。タグごとの遅延
