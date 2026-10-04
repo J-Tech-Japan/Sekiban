@@ -53,6 +53,12 @@ internal sealed class PerCommandFenceFacade
         return Capture(task);
     }
 
+    // The PUBLIC typed overload of the concrete executor (no execution options): the path existing applications use.
+    internal Task<ResultBox<ExecutionResult>> ExecutePublic(Guid id, string value) =>
+        _executor is OrleansDcbExecutor with
+            ? with.ExecuteAsync(new G22UpsertCommand(id, value))
+            : Capture(((WithoutExecutor)_executor).ExecuteAsync(new WithoutCommand(id, value)));
+
     private static async Task<ResultBox<ExecutionResult>> Capture(Task<ExecutionResult> task)
     {
         try { return ResultBox.FromValue(await task); }

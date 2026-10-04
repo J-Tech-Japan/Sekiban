@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Sockets;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using ResultBoxes;
@@ -103,8 +101,6 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
     private static async Task<TestCluster> BuildClusterAsync(string name)
     {
         var builder = new TestClusterBuilder();
-        // macOS listener enumeration can stall in a sandbox; probe only the ports this fixture needs.
-        if (OperatingSystem.IsMacOS()) builder.PortAllocator = new LoopbackPortAllocator();
         builder.Options.InitialSilosCount = 1;
         var uid = Guid.NewGuid().ToString("N")[..8];
         builder.Options.ClusterId = $"G20-pg-{name}-{uid}";
@@ -114,33 +110,6 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
         var cluster = builder.Build();
         await cluster.DeployAsync();
         return cluster;
-    }
-
-    private sealed class LoopbackPortAllocator : ITestClusterPortAllocator
-    {
-        public (int, int) AllocateConsecutivePortPairs(int numPorts)
-        {
-            for (var attempt = 0; attempt < 100; attempt++)
-            {
-                var first = Random.Shared.Next(20000, 50000 - 2 * numPorts);
-                var probes = new List<Socket>();
-                try
-                {
-                    for (var offset = 0; offset < 2 * numPorts; offset++)
-                    {
-                        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                        probes.Add(socket);
-                        socket.Bind(new IPEndPoint(IPAddress.Loopback, first + offset));
-                    }
-                    return (first, first + numPorts);
-                }
-                catch (SocketException) { }
-                finally { foreach (var probe in probes) probe.Dispose(); }
-            }
-            throw new InvalidOperationException("Could not allocate loopback ports for the PostgreSQL test clusters.");
-        }
-
-        public void Dispose() { }
     }
 
     // A direct (ungated) Postgres checkpoint store for authoritative row/offload assertions, using the SAME serviceId as
@@ -164,7 +133,16 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
     [InlineData(true, TagConsistencyFenceMode.Off)]
     public async Task DerivedFence_TwoIndependentClusters_OnlyFencedWritersConflict(bool update, TagConsistencyFenceMode mode)
     {
-        await AssertFenceRace(update, false, mode, null);
+        // Both writers use the public typed overload of the concrete executor, not the options interface.
+        await AssertFenceRace(update, false, mode, null, publicOverload: true);
+    }
+
+    [Theory]
+    [InlineData(TagConsistencyFenceMode.DeriveFromReservations)]
+    [InlineData(TagConsistencyFenceMode.Off)]
+    public async Task DerivedFence_WithoutResultPublicOverload_FollowsGlobalMode(TagConsistencyFenceMode mode)
+    {
+        await AssertFenceRace(true, true, mode, null, publicOverload: true);
     }
 
     [Theory]
@@ -189,7 +167,7 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
     }
 
     private async Task AssertFenceRace(bool update, bool withoutResult, TagConsistencyFenceMode? global,
-        CommandExecutionOptions? options, bool explicitPositions = false)
+        CommandExecutionOptions? options, bool explicitPositions = false, bool publicOverload = false)
     {
         var domain = G20Shared.BuildDomain();
         var store = (PostgresEventStore)_rootSp.GetRequiredService<IEventStore>();
@@ -222,8 +200,8 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
             };
         var a = new PerCommandFenceFacade(withoutResult, _clusterA.Client, barrier, global);
         var b = new PerCommandFenceFacade(withoutResult, _clusterB.Client, barrier, global);
-        var first = a.Execute(id, "A", options);
-        var second = b.Execute(id, "B", options, suppliedHandler: true);
+        var first = publicOverload ? a.ExecutePublic(id, "A") : a.Execute(id, "A", options);
+        var second = publicOverload ? b.ExecutePublic(id, "B") : b.Execute(id, "B", options, suppliedHandler: true);
         try
         {
             await barrier.BothArrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
