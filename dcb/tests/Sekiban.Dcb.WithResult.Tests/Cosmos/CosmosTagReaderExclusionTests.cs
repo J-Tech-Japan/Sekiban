@@ -143,6 +143,23 @@ public class CosmosTagReaderExclusionTests
         }
     }
 
+    [Fact]
+    public async Task ObservedDocuments_ReadersRepairSweepAndMigrationIgnoreEvidence()
+    {
+        var fixture = new Fixture();
+        await fixture.SeedAsync(3, false);
+        foreach (var original in fixture.Client.Container("events").Items)
+        {
+            var document = (JObject)original.DeepClone();
+            document["observed"] = new JArray("");
+            document["observedWrite"] = Guid.NewGuid().ToString("N");
+            fixture.Client.Container("events").Seed(document);
+        }
+        await fixture.AssertReadersAsync();
+        await fixture.AssertMaintenanceAsync();
+        Assert.All(fixture.Client.Container("events").Items, document => Assert.NotNull(document["observed"]));
+    }
+
     [Theory]
     [InlineData(0, false)]
     [InlineData(3, false)]

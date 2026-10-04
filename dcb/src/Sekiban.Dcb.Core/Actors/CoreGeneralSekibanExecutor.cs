@@ -285,6 +285,28 @@ public class CoreGeneralSekibanExecutor
             new TagHeadExpectationEntry(serviceId, e.Key, e.Value)).ToArray());
     }
 
+    private Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        WriteOrdinaryEventsAsync(
+            IEnumerable<SerializableEvent> events,
+            IEnumerable<(string Tag, string? Position)> observations,
+            CancellationToken cancellationToken)
+    {
+        if (_eventStore is not IObservedTagPositionEventStore { RecordsObservedTagPositions: true } store)
+            return _eventStore.WriteSerializableEventsAsync(events);
+
+        var positions = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var (tag, position) in observations)
+        {
+            if (positions.TryGetValue(tag, out var previous) && previous != position)
+                throw new TagHeadExpectationValidationException($"Conflicting reservation expectations for '{tag}'.");
+            if (position is { Length: > 0 } &&
+                (position.Length != 30 || position.Any(c => c is < '0' or > '9')))
+                throw new TagHeadExpectationValidationException("Observed positions must be empty or 30 digits.");
+            positions[tag] = position;
+        }
+        return store.WriteSerializableEventsWithObservedTagPositionsAsync(events, positions, cancellationToken);
+    }
+
     private Task EnsureSortableUniqueIdSeededAsync(CancellationToken cancellationToken)
     {
         var serviceId = ServiceIdValidator.NormalizeAndValidate(_serviceIdProvider.GetCurrentServiceId());
@@ -571,7 +593,10 @@ public class CoreGeneralSekibanExecutor
                 }
                 else
                 {
-                    var writeResult = await _eventStore.WriteEventsAsync(events, _domainTypes.EventTypes);
+                    var writeResult = await EventStoreExtensions.WriteEventsUsingAsync(
+                        events, _domainTypes.EventTypes,
+                        serialized => WriteOrdinaryEventsAsync(serialized,
+                            reservationInputs.Select(input => (input.Key.GetTag(), input.Value)), cancellationToken));
                     if (!writeResult.IsSuccess)
                     {
                         await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);
@@ -989,7 +1014,8 @@ public class CoreGeneralSekibanExecutor
                 }
                 else
                 {
-                    var writeResult = await _eventStore.WriteSerializableEventsAsync(serializableEvents);
+                    var writeResult = await WriteOrdinaryEventsAsync(serializableEvents,
+                        consistencyEntryMap.Select(input => (input.Key, (string?)input.Value)), cancellationToken);
                     if (!writeResult.IsSuccess)
                     {
                         await TagReservationHelper.CancelReservationsAsync(_actorAccessor, reservations);

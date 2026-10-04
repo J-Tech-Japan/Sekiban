@@ -11,6 +11,9 @@ public class CosmosDbEventStoreOptions
     /// </summary>
     public const int DefaultMultiProjectionStateOffloadThresholdBytes = 1_000_000;
 
+    /// <summary>Records original command observations on event documents. Default false; does not enforce a fence.</summary>
+    public bool RecordObservedTagPositions { get; set; }
+
     /// <summary>
     ///     Maximum number of concurrent event write operations.
     ///     Events are written in parallel with this concurrency limit.

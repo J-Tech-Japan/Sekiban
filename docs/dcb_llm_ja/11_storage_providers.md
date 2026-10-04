@@ -62,6 +62,20 @@ services.AddSekibanDcbCosmosDbWithAspire();
 
 Cosmos の書き込みはベストエフォート トランザクションです。整合性は Executor の予約と Cosmos の設定に依存します。
 
+### Cosmos の観測タグ位置の記録（オプトイン）
+
+`CosmosDbEventStoreOptions.RecordObservedTagPositions` の既定値は `false` です。有効にすると、通常のコマンド書き込みは元の consistency タグの観測位置を `tags` と同じ順序・長さの配列 `observed` に記録します。null は未読、`""` は空の状態を読んだこと、それ以外は 30 桁の位置を表します。不正な空でない位置はイベントを保存する前に書き込みエラーになります。明示した consistency タグ位置は読み取った状態より優先されます。unique-key 書き込みと expected-position fence の経路では記録しません。
+
+null 以外の観測値があるイベントには、同じ書き込み全体で共有する N 形式の GUID `observedWrite` も記録します。複数イベントでも元の観測位置を保持し、チェーンにはしません。イベント書き込みの一部が失敗しても、保存済みイベントは元の観測位置と書き込み ID を保持します。呼び出し側の再試行には新しい ID が付きます。全要素が null の場合は両プロパティを省略するため、「記録が無効」と「有効だが何も観測していない」は区別できません。無効時の JSON は従来と同じです。
+
+これは証跡の記録だけです。現時点では何も読み取らず、検出は SEK-G115 で追加予定です。このフィールドは何も防止しません。reader、タグ行、repair、sweep の動作は変わりません。`tools/MigrateDcbCosmosEventsTags` の import は選択したフィールドから文書を再構成するため両プロパティを失います。cold-event export も `SerializableEvent` を保存するので両プロパティを失います。将来の検出対象は hot の Cosmos 文書に限られます。
+
+コンパクト JSON の追加サイズの概算は、位置ごとに **約 33 バイト**、空文字列ごとに **約 3 バイト**、null ごとに **約 5 バイト**、さらにプロパティ名・書き込み ID・区切り文字で **文書ごとに約 65 バイト**です。記録が有効ならサイズゲートは常に全タグに 30 桁の位置と `observedWrite` を付けた最悪ケースを計測します。実際には省略する場合や unique-key 経路も安全側に加算します。計測は `CosmosDbContext.Options` から設定を取得し、標準 DI は store と同じ context を共有します。計測用 context を明示する場合は store と同じ context・設定を使用してください。
+
+events コンテナは既定で全パスをインデックスするため、`observed` の要素により書き込み RU が少し増えます。観測値を検索しない場合は `/observed/[]/?` を excluded path に追加してください（`/observedWrite/?` も同様です）。
+
+観測位置を持つのは executor 経由のコマンド書き込みだけです。store を直接呼ぶ書き込み（event store の `WriteEventsAsync` や `WriteSerializableEventsAsync`）には観測位置がないため、オプションが有効でも何も記録しません。
+
 ### Cosmos タグ head の維持（オプトイン）
 
 `CosmosDbEventStoreOptions.TagHeadMode` の既定値は `CosmosTagHeadMode.Off` です。

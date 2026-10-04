@@ -1,4 +1,5 @@
 using System.Text;
+using Sekiban.Dcb.CosmosDb.Tags;
 using Sekiban.Dcb.CosmosDb.Models;
 using Sekiban.Dcb.Events;
 
@@ -9,6 +10,29 @@ namespace Sekiban.Dcb.CosmosDb;
 /// </summary>
 internal static class CosmosEventDocumentMapper
 {
+    internal static void ValidateObservations(IReadOnlyDictionary<string, string?> observations)
+    {
+        ArgumentNullException.ThrowIfNull(observations);
+        foreach (var position in observations.Values)
+            if (position is { Length: > 0 }) CosmosTagHead.ValidatePosition(position);
+    }
+
+    internal static void ApplyObservations(
+        CosmosEvent document, IReadOnlyDictionary<string, string?> observations, string writeId)
+    {
+        var aligned = document.Tags.Select(tag => observations.GetValueOrDefault(tag)).ToArray();
+        if (aligned.All(position => position is null)) return;
+        document.Observed = aligned;
+        document.ObservedWrite = writeId;
+    }
+
+    internal static void ApplyWorstCaseObservations(CosmosEvent document)
+    {
+        if (document.Tags.Count == 0) return;
+        document.Observed = Enumerable.Repeat<string?>(new string('9', 30), document.Tags.Count).ToArray();
+        document.ObservedWrite = new string('f', 32);
+    }
+
     private static readonly DateTime MeasurementTimestamp =
         new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddTicks(1_234_567);
 

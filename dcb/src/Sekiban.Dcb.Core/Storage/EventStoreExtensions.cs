@@ -87,11 +87,18 @@ public static class EventStoreExtensions
         this IEventStore eventStore,
         IEnumerable<Event> events,
         IEventTypes eventTypes)
+        => await WriteEventsUsingAsync(events, eventTypes, eventStore.WriteSerializableEventsAsync);
+
+    internal static async Task<ResultBox<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        WriteEventsUsingAsync(
+            IEnumerable<Event> events,
+            IEventTypes eventTypes,
+            Func<IEnumerable<SerializableEvent>, Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>> write)
     {
         var serializableEvents = events
             .Select(evt => evt.ToSerializableEvent(eventTypes))
             .ToList();
-        var result = await eventStore.WriteSerializableEventsAsync(serializableEvents);
+        var result = await write(serializableEvents);
         if (!result.IsSuccess)
         {
             return ResultBox.Error<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)>(result.GetException());

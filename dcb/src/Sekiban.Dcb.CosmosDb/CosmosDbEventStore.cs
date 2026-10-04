@@ -21,7 +21,7 @@ namespace Sekiban.Dcb.CosmosDb;
 /// </summary>
 public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDescriptorProvider,
     IConditionalEventStore, IWriteConditionCapabilityProvider, IStreamingTaggedSerializableEventStore,
-    ITaggedStreamCapabilityProvider
+    ITaggedStreamCapabilityProvider, IObservedTagPositionEventStore
 {
     private const string ConditionalProviderName = "CosmosDb";
 
@@ -1470,12 +1470,37 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
     /// </summary>
     public async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
         WriteSerializableEventsAsync(IEnumerable<SerializableEvent> events, CancellationToken cancellationToken)
+        => await WriteSerializableEventsCoreAsync(events, null, cancellationToken);
+
+    /// <inheritdoc />
+    public bool RecordsObservedTagPositions => _context.Options.RecordObservedTagPositions;
+
+    /// <inheritdoc />
+    public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        WriteSerializableEventsWithObservedTagPositionsAsync(
+            IEnumerable<SerializableEvent> events,
+            IReadOnlyDictionary<string, string?> observedTagPositions,
+            CancellationToken cancellationToken = default)
+    {
+        // Internally null means "ordinary write"; a caller of the observed API must never get that silently.
+        ArgumentNullException.ThrowIfNull(observedTagPositions);
+        return WriteSerializableEventsCoreAsync(events, observedTagPositions, cancellationToken);
+    }
+
+    private async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
+        WriteSerializableEventsCoreAsync(
+            IEnumerable<SerializableEvent> events,
+            IReadOnlyDictionary<string, string?>? observedTagPositions,
+            CancellationToken cancellationToken)
     {
         var options = _context.Options;
         var serviceId = CurrentServiceId;
 
         try
         {
+            var observations = options.RecordObservedTagPositions ? observedTagPositions : null;
+            if (observations is not null) CosmosEventDocumentMapper.ValidateObservations(observations);
+            var observedWrite = observations is null ? null : Guid.NewGuid().ToString("N");
             var eventsSettings = _containerResolver.ResolveEventsContainer(serviceId);
             var tagsSettings = _containerResolver.ResolveTagsContainer(serviceId);
             var eventsContainer = await _context.GetEventsContainerAsync(eventsSettings).ConfigureAwait(false);
@@ -1508,6 +1533,8 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
                         se,
                         serviceId,
                         DateTime.UtcNow);
+                    if (observations is not null)
+                        CosmosEventDocumentMapper.ApplyObservations(cosmosEvent, observations, observedWrite!);
                     var eventPk = GetEventPartitionKey(cosmosEvent.Id, serviceId);
 
                     await eventsContainer.CreateItemAsync(
