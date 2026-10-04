@@ -96,7 +96,9 @@ This only records evidence: nothing reads it yet, detection follows in SEK-G115,
 
 Estimated compact JSON overhead is about **33 bytes per full position**, **3 bytes per empty position**, or **5 bytes per null entry**, plus about **65 bytes per document** for the property names and write id (including separators). The Cosmos event-document size gate always budgets the worst case when recording is on: 30 digits for every tag plus `observedWrite`, even when observations will be omitted or the write uses a unique key. Measurement reads the option from its `CosmosDbContext.Options`; standard DI shares the store's context. If supplying a context explicitly for measurement, use the same context/options as the store.
 
-The events container indexes every path by default, so `/observed/[]` adds a small write RU charge. It can be added as an excluded indexing path when observation queries are unnecessary (and `/observedWrite/?` can likewise be excluded).
+The events container indexes every path by default, so the `observed` entries add a small write RU charge. When observation queries are unnecessary, add `/observed/[]/?` as an excluded indexing path (and `/observedWrite/?` likewise).
+
+Only command writes through the executor carry an observation. A direct store call (`WriteEventsAsync` or `WriteSerializableEventsAsync` on the event store) has none and records nothing, even when the option is on.
 
 ### Cosmos tag head maintenance (opt-in)
 

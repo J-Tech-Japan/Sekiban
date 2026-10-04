@@ -1480,8 +1480,12 @@ public partial class CosmosDbEventStore : IHotEventStore, IStorageDurabilityDesc
         WriteSerializableEventsWithObservedTagPositionsAsync(
             IEnumerable<SerializableEvent> events,
             IReadOnlyDictionary<string, string?> observedTagPositions,
-            CancellationToken cancellationToken = default) =>
-        WriteSerializableEventsCoreAsync(events, observedTagPositions, cancellationToken);
+            CancellationToken cancellationToken = default)
+    {
+        // Internally null means "ordinary write"; a caller of the observed API must never get that silently.
+        ArgumentNullException.ThrowIfNull(observedTagPositions);
+        return WriteSerializableEventsCoreAsync(events, observedTagPositions, cancellationToken);
+    }
 
     private async Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
         WriteSerializableEventsCoreAsync(

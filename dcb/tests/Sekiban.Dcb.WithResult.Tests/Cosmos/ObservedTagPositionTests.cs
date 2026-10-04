@@ -77,6 +77,37 @@ public sealed class ObservedTagPositionTests
     }
 
     [Fact]
+    public async Task DirectStoreWrites_CarryNoObservation_AndRecordNothing_EvenWhenEnabled()
+    {
+        var (store, client, context) = Setup(true);
+        using (context)
+        {
+            var typed = new Sekiban.Dcb.Events.Event(new StudentCreated(Guid.NewGuid(), "direct", 5),
+                SortableUniqueId.GenerateNew(), nameof(StudentCreated), Guid.NewGuid(),
+                new EventMetadata("cause", "correlation", "user"), ["Student:a"]);
+            Assert.True((await store.WriteEventsAsync([typed])).IsSuccess);
+            Assert.True((await store.WriteSerializableEventsAsync([Event("Student:a")])).IsSuccess);
+            Assert.All(client.Container("events").Items, doc =>
+            {
+                Assert.Null(doc["observed"]);
+                Assert.Null(doc["observedWrite"]);
+            });
+        }
+    }
+
+    [Fact]
+    public async Task NullObservationDictionary_IsRejected_NotTreatedAsOrdinaryWrite()
+    {
+        var (store, client, context) = Setup(true);
+        using (context)
+        {
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
+                store.WriteSerializableEventsWithObservedTagPositionsAsync([Event("Student:a")], null!));
+            Assert.Empty(client.Container("events").Items);
+        }
+    }
+
+    [Fact]
     public async Task AllNullOrMissingObservations_OmitBothProperties()
     {
         var (store, client, context) = Setup(true);

@@ -72,7 +72,9 @@ null 以外の観測値があるイベントには、同じ書き込み全体で
 
 コンパクト JSON の追加サイズの概算は、位置ごとに **約 33 バイト**、空文字列ごとに **約 3 バイト**、null ごとに **約 5 バイト**、さらにプロパティ名・書き込み ID・区切り文字で **文書ごとに約 65 バイト**です。記録が有効ならサイズゲートは常に全タグに 30 桁の位置と `observedWrite` を付けた最悪ケースを計測します。実際には省略する場合や unique-key 経路も安全側に加算します。計測は `CosmosDbContext.Options` から設定を取得し、標準 DI は store と同じ context を共有します。計測用 context を明示する場合は store と同じ context・設定を使用してください。
 
-events コンテナは既定で全パスをインデックスするため、`/observed/[]` により書き込み RU が少し増えます。観測値を検索しない場合は excluded path に追加できます（`/observedWrite/?` も同様です）。
+events コンテナは既定で全パスをインデックスするため、`observed` の要素により書き込み RU が少し増えます。観測値を検索しない場合は `/observed/[]/?` を excluded path に追加してください（`/observedWrite/?` も同様です）。
+
+観測位置を持つのは executor 経由のコマンド書き込みだけです。store を直接呼ぶ書き込み（event store の `WriteEventsAsync` や `WriteSerializableEventsAsync`）には観測位置がないため、オプションが有効でも何も記録しません。
 
 ### Cosmos タグ head の維持（オプトイン）
 
