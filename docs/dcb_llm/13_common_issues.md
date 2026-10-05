@@ -473,23 +473,19 @@ if (executor is IConditionalCommandExecutor conditional)
 | Provider | Fast / ordinary writes | Available storage protection and Orleans reachability |
 |---|---|---|
 | PostgreSQL | Reservations; canonical head maintenance still runs | Durable multi-tag expected-position CAS and derived fence; Orleans supports global and per-command typed selection |
-| Cosmos DB | Reservations; `TagHeadMode.Off` recommended unless diagnostic heads are wanted | `Advance` only maintains heads. Single-event unique-key append is available through a separate General executor or the store, **not** an Orleans executor option |
+| Cosmos DB | Reservations | No expected-position fence and none is planned. Single-event unique-key append for create-once operations is available through a separate General executor or the store, **not** an Orleans executor option |
 | DynamoDB | Reservations | Single-event unique-key append; no expected-position fence; Orleans execution options always reject unique-key conditions |
 | SQLite | Reservations | Single-event unique-key append; no expected-position fence; Orleans execution options always reject unique-key conditions |
 | InMemory | Reservations; volatile state | Ordinary `InMemoryEventStore` does not support conditional append; testing-only `InMemoryConditionalEventStore` claims are instance-local and volatile |
 
-The Cosmos fence stops at `Advance`; no enforcing mode is planned. Strict workloads should use PostgreSQL.
-Events and tags are in separate Cosmos containers, without a transaction spanning them. The proposed Cosmos enforcement
-work (SEK-G109/G110/G111) was withdrawn. The
-[interim Cosmos unique-key pattern](11_storage_providers.md#cosmos-interim-tag-head-cas) is limited to cooperating
-single-event writers and one fenced tag; it is not general strict tag consistency under Orleans.
+Cosmos DB has no expected-position fence and none is planned. Strict workloads should use PostgreSQL.
+Events and tags are in separate Cosmos containers, without a transaction spanning them.
+Single-event unique-key append remains available for create-once operations.
 
 Costs here describe code operations, not measured performance: PostgreSQL already inserts, locks, reconciles and advances
 heads with the fence off. Enabling the derived fence adds epoch existence queries and comparison/validation, rather than
-another head transaction. Cosmos `Advance` adds one operation to the existing batch per tag partition; a missing head
-adds a failed batch, a bootstrap query and a retry, and conflicts can add requests. See
-[derived-fence costs and boundaries](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions) and
-[Cosmos head maintenance](11_storage_providers.md#cosmos-tag-head-maintenance-opt-in).
+another head transaction. See
+[derived-fence costs and boundaries](11_storage_providers.md#derived-fence-tagconsistencyfenceoptions).
 Projection convergence over durable duplicate events does not provide create uniqueness.
 
 **Behavior change**: from 10.8.0, competing asserted-empty creates handled by the same activation result in a
@@ -589,8 +585,8 @@ the last position of every state the handler read through tracked state access, 
 
 The reserved paths do not cover a tag read but not attached to an event, non-consistency tags, or unobserved tags
 in a multi-tag write. `GetTagLatestSortableUniqueIdAsync` and direct store head reads are not tracked, including on
-the typed unique-key path; callers using those heads must still seed or check the position themselves as described
-in [the interim unique-key pattern](11_storage_providers.md#interim-cosmos-pattern-unique-key-from-tag-and-expected-head).
+the typed unique-key path; callers using those heads must ensure their event id exceeds the head themselves,
+by seeding their generator or checking the allocated position.
 Serialized unique-key commits, writers in other clusters or older versions, and already stored inverted events
 are also outside this fix. A cached activation missing an already inverted event does not recover through this change.
 The derived PostgreSQL fence remains the backstop that rejects remaining inversions on enforced tags.

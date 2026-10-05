@@ -29,15 +29,6 @@ internal interface ICosmosTagRowStore
         string partitionKey, IReadOnlyList<CosmosTag> rows, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Creates the first chunk with a head at index zero. Both returned outcomes guarantee the head
-    /// is at least the partition-wide maximum; Conflict permits the caller to create fallback rows.
-    /// Failure throws before any rows-only continuation is allowed.
-    /// </summary>
-    Task<CosmosTagBatchOutcome> CreateHeadBatchAsync(
-        string partitionKey, IReadOnlyList<CosmosTag> rows, string maximum,
-        CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-    /// <summary>
     ///     Creates a single row. Returns false if a row already exists at that identity.
     /// </summary>
     Task<bool> TryCreateRowAsync(string partitionKey, CosmosTag row, CancellationToken cancellationToken = default);

@@ -12,27 +12,12 @@ namespace Sekiban.Dcb.ColdEvents;
 
 public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventStore,
     IStreamingTaggedSerializableEventStore, IStorageDurabilityDescriptorProvider, IWriteConditionCapabilityProvider,
-    ITaggedStreamCapabilityProvider, IConditionalEventStore, IExpectedTagPositionEventStore, IObservedTagPositionEventStore
+    ITaggedStreamCapabilityProvider, IConditionalEventStore, IExpectedTagPositionEventStore
 {
     private const string ReadAllSerializableEventsCall = nameof(ReadAllSerializableEventsAsync);
 
-    public bool RecordsObservedTagPositions =>
-        (_hotStore as IObservedTagPositionEventStore)?.RecordsObservedTagPositions ?? false;
-
-    public Task<ResultBox<(IReadOnlyList<SerializableEvent> Events, IReadOnlyList<TagWriteResult> TagWrites)>>
-        WriteSerializableEventsWithObservedTagPositionsAsync(
-            IEnumerable<SerializableEvent> events,
-            IReadOnlyDictionary<string, string?> observedTagPositions,
-            CancellationToken cancellationToken = default) =>
-        _hotStore is IObservedTagPositionEventStore observedHot
-            ? observedHot.WriteSerializableEventsWithObservedTagPositionsAsync(events, observedTagPositions, cancellationToken)
-            : _hotStore.WriteSerializableEventsAsync(events);
-
     public string? ExpectedTagPositionServiceId =>
         (_hotStore as IExpectedTagPositionEventStore)?.ExpectedTagPositionServiceId;
-
-    public ExpectedTagPositionLimits ExpectedTagPositionLimits =>
-        (_hotStore as IExpectedTagPositionEventStore)?.ExpectedTagPositionLimits ?? ExpectedTagPositionLimits.Unlimited;
 
     /// <summary>
     ///     A wrapper is not a durability. Writes land in the hot store, so the hot store's answer is the answer — and if

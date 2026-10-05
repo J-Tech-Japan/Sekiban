@@ -67,9 +67,6 @@ public sealed class CosmosEventDocumentSizeMeasurement : IExecutorSizeMeasuremen
                 context.ServiceId,
                 CosmosEventDocumentMapper.MeasurementTimestampUtc);
 
-            if (_context.Options.RecordObservedTagPositions)
-                CosmosEventDocumentMapper.ApplyWorstCaseObservations(document);
-
             if (!_context.TryMeasureSupportedDocument(document, out var measuredBytes, out var reason))
             {
                 return ExecutorSizeMeasurementResult.Unavailable(

@@ -16,7 +16,7 @@ using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.CosmosDb.Emulator.Tests;
 
 [Collection(CosmosEmulatorCollection.Name)]
-public sealed class ReaderExclusionTests(CosmosEmulatorFixture fixture)
+public sealed class RealStoreTests(CosmosEmulatorFixture fixture)
 {
     private const string ServiceId = "svc";
     private sealed class Service : IServiceIdProvider { public string GetCurrentServiceId() => ServiceId; }
@@ -27,11 +27,10 @@ public sealed class ReaderExclusionTests(CosmosEmulatorFixture fixture)
         public string GetTagContent() => Content;
     }
 
-    [SkippableTheory]
-    [InlineData(0)]
-    [InlineData(3)]
-    public async Task EveryReaderExcludesHead(int rowCount)
+    [SkippableFact]
+    public async Task TaggedEventsRoundTrip()
     {
+        const int rowCount = 3;
         await using var db = await TestDatabase.CreateAsync(fixture);
         var options = new CosmosDbEventStoreOptions { MaxItemCountPerPage = 1, MaxConcurrentTaggedStreamPointReads = 1 };
         using var context = new CosmosDbContext(db.Client, db.Name, null, options);
@@ -45,25 +44,10 @@ public sealed class ReaderExclusionTests(CosmosEmulatorFixture fixture)
             nameof(StudentCreated), Guid.NewGuid(), new EventMetadata("c", "c", "test"), [tagString])).ToList();
         var write = await store.WriteEventsAsync(events);
         Assert.True(write.IsSuccess, write.IsSuccess ? "" : write.GetException().ToString());
-        // Initialize both containers even when no event was written.
-        await new CosmosDbTagRepairServiceFactory(context, resolver).CreateAsync(ServiceId);
-        var tags = db.Client.GetContainer(db.Name, options.TagsContainerName);
-        var pk = ServiceId + "|" + tagString;
-        await tags.CreateItemAsync(EngineSemanticsTests.Head(pk), new PartitionKey(pk));
-
         Assert.Equal(rowCount > 0, (await store.TagExistsAsync(tag)).GetValue());
         Assert.Equal(events.Select(e => e.Id), (await store.ReadTagsAsync(tag)).GetValue().Select(r => r.EventId));
         Assert.Equal(events.LastOrDefault()?.SortableUniqueIdValue ?? string.Empty,
             (await store.GetLatestTagAsync(tag)).GetValue().LastSortedUniqueId);
-        foreach (var group in new string?[] { null, "Student", "Other" })
-        {
-            var infos = (await store.GetAllTagsAsync(group)).GetValue().ToList();
-            if (rowCount == 0 || group == "Other") { Assert.Empty(infos); continue; }
-            var info = Assert.Single(infos);
-            Assert.Equal(rowCount, info.EventCount);
-            Assert.Equal(events[0].SortableUniqueIdValue, info.FirstSortableUniqueId);
-            Assert.Equal(events[^1].SortableUniqueIdValue, info.LastSortableUniqueId);
-        }
         var boundary = new SortableUniqueId(SortableUniqueId.Generate(new DateTime(2026, 1, 1, 0, 0, 1, DateTimeKind.Utc), Guid.Empty));
         foreach (var since in new SortableUniqueId?[] { null, boundary })
         {
@@ -86,7 +70,7 @@ public sealed class ReaderExclusionTests(CosmosEmulatorFixture fixture)
     [SkippableTheory]
     [InlineData(0)]
     [InlineData(3)]
-    public async Task RepairAndSweepLeaveHeadAndRowsUnchanged(int rowCount)
+    public async Task RepairAndSweepLeaveHealthyContainerUnchanged(int rowCount)
     {
         await using var db = await TestDatabase.CreateAsync(fixture);
         var options = new CosmosDbEventStoreOptions();
@@ -101,7 +85,8 @@ public sealed class ReaderExclusionTests(CosmosEmulatorFixture fixture)
             nameof(StudentCreated), Guid.NewGuid(), new EventMetadata("c", "c", "test"), [tag])).ToList();
         Assert.True((await store.WriteEventsAsync(events)).IsSuccess);
         var tags = db.Client.GetContainer(db.Name, options.TagsContainerName);
-        await tags.CreateItemAsync(EngineSemanticsTests.Head(ServiceId + "|" + tag), new PartitionKey(ServiceId + "|" + tag));
+        var eventContainer = db.Client.GetContainer(db.Name, options.EventsContainerName);
+        var eventsBefore = await SnapshotAsync(eventContainer);
         var before = await SnapshotAsync(tags);
         var report = await repair.RepairAsync(new CosmosTagRepairOptions { DryRun = false });
         Assert.Equal(rowCount, report.EventsScanned);
@@ -109,6 +94,7 @@ public sealed class ReaderExclusionTests(CosmosEmulatorFixture fixture)
         Assert.Equal(0, report.Repaired);
         Assert.Equal(0, report.Missing);
         Assert.Equal(before, await SnapshotAsync(tags));
+        Assert.Equal(eventsBefore, await SnapshotAsync(eventContainer));
 
         // Use the public registration path and wait for the sweep's terminal log event (no internals access).
         var services = new ServiceCollection();
@@ -132,10 +118,19 @@ public sealed class ReaderExclusionTests(CosmosEmulatorFixture fixture)
         Assert.Contains(1, logs.EventIds); // Completed, not a swallowed repair failure or budget expiry.
         Assert.DoesNotContain(4, logs.EventIds);
         Assert.Equal(before, await SnapshotAsync(tags));
+        Assert.Equal(eventsBefore, await SnapshotAsync(eventContainer));
+    }
+
+    internal static async Task<List<T>> QueryAsync<T>(Container container, string sql)
+    {
+        using var iterator = container.GetItemQueryIterator<T>(new QueryDefinition(sql));
+        var items = new List<T>();
+        while (iterator.HasMoreResults) items.AddRange(await iterator.ReadNextAsync());
+        return items;
     }
 
     private static async Task<string[]> SnapshotAsync(Container container) =>
-        (await EngineSemanticsTests.QueryAsync<JObject>(container, "SELECT * FROM c"))
+        (await QueryAsync<JObject>(container, "SELECT * FROM c"))
         .OrderBy(j => j["id"]!.ToString()).Select(j => j.ToString(Newtonsoft.Json.Formatting.None)).ToArray();
 
     private sealed class SweepLog : ILogger<CosmosTagSweepService>

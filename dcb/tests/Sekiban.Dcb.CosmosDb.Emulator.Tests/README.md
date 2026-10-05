@@ -1,7 +1,8 @@
 # Cosmos emulator tests
 
-Real `CosmosDbEventStore` reader exclusion and Cosmos engine batch, conditional patch,
-ETag, rollback, and operation-limit characterisation. No production fence is implemented.
+Real `CosmosDbEventStore` tagged-event round trips (tag reads, latest tag, tag existence,
+all events and tagged streams), repair and sweep checks on healthy containers, and the
+TransactionalBatch create limit (100 accepted, 101 rejected).
 Targets .NET 9 and .NET 10; requires Docker locally or an external emulator.
 
 ```sh

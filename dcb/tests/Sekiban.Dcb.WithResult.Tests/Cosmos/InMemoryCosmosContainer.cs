@@ -1,5 +1,4 @@
 using Microsoft.Azure.Cosmos;
-using Sekiban.Dcb.CosmosDb;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections;
@@ -40,6 +39,9 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
     /// <summary>Fails the next N point reads, before their resource is materialized.</summary>
     public Queue<Exception> ReadFaults { get; } = new();
 
+    /// <summary>Injects an empty first page into the next query.</summary>
+    public bool EmptyFirstQueryPage { get; set; }
+
     private void ThrowIfPostFaulted()
     {
         if (PostWriteFaults.Count > 0)
@@ -69,10 +71,6 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
     /// <summary>Every document currently stored, newest last.</summary>
     public IReadOnlyList<JObject> Items => _items.Values.ToList();
-
-    public List<string[]> BatchInventory { get; } = new();
-    public List<string?> BatchHeadPositions { get; } = new();
-    public Action<IReadOnlyList<string>>? BeforeBatch { get; set; }
 
     public int Creates { get; private set; }
     public int Deletes { get; private set; }
@@ -337,31 +335,6 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         }
     }
 
-    public override Task<ItemResponse<T>> PatchItemAsync<T>(string id, PartitionKey partitionKey,
-        IReadOnlyList<PatchOperation> patchOperations, PatchItemRequestOptions? requestOptions = null,
-        CancellationToken cancellationToken = default)
-    {
-        lock (_gate)
-        {
-            ThrowIfFaulted();
-            var key = (UnwrapPartitionKey(partitionKey), id);
-            if (!_items.TryGetValue(key, out var live)) throw CosmosFailures.NotFound();
-            if (!PositionMatches(live, requestOptions?.FilterPredicate)) throw CosmosFailures.PreconditionFailed();
-            ApplyPatch(live, patchOperations);
-            return Task.FromResult<ItemResponse<T>>(new FakeItemResponse<T>(live.ToObject<T>()!, HttpStatusCode.OK));
-        }
-    }
-
-    private static bool PositionMatches(JObject live, string? predicate) => predicate is null ||
-        string.CompareOrdinal(live["position"]?.Value<string>(), predicate.Split('\'')[1]) < 0;
-
-    private void ApplyPatch(JObject live, IReadOnlyList<PatchOperation> patches)
-    {
-        foreach (var patch in patches)
-            live[patch.Path.TrimStart('/')] = JToken.FromObject(patch.GetType().GetProperty("Value")!.GetValue(patch)!);
-        Stamp(live);
-    }
-
     public override TransactionalBatch CreateTransactionalBatch(PartitionKey partitionKey) =>
         new InMemoryTransactionalBatch(this, UnwrapPartitionKey(partitionKey));
 
@@ -387,12 +360,6 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         {
             ThrowIfFaulted();
 
-            var inventory = operations.Select(o => o.Kind + ":" + o.Id).ToArray();
-            BeforeBatch?.Invoke(inventory);
-            BatchInventory.Add(inventory);
-            var head = operations.FirstOrDefault(o => o.Id == "$head");
-            BatchHeadPositions.Add(head?.Predicate?.Split('\'')[1] ?? head?.Document?["position"]?.Value<string>());
-            if (operations.Count > 100) return new FakeBatchResponse(HttpStatusCode.BadRequest, []);
             var statuses = new List<HttpStatusCode>();
             var rejected = false;
 
@@ -407,15 +374,12 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
                 }
 
                 statuses.Add(status);
-                if (rejected) break;
             }
 
             if (rejected)
             {
                 // Not one write. This is the guarantee the migration is built on.
-                var failed = statuses.Count - 1;
-                return new FakeBatchResponse(statuses[failed], Enumerable.Range(0, operations.Count)
-                    .Select(i => i == failed ? statuses[failed] : HttpStatusCode.FailedDependency).ToArray());
+                return new FakeBatchResponse(HttpStatusCode.FailedDependency, statuses);
             }
 
             // Pass 2 — every condition held, so commit. Always against the batch's own partition.
@@ -425,9 +389,6 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
                 switch (operation.Kind)
                 {
-                    case InMemoryTransactionalBatch.Kind.Patch:
-                        ApplyPatch(_items[key], operation.Patches!);
-                        break;
                     case InMemoryTransactionalBatch.Kind.Delete:
                         Deletes++;
                         _items.Remove(key);
@@ -461,8 +422,6 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
 
         return operation.Kind switch
         {
-            InMemoryTransactionalBatch.Kind.Patch => !exists ? HttpStatusCode.NotFound :
-                PositionMatches(live!, operation.Predicate) ? HttpStatusCode.OK : HttpStatusCode.PreconditionFailed,
             InMemoryTransactionalBatch.Kind.Create =>
                 exists ? HttpStatusCode.Conflict : HttpStatusCode.Created,
 
@@ -500,18 +459,14 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             .ToDictionary(parameter => parameter.Name, parameter => parameter.Value, StringComparer.Ordinal);
 
         var rows = Execute(text, parameters);
-        if (text.StartsWith("SELECT c.eventId, c.documentType FROM", StringComparison.Ordinal))
-        {
-            rows = rows.Select(row => new JObject(row.Properties()
-                .Where(property => property.Name is "eventId" or "documentType")
-                .Select(property => new JProperty(property.Name, property.Value.DeepClone())))).ToList();
-        }
 
         // A query with an item cap pages; the store and the repair both follow continuation tokens.
         var pageSize = requestOptions?.MaxItemCount is > 0 ? requestOptions.MaxItemCount!.Value : rows.Count;
         var offset = continuationToken == null ? 0 : int.Parse(continuationToken, null);
         var typed = rows.Select(Materialize<T>).ToList();
-        return new FakeFeedIterator<T>(typed, Math.Max(1, pageSize), offset, RecordQueryReadToken);
+        var emptyFirstPage = EmptyFirstQueryPage;
+        EmptyFirstQueryPage = false;
+        return new FakeFeedIterator<T>(typed, Math.Max(1, pageSize), offset, RecordQueryReadToken, emptyFirstPage);
     }
 
     private void RecordQueryReadToken(CancellationToken cancellationToken)
@@ -544,23 +499,9 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
         return text.Contains("sortableUniqueId >= @since", StringComparison.Ordinal) ? cmp >= 0 : cmp > 0;
     }
 
-    /// <summary>Over-returns documents to exercise the client guard independently of server filtering.</summary>
-    public bool IgnoreTagRowPredicate { get; set; }
-
     private List<JObject> Execute(string text, IReadOnlyDictionary<string, object> parameters)
     {
         var rows = _items.Values.AsEnumerable();
-
-        var tagsQuery = text.Contains(CosmosTagQueryFilters.RowsOnly, StringComparison.Ordinal) &&
-            !text.Contains("c.documentType =", StringComparison.Ordinal);
-        if (tagsQuery && !IgnoreTagRowPredicate)
-        {
-            rows = rows.Where(row => row.Property("documentType") == null);
-        }
-        if (parameters.TryGetValue("@tagGroup", out var tagGroup))
-        {
-            rows = rows.Where(row => row["tagGroup"]?.Value<string>() == (string)tagGroup);
-        }
 
         // --- tags container -------------------------------------------------------------------------
         if (text.Contains("c.pk = @pk", StringComparison.Ordinal))
@@ -568,7 +509,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             var pk = (string)parameters["@pk"];
             rows = rows.Where(row => Pk(row) == pk);
 
-            if (!tagsQuery && text.Contains("documentType", StringComparison.Ordinal))
+            if (text.Contains("documentType", StringComparison.Ordinal))
             {
                 rows = FilterDocumentKind(rows, text, parameters);
                 if (text.Contains("eventsProcessed DESC", StringComparison.Ordinal))
@@ -595,14 +536,14 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             {
                 rows = rows.Where(row => SinceMatches(
                     text,
-                    row["sortableUniqueId"]?.Value<string>() ?? string.Empty,
+                    row["sortableUniqueId"]!.Value<string>() ?? string.Empty,
                     (string)since));
             }
 
             if (parameters.TryGetValue("@until", out var until))
             {
                 rows = rows.Where(row =>
-                    string.CompareOrdinal(row["sortableUniqueId"]?.Value<string>(), (string)until) <= 0);
+                    string.CompareOrdinal(row["sortableUniqueId"]!.Value<string>(), (string)until) <= 0);
             }
 
             if (text.Contains("COUNT(1)", StringComparison.Ordinal))
@@ -611,8 +552,8 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             }
 
             rows = text.Contains("DESC", StringComparison.Ordinal)
-                ? rows.OrderByDescending(row => row["sortableUniqueId"]?.Value<string>(), StringComparer.Ordinal)
-                : rows.OrderBy(row => row["sortableUniqueId"]?.Value<string>(), StringComparer.Ordinal);
+                ? rows.OrderByDescending(row => row["sortableUniqueId"]!.Value<string>(), StringComparer.Ordinal)
+                : rows.OrderBy(row => row["sortableUniqueId"]!.Value<string>(), StringComparer.Ordinal);
 
             return rows.ToList();
         }
@@ -623,7 +564,7 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             var serviceId = (string)parameters["@serviceId"];
             rows = rows.Where(row => row["serviceId"]?.Value<string>() == serviceId);
 
-            if (!tagsQuery && text.Contains("documentType", StringComparison.Ordinal))
+            if (text.Contains("documentType", StringComparison.Ordinal))
             {
                 rows = FilterDocumentKind(rows, text, parameters);
                 if (parameters.TryGetValue("@projectorName", out var projectorName) && projectorName is string name)
@@ -643,20 +584,20 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             {
                 rows = rows.Where(row => SinceMatches(
                     text,
-                    row["sortableUniqueId"]?.Value<string>() ?? string.Empty,
+                    row["sortableUniqueId"]!.Value<string>() ?? string.Empty,
                     (string)since));
             }
 
             if (parameters.TryGetValue("@from", out var from))
             {
                 rows = rows.Where(row =>
-                    string.CompareOrdinal(row["sortableUniqueId"]?.Value<string>(), (string)from) > 0);
+                    string.CompareOrdinal(row["sortableUniqueId"]!.Value<string>(), (string)from) > 0);
             }
 
             if (parameters.TryGetValue("@to", out var to))
             {
                 rows = rows.Where(row =>
-                    string.CompareOrdinal(row["sortableUniqueId"]?.Value<string>(), (string)to) <= 0);
+                    string.CompareOrdinal(row["sortableUniqueId"]!.Value<string>(), (string)to) <= 0);
             }
 
             if (text.Contains("COUNT(1)", StringComparison.Ordinal))
@@ -665,8 +606,8 @@ public sealed class InMemoryCosmosContainer : NotSupportedCosmosContainer
             }
 
             rows = text.Contains("DESC", StringComparison.Ordinal)
-                ? rows.OrderByDescending(row => row["sortableUniqueId"]?.Value<string>(), StringComparer.Ordinal)
-                : rows.OrderBy(row => row["sortableUniqueId"]?.Value<string>(), StringComparer.Ordinal);
+                ? rows.OrderByDescending(row => row["sortableUniqueId"]!.Value<string>(), StringComparer.Ordinal)
+                : rows.OrderBy(row => row["sortableUniqueId"]!.Value<string>(), StringComparer.Ordinal);
 
             if (text.Contains("TOP 1 VALUE c.sortableUniqueId", StringComparison.Ordinal))
             {
@@ -722,10 +663,9 @@ public static class CosmosFailures
 /// </summary>
 internal sealed class InMemoryTransactionalBatch : TransactionalBatch
 {
-    internal enum Kind { Create, Replace, Delete, Patch }
+    internal enum Kind { Create, Replace, Delete }
 
-    internal sealed record Operation(Kind Kind, string Id, JObject? Document, string? IfMatchEtag,
-        IReadOnlyList<PatchOperation>? Patches = null, string? Predicate = null);
+    internal sealed record Operation(Kind Kind, string Id, JObject? Document, string? IfMatchEtag);
 
     private readonly InMemoryCosmosContainer _container;
     private readonly List<Operation> _operations = new();
@@ -788,11 +728,7 @@ internal sealed class InMemoryTransactionalBatch : TransactionalBatch
     public override TransactionalBatch PatchItem(
         string id,
         IReadOnlyList<PatchOperation> patchOperations,
-        TransactionalBatchPatchItemRequestOptions? requestOptions = null)
-    {
-        _operations.Add(new Operation(Kind.Patch, id, null, null, patchOperations, requestOptions?.FilterPredicate));
-        return this;
-    }
+        TransactionalBatchPatchItemRequestOptions? requestOptions = null) => throw new NotSupportedException();
 
     public override TransactionalBatch ReadItem(string id, TransactionalBatchItemRequestOptions? requestOptions = null) =>
         throw new NotSupportedException();
@@ -875,25 +811,33 @@ internal sealed class FakeFeedIterator<T> : FeedIterator<T>
     private readonly int _pageSize;
     private readonly Action<CancellationToken>? _recordToken;
     private int _offset;
+    private bool _emptyFirstPage;
 
     public FakeFeedIterator(
         IReadOnlyList<T> rows,
         int pageSize,
         int offset,
-        Action<CancellationToken>? recordToken = null)
+        Action<CancellationToken>? recordToken = null,
+        bool emptyFirstPage = false)
     {
         _rows = rows;
         _pageSize = pageSize;
         _offset = offset;
         _recordToken = recordToken;
+        _emptyFirstPage = emptyFirstPage;
     }
 
-    public override bool HasMoreResults => _offset < _rows.Count;
+    public override bool HasMoreResults => _emptyFirstPage || _offset < _rows.Count;
 
     public override Task<FeedResponse<T>> ReadNextAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         _recordToken?.Invoke(cancellationToken);
+        if (_emptyFirstPage)
+        {
+            _emptyFirstPage = false;
+            return Task.FromResult<FeedResponse<T>>(new FakeFeedResponse<T>([], _offset.ToString(null as IFormatProvider)));
+        }
         var page = _rows.Skip(_offset).Take(_pageSize).ToList();
         _offset += page.Count;
         var continuation = _offset < _rows.Count ? _offset.ToString(null as IFormatProvider) : null;

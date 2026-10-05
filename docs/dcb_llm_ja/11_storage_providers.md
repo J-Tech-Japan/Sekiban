@@ -46,7 +46,6 @@ DCB は複数のストレージプロバイダーをサポートしています�
 
 ### Cosmos DB イベントストア
 
-Cosmos の tags コンテナーのリーダーは、`documentType` を持つ行以外のドキュメントを無視します。今後タグのヘッドドキュメントを書き込むリリースを有効にする前に、すべてのリーダーをこの除外対応リリース以降に更新してください。
 
 `Sekiban.Dcb.CosmosDb` (`src/Sekiban.Dcb.CosmosDb`). コンテナー構成:
 
@@ -61,47 +60,6 @@ services.AddSekibanDcbCosmosDbWithAspire();
 ```
 
 Cosmos の書き込みはベストエフォート トランザクションです。整合性は Executor の予約と Cosmos の設定に依存します。
-
-### Cosmos の観測タグ位置の記録（オプトイン）
-
-`CosmosDbEventStoreOptions.RecordObservedTagPositions` の既定値は `false` です。有効にすると、通常のコマンド書き込みは元の consistency タグの観測位置を `tags` と同じ順序・長さの配列 `observed` に記録します。null は未読、`""` は空の状態を読んだこと、それ以外は 30 桁の位置を表します。不正な空でない位置はイベントを保存する前に書き込みエラーになります。明示した consistency タグ位置は読み取った状態より優先されます。unique-key 書き込みと expected-position fence の経路では記録しません。
-
-null 以外の観測値があるイベントには、同じ書き込み全体で共有する N 形式の GUID `observedWrite` も記録します。複数イベントでも元の観測位置を保持し、チェーンにはしません。イベント書き込みの一部が失敗しても、保存済みイベントは元の観測位置と書き込み ID を保持します。呼び出し側の再試行には新しい ID が付きます。全要素が null の場合は両プロパティを省略するため、「記録が無効」と「有効だが何も観測していない」は区別できません。無効時の JSON は従来と同じです。
-
-これは証跡の記録だけです。現時点では何も読み取らず、検出は SEK-G115 で追加予定です。このフィールドは何も防止しません。reader、タグ行、repair、sweep の動作は変わりません。`tools/MigrateDcbCosmosEventsTags` の import は選択したフィールドから文書を再構成するため両プロパティを失います。cold-event export も `SerializableEvent` を保存するので両プロパティを失います。将来の検出対象は hot の Cosmos 文書に限られます。
-
-コンパクト JSON の追加サイズの概算は、位置ごとに **約 33 バイト**、空文字列ごとに **約 3 バイト**、null ごとに **約 5 バイト**、さらにプロパティ名・書き込み ID・区切り文字で **文書ごとに約 65 バイト**です。記録が有効ならサイズゲートは常に全タグに 30 桁の位置と `observedWrite` を付けた最悪ケースを計測します。実際には省略する場合や unique-key 経路も安全側に加算します。計測は `CosmosDbContext.Options` から設定を取得し、標準 DI は store と同じ context を共有します。計測用 context を明示する場合は store と同じ context・設定を使用してください。
-
-events コンテナは既定で全パスをインデックスするため、`observed` の要素により書き込み RU が少し増えます。観測値を検索しない場合は `/observed/[]/?` を excluded path に追加してください（`/observedWrite/?` も同様です）。
-
-観測位置を持つのは executor 経由のコマンド書き込みだけです。store を直接呼ぶ書き込み（event store の `WriteEventsAsync` や `WriteSerializableEventsAsync`）には観測位置がないため、オプションが有効でも何も記録しません。
-
-### Cosmos タグ head の維持（オプトイン）
-
-`CosmosDbEventStoreOptions.TagHeadMode` の既定値は `CosmosTagHeadMode.Off` です。
-`Advance` を指定すると、各タグのパーティションに `{ id: "$head", pk: "{serviceId}|{tag}",
-serviceId, tag, documentType: "tagHead", position }` を保存し、`position` にそのタグへ書いた
-最大の SortableUniqueId を維持します。Advance は head を維持するだけで、head に基づく
-書き込み拒否は行いません。書き込みの enforcement にこの head を読む経路はありません。
-Cosmos のフェンスは `Advance` までで、強制検査モードの予定はありません。診断用 head が必要な場合以外は
-`TagHeadMode` を `Off` にしてください。strict なワークロードには PostgreSQL を使ってください。
-[fast と strict の選択](13_common_issues.md#fast-and-strict-tag-consistency)も参照してください。
-
-有効化前に **すべての reader を SEK-G106 以降へ更新**してください。この reader は行以外の
-ドキュメントを除外します。`UseTransactionalBatchForTags = true` と `MaxBatchOperations >= 2`
-が必須で、構築時および使用時に検証します。両モードともバッチ上限を 100 に制限します
-（Off の非正値は従来どおり 1）。Advance は head 用に 1 操作を予約し、最初のチャンクに
-全チャンクの最大値を設定します。fallback や後続の行だけのチャンクの前に、head がその
-最大値以上であることを確認します。head がない場合は既存の最上位行と新しい最大値の
-大きい方で初期化します。repair と sweep も同じ規則で、行作成前に head を進めます。
-
-コストはタグパーティションごとの書き込みにつき、既存バッチへ追加 1 操作です。初回に head が
-なければ失敗バッチ、初期化クエリ、再試行が加わります。head が既に新しい最大値以上で Patch が
-412 を返した場合は、行だけのバッチをもう1回実行します。その他の競合では追加の head リクエストが必要になる場合があります。
-古いパッケージ、Off のインスタンス（repair/sweep を含む）、外部 export/import ツールが
-行を追加している間は head が真の最大値より遅れることがあります。export/import ツールは
-head を維持しません。旧形式の migration reduction は
-イベントとタグの組を変えないため、head を維持しません。
 
 ### Cosmos event document サイズ admission（opt-in）
 
@@ -826,123 +784,6 @@ var executor = new InMemoryDcbExecutor(domainTypes, new InMemoryEventStore());
 
 **境界は耐久クレーム1つ。** 本コントラクトはキーごとに高々1つの耐久クレームを保証しますが、マイグレーションの副作用をちょうど1回にはしません。マイグレーション自体が外部副作用（他システムへの書き込み、通知送信）を行う場合は、それらを勝者クレームの背後にアウトボックス／冪等層で置いてください — クレームが伝えるのは*誰が勝ったか*であって、副作用がちょうど1回実行されたことではありません。
 
-<a id="cosmos-interim-tag-head-cas"></a>
-
-## Cosmos の暫定パターン: タグと期待する先頭からユニークキーを作る
-
-まず `IEventStore.GetLatestTagAsync(tag)` でタグの現在の先頭を読みます。Cosmos は `$head` ではなくタグ行を
-検索します。`LastSortedUniqueId` を使い、空タグなら `""` として、handler 実行前にキーを作ってください。
-イベントはその期待先頭の状態から作る必要があります。読み取りエラーを空タグとして扱ってはいけません。
-区切り文字の曖昧さを避けるため、正確なタグ文字列と期待先頭の JSON 配列をハッシュ化します。
-
-```csharp
-using System.Security.Cryptography;
-using System.Text.Json;
-using Sekiban.Dcb.Storage;
-
-static string TagHeadKey(string tag, string expectedHead) =>
-    "tag-head-v1:" + Convert.ToHexString(SHA256.HashData(
-        JsonSerializer.SerializeToUtf8Bytes(new[] { tag, expectedHead })));
-
-// eventStore: IEventStore; tag: ITag; singleEvent: SerializableEvent.
-// Read first; propagate errors instead of treating them as an empty head.
-var headResult = await eventStore.GetLatestTagAsync(tag);
-if (!headResult.IsSuccess) throw headResult.GetException();
-var expectedHead = headResult.GetValue().LastSortedUniqueId; // "" when empty
-var key = TagHeadKey(tag.GetTag(), expectedHead);
-// Construct singleEvent from the state at expectedHead, with a unique request id in its payload.
-// Allocate its position above expectedHead and reject a stale/equal position BEFORE consuming the key.
-if (StringComparer.Ordinal.Compare(singleEvent.SortableUniqueIdValue, expectedHead) <= 0)
-    throw new InvalidOperationException("The event position must be strictly greater than expectedHead.");
-var result = await ((IConditionalEventStore)eventStore).AppendIfUniqueAsync(
-    new ConditionalAppendRequest(key, singleEvent));
-```
-
-空でない ASCII キーは `OperationFingerprint.NormalizeKey` の制約（trim、NFC、UTF-8 で512バイト以下）を満たします。
-ServiceId は `ConditionalAppendIdentity.DeriveEventId` に既に含まれます。読み書きは同じサービス範囲で行ってください。
-全 writer がこの同じ導出を使い、以下の位置の前提条件を満たす場合に限り、`(tag, head)` の compare-and-set になります。
-同じ先頭で異なる操作が1つの永続イベント ID を奪い合い、一方が `Appended`、異なる payload の側は
-`KeyReuseConflictException` を持つ `ResultBox.Error` になります。次の書き込みは勝者の `WinnerSortableUniqueId` を
-期待先頭として新しいキーを作ります。これは協調する writer 間の CAS であり、provider が現在の head と比較するものではありません。
-
-コマンドの入口は `CommandExecutionOptions` を受け取る `GeneralSekibanExecutor.ExecuteAsync` overload です。
-`ConditionalAppend = new ConditionalAppendSpecification(key)` を指定します。キーは handler 実行前に必要です。
-または例のように `IConditionalEventStore.AppendIfUniqueAsync` を直接使います。
-両方の `OrleansDcbExecutor` facade は execution options 用に `IConditionalCommandExecutor` を明示的に実装します。
-ただし `ConditionalAppend` は、fence オプションと併用した場合も、handler や actor/store 呼び出しの前に
-`ConditionNotSupportedException` で必ず拒否します。feature detection は「execution options を受け取れる」ことを示し、
-ユニークキー対応を意味しません。`ISerializedConditionalSekibanDcbExecutor` は引き続き実装しません。
-Orleans ホストは Cosmos store を直接呼ぶか、公開の `OrleansActorObjectAccessor` を使って別途
-以下の overload で executor を構築できます（両方の General facade にあります）。
-
-```csharp
-var generator = new MonotonicSortableUniqueIdGenerator(); // Sekiban.Dcb.Common
-var seedCoordinator = new SortableUniqueIdSeedCoordinator(generator); // Sekiban.Dcb.Actors
-var executor = new GeneralSekibanExecutor(
-    eventStore, orleansActorAccessor, domainTypes,
-    eventPublisher: null, executedUserProvider: null,
-    sortableUniqueIdGenerator: generator,
-    sortableUniqueIdSeedCoordinator: seedCoordinator,
-    serviceIdProvider: serviceIdProvider);
-```
-
-これらのオブジェクトはホストごとに1回作り、再利用してください。
-store と accessor が使う**同じ `IServiceIdProvider`** を渡してください。3 引数のコンストラクタは
-`DefaultServiceIdProvider` を使うため、Orleans の ServiceId をカスタマイズしている場合は store の seed を
-異なるサービスキーでキャッシュし、別サービスの完了済み seed を再利用して、このサービスの永続先頭を
-読まない可能性があります。accessor も Grain キーに ServiceId を使います。
-これはホストが用意する別経路であり、Orleans executor のオプションではありません。
-
-**毎回の試行に必要な位置の前提条件:** 追記するイベントの SortableUniqueId は、ordinal 順で
-**`expectedHead` より厳密に大きい**必要があります。`IConditionalEventStore.AppendIfUniqueAsync` を直接
-呼ぶ場合は、その条件を満たす id でイベントを作り、例のように追記前に検査してください。先頭を読む前に
-生成した id や、別 writer より時計が遅れているホストの id は、この条件を満たさない場合があります。
-Cosmos はキーに含まれる先頭とイベント位置を比較しません（`Advance` モードでも同様です）。
-
-`GeneralSekibanExecutor` の `ConditionalAppend` 経路では、executor が handler の後に id を生成します。
-既定の monotonic generator はプロセス内で単調に進み、coordinator はサービス全体の永続イベントの最大位置を
-**seed 成功後は coordinator ごとに正規化 ServiceId あたり1回だけ**読みます（失敗した seed は再試行可能です）。
-従来のコンストラクタはプロセス内でその coordinator を共有します。書き込みごとに store head を再取得しません。
-通常の typed / serialized commit では予約がすべて成功した観測位置より上へ generator の下限を上げます。
-typed `ConditionalAppend` では handler の追跡対象 state 読み取りの最終位置より上へ下限を上げます。
-serialized conditional commit には追跡対象 state がなく、この経路は変更されません。
-store から直接、または `GetTagLatestSortableUniqueIdAsync` で読んだ先頭は追跡されず、どちらの unique-key
-経路にも下限を提供しません。この方法で `expectedHead` を取得する場合は、以下の手動 seed が必要です。
-呼び出し側は **毎回**の `ExecuteAsync` の前に、注入した generator がその試行の `expectedHead` より大きい id を
-生成することを保証してください。上記の `MonotonicSortableUniqueIdGenerator` では、空でない先頭を
-`SortableUniqueId.TryParse` で検証し、`new SortableUniqueId(expectedHead).GetDateTime().Ticks` で ticks を取得して、
-実行前に `generator.Seed(ticks)` を呼びます。次の生成は時計の遅れによらずその ticks を超えます。
-不正な先頭は拒否し、ticks を使い切った場合も書き込まず失敗させてください。coordinator と executor には
-同じ generator を渡します。この試行ごとの生成保証を用意できない場合は、追記前に検査する直接経路を使ってください。
-executor のレシートを後から検査しても、キーの消費を防ぐには遅すぎます。
-
-制限:
-
-- `expectedHead` 以下の位置でも受理され、`key(tag, expectedHead)` が消費される一方で、
-  `GetLatestTagAsync` は元の先頭を返し続ける場合があります。以後の異なる操作は消費済みの同じキーを導出して
-  `KeyReuseConflictException` になり、このパターンは進めなくなります。同一操作の再試行は元のレシートを返すため、
-  その位置を置き換えられません。タグ行の修復や `Advance` もこの順序の誤りを解消しません。
-  このパターンの自動復旧や claim をリセットする API はありません。運用者が復旧するには、受理済みイベントを
-  照合し、writer を停止してから、元の先頭を超える妥当なイベントで意図的にタグを進める必要があります。
-  無条件の `WriteSerializableEventsAsync` API で実行できますが、このパターンの保護を迂回します。
-  新しい先頭が見えることを確認してから再開してください。任意の新しいキーを選ぶだけでは共有 CAS ルールを放棄します。
-- イベントは1つ、フェンスするタグも1つです。他の出力タグの先頭はこのキーでは保護されません。
-- 無条件 writer はキーを迂回します。保護するストリームに混在させないでください。
-- 同じキーでイベント型、正規化 payload、タグが同じなら、新しい EventId/SortableUniqueId でも
-  `AlreadyCommittedSameOperation` にまとまります。異なるコマンドが同じ payload を持つと更新が黙って失われます。
-  一意の command/request id を **payload 内**に含め、再試行では同じ id を使ってください。
-- この経路は予約を取らず、タグアクターへの確認・通知も送りません。Grain のキャッシュ済み先頭は更新されず、
-  同じタグの通常コマンドを混在させると、そのキャッシュ済み先頭が古いままになる場合があります。
-- executor は `ConditionalAppend` と明示的な `ExpectedTagPositions`、またはコマンド単位の
-  `TagConsistencyFence = DeriveFromReservations` の併用を拒否します。global derived 設定だけでは拒否せず、
-  条件付き経路はその設定を迂回するため derived fence は適用されません。
-- イベントとタグ行は別コンテナでコミットします。先頭の読み取りがイベント claim より遅れ、同じキーの競合に
-  なる場合があります。安全に先へ進むには不足したタグ行の修復が必要です。元の操作を再試行して可視性のゲートを
-  完了させてください。[Cosmos タグ修復ゲート](13_common_issues.md#条件付きユニークキー追記-in-doubtキー再利用cosmos-タグ修復ゲート)参照。
-
-例では追記の前に head クエリが1つ加わります。再試行と可視性の修復で追加リクエストがあり得ます。
-これはコード上の経路のコストであり、ベンチマーク結果ではありません。汎用的な strict ワークロードには PostgreSQL を選んでください。
-
 ## PostgreSQL の耐久 multi-tag expected-position CAS — SEK-G40
 
 **バージョン: 10.19.0（minor）。** PostgreSQL は任意の
@@ -950,8 +791,6 @@ executor のレシートを後から検査しても、キーの消費を防ぐ�
 DCB fence であり、パーティション／retire 後の writer が in-memory reservation を迂回しても、古い
 consistency-tag head を読んだ command の追記を防ぎます。reservation の置換ではなく、任意の外部副作用を
 exactly-once にするものでもありません。
-
-ストアは `ExpectedTagPositionLimits` で強制検査の制限を宣言でき、PostgreSQL は制限を宣言せず、executor はストアの制限を超える command を予約前に拒否します。
 
 ### Derived fence (TagConsistencyFenceOptions)
 
@@ -984,8 +823,8 @@ if (executor is IConditionalCommandExecutor conditional)
 ```
 
 Orleans executor は、fence オプションとの併用時も `ConditionalAppend` を `ConditionNotSupportedException` で必ず拒否します。
-ユニークキー追記は store-level の `IConditionalEventStore.AppendIfUniqueAsync` API または別途 General executor を使ってください
-（[暫定パターン](#cosmos-interim-tag-head-cas)参照）。General executor の conditional append は別経路で global derived 設定を
+ユニークキー追記は store-level の `IConditionalEventStore.AppendIfUniqueAsync` API または別途 General executor を使ってください。
+General executor の conditional append は別経路で global derived 設定を
 迂回し、明示的な fence オプションとは併用できません。導出モードを既定にするかは未決定です。
 
 **追加コスト（コード上の操作。実測ではありません）**。通常の型付き・シリアライズ済み書き込みと条件付き claim は、

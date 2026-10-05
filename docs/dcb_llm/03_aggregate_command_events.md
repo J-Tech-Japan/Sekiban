@@ -100,10 +100,8 @@ How the expected version is chosen for a write:
 
 **Guarantee boundary.** Reservations coordinate one activation; duplicate activations can accept stale writes.
 See [Choosing between fast and strict tag consistency](13_common_issues.md#fast-and-strict-tag-consistency)
-for provider choices, costs and the all-writer boundaries. The Cosmos fence stops at `Advance`; no enforcing mode is
-planned. Strict workloads should use PostgreSQL. The
-[interim Cosmos unique-key pattern](11_storage_providers.md#cosmos-interim-tag-head-cas) uses a separate General
-executor or the store; it is not reachable through `OrleansDcbExecutor` today.
+for provider choices, costs and the all-writer boundaries. Cosmos DB has no expected-position fence and none is planned.
+Strict workloads should use PostgreSQL.
 
 **10.11.0 release note.** Unread consistency tags once again use the 10.1.x no-comparison behavior, fixing commands that
 attach existing secondary tags without reading them. Asserted-empty first writes retain the 10.8.0 conflict check within one activation.

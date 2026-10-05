@@ -101,10 +101,8 @@ public record StudentTag(Guid StudentId) : IGuidTagGroup<StudentTag>
 **保証境界**。予約は1つの活性化を協調させます。重複活性化では古い状態からの書き込みを受け入れ得ます。
 provider の選択、コスト、全 writer の境界は
 [fast と strict のタグ整合性を選ぶ](13_common_issues.md#fast-and-strict-tag-consistency)を参照してください。
-Cosmos のフェンスは `Advance` までで、書き込みを強制的に検査するモードの予定はありません。
+Cosmos DB に expected-position fence はなく、導入の予定もありません。
 strict なワークロードには PostgreSQL を使ってください。
-[Cosmos の暫定ユニークキーパターン](11_storage_providers.md#cosmos-interim-tag-head-cas)は別途 General executor
-または store を使います。現在の `OrleansDcbExecutor` からは到達できません。
 
 **10.11.0 リリースノート**: 未読の整合性タグは 10.1.x と同じ比較なし動作へ戻り、既存の副次タグを読み取らず付与
 するコマンドを修復します。明示的に空を観測した初回書き込みは、単一活性化内の 10.8.0 の衝突検査を維持します。nullable metadata で
