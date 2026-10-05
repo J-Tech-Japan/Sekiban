@@ -97,6 +97,8 @@
     <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/Sekiban.Dcb.MaterializedView.BinaryConsumer.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.NewVersionConsumer/Sekiban.Dcb.MaterializedView.NewVersionConsumer.csproj" />
+    <Project Path="dcb/tests/Sekiban.Dcb.SortableUniqueIdWait.Tests/Sekiban.Dcb.SortableUniqueIdWait.Tests.csproj" />
+    <Project Path="dcb/tests/Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests/Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.Tests/Sekiban.Dcb.MaterializedView.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.Postgres.Tests/Sekiban.Dcb.MaterializedView.Postgres.Tests.csproj" />
     <Project Path="dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj" />

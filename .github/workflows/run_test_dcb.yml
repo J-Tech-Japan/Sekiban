@@ -46,6 +46,10 @@ on:
       - 'dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/**'
       - 'dcb/tests/Sekiban.Dcb.TemplateValidation/**'
       - 'templates/Sekiban.Dcb.Templates/content/*/SekibanDcbTemplateVersion.props'
+      - 'dcb/tests/Sekiban.Dcb.SortableUniqueIdWait.Tests/**'
+      - 'dcb/tests/Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests/**'
+      - 'Sekiban.slnx'
+      - '.github/workflows/run_test_dcb.yml'
 
 concurrency:
   group: DcbTestWorkflow
@@ -232,6 +236,9 @@ jobs:
 
       - name: dotnet test DCB projects sequentially (net10.0)
         run: |
+          # These net10-only projects have no coverage collector; run without --collect.
+          dotnet test dcb/tests/Sekiban.Dcb.SortableUniqueIdWait.Tests/Sekiban.Dcb.SortableUniqueIdWait.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests/Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
