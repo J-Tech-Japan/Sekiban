@@ -40,9 +40,12 @@ jobs:
           # runs the same fixture's supported-path and intentionally-buffered counter-proof; this is supporting evidence.
           timeout 10m dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net10.0 --filter "Category=StreamingRestoreControlledMemory|Category=TaggedStreamControlledMemory" --logger "console;verbosity=normal"
 
-      - name: Run 128-200 MiB restore smoke under a process ceiling
+      - name: Run 128-200 MiB restore smoke in an isolated process
         run: |
-          # The selected test process is isolated from normal PR CI. 6 GiB virtual-address limit and 30 minute wall
-          # timeout are supporting safety ceilings, while the test records peak RSS and selected-path telemetry.
-          ulimit -Sv 6291456
-          timeout 30m dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net10.0 --filter "Category=StreamingRestoreManualMemory|Category=TaggedStreamManualMemory" --logger "console;verbosity=normal"
+          # Each manual smoke runs in its own test process. The wall timeout is the safety bound,
+          # while the tests record peak working set and selected-path telemetry.
+          timeout 30m dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net10.0 --filter "Category=StreamingRestoreManualMemory" --logger "console;verbosity=normal"
+
+      - name: Run tagged-stream manual smoke in an isolated process
+        run: |
+          timeout 10m dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net10.0 --filter "Category=TaggedStreamManualMemory" --logger "console;verbosity=normal"

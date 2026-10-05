@@ -578,7 +578,7 @@ public sealed partial class StreamingSnapshotRestoreTests
     public async Task Manual_143MiB_offloaded_fixture_reports_peak_and_selected_restore_path_without_claiming_no_oom()
     {
         // This intentionally does not run as part of ordinary CI. The dedicated scheduled/manual workflow supplies the
-        // opt-in variable, runs this test in its own process with a timeout and virtual-memory ceiling, and preserves
+        // opt-in variable, runs this test in its own process with a timeout, and preserves
         // the console telemetry. The assertion is selected-path structure, never a "no OOM" promise.
         if (!string.Equals(Environment.GetEnvironmentVariable("SEKIBAN_STREAM_RESTORE_SMOKE"), "1", StringComparison.Ordinal))
         {
@@ -679,7 +679,7 @@ public sealed partial class StreamingSnapshotRestoreTests
             canGetUnsafeState: true,
             blobAccessor: blob,
             offloadThresholdBytes: 1);
-        Assert.True(result.IsSuccess);
+        Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
         Assert.True(result.GetValue().IsOffloaded);
         return (result.GetValue(), blob);
     }
