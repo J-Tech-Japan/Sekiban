@@ -77,6 +77,95 @@ jobs:
           dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh \
             --repo-root "$GITHUB_WORKSPACE" --feed "$GITHUB_WORKSPACE/dcb-local-feed" --version "$VERSION"
 
+  production-pack-first:
+    name: First independent production library pack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Log SDK and runner image
+        run: |
+          dotnet --info
+          echo "Runner image: ${ImageOS} ${ImageVersion}"
+
+      - name: Derive version and pack with exact tag-workflow production settings
+        run: |
+          VERSION="$(bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-template-version.sh --repo-root "$GITHUB_WORKSPACE")"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          bash dcb/tests/Sekiban.Dcb.TemplateValidation/pack-local-dcb.sh \
+            --production --repo-root "$GITHUB_WORKSPACE" \
+            --output "$GITHUB_WORKSPACE/production-feed" --version "$VERSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-library-pack
+          path: production-feed/*.nupkg
+          if-no-files-found: error
+
+  production-pack-second:
+    name: Second independent production pack and 26-package comparison
+    needs: production-pack-first
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Log SDK and runner image
+        run: |
+          dotnet --info
+          echo "Runner image: ${ImageOS} ${ImageVersion}"
+
+      - name: Derive version and pack with exact tag-workflow production settings
+        run: |
+          VERSION="$(bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-template-version.sh --repo-root "$GITHUB_WORKSPACE")"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          bash dcb/tests/Sekiban.Dcb.TemplateValidation/pack-local-dcb.sh \
+            --production --repo-root "$GITHUB_WORKSPACE" \
+            --output "$GITHUB_WORKSPACE/production-feed" --version "$VERSION"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-library-pack
+          path: first-runner-feed
+
+      - name: Compare all 26 packages from the two runners
+        run: |
+          bash dcb/tests/Sekiban.Dcb.TemplateValidation/run-library-pack-determinism.sh \
+            --repo-root "$GITHUB_WORKSPACE" --version "$VERSION" \
+            --first-feed "$GITHUB_WORKSPACE/first-runner-feed" \
+            --second-feed "$GITHUB_WORKSPACE/production-feed"
+
   currency-drift:
     name: Scheduled stable DCB/template currency check
     if: github.event_name == 'schedule'

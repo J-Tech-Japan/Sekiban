@@ -438,7 +438,13 @@ for invalid_version in "${invalid_versions[@]}"; do
   make_minimal_currency_docs_fixture "$invalid_fixture"
   perl -0pi -e "s/Sekiban\\.Dcb ${version}/Sekiban.Dcb ${invalid_version}/" \
     "$invalid_fixture/templates/Sekiban.Dcb.Templates/README.md"
-  expect_failure_reason "Expected exactly one whole-token Sekiban.Dcb version mention" run_net10 "$validator" docs-currency --repo-root "$invalid_fixture" --expected-version "$version"
+  currency_failure_reason="Expected exactly one whole-token Sekiban.Dcb version mention"
+  # Appending a digit can form a valid but wrong version (10.23.1 -> 10.23.10).
+  # Keep requiring rejection, with the validator's precise reason for that case.
+  if [[ "$invalid_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+    currency_failure_reason="The sole template Markdown Sekiban.Dcb version must be $version"
+  fi
+  expect_failure_reason "$currency_failure_reason" run_net10 "$validator" docs-currency --repo-root "$invalid_fixture" --expected-version "$version"
 done
 
 newline_fixture="$work_root/docs-invalid-newline"

@@ -47,12 +47,14 @@ compare_one() {
     --local-package "$2"
 }
 
+failures=()
 while IFS= read -r package; do
   name="$(basename "$package")"
   other="$second_feed/$name"
   [[ -f "$other" ]] || {
     echo "Second feed is missing $name" >&2
-    exit 1
+    failures+=("$name: missing locally in second feed")
+    continue
   }
   first_real="$(cd "$(dirname "$package")" && pwd)/$(basename "$package")"
   second_real="$(cd "$(dirname "$other")" && pwd)/$(basename "$other")"
@@ -61,11 +63,14 @@ while IFS= read -r package; do
     exit 1
   fi
   compare_one "$package" "$other" || {
-    echo "Semantic package manifests differ for $name" >&2
-    exit 1
+    failures+=("$name: content differs")
   }
 done < <(find "$first_feed" -maxdepth 1 -name '*.nupkg' | sort)
 
+if (( ${#failures[@]} > 0 )); then
+  printf 'Independent runner equality failed: %s\n' "${failures[@]}" >&2
+  exit 1
+fi
 echo "LIBRARY PACK DETERMINISM: 26/26 equal"
 
 near_root="$(mktemp -d "${TMPDIR:-/tmp}/sek-g82-near-pack.XXXXXX")"

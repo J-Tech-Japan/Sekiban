@@ -573,42 +573,51 @@ check_library_post_push_equality() {
     return 1
   }
   local package package_lower local_path remote_path temporary http_code
+  local failures=() equal=0
   for package in "${dcb_package_ids[@]}"; do
     package_lower="$(printf '%s' "$package" | tr '[:upper:]' '[:lower:]')"
     local_path="$local_out_dir/${package}.${version}.nupkg"
-    [[ -f "$local_path" ]] || {
-      echo "Local package missing: ${local_path}" >&2
-      return 1
-    }
-    if [[ "$feed_base_url" == file://* ]]; then
-      remote_path="$(printf '%s' "$feed_base_url" | sed 's#^file://##')/$package_lower/$version/$package_lower.$version.nupkg"
-      [[ -f "$remote_path" ]] || {
-        echo "Public package missing on feed: ${package}/${version}" >&2
-        return 1
-      }
-      compare_semantic_package_manifests "$local_path" "$remote_path" || return 1
+    if [[ ! -f "$local_path" ]]; then
+      failures+=("${package}: missing locally (${local_path})")
       continue
     fi
-    temporary="$(mktemp /tmp/sek-public-pkg.XXXXXX)"
-    if ! http_code="$(curl --silent --show-error --location --retry 0 \
-        --connect-timeout 20 --max-time 60 \
-        --output "$temporary" --write-out '%{http_code}' \
-        "$feed_base_url/$package_lower/$version/$package_lower.$version.nupkg")"; then
-      rm -f "$temporary"
-      echo "Unable to download public package ${package}/${version}." >&2
-      return 1
+    temporary=""
+    if [[ "$feed_base_url" == file://* ]]; then
+      remote_path="${feed_base_url#file://}/$package_lower/$version/$package_lower.$version.nupkg"
+      if [[ ! -f "$remote_path" ]]; then
+        failures+=("${package}: could not download (public package missing on feed)")
+        continue
+      fi
+    else
+      temporary="$(mktemp /tmp/sek-public-pkg.XXXXXX)"
+      if ! http_code="$(curl --silent --show-error --location --retry 0 \
+          --connect-timeout 20 --max-time 60 \
+          --output "$temporary" --write-out '%{http_code}' \
+          "$feed_base_url/$package_lower/$version/$package_lower.$version.nupkg")"; then
+        rm -f "$temporary"
+        failures+=("${package}: could not download (transport failure)")
+        continue
+      fi
+      if [[ "$http_code" != 200 ]]; then
+        rm -f "$temporary"
+        failures+=("${package}: could not download (HTTP ${http_code})")
+        continue
+      fi
+      remote_path="$temporary"
     fi
-    if [[ "$http_code" != 200 ]]; then
-      rm -f "$temporary"
-      echo "Public package ${package}/${version} returned HTTP ${http_code}." >&2
-      return 1
+    if compare_semantic_package_manifests "$local_path" "$remote_path"; then
+      equal=$((equal + 1))
+      echo "Package equal: ${package}/${version}"
+    else
+      failures+=("${package}: content differs")
     fi
-    if ! compare_semantic_package_manifests "$local_path" "$temporary"; then
-      rm -f "$temporary"
-      return 1
-    fi
-    rm -f "$temporary"
+    [[ -z "$temporary" ]] || rm -f "$temporary"
   done
+  echo "Public library equality: ${equal}/${#dcb_package_ids[@]} equal; ${#failures[@]} failed."
+  if (( ${#failures[@]} > 0 )); then
+    printf 'Package equality failed: %s\n' "${failures[@]}" >&2
+    return 1
+  fi
   echo "Public library packages match the local pack under compare_semantic_package_manifests (${#dcb_package_ids[@]}/${#dcb_package_ids[@]})."
 }
 
@@ -941,6 +950,7 @@ with ZipFile(path) as archive:
         lowered = name.lower()
         if not name or name.endswith('/') or lowered == '_rels/.rels' or lowered.endswith('.signature.p7s') or \
            lowered.startswith('package/services/metadata/core-properties/') or \
+           lowered.startswith('_manifest/') or \
            lowered.endswith('.psmdcp'):
             continue
         entries.append((name, sha256(archive.read(entry)).hexdigest()))
@@ -965,8 +975,12 @@ compare_semantic_package_manifests() {
   local left_manifest right_manifest
   left_manifest="$(mktemp /tmp/sek-manifest-left.XXXXXX)"
   right_manifest="$(mktemp /tmp/sek-manifest-right.XXXXXX)"
-  canonical_package_manifest "$left" > "$left_manifest"
-  canonical_package_manifest "$right" > "$right_manifest"
+  if ! canonical_package_manifest "$left" > "$left_manifest" ||
+     ! canonical_package_manifest "$right" > "$right_manifest"; then
+    echo "Unable to read canonical package entries: $left or $right" >&2
+    rm -f "$left_manifest" "$right_manifest"
+    return 1
+  fi
   if ! diff -u "$left_manifest" "$right_manifest" >/dev/null; then
     echo "Semantic package manifests differ:" >&2
     diff -u "$left_manifest" "$right_manifest" >&2 || true
