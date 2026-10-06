@@ -698,13 +698,12 @@ selection, folding, retention, or cleanup policy.
 
 **Cause.** Applying a catch-up batch and the snapshot serialization that may follow perform synchronous work inside a grain turn. A large batch or state can keep that activation busy. Orleans measures each synchronous scheduler-task execution, not the total elapsed time of an asynchronous batch (I/O awaits can split it into multiple turns). The warning itself reports a busy activation, not a correctness failure; calls to that activation wait while the long turn runs.
 
-**Threshold.** After diagnosing the warning as catch-up work, raise Orleans `SchedulingOptions.TurnWarningLengthThreshold` only as far as needed. The Orleans 10.3.1 default is **1 second**. For example:
+**Threshold.** After diagnosing the warning as catch-up work, raise Orleans `SchedulingOptions.TurnWarningLengthThreshold` only as far as needed. The Orleans 10.3.1 default is **1 second**. For example, in the silo's service configuration:
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.Configuration;
 
-// In the silo's service configuration; choose only the increase needed.
 services.Configure<SchedulingOptions>(options =>
     options.TurnWarningLengthThreshold = TimeSpan.FromSeconds(3));
 ```

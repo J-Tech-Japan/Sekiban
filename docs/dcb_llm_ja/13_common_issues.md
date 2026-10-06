@@ -621,13 +621,12 @@ recent な commit 済み timestamp と live な optional lease の両方を引�
 
 **原因。** catch-up batch の適用と、それに続く場合のスナップショットのシリアライズは、grain turn 内で同期処理を行います。大きな batch や state はその activation を長く占有する可能性があります。Orleans が計測するのは個々の同期 scheduler-task の実行であり、非同期 batch の総経過時間ではありません（I/O の await により複数の turn に分かれる場合があります）。警告自体は activation が占有されていたことを示し、正しさの失敗ではありません。長い turn の実行中、その activation への呼び出しは待たされます。
 
-**しきい値。** 警告の原因が catch-up 処理だと診断した後、Orleans の `SchedulingOptions.TurnWarningLengthThreshold` を必要な分だけ引き上げてください。Orleans 10.3.1 の既定値は **1 秒**です。例:
+**しきい値。** 警告の原因が catch-up 処理だと診断した後、Orleans の `SchedulingOptions.TurnWarningLengthThreshold` を必要な分だけ引き上げてください。Orleans 10.3.1 の既定値は **1 秒**です。silo のサービス設定での例:
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.Configuration;
 
-// silo のサービス設定で、必要な分だけ引き上げる。
 services.Configure<SchedulingOptions>(options =>
     options.TurnWarningLengthThreshold = TimeSpan.FromSeconds(3));
 ```

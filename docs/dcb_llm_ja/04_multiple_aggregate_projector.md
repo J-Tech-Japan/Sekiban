@@ -140,14 +140,14 @@ await foreach (var reference in OffloadKeyEnumerator.EnumerateAsync(
 
 Sekiban はスナップショット Blob の削除 API や協調プロトコルを提供しません。以下の前提条件を**すべて**満たしてから、ストレージプロバイダーのツールを使用してください（ここでのコンテナには S3 bucket も含みます）。
 
-- コンテナを使うすべてのスナップショット writer、reader、`MultiProjectionStateBuilder` などの offline builder を停止し、進行中の処理を完了させてください。最初の参照走査から削除・検証の完了まで停止を維持します。
+- コンテナを使うすべてのスナップショット writer、reader、`MultiProjectionStateBuilder` などの offline builder を停止し、進行中の処理を完了させてください。最初の参照走査から削除・検証の完了まで停止を維持します。この手順で実行する `OffloadKeyEnumerator` だけが例外です。
 - 削除前に、十分な保持期間と実行可能な手動復元手順を備えたプロバイダーの soft delete または versioning を有効にしてください。削除前の state store backup を復元すると、削除済み Blob を参照する行が戻ります。そのような復元が可能な間は、復元可能な Blob version を保持してください。
 - 設定されたプレフィックスに関係なく、コンテナに**過去一度でも**書き込んだすべての state store（database、environment、tenant deployment）とすべての `ServiceId` を把握してください。`OffloadKeyEnumerator` の一度の列挙は、渡された一つのストアをその service scope で走査するだけです。キーには ServiceId や tenant が含まれません。`df24f127` からプレフィックス修正までの seekable write は、設定されたプレフィックスに関係なくプレフィックスなしでした。
 - 完全で整合性のある参照ビューを確立してください。最初の走査は writer を停止・drain し、結果整合性の一覧が収束した後に行います。DynamoDB の `ListAllAsync` は `ConsistentRead` なしの `Scan` を使い、見落とした行は `Undecodable` を生成しません。繰り返しの走査と Blob の年齢だけでは完全性を証明できません。収束や inventory の網羅性を確立できない場合、プレフィックスなしのキーも含めて**何も削除しないでください**。
 
 1. inventory 内のすべてのストアと ServiceId について、そのアプリケーションの `JsonSerializerOptions` で `OffloadKeyEnumerator.EnumerateAsync` を実行し、全バージョン・tombstone 行を含む参照キーの和集合を取ります。`Undecodable` または列挙の失敗が一つでもあれば削除を中止します。
 2. プロバイダーのツールで Blob を一覧取得し、スナップショットを積極的に識別します。**既知の projector 名**の配下で `.bin` に終わるキーだけを許可し、行 Blob の `{projector}/{version}` 配下も含めます。把握したすべてのプレフィックスについて、`{prefix}/{projector}/...` と以前のプレフィックスなしの `{projector}/...` の両方を対象にします。この許可リストは cold-event オブジェクトと無関係な Blob を削除対象にしません。segmented cold-event のパスは cold storage root からの相対パスで、`control/{serviceId}/manifest.json`、`control/{serviceId}/checkpoint.json`、`control/{leaseId}/lease.json`、`segments/{serviceId}/{from}_{to}{extension}` です。プレフィックスも scope もなければこれがオブジェクトキーです。プレフィックスや format scope があればそのルートが先頭に付きます。別の database-object 実装は `{prefix}/{databaseFile}`、プレフィックスなしなら `{databaseFile}` を使います。これらの配置をスナップショット候補として扱わないでください。
-3. 候補は、許可したスナップショット一覧から参照キーの和集合を引き、最長の upload-to-commit 処理より長い猶予期間の開始前に最終更新された Blob に限定します。アップロードは行のコミットに先行し、writer 停止中には失敗したコミットの孤立 Blob もこの期間で保護します。最終更新時刻は Blob の年齢であり、**参照されなくなってからの時間ではありません**。
+3. 候補は、許可したスナップショット一覧から参照キーの和集合を引き、最長の upload-to-commit 処理より長い猶予期間の開始前に最終更新された Blob に限定します。アップロードは行のコミットに先行し、writer 停止中は、失敗したコミットが残した孤立 Blob もこの期間で候補に含まれます。最終更新時刻は Blob の年齢であり、**参照されなくなってからの時間ではありません**。
 4. 削除の直前に参照対象全体を再列挙し、失敗または `Undecodable` があれば中止し、新しい和集合を候補から引きます。残ったものだけをプロバイダーのツールで削除します。プロバイダーが一覧取得時の ETag を条件とする削除をサポートしていれば、追加の保護として使ってください。
 5. 削除後に再列挙し、**ストレージ自体**を確認します。すべての参照キーがプロバイダーのストレージ一覧に存在する必要があります。列挙の失敗または `Undecodable` があれば検証を中止します。欠落したキーは保持期間内にプロバイダーの soft delete または versioning から手動で復元し、アプリケーションを再開する前に再検証してください。キャッシュ済み Blob はストレージ側の欠落を隠すため、アプリケーションがエラーなく動くことはこの確認の代わりになりません。
 
