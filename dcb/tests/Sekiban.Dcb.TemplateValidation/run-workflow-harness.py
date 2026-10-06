@@ -31,7 +31,7 @@ CHECKS = [('dcbTestsNet9', 'run_test_dcb.yml', 'dcbTestsNet9'),
           ('dcbTestsNet10', 'run_test_dcb.yml', 'dcbTestsNet10'),
           ('packagedConsumer', 'dcb_azure_queue_packaged_consumer.yml', 'packaged-consumer'),
           ('templateConsumer', 'dcb_template_validation.yml', 'Pack, install, generate, restore, build, and test templates')]
-VERSIONS = ('10.22.0', '42.7.3')  # Explicit fixture inputs; never production defaults.
+VERSIONS = ('10.22.0', '42.7.3', '10.23.1')  # Explicit fixture inputs; never production defaults.
 
 class Failure(RuntimeError):
     pass
@@ -126,6 +126,11 @@ class Fixture:
             env=os.environ.copy(); env['GIT_COMMITTER_DATE']=date
             run(['git','tag','-a',tag,'-m','offline fixture'],self.repo,env)
             self.tags[tag]=run(['git','rev-parse',f'{tag}^{{tag}}'],self.repo).strip()
+        if version == '10.23.1':
+            # Incomplete predecessor: library tag exists, but its template tag
+            # and GitHub Release have no fixture endpoint (unexpected GETs fail).
+            for old in ['dcb-v10.22.0', 'dcbTemplates-v10.22.0', 'dcb-v10.23.0']:
+                run(['git','tag','-a',old,'-m','historical fixture'],self.repo)
         # Fetches use only this local bare fixture; never the real repository.
         run(['git','clone','--no-local','--bare',str(self.repo),str(root/'origin.git')],root)
         run(['git','remote','add','origin',str(root/'origin.git')],self.repo)
@@ -158,6 +163,7 @@ class Fixture:
         self.env=os.environ.copy(); self.env.update({'FIXTURE_ROOT':str(root),'PATH':str(self.shims)+':'+os.environ['PATH'],
            'GITHUB_REPOSITORY':REPO,'GITHUB_WORKSPACE':str(self.repo),'RUNNER_TEMP':str(self.temp),
            'GITHUB_ENV':str(root/'github.env'),'GITHUB_RUN_ATTEMPT':'1',
+           'ImageOS':'offline-fixture','ImageVersion':'offline-fixture',
            'SEKIBAN_RELEASE_RECORD_REF':HOST_REF,'VERSION':version})
         self.env.pop('GH_TOKEN', None)
         self.local=root/'packed'; self.local.mkdir()
@@ -178,6 +184,10 @@ class Fixture:
         with zipfile.ZipFile(path,'w') as archive:
             archive.writestr(f'{id}.nuspec',f'<package><metadata><id>{id}</id><version>{version}</version><dependencies>{groups}</dependencies></metadata></package>')
             archive.writestr('content/offline.txt',id+' '+version)
+            archive.writestr('lib/net10.0/fixture.dll', b'unchanged assembly')
+            manifest = json.dumps({'SPDXID':'SPDXRef-DOCUMENT','fixture':id}).encode()
+            archive.writestr('_manifest/spdx_2.2/manifest.spdx.json', manifest)
+            archive.writestr('_manifest/spdx_2.2/manifest.spdx.json.sha256', hashlib.sha256(manifest).hexdigest())
             if template:
                 carrier=self.repo/'templates/Sekiban.Dcb.Templates'
                 archive.writestr('README.md',(carrier/'README.md').read_bytes())
@@ -216,7 +226,8 @@ class Fixture:
             if pkg.name.startswith('Sekiban.Dcb.Templates.') != template: continue
             lower=pkg.name[:-len('.'+self.version+'.nupkg')].lower()
             dest=self.root/'public'/lower/self.version/pkg.name.lower(); dest.parent.mkdir(parents=True,exist_ok=True)
-            shutil.copy2(pkg,dest)
+            # Model NuGet --skip-duplicate: never replace an existing artifact.
+            if not dest.exists(): shutil.copy2(pkg,dest)
             write_json(dest.parent.parent/'index.json',{'versions':[self.version]})
 
     def workflow(self,mode):
@@ -235,6 +246,9 @@ class Fixture:
         self.save()
         for step in data['jobs']['build']['steps']:
             name=step.get('name',step.get('uses','')); trace.append(name)
+            if name == getattr(self, 'failure_point', None):
+                self.failure_point = None
+                raise Failure('injected post-push failure at '+name)
             if step.get('uses','').startswith('actions/checkout'):
                 assert step.get('with',{}).get('fetch-depth')==0
                 run(['git','update-ref','refs/tags/'+tag,self.sha],self.repo)
@@ -273,7 +287,7 @@ class Fixture:
                 if case: write_json(self.root/'api.json',self.api)
                 if getattr(self,'missing_guard_token',False): step.get('env',{}).pop('GH_TOKEN',None)
             env=self.env.copy(); env.update({k:substitute(v) for k,v in step.get('env',{}).items()})
-            script=substitute(step['run']).replace('--timeout-seconds 900','--timeout-seconds 10').replace('--interval-seconds 15','--interval-seconds 1')
+            script=substitute(step['run']).replace('--timeout-seconds 3600','--timeout-seconds 10').replace('--interval-seconds 15','--interval-seconds 1')
             # Replaced only the external timeout; every guard's literal run block executes.
             run(['bash','-euo','pipefail','-c',script],self.repo,env)
             env_file=Path(self.env['GITHUB_ENV'])
@@ -287,6 +301,92 @@ class Fixture:
         self.api[f'repos/{REPO}/git/ref/tags/dcbTemplates-v{self.version}']={'object':{'sha':self.tags[f'dcbTemplates-v{self.version}'],'type':'tag'}}
         self.save()
         return trace
+
+def mutate_retry_package(path, kind):
+    with zipfile.ZipFile(path) as archive:
+        entries = {entry.filename: archive.read(entry) for entry in archive.infolist()}
+    manifest = b'{"SPDXID":"SPDXRef-DOCUMENT","fixture":"repacked"}'
+    entries['_manifest/spdx_2.2/manifest.spdx.json'] = manifest
+    entries['_manifest/spdx_2.2/manifest.spdx.json.sha256'] = hashlib.sha256(manifest).hexdigest().encode()
+    if kind == 'assembly': entries['lib/net10.0/fixture.dll'] = b'changed assembly'
+    elif kind == 'nuspec':
+        name = next(name for name in entries if name.endswith('.nuspec'))
+        entries[name] = entries[name].replace(b'</metadata>', b'<description>changed</description></metadata>')
+    elif kind == 'nested-manifest': entries['lib/_manifest/x'] = b'compared payload'
+    else: assert kind == 'sbom'
+    with zipfile.ZipFile(path, 'w') as archive:
+        for name, content in entries.items(): archive.writestr(name, content)
+
+
+def check_incomplete_history_drift(f):
+    script = str(f.repo/REL/'validate-release-tags.sh')
+    library, template = 'dcb-v10.23.1', 'dcbTemplates-v10.23.1'
+    for phase in ['before', 'between', 'after']:
+        for tag, present in [(library, phase != 'before'), (template, phase == 'after')]:
+            if present: run(['git','update-ref','refs/tags/'+tag,f.tags[tag]],f.repo)
+            else: run(['git','update-ref','-d','refs/tags/'+tag],f.repo)
+        try: result = run(['bash',script,'--check-drift','--repo-root',str(f.repo)],f.repo,f.env)
+        except Failure as error:
+            assert phase != 'after' and 'drift' in str(error).lower(), str(error)
+            print('PASS incomplete 10.23.0 history drift '+phase+': rejects as required',flush=True)
+        else:
+            assert phase == 'after', result
+            print('PASS incomplete 10.23.0 history drift after: equal at 10.23.1',flush=True)
+
+
+def retry_cases(source, root):
+    for mode in ['library', 'template']:
+        for kind in ['sbom', 'assembly', 'nuspec', 'nested-manifest']:
+            f = Fixture(source, root/(mode+'-retry-'+kind), '10.23.1')
+            f.workflow('library')
+            if mode == 'template': f.workflow('template')
+            f.env['GITHUB_RUN_ATTEMPT'] = '2'
+            paths = [f.template_package] if mode == 'template' else [f.local/f'{id}.{f.version}.nupkg' for id in f.ids]
+            for path in paths: mutate_retry_package(path, kind)
+            # The fixture must actually contain different SBOM bytes on each side.
+            remote = f.root/'public'/('sekiban.dcb.templates' if mode == 'template' else f.ids[0].lower())/f.version/paths[0].name.lower()
+            with zipfile.ZipFile(paths[0]) as left, zipfile.ZipFile(remote) as right:
+                for name in ['_manifest/spdx_2.2/manifest.spdx.json','_manifest/spdx_2.2/manifest.spdx.json.sha256']:
+                    assert left.read(name) != right.read(name)
+            try: f.workflow(mode)
+            except Failure as error:
+                assert kind != 'sbom' and 'Semantic package manifests differ' in str(error), str(error)
+                if mode == 'library':
+                    assert '0/26 equal; 26 failed' in str(error)
+                    for id in f.ids: assert f'Package equality failed: {id}: content differs' in str(error)
+                assert 'Create GitHub Release' not in f.workflow_trace
+                print(f'PASS {mode} retry rejects {kind} (root SBOM also differs)',flush=True)
+            else:
+                assert kind == 'sbom'
+                print(f'PASS {mode} retry SBOM-only difference reaches Release',flush=True)
+        points = (['Wait for exact public library visibility','Prove public library packages match local pack'] if mode == 'library' else
+                  ['Wait for exact public template visibility','Prove public template package matches local pack']) + ['Create GitHub Release']
+        for i, point in enumerate(points):
+            f = Fixture(source, root/(mode+'-recovery-'+str(i)), '10.23.1')
+            if mode == 'template': f.workflow('library')
+            f.failure_point = point
+            try: f.workflow(mode)
+            except Failure as error: assert 'injected post-push failure' in str(error)
+            else: raise Failure('injected failure did not fire')
+            f.env['GITHUB_RUN_ATTEMPT'] = '2'
+            for path in f.local.glob('*.nupkg'): mutate_retry_package(path, 'sbom')
+            f.workflow(mode)
+            print(f'PASS {mode} retry after failure at {point}: reaches Release',flush=True)
+    # All diagnostics are collected even when different failure classes coexist.
+    f = Fixture(source, root/'equality-diagnostics', '10.23.1'); f.workflow('library')
+    (f.local/f'{f.ids[0]}.{f.version}.nupkg').unlink()
+    missing = f.root/'public'/f.ids[1].lower()/f.version/f'{f.ids[1]}.{f.version}.nupkg'.lower()
+    missing.unlink()
+    mutate_retry_package(f.local/f'{f.ids[2]}.{f.version}.nupkg','assembly')
+    try:
+        run(['bash',str(f.repo/REL/'validate-release-tags.sh'),'--check-library-post-push-equality',
+             '--version',f.version,'--local-out-dir',str(f.local)],f.repo,f.env)
+    except Failure as error:
+        for id, reason in zip(f.ids[:3], ['missing locally','could not download','content differs']):
+            assert f'{id}: {reason}' in str(error)
+        assert '23/26 equal; 3 failed' in str(error)
+        print('PASS library equality aggregates missing locally, could not download, content differs',flush=True)
+    else: raise Failure('diagnostics case unexpectedly passed')
 
 def mutate(f,case):
     route=f'repos/{REPO}/actions/runs/100'; run_api=f.api[route]
@@ -383,6 +483,7 @@ def main():
                    '-c','Release','--nologo','-p:NuGetAudit=false'],build_host),flush=True)
         for version in VERSIONS:
             f=Fixture(source,root/('pass-'+version),version)
+            if version == '10.23.1': check_incomplete_history_drift(f)
             f.validate()
             assert f'repos/{HOST}/git/trees/{TREE}?recursive=1' not in (f.root/'api-trace').read_text().splitlines()
             print(f'PASS reader recursive listing truncated but path walk succeeds {version}',flush=True)
@@ -397,6 +498,7 @@ def main():
             f=Fixture(source,root/'retry-pass',VERSIONS[0]); f.env['GITHUB_RUN_ATTEMPT']='2'
             for mode in ['library','template']: f.workflow(mode)
             print('PASS BOTH workflows retry with same triggering tag object',flush=True)
+        if not args.self_test: retry_cases(source, root)
         cases=RECORD_CASES if args.self_test else INTEGRATION_CASES
         for case,reason in cases.items():
             f=Fixture(source,root/case,VERSIONS[0])

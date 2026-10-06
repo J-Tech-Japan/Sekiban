@@ -1,0 +1,120 @@
+name: DCB released-library reproducibility
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Released library version to rebuild and compare with NuGet
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - '.github/workflows/dcb_release_reproducibility.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  public-reproducibility:
+    runs-on: ubuntu-latest
+    steps:
+      # Keep the triggering tooling revision, then build the exact tag at the
+      # default workspace path used by packagesDcb.yml. Nothing is published.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags and check out the released commit at the workspace root
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          TOOLING_SHA="$(git rev-parse HEAD)"
+          git fetch --force --tags
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            VERSION="$(git tag --list 'dcb-v*' | python3 -c '
+          import re, sys
+          versions = [m.groups() for line in sys.stdin if (m := re.fullmatch(r"dcb-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\n?", line))]
+          print(".".join(max(versions, key=lambda v: tuple(map(int, v)))))')"
+          else
+            VERSION="$REQUESTED_VERSION"
+          fi
+          [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || exit 1
+          echo "TOOLING_SHA=$TOOLING_SHA" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          git checkout --detach "dcb-v${VERSION}"
+          echo "Rebuilding $(git rev-parse HEAD) at $GITHUB_WORKSPACE"
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Log SDK and runner image
+        run: |
+          dotnet --info
+          echo "Runner image: ${ImageOS} ${ImageVersion}"
+
+      - name: Restore dependencies
+        run: |
+          dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
+          dotnet restore dcb/Sekiban.Dcb.slnx
+
+      - name: Build with dotnet
+        run: dotnet build dcb/Sekiban.Dcb.slnx -c Release
+
+      - name: Build release-record and package validators
+        run: dotnet build dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release
+
+      - name: Pack NuGet packages
+        run: |
+          dotnet pack dcb/src/Sekiban.Dcb.Core.Model/Sekiban.Dcb.Core.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.Core/Sekiban.Dcb.Core.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.ColdStorage/Sekiban.Dcb.ColdStorage.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.WithResult.Model/Sekiban.Dcb.WithResult.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.WithoutResult.Model/Sekiban.Dcb.WithoutResult.Model.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.WithResult/Sekiban.Dcb.WithResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.WithoutResult/Sekiban.Dcb.WithoutResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.Core.Testing/Sekiban.Dcb.Core.Testing.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.WithResult.Testing/Sekiban.Dcb.WithResult.Testing.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.WithoutResult.Testing/Sekiban.Dcb.WithoutResult.Testing.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.MaterializedView/Sekiban.Dcb.MaterializedView.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.MaterializedView.Postgres/Sekiban.Dcb.MaterializedView.Postgres.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.MaterializedView.SqlServer/Sekiban.Dcb.MaterializedView.SqlServer.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.MaterializedView.MySql/Sekiban.Dcb.MaterializedView.MySql.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.MaterializedView.Sqlite/Sekiban.Dcb.MaterializedView.Sqlite.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.MaterializedView.Orleans/Sekiban.Dcb.MaterializedView.Orleans.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.Orleans.AzureQueue/Sekiban.Dcb.Orleans.AzureQueue.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.Orleans.WithResult/Sekiban.Dcb.Orleans.WithResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.Orleans.WithoutResult/Sekiban.Dcb.Orleans.WithoutResult.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.CosmosDb/Sekiban.Dcb.CosmosDb.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.Sqlite/Sekiban.Dcb.Sqlite.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.BlobStorage.AzureStorage/Sekiban.Dcb.BlobStorage.AzureStorage.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.DynamoDB/Sekiban.Dcb.DynamoDB.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+          dotnet pack dcb/src/Sekiban.Dcb.BlobStorage.S3/Sekiban.Dcb.BlobStorage.S3.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
+
+      - name: Place triggering tooling outside the tagged work tree after packing
+        run: git worktree add --detach "$RUNNER_TEMP/release-tooling" "$TOOLING_SHA"
+
+      - name: Validate the reproducibility workflow package manifest
+        run: |
+          bash "$RUNNER_TEMP/release-tooling/dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh" \
+            --check-package-manifest --repo-root "$GITHUB_WORKSPACE" \
+            --workflow-file "$RUNNER_TEMP/release-tooling/.github/workflows/dcb_release_reproducibility.yml"
+
+      - name: Compare all 26 public packages with the clean tag rebuild
+        run: |
+          bash "$RUNNER_TEMP/release-tooling/dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh" \
+            --check-library-post-push-equality --version "$VERSION" \
+            --local-out-dir "$GITHUB_WORKSPACE/out"

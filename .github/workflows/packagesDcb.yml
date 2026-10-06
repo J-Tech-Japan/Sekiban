@@ -47,6 +47,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Log SDK and runner image
+        run: |
+          dotnet --info
+          echo "Runner image: ${ImageOS} ${ImageVersion}"
+
       - name: Detect version from tag
         run: |
           TAG="${GITHUB_REF_NAME}"
@@ -167,7 +172,7 @@ jobs:
       - name: Wait for exact public library visibility
         run: |
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
-            --wait-for-published-packages --version "$VERSION" --timeout-seconds 900 --interval-seconds 15
+            --wait-for-published-packages --version "$VERSION" --timeout-seconds 3600 --interval-seconds 15
 
       - name: Prove public library packages match local pack
         run: |

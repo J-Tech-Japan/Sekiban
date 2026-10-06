@@ -75,12 +75,55 @@ irreversible release operations. Stop if any reader, validator, live guard,
 visibility or equality check fails. Never bypass a guard, move an existing tag,
 or substitute another package under the same version.
 
-A transient failure can be retried on the same run/tag object and identical
-source/artifacts. Later workflow attempts require the live tag object to equal
-the triggering tag object. Duplicate-safe pushes still require public/local
-semantic equality. After **any public artifact exists**, a source-changing fix
-requires a **new version** and a new release-integration PR, checks, record and
-tags. Do not re-use the partially published version.
+Before re-running a failed tag run, dispatch `dcb_release_reproducibility.yml`
+for that released library version on GitHub-hosted runners. Require 26/26 public
+packages to equal the clean rebuild. If it fails, do not retry: report all differing
+packages (distinguishing download failures and missing local files) and the SDK
+and runner image beside those of the original run, then use a new version. For
+this PR, the 10.23.0 result remains required before merge unless the operator
+explicitly decides otherwise. Never widen the exclusions or relax another guard.
+
+Retry promptly on the same run/tag object. A retry **re-packs** the exact tagged
+commit; it does not reuse the original build output. Equality ignores entries
+starting with `_manifest/` at the package root in addition to the existing ZIP
+relationship, signature and core-properties exclusions. It compares assemblies,
+nuspec, README and every other canonical entry, including `lib/_manifest/x`.
+The generated SBOM is the only new exclusion. Later attempts require the live
+tag object to equal the triggering tag object. Duplicate-safe pushes skip existing
+packages; public/local equality must still pass before the GitHub Release.
+The library retry also requires the current-version template tag to be absent.
+
+All three visibility waits are **60 minutes** (3600 seconds), including the
+pre-pack library wait in the template workflow. In the 10.23.0 incident it took
+about **38 minutes from the start of the run** until all 26 packages were visible:
+push finished at 15:01 UTC and all were visible by 15:37 UTC on 2026-10-06.
+Neither tag job sets a shorter job timeout; the GitHub default is 360 minutes.
+
+The Release action updates an existing GitHub Release on retry. Its assets are
+the re-packed `.nupkg` files, whose SBOM bytes differ from the NuGet copies.
+Symbol packages (`.snupkg`) are outside equality and outside the Release assets;
+this check does not prove recovery of symbol publication.
+
+The two-runner comparison catches non-determinism between runners at one point
+in time; drift over time (SDK or image changes) is caught only by the released-
+artifact reproducibility workflow and this retry procedure. Both tag workflows
+and the two real-artifact gates log `dotnet --info` and the runner image version.
+SDK pinning and retaining SDK/image diagnostics beyond Actions log retention are
+candidates for later work, not changes in this unit.
+
+After **any public artifact exists**, a source-changing fix requires a **new
+version** and a new release-integration PR, checks, record and tags. Do not re-use
+the partially published version.
+
+For 10.23.1, leave the 10.23.0 host record at `prepared`: its packages are public,
+but it has no GitHub Release or template tag/package. No guard requires the
+previous library tag to have a template tag or Release. The scheduled drift job
+(next run 2026-10-12, 04:23 UTC) reports drift before 10.23.1 (library 10.23.0,
+template 10.22.0) and between its two tags (library 10.23.1, template 10.22.0).
+After both 10.23.1 tags exist it passes without exempting 10.23.0. After merge,
+perform steps 2–5 for 10.23.1 on the merged commit: four checks, prepared host
+record, immutable variable and stage check. Report their results and obtain
+operator approval before tagging. This builder unit publishes nothing.
 
 The `dcb-release` environment remains the token/publication boundary. Stage
 checks run only on main; tag workflows run on their respective tag series.
