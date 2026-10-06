@@ -103,7 +103,7 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 
 ### スナップショット Blob のプレフィックス
 
-`dcb-v10.22.0` より後のリリースでは（執筆時点でこの修正は未リリース）、設定したプレフィックスは新しく書き込むすべてのスナップショット Blob に適用されます。seekable stream のキーは `{prefix}/{projector}/{sha256}.bin` です（行スナップショットの `{projector}` にはバージョンも含まれます）。プレフィックスが null または空なら従来と同じキーになります。プレフィックスから取り除くのは末尾の `/` のみです。non-seekable stream のプレフィックス付き GUID キーは従来どおりです。
+DCB 10.23.0 から、設定したプレフィックスは新しく書き込むすべてのスナップショット Blob に適用されます。seekable stream のキーは `{prefix}/{projector}/{sha256}.bin` です（行スナップショットの `{projector}` にはバージョンも含まれます）。プレフィックスが null または空なら従来と同じキーになります。プレフィックスから取り除くのは末尾の `/` のみです。non-seekable stream のプレフィックス付き GUID キーは従来どおりです。
 
 `df24f127` 以降の seekable stream の決定的キーにはプレフィックスが付きませんでした。その Blob は古いキーのまま残り、移行なしで引き続き読み取れます。non-seekable stream の書き込みや同コミット以前の書き込みには、すでにプレフィックスが付いている場合があります。アップグレード後は同じ内容がプレフィックスの下にもう一度保存されます。プレフィックスで一覧取得・削除する場合も、`OffloadKeyEnumerator` と参照キーの安全規則を使い、古いプレフィックスなしのキーを考慮してください。スナップショットと cold-event のストレージを同じ options から登録した場合、設定されたプレフィックスを共有します。cold-event のパスはストレージルートからの相対パスであり、ルートにはプレフィックスに加えて format scope が含まれる場合があります。常に `{prefix}/control/...` や `{prefix}/segments/...` の直下にあるとは限りません。
 
