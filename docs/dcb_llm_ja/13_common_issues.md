@@ -621,7 +621,7 @@ recent な commit 済み timestamp と live な optional lease の両方を引�
 
 **原因。** catch-up batch の適用と、それに続く場合のスナップショットのシリアライズは、grain turn 内で同期処理を行います。大きな batch や state はその activation を長く占有する可能性があります。Orleans が計測するのは個々の同期 scheduler-task の実行であり、非同期 batch の総経過時間ではありません（I/O の await により複数の turn に分かれる場合があります）。警告自体は activation が占有されていたことを示し、正しさの失敗ではありません。長い turn の実行中、その activation への呼び出しは待たされます。
 
-**しきい値。** 警告の原因が catch-up 処理だと診断した後、Orleans の `SchedulingOptions.TurnWarningLengthThreshold` を必要な分だけ引き上げてください。Orleans 10.3.1 の既定値は **1 秒**です。インストール済みの 10.3.1 `Orleans.Runtime.dll` の `SchedulingOptions` を逆コンパイルし、既定値の field が `TimeSpan.FromMilliseconds(1000)` で初期化され、property initializer に使われることを確認しました。例:
+**しきい値。** 警告の原因が catch-up 処理だと診断した後、Orleans の `SchedulingOptions.TurnWarningLengthThreshold` を必要な分だけ引き上げてください。Orleans 10.3.1 の既定値は **1 秒**です。例:
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
@@ -642,7 +642,7 @@ using Microsoft.Extensions.Logging;
 logging.AddFilter("Orleans.Runtime.Scheduler.WorkItemGroup", LogLevel.Error);
 ```
 
-カテゴリは Orleans 10.3.1 runtime assembly の `WorkItemGroup` と `GrainTypeSharedContext` を逆コンパイルして確認しました。警告は `CreateLogger<WorkItemGroup>()` で生成された scheduler logger を使います。カテゴリフィルタも同様に広くすべての grain に適用され、そのカテゴリの他の scheduler warning も抑制します。しきい値の引き上げもログフィルタも、catch-up や呼び出しを速くしません。
+これは、Orleans 10.3.1 でこの警告を出す scheduler logger のカテゴリです。カテゴリフィルタも同様に広くすべての grain に適用され、そのカテゴリの他の scheduler warning も抑制します。しきい値の引き上げもログフィルタも、catch-up や呼び出しを速くしません。
 
 **batch サイズとクエリ。** 別の調整手段は、設定可能な二つの batch サイズ、`GeneralMultiProjectionActorOptions.CatchUpBatchSize`（既定 **500**）と `ColdEventStoreOptions.ColdCatchUpBatchSize`（既定 **100,000**）を下げることです。cold read 後の要求 batch サイズは、少なくとも設定された cold サイズです（通常サイズと cold サイズの最大値）。streaming path は固定 **4096** 件の chunk（`StreamingCatchUpApplyChunkSize`）で適用し、これは設定できません。設定可能な batch を小さくすると batch ごとの同期処理を減らせる場合がありますが、スナップショットのシリアライズは依然として高コストになり得ます。クエリ側は[Catch-up 中の初回クエリが timeout する場合](#catch-up-中の初回クエリが-timeout-する場合-sek-g90-1253-item-5)を参照してください。正の `FirstQueryCatchUpMaxWaitMs` は初回クエリの gate wait を制限しますが、activation と request queuing は含まず、総応答時間の保証ではありません。
 
