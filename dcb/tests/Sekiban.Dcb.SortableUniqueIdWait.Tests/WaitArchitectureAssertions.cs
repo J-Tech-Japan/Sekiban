@@ -12,11 +12,13 @@ internal sealed record WaitArchitectureRoute(
     Type ExecutorType,
     Type QueryContractDefinition,
     string WaitMethodName,
-    SortableUniqueIdWaitSurface Surface);
+    SortableUniqueIdWaitSurface Surface,
+    string? WaitOwnerTypeName = null,
+    string? ForwardingMethodName = null);
 
 /// <summary>
 ///     Structural proof for the production wait-route inventory. Each route must call its named wait boundary exactly
-///     once, that boundary must call the one shared policy exactly once, and neither method may contain a second wait
+///     once, that boundary must call the one shared policy exactly once, and none of the methods may contain a second wait
 ///     loop or direct delay/clock implementation. This is deliberately IL-based so a private field-only assertion cannot
 ///     remain green after a route is bypassed or its wait is copied back into an entrypoint.
 /// </summary>
@@ -43,33 +45,53 @@ internal static class WaitArchitectureAssertions
     private static void AssertRoute(WaitArchitectureRoute route)
     {
         var entrypoint = FindQueryEntrypoint(route);
-        var waitMethod = FindWaitMethod(route);
+        var waitOwner = route.WaitOwnerTypeName is null
+            ? route.ExecutorType
+            : Assembly.Load("Sekiban.Dcb.Orleans.Core").GetType(route.WaitOwnerTypeName);
+        Assert.NotNull(waitOwner);
+        var waitMethod = FindMethod(waitOwner!, route.WaitMethodName);
+        var forwardingMethod = route.ForwardingMethodName is null
+            ? null
+            : FindMethod(waitOwner!, route.ForwardingMethodName);
+        var firstHop = forwardingMethod ?? waitMethod;
         var entrypointImplementation = GetAsyncImplementation(entrypoint);
         var waitImplementation = GetAsyncImplementation(waitMethod);
 
         var entrypointInstructions = ReadInstructions(entrypointImplementation);
         var entrypointCalls = GetCallSites(entrypointImplementation, entrypointInstructions);
         var waitCalls = entrypointCalls
-            .Where(call => SameMethod(call.Target, waitMethod))
+            .Where(call => SameMethod(call.Target, firstHop))
             .ToArray();
 
-        Assert.Single(
-            waitCalls);
+        Assert.True(waitCalls.Length == 1, $"Route '{route.Name}' must call {firstHop.Name} exactly once.");
         Assert.DoesNotContain(
             entrypointCalls,
             call => SameMethod(call.Target, SharedWaitMethod));
         Assert.True(
             HasEnumConstantNearCall(entrypointInstructions, waitCalls[0].Instruction.Offset, route.Surface),
-            $"Route '{route.Name}' must pass its explicitly inventoried wait surface to {waitMethod.Name}.");
+            $"Route '{route.Name}' must pass its explicitly inventoried wait surface to {firstHop.Name}.");
         AssertNoDuplicateWaitImplementation(route.Name, entrypointImplementation, entrypointInstructions);
+
+        if (forwardingMethod is not null)
+        {
+            Assert.DoesNotContain(entrypointCalls, call => SameMethod(call.Target, waitMethod));
+            var forwardingImplementation = GetAsyncImplementation(forwardingMethod);
+            var forwardingInstructions = ReadInstructions(forwardingImplementation);
+            var forwardingCalls = GetCallSites(forwardingImplementation, forwardingInstructions);
+            var boundaryCall = Assert.Single(forwardingCalls.Where(call => SameMethod(call.Target, waitMethod)));
+            Assert.DoesNotContain(forwardingCalls, call => SameMethod(call.Target, SharedWaitMethod));
+            AssertReceivedSurfaceIsForwarded(forwardingMethod, forwardingImplementation,
+                forwardingInstructions, boundaryCall.Instruction.Offset);
+            AssertNoDuplicateWaitImplementation(route.Name + " forwarding method",
+                forwardingImplementation, forwardingInstructions);
+        }
 
         var waitInstructions = ReadInstructions(waitImplementation);
         var policyCalls = GetCallSites(waitImplementation, waitInstructions)
             .Where(call => SameMethod(call.Target, SharedWaitMethod))
             .ToArray();
 
-        Assert.Single(
-            policyCalls);
+        Assert.True(policyCalls.Length == 1, $"Route '{route.Name}' wait boundary must call the shared policy exactly once.");
         AssertNoDuplicateWaitImplementation(route.Name + " wait boundary", waitImplementation, waitInstructions);
     }
 
@@ -90,16 +112,48 @@ internal static class WaitArchitectureAssertions
         return candidates[0];
     }
 
-    private static MethodInfo FindWaitMethod(WaitArchitectureRoute route)
+    private static MethodInfo FindMethod(Type owner, string name)
     {
-        var candidates = route.ExecutorType
-            .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic)
-            .Where(method => method.Name == route.WaitMethodName)
+        var candidates = owner
+            .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+            .Where(method => method.Name == name)
             .ToArray();
 
         Assert.Single(
             candidates);
         return candidates[0];
+    }
+
+    private static void AssertReceivedSurfaceIsForwarded(
+        MethodInfo forwardingMethod,
+        MethodInfo implementation,
+        IReadOnlyList<Instruction> instructions,
+        int callOffset)
+    {
+        var surfaceParameter = Assert.Single(forwardingMethod.GetParameters()
+            .Where(parameter => parameter.ParameterType == typeof(SortableUniqueIdWaitSurface)));
+        var callIndex = instructions.ToList().FindIndex(instruction => instruction.Offset == callOffset);
+        var load = instructions[callIndex - 1];
+        // Async methods capture their arguments in the state machine. Prove both the capture
+        // from the received argument and the use of that same field as the boundary's last argument.
+        Assert.Equal(OpCodes.Ldfld, load.OpCode);
+        var field = implementation.Module.ResolveField((int)load.Operand!);
+        Assert.NotNull(field);
+        Assert.Equal(surfaceParameter.Name, field!.Name);
+        Assert.Equal(typeof(SortableUniqueIdWaitSurface), field.FieldType);
+        Assert.DoesNotContain(instructions, instruction => instruction.OpCode == OpCodes.Stfld &&
+            implementation.Module.ResolveField((int)instruction.Operand!)?.MetadataToken == field.MetadataToken);
+        var kickoff = ReadInstructions(forwardingMethod);
+        var capture = Assert.Single(kickoff.Select((instruction, index) => (instruction, index))
+            .Where(pair => pair.instruction.OpCode == OpCodes.Stfld &&
+                forwardingMethod.Module.ResolveField((int)pair.instruction.Operand!)?.MetadataToken == field.MetadataToken));
+        var argumentLoad = kickoff[capture.index - 1];
+        var argumentIndex = surfaceParameter.Position + 1; // instance method's this is argument zero
+        Assert.True(
+            (argumentLoad.OpCode == OpCodes.Ldarg_3 && argumentIndex == 3) ||
+            ((argumentLoad.OpCode == OpCodes.Ldarg || argumentLoad.OpCode == OpCodes.Ldarg_S) &&
+             Convert.ToInt32(argumentLoad.Operand) == argumentIndex),
+            "The forwarding method must capture and forward its received surface argument.");
     }
 
     private static MethodInfo GetAsyncImplementation(MethodInfo method)

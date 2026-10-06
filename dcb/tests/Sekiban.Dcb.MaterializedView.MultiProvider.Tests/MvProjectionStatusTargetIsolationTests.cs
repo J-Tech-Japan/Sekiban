@@ -85,7 +85,29 @@ public abstract class MvStatusTargetIsolationTests(MultiProviderFixtureBase fixt
         await AssertTargetCounterIsNonVacuousAsync(registry, targetIo).ConfigureAwait(false);
         var statusStore = new CountingProjectionStatusStore(targetIo);
         var hostFactory = CreateIsolationHostFactory();
-        var options = fixture.Services.GetRequiredService<IOptions<MvOptions>>();
+        var sharedOptions = fixture.Services.GetRequiredService<IOptions<MvOptions>>().Value;
+        // Keep the grain healthy while excluding scheduled idle probes from this heartbeat-only window.
+        var options = Options.Create(new MvOptions
+        {
+            PollInterval = TimeSpan.FromMinutes(5),
+            BatchSize = sharedOptions.BatchSize,
+            StreamReorderWindow = sharedOptions.StreamReorderWindow,
+            SafeWindowMs = sharedOptions.SafeWindowMs,
+            MaxConsecutiveFailuresBeforeStop = sharedOptions.MaxConsecutiveFailuresBeforeStop,
+            TablePrefix = sharedOptions.TablePrefix,
+            PhysicalNameResolver = sharedOptions.PhysicalNameResolver,
+            MaxConsecutiveEmptyBatches = sharedOptions.MaxConsecutiveEmptyBatches,
+            CatchUpStallThreshold = sharedOptions.CatchUpStallThreshold,
+            CatchUpMaxConcurrentBatches = sharedOptions.CatchUpMaxConcurrentBatches,
+            ServiceId = sharedOptions.ServiceId,
+            AllowDefaultServiceId = sharedOptions.AllowDefaultServiceId,
+            InitializationMode = sharedOptions.InitializationMode,
+            VerifyOnlyRetryDelay = sharedOptions.VerifyOnlyRetryDelay,
+            SqlStatementPolicy = sharedOptions.SqlStatementPolicy,
+            SqlStatementPolicyMode = sharedOptions.SqlStatementPolicyMode,
+            SqlServerInspectionConnectionString = sharedOptions.SqlServerInspectionConnectionString,
+            ExecutionObserver = sharedOptions.ExecutionObserver,
+        });
         OrleansTargetIsolationContext.Current = new(
             hostFactory,
             CreateProviderExecutor(registry, options),
@@ -116,6 +138,9 @@ public abstract class MvStatusTargetIsolationTests(MultiProviderFixtureBase fixt
             targetIo.Reset();
             await statusStore.WaitForWriteAfterAsync(writesBefore, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
             await AssertReadableThroughExistingG24SurfacesAsync(statusStore, fixture.EventStore).ConfigureAwait(false);
+            var status = await grain.GetStatusAsync().ConfigureAwait(false);
+            Assert.False(status.CatchUpHalted);
+            Assert.Null(status.LastError);
 
             Assert.Equal(0, targetIo.FactoryResolutions);
             Assert.Equal(0, targetIo.OpenCalls);
@@ -527,6 +552,15 @@ internal sealed class CountingDelegatingMvRegistryStore : IMvRegistryStore
     {
         Count(query: true);
         return _inner.TryForceReverseAsync(request, transaction, cancellationToken);
+    }
+
+    public Task<MvActivationResult> TryRestoreActiveStatusAsync(
+        MvActiveStatusRestoreRequest request,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        Count(query: true);
+        return _inner.TryRestoreActiveStatusAsync(request, transaction, cancellationToken);
     }
 
     public Task SetActiveAsync(
