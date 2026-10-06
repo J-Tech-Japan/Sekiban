@@ -16,8 +16,8 @@ internal static class PackageArtifactValidator
             .Where(path => !path.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToArray();
-        Assert(packages.Length == ReleaseRecordValidator.PackageIds.Length,
-            $"Expected exactly {ReleaseRecordValidator.PackageIds.Length} DCB packages, found {packages.Length}.");
+        Assert(packages.Length == PackageManifest.PackageIds.Length,
+            $"Expected exactly {PackageManifest.PackageIds.Length} DCB packages, found {packages.Length}.");
 
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var nuspecs = new Dictionary<string, XDocument>(StringComparer.Ordinal);
@@ -31,12 +31,12 @@ internal static class PackageArtifactValidator
             var id = document.Descendants().Single(element => element.Name.LocalName == "id").Value.Trim();
             var version = document.Descendants().Single(element => element.Name.LocalName == "version").Value.Trim();
             Assert(ids.Add(id), $"Duplicate package ID {id} in the local feed.");
-            Assert(ReleaseRecordValidator.PackageIds.Contains(id, StringComparer.Ordinal), $"Unexpected package ID {id}.");
+            Assert(PackageManifest.PackageIds.Contains(id, StringComparer.Ordinal), $"Unexpected package ID {id}.");
             Assert(version == expectedVersion, $"Package {id} must be version {expectedVersion}, found {version}.");
             nuspecs[id] = document;
         }
 
-        Assert(ids.SetEquals(ReleaseRecordValidator.PackageIds), "The local package feed is not the exact DCB package set.");
+        Assert(ids.SetEquals(PackageManifest.PackageIds), "The local package feed is not the exact DCB package set.");
         ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], "net9.0", "Microsoft.EntityFrameworkCore.Relational", "9.0.13");
         ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], "net10.0", "Microsoft.EntityFrameworkCore.Relational", "10.0.3");
         Assert(!DependencyIds(nuspecs["Sekiban.Dcb.Orleans.Core"]).Any(IsAzureDependency),

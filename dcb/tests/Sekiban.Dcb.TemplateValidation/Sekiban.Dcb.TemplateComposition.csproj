@@ -8,8 +8,11 @@
     <!-- The SQLite provider's published 10.19 transitive graph contains this advisory. This harness does not ship it;
          retaining the exact published graph is necessary to prove the consumer composition path. -->
     <NoWarn>$(NoWarn);NU1903</NoWarn>
-    <DcbVersion Condition="'$(DcbVersion)' == ''">10.22.0</DcbVersion>
+
   </PropertyGroup>
+  <Target Name="RequireDcbVersion" BeforeTargets="CollectPackageReferences">
+    <Error Condition="'$(DcbVersion)' == ''" Text="Pass DcbVersion derived from read-template-version.sh." />
+  </Target>
   <ItemGroup>
     <Compile Remove="Program.cs" />
     <Compile Remove="LegacyStatusCompositionProgram.cs" />

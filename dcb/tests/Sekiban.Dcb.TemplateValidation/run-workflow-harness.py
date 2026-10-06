@@ -1,1227 +1,403 @@
 #!/usr/bin/env python3
-"""Executable workflow harness for SEK-G82 (AC8).
+"""Offline schema-3 tests and literal guard sequences from BOTH tag workflows.
 
-Parses packagesDcb.yml, packagesDcbTemplate.yml and dcb_release_record_check.yml,
-substitutes an allowlisted set of ${{ }} expressions, and executes literal run:
-blocks with PATH shims for gh/curl/dotnet nuget push until the first publication
-stub. Checkout is emulated from a local bare mirror with the annotated-tag
-+<commit>:refs/tags/X rewrite used by actions/checkout@v4.
+Only checkout/SDK setup, builds, pack and expensive consumers are simulated.
+Reader, record/body/package validators, every shell guard, waits and equality run
+for real. gh/curl serve deterministic API/feed fixtures; push and Release are
+local simulations with a recorded trace. No validator outputs are fabricated.
 """
-
 from __future__ import annotations
-
 import argparse
+import base64
 import hashlib
 import json
 import os
+from pathlib import Path
 import re
 import shutil
-import stat
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
-
+import zipfile
 import yaml
 
-DCB_PACKAGE_IDS = [
-    "Sekiban.Dcb.BlobStorage.AzureStorage",
-    "Sekiban.Dcb.BlobStorage.S3",
-    "Sekiban.Dcb.ColdStorage",
-    "Sekiban.Dcb.Core",
-    "Sekiban.Dcb.Core.Model",
-    "Sekiban.Dcb.Core.Testing",
-    "Sekiban.Dcb.CosmosDb",
-    "Sekiban.Dcb.DynamoDB",
-    "Sekiban.Dcb.MaterializedView",
-    "Sekiban.Dcb.MaterializedView.MySql",
-    "Sekiban.Dcb.MaterializedView.Orleans",
-    "Sekiban.Dcb.MaterializedView.Postgres",
-    "Sekiban.Dcb.MaterializedView.SqlServer",
-    "Sekiban.Dcb.MaterializedView.Sqlite",
-    "Sekiban.Dcb.Orleans.AzureQueue",
-    "Sekiban.Dcb.Orleans.Core",
-    "Sekiban.Dcb.Orleans.WithResult",
-    "Sekiban.Dcb.Orleans.WithoutResult",
-    "Sekiban.Dcb.Postgres",
-    "Sekiban.Dcb.Sqlite",
-    "Sekiban.Dcb.WithResult",
-    "Sekiban.Dcb.WithResult.Model",
-    "Sekiban.Dcb.WithResult.Testing",
-    "Sekiban.Dcb.WithoutResult",
-    "Sekiban.Dcb.WithoutResult.Model",
-    "Sekiban.Dcb.WithoutResult.Testing",
-]
+REL = Path('dcb/tests/Sekiban.Dcb.TemplateValidation')
+REPO = 'J-Tech-Japan/Sekiban'
+HOST = 'J-Tech-Japan/SekibanIntentHost'
+HOST_REF = 'a' * 40
+TREE = 'b' * 40
+CHECKS = [('dcbTestsNet9', 'run_test_dcb.yml', 'dcbTestsNet9'),
+          ('dcbTestsNet10', 'run_test_dcb.yml', 'dcbTestsNet10'),
+          ('packagedConsumer', 'dcb_azure_queue_packaged_consumer.yml', 'packaged-consumer'),
+          ('templateConsumer', 'dcb_template_validation.yml', 'Pack, install, generate, restore, build, and test templates')]
+VERSIONS = ('10.22.0', '42.7.3')  # Explicit fixture inputs; never production defaults.
 
-ALLOWLIST = {
-    "github.event.after",
-    "github.ref_name",
-    "github.token",
-    "github.run_id",
-    "secrets.SEKIBAN_RELEASE_RECORD_TOKEN",
-    "secrets.NUGET_APIKEY",
-    "vars.SEKIBAN_RELEASE_RECORD_REF",
-    "inputs.version",
-    "inputs.state",
-    "inputs.ref",
-    "inputs.candidate",
-}
-
-PINNED_USES = {
-    "actions/checkout@v4",
-    "actions/setup-dotnet@v4",
-    "softprops/action-gh-release@v2",
-}
-
-# Heavy pack, consumer, and publication-adjacent steps AC8 allows the harness to stub.
-STUB_STEP_NAMES = {
-    "Setup .NET 8",
-    "Setup .NET 9",
-    "Setup .NET 10",
-    "Restore dependencies",
-    "Build with dotnet",
-    "Build release-record and package validators",
-    "Build release validators",
-    "Pack NuGet packages",
-    "Inspect exact package set and dependency groups before push",
-    "Validate Azure Queue V2 packaged consumer and dependency groups",
-    "Validate reviewed bilingual library release body",
-    "Verify reviewed library release body input",
-    "Assemble reviewed library release body",
-    "Validate packed consumer path",
-    "Verify reviewed template release body input",
-    "Assemble reviewed template release body",
-    "Pack Template",
-    "Create GitHub Release",
-    "Check out release candidate",
-    "Build release-record validator",
-}
-
-EXPR_RE = re.compile(r"\$\{\{\s*([^}]+?)\s*\}\}")
-
-
-class HarnessError(RuntimeError):
+class Failure(RuntimeError):
     pass
 
+def run(args, cwd, env=None):
+    result = subprocess.run(args, cwd=cwd, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if result.returncode:
+        raise Failure(result.stdout.strip())
+    return result.stdout
 
-def die(message: str) -> None:
-    raise HarnessError(message)
+def write_json(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, ensure_ascii=False) + '\n')
 
+def executable(path, content):
+    path.write_text(content)
+    path.chmod(0o755)
 
-def write_executable(path: Path, body: str) -> None:
-    path.write_text(body, encoding="utf-8")
-    path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+# All external calls are intercepted. Unexpected endpoints fail closed.
+SHIM = '''#!/usr/bin/env python3
+import sys, json, os, shutil
+from pathlib import Path
+args=sys.argv[1:]; root=Path(os.environ['FIXTURE_ROOT']); tool=Path(sys.argv[0]).name
+state=json.loads((root/'api.json').read_text())
+if tool=='gh':
+    assert args[0]=='api', args
+    assert '--method' not in args or args[args.index('--method')+1]=='GET', args
+    route=next(a for a in args[1:] if a.startswith('repos/'))
+    token='host-token' if '/SekibanIntentHost/' in route else 'workflow-token'
+    assert os.environ.get('GH_TOKEN')==token, (route, 'wrong token')
+    with (root/'api-trace').open('a') as trace: trace.write(route+'\\n')
+    if route in state and '_error' in state[route]:
+        print('API failed (HTTP '+str(state[route]['_error'])+')', file=sys.stderr); sys.exit(1)
+    if route not in state:
+        if '-i' in args: print('HTTP/2 404')
+        print('Not Found (HTTP 404)', file=sys.stderr); sys.exit(1)
+    if '-i' in args: print('HTTP/2 200\\n')
+    print(json.dumps(state[route])); sys.exit(0)
+if tool=='curl':
+    url=next(a for a in args if a.startswith(('https://','file://')))
+    relative=url.split('/v3-flatcontainer/',1)[-1] if '/v3-flatcontainer/' in url else url.removeprefix('file://')
+    path=root/'public'/relative if not url.startswith('file://') else Path(relative)
+    exists=path.is_file(); output=None
+    for flag in ['--output','-o']:
+        if flag in args: output=args[args.index(flag)+1]
+    if output: Path(output).write_bytes(path.read_bytes() if exists else b'not found')
+    elif exists: sys.stdout.buffer.write(path.read_bytes())
+    if '--write-out' in args: print('200' if exists else '404', end='')
+    if not exists and '--fail' in args: sys.exit(22)
+    sys.exit(0)
+raise AssertionError(tool)
+'''
 
+class Fixture:
+    def __init__(self, source, root, version):
+        self.root, self.version = root, version
+        self.repo = root/'checkout'
+        self.repo.mkdir(parents=True)
+        self.dotnet = shutil.which('dotnet')
+        for relative in ['.github/workflows', 'dcb/src', str(REL), 'templates/Sekiban.Dcb.Templates', 'docs/releases']:
+            shutil.copytree(source/relative, self.repo/relative, ignore=shutil.ignore_patterns('bin','obj','__pycache__'))
+        shutil.copy2(source/'CONTRIBUTING.md', self.repo/'CONTRIBUTING.md')
+        self.dll = source/REL/'bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll'
+        output = self.repo/REL/'bin/Release/net10.0'
+        shutil.copytree(self.dll.parent, output)
+        self.dll = output/self.dll.name
+        authority_version = run(['bash', str(source/REL/'read-template-version.sh'), '--repo-root', str(source)], source).strip()
+        for props in (self.repo/'templates/Sekiban.Dcb.Templates/content').glob('*/SekibanDcbTemplateVersion.props'):
+            props.write_text(props.read_text().replace(authority_version, version))
+        assert run(['bash',str(self.repo/REL/'read-template-version.sh'),'--repo-root',str(self.repo)],self.repo).strip()==version
+        template_readme=self.repo/'templates/Sekiban.Dcb.Templates/README.md'
+        template_readme.write_text(template_readme.read_text().replace(authority_version, version))
+        self.bodies = {'library_en_sha256': f'dcb-v{version}-library.en.md', 'library_ja_sha256': f'dcb-v{version}-library.ja.md',
+                       'template_en_sha256': f'dcbTemplates-v{version}.en.md', 'template_ja_sha256': f'dcbTemplates-v{version}.ja.md'}
+        if version != authority_version:
+            for key, name in self.bodies.items():
+                text = f'{version} template release.\n' if '_en_' in key else f'{version} テンプレートのリリース。\n'
+                (self.repo/'docs/releases'/name).write_text(text)
+        run(['git','init','-b','main'], self.repo)
+        run(['git','config','user.name','SEK-G122 offline fixture'], self.repo)
+        run(['git','config','user.email','offline@example.invalid'], self.repo)
+        run(['git','add','.'], self.repo)
+        run(['git','commit','-m','offline merged candidate'], self.repo)
+        self.sha=run(['git','rev-parse','HEAD'], self.repo).strip()
+        # Main has advanced: the candidate must pass as an older ancestor.
+        run(['git','commit','--allow-empty','-m','newer main tip'], self.repo)
+        self.main=run(['git','rev-parse','HEAD'],self.repo).strip()
+        run(['git','update-ref','refs/remotes/origin/main',self.main],self.repo)
+        run(['git','checkout','--detach',self.sha],self.repo)
+        self.tags={}
+        for tag, date in [(f'dcb-v{version}', '2026-09-14T18:00:00Z'),(f'dcbTemplates-v{version}', '2026-09-14T19:00:00Z')]:
+            env=os.environ.copy(); env['GIT_COMMITTER_DATE']=date
+            run(['git','tag','-a',tag,'-m','offline fixture'],self.repo,env)
+            self.tags[tag]=run(['git','rev-parse',f'{tag}^{{tag}}'],self.repo).strip()
+        # Fetches use only this local bare fixture; never the real repository.
+        run(['git','clone','--no-local','--bare',str(self.repo),str(root/'origin.git')],root)
+        run(['git','remote','add','origin',str(root/'origin.git')],self.repo)
+        self.api={}
+        self.record={'schema_version':3,'version':version,'stage':'prepared','merged_sha':self.sha,'candidate_pr':1316,
+                     'checks':[{'name':name,'run_id':100+i} for i,(name,_,_) in enumerate(CHECKS)],
+                     'release_bodies':{key:hashlib.sha256((self.repo/'docs/releases'/name).read_bytes()).hexdigest() for key,name in self.bodies.items()}}
+        for i,(_,workflow,job) in enumerate(CHECKS):
+            route=f'repos/{REPO}/actions/runs/{100+i}'
+            self.api[route]={'id':100+i,'repository':{'full_name':REPO},'head_repository':{'full_name':REPO},
+                             'path':f'.github/workflows/{workflow}','event':'workflow_dispatch','head_sha':self.sha,
+                             'status':'completed','conclusion':'success','run_attempt':2}
+            self.api[route+'/attempts/2/jobs?per_page=100&page=1']={'total_count':1,'jobs':[{'name':job,'run_id':100+i,'run_attempt':2,
+                               'head_sha':self.sha,'status':'completed','conclusion':'success'}]}
+        # Attempt 1 may have failed; only the successful current attempt is used.
+        for tag,obj in self.tags.items():
+            self.api[f'repos/{REPO}/git/ref/tags/{tag}']={'ref':'refs/tags/'+tag,'object':{'sha':obj,'type':'tag'}}
+            self.api[f'repos/{REPO}/git/tags/{obj}']={'sha':obj,'tag':tag,'object':{'sha':self.sha,'type':'commit'},
+                        'tagger':{'date':'2026-09-14T19:00:00Z' if tag.startswith('dcbTemplates') else '2026-09-14T18:00:00Z'}}
+        self.ids=re.findall(r'"(Sekiban\.Dcb[^\"]+)"',(source/REL/'PackageManifest.cs').read_text())
+        for tag in self.tags:
+            library=tag.startswith('dcb-v')
+            names=[f'{id}.{version}.nupkg' for id in self.ids] if library else [f'Sekiban.Dcb.Templates.{version}.nupkg']
+            self.api[f'repos/{REPO}/releases/tags/{tag}']={'tag_name':tag,'html_url':f'https://github.com/{REPO}/releases/tag/{tag}',
+                         'draft':False,'published_at':'2026-09-14T18:30:00Z','assets':[{'name':name} for name in names],
+                         'body':''.join((self.repo/'docs/releases'/self.bodies[k]).read_text() for k in (['library_en_sha256','library_ja_sha256'] if library else ['template_en_sha256','template_ja_sha256']))}
+        self.shims=root/'shims'; self.shims.mkdir()
+        for tool in ['gh','curl']: executable(self.shims/tool, SHIM)
+        self.temp=root/'runner-temp'; self.temp.mkdir()
+        self.env=os.environ.copy(); self.env.update({'FIXTURE_ROOT':str(root),'PATH':str(self.shims)+':'+os.environ['PATH'],
+           'GITHUB_REPOSITORY':REPO,'GITHUB_WORKSPACE':str(self.repo),'RUNNER_TEMP':str(self.temp),
+           'GITHUB_ENV':str(root/'github.env'),'GITHUB_RUN_ATTEMPT':'1','GH_TOKEN':'workflow-token',
+           'SEKIBAN_RELEASE_RECORD_REF':HOST_REF,'VERSION':version})
+        self.local=root/'packed'; self.local.mkdir()
+        for id in self.ids: self.package(self.local/f'{id}.{version}.nupkg',id)
+        self.template_package=self.local/f'Sekiban.Dcb.Templates.{version}.nupkg'
+        self.package(self.template_package,'Sekiban.Dcb.Templates',template=True)
+        (root/'public').mkdir()
+        self.save()
 
-def mutate_nupkg_entry(path: Path, entry_name: str, payload: str) -> None:
-    import zipfile
+    def package(self,path,id,template=False,version=None):
+        version=version or self.version
+        groups=''
+        for framework, relational in [('net9.0','9.0.13'),('net10.0','10.0.3')]:
+            deps=[]
+            if id=='Sekiban.Dcb.Postgres': deps=[('Microsoft.EntityFrameworkCore.Relational',relational)]
+            if id=='Sekiban.Dcb.Orleans.AzureQueue': deps=[('Azure.Storage.Queues','12.25.0'),('Microsoft.Orleans.Streaming.AzureStorage','10.3.1')]
+            groups+=f'<group targetFramework="{framework}">'+''.join(f'<dependency id="{n}" version="{v}" />' for n,v in deps)+'</group>'
+        with zipfile.ZipFile(path,'w') as archive:
+            archive.writestr(f'{id}.nuspec',f'<package><metadata><id>{id}</id><version>{version}</version><dependencies>{groups}</dependencies></metadata></package>')
+            archive.writestr('content/offline.txt',id+' '+version)
+            if template:
+                carrier=self.repo/'templates/Sekiban.Dcb.Templates'
+                archive.writestr('README.md',(carrier/'README.md').read_bytes())
+                for file in (carrier/'content').rglob('*'):
+                    if file.is_file() and file.name!='Directory.Build.props': archive.write(file, file.relative_to(carrier))
 
-    with zipfile.ZipFile(path, "a", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(entry_name, payload)
+    def save(self):
+        content=(json.dumps(self.record,ensure_ascii=False)+'\n').encode()
+        blob=hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()
+        path=f'intents/sekiban/releases/dcb-v{self.version}-release-record.json'
+        self.api[f'repos/{HOST}/contents/{path}?ref={HOST_REF}']={'type':'file','encoding':'base64','path':path,'sha':blob,'content':base64.b64encode(content).decode()}
+        self.api[f'repos/{HOST}/commits/{HOST_REF}']={'sha':HOST_REF,'commit':{'tree':{'sha':TREE}}}
+        self.api[f'repos/{HOST}/git/trees/{TREE}?recursive=1']={'sha':TREE,'truncated':False,'tree':[{'path':path,'type':'blob','sha':blob}]}
+        write_json(self.root/'api.json',self.api)
 
+    def validate(self,state='prepared'):
+        bundle=self.temp/'dcb-release-record-bundle'
+        shutil.rmtree(bundle,ignore_errors=True)
+        env=self.env.copy(); env['GH_TOKEN']='host-token'
+        run(['bash',str(self.repo/REL/'read-host-release-record.sh'),'--version',self.version,'--state',state,
+             '--output-dir',str(bundle),'--manifest',str(bundle/'bundle.json')],self.repo,env)
+        return run([self.dotnet,str(self.dll),'release-record','--bundle',str(bundle),'--manifest',str(bundle/'bundle.json'),
+             '--repo-root',str(self.repo),'--expected-version',self.version,'--state',state,'--merged-sha-output',str(self.temp/'validated-merged-sha.txt')],self.repo,self.env)
 
-def write_minimal_nupkg(path: Path, package_id: str, package_version: str) -> None:
-    import zipfile
+    def publish(self,template=False):
+        for pkg in (self.repo/'out').glob('*.nupkg'):
+            if pkg.name.startswith('Sekiban.Dcb.Templates.') != template: continue
+            lower=pkg.name[:-len('.'+self.version+'.nupkg')].lower()
+            dest=self.root/'public'/lower/self.version/pkg.name.lower(); dest.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(pkg,dest)
+            write_json(dest.parent.parent/'index.json',{'versions':[self.version]})
 
-    nuspec = f"""<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
-  <metadata>
-    <id>{package_id}</id>
-    <version>{package_version}</version>
-    <authors>Sekiban</authors>
-    <description>Harness stub package</description>
-  </metadata>
-</package>
-"""
-    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(f"{package_id}.nuspec", nuspec)
-        archive.writestr("content/README.txt", f"{package_id} {package_version}\n")
-
-
-def substitute_expressions(text: str, values: dict[str, str]) -> str:
-    def repl(match: re.Match[str]) -> str:
-        key = match.group(1).strip()
-        if key not in ALLOWLIST:
-            die(f"Disallowed ${{{{ }}}} expression: {key}")
-        if key not in values:
-            die(f"Missing allowlisted expression value: {key}")
-        return values[key]
-
-    return EXPR_RE.sub(repl, text)
-
-
-def load_workflow(path: Path) -> dict:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
-
-
-def named_steps(job: dict) -> list[dict]:
-    steps = []
-    for step in job.get("steps", []):
-        if "name" in step:
-            steps.append(step)
-        elif "uses" in step:
-            steps.append({"name": f"uses:{step['uses']}", "uses": step["uses"], **{k: v for k, v in step.items() if k != "uses"}})
-    return steps
-
-
-def create_bare_mirror(repo_root: Path, work: Path, version: str, tag_name: str) -> tuple[Path, str, str]:
-    mirror = work / "bare.git"
-    checkout_src = work / "seed"
-    checkout_src.mkdir(parents=True)
-    subprocess.check_call(["git", "init"], cwd=checkout_src, stdout=subprocess.DEVNULL)
-    subprocess.check_call(["git", "config", "user.email", "g82@example.com"], cwd=checkout_src)
-    subprocess.check_call(["git", "config", "user.name", "g82"], cwd=checkout_src)
-    # Minimal seed content so pack stubs have something to copy from local feed later.
-    (checkout_src / "README").write_text("sek-g82 harness\n", encoding="utf-8")
-    subprocess.check_call(["git", "add", "README"], cwd=checkout_src)
-    subprocess.check_call(["git", "commit", "-m", "seed"], cwd=checkout_src, stdout=subprocess.DEVNULL)
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=checkout_src, text=True).strip()
-    env = os.environ.copy()
-    env["GIT_COMMITTER_DATE"] = "2026-09-14T18:00:00Z"
-    env["GIT_AUTHOR_DATE"] = "2026-09-14T18:00:00Z"
-    subprocess.check_call(
-        ["git", "tag", "-a", tag_name, "-m", f"release {version}"],
-        cwd=checkout_src,
-        env=env,
-        stdout=subprocess.DEVNULL,
-    )
-    tag_object = subprocess.check_output(
-        ["git", "rev-parse", f"{tag_name}^{{tag}}"], cwd=checkout_src, text=True
-    ).strip()
-    subprocess.check_call(["git", "clone", "--bare", str(checkout_src), str(mirror)], stdout=subprocess.DEVNULL)
-    return mirror, head, tag_object
-
-
-def emulate_checkout(mirror: Path, dest: Path, tag_name: str, head: str, fetch_depth: int | None) -> None:
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
-    clone_args = ["git", "clone"]
-    if fetch_depth == 1:
-        clone_args.extend(["--depth", "1"])
-    clone_args.extend([str(mirror), str(dest)])
-    subprocess.check_call(clone_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    # actions/checkout@v4 annotated-tag rewrite: +<commit>:refs/tags/X
-    subprocess.check_call(
-        ["git", "fetch", "origin", f"+{head}:refs/tags/{tag_name}"],
-        cwd=dest,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    subprocess.check_call(
-        ["git", "checkout", "--force", tag_name],
-        cwd=dest,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-
-def seed_feed_from_local_feed(feed_root: Path, local_feed: Path, version: str) -> None:
-    for pkg in local_feed.glob("*.nupkg"):
-        base = pkg.stem
-        if not base.endswith(f".{version}"):
-            continue
-        package_id = base[: -(len(version) + 1)]
-        lower = package_id.lower()
-        target_dir = feed_root / lower / version
-        target_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(pkg, target_dir / f"{lower}.{version}.nupkg")
-        (feed_root / lower / "index.json").write_text(
-            json.dumps({"versions": [version]}) + "\n", encoding="utf-8"
-        )
-
-
-def copy_repo_surface(repo_root: Path, dest: Path) -> None:
-    for relative in [
-        ".github/workflows",
-        "dcb/src",
-        "dcb/tests/Sekiban.Dcb.TemplateValidation",
-        "dcb/tests/Sekiban.Dcb.Orleans.Tests",
-        "docs/releases",
-        "templates/Sekiban.Dcb.Templates",
-    ]:
-        src = repo_root / relative
-        target = dest / relative
-        if target.exists():
-            shutil.rmtree(target)
-        if src.is_dir():
-            shutil.copytree(src, target, ignore=shutil.ignore_patterns("bin", "obj", "__pycache__"))
-        elif src.is_file():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, target)
-    # Minimal packable project surface for any non-stubbed manifest probes.
-    src_root = dest / "dcb" / "src"
-    src_root.mkdir(parents=True, exist_ok=True)
-
-
-def install_shims(
-    shim_dir: Path,
-    *,
-    api_root: Path,
-    feed_root: Path,
-    local_feed: Path,
-    push_log: Path,
-    release_log: Path,
-) -> None:
-    write_executable(
-        shim_dir / "gh",
-        f"""#!/usr/bin/env bash
-set -euo pipefail
-args=("$@")
-include_headers=0
-route=""
-start=0
-if [[ "${{args[0]:-}}" == api ]]; then
-  start=1
-fi
-for ((i=start; i<${{#args[@]}}; i++)); do
-  case "${{args[$i]}}" in
-    -i|--include) include_headers=1 ;;
-    repos/*|/repos/*) route="${{args[$i]#/}}" ;;
-  esac
-done
-api_root={json.dumps(str(api_root))}
-if [[ -z "$route" ]]; then
-  echo "gh shim missing route: ${{args[*]}}" >&2
-  exit 1
-fi
-file="$api_root/${{route//\\//__}}.json"
-if [[ ! -f "$file" ]]; then
-  alt="$api_root/$(printf '%s' "$route" | tr '/' '_').json"
-  if [[ -f "$alt" ]]; then
-    file="$alt"
-  fi
-fi
-if [[ ! -f "$file" ]]; then
-  if (( include_headers == 1 )); then
-    printf 'HTTP/1.1 404 Not Found\\ncontent-type: application/json\\n\\n'
-  fi
-  echo '{{"message":"Not Found","documentation_url":"https://docs.github.com/rest"}}'
-  echo "gh: Not Found (HTTP 404)" >&2
-  exit 1
-fi
-if (( include_headers == 1 )); then
-  printf 'HTTP/1.1 200 OK\\ncontent-type: application/json\\n\\n'
-fi
-cat "$file"
-exit 0
-""",
-    )
-    write_executable(
-        shim_dir / "curl",
-        f"""#!/usr/bin/env bash
-set -euo pipefail
-out=""
-url=""
-write_out=""
-fail=0
-args=("$@")
-for ((i=0; i<${{#args[@]}}; i++)); do
-  case "${{args[$i]}}" in
-    --fail) fail=1 ;;
-    --output|-o) out="${{args[$((i+1))]}}" ;;
-    --write-out) write_out="${{args[$((i+1))]}}" ;;
-    http://*|https://*|file://*) url="${{args[$i]}}" ;;
-  esac
-done
-feed_root={json.dumps(str(feed_root))}
-if [[ -z "$url" ]]; then echo "curl shim missing url" >&2; exit 1; fi
-rel="${{url#https://api.nuget.org/v3-flatcontainer/}}"
-rel="${{rel#http://127.0.0.1/}}"
-path="$feed_root/$rel"
-code=404
-if [[ -f "$path" ]]; then
-  code=200
-  if [[ -n "$out" ]]; then cp "$path" "$out"; fi
-else
-  if [[ -n "$out" ]]; then rm -f "$out"; fi
-fi
-if [[ -n "$write_out" ]]; then
-  printf '%s' "$code"
-fi
-if (( fail == 1 && code != 200 )); then
-  exit 22
-fi
-exit 0
-""",
-    )
-    write_executable(
-        shim_dir / "dotnet",
-        f"""#!/usr/bin/env bash
-set -euo pipefail
-push_log={json.dumps(str(push_log))}
-local_feed={json.dumps(str(local_feed))}
-feed_root={json.dumps(str(feed_root))}
-if [[ "${{1:-}}" == nuget && "${{2:-}}" == push ]]; then
-  echo "STUB nuget push: $*" >> "$push_log"
-  shift 2
-  for arg in "$@"; do
-    if [[ "$arg" == out/*.nupkg || "$arg" == *.nupkg ]]; then
-      for pkg in $arg; do
-        [[ -f "$pkg" ]] || continue
-        base="$(basename "$pkg")"
-        idver="${{base%.nupkg}}"
-        if [[ "$idver" =~ ^(.*)\\.([0-9]+\\.[0-9]+\\.[0-9]+)$ ]]; then
-          id="${{BASH_REMATCH[1]}}"
-          version="${{BASH_REMATCH[2]}}"
-        else
-          echo "Unable to parse package id/version from $base" >&2
-          exit 1
-        fi
-        lower="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
-        mkdir -p "$feed_root/$lower/$version"
-        target="$feed_root/$lower/$version/$lower.$version.nupkg"
-        if [[ -f "$target" ]]; then
-          echo "STUB nuget push skip-duplicate: $target already exists"
-        else
-          cp "$pkg" "$target"
-        fi
-        printf '%s\\n' '{{"versions":["'"$version"'"]}}' > "$feed_root/$lower/index.json"
-      done
-    fi
-  done
-  exit 0
-fi
-if [[ "${{1:-}}" == pack ]]; then
-  out_dir="out"
-  for ((i=1; i<=$#; i++)); do
-    arg="${{!i}}"
-    if [[ "$arg" == -o ]]; then
-      next=$((i+1)); out_dir="${{!next}}"
-    fi
-  done
-  mkdir -p "$out_dir"
-  if [[ -d "$local_feed" ]]; then
-    find "$local_feed" -maxdepth 1 -name "*.nupkg" -exec cp {{}} "$out_dir/" \\;
-  fi
-  echo "STUB dotnet pack -> $out_dir"
-  exit 0
-fi
-if [[ "${{1:-}}" == build || "${{1:-}}" == restore ]]; then
-  echo "STUB dotnet $1"
-  exit 0
-fi
-if [[ -f "${{1:-}}" && "$1" == *.dll ]]; then
-  # Prefer a real dotnet for DLL invocations if present; otherwise no-op success for stubbed validators.
-  if command -v /usr/local/share/dotnet/dotnet >/dev/null 2>&1; then
-    exec /usr/local/share/dotnet/dotnet "$@"
-  fi
-  if [[ -x /usr/bin/dotnet ]]; then
-    exec /usr/bin/dotnet "$@"
-  fi
-  echo "STUB dll $*"
-  exit 0
-fi
-if command -v /usr/local/share/dotnet/dotnet >/dev/null 2>&1; then
-  exec /usr/local/share/dotnet/dotnet "$@"
-fi
-if [[ -x /usr/bin/dotnet ]]; then
-  exec /usr/bin/dotnet "$@"
-fi
-echo "dotnet shim unhandled: $*" >&2
-exit 1
-""",
-    )
-
-
-def write_api(api_root: Path, route: str, payload: dict | list, status_ok: bool = True) -> None:
-    api_root.mkdir(parents=True, exist_ok=True)
-    key = route.lstrip("/").replace("/", "__")
-    (api_root / f"{key}.json").write_text(json.dumps(payload) + "\n", encoding="utf-8")
-
-
-def prepared_facts(version: str, merged_sha: str) -> dict:
-    return {
-        "version": version,
-        "state": "prepared",
-        "merged_sha": merged_sha,
-        "prepared_completed_at_utc": "2026-09-14T12:00:00Z",
-        "latest_recorded_check_completed_at_utc": "2026-09-14T13:00:00Z",
-    }
-
-
-def libraries_facts(version: str, merged_sha: str, library_tag_object: str) -> dict:
-    facts = prepared_facts(version, merged_sha)
-    facts.update(
-        {
-            "state": "libraries-verified",
-            "library_tag_object_id": library_tag_object,
-            "library_tag_created_at_utc": "2026-09-14T18:00:00Z",
-            "library_release_published_at_utc": "2026-09-14T18:30:00Z",
-        }
-    )
-    return facts
-
-
-def library_release_payload(version: str, repo_root: Path) -> dict:
-    lib_tag = f"dcb-v{version}"
-    repository = "J-Tech-Japan/Sekiban"
-    en = (repo_root / f"docs/releases/{lib_tag}-library.en.md").read_text(encoding="utf-8")
-    ja = (repo_root / f"docs/releases/{lib_tag}-library.ja.md").read_text(encoding="utf-8")
-    return {
-        "tag_name": lib_tag,
-        "published_at": "2026-09-14T18:30:00Z",
-        "draft": False,
-        "html_url": f"https://github.com/{repository}/releases/tag/{lib_tag}",
-        "body": en + ja,
-        "assets": [{"name": f"{package}.{version}.nupkg"} for package in DCB_PACKAGE_IDS],
-    }
-
-
-def seed_pass_apis(
-    api_root: Path,
-    *,
-    version: str,
-    merged_sha: str,
-    library_tag_object: str,
-    template_tag_object: str | None,
-    mode: str,
-    repo_root: Path,
-) -> None:
-    lib_tag = f"dcb-v{version}"
-    tmpl_tag = f"dcbTemplates-v{version}"
-    write_api(
-        api_root,
-        f"repos/J-Tech-Japan/Sekiban/git/ref/tags/{lib_tag}",
-        {"ref": f"refs/tags/{lib_tag}", "object": {"sha": library_tag_object, "type": "tag"}},
-    )
-    write_api(
-        api_root,
-        f"repos/J-Tech-Japan/Sekiban/git/tags/{library_tag_object}",
-        {
-            "sha": library_tag_object,
-            "tag": lib_tag,
-            "object": {"sha": merged_sha, "type": "commit"},
-            "tagger": {"date": "2026-09-14T18:00:00Z"},
-        },
-    )
-    if mode == "library":
-        # Template tag must be absent.
-        missing = api_root / f"repos__J-Tech-Japan__Sekiban__git__ref__tags__{tmpl_tag}.json"
-        if missing.exists():
-            missing.unlink()
-    else:
-        assert template_tag_object is not None
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/ref/tags/{tmpl_tag}",
-            {"ref": f"refs/tags/{tmpl_tag}", "object": {"sha": template_tag_object, "type": "tag"}},
-        )
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/tags/{template_tag_object}",
-            {
-                "sha": template_tag_object,
-                "tag": tmpl_tag,
-                "object": {"sha": merged_sha, "type": "commit"},
-                "tagger": {"date": "2026-09-14T19:00:00Z"},
-            },
-        )
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/releases/tags/{lib_tag}",
-            library_release_payload(version, repo_root),
-        )
-
-
-def merge_env(*layers: dict[str, str]) -> dict[str, str]:
-    merged: dict[str, str] = {}
-    for layer in layers:
-        merged.update(layer)
-    return merged
-
-
-def run_script(script: str, *, cwd: Path, env: dict[str, str]) -> None:
-    github_env = Path(env["GITHUB_ENV"])
-    github_output = Path(env["GITHUB_OUTPUT"])
-    github_env.parent.mkdir(parents=True, exist_ok=True)
-    github_env.write_text("", encoding="utf-8")
-    github_output.write_text("", encoding="utf-8")
-    completed = subprocess.run(
-        ["bash", "-eo", "pipefail", "-c", script],
-        cwd=cwd,
-        env=env,
-        text=True,
-        capture_output=True,
-    )
-    if completed.returncode != 0:
-        raise HarnessError(
-            f"step failed ({completed.returncode}):\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}\nSCRIPT:\n{script}"
-        )
-    # Carry GITHUB_ENV into the process env for subsequent steps.
-    for line in github_env.read_text(encoding="utf-8").splitlines():
-        if "=" in line:
-            key, value = line.split("=", 1)
-            env[key] = value
-
-
-def execute_workflow(
-    *,
-    workflow_path: Path,
-    job_name: str,
-    repo_root: Path,
-    work: Path,
-    mode: str,
-    version: str,
-    local_feed: Path,
-    mutant: str | None,
-    fetch_depth: int | None,
-    expect_failure: bool,
-) -> None:
-    workflow = load_workflow(workflow_path)
-    job = workflow["jobs"][job_name]
-    tag_name = f"dcb-v{version}" if mode == "library" else f"dcbTemplates-v{version}"
-    mirror, head, library_tag_object = create_bare_mirror(repo_root, work / "mirror-lib", version, f"dcb-v{version}")
-    template_tag_object = None
-    if mode == "template":
-        # Annotated template tag on same head.
-        # Recreate template annotated tag object identity from a second annotated tag in a clone.
-        # Bare clones do not carry user.name/email; runners without a global identity fail
-        # annotated-tag creation unless we set a local identity here.
-        clone = work / "tag-seed"
-        subprocess.check_call(["git", "clone", str(mirror), str(clone)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.check_call(["git", "config", "user.email", "g82@example.com"], cwd=clone)
-        subprocess.check_call(["git", "config", "user.name", "g82"], cwd=clone)
-        env = os.environ.copy()
-        env["GIT_COMMITTER_DATE"] = "2026-09-14T19:00:00Z"
-        env["GIT_AUTHOR_DATE"] = "2026-09-14T19:00:00Z"
-        subprocess.check_call(
-            ["git", "tag", "-a", tag_name, "-m", f"template {version}"],
-            cwd=clone,
-            env=env,
-            stdout=subprocess.DEVNULL,
-        )
-        template_tag_object = subprocess.check_output(
-            ["git", "rev-parse", f"{tag_name}^{{tag}}"], cwd=clone, text=True
-        ).strip()
-        subprocess.check_call(["git", "push", "origin", tag_name], cwd=clone, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-    checkout = work / "checkout"
-    emulate_checkout(mirror, checkout, tag_name if mode != "stage" else "dcb-v" + version, head, fetch_depth)
-    copy_repo_surface(repo_root, checkout)
-
-    # Apply mutant overlays to checked-out workflow files when requested.
-    if mutant:
-        apply_mutant(checkout, mutant, mode)
-
-    api_root = work / "api"
-    feed_root = work / "feed"
-    feed_root.mkdir(parents=True, exist_ok=True)
-    shim_dir = work / "shims"
-    shim_dir.mkdir()
-    push_log = work / "push.log"
-    release_log = work / "release.log"
-    push_log.write_text("", encoding="utf-8")
-    install_shims(shim_dir, api_root=api_root, feed_root=feed_root, local_feed=local_feed, push_log=push_log, release_log=release_log)
-
-    if mode == "library":
-        seed_pass_apis(
-            api_root,
-            version=version,
-            merged_sha=head,
-            library_tag_object=library_tag_object,
-            template_tag_object=None,
-            mode="library",
-            repo_root=repo_root,
-        )
-    elif mode == "template":
-        seed_pass_apis(
-            api_root,
-            version=version,
-            merged_sha=head,
-            library_tag_object=library_tag_object,
-            template_tag_object=template_tag_object,
-            mode="template",
-            repo_root=repo_root,
-        )
-    else:
-        seed_pass_apis(
-            api_root,
-            version=version,
-            merged_sha=head,
-            library_tag_object=library_tag_object,
-            template_tag_object=None,
-            mode="library",
-            repo_root=repo_root,
-        )
-
-    # Mutant API overlays
-    if mutant == "lightweight-live-tag":
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/ref/tags/{tag_name}",
-            {"ref": f"refs/tags/{tag_name}", "object": {"sha": head, "type": "commit"}},
-        )
-    if mutant == "library-attempt1-preexisting":
-        pkg = "sekiban.dcb.core"
-        index = feed_root / pkg / "index.json"
-        index.parent.mkdir(parents=True, exist_ok=True)
-        index.write_text(json.dumps({"versions": [version]}) + "\n", encoding="utf-8")
-    if mutant == "library-tag-equal-completion":
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/tags/{library_tag_object}",
-            {
-                "sha": library_tag_object,
-                "tag": f"dcb-v{version}",
-                "object": {"sha": head, "type": "commit"},
-                "tagger": {"date": "2026-09-14T12:00:00Z"},
-            },
-        )
-    if mutant == "retry-changed-tag-object":
-        # Keep live object as library_tag_object but force trigger to differ via values below.
-        pass
-    if mutant == "template-tag-early":
-        assert template_tag_object is not None
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/tags/{template_tag_object}",
-            {
-                "sha": template_tag_object,
-                "tag": tag_name,
-                "object": {"sha": head, "type": "commit"},
-                "tagger": {"date": "2026-09-14T18:00:00Z"},
-            },
-        )
-    if mutant == "template-tag-equal-library":
-        assert template_tag_object is not None
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/tags/{template_tag_object}",
-            {
-                "sha": template_tag_object,
-                "tag": tag_name,
-                "object": {"sha": head, "type": "commit"},
-                "tagger": {"date": "2026-09-14T18:00:00Z"},
-            },
-        )
-    if mutant == "template-tag-before-library":
-        assert template_tag_object is not None
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/tags/{template_tag_object}",
-            {
-                "sha": template_tag_object,
-                "tag": tag_name,
-                "object": {"sha": head, "type": "commit"},
-                "tagger": {"date": "2026-09-14T17:00:00Z"},
-            },
-        )
-    if mutant == "template-tag-equal-release":
-        assert template_tag_object is not None
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/tags/{template_tag_object}",
-            {
-                "sha": template_tag_object,
-                "tag": tag_name,
-                "object": {"sha": head, "type": "commit"},
-                "tagger": {"date": "2026-09-14T18:30:00Z"},
-            },
-        )
-    if mutant == "template-wrong-commit":
-        assert template_tag_object is not None
-        wrong = "cccccccccccccccccccccccccccccccccccccccc"
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/tags/{template_tag_object}",
-            {
-                "sha": template_tag_object,
-                "tag": tag_name,
-                "object": {"sha": wrong, "type": "commit"},
-                "tagger": {"date": "2026-09-14T19:00:00Z"},
-            },
-        )
-    if mutant == "lightweight-template-tag":
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/ref/tags/{tag_name}",
-            {"ref": f"refs/tags/{tag_name}", "object": {"sha": head, "type": "commit"}},
-        )
-    if mutant == "template-preexisting-package":
-        pkg = "sekiban.dcb.templates"
-        index = feed_root / pkg / "index.json"
-        index.parent.mkdir(parents=True, exist_ok=True)
-        index.write_text(json.dumps({"versions": [version]}) + "\n", encoding="utf-8")
-    if mutant == "library-tag-before-completion":
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/tags/{library_tag_object}",
-            {
-                "sha": library_tag_object,
-                "tag": f"dcb-v{version}",
-                "object": {"sha": head, "type": "commit"},
-                "tagger": {"date": "2026-09-14T11:00:00Z"},
-            },
-        )
-    if mutant == "library-tag-equal-latest-check":
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/tags/{library_tag_object}",
-            {
-                "sha": library_tag_object,
-                "tag": f"dcb-v{version}",
-                "object": {"sha": head, "type": "commit"},
-                "tagger": {"date": "2026-09-14T13:00:00Z"},
-            },
-        )
-    if mutant == "library-tag-wrong-commit":
-        wrong = "dddddddddddddddddddddddddddddddddddddddd"
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/tags/{library_tag_object}",
-            {
-                "sha": library_tag_object,
-                "tag": f"dcb-v{version}",
-                "object": {"sha": wrong, "type": "commit"},
-                "tagger": {"date": "2026-09-14T18:00:00Z"},
-            },
-        )
-    if mutant == "template-ref-exists":
-        tmpl = f"dcbTemplates-v{version}"
-        write_api(
-            api_root,
-            f"repos/J-Tech-Japan/Sekiban/git/ref/tags/{tmpl}",
-            {"ref": f"refs/tags/{tmpl}", "object": {"sha": library_tag_object, "type": "tag"}},
-        )
-    if mutant == "non-404-index-error":
-        pkg = "sekiban.dcb.core"
-        index = feed_root / pkg / "index.json"
-        index.parent.mkdir(parents=True, exist_ok=True)
-        index.write_text("server error\n", encoding="utf-8")
-    if mutant == "retry-different-public-package":
-        seed_feed_from_local_feed(feed_root, local_feed, version)
-        victim = feed_root / "sekiban.dcb.core" / version / f"sekiban.dcb.core.{version}.nupkg"
-        if victim.exists():
-            mutate_nupkg_entry(victim, "content/changed-public.txt", "mutated")
-    if mutant == "template-retry-different-public-package":
-        seed_feed_from_local_feed(feed_root, local_feed, version)
-        pkg = "sekiban.dcb.templates"
-        target = feed_root / pkg / version / f"{pkg}.{version}.nupkg"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        write_minimal_nupkg(target, "Sekiban.Dcb.Templates", version)
-        mutate_nupkg_entry(target, "content/changed-public.txt", "mutated")
-        (feed_root / pkg / "index.json").write_text(
-            json.dumps({"versions": [version]}) + "\n", encoding="utf-8"
-        )
-    if mutant == "guard-removed-library-live-guard":
-        pkg = "sekiban.dcb.core"
-        index = feed_root / pkg / "index.json"
-        index.parent.mkdir(parents=True, exist_ok=True)
-        index.write_text(json.dumps({"versions": [version]}) + "\n", encoding="utf-8")
-
-    if mode == "template" and mutant != "template-preexisting-package":
-        if mutant != "template-retry-different-public-package":
-            seed_feed_from_local_feed(feed_root, local_feed, version)
-
-    trigger = library_tag_object if mode == "library" else (template_tag_object or library_tag_object)
-    if mutant in {"retry-changed-tag-object", "template-retry-changed-tag-object"}:
-        trigger = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    if mutant in {"retry-missing-after", "template-retry-missing-after"}:
-        trigger = ""
-    if mutant == "retry-same-tag-object":
-        trigger = library_tag_object if mode == "library" else (template_tag_object or library_tag_object)
-
-    expr_values = {
-        "github.event.after": trigger,
-        "github.ref_name": tag_name,
-        "github.token": "gh-token",
-        "github.run_id": "1",
-        "secrets.SEKIBAN_RELEASE_RECORD_TOKEN": "release-token",
-        "secrets.NUGET_APIKEY": "nuget-key",
-        "vars.SEKIBAN_RELEASE_RECORD_REF": "host-ref",
-        "inputs.version": version,
-        "inputs.state": "prepared",
-        "inputs.ref": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "inputs.candidate": head,
-    }
-
-    runner_temp = work / "runner-temp"
-    runner_temp.mkdir()
-    github_env_file = work / "github.env"
-    github_output_file = work / "github.output"
-    env = merge_env(
-        os.environ.copy(),
-        {
-            "PATH": f"{shim_dir}:{os.environ.get('PATH', '')}",
-            "GITHUB_WORKSPACE": str(checkout),
-            "GITHUB_ENV": str(github_env_file),
-            "GITHUB_OUTPUT": str(github_output_file),
-            "GITHUB_REF": f"refs/tags/{tag_name}" if mode != "stage" else "refs/heads/main",
-            "GITHUB_REF_NAME": tag_name if mode != "stage" else "main",
-            "GITHUB_REPOSITORY": "J-Tech-Japan/Sekiban",
-            "GITHUB_RUN_ATTEMPT": "2"
-            if mutant
-            in {
-                "retry-changed-tag-object",
-                "retry-missing-after",
-                "retry-same-tag-object",
-                "retry-different-public-package",
-                "template-retry-changed-tag-object",
-                "template-retry-missing-after",
-                "template-retry-different-public-package",
-            }
-            else "1",
-            "RUNNER_TEMP": str(runner_temp),
-            "VERSION": version,
-            "GH_TOKEN": "release-token",
-            "SEKIBAN_RELEASE_RECORD_REF": "host-ref",
-        },
-    )
-
-    # For pass cases we still need release-record validation. Stub the reader and
-    # validator by pre-writing bundle + injecting a thin wrapper when mutant is pointer-bytes-read.
-    bundle = runner_temp / "dcb-release-record-bundle"
-    bundle.mkdir()
-    (bundle / "bundle.json").write_text(
-        json.dumps({"record_relative_path": "record.json", "entries": []}) + "\n", encoding="utf-8"
-    )
-    (bundle / "record.json").write_text("{}\n", encoding="utf-8")
-
-    # Pre-create validated outputs for steps that invoke the DLL; a thin stub DLL
-    # writer is installed as a shell function via PATH script named for the workflow.
-    facts = prepared_facts(version, head) if mode != "template" else libraries_facts(version, head, library_tag_object)
-    if mutant == "live-library-time-mismatch" and mode == "template":
-        facts["library_tag_created_at_utc"] = "2026-09-14T17:00:00Z"
-    if mutant == "missing-facts-file":
-        facts_path = runner_temp / "pre-facts-missing.json"
-    else:
-        facts_path = runner_temp / "pre-facts.json"
-    facts_path.write_text(json.dumps(facts, indent=2) + "\n", encoding="utf-8")
-    merged_path = runner_temp / "pre-merged.txt"
-    merged_path.write_text(head + "\n", encoding="utf-8")
-
-    # Install a release-record stub that writes the precomputed outputs.
-    write_executable(
-        shim_dir / "sekiban-release-record-stub",
-        f"""#!/usr/bin/env bash
-set -euo pipefail
-merged=""
-facts=""
-while (( $# > 0 )); do
-  case "$1" in
-    --merged-sha-output) merged="$2"; shift 2 ;;
-    --release-facts-output) facts="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-[[ -n "$merged" && -n "$facts" ]] || {{ echo "release-record stub requires outputs" >&2; exit 1; }}
-cp {json.dumps(str(merged_path))} "$merged"
-if [[ "{mutant or ''}" != "missing-facts-file" ]]; then
-  cp {json.dumps(str(facts_path))} "$facts"
-  echo "Wrote validated merged SHA to $merged and release facts to $facts."
-else
-  echo "Wrote validated merged SHA to $merged without release facts (missing-facts-file mutant)."
-fi
-""",
-    )
-
-    # Wrap real validate-release-tags / reader; stub only the DLL release-record invocations.
-    write_executable(
-        shim_dir / "dotnet-real-wrap-note",
-        "#!/usr/bin/env bash\nexit 0\n",
-    )
-
-    # Monkeypatch: replace DLL invocations in scripts by rewriting checkout workflows temporarily.
-    for wf in (checkout / ".github/workflows").glob("*.yml"):
-        text = wf.read_text(encoding="utf-8")
-        text = text.replace("--timeout-seconds 900", "--timeout-seconds 5")
-        text = text.replace("--interval-seconds 15", "--interval-seconds 1")
-        text = text.replace(
-            "dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \\\n            release-record",
-            "sekiban-release-record-stub release-record",
-        )
-        text = text.replace(
-            "dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \\\n            release-bodies",
-            "true # stub release-bodies",
-        )
-        text = text.replace(
-            "dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \\\n            packages",
-            "true # stub packages",
-        )
-        if mutant == "pointer-bytes-read":
-            # Restore a pointer-byte decode that cannot succeed against the stub record.
-            text = text.replace(
-                "test \"$(tr -d '\\n' < \"$RUNNER_TEMP/validated-merged-sha.txt\")\" = \"$(git rev-parse 'HEAD^{commit}')\"",
-                "MERGED_SHA=\"$(jq -r '.content' \"$RUNNER_TEMP/dcb-release-record-bundle/record.json\" | tr -d '\\n' | base64 --decode | jq -r '.merged_sha')\"\n"
-                "          test \"$MERGED_SHA\" = \"$(git rev-parse 'HEAD^{commit}')\"",
-            )
-        if mutant == "pointer-payload-bytes-read" and "packagesDcb.yml" in str(wf):
-            text = text.replace(
-                "--facts-file \"$RUNNER_TEMP/release-facts.json\"",
-                "--facts-file \"$RUNNER_TEMP/dcb-release-record-bundle/record.json\"",
-            )
-        if mutant == "guard-removed-library-live-guard":
-            text = re.sub(
-                r"\n      - name: Enforce library live guard before push\n(?:        .*\n)*?        --trigger-tag-object \"\$TRIGGER_TAG_OBJECT_ID\"\n",
-                "\n",
-                text,
-            )
-        if mutant == "guard-removed-template-live-guard":
-            text = re.sub(
-                r"\n      - name: Enforce template live guard before push\n(?:        .*\n)*?        --trigger-tag-object \"\$TRIGGER_TAG_OBJECT_ID\"\n",
-                "\n",
-                text,
-            )
-        if mutant == "retry-different-public-package" and "packagesDcb.yml" in str(wf):
-            # Attempt 2: public package differs semantically from the local pack.
-            pass
-        if mutant == "live-check-before-fetch" and "packagesDcbTemplate.yml" in str(wf):
-            text = text.replace(
-                "      - name: Fetch tags before live checks\n        run: git fetch --force --tags\n\n      - name: Validate live template tag identity before template pack\n",
-                "      - name: Validate live template tag identity before template pack\n",
-            )
-            text = text.replace(
-                "      - name: Verify published library/template parity before pack\n",
-                "      - name: Fetch tags before live checks\n        run: git fetch --force --tags\n\n      - name: Verify published library/template parity before pack\n",
-            )
-            # Restore the M14 local-object compare so checkout rewrite fails before fetch.
-            text = text.replace(
-                "--expected-peeled \"$MERGED_SHA\"",
-                "--expected-peeled \"$MERGED_SHA\"\n"
-                "          live_object=\"$(gh api \\\"repos/${GITHUB_REPOSITORY}/git/ref/tags/dcbTemplates-v${VERSION}\\\" | jq -r '.object.sha')\"\n"
-                "          local_object=\"$(git rev-parse \\\"dcbTemplates-v${VERSION}^{tag}\\\" 2>/dev/null || git rev-parse \\\"dcbTemplates-v${VERSION}\\\")\"\n"
-                "          test \"$local_object\" = \"$live_object\"",
-            )
-        if mutant == "environment-removed":
-            text = text.replace("    environment: dcb-release\n", "")
-        if mutant == "stage-check-inputs-in-run" and "dcb_release_record_check.yml" in str(wf):
-            text = text.replace(
-                '[[ "$INPUT_VERSION" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+$ ]] || {',
-                'INPUT_VERSION="${{ inputs.version }}"\n          [[ "$INPUT_VERSION" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+$ ]] || {',
-            )
-        wf.write_text(text, encoding="utf-8")
-
-    # Reader stub: avoid private host access.
-    write_executable(
-        checkout / "dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh",
-        f"""#!/usr/bin/env bash
-set -euo pipefail
-out=""
-manifest=""
-while (( $# > 0 )); do
-  case "$1" in
-    --output-dir) out="$2"; shift 2 ;;
-    --manifest) manifest="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-mkdir -p "$out"
-printf '%s\\n' '{{"record_relative_path":"record.json","entries":[]}}' > "$manifest"
-printf '{{}}\\n' > "$out/record.json"
-echo "host release-record stub wrote $manifest"
-""",
-    )
-
-    workflow_path_in_checkout = checkout / ".github/workflows" / workflow_path.name
-    workflow = load_workflow(workflow_path_in_checkout)
-    job = workflow["jobs"][job_name]
-    job_env = {k: str(v) for k, v in (job.get("env") or {}).items()}
-
-    publication_hit = False
-    try:
-        if mode in {"library", "template", "stage"} and mutant != "environment-removed":
-            if job.get("environment") != "dcb-release":
-                die("Token-reading job missing environment: dcb-release")
-        if mutant == "environment-removed" and job.get("environment") in (None, ""):
-            die("environment-removed mutant: dcb-release environment is absent")
-        for step in named_steps(job):
-            name = step.get("name", "")
-            if "uses" in step and "run" not in step:
-                uses = step.get("uses", "")
-                if uses not in PINNED_USES:
-                    die(f"Unpinned uses: action: {uses}")
+    def workflow(self,mode):
+        template=mode=='template'
+        tag=f'dcbTemplates-v{self.version}' if template else f'dcb-v{self.version}'
+        self.env.update({'GITHUB_REF_NAME':tag,'GITHUB_REF':'refs/tags/'+tag})
+        data=yaml.safe_load((self.repo/'.github/workflows'/('packagesDcbTemplate.yml' if template else 'packagesDcb.yml')).read_text())
+        expr={'github.event.after':getattr(self,'trigger_override',self.tags[tag]),'github.ref_name':tag,'github.token':'workflow-token',
+              'secrets.SEKIBAN_RELEASE_RECORD_TOKEN':'host-token','secrets.NUGET_APIKEY':'offline-never-used',
+              'vars.SEKIBAN_RELEASE_RECORD_REF':HOST_REF}
+        trace=[]
+        out=self.repo/'out'; shutil.rmtree(out,ignore_errors=True); out.mkdir()
+        if not template:
+            self.api.pop(f'repos/{REPO}/git/ref/tags/dcbTemplates-v{self.version}',None)
+        self.save()
+        for step in data['jobs']['build']['steps']:
+            name=step.get('name',step.get('uses','')); trace.append(name)
+            if step.get('uses','').startswith('actions/checkout'):
+                assert step.get('with',{}).get('fetch-depth')==0
+                run(['git','update-ref','refs/tags/'+tag,self.sha],self.repo)
                 continue
-            if name in STUB_STEP_NAMES:
-                if "Pack NuGet packages" in name:
-                    out_dir = checkout / "out"
-                    out_dir.mkdir(exist_ok=True)
-                    if local_feed.exists():
-                        for pkg in local_feed.glob("*.nupkg"):
-                            shutil.copy2(pkg, out_dir / pkg.name)
-                elif name == "Pack Template":
-                    out_dir = checkout / "out"
-                    out_dir.mkdir(exist_ok=True)
-                    template_pkg = out_dir / f"Sekiban.Dcb.Templates.{version}.nupkg"
-                    write_minimal_nupkg(template_pkg, "Sekiban.Dcb.Templates", version)
+            if step.get('uses','').startswith('actions/setup-dotnet'): continue
+            if name in ['Restore dependencies','Build with dotnet','Build release-record and package validators','Build release validators']: continue
+            if name in ['Pack NuGet packages','Pack Template']:
+                for pkg in self.local.glob('*.nupkg'):
+                    if pkg.name.startswith('Sekiban.Dcb.Templates.') == template: shutil.copy2(pkg,out/pkg.name)
                 continue
-
-            run = step.get("run")
-            if not run:
+            if name=='Validate Azure Queue V2 packaged consumer and dependency groups': continue
+            if name=='Validate packed consumer path':
+                # Full SDK restore/build/test consumers remain in CI; artifact checks still run for real here.
+                run([self.dotnet,str(self.dll),'package','--package',str(out/self.template_package.name),'--expected-version',self.version],self.repo,self.env)
                 continue
-            if "dotnet nuget push" in run or "nuget push" in run:
-                publication_hit = True
-            if "${{ inputs." in run:
-                die("stage-check inputs must not appear inside run: blocks")
-            substituted = substitute_expressions(run, expr_values)
-            step_env = merge_env(env, job_env, {k: str(v) for k, v in (step.get("env") or {}).items()})
-            for key, value in list(step_env.items()):
-                if isinstance(value, str) and "${{" in value:
-                    step_env[key] = substitute_expressions(value, expr_values)
-            run_script(substituted, cwd=checkout, env=step_env)
-            env = step_env
-            if publication_hit and ("Push to NuGet.org" in name or name == "Push Template"):
-                if mutant not in {
-                    "retry-different-public-package",
-                    "template-retry-different-public-package",
-                }:
-                    break
-        if mutant == "guard-removed-library-live-guard" and push_log.stat().st_size > 0:
-            die("guard-removed-library-live-guard reached publication without the live guard")
-        if mutant == "guard-removed-template-live-guard" and push_log.stat().st_size > 0:
-            die("guard-removed-template-live-guard reached publication without the live guard")
-        if expect_failure:
-            raise HarnessError(f"Expected mutant {mutant} to fail, but workflow completed.")
-        print(f"HARNESS PASS mode={mode} mutant={mutant or 'none'} fetch_depth={fetch_depth}")
-    except HarnessError as exc:
-        if expect_failure:
-            print(f"HARNESS EXPECTED FAIL mode={mode} mutant={mutant}: {exc}")
-            return
-        raise
-    except RuntimeError as exc:
-        if expect_failure:
-            print(f"HARNESS EXPECTED FAIL mode={mode} mutant={mutant}: {exc}")
-            return
-        raise
+            if name in ['Push to NuGet.org','Push Template']:
+                self.publish(template); continue
+            if name=='Create GitHub Release':
+                assert step['with']['draft'] is False
+                assert list(out.glob('*.nupkg'))
+                assert (out/('template-release-body.md' if template else 'library-release-body.md')).stat().st_size
+                continue
+            def substitute(value):
+                return re.sub(r'\$\{\{\s*([^}]+?)\s*\}\}',lambda m:expr[m[1].strip()],str(value))
+            env=self.env.copy(); env.update({k:substitute(v) for k,v in step.get('env',{}).items()})
+            script=substitute(step['run']).replace('--timeout-seconds 900','--timeout-seconds 10').replace('--interval-seconds 15','--interval-seconds 1')
+            # Replaced only the external timeout; every guard's literal run block executes.
+            run(['bash','-euo','pipefail','-c',script],self.repo,env)
+            env_file=Path(self.env['GITHUB_ENV'])
+            if env_file.exists():
+                for line in env_file.read_text().splitlines():
+                    key,value=line.split('=',1); self.env[key]=value
+        expected=['Pack Template','Validate packed consumer path','Push Template','Wait for exact public template visibility','Prove public template package matches local pack','Create GitHub Release'] if template else ['Pack NuGet packages','Inspect exact package set and dependency groups before push','Push to NuGet.org','Wait for exact public library visibility','Prove public library packages match local pack','Create GitHub Release']
+        assert [trace.index(n) for n in expected]==sorted(trace.index(n) for n in expected)
+        assert (self.temp/'validated-merged-sha.txt').read_text()==self.sha+'\n'
+        assert not (self.temp/'release-facts.json').exists()
+        self.api[f'repos/{REPO}/git/ref/tags/dcbTemplates-v{self.version}']={'object':{'sha':self.tags[f'dcbTemplates-v{self.version}'],'type':'tag'}}
+        self.save()
+        return trace
 
+def mutate(f,case):
+    route=f'repos/{REPO}/actions/runs/100'; run_api=f.api[route]
+    if case=='wrong-merged-sha': f.record['merged_sha']='c'*40
+    elif case=='merged-sha-not-on-main': pass
+    elif case=='wrong-check-head': run_api['head_sha']='c'*40
+    elif case=='wrong-workflow': run_api['path']='.github/workflows/dcb_postgres_packaged_consumer.yml'
+    elif case=='fork-run': run_api['head_repository']['full_name']='fork/Sekiban'
+    elif case=='wrong-repository': run_api['repository']['full_name']='fork/Sekiban'
+    elif case=='pull-request-run': run_api['event']='pull_request'
+    elif case=='success-then-failed-rerun': run_api['conclusion']='failure'
+    elif case=='rerun-in-progress': run_api.update(status='in_progress',conclusion=None)
+    elif case=='body-hash-mismatch': f.record['release_bodies']['library_en_sha256']='0'*64
+    elif case=='empty-body':
+        (f.repo/'docs/releases'/f.bodies['library_en_sha256']).write_text('')
+        f.record['release_bodies']['library_en_sha256']=hashlib.sha256(b'').hexdigest()
+    elif case=='missing-package': (f.local/f'Sekiban.Dcb.Core.{f.version}.nupkg').unlink()
+    elif case=='wrong-version-package': f.package(f.local/f'Sekiban.Dcb.Core.{f.version}.nupkg','Sekiban.Dcb.Core',version='99.0.0')
+    elif case=='duplicate-alias': f.record['checks'][1]['name']='dcbTestsNet9'
+    elif case=='missing-alias': f.record['checks'].pop()
+    elif case=='failed-job': f.api[route+'/attempts/2/jobs?per_page=100&page=1']['jobs'][0]['conclusion']='failure'
+    elif case=='wrong-job-attempt': f.api[route+'/attempts/2/jobs?per_page=100&page=1']['jobs'][0]['run_attempt']=1
+    elif case=='schema-2': f.record['schema_version']=2
+    elif case=='wrong-record-version': f.record['version']='99.0.0'
+    elif case in ['template-not-later-than-library-tag','template-not-later-than-library-release']:
+        f.api[f'repos/{REPO}/git/tags/{f.tags[f"dcbTemplates-v{f.version}"]}']['tagger']['date']='2026-09-14T18:00:00Z' if case.endswith('library-tag') else '2026-09-14T18:30:00Z'
+    elif case=='library-preexisting-package' or case=='template-preexisting-package':
+        id='sekiban.dcb.core' if case.startswith('library') else 'sekiban.dcb.templates'
+        write_json(f.root/'public'/id/'index.json',{'versions':[f.version]})
+    elif case in ['library-retry-changed-tag','template-retry-changed-tag']:
+        f.env['GITHUB_RUN_ATTEMPT']='2'
+        f.trigger_override='c'*40
+    elif case in ['library-lightweight-tag','template-lightweight-tag']:
+        tag=f'dcb-v{f.version}' if case.startswith('library') else f'dcbTemplates-v{f.version}'
+        f.api[f'repos/{REPO}/git/ref/tags/{tag}']['object']={'sha':f.sha,'type':'commit'}
+    elif case=='library-wrong-peel': f.api[f'repos/{REPO}/git/tags/{f.tags[f"dcb-v{f.version}"]}']['object']['sha']='c'*40
+    elif case=='template-wrong-peel': f.api[f'repos/{REPO}/git/tags/{f.tags[f"dcbTemplates-v{f.version}"]}']['object']['sha']='c'*40
+    elif case=='library-release-draft': f.api[f'repos/{REPO}/releases/tags/dcb-v{f.version}']['draft']=True
+    elif case=='library-release-25-assets': f.api[f'repos/{REPO}/releases/tags/dcb-v{f.version}']['assets'].pop()
+    elif case=='library-release-wrong-body': f.api[f'repos/{REPO}/releases/tags/dcb-v{f.version}']['body']='wrong'
+    elif case=='authority-mismatch':
+        props=next((f.repo/'templates/Sekiban.Dcb.Templates/content').glob('*/SekibanDcbTemplateVersion.props'))
+        props.write_text(props.read_text().replace(f.version,'99.0.0'))
+    elif case=='draft-complete-release': f.api[f'repos/{REPO}/releases/tags/dcb-v{f.version}']['draft']=True
+    elif case=='wrong-complete-url': f.record['published']['library_release_url']='https://example.invalid/release'
+    elif case=='wrong-complete-peel': f.api[f'repos/{REPO}/git/tags/{f.tags[f"dcb-v{f.version}"]}']['object']['sha']='c'*40
+    else: raise AssertionError(case)
+    if case=='merged-sha-not-on-main':
+        run(['git','checkout','--orphan','unrelated'],f.repo)
+        run(['git','commit','-m','unrelated main'],f.repo)
+        off=run(['git','rev-parse','HEAD'],f.repo).strip()
+        run(['git','update-ref','refs/remotes/origin/main',off],f.repo)
+        run(['git','checkout','--detach',f.sha],f.repo)
+    f.save()
 
-def apply_mutant(checkout: Path, mutant: str, mode: str) -> None:
-    # Structural mutants applied in execute_workflow rewrite; keep hook for clarity.
-    _ = (checkout, mutant, mode)
+# Expected reason ensures mutations fail at the intended gate, not incidental setup.
+RECORD_CASES={'wrong-merged-sha':'merged_sha does not equal', 'merged-sha-not-on-main':'git failed',
+ 'wrong-check-head':'Run event or head_sha', 'wrong-workflow':'Wrong workflow', 'fork-run':'Run repository',
+ 'wrong-repository':'Run repository','pull-request-run':'Run event', 'success-then-failed-rerun':'Latest run attempt',
+ 'rerun-in-progress':'Latest run attempt','body-hash-mismatch':'Body hash mismatch','empty-body':'must name DCB',
+ 'duplicate-alias':'duplicate or unknown','missing-alias':'Exactly four','failed-job':'Latest attempt job',
+ 'wrong-job-attempt':'Latest attempt job','schema-2':'requested schema-3','wrong-record-version':'requested schema-3'}
+INTEGRATION_CASES={**{k:v for k,v in RECORD_CASES.items() if k in ['wrong-merged-sha','merged-sha-not-on-main','wrong-check-head','wrong-workflow','fork-run','pull-request-run','success-then-failed-rerun','rerun-in-progress','body-hash-mismatch','empty-body']},
+ 'missing-package':'Expected exactly 26', 'wrong-version-package':'must be version',
+ 'template-not-later-than-library-tag':'strictly later than the library tag',
+ 'template-not-later-than-library-release':'strictly later than the library release',
+ 'library-preexisting-package':'already exists', 'template-preexisting-package':'already exists',
+ 'library-retry-changed-tag':'differs from triggering tag object', 'template-retry-changed-tag':'differs from triggering tag object',
+ 'library-lightweight-tag':'must be an annotated tag', 'template-lightweight-tag':'must be an annotated tag',
+ 'library-wrong-peel':'does not point at the validated merged SHA', 'template-wrong-peel':'peeled commit does not match',
+ 'library-release-draft':'non-draft', 'library-release-25-assets':'exactly 26 package assets',
+ 'library-release-wrong-body':'body does not exactly match', 'authority-mismatch':'expected'}
 
-
-def compare_semantic(a: Path, b: Path) -> None:
-    script = Path(__file__).resolve().parent / "validate-release-tags.sh"
-    completed = subprocess.run(
-        ["bash", str(script), "--compare-semantic-manifests", "--package", str(a), "--local-package", str(b)],
-        text=True,
-        capture_output=True,
-    )
-    if completed.returncode != 0:
-        die(
-            f"semantic package manifests differ: {a} vs {b}\n"
-            f"{completed.stdout}\n{completed.stderr}"
-        )
-
-
-def prove_pack_determinism(local_feed: Path, second_feed: Path) -> None:
-    first = sorted(local_feed.glob("*.nupkg"))
-    second = sorted(second_feed.glob("*.nupkg"))
-    if len(first) != 26 or len(second) != 26:
-        die(f"expected 26/26 packages, got {len(first)}/{len(second)}")
-    by_name = {p.name: p for p in first}
-    for pkg in second:
-        if pkg.name not in by_name:
-            die(f"second pack missing counterpart for {pkg.name}")
-        if pkg.resolve() == by_name[pkg.name].resolve():
-            die("second pack reused a first-pack nupkg path/inode")
-        compare_semantic(by_name[pkg.name], pkg)
-    print("LIBRARY PACK DETERMINISM: 26/26 equal")
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--repo-root", required=True)
-    parser.add_argument("--local-feed", required=True)
-    parser.add_argument("--second-feed", default="")
-    args = parser.parse_args()
-    repo_root = Path(args.repo_root).resolve()
-    local_feed = Path(args.local_feed).resolve()
-    version = "10.22.0"
-
-    cases = [
-        # AC1-AC3 / AC7 pass paths
-        ("library", None, False, 1),
-        ("library", None, False, 0),
-        ("template", None, False, 0),
-        ("stage", None, False, 1),
-        ("library", "retry-same-tag-object", False, 1),
-        ("template", "retry-same-tag-object", False, 0),
-        # AC1 validated-facts mutants
-        ("library", "pointer-bytes-read", True, 1),
-        ("library", "pointer-payload-bytes-read", True, 1),
-        ("library", "missing-facts-file", True, 1),
-        ("template", "live-library-time-mismatch", True, 0),
-        # AC2 lightweight-tag
-        ("library", "lightweight-live-tag", True, 1),
-        ("template", "lightweight-template-tag", True, 0),
-        # AC3 checkout-safe live tag ordering
-        ("template", "live-check-before-fetch", True, 0),
-        # AC4 library live guard input matrix
-        ("library", "library-attempt1-preexisting", True, 1),
-        ("library", "library-tag-equal-completion", True, 1),
-        ("library", "library-tag-before-completion", True, 1),
-        ("library", "library-tag-equal-latest-check", True, 1),
-        ("library", "library-tag-wrong-commit", True, 1),
-        ("library", "template-ref-exists", True, 1),
-        ("library", "retry-changed-tag-object", True, 1),
-        ("library", "retry-missing-after", True, 1),
-        ("library", "retry-different-public-package", True, 1),
-        ("library", "non-404-index-error", True, 1),
-        ("library", "guard-removed-library-live-guard", True, 1),
-        # AC5 template live guard input matrix
-        ("template", "template-tag-early", True, 0),
-        ("template", "template-tag-equal-library", True, 0),
-        ("template", "template-tag-before-library", True, 0),
-        ("template", "template-tag-equal-release", True, 0),
-        ("template", "template-wrong-commit", True, 0),
-        ("template", "template-preexisting-package", True, 0),
-        ("template", "template-retry-changed-tag-object", True, 0),
-        ("template", "template-retry-missing-after", True, 0),
-        ("template", "template-retry-different-public-package", True, 0),
-        ("template", "guard-removed-template-live-guard", True, 0),
-        # AC6 stage-check hardening
-        ("stage", "stage-check-inputs-in-run", True, 1),
-        # AC7 environment boundary
-        ("library", "environment-removed", True, 1),
-    ]
-
-    for mode, mutant, expect_failure, fetch_depth in cases:
-        with tempfile.TemporaryDirectory(prefix=f"sek-g82-{mode}-") as tmp:
-            work = Path(tmp)
-            workflow = {
-                "library": repo_root / ".github/workflows/packagesDcb.yml",
-                "template": repo_root / ".github/workflows/packagesDcbTemplate.yml",
-                "stage": repo_root / ".github/workflows/dcb_release_record_check.yml",
-            }[mode]
-            job = {"library": "build", "template": "build", "stage": "check"}[mode]
-            print(f"==> harness case mode={mode} mutant={mutant or 'pass'} depth={fetch_depth}")
-            execute_workflow(
-                workflow_path=workflow,
-                job_name=job,
-                repo_root=repo_root,
-                work=work,
-                mode=mode,
-                version=version,
-                local_feed=local_feed,
-                mutant=mutant,
-                fetch_depth=None if fetch_depth == 0 else fetch_depth,
-                expect_failure=expect_failure,
-            )
-
-    if args.second_feed:
-        second = Path(args.second_feed).resolve()
-        prove_pack_determinism(local_feed, second)
-        # Near-case: change one package and expect failure.
-        with tempfile.TemporaryDirectory(prefix="sek-g82-near-") as tmp:
-            near = Path(tmp)
-            for pkg in second.glob("*.nupkg"):
-                shutil.copy2(pkg, near / pkg.name)
-            victim = next(near.glob("Sekiban.Dcb.Core.*.nupkg"))
-            victim.write_bytes(victim.read_bytes() + b"mut")
+def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--repo-root',type=Path,default=Path(__file__).resolve().parents[3])
+    parser.add_argument('--self-test',action='store_true',help='Validator and reader tests only')
+    args=parser.parse_args(); source=args.repo_root.resolve()
+    with tempfile.TemporaryDirectory(prefix='sek-g122-') as temp:
+        root=Path(temp)
+        for version in VERSIONS:
+            f=Fixture(source,root/('pass-'+version),version)
+            f.validate(); print(f'PASS validator prepared {version} (older main ancestor; successful rerun attempt 2)',flush=True)
+            f.record.update(stage='complete',published={key:f'https://github.com/{REPO}/releases/tag/{tag}' for key,tag in [('library_release_url',f'dcb-v{version}'),('template_release_url',f'dcbTemplates-v{version}')]}); f.save(); f.validate('complete')
+            print(f'PASS validator complete {version}',flush=True)
+            f.record.pop('published'); f.record['stage']='prepared'; f.save()
+            if not args.self_test:
+                for mode in ['library','template']: f.workflow(mode)
+                print(f'PASS BOTH workflow guard sequences {version}: real schema-3 outputs; pack -> local validation -> simulated push -> visibility -> equality -> simulated Release',flush=True)
+        if not args.self_test:
+            f=Fixture(source,root/'retry-pass',VERSIONS[0]); f.env['GITHUB_RUN_ATTEMPT']='2'
+            for mode in ['library','template']: f.workflow(mode)
+            print('PASS BOTH workflows retry with same triggering tag object',flush=True)
+        cases=RECORD_CASES if args.self_test else INTEGRATION_CASES
+        for case,reason in cases.items():
+            f=Fixture(source,root/case,VERSIONS[0])
+            template_case=not args.self_test and (case.startswith('template-') or case.startswith('library-release-') or case=='authority-mismatch')
+            if template_case: f.workflow('library')
+            mutate(f,case)
+            # Prove a failed validation removes stale output.
+            if not template_case and case not in ['schema-2','wrong-record-version']: (f.temp/'validated-merged-sha.txt').write_text('stale\n')
             try:
-                prove_pack_determinism(local_feed, near)
-                die("near-case pack determinism unexpectedly passed")
-            except HarnessError:
-                print("LIBRARY PACK DETERMINISM near-case failed as required")
+                if args.self_test: f.validate()
+                else:
+                    if not template_case: f.workflow('library')
+                    f.workflow('template')
+            except Failure as error:
+                if reason not in str(error): raise Failure(f'{case}: wrong failure (wanted {reason}): {error}')
+                if case in RECORD_CASES and (f.temp/'validated-merged-sha.txt').exists(): raise Failure('Stale validated output survived rejection')
+                print(f'PASS rejects {case}: {reason}',flush=True)
+            else: raise Failure(f'{case} unexpectedly passed')
+        if args.self_test:
+            for case,reason in [('draft-complete-release','non-draft'),('wrong-complete-url','non-draft'),('wrong-complete-peel','does not peel')]:
+                f=Fixture(source,root/case,VERSIONS[0]); f.record.update(stage='complete',published={key:f'https://github.com/{REPO}/releases/tag/{tag}' for key,tag in [('library_release_url',f'dcb-v{f.version}'),('template_release_url',f'dcbTemplates-v{f.version}')]}); mutate(f,case)
+                try: f.validate('complete')
+                except Failure as error:
+                    if reason not in str(error): raise
+                    print(f'PASS rejects {case}: {reason}',flush=True)
+                else: raise Failure(case+' unexpectedly passed')
+        if args.self_test:
+            for case,reason in [('reader-blob-mismatch','record bytes do not match'),('reader-commit-mismatch','Host commit does not match'),('reader-tree-blob-mismatch','does not bind'),('reader-truncated-tree','Host tree is truncated')]:
+                f=Fixture(source,root/case,VERSIONS[0])
+                path=f'intents/sekiban/releases/dcb-v{f.version}-release-record.json'
+                if case=='reader-blob-mismatch': f.api[f'repos/{HOST}/contents/{path}?ref={HOST_REF}']['sha']='c'*40
+                elif case=='reader-commit-mismatch': f.api[f'repos/{HOST}/commits/{HOST_REF}']['sha']='c'*40
+                elif case=='reader-tree-blob-mismatch': f.api[f'repos/{HOST}/git/trees/{TREE}?recursive=1']['tree'][0]['sha']='c'*40
+                else: f.api[f'repos/{HOST}/git/trees/{TREE}?recursive=1']['truncated']=True
+                write_json(f.root/'api.json',f.api)
+                try: f.validate()
+                except Failure as error:
+                    if reason not in str(error): raise
+                    assert not (f.temp/'validated-merged-sha.txt').exists()
+                    print(f'PASS rejects {case}: {reason}',flush=True)
+                else: raise Failure(case+' unexpectedly passed')
+    print('All offline tests passed.',flush=True)
 
-    print("AC8 workflow harness completed all pass/fail cases.")
-    return 0
-
-
-if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except HarnessError as exc:
-        print(f"HARNESS FAILURE: {exc}", file=sys.stderr)
-        raise SystemExit(1)
+if __name__=='__main__':
+    try: main()
+    except (Failure,AssertionError) as error: sys.exit(str(error))

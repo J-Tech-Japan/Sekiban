@@ -12,6 +12,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Export triggering library tag object id
         env:
@@ -62,7 +64,6 @@ jobs:
           rm -rf "$RUNNER_TEMP/dcb-release-record-bundle"
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh \
             --version "$VERSION" --state prepared \
-            --verify-tags none \
             --output-dir "$RUNNER_TEMP/dcb-release-record-bundle" \
             --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json"
 
@@ -84,14 +85,15 @@ jobs:
         run: dotnet build dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release
 
       - name: Validate canonical prepared release state before pack
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
             release-record --bundle "$RUNNER_TEMP/dcb-release-record-bundle" \
             --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json" \
             --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
             --state prepared \
-            --merged-sha-output "$RUNNER_TEMP/validated-merged-sha.txt" \
-            --release-facts-output "$RUNNER_TEMP/release-facts.json"
+            --merged-sha-output "$RUNNER_TEMP/validated-merged-sha.txt"
           test "$(tr -d '\n' < "$RUNNER_TEMP/validated-merged-sha.txt")" = "$(git rev-parse 'HEAD^{commit}')"
 
       - name: Validate reviewed bilingual library release body
@@ -150,12 +152,12 @@ jobs:
 
       - name: Enforce library live guard before push
         env:
-          GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
             --check-library-live-guard --repo-root "$GITHUB_WORKSPACE" \
             --version "$VERSION" \
-            --facts-file "$RUNNER_TEMP/release-facts.json" \
+            --merged-sha-file "$RUNNER_TEMP/validated-merged-sha.txt" \
             --run-attempt "${GITHUB_RUN_ATTEMPT}" \
             --trigger-tag-object "$TRIGGER_TAG_OBJECT_ID"
 

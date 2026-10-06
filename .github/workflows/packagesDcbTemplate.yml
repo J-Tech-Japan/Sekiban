@@ -58,8 +58,7 @@ jobs:
         run: |
           rm -rf "$RUNNER_TEMP/dcb-release-record-bundle"
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh \
-            --version "$VERSION" --state libraries-verified \
-            --verify-tags library \
+            --version "$VERSION" --state prepared \
             --output-dir "$RUNNER_TEMP/dcb-release-record-bundle" \
             --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json"
 
@@ -68,15 +67,16 @@ jobs:
           dotnet restore dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -p:NuGetAudit=false
           dotnet build dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release --no-restore --nologo
 
-      - name: Validate canonical libraries-verified state before template pack
+      - name: Validate canonical prepared state before template pack
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           dotnet dcb/tests/Sekiban.Dcb.TemplateValidation/bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll \
             release-record --bundle "$RUNNER_TEMP/dcb-release-record-bundle" \
             --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json" \
             --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
-            --state libraries-verified \
-            --merged-sha-output "$RUNNER_TEMP/validated-merged-sha.txt" \
-            --release-facts-output "$RUNNER_TEMP/release-facts.json"
+            --state prepared \
+            --merged-sha-output "$RUNNER_TEMP/validated-merged-sha.txt"
           test "$(tr -d '\n' < "$RUNNER_TEMP/validated-merged-sha.txt")" = "$(git rev-parse 'HEAD^{commit}')"
 
       - name: Fetch tags before live checks
@@ -84,7 +84,7 @@ jobs:
 
       - name: Validate live template tag identity before template pack
         env:
-          GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           MERGED_SHA="$(tr -d '\n' < "$RUNNER_TEMP/validated-merged-sha.txt")"
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
@@ -137,12 +137,12 @@ jobs:
 
       - name: Enforce template live guard before push
         env:
-          GH_TOKEN: ${{ secrets.SEKIBAN_RELEASE_RECORD_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
             --check-template-live-guard --repo-root "$GITHUB_WORKSPACE" \
             --version "$VERSION" \
-            --facts-file "$RUNNER_TEMP/release-facts.json" \
+            --merged-sha-file "$RUNNER_TEMP/validated-merged-sha.txt" \
             --run-attempt "${GITHUB_RUN_ATTEMPT}" \
             --trigger-tag-object "$TRIGGER_TAG_OBJECT_ID"
 

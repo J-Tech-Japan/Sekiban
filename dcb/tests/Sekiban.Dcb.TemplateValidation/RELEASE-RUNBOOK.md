@@ -1,104 +1,86 @@
-# DCB 10.22 release runbook (SEK-G82 / AC10)
+# DCB release runbook
 
-## Annotated tag creation
+The library tag is `dcb-v{V}` and the template tag is `dcbTemplates-v{V}`.
+Both workflows accept the same schema-3 `prepared` record. Release-integration
+work changes the version authorities and four bilingual release bodies together,
+before either tag. Keep review and closeout evidence in the host intent records;
+they are not publication-gate inputs.
 
-Create `dcb-v{V}` and `dcbTemplates-v{V}` as annotated tags only after the
-`prepared` pointer and its approval are validated. Tag creation for
-`refs/tags/dcb-v*` and `refs/tags/dcbTemplates-v*` is restricted to repository
-admins by ruleset `23358049` ("DCB release tag creation admin-only").
+1. Merge the release-integration PR to main. Record its merged commit as
+   `merged_sha` and its PR number as `candidate_pr`. All five
+   `SekibanDcbTemplateVersion.props` authorities must agree on `{V}`.
+2. Dispatch `run_test_dcb.yml`, `dcb_azure_queue_packaged_consumer.yml` and
+   `dcb_template_validation.yml` on that exact commit. A dispatch uses the branch
+   head; if main has moved, create a temporary branch at `merged_sha` and
+   dispatch the checks from it. The commit must remain an ancestor of main.
+   `run_test_dcb.yml` also runs the Cosmos emulator job: the **whole run** must
+   conclude success. Handle a flake by re-running the failed job. Attempts are
+   not pinned; a successful retry is accepted, while a later failed or running
+   retry invalidates the recorded success.
+3. Write one host record at
+   `intents/sekiban/releases/dcb-v{V}-release-record.json`:
+   `schema_version: 3`, `version`, `stage: prepared`, `merged_sha`,
+   `candidate_pr`, `checks`, and `release_bodies`. `checks` contains exactly
+   `dcbTestsNet9`, `dcbTestsNet10`, `packagedConsumer`, `templateConsumer`, each
+   with its numeric `run_id`. The first two aliases normally use the same run.
+   The latter aliases map to `packaged-consumer` in the Azure Queue workflow
+   and `Pack, install, generate, restore, build, and test templates` in the
+   template workflow. Record the SHA-256 of each checked-in body as
+   `library_en_sha256`, `library_ja_sha256`, `template_en_sha256`,
+   `template_ja_sha256`. Bodies must be non-empty, name `{V}`, and have no TODO
+   or TBD. Japanese bodies contain Japanese text; template bodies identify
+   `template` / `テンプレート`.
+4. Commit the host record and set `vars.SEKIBAN_RELEASE_RECORD_REF` to that
+   immutable 40-hex host commit. `SEKIBAN_RELEASE_RECORD_TOKEN` reads only the
+   private host record; workflow tokens read this repository's Actions state
+   and live tags/releases. Never move the variable during an active tag run.
+5. **Mandatory before any tag:** dispatch `dcb_release_record_check.yml` on
+   **main**, with `version={V}`, `state=prepared`, `ref` exactly equal to the
+   variable, and `candidate=merged_sha`. Require success. This publishes
+   nothing and is the first real check of the host reader and token. Do not
+   infer credential validity from offline fixtures.
+6. Obtain operator approval for the irreversible tag/publication steps. Verify
+   that all 26 library versions and the template tag are absent. Create and
+   push the annotated library tag at `merged_sha`. The push launches the
+   library workflow, which checks the exact source manifest, packs 26
+   artifacts, validates package identities/dependency groups and the Azure
+   Queue consumer, then checks the live tag and first-attempt absence before
+   NuGet push. It waits for public visibility, proves public/local semantic
+   equality, then creates a non-draft GitHub Release with exactly 26 packages
+   and `cat library.en.md library.ja.md` as its body.
+7. Keep the variable on `prepared`. After library publication and its release
+   succeed, obtain operator approval and create/push the annotated template
+   tag at the same `merged_sha`. Its tagger date must be strictly later than
+   both the library tagger date and library release `published_at`. The
+   workflow reads these facts live, verifies the library release's 26 assets
+   and exact bilingual body, all 26 public package versions and five version
+   authorities, packs and tests template consumers, checks unchanged content
+   for duplicate-safe retries and first-attempt template absence, then pushes.
+   It waits for template visibility and proves public/local equality before
+   the non-draft template Release using `cat template.en.md template.ja.md`.
+8. After both publications succeed, change the host record to `complete`,
+   retaining the prepared fields and adding `published.library_release_url`
+   and `published.template_release_url` with the canonical GitHub URLs for
+   the two tags. Commit, update the variable, and dispatch the stage check on
+   main with `state=complete`. This checks both tags peel to `merged_sha` and
+   both URLs resolve to non-draft releases. Complete closeout in host intent
+   records separately. Remove any temporary dispatch branch when finished.
 
-## `vars.SEKIBAN_RELEASE_RECORD_REF` movement
+## Irreversible actions and recovery
 
-- Keep the pointer on `prepared` until the library workflow and any same-tag
-  retries succeed.
-- Move the pointer to `libraries-verified` only before the template tag push.
-- Never move the pointer while a tag workflow run is pending.
+Tag pushes trigger publication; NuGet pushes and public GitHub Releases are
+irreversible release operations. Stop if any reader, validator, live guard,
+visibility or equality check fails. Never bypass a guard, move an existing tag,
+or substitute another package under the same version.
 
-## Stage-check workflow
+A transient failure can be retried on the same run/tag object and identical
+source/artifacts. Later workflow attempts require the live tag object to equal
+the triggering tag object. Duplicate-safe pushes still require public/local
+semantic equality. After **any public artifact exists**, a source-changing fix
+requires a **new version** and a new release-integration PR, checks, record and
+tags. Do not re-use the partially published version.
 
-Run `.github/workflows/dcb_release_record_check.yml` on `main` and record a
-successful run at each stage pointer before the next external action
-(`library-tagged/incomplete`, `template-tagged/incomplete`,
-`artifacts-verified`, `complete`).
-
-## No re-runs of recorded runs
-
-Do not re-run any recorded check run that is bound into the closed release
-record. A re-run permanently invalidates the candidate.
-
-## Up-to-date-before-merge
-
-Immediately before merge, the reviewed PR head must contain the current `main`
-tip (`compare/main...{head}` reports `behind_by == 0`, or the merge-base equals
-the `main` tip). Otherwise update, re-run CI / PostgreSQL dispatch, and
-re-review.
-
-## Implementation-review transport for the release-candidate PR
-
-The PR whose merge becomes the closed schema-v2 `prepared` `candidate` must
-finish its exact-head implementation review before merge. Same-account GitHub
-reviews stay `COMMENTED` and must carry exactly one canonical semantic verdict
-line of the form `Verdict: **APPROVE**` (a leading list marker `- ` is allowed).
-
-Complete the review through intent-cli notify so the host transport matches the
-closed validator:
-
-- outbox `from_role` is `review` and `to_role` is `orchestrator` (not
-  `reviewer`);
-- `result_nonce` is present and identical on the outbox record line, the
-  delivered line, and the orchestrator report receipt;
-- the orchestrator receipt reaches `report_arrived=true` before merge;
-- chronology is GitHub review `submitted_at` < outbox record `created_at` <=
-  receipt `reported_at` <= `delivered_at` < merge.
-
-Do not invent or rewrite transport after merge to repair a missing nonce, wrong
-role, or open receipt. Cut a new tip-binder PR instead and gather fresh
-integrated-head CI on that tip before authoring `prepared`.
-
-### After SEK-G85 (#1249)
-
-Product tip advanced to merge `1bc6d495` with #1244 tombstone query fail-closed.
-That PR must **not** be used as the prepared `candidate`: its host notify used
-`from_role=reviewer` without `result_nonce`, and the COMMENTED APPROVE targeted
-head `84d81acc` rather than merge head `f78abb9f`. Cut a new tip-binder PR from
-current `main`, complete exact-head review with `from_role=review` +
-`result_nonce` + closed orchestrator receipt before merge, then re-gather tip CI
-before authoring `prepared`.
-
-## Pre-tag package absence
-
-Before the library tag push, confirm none of the 26 `{id}/{V}` packages exist
-on nuget.org. The library workflow also enforces this on attempt 1 and proves
-public-package semantic equality after push on every attempt.
-
-## Stop-and-recover
-
-If any live guard, stage-check, or private-host smoke fails, stop. Do not push
-packages, create GitHub Releases, or advance the pointer. Recover by repairing
-the candidate and starting a fresh prepared record when required.
-
-## Environment operator gate (`dcb-release`)
-
-The operator has created and verified GitHub Environment `dcb-release` with
-custom deployment policies for exactly:
-
-- branch `main`
-- tag `dcb-v*`
-- tag `dcbTemplates-v*`
-
-Design re-verifies this through the API immediately before this PR merges and
-before any token-reading job runs.
-
-Operator verification steps before adding the secret:
-
-1. `GET /repos/J-Tech-Japan/Sekiban/environments/dcb-release`
-2. `GET /repos/J-Tech-Japan/Sekiban/environments/dcb-release/deployment-branch-policies`
-   — must list exactly the three policies above.
-3. Confirm no repository-level secret named `SEKIBAN_RELEASE_RECORD_TOKEN`
-   (`GET /repos/J-Tech-Japan/Sekiban/actions/secrets`).
-4. Confirm no organization-level secret visible to the repository with that
-   name (`GET /repos/J-Tech-Japan/Sekiban/actions/organization-secrets`).
-
-The Environment secret `SEKIBAN_RELEASE_RECORD_TOKEN` is present only on
-`dcb-release`. Merge/closeout records this API evidence together with the
-up-to-date-before-merge evidence.
+The `dcb-release` environment remains the token/publication boundary. Stage
+checks run only on main; tag workflows run on their respective tag series.
+Offline verification never proves environment configuration, private-host
+credential validity, or actual public publication.
