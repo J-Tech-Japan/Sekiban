@@ -617,6 +617,34 @@ expected と observed projector version の診断に opt-in する経路で、V1
 recent な commit 済み timestamp と live な optional lease の両方を引き続き必要とします。stale mismatch は orphan candidate であって
 削除の authorization ではありません。dcb は selection、folding、retention、cleanup policy を実行しません。
 
+### Catch-up 中のターン長警告 (#1253 item 6)
+
+**原因。** catch-up batch の適用と、それに続く場合のスナップショットのシリアライズは、grain turn 内で同期処理を行います。大きな batch や state はその activation を長く占有する可能性があります。Orleans が計測するのは個々の同期 scheduler-task の実行であり、非同期 batch の総経過時間ではありません（I/O の await により複数の turn に分かれる場合があります）。警告自体は activation が占有されていたことを示し、正しさの失敗ではありません。長い turn の実行中、その activation への呼び出しは待たされます。
+
+**しきい値。** 警告の原因が catch-up 処理だと診断した後、Orleans の `SchedulingOptions.TurnWarningLengthThreshold` を必要な分だけ引き上げてください。Orleans 10.3.1 の既定値は **1 秒**です。silo のサービス設定での例:
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Orleans.Configuration;
+
+services.Configure<SchedulingOptions>(options =>
+    options.TurnWarningLengthThreshold = TimeSpan.FromSeconds(3));
+```
+
+この設定は silo 全体に適用されます。引き上げると、他のすべての grain についても、新しいしきい値未満の長い turn の警告を抑制し、そのしきい値で数える long-turn metric の観測数も減らします。
+
+**ログフィルタという代替策。** `Orleans.Runtime.Scheduler.WorkItemGroup` をフィルタします。例:
+
+```csharp
+using Microsoft.Extensions.Logging;
+
+logging.AddFilter("Orleans.Runtime.Scheduler.WorkItemGroup", LogLevel.Error);
+```
+
+これは、Orleans 10.3.1 でこの警告を出す scheduler logger のカテゴリです。カテゴリフィルタも同様に広くすべての grain に適用され、そのカテゴリの他の scheduler warning も抑制します。しきい値の引き上げもログフィルタも、catch-up や呼び出しを速くしません。
+
+**batch サイズとクエリ。** 別の調整手段は、設定可能な二つの batch サイズ、`GeneralMultiProjectionActorOptions.CatchUpBatchSize`（既定 **500**）と `ColdEventStoreOptions.ColdCatchUpBatchSize`（既定 **100,000**）を下げることです。cold read 後の要求 batch サイズは、少なくとも設定された cold サイズです（通常サイズと cold サイズの最大値）。streaming path は固定 **4096** 件の chunk（`StreamingCatchUpApplyChunkSize`）で適用し、これは設定できません。設定可能な batch を小さくすると batch ごとの同期処理を減らせる場合がありますが、スナップショットのシリアライズは依然として高コストになり得ます。クエリ側は[Catch-up 中の初回クエリが timeout する場合](#catch-up-中の初回クエリが-timeout-する場合-sek-g90-1253-item-5)を参照してください。正の `FirstQueryCatchUpMaxWaitMs` は初回クエリの gate wait を制限しますが、activation と request queuing は含まず、総応答時間の保証ではありません。
+
 ### Catch-up 中の初回クエリが timeout する場合 (SEK-G90; #1253 item 5)
 
 `GeneralMultiProjectionActorOptions.FirstQueryCatchUpMaxWaitMs` の既定値は `0` です。

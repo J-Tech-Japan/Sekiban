@@ -104,9 +104,9 @@ The Orleans grain detects the accessor and periodically checkpoints state, reduc
 
 ### Snapshot blob prefixes
 
-With the SEK-G120 fix in this source revision, the configured prefix applies to all newly written snapshot blobs. Seekable writes use `{prefix}/{projector}/{sha256}.bin` (row snapshots include the version in `{projector}`); null or empty prefixes keep the existing keys. Only trailing `/` characters are trimmed from the prefix. Non-seekable writes keep their existing prefixed GUID keys.
+In releases after `dcb-v10.22.0` (the fix is unreleased at the time of writing), the configured prefix applies to all newly written snapshot blobs. Seekable writes use `{prefix}/{projector}/{sha256}.bin` (row snapshots include the version in `{projector}`); null or empty prefixes keep the existing keys. Only trailing `/` characters are trimmed from the prefix. Non-seekable writes keep their existing prefixed GUID keys.
 
-Deterministic keys from seekable writes since `df24f127` were un-prefixed. Those blobs stay at their old keys and remain readable without migration; non-seekable writes and writes before that commit could already be prefixed. Identical content is stored once more under the prefix after upgrading. Any listing or deletion by prefix must also account for old un-prefixed keys using `OffloadKeyEnumerator` and the referenced-key safety rules. Snapshot blobs now sit next to cold-event objects using the same configured prefix: `{prefix}/control/...` and `{prefix}/segments/...`.
+Deterministic keys from seekable writes since `df24f127` were un-prefixed. Those blobs stay at their old keys and remain readable without migration; non-seekable writes and writes before that commit could already be prefixed. Identical content is stored once more under the prefix after upgrading. Any listing or deletion by prefix must also account for old un-prefixed keys using `OffloadKeyEnumerator` and the referenced-key safety rules. When snapshot and cold-event storage are registered from the same options, they share the configured prefix. Cold-event paths are relative to their storage root, which can include a format scope in addition to the prefix; they are not always directly under `{prefix}/control/...` or `{prefix}/segments/...`.
 
 Keep prefixes short, with no leading slash and forward slashes only; provider naming rules still apply. Prefixed deterministic keys over 512 characters throw `InvalidOperationException` before upload. A prefix of at most 57 characters keeps every projector name/version within PostgreSQL's valid bounds (256/128 characters) inside that limit. Null or empty prefixes introduce no length check.
 
@@ -137,7 +137,28 @@ A safe external GC must follow all of these rules:
 - Obtain a complete, consistent reference view, and apply a grace period. Blobs are uploaded before their row commits, and a failed CAS can leave an orphan.
 - Re-check references at deletion time and use coordination or a conditional delete that protects concurrent uploads and commits. Content-addressed keys can be re-uploaded by a writer between a GC's check and delete; re-checking alone does not close that race.
 
-The deletion API and coordination protocol are #1253 item 3 and are **not provided here**.
+### Maintenance-window snapshot blob pruning (#1253 item 3)
+
+Sekiban provides no snapshot blob delete API or coordination protocol. Use the storage provider's tools only after establishing **all** of these preconditions (container also means an S3 bucket here):
+
+- Stop and drain every snapshot writer, reader and offline builder, such as `MultiProjectionStateBuilder`, that uses the container. Keep them stopped from the first reference scan through deletion and verification. The `OffloadKeyEnumerator` runs of this procedure are the only exception.
+- Enable provider soft delete or versioning, with adequate retention and a usable manual restore procedure, before pruning. Restoring a state-store backup taken before pruning brings back rows referencing deleted blobs: retain recoverable blob versions for as long as such a restore is possible.
+- Inventory every state store (database, environment and tenant deployment) and every `ServiceId` that has **ever** written to the container, whatever prefix was configured. One `OffloadKeyEnumerator` enumeration scans only the supplied store in its service scope; keys carry no ServiceId or tenant. Seekable writes from `df24f127` until the prefix fix were un-prefixed regardless of the configured prefix.
+- Establish a complete, consistent reference view. Take the first scan only after writers are stopped and drained and eventually consistent listings have converged. DynamoDB `ListAllAsync` uses `Scan` without `ConsistentRead`; a missed row produces no `Undecodable`. Repeated scans and blob age alone do not prove completeness. If convergence or inventory coverage cannot be established, **delete nothing**, including un-prefixed keys.
+
+1. For every store and ServiceId in the inventory, run `OffloadKeyEnumerator.EnumerateAsync` with that application's `JsonSerializerOptions` and take the union of referenced keys, including all versions and tombstoned rows. Any `Undecodable` or failed enumeration aborts pruning.
+2. List blobs with the provider's tools and positively identify snapshots: allow only keys ending in `.bin` under a **known projector name**, including row blobs under `{projector}/{version}`. Cover `{prefix}/{projector}/...` and earlier un-prefixed `{projector}/...` shapes for all inventoried prefixes. This allow list leaves cold-event objects and unrelated blobs alone. Segmented cold-event paths are `control/{serviceId}/manifest.json`, `control/{serviceId}/checkpoint.json`, `control/{leaseId}/lease.json` and `segments/{serviceId}/{from}_{to}{extension}`, relative to the cold storage root. With no prefix or scope these are the object keys; a prefix and/or format scope prepends that root. The separate database-object implementation uses `{prefix}/{databaseFile}` or `{databaseFile}` without a prefix. Do not treat these layouts as snapshot candidates.
+3. Candidates are the allowed snapshot listing minus the reference union, restricted to blobs last modified before a grace interval longer than the longest possible upload-to-commit operation. Upload precedes row commit; with writers stopped, the interval also covers orphans from failed commits. Last-modified measures blob age, **not** time since it became unreferenced.
+4. Immediately before deletion, enumerate the entire reference universe again, abort on any failure or `Undecodable`, and subtract the new union from the candidates. Delete only the remainder with provider tools. If the provider supports conditional deletion against the ETag observed at listing time, use it as an extra guard.
+5. After deletion, enumerate again and check **storage itself**: every referenced key must exist in the provider's storage listing. Abort verification on enumeration failure or `Undecodable`; manually restore any missing key using provider soft delete or versioning within its retention period, and verify again before resuming applications. A cached blob can hide its absence in storage, so an application running without errors is not this check.
+
+**Why the stop-and-drain requirement matters.** A running writer can re-upload byte-identical content to a candidate key between the check and deletion; this race cannot occur while writers remain stopped. A running reader may hold a row pointing to a blob that a later write replaces, leaving it unreferenced in both scans but still needed by that reader.
+
+**Do not use age-only lifecycle rules.** By default, `SkipPersistWhenSafeCheckpointUnchanged` skips persistence while the safe checkpoint is unchanged. A quiet projector can therefore reference an arbitrarily old blob.
+
+### Local snapshot read cache
+
+Both Azure and S3 accessors retain downloaded blobs under `localCacheDirectory`, defaulting to `<temp>/sekiban-snapshot-cache`. `SnapshotLocalCachePath.Build` uses `<root>/<sha256(provider + namespace)>/<sha256(key)>.bin`; the namespace includes the container URI or bucket and the prefix. An existing cache file is returned without contacting storage; a missing cache file is downloaded again. The accessors clean up temporary download files (`.tmp`) only: nothing removes completed cache files. Disk use grows with the number of distinct blobs read, so operators should size or clear the directory. Cache hits do not establish that a referenced blob still exists in storage; pruning verification must use provider tools.
 
 ### Streaming restore for offloaded snapshots
 
@@ -271,6 +292,8 @@ place by later in-order unsafe folds. Callers must not retain that instance acro
   same payload/position/threshold/count.
 
 ### Catch-up persist cadence and telemetry (SEK-G37 / #1142)
+
+For long-turn warnings while applying catch-up batches or serializing snapshots, see [Catch-up turn-length warnings](13_common_issues.md#catch-up-turn-length-warnings-1253-item-6).
 
 Catch-up completion is defined by `FetchedCount == 0`. A non-empty read whose events are
 all filtered (`AppliedCount == 0`) still advances the traversal cursor and reaches the

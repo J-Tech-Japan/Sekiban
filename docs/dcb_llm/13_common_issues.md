@@ -694,6 +694,34 @@ indistinguishable to the consumer. `IsFresh` still requires both a recent commit
 lease. A stale mismatch remains an orphan candidate, not a deletion authorization, and dcb still performs no
 selection, folding, retention, or cleanup policy.
 
+### Catch-up turn-length warnings (#1253 item 6)
+
+**Cause.** Applying a catch-up batch and the snapshot serialization that may follow perform synchronous work inside a grain turn. A large batch or state can keep that activation busy. Orleans measures each synchronous scheduler-task execution, not the total elapsed time of an asynchronous batch (I/O awaits can split it into multiple turns). The warning itself reports a busy activation, not a correctness failure; calls to that activation wait while the long turn runs.
+
+**Threshold.** After diagnosing the warning as catch-up work, raise Orleans `SchedulingOptions.TurnWarningLengthThreshold` only as far as needed. The Orleans 10.3.1 default is **1 second**. For example, in the silo's service configuration:
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Orleans.Configuration;
+
+services.Configure<SchedulingOptions>(options =>
+    options.TurnWarningLengthThreshold = TimeSpan.FromSeconds(3));
+```
+
+This setting is silo-wide: raising it also silences long-turn warnings from every other grain for durations below the new threshold, and reduces the long-turn metric observations counted at that threshold.
+
+**Log filtering alternative.** Filter `Orleans.Runtime.Scheduler.WorkItemGroup`, for example:
+
+```csharp
+using Microsoft.Extensions.Logging;
+
+logging.AddFilter("Orleans.Runtime.Scheduler.WorkItemGroup", LogLevel.Error);
+```
+
+This is the category of the scheduler logger that emits the warning in Orleans 10.3.1. The category filter is equally broad across grains and also suppresses other scheduler warnings in that category. Neither raising the threshold nor filtering logs makes catch-up or calls faster.
+
+**Batch sizes and queries.** The other lever is to lower the two configurable batch sizes: `GeneralMultiProjectionActorOptions.CatchUpBatchSize` (default **500**) and `ColdEventStoreOptions.ColdCatchUpBatchSize` (default **100,000**). After a cold read, the requested batch size is at least the configured cold size (the maximum of the normal and cold sizes). The streaming path applies fixed chunks of **4096** (`StreamingCatchUpApplyChunkSize`), which is not configurable. Smaller configurable batches can reduce synchronous work per batch; snapshot serialization can still be expensive. For the query side, see [First query times out during catch-up](#first-query-times-out-during-catch-up-sek-g90-1253-item-5): `FirstQueryCatchUpMaxWaitMs` bounds the first-query gate wait when positive, but excludes activation and request queuing and is not a total response-time guarantee.
+
 ### First query times out during catch-up (SEK-G90; #1253 item 5)
 
 `GeneralMultiProjectionActorOptions.FirstQueryCatchUpMaxWaitMs` defaults to `0`.
