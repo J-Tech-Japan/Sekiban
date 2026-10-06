@@ -101,6 +101,14 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 
 `MultiProjectionGrain` がアクセサを検出すると、定期的にスナップショットを保存しメモリ使用量を抑えます。
 
+### スナップショット Blob のプレフィックス
+
+このソースリビジョンの SEK-G120 修正以降、設定したプレフィックスは新しく書き込むすべてのスナップショット Blob に適用されます。seekable stream のキーは `{prefix}/{projector}/{sha256}.bin` です（行スナップショットの `{projector}` にはバージョンも含まれます）。プレフィックスが null または空なら従来と同じキーになります。プレフィックスから取り除くのは末尾の `/` のみです。non-seekable stream のプレフィックス付き GUID キーは従来どおりです。
+
+`df24f127` 以降の seekable stream の決定的キーにはプレフィックスが付きませんでした。その Blob は古いキーのまま残り、移行なしで引き続き読み取れます。non-seekable stream の書き込みや同コミット以前の書き込みには、すでにプレフィックスが付いている場合があります。アップグレード後は同じ内容がプレフィックスの下にもう一度保存されます。プレフィックスで一覧取得・削除する場合も、`OffloadKeyEnumerator` と参照キーの安全規則を使い、古いプレフィックスなしのキーを考慮してください。スナップショット Blob は、同じ設定のプレフィックスを使う cold-event オブジェクト `{prefix}/control/...`、`{prefix}/segments/...` と並んで配置されます。
+
+プレフィックスは短くし、先頭に `/` を付けず、区切りには `/` のみを使ってください。プロバイダーの命名規則も適用されます。プレフィックス付きの決定的キーが 512 文字を超えると、アップロード前に `InvalidOperationException` が発生します。プレフィックスが 57 文字以下なら、PostgreSQL の有効な projector 名・バージョンの上限（256・128 文字）の範囲で必ずこの制限に収まります。プレフィックスが null または空の場合、新たな長さチェックは行いません。
+
 ### 参照されている退避キーの列挙
 
 スナップショットの blob 参照には二つの形式があります。行の `IsOffloaded` / `OffloadKey` / `OffloadProvider` と、`SerializableMultiProjectionStateEnvelope` 内の `OffloadedState.OffloadKey` / `StorageProvider` です。行自体が退避されている場合、その blob にエンベロープが入っているため、両方の参照を保持する必要があります。現在の writer はエンベロープを通常の JSON として保存します。gzip 対応は読み取り側の許容のみです。Orleans の `MultiProjectionGrainState` は退避キーを保持せず、使われなくなった旧 `SerializedState` フィールドはクリアされるだけです。参照元はストアの行です。
