@@ -59,7 +59,7 @@ public sealed class S3BlobStorageSnapshotAccessor : IBlobStorageSnapshotAccessor
     {
         var key = data.CanSeek
             ? StreamOffloadHelper.ComputeDeterministicKey(
-                projectorName,
+                _prefix, projectorName,
                 await StreamOffloadHelper.ComputeContentHashAsync(data, cancellationToken).ConfigureAwait(false))
             : BuildKey(projectorName, Guid.NewGuid().ToString("N"));
         if (data.CanSeek)

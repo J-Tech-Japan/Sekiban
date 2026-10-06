@@ -102,6 +102,14 @@ services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 The Orleans grain detects the accessor and periodically checkpoints state, reducing silo memory usage
 (`src/Sekiban.Dcb.Orleans/Grains/MultiProjectionGrainState.cs`).
 
+### Snapshot blob prefixes
+
+With the SEK-G120 fix in this source revision, the configured prefix applies to all newly written snapshot blobs. Seekable writes use `{prefix}/{projector}/{sha256}.bin` (row snapshots include the version in `{projector}`); null or empty prefixes keep the existing keys. Only trailing `/` characters are trimmed from the prefix. Non-seekable writes keep their existing prefixed GUID keys.
+
+Deterministic keys from seekable writes since `df24f127` were un-prefixed. Those blobs stay at their old keys and remain readable without migration; non-seekable writes and writes before that commit could already be prefixed. Identical content is stored once more under the prefix after upgrading. Any listing or deletion by prefix must also account for old un-prefixed keys using `OffloadKeyEnumerator` and the referenced-key safety rules. Snapshot blobs now sit next to cold-event objects using the same configured prefix: `{prefix}/control/...` and `{prefix}/segments/...`.
+
+Keep prefixes short, with no leading slash and forward slashes only; provider naming rules still apply. Prefixed deterministic keys over 512 characters throw `InvalidOperationException` before upload. A prefix of at most 57 characters keeps every projector name/version within PostgreSQL's valid bounds (256/128 characters) inside that limit. Null or empty prefixes introduce no length check.
+
 ### Enumerating referenced offload keys
 
 Snapshot blobs can be referenced in two places: the row's `IsOffloaded` / `OffloadKey` / `OffloadProvider` fields, and the `OffloadedState.OffloadKey` / `StorageProvider` fields inside a `SerializableMultiProjectionStateEnvelope`. If the row itself is offloaded, its blob contains the envelope, so both references matter. Current writers store envelopes as plain JSON; gzip support is read-side tolerance only. Orleans `MultiProjectionGrainState` stores no offload key; its dead legacy `SerializedState` field is only cleared. The store row remains the reference source.

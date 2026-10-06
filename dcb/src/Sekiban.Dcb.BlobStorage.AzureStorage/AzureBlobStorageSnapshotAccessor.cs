@@ -77,7 +77,7 @@ public sealed class AzureBlobStorageSnapshotAccessor : IBlobStorageSnapshotAcces
         await EnsureContainerExistsAsync(cancellationToken).ConfigureAwait(false);
         var key = data.CanSeek
             ? StreamOffloadHelper.ComputeDeterministicKey(
-                projectorName,
+                _prefix, projectorName,
                 await StreamOffloadHelper.ComputeContentHashAsync(data, cancellationToken).ConfigureAwait(false))
             : BuildKey(projectorName, Guid.NewGuid().ToString("N"));
         var blob = _container.GetBlobClient(key);

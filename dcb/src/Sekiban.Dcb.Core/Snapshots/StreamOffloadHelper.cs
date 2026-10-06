@@ -8,6 +8,9 @@ namespace Sekiban.Dcb.Snapshots;
 /// </summary>
 public static class StreamOffloadHelper
 {
+    /// <summary>Maximum length of a deterministic snapshot key when a prefix is configured.</summary>
+    public const int MaxDeterministicKeyLength = 512;
+
     /// <summary>
     ///     Reads the stream, compares its length to the threshold, and either
     ///     returns inline data or uploads to blob and returns offload metadata.
@@ -89,6 +92,30 @@ public static class StreamOffloadHelper
     {
         var normalized = projectorName.Replace('\\', '/').Trim('/');
         return $"{normalized}/{contentHash}.bin";
+    }
+
+    /// <summary>
+    ///     Applies the configured prefix to a deterministic key and rejects prefixed keys
+    ///     that exceed the persistence limit before the caller uploads the snapshot.
+    ///     Null or empty prefixes preserve the existing key without a length check.
+    /// </summary>
+    public static string ComputeDeterministicKey(string? prefix, string projectorName, string contentHash)
+    {
+        var key = ComputeDeterministicKey(projectorName, contentHash);
+        if (string.IsNullOrEmpty(prefix))
+        {
+            return key;
+        }
+
+        key = $"{prefix.TrimEnd('/')}/{key}";
+        if (key.Length > MaxDeterministicKeyLength)
+        {
+            throw new InvalidOperationException(
+                $"Snapshot prefix '{prefix}' produces a deterministic key of length {key.Length}, " +
+                $"exceeding the limit of {MaxDeterministicKeyLength} characters.");
+        }
+
+        return key;
     }
 
     public static async Task<string> ComputeContentHashAsync(Stream stream, CancellationToken cancellationToken)
