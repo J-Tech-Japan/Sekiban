@@ -214,7 +214,7 @@ check_publish_parity() {
   fi
   if [[ "$verify_release_evidence" == 1 ]]; then
     check_library_release_evidence "$repo_root" "$version" || return 1
-    echo "Tag/release chronology is sourced from the immutable host release record, not ref creatordate metadata."
+    echo "Tag/release chronology is read live from annotated tagger.date and GitHub Release published_at, not ref creatordate metadata."
   fi
   echo "Publish parity passed for ${version}."
 }
@@ -233,8 +233,8 @@ check_library_release_evidence() {
   fi
 
   local repository="${GITHUB_REPOSITORY:-J-Tech-Japan/Sekiban}"
-  local release
-  if ! release="$(gh api "repos/${repository}/releases/tags/${tag}" 2>/dev/null)"; then
+  local release="${3:-}"
+  if [[ -z "$release" ]] && ! release="$(gh api "repos/${repository}/releases/tags/${tag}" 2>/dev/null)"; then
     echo "Finalized GitHub Release ${tag} is required before template publication." >&2
     return 1
   fi
@@ -263,7 +263,7 @@ check_library_release_evidence() {
     echo "GitHub Release ${tag} body does not exactly match the reviewed EN/JA library body." >&2
     return 1
   fi
-  echo "libraries-verified evidence passed: ${tag}, 26 exact assets, non-draft release, reviewed body, and current peeled commit."
+  echo "Live library release verification passed: ${tag}, 26 exact assets, non-draft release, reviewed body, and current peeled commit."
 }
 
 # Checkout-safe live tag check (AC2/AC3): compare API identity plus peeled commit
@@ -389,16 +389,16 @@ require_trigger_tag_object() {
 check_library_live_guard() {
   local repo_root="$1"
   local version="$2"
-  local facts_file="$3"
+  local merged_sha_file="$3"
   local run_attempt="$4"
   local trigger_tag_object="$5"
   local feed_base_url="$6"
   require_value repo-root "$repo_root"
   require_value version "$version"
-  require_value facts-file "$facts_file"
+  require_value merged-sha-file "$merged_sha_file"
   require_value run-attempt "$run_attempt"
-  [[ -f "$facts_file" ]] || {
-    echo "Release facts file is missing: ${facts_file}" >&2
+  [[ -f "$merged_sha_file" ]] || {
+    echo "Validated merged SHA file is missing: ${merged_sha_file}" >&2
     return 1
   }
   require_trigger_tag_object "$run_attempt" "$trigger_tag_object" || return 1
@@ -406,12 +406,10 @@ check_library_live_guard() {
   local tag="dcb-v${version}"
   local template_tag="dcbTemplates-v${version}"
   local repository="${GITHUB_REPOSITORY:-J-Tech-Japan/Sekiban}"
-  local merged_sha prepared_completed latest_check live_ref live_object live_type tag_object peeled tagger_date
-  merged_sha="$(jq -r '.merged_sha' "$facts_file")"
-  prepared_completed="$(jq -r '.prepared_completed_at_utc' "$facts_file")"
-  latest_check="$(jq -r '.latest_recorded_check_completed_at_utc' "$facts_file")"
+  local merged_sha live_ref live_object live_type tag_object peeled
+  merged_sha="$(tr -d '\n' < "$merged_sha_file")"
   [[ "$merged_sha" =~ ^[0-9a-fA-F]{40}$ ]] || {
-    echo "Release facts are missing a validated merged_sha." >&2
+    echo "Validated merged SHA is invalid." >&2
     return 1
   }
 
@@ -430,24 +428,10 @@ check_library_live_guard() {
     return 1
   fi
   peeled="$(jq -r '.object.sha' <<<"$tag_object")"
-  tagger_date="$(jq -r '.tagger.date' <<<"$tag_object")"
   [[ "$peeled" == "$merged_sha" ]] || {
     echo "Library tag ${tag} does not point at the validated merged SHA." >&2
     return 1
   }
-  local tag_epoch prepared_epoch check_epoch
-  tag_epoch="$(parse_utc_epoch "$tagger_date")"
-  prepared_epoch="$(parse_utc_epoch "$prepared_completed")"
-  check_epoch="$(parse_utc_epoch "$latest_check")"
-  (( tag_epoch > prepared_epoch )) || {
-    echo "Library tagger.date must be strictly later than prepared_completed_at_utc." >&2
-    return 1
-  }
-  (( tag_epoch > check_epoch )) || {
-    echo "Library tagger.date must be strictly later than latest_recorded_check_completed_at_utc." >&2
-    return 1
-  }
-
   # Fail closed: only an explicit HTTP 404 means the template tag is absent.
   local template_http template_body
   template_body="$(mktemp /tmp/sek-template-tag.XXXXXX)"
@@ -483,16 +467,16 @@ check_library_live_guard() {
 check_template_live_guard() {
   local repo_root="$1"
   local version="$2"
-  local facts_file="$3"
+  local merged_sha_file="$3"
   local run_attempt="$4"
   local trigger_tag_object="$5"
   local feed_base_url="$6"
   require_value repo-root "$repo_root"
   require_value version "$version"
-  require_value facts-file "$facts_file"
+  require_value merged-sha-file "$merged_sha_file"
   require_value run-attempt "$run_attempt"
-  [[ -f "$facts_file" ]] || {
-    echo "Release facts file is missing: ${facts_file}" >&2
+  [[ -f "$merged_sha_file" ]] || {
+    echo "Validated merged SHA file is missing: ${merged_sha_file}" >&2
     return 1
   }
   require_trigger_tag_object "$run_attempt" "$trigger_tag_object" || return 1
@@ -500,15 +484,12 @@ check_template_live_guard() {
   local tag="dcbTemplates-v${version}"
   local library_tag="dcb-v${version}"
   local repository="${GITHUB_REPOSITORY:-J-Tech-Japan/Sekiban}"
-  local merged_sha facts_tag_object facts_tag_created facts_release_published
+  local merged_sha
   local live_ref live_object live_type tag_object peeled tagger_date
   local library_ref library_object library_type library_tag_object library_tagger_date library_release published_at
-  merged_sha="$(jq -r '.merged_sha' "$facts_file")"
-  facts_tag_object="$(jq -r '.library_tag_object_id' "$facts_file")"
-  facts_tag_created="$(jq -r '.library_tag_created_at_utc' "$facts_file")"
-  facts_release_published="$(jq -r '.library_release_published_at_utc' "$facts_file")"
-  [[ "$merged_sha" =~ ^[0-9a-fA-F]{40}$ && "$facts_tag_object" =~ ^[0-9a-fA-F]{40}$ ]] || {
-    echo "Release facts are missing libraries-verified library tag members." >&2
+  merged_sha="$(tr -d '\n' < "$merged_sha_file")"
+  [[ "$merged_sha" =~ ^[0-9a-fA-F]{40}$ ]] || {
+    echo "Validated merged SHA is missing." >&2
     return 1
   }
 
@@ -522,28 +503,20 @@ check_template_live_guard() {
     echo "${library_tag} must be an annotated tag: its ref object type is '${library_type}', not 'tag'." >&2
     return 1
   fi
-  [[ "$library_object" == "$facts_tag_object" ]] || {
-    echo "Live library tag object does not equal release-facts library_tag_object_id." >&2
-    return 1
-  }
   if ! library_tag_object="$(gh api "repos/${repository}/git/tags/${library_object}")"; then
     echo "Unable to peel annotated library tag ${library_tag}." >&2
     return 1
   fi
   library_tagger_date="$(jq -r '.tagger.date' <<<"$library_tag_object")"
-  [[ "$library_tagger_date" == "$facts_tag_created" ]] || {
-    echo "Live library tagger.date does not equal release-facts library_tag_created_at_utc." >&2
-    return 1
+  [[ "$(jq -r '.object.sha' <<<"$library_tag_object")" == "$merged_sha" ]] || {
+    echo "Library tag does not point at the validated merged SHA." >&2; return 1;
   }
   if ! library_release="$(gh api "repos/${repository}/releases/tags/${library_tag}")"; then
     echo "Unable to read live library GitHub Release ${library_tag}." >&2
     return 1
   fi
+  check_library_release_evidence "$repo_root" "$version" "$library_release" || return 1
   published_at="$(jq -r '.published_at' <<<"$library_release")"
-  [[ "$published_at" == "$facts_release_published" ]] || {
-    echo "Live library release published_at does not equal release-facts library_release_published_at_utc." >&2
-    return 1
-  }
 
   if ! live_ref="$(gh api "repos/${repository}/git/ref/tags/${tag}")"; then
     echo "Unable to read live template tag ref ${tag}." >&2
@@ -1004,19 +977,20 @@ compare_semantic_package_manifests() {
 }
 
 self_test() {
+  local fixture_version="10.22.0"
   local repo_root="$1"
   local fixture_root="$script_dir/fixtures/tags"
   check_package_manifest "$repo_root" "$repo_root/.github/workflows/packagesDcb.yml"
-  check_publish_parity "$repo_root" "10.22.0" "dcbTemplates-v10.22.0" \
-    "$fixture_root/library-10.22.0.txt" "$fixture_root/authorities-matching-10.22.0.txt" 0
-  expect_failure check_publish_parity "$repo_root" "10.22.0" "dcbTemplates-v10.22.0" \
-    "$fixture_root/library-10.22.0.txt" "$fixture_root/authorities-one-mismatch-10.22.0.txt" 0
-  expect_failure check_publish_parity "$repo_root" "10.22.0" "dcbTemplates-v10.21.0" \
-    "$fixture_root/library-10.22.0.txt" "$fixture_root/authorities-matching-10.22.0.txt" 0
-  expect_failure check_drift "$repo_root" "$fixture_root/library-10.23.0.txt" "$fixture_root/template-10.22.0.txt"
+  check_publish_parity "$repo_root" "${fixture_version}" "dcbTemplates-v${fixture_version}" \
+    "$fixture_root/library-${fixture_version}.txt" "$fixture_root/authorities-matching-${fixture_version}.txt" 0
+  expect_failure check_publish_parity "$repo_root" "${fixture_version}" "dcbTemplates-v${fixture_version}" \
+    "$fixture_root/library-${fixture_version}.txt" "$fixture_root/authorities-one-mismatch-${fixture_version}.txt" 0
+  expect_failure check_publish_parity "$repo_root" "${fixture_version}" "dcbTemplates-v10.21.0" \
+    "$fixture_root/library-${fixture_version}.txt" "$fixture_root/authorities-matching-${fixture_version}.txt" 0
+  expect_failure check_drift "$repo_root" "$fixture_root/library-10.23.0.txt" "$fixture_root/template-${fixture_version}.txt"
 
   local exclusion_output
-  exclusion_output="$(check_drift "$repo_root" "$fixture_root/library-10.22.0-with-exclusions.txt" "$fixture_root/template-10.22.0-with-exclusions.txt" 2>&1)"
+  exclusion_output="$(check_drift "$repo_root" "$fixture_root/library-${fixture_version}-with-exclusions.txt" "$fixture_root/template-${fixture_version}-with-exclusions.txt" 2>&1)"
   if [[ "$exclusion_output" != *"Excluded library tag 'dcb-v10.23.0-preview.1'"* ]] ||
      [[ "$exclusion_output" != *"Excluded library tag 'dcb-v10.1.06': leading-zero numeric component is not valid strict SemVer."* ]] ||
      [[ "$exclusion_output" != *"Excluded template tag 'dcbTemplates-v10.1.06': leading-zero numeric component is not valid strict SemVer."* ]] ||
@@ -1032,23 +1006,23 @@ self_test() {
   for fake_package in "${dcb_package_ids[@]}" Sekiban.Dcb.Templates; do
     local fake_lower
     fake_lower="$(printf '%s' "$fake_package" | tr '[:upper:]' '[:lower:]')"
-    write_fake_nupkg "$fake_feed/$fake_lower/10.22.0/$fake_lower.10.22.0.nupkg" "$fake_package" "10.22.0"
+    write_fake_nupkg "$fake_feed/$fake_lower/${fixture_version}/$fake_lower.${fixture_version}.nupkg" "$fake_package" "${fixture_version}"
   done
-  check_feed_once "$fake_base" "10.22.0" 2 "${dcb_package_ids[@]}" Sekiban.Dcb.Templates
-  rm "$fake_feed/sekiban.dcb.core/10.22.0/sekiban.dcb.core.10.22.0.nupkg"
-  expect_failure check_feed_once "$fake_base" "10.22.0" 2 "${dcb_package_ids[@]}" Sekiban.Dcb.Templates
-  write_fake_nupkg "$fake_feed/sekiban.dcb.core/10.22.0/sekiban.dcb.core.10.22.0.nupkg" "Sekiban.Dcb.Core" "0.0.0"
-  expect_failure check_feed_once "$fake_base" "10.22.0" 2 "Sekiban.Dcb.Core"
-  write_fake_nupkg "$fake_feed/sekiban.dcb.core/10.22.0/sekiban.dcb.core.10.22.0.nupkg" "Sekiban.Dcb.Core" "10.22.0"
-  rm "$fake_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg"
-  expect_failure check_feed_once "$fake_base" "10.22.0" 2 Sekiban.Dcb.Templates
-  write_fake_nupkg "$fake_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg" "Sekiban.Dcb.Templates" "0.0.0"
-  expect_failure check_feed_once "$fake_base" "10.22.0" 2 Sekiban.Dcb.Templates
-  write_fake_nupkg "$fake_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg" "Sekiban.Dcb.Templates" "10.22.0"
-  write_fake_nupkg "$fake_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg" "Wrong.Package" "10.22.0"
-  expect_failure check_feed_once "$fake_base" "10.22.0" 2 Sekiban.Dcb.Templates
-  printf 'malformed nupkg\n' > "$fake_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg"
-  expect_failure check_feed_once "$fake_base" "10.22.0" 2 Sekiban.Dcb.Templates
+  check_feed_once "$fake_base" "${fixture_version}" 2 "${dcb_package_ids[@]}" Sekiban.Dcb.Templates
+  rm "$fake_feed/sekiban.dcb.core/${fixture_version}/sekiban.dcb.core.${fixture_version}.nupkg"
+  expect_failure check_feed_once "$fake_base" "${fixture_version}" 2 "${dcb_package_ids[@]}" Sekiban.Dcb.Templates
+  write_fake_nupkg "$fake_feed/sekiban.dcb.core/${fixture_version}/sekiban.dcb.core.${fixture_version}.nupkg" "Sekiban.Dcb.Core" "0.0.0"
+  expect_failure check_feed_once "$fake_base" "${fixture_version}" 2 "Sekiban.Dcb.Core"
+  write_fake_nupkg "$fake_feed/sekiban.dcb.core/${fixture_version}/sekiban.dcb.core.${fixture_version}.nupkg" "Sekiban.Dcb.Core" "${fixture_version}"
+  rm "$fake_feed/sekiban.dcb.templates/${fixture_version}/sekiban.dcb.templates.${fixture_version}.nupkg"
+  expect_failure check_feed_once "$fake_base" "${fixture_version}" 2 Sekiban.Dcb.Templates
+  write_fake_nupkg "$fake_feed/sekiban.dcb.templates/${fixture_version}/sekiban.dcb.templates.${fixture_version}.nupkg" "Sekiban.Dcb.Templates" "0.0.0"
+  expect_failure check_feed_once "$fake_base" "${fixture_version}" 2 Sekiban.Dcb.Templates
+  write_fake_nupkg "$fake_feed/sekiban.dcb.templates/${fixture_version}/sekiban.dcb.templates.${fixture_version}.nupkg" "Sekiban.Dcb.Templates" "${fixture_version}"
+  write_fake_nupkg "$fake_feed/sekiban.dcb.templates/${fixture_version}/sekiban.dcb.templates.${fixture_version}.nupkg" "Wrong.Package" "${fixture_version}"
+  expect_failure check_feed_once "$fake_base" "${fixture_version}" 2 Sekiban.Dcb.Templates
+  printf 'malformed nupkg\n' > "$fake_feed/sekiban.dcb.templates/${fixture_version}/sekiban.dcb.templates.${fixture_version}.nupkg"
+  expect_failure check_feed_once "$fake_base" "${fixture_version}" 2 Sekiban.Dcb.Templates
 
   local timeout_port timeout_pid timeout_ready timeout_output
   timeout_ready="$(mktemp "${TMPDIR:-/tmp}/sek-timeout-ready.XXXXXX")"
@@ -1076,7 +1050,7 @@ PY
   for _ in $(seq 1 30); do [[ -s "$timeout_ready" ]] && break; sleep 0.1; done
   timeout_port="$(cat "$timeout_ready")"
   if timeout_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-template \
-      --version "10.22.0" --feed-base-url "http://127.0.0.1:${timeout_port}" \
+      --version "${fixture_version}" --feed-base-url "http://127.0.0.1:${timeout_port}" \
       --timeout-seconds 2 --interval-seconds 1 --request-timeout-seconds 1 2>&1)"; then
     printf '%s\n' "$timeout_output"
     echo "Expected the real template wait loop to time out." >&2
@@ -1090,7 +1064,7 @@ PY
 
   local package_timeout_output
   if package_timeout_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-packages \
-      --version "10.22.0" --feed-base-url "http://127.0.0.1:${timeout_port}" \
+      --version "${fixture_version}" --feed-base-url "http://127.0.0.1:${timeout_port}" \
       --timeout-seconds 2 --interval-seconds 1 --request-timeout-seconds 1 2>&1)"; then
     printf '%s\n' "$package_timeout_output"
     echo "Expected the real package wait loop to time out." >&2
@@ -1112,11 +1086,11 @@ PY
   malformed_wait_feed="$(mktemp -d "${TMPDIR:-/tmp}/sek-malformed-wait-feed.XXXXXX")"
   for fake_package in "${dcb_package_ids[@]}" Sekiban.Dcb.Templates; do
     fake_lower="$(printf '%s' "$fake_package" | tr '[:upper:]' '[:lower:]')"
-    write_fake_nupkg "$malformed_wait_feed/$fake_lower/10.22.0/$fake_lower.10.22.0.nupkg" "$fake_package" "10.22.0"
+    write_fake_nupkg "$malformed_wait_feed/$fake_lower/${fixture_version}/$fake_lower.${fixture_version}.nupkg" "$fake_package" "${fixture_version}"
   done
-  printf 'malformed nupkg\n' > "$malformed_wait_feed/sekiban.dcb.core/10.22.0/sekiban.dcb.core.10.22.0.nupkg"
+  printf 'malformed nupkg\n' > "$malformed_wait_feed/sekiban.dcb.core/${fixture_version}/sekiban.dcb.core.${fixture_version}.nupkg"
   if malformed_wait_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-packages \
-      --version "10.22.0" --feed-base-url "file://${malformed_wait_feed}" \
+      --version "${fixture_version}" --feed-base-url "file://${malformed_wait_feed}" \
       --timeout-seconds 2 --interval-seconds 1 --request-timeout-seconds 1 2>&1)"; then
     printf '%s\n' "$malformed_wait_output"
     echo "Expected malformed package wait evidence to remain unresolved." >&2
@@ -1128,9 +1102,9 @@ PY
     echo "Malformed package evidence did not preserve the exact unresolved package ID." >&2
     return 1
   fi
-  printf 'malformed nupkg\n' > "$malformed_wait_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg"
+  printf 'malformed nupkg\n' > "$malformed_wait_feed/sekiban.dcb.templates/${fixture_version}/sekiban.dcb.templates.${fixture_version}.nupkg"
   if malformed_wait_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-template \
-      --version "10.22.0" --feed-base-url "file://${malformed_wait_feed}" \
+      --version "${fixture_version}" --feed-base-url "file://${malformed_wait_feed}" \
       --timeout-seconds 2 --interval-seconds 1 --request-timeout-seconds 1 2>&1)"; then
     printf '%s\n' "$malformed_wait_output"
     echo "Expected malformed template wait evidence to remain unresolved." >&2
@@ -1148,7 +1122,7 @@ PY
   delayed_feed="$(mktemp -d /tmp/sek-g79-delayed-feed.XXXXXX)"
   for fake_package in "${dcb_package_ids[@]}" Sekiban.Dcb.Templates; do
     fake_lower="$(printf '%s' "$fake_package" | tr '[:upper:]' '[:lower:]')"
-    write_fake_nupkg "$delayed_feed/$fake_lower/10.22.0/$fake_lower.10.22.0.nupkg" "$fake_package" "10.22.0"
+    write_fake_nupkg "$delayed_feed/$fake_lower/${fixture_version}/$fake_lower.${fixture_version}.nupkg" "$fake_package" "${fixture_version}"
   done
   delayed_ready="$(mktemp /tmp/sek-delayed-ready.XXXXXX)"
   rm -f "$delayed_ready"
@@ -1191,7 +1165,7 @@ PY
   for _ in $(seq 1 30); do [[ -s "$delayed_ready" ]] && break; sleep 0.1; done
   delayed_port="$(cat "$delayed_ready")"
   delayed_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-packages \
-      --version 10.22.0 --feed-base-url "http://127.0.0.1:$delayed_port" \
+      --version ${fixture_version} --feed-base-url "http://127.0.0.1:$delayed_port" \
       --timeout-seconds 5 --interval-seconds 1 --request-timeout-seconds 2 2>&1)"
   if [[ "$delayed_output" != *"All 26 DCB packages are available"* ]]; then
     echo "$delayed_output"
@@ -1199,7 +1173,7 @@ PY
     return 1
   fi
   delayed_output="$("$script_dir/validate-release-tags.sh" --wait-for-published-template \
-      --version 10.22.0 --feed-base-url "http://127.0.0.1:$delayed_port" \
+      --version ${fixture_version} --feed-base-url "http://127.0.0.1:$delayed_port" \
       --timeout-seconds 5 --interval-seconds 1 --request-timeout-seconds 2 2>&1)"
   if [[ "$delayed_output" != *"Template package is available"* ]]; then
     echo "$delayed_output"
@@ -1213,17 +1187,17 @@ PY
   local retry_package retry_feed retry_base
   retry_feed="$(mktemp -d "${TMPDIR:-/tmp}/sek-g79-retry-feed.XXXXXX")"
   retry_base="file://${retry_feed}"
-  retry_package="$fake_feed/sekiban.dcb.templates.10.22.0.nupkg"
-  write_fake_nupkg "$retry_package" "Sekiban.Dcb.Templates" "10.22.0"
-  mkdir -p "$retry_feed/sekiban.dcb.templates/10.22.0"
-  cp "$retry_package" "$retry_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg"
-  python3 - "$retry_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg" <<'PY'
+  retry_package="$fake_feed/sekiban.dcb.templates.${fixture_version}.nupkg"
+  write_fake_nupkg "$retry_package" "Sekiban.Dcb.Templates" "${fixture_version}"
+  mkdir -p "$retry_feed/sekiban.dcb.templates/${fixture_version}"
+  cp "$retry_package" "$retry_feed/sekiban.dcb.templates/${fixture_version}/sekiban.dcb.templates.${fixture_version}.nupkg"
+  python3 - "$retry_feed/sekiban.dcb.templates/${fixture_version}/sekiban.dcb.templates.${fixture_version}.nupkg" <<'PY'
 from zipfile import ZIP_DEFLATED, ZipFile
 import sys
 with ZipFile(sys.argv[1], "a", ZIP_DEFLATED) as archive:
     archive.writestr("package/services/digital-signature/repository.signature.p7s", "volatile signature")
 PY
-  check_template_retry "$retry_package" "10.22.0" "$retry_base" 2
+  check_template_retry "$retry_package" "${fixture_version}" "$retry_base" 2
   python3 - "$retry_package" <<'PY'
 from zipfile import ZIP_DEFLATED, ZipFile
 import sys
@@ -1231,9 +1205,9 @@ path = sys.argv[1]
 with ZipFile(path, "a", ZIP_DEFLATED) as archive:
     archive.writestr("content/changed-same-version.txt", "changed payload")
 PY
-  expect_failure check_template_retry "$retry_package" "10.22.0" "$retry_base" 2
-  rm "$retry_feed/sekiban.dcb.templates/10.22.0/sekiban.dcb.templates.10.22.0.nupkg"
-  check_template_retry "$retry_package" "10.22.0" "$retry_base" 2
+  expect_failure check_template_retry "$retry_package" "${fixture_version}" "$retry_base" 2
+  rm "$retry_feed/sekiban.dcb.templates/${fixture_version}/sekiban.dcb.templates.${fixture_version}.nupkg"
+  check_template_retry "$retry_package" "${fixture_version}" "$retry_base" 2
   rm -rf "$retry_feed"
   rm -rf "$fake_feed"
 
@@ -1263,7 +1237,7 @@ echo "unexpected gh invocation: $*" >&2
 exit 1
 GH
   chmod +x "${PATH%%:*}/gh"
-  if lightweight_output="$(check_live_tag "$lightweight_root" "dcb-v10.22.0" "$lightweight_sha" 2>&1)"; then
+  if lightweight_output="$(check_live_tag "$lightweight_root" "dcb-v${fixture_version}" "$lightweight_sha" 2>&1)"; then
     echo "$lightweight_output"
     echo "Expected lightweight live tag to fail with the named annotated-tag error." >&2
     return 1
@@ -1295,7 +1269,7 @@ authorities_file=""
 workflow_file=""
 tag=""
 expected_peeled=""
-facts_file=""
+merged_sha_file=""
 run_attempt="1"
 trigger_tag_object=""
 local_out_dir=""
@@ -1317,7 +1291,7 @@ while (( $# > 0 )); do
     --workflow-file) workflow_file="$2"; shift 2 ;;
     --tag) tag="$2"; shift 2 ;;
     --expected-peeled) expected_peeled="$2"; shift 2 ;;
-    --facts-file) facts_file="$2"; shift 2 ;;
+    --merged-sha-file) merged_sha_file="$2"; shift 2 ;;
     --run-attempt) run_attempt="$2"; shift 2 ;;
     --trigger-tag-object) trigger_tag_object="$2"; shift 2 ;;
     --local-out-dir) local_out_dir="$2"; shift 2 ;;
@@ -1342,10 +1316,10 @@ case "$mode" in
     check_live_tag "$repo_root" "$tag" "$expected_peeled"
     ;;
   --check-library-live-guard)
-    check_library_live_guard "$repo_root" "$version" "$facts_file" "$run_attempt" "$trigger_tag_object" "$feed_base_url"
+    check_library_live_guard "$repo_root" "$version" "$merged_sha_file" "$run_attempt" "$trigger_tag_object" "$feed_base_url"
     ;;
   --check-template-live-guard)
-    check_template_live_guard "$repo_root" "$version" "$facts_file" "$run_attempt" "$trigger_tag_object" "$feed_base_url"
+    check_template_live_guard "$repo_root" "$version" "$merged_sha_file" "$run_attempt" "$trigger_tag_object" "$feed_base_url"
     ;;
   --check-library-post-push-equality)
     check_library_post_push_equality "$version" "$local_out_dir" "$feed_base_url"

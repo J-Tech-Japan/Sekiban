@@ -41,17 +41,22 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Derive version from the five template authorities
+        run: |
+          VERSION="$(bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-template-version.sh --repo-root "$GITHUB_WORKSPACE")"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
       - name: Pack exact local DCB feed for template consumers
         run: |
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/pack-local-dcb.sh \
-            --repo-root "$GITHUB_WORKSPACE" --output "$GITHUB_WORKSPACE/dcb-local-feed" --version 10.22.0
+            --repo-root "$GITHUB_WORKSPACE" --output "$GITHUB_WORKSPACE/dcb-local-feed" --version "$VERSION"
 
       - name: Independent second library pack for determinism
         run: |
           rm -rf "$GITHUB_WORKSPACE/dcb-local-feed-second"
           mkdir -p "$GITHUB_WORKSPACE/dcb-local-feed-second"
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/pack-local-dcb.sh \
-            --repo-root "$GITHUB_WORKSPACE" --output "$GITHUB_WORKSPACE/dcb-local-feed-second" --version 10.22.0
+            --repo-root "$GITHUB_WORKSPACE" --output "$GITHUB_WORKSPACE/dcb-local-feed-second" --version "$VERSION"
 
       - name: Prove library pack determinism
         run: |
@@ -59,19 +64,18 @@ jobs:
             --repo-root "$GITHUB_WORKSPACE" \
             --first-feed "$GITHUB_WORKSPACE/dcb-local-feed" \
             --second-feed "$GITHUB_WORKSPACE/dcb-local-feed-second" \
-            --version 10.22.0 | tee "$RUNNER_TEMP/library-pack-determinism.log"
+            --version "$VERSION" | tee "$RUNNER_TEMP/library-pack-determinism.log"
           grep -Fxq 'LIBRARY PACK DETERMINISM: 26/26 equal' "$RUNNER_TEMP/library-pack-determinism.log"
 
       - name: Executable tag-workflow harness
         run: |
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/run-workflow-harness.sh \
-            --repo-root "$GITHUB_WORKSPACE" \
-            --local-feed "$GITHUB_WORKSPACE/dcb-local-feed"
+            --repo-root "$GITHUB_WORKSPACE"
 
       - name: Validate packaged consumer path and killing fixtures
         run: |
           dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh \
-            --repo-root "$GITHUB_WORKSPACE" --feed "$GITHUB_WORKSPACE/dcb-local-feed" --version 10.22.0
+            --repo-root "$GITHUB_WORKSPACE" --feed "$GITHUB_WORKSPACE/dcb-local-feed" --version "$VERSION"
 
   currency-drift:
     name: Scheduled stable DCB/template currency check

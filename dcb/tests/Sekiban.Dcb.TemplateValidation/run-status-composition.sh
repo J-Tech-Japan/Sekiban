@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../../.." && pwd)"
-version="10.22.0"
+version=""
 feed=""
 
 while (( $# > 0 )); do
@@ -17,6 +17,8 @@ while (( $# > 0 )); do
       ;;
   esac
 done
+
+[[ -n "$version" ]] || version="$(bash "$script_dir/read-template-version.sh" --repo-root "$repo_root")"
 
 dcb_package_ids=(
   Sekiban.Dcb.BlobStorage.AzureStorage Sekiban.Dcb.BlobStorage.S3 Sekiban.Dcb.ColdStorage

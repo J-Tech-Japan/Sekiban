@@ -13,7 +13,7 @@ usage() {
 repo_root=""
 first_feed=""
 second_feed=""
-version="10.22.0"
+version=""
 
 while (( $# > 0 )); do
   case "$1" in
@@ -24,6 +24,8 @@ while (( $# > 0 )); do
     *) usage ;;
   esac
 done
+
+[[ -n "$version" ]] || version="$(bash "$script_dir/read-template-version.sh" --repo-root "$repo_root")"
 
 [[ -n "$repo_root" && -n "$first_feed" && -n "$second_feed" ]] || usage
 [[ -d "$first_feed" && -d "$second_feed" ]] || {

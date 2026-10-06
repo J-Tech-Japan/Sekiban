@@ -49,13 +49,18 @@ If you're ready to start contributing code or documentation, please submit a pul
 <!-- sek-g44:two-stage-template-release -->
 ## DCB template release protocol
 
-DCB libraries and DCB templates are intentionally separate NuGet and Git tag series. Release a library version first
-with `dcb-vX.Y.Z`; do not publish a matching template merely because the source version was edited. After the library
-publish, use a bounded retry with a timeout to confirm that all 17 template package IDs resolve from nuget.org. Then
-move all five `SekibanDcbTemplateVersion.props` authorities to the published version and run the packaged-consumer
-gate: pack the net9 carrier, install it into an isolated `dotnet new` hive, generate all five net10 templates, restore
-only from nuget.org using an isolated package cache, build, and run the bundled tests. Only after that gate is green
-may `dcbTemplates-vX.Y.Z` publish the template package.
+DCB libraries and DCB templates use separate NuGet and Git tag series. In the release-integration PR, bump all
+five `SekibanDcbTemplateVersion.props` authorities and the template README together, and add the four bilingual
+release bodies for that version. Merge before the library tag. Gather dispatched checks on the merged commit,
+write the host schema-3 `prepared` record, and require the prepared stage check on main before any tag.
+
+With operator approval, publish the libraries first with annotated `dcb-vX.Y.Z`. The template workflow then
+verifies all 26 library packages are publicly visible, the library Release has the exact assets and bilingual body,
+both tags peel to the merged commit, and the five version authorities agree. Its packaged-consumer gate packs
+the net9 carrier, installs it into an isolated `dotnet new` hive, generates all five net10 templates, restores,
+builds, and runs the bundled tests. Only after the gates pass may annotated `dcbTemplates-vX.Y.Z` publish the
+template package. Follow [the release runbook](dcb/tests/Sekiban.Dcb.TemplateValidation/RELEASE-RUNBOOK.md)
+for record fields, mandatory preflight, operator approvals, retries and the new-version recovery rule.
 
 The scheduled currency workflow compares stable `dcb-v*` and `dcbTemplates-v*` tags numerically. Pre-release and
 unparseable tags are logged and excluded. A stale but still restorable template version is a release failure, not a
