@@ -283,6 +283,21 @@ expect_failure() {
 }
 
 
+expect_failure_reason() {
+  local reason="$1" output
+  shift
+  if output="$("$@" 2>&1)"; then
+    echo "Expected command to fail: $*" >&2
+    return 1
+  fi
+  printf '%s\n' "$output"
+  [[ "$output" == *"$reason"* ]] || {
+    echo "Expected failure reason '$reason': $*" >&2
+    return 1
+  }
+}
+
+
 assert_unavailable_package_diagnostic() {
   local operation="$1"
   local output="$2"
@@ -356,7 +371,7 @@ cp "$repo_root/docs/dcb_llm_ja/11_storage_providers.md" "$docs_mutant/docs/dcb_l
 cp "$repo_root/CONTRIBUTING.md" "$docs_mutant/CONTRIBUTING.md"
 cp -R "$repo_root/docs/releases/." "$docs_mutant/docs/releases/"
 perl -0pi -e 's/<!-- sek-g44:cas-non-default -->//' "$docs_mutant/docs/dcb_llm_ja/11_storage_providers.md"
-expect_failure run_net10 "$validator" docs --repo-root "$docs_mutant"
+expect_failure_reason "Japanese CAS non-default guidance is incomplete." run_net10 "$validator" docs --repo-root "$docs_mutant" --expected-version "$version"
 
 copy_release_docs_fixture() {
   local destination="$1"
@@ -372,12 +387,12 @@ copy_release_docs_fixture() {
 missing_release_body="$work_root/docs-missing-release-body"
 copy_release_docs_fixture "$missing_release_body"
 rm "$missing_release_body/docs/releases/dcbTemplates-v${version}.ja.md"
-expect_failure run_net10 "$validator" docs --repo-root "$missing_release_body"
+expect_failure_reason "Missing reviewed Japanese template release body:" run_net10 "$validator" docs --repo-root "$missing_release_body" --expected-version "$version"
 
 blank_release_body="$work_root/docs-blank-release-body"
 copy_release_docs_fixture "$blank_release_body"
 : > "$blank_release_body/docs/releases/dcb-v${version}-library.en.md"
-expect_failure run_net10 "$validator" docs --repo-root "$blank_release_body"
+expect_failure_reason "must name DCB $version." run_net10 "$validator" docs --repo-root "$blank_release_body" --expected-version "$version"
 
 make_minimal_currency_docs_fixture() {
   local destination="$1"
@@ -423,14 +438,14 @@ for invalid_version in "${invalid_versions[@]}"; do
   make_minimal_currency_docs_fixture "$invalid_fixture"
   perl -0pi -e "s/Sekiban\\.Dcb ${version}/Sekiban.Dcb ${invalid_version}/" \
     "$invalid_fixture/templates/Sekiban.Dcb.Templates/README.md"
-  expect_failure run_net10 "$validator" docs-currency --repo-root "$invalid_fixture" --expected-version "$version"
+  expect_failure_reason "Expected exactly one whole-token Sekiban.Dcb version mention" run_net10 "$validator" docs-currency --repo-root "$invalid_fixture" --expected-version "$version"
 done
 
 newline_fixture="$work_root/docs-invalid-newline"
 make_minimal_currency_docs_fixture "$newline_fixture"
 perl -0pi -e "s/Sekiban\\.Dcb ${version}/Sekiban.Dcb\\n${version}/" \
   "$newline_fixture/templates/Sekiban.Dcb.Templates/README.md"
-expect_failure run_net10 "$validator" docs-currency --repo-root "$newline_fixture" --expected-version "$version"
+expect_failure_reason "Expected exactly one whole-token Sekiban.Dcb version mention" run_net10 "$validator" docs-currency --repo-root "$newline_fixture" --expected-version "$version"
 
 # SEK-G47 fixture family 3: only the new stage rejects stale, deleted, and duplicate README claims.
 stale_currency_fixture="$work_root/docs-stale-currency"
@@ -445,20 +460,20 @@ cp -R "$repo_root/docs/releases/." "$stale_currency_fixture/docs/releases/"
 perl -0pi -e "s/Sekiban\\.Dcb ${version}/Sekiban.Dcb 10.8.2/" \
   "$stale_currency_fixture/templates/Sekiban.Dcb.Templates/README.md"
 run_net10 "$validator" authorities --repo-root "$stale_currency_fixture" --expected-version "$version"
-run_net10 "$validator" docs --repo-root "$stale_currency_fixture"
-expect_failure run_net10 "$validator" docs-currency --repo-root "$stale_currency_fixture" --expected-version "$version"
+run_net10 "$validator" docs --repo-root "$stale_currency_fixture" --expected-version "$version"
+expect_failure_reason "The sole template Markdown Sekiban.Dcb version must be $version" run_net10 "$validator" docs-currency --repo-root "$stale_currency_fixture" --expected-version "$version"
 
 deleted_currency_fixture="$work_root/docs-deleted-currency"
 make_minimal_currency_docs_fixture "$deleted_currency_fixture"
 perl -0pi -e "s/Sekiban\\.Dcb ${version}//" \
   "$deleted_currency_fixture/templates/Sekiban.Dcb.Templates/README.md"
-expect_failure run_net10 "$validator" docs-currency --repo-root "$deleted_currency_fixture" --expected-version "$version"
+expect_failure_reason "Expected exactly one whole-token Sekiban.Dcb version mention" run_net10 "$validator" docs-currency --repo-root "$deleted_currency_fixture" --expected-version "$version"
 
 duplicate_currency_fixture="$work_root/docs-duplicate-currency"
 make_minimal_currency_docs_fixture "$duplicate_currency_fixture"
 printf '%s\n' "Duplicate package statement: **Sekiban.Dcb ${version}**." \
   >> "$duplicate_currency_fixture/templates/Sekiban.Dcb.Templates/README.md"
-expect_failure run_net10 "$validator" docs-currency --repo-root "$duplicate_currency_fixture" --expected-version "$version"
+expect_failure_reason "Expected exactly one whole-token Sekiban.Dcb version mention" run_net10 "$validator" docs-currency --repo-root "$duplicate_currency_fixture" --expected-version "$version"
 
 # SEK-G47 fixture family 4: a packed root README uses the same whole-token validation.
 packed_readme_mutant="$work_root/packed-readme-currency-mutant.nupkg"

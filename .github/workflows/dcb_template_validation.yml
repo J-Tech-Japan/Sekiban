@@ -42,7 +42,9 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Derive version from the five template authorities
-        run: echo "VERSION=$(bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-template-version.sh --repo-root "$GITHUB_WORKSPACE")" >> "$GITHUB_ENV"
+        run: |
+          VERSION="$(bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-template-version.sh --repo-root "$GITHUB_WORKSPACE")"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Pack exact local DCB feed for template consumers
         run: |

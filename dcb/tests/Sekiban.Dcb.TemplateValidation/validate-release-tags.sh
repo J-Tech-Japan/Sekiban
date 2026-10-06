@@ -214,7 +214,7 @@ check_publish_parity() {
   fi
   if [[ "$verify_release_evidence" == 1 ]]; then
     check_library_release_evidence "$repo_root" "$version" || return 1
-    echo "Tag/release chronology is sourced from the immutable host release record, not ref creatordate metadata."
+    echo "Tag/release chronology is read live from annotated tagger.date and GitHub Release published_at, not ref creatordate metadata."
   fi
   echo "Publish parity passed for ${version}."
 }
@@ -233,8 +233,8 @@ check_library_release_evidence() {
   fi
 
   local repository="${GITHUB_REPOSITORY:-J-Tech-Japan/Sekiban}"
-  local release
-  if ! release="$(gh api "repos/${repository}/releases/tags/${tag}" 2>/dev/null)"; then
+  local release="${3:-}"
+  if [[ -z "$release" ]] && ! release="$(gh api "repos/${repository}/releases/tags/${tag}" 2>/dev/null)"; then
     echo "Finalized GitHub Release ${tag} is required before template publication." >&2
     return 1
   fi
@@ -515,6 +515,7 @@ check_template_live_guard() {
     echo "Unable to read live library GitHub Release ${library_tag}." >&2
     return 1
   fi
+  check_library_release_evidence "$repo_root" "$version" "$library_release" || return 1
   published_at="$(jq -r '.published_at' <<<"$library_release")"
 
   if ! live_ref="$(gh api "repos/${repository}/git/ref/tags/${tag}")"; then

@@ -28,13 +28,13 @@ temporary="$(mktemp -d "${TMPDIR:-/tmp}/sek-release-record.XXXXXX")"
 trap 'rm -rf "$temporary"' EXIT
 gh api --method GET "repos/${host_repository}/contents/${record_path}?ref=${ref}" > "$temporary/envelope.json"
 jq -e --arg path "$record_path" '.type == "file" and .encoding == "base64" and .path == $path and (.sha | test("^[0-9a-f]{40}$"))' "$temporary/envelope.json" >/dev/null || { echo 'Invalid host contents envelope.' >&2; exit 1; }
-# Python works with both BSD and GNU base64/sha utilities.
+# Decode consistently on BSD/GNU systems; Git supplies the object identity.
 python3 - "$temporary/envelope.json" "$temporary/record.json" <<'PY'
-import base64, json, hashlib, sys
+import base64, json, subprocess, sys
 from pathlib import Path
 envelope = json.loads(Path(sys.argv[1]).read_text())
 content = base64.b64decode(envelope['content'])
-blob = hashlib.sha1(b'blob ' + str(len(content)).encode() + b'\0' + content).hexdigest()
+blob = subprocess.run(['git', 'hash-object', '--stdin'], input=content, stdout=subprocess.PIPE, check=True).stdout.decode().strip()
 if blob != envelope['sha']: sys.exit('Downloaded record bytes do not match the contents blob.')
 Path(sys.argv[2]).write_bytes(content)
 PY
@@ -43,12 +43,21 @@ jq -e --arg version "$version" --arg state "$state" '.schema_version == 3 and .v
 gh api --method GET "repos/${host_repository}/commits/${ref}" > "$temporary/commit.json"
 jq -e --arg ref "$ref" '.sha == $ref and (.commit.tree.sha | test("^[0-9a-f]{40}$"))' "$temporary/commit.json" >/dev/null || { echo 'Host commit does not match the immutable ref.' >&2; exit 1; }
 tree_sha="$(jq -r '.commit.tree.sha' "$temporary/commit.json")"
-gh api --method GET "repos/${host_repository}/git/trees/${tree_sha}?recursive=1" > "$temporary/tree.json"
-jq -e --arg tree "$tree_sha" --arg path "$record_path" --arg blob "$blob_sha" '
-  .sha == $tree and .truncated == false and
-  ([.tree[] | select(.path == $path)] | length == 1) and
-  ([.tree[] | select(.path == $path and .type == "blob" and .sha == $blob)] | length == 1)
-' "$temporary/tree.json" >/dev/null || { echo 'Host tree is truncated, mismatched, or does not bind the record blob.' >&2; exit 1; }
+# Bind every path component to the preceding tree without a recursive listing.
+IFS='/' read -r -a components <<< "$record_path"
+for i in "${!components[@]}"; do
+  kind=tree
+  (( i == ${#components[@]} - 1 )) && kind=blob
+  gh api --method GET "repos/${host_repository}/git/trees/${tree_sha}" > "$temporary/tree-${i}.json"
+  jq -e --arg tree "$tree_sha" --arg path "${components[$i]}" --arg kind "$kind" '
+    .sha == $tree and .truncated == false and
+    ([.tree[] | select(.path == $path)] | length == 1) and
+    ([.tree[] | select(.path == $path and .type == $kind and (.sha | test("^[0-9a-f]{40}$")))] | length == 1)
+  ' "$temporary/tree-${i}.json" >/dev/null || { echo 'Host tree is truncated, mismatched, or does not bind the record blob.' >&2; exit 1; }
+  tree_sha="$(jq -r --arg path "${components[$i]}" '.tree[] | select(.path == $path) | .sha' "$temporary/tree-${i}.json")"
+done
+[[ "$tree_sha" == "$blob_sha" ]] || { echo 'Host tree does not bind the record blob.' >&2; exit 1; }
+jq -s '.' "$temporary"/tree-*.json > "$temporary/tree.json"
 cp "$temporary/record.json" "$temporary/commit.json" "$temporary/tree.json" "$output_dir/"
 jq -n --arg host "$host_repository" --arg ref "$ref" --arg path "$record_path" --arg blob "$blob_sha" \
   '{host_repository:$host,host_ref:$ref,record_path:$path,record_blob_sha:$blob}' > "$manifest_path"

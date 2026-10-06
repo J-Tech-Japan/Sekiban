@@ -26,6 +26,7 @@ REPO = 'J-Tech-Japan/Sekiban'
 HOST = 'J-Tech-Japan/SekibanIntentHost'
 HOST_REF = 'a' * 40
 TREE = 'b' * 40
+PATH_TREES = [TREE, 'd' * 40, 'e' * 40, 'f' * 40]
 CHECKS = [('dcbTestsNet9', 'run_test_dcb.yml', 'dcbTestsNet9'),
           ('dcbTestsNet10', 'run_test_dcb.yml', 'dcbTestsNet10'),
           ('packagedConsumer', 'dcb_azure_queue_packaged_consumer.yml', 'packaged-consumer'),
@@ -156,8 +157,9 @@ class Fixture:
         self.temp=root/'runner-temp'; self.temp.mkdir()
         self.env=os.environ.copy(); self.env.update({'FIXTURE_ROOT':str(root),'PATH':str(self.shims)+':'+os.environ['PATH'],
            'GITHUB_REPOSITORY':REPO,'GITHUB_WORKSPACE':str(self.repo),'RUNNER_TEMP':str(self.temp),
-           'GITHUB_ENV':str(root/'github.env'),'GITHUB_RUN_ATTEMPT':'1','GH_TOKEN':'workflow-token',
+           'GITHUB_ENV':str(root/'github.env'),'GITHUB_RUN_ATTEMPT':'1',
            'SEKIBAN_RELEASE_RECORD_REF':HOST_REF,'VERSION':version})
+        self.env.pop('GH_TOKEN', None)
         self.local=root/'packed'; self.local.mkdir()
         for id in self.ids: self.package(self.local/f'{id}.{version}.nupkg',id)
         self.template_package=self.local/f'Sekiban.Dcb.Templates.{version}.nupkg'
@@ -184,11 +186,16 @@ class Fixture:
 
     def save(self):
         content=(json.dumps(self.record,ensure_ascii=False)+'\n').encode()
-        blob=hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()
+        blob=subprocess.run(['git','hash-object','--stdin'],input=content,stdout=subprocess.PIPE,check=True).stdout.decode().strip()
         path=f'intents/sekiban/releases/dcb-v{self.version}-release-record.json'
         self.api[f'repos/{HOST}/contents/{path}?ref={HOST_REF}']={'type':'file','encoding':'base64','path':path,'sha':blob,'content':base64.b64encode(content).decode()}
         self.api[f'repos/{HOST}/commits/{HOST_REF}']={'sha':HOST_REF,'commit':{'tree':{'sha':TREE}}}
-        self.api[f'repos/{HOST}/git/trees/{TREE}?recursive=1']={'sha':TREE,'truncated':False,'tree':[{'path':path,'type':'blob','sha':blob}]}
+        for i, component in enumerate(path.split('/')):
+            last = i == len(PATH_TREES)-1
+            self.api[f'repos/{HOST}/git/trees/{PATH_TREES[i]}']={'sha':PATH_TREES[i],'truncated':False,
+                'tree':[{'path':component,'type':'blob' if last else 'tree','sha':blob if last else PATH_TREES[i+1]}]}
+        # A large host repository cannot safely be verified with recursive listing.
+        self.api[f'repos/{HOST}/git/trees/{TREE}?recursive=1']={'sha':TREE,'truncated':True,'tree':[]}
         write_json(self.root/'api.json',self.api)
 
     def validate(self,state='prepared'):
@@ -197,8 +204,12 @@ class Fixture:
         env=self.env.copy(); env['GH_TOKEN']='host-token'
         run(['bash',str(self.repo/REL/'read-host-release-record.sh'),'--version',self.version,'--state',state,
              '--output-dir',str(bundle),'--manifest',str(bundle/'bundle.json')],self.repo,env)
+        return self.validate_bundle(state)
+
+    def validate_bundle(self,state='prepared'):
+        bundle=self.temp/'dcb-release-record-bundle'
         return run([self.dotnet,str(self.dll),'release-record','--bundle',str(bundle),'--manifest',str(bundle/'bundle.json'),
-             '--repo-root',str(self.repo),'--expected-version',self.version,'--state',state,'--merged-sha-output',str(self.temp/'validated-merged-sha.txt')],self.repo,self.env)
+             '--repo-root',str(self.repo),'--expected-version',self.version,'--state',state,'--merged-sha-output',str(self.temp/'validated-merged-sha.txt')],self.repo,{**self.env,'GH_TOKEN':'workflow-token'})
 
     def publish(self,template=False):
         for pkg in (self.repo/'out').glob('*.nupkg'):
@@ -217,6 +228,7 @@ class Fixture:
               'secrets.SEKIBAN_RELEASE_RECORD_TOKEN':'host-token','secrets.NUGET_APIKEY':'offline-never-used',
               'vars.SEKIBAN_RELEASE_RECORD_REF':HOST_REF}
         trace=[]
+        self.workflow_trace=trace
         out=self.repo/'out'; shutil.rmtree(out,ignore_errors=True); out.mkdir()
         if not template:
             self.api.pop(f'repos/{REPO}/git/ref/tags/dcbTemplates-v{self.version}',None)
@@ -247,6 +259,19 @@ class Fixture:
                 continue
             def substitute(value):
                 return re.sub(r'\$\{\{\s*([^}]+?)\s*\}\}',lambda m:expr[m[1].strip()],str(value))
+            if template and name=='Enforce template live guard before push':
+                case=getattr(self,'late_mutation',None)
+                release=self.api[f'repos/{REPO}/releases/tags/dcb-v{self.version}']
+                if case=='late-library-release-draft': release['draft']=True
+                elif case=='late-library-release-25-assets': release['assets'].pop()
+                elif case=='late-library-release-wrong-body': release['body']='edited after verification'
+                elif case=='late-library-release-recreated': release['published_at']='2026-09-14T20:00:00Z'
+                elif case=='late-library-release-deleted':
+                    self.api[f'repos/{REPO}/releases/tags/dcb-v{self.version}']={'_error':404}
+                elif case=='late-library-wrong-peel':
+                    self.api[f'repos/{REPO}/git/tags/{self.tags[f"dcb-v{self.version}"]}']['object']['sha']='c'*40
+                if case: write_json(self.root/'api.json',self.api)
+                if getattr(self,'missing_guard_token',False): step.get('env',{}).pop('GH_TOKEN',None)
             env=self.env.copy(); env.update({k:substitute(v) for k,v in step.get('env',{}).items()})
             script=substitute(step['run']).replace('--timeout-seconds 900','--timeout-seconds 10').replace('--interval-seconds 15','--interval-seconds 1')
             # Replaced only the external timeout; every guard's literal run block executes.
@@ -265,7 +290,9 @@ class Fixture:
 
 def mutate(f,case):
     route=f'repos/{REPO}/actions/runs/100'; run_api=f.api[route]
-    if case=='wrong-merged-sha': f.record['merged_sha']='c'*40
+    if case.startswith('late-'): f.late_mutation=case
+    elif case=='template-guard-missing-token': f.missing_guard_token=True
+    elif case=='wrong-merged-sha': f.record['merged_sha']='c'*40
     elif case=='merged-sha-not-on-main': pass
     elif case=='wrong-check-head': run_api['head_sha']='c'*40
     elif case=='wrong-workflow': run_api['path']='.github/workflows/dcb_postgres_packaged_consumer.yml'
@@ -333,7 +360,13 @@ INTEGRATION_CASES={**{k:v for k,v in RECORD_CASES.items() if k in ['wrong-merged
  'library-lightweight-tag':'must be an annotated tag', 'template-lightweight-tag':'must be an annotated tag',
  'library-wrong-peel':'does not point at the validated merged SHA', 'template-wrong-peel':'peeled commit does not match',
  'library-release-draft':'non-draft', 'library-release-25-assets':'exactly 26 package assets',
- 'library-release-wrong-body':'body does not exactly match', 'authority-mismatch':'expected'}
+ 'library-release-wrong-body':'body does not exactly match', 'authority-mismatch':'expected',
+ 'late-library-release-draft':'non-draft', 'late-library-release-25-assets':'exactly 26 package assets',
+ 'late-library-release-wrong-body':'body does not exactly match',
+ 'late-library-release-recreated':'strictly later than the library release',
+ 'late-library-release-deleted':'Unable to read live library GitHub Release',
+ 'late-library-wrong-peel':'Library tag does not point at the validated merged SHA',
+ 'template-guard-missing-token':'wrong token'}
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -342,9 +375,18 @@ def main():
     args=parser.parse_args(); source=args.repo_root.resolve()
     with tempfile.TemporaryDirectory(prefix='sek-g122-') as temp:
         root=Path(temp)
+        # Always run the incremental build: MSBuild detects missing/stale outputs,
+        # including changed sources and project/import inputs, for every caller.
+        build_host=root/'build-host'; build_host.mkdir()
+        write_json(build_host/'global.json',{'sdk':{'version':'10.0.100','rollForward':'latestFeature','allowPrerelease':False}})
+        print(run(['dotnet','build',str(source/REL/'Sekiban.Dcb.TemplateValidation.csproj'),
+                   '-c','Release','--nologo','-p:NuGetAudit=false'],build_host),flush=True)
         for version in VERSIONS:
             f=Fixture(source,root/('pass-'+version),version)
-            f.validate(); print(f'PASS validator prepared {version} (older main ancestor; successful rerun attempt 2)',flush=True)
+            f.validate()
+            assert f'repos/{HOST}/git/trees/{TREE}?recursive=1' not in (f.root/'api-trace').read_text().splitlines()
+            print(f'PASS reader recursive listing truncated but path walk succeeds {version}',flush=True)
+            print(f'PASS validator prepared {version} (older main ancestor; successful rerun attempt 2)',flush=True)
             f.record.update(stage='complete',published={key:f'https://github.com/{REPO}/releases/tag/{tag}' for key,tag in [('library_release_url',f'dcb-v{version}'),('template_release_url',f'dcbTemplates-v{version}')]}); f.save(); f.validate('complete')
             print(f'PASS validator complete {version}',flush=True)
             f.record.pop('published'); f.record['stage']='prepared'; f.save()
@@ -358,7 +400,7 @@ def main():
         cases=RECORD_CASES if args.self_test else INTEGRATION_CASES
         for case,reason in cases.items():
             f=Fixture(source,root/case,VERSIONS[0])
-            template_case=not args.self_test and (case.startswith('template-') or case.startswith('library-release-') or case=='authority-mismatch')
+            template_case=not args.self_test and (case.startswith('template-') or case.startswith('library-release-') or case.startswith('late-') or case=='authority-mismatch')
             if template_case: f.workflow('library')
             mutate(f,case)
             # Prove a failed validation removes stale output.
@@ -370,6 +412,10 @@ def main():
                     f.workflow('template')
             except Failure as error:
                 if reason not in str(error): raise Failure(f'{case}: wrong failure (wanted {reason}): {error}')
+                if case.startswith('late-') or case=='template-guard-missing-token':
+                    assert 'Verify published library/template parity before pack' in f.workflow_trace
+                    assert f.workflow_trace[-1]=='Enforce template live guard before push'
+                    assert 'Push Template' not in f.workflow_trace
                 if case in RECORD_CASES and (f.temp/'validated-merged-sha.txt').exists(): raise Failure('Stale validated output survived rejection')
                 print(f'PASS rejects {case}: {reason}',flush=True)
             else: raise Failure(f'{case} unexpectedly passed')
@@ -381,21 +427,37 @@ def main():
                     if reason not in str(error): raise
                     print(f'PASS rejects {case}: {reason}',flush=True)
                 else: raise Failure(case+' unexpectedly passed')
-        if args.self_test:
-            for case,reason in [('reader-blob-mismatch','record bytes do not match'),('reader-commit-mismatch','Host commit does not match'),('reader-tree-blob-mismatch','does not bind'),('reader-truncated-tree','Host tree is truncated')]:
-                f=Fixture(source,root/case,VERSIONS[0])
-                path=f'intents/sekiban/releases/dcb-v{f.version}-release-record.json'
-                if case=='reader-blob-mismatch': f.api[f'repos/{HOST}/contents/{path}?ref={HOST_REF}']['sha']='c'*40
-                elif case=='reader-commit-mismatch': f.api[f'repos/{HOST}/commits/{HOST_REF}']['sha']='c'*40
-                elif case=='reader-tree-blob-mismatch': f.api[f'repos/{HOST}/git/trees/{TREE}?recursive=1']['tree'][0]['sha']='c'*40
-                else: f.api[f'repos/{HOST}/git/trees/{TREE}?recursive=1']['truncated']=True
-                write_json(f.root/'api.json',f.api)
-                try: f.validate()
-                except Failure as error:
-                    if reason not in str(error): raise
-                    assert not (f.temp/'validated-merged-sha.txt').exists()
-                    print(f'PASS rejects {case}: {reason}',flush=True)
-                else: raise Failure(case+' unexpectedly passed')
+        # Reader rejection coverage applies to both the full and self-test entry points.
+        for case,reason in [('reader-blob-mismatch','record bytes do not match'),('reader-commit-mismatch','Host commit does not match'),('reader-tree-blob-mismatch','does not bind'),('reader-truncated-tree','Host tree is truncated'),('reader-intermediate-tree-mismatch','Host tree is truncated'),('reader-intermediate-wrong-type','does not bind')]:
+            f=Fixture(source,root/case,VERSIONS[0])
+            path=f'intents/sekiban/releases/dcb-v{f.version}-release-record.json'
+            if case=='reader-blob-mismatch': f.api[f'repos/{HOST}/contents/{path}?ref={HOST_REF}']['sha']='c'*40
+            elif case=='reader-commit-mismatch': f.api[f'repos/{HOST}/commits/{HOST_REF}']['sha']='c'*40
+            elif case=='reader-tree-blob-mismatch': f.api[f'repos/{HOST}/git/trees/{PATH_TREES[-1]}']['tree'][0]['sha']='c'*40
+            elif case=='reader-intermediate-tree-mismatch': f.api[f'repos/{HOST}/git/trees/{PATH_TREES[1]}']['sha']='c'*40
+            elif case=='reader-intermediate-wrong-type': f.api[f'repos/{HOST}/git/trees/{PATH_TREES[1]}']['tree'][0]['type']='blob'
+            else: f.api[f'repos/{HOST}/git/trees/{TREE}']['truncated']=True
+            write_json(f.root/'api.json',f.api)
+            try: f.validate()
+            except Failure as error:
+                if reason not in str(error): raise
+                assert not (f.temp/'validated-merged-sha.txt').exists()
+                print(f'PASS rejects {case}: {reason}',flush=True)
+            else: raise Failure(case+' unexpectedly passed')
+        for case,reason in [('validator-tree-chain-mismatch','Host tree is mismatched'),
+                            ('validator-tree-chain-incomplete','Host tree chain is incomplete')]:
+            f=Fixture(source,root/case,VERSIONS[0]); f.validate()
+            path=f.temp/'dcb-release-record-bundle/tree.json'
+            trees=json.loads(path.read_text())
+            if case.endswith('incomplete'): trees.pop()
+            else: trees[1]['sha']='c'*40
+            write_json(path,trees)
+            try: f.validate_bundle()
+            except Failure as error:
+                if reason not in str(error): raise
+                assert not (f.temp/'validated-merged-sha.txt').exists()
+                print(f'PASS rejects {case}: {reason}',flush=True)
+            else: raise Failure(case+' unexpectedly passed')
     print('All offline tests passed.',flush=True)
 
 if __name__=='__main__':

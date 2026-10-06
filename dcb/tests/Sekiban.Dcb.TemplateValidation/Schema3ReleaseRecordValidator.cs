@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -55,7 +54,7 @@ internal static class Schema3ReleaseRecordValidator
 
     internal static string Validate(string bundle, string manifest, string repoRoot, string version, string state, IReleaseApi api)
     {
-        Require(Regex.IsMatch(version, @"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"), "Invalid release version.");
+        Require(Regex.IsMatch(version, @"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$", RegexOptions.None, TimeSpan.FromSeconds(1)), "Invalid release version.");
         Require(state is "prepared" or "complete", "Stage must be prepared or complete.");
         Require(Path.GetFullPath(manifest) == Path.Combine(Path.GetFullPath(bundle), "bundle.json"), "Detached manifest is not accepted.");
         var index = Read(manifest);
@@ -65,16 +64,27 @@ internal static class Schema3ReleaseRecordValidator
         var path = $"intents/sekiban/releases/dcb-v{version}-release-record.json";
         Require(Text(index, "record_path") == path, "Record path must be version-derived.");
         var bytes = File.ReadAllBytes(Path.Combine(bundle, "record.json"));
-        var blob = Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes($"blob {bytes.Length}\0").Concat(bytes).ToArray()));
+        var blob = ReleaseProcess.Run("git", repoRoot, "hash-object", "--no-filters", "--", Path.GetFullPath(Path.Combine(bundle, "record.json"))).Trim();
         Require(blob == Text(index, "record_blob_sha"), "Record bytes differ from the host blob.");
         var commit = Read(Path.Combine(bundle, "commit.json"));
         Require(Text(commit, "sha") == hostRef, "Host commit is not the requested ref.");
         var treeSha = Text(commit.GetProperty("commit").GetProperty("tree"), "sha");
         Require(Hex(treeSha, 40), "Invalid host tree SHA.");
-        var tree = Read(Path.Combine(bundle, "tree.json"));
-        Require(Text(tree, "sha") == treeSha && tree.GetProperty("truncated").ValueKind == JsonValueKind.False, "Host tree is mismatched or truncated.");
-        var matches = tree.GetProperty("tree").EnumerateArray().Where(e => Text(e, "path") == path).ToArray();
-        Require(matches.Length == 1 && Text(matches[0], "type") == "blob" && Text(matches[0], "sha") == blob, "Host tree does not bind the record blob.");
+        var trees = Read(Path.Combine(bundle, "tree.json")).EnumerateArray().ToArray();
+        var components = path.Split('/');
+        Require(trees.Length == components.Length, "Host tree chain is incomplete.");
+        for (var i = 0; i < components.Length; i++)
+        {
+            var tree = trees[i];
+            Require(Text(tree, "sha") == treeSha && tree.GetProperty("truncated").ValueKind == JsonValueKind.False,
+                "Host tree is mismatched or truncated.");
+            var matches = tree.GetProperty("tree").EnumerateArray().Where(e => Text(e, "path") == components[i]).ToArray();
+            var kind = i == components.Length - 1 ? "blob" : "tree";
+            Require(matches.Length == 1 && Text(matches[0], "type") == kind && Hex(Text(matches[0], "sha"), 40),
+                "Host tree does not bind the record blob.");
+            treeSha = Text(matches[0], "sha");
+        }
+        Require(treeSha == blob, "Host tree does not bind the record blob.");
         using var document = JsonDocument.Parse(bytes);
         var record = document.RootElement;
         Members(record, state == "complete"

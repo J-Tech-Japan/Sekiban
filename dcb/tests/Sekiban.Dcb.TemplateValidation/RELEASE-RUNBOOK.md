@@ -14,8 +14,10 @@ they are not publication-gate inputs.
    head; if main has moved, create a temporary branch at `merged_sha` and
    dispatch the checks from it. The commit must remain an ancestor of main.
    `run_test_dcb.yml` also runs the Cosmos emulator job: the **whole run** must
-   conclude success. Handle a flake by re-running the failed job. Attempts are
-   not pinned; a successful retry is accepted, while a later failed or running
+   conclude success. Handle a flake by re-running **all jobs** of the run, not only the failed
+   jobs. The mapped jobs must have the latest run attempt number; whether GitHub
+   preserves old attempt numbers for successful jobs after a partial re-run is
+   unverified. Attempts are not pinned; a successful retry is accepted, while a later failed or running
    retry invalidates the recorded success.
 3. Write one host record at
    `intents/sekiban/releases/dcb-v{V}-release-record.json`:
