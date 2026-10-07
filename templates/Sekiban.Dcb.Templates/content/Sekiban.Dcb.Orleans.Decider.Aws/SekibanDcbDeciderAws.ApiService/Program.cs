@@ -41,6 +41,7 @@ builder.AddServiceDefaults();
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
 
 // Add global exception handler
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();

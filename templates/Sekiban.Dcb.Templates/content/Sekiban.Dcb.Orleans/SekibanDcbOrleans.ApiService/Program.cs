@@ -51,6 +51,7 @@ builder.AddServiceDefaults();
 builder.Services.AddHealthChecks()
     .AddCheck<OrleansHealthCheck>("orleans", tags: ["ready"]);
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
 builder.Services.AddOpenApi();
 
 // Configuration switches for Orleans
@@ -566,7 +567,7 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student created successfully"
                     });
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("CreateStudent");
 apiRoute
@@ -591,7 +592,7 @@ apiRoute
                 return Results.Ok(queryResult.Items);
             }
 
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("GetStudentList");
 apiRoute
@@ -632,7 +633,7 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "ClassRoom created successfully"
                     });
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("CreateClassRoom");
 apiRoute
@@ -657,7 +658,7 @@ apiRoute
                 return Results.Ok(queryResult.Items);
             }
 
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("GetClassRoomList");
 apiRoute
@@ -699,7 +700,7 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student enrolled successfully"
                     });
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("EnrollStudent");
 apiRoute
@@ -718,7 +719,7 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student dropped successfully"
                     });
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("DropStudent");
 if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
@@ -748,11 +749,11 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                             });
                     }
 
-                    return Results.BadRequest(new { error = result.GetException()?.Message });
+                    return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message }));
                 }
                 catch (Exception ex)
                 {
-                    return Results.Problem(ex.Message);
+                    return ProjectionErrors.Map(ex, Results.Problem(ex.Message));
                 }
             })
             .WithName("DebugGetEvents");
@@ -781,7 +782,7 @@ apiRoute
                 return Results.Ok(queryResult.Items);
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message }));
         })
         .WithName("GetWeatherForecast");
 apiRoute
@@ -808,7 +809,7 @@ apiRoute
                 return Results.Ok(queryResult.Items);
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message }));
         })
         .WithName("GetWeatherForecastGeneric");
 apiRoute
@@ -835,7 +836,7 @@ apiRoute
                 return Results.Ok(queryResult.Items);
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message }));
         })
         .WithName("GetWeatherForecastSingle");
 apiRoute
@@ -853,12 +854,12 @@ apiRoute
                         aggregateId = result.GetValue().Events.FirstOrDefault(m => m.Payload is WeatherForecastCreated)?.Payload.As<WeatherForecastCreated>()?.ForecastId,
                         sortableUniqueId = result.GetValue().SortableUniqueId
                     });
-            return Results.BadRequest(
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(
                 new
                 {
                     success = false,
                     error = result.GetException()?.Message
-                });
+                }));
         })
     .WithName("InputWeatherForecast");
 
@@ -877,12 +878,12 @@ apiRoute
                         aggregateId = command.ForecastId,
                         sortableUniqueId = result.GetValue().SortableUniqueId
                     });
-            return Results.BadRequest(
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(
                 new
                 {
                     success = false,
                     error = result.GetException()?.Message
-                });
+                }));
         })
     .WithName("UpdateWeatherForecastLocation");
 
@@ -909,7 +910,7 @@ apiRoute
                 });
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" }));
         })
         .WithName("GetWeatherForecastCount");
 apiRoute
@@ -936,7 +937,7 @@ apiRoute
                 });
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" }));
         })
         .WithName("GetWeatherForecastCountGeneric");
 apiRoute
@@ -963,7 +964,7 @@ apiRoute
                 });
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" }));
         })
         .WithName("GetWeatherForecastCountSingle");
 apiRoute
@@ -1051,11 +1052,11 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                     if (rb.IsSuccess)
                         return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
                     var err = rb.GetException()?.Message;
-                    return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
+                    return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds }));
                 }
                 catch (Exception ex)
                 {
-                    return Results.BadRequest(new { error = ex.Message });
+                    return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
                 }
             })
             .WithName("PersistProjectionState");
@@ -1075,7 +1076,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 }
                 catch (Exception ex)
                 {
-                    return Results.BadRequest(new { error = ex.Message });
+                    return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
                 }
             })
             .WithName("DeactivateProjection");
@@ -1095,7 +1096,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 }
                 catch (Exception ex)
                 {
-                    return Results.BadRequest(new { error = ex.Message });
+                    return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
                 }
             })
             .WithName("RefreshProjection");
@@ -1111,12 +1112,12 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 {
                     var grain = client.GetGrain<IMultiProjectionGrain>(name);
                     var rb = await grain.GetSnapshotJsonAsync(unsafeState ?? true);
-                    if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
+                    if (!rb.IsSuccess) return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = rb.GetException()?.Message }));
                     return Results.Text(rb.GetValue(), "application/json");
                 }
                 catch (Exception ex)
                 {
-                    return Results.BadRequest(new { error = ex.Message });
+                    return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
                 }
             })
             .WithName("GetProjectionSnapshot");
@@ -1138,7 +1139,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 }
                 catch (Exception ex)
                 {
-                    return Results.BadRequest(new { error = ex.Message });
+                    return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
                 }
             })
             .WithName("OverwriteProjectionPersistedVersion");
@@ -1158,12 +1159,12 @@ apiRoute
                         aggregateId = command.ForecastId,
                         sortableUniqueId = result.GetValue().SortableUniqueId
                     });
-            return Results.BadRequest(
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(
                 new
                 {
                     success = false,
                     error = result.GetException()?.Message
-                });
+                }));
         })
     .WithName("RemoveWeatherForecast");
 
@@ -1186,22 +1187,22 @@ apiRoute
                             message = "Successfully executed query through Orleans",
                             itemCount = result.GetValue().TotalCount
                         });
-                return Results.Ok(
+                return ProjectionErrors.Map(result.GetException(), Results.Ok(
                     new
                     {
                         status = "Orleans query failed",
                         error = result.GetException()?.Message ?? "Unknown error"
-                    });
+                    }));
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Orleans test failed");
-                return Results.Ok(
+                return ProjectionErrors.Map(ex, Results.Ok(
                     new
                     {
                         status = "Orleans test failed",
                         error = ex.Message
-                    });
+                    }));
             }
         })
         .WithName("TestOrleans");

@@ -1,3 +1,4 @@
+using SekibanDcbDeciderAws.ApiService;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb.Orleans.Grains;
 
@@ -44,7 +45,7 @@ public static class ProjectionEndpoints
         }
         var err = rb.GetException()?.Message;
         logger.LogWarning("PersistProjectionState failure: name={Name}, elapsed={ElapsedMs:F1}ms, error={Error}", name, elapsedMs, err);
-        return Results.BadRequest(new { error = err, elapsedMs });
+        return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = err, elapsedMs }));
     }
 
     private static async Task<IResult> DeactivateProjectionAsync(
@@ -72,7 +73,7 @@ public static class ProjectionEndpoints
     {
         var grain = client.GetGrain<IMultiProjectionGrain>(name);
         var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
-        if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
+        if (!rb.IsSuccess) return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = rb.GetException()?.Message }));
         return Results.Text(rb.GetValue(), "application/json");
     }
 

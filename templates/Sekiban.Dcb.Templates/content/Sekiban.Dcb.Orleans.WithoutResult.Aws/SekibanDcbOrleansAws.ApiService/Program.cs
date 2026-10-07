@@ -43,6 +43,7 @@ builder.AddServiceDefaults();
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
 
 // Add global exception handler
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -818,7 +819,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 }
                 var err = rb.GetException()?.Message;
                 Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
-                return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
+                return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds }));
             })
         .WithOpenApi()
         .WithName("PersistProjectionState");
@@ -863,7 +864,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
             {
                 var grain = client.GetGrain<IMultiProjectionGrain>(name);
                 var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
-                if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
+                if (!rb.IsSuccess) return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = rb.GetException()?.Message }));
                 return Results.Text(rb.GetValue(), "application/json");
             })
         .WithOpenApi()
