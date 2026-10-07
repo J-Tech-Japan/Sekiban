@@ -22,6 +22,13 @@ public class GlobalExceptionHandler : IExceptionHandler
     {
         var problemDetails = exception switch
         {
+            BadHttpRequestException badRequest => new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = badRequest.Message
+            },
+
             NotFoundException notFound => new ProblemDetails
             {
                 Status = StatusCodes.Status404NotFound,
