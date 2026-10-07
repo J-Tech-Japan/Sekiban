@@ -1,3 +1,5 @@
+using Azure.Storage.Queues;
+using System.Net;
 using SekibanDcbOrleans.ApiService;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
@@ -118,43 +120,151 @@ builder.UseOrleans(config =>
         }
     }
 
-    // Use in-memory streams (configured via Orleans:UseInMemoryStreams in appsettings)
-    config.AddMemoryStreams("EventStreamProvider", configurator =>
+    var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    if (useInMemoryStreams)
     {
-        // Increase partitions for better parallelism
-        configurator.ConfigurePartitioning(8);
-
-        // Configure pulling agent for better batch processing
-        configurator.ConfigurePullingAgent(options =>
+        config.AddMemoryStreams("EventStreamProvider", configurator =>
         {
-            options.Configure(opt =>
+            configurator.ConfigurePartitioning(8);
+            configurator.ConfigurePullingAgent(options =>
             {
-                // Process events more frequently
-                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
-                // Increase batch size for better throughput
-                opt.BatchContainerBatchSize = 100;
+                options.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                    opt.BatchContainerBatchSize = 100;
+                });
             });
         });
-    });
-
-    config.AddMemoryStreams("DcbOrleansQueue", configurator =>
-    {
-        configurator.ConfigurePartitioning(8);
-        configurator.ConfigurePullingAgent(options =>
+        config.AddMemoryStreams("DcbOrleansQueue", configurator =>
         {
-            options.Configure(opt =>
+            configurator.ConfigurePartitioning(8);
+            configurator.ConfigurePullingAgent(options =>
             {
-                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
-                opt.BatchContainerBatchSize = 100;
+                options.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                    opt.BatchContainerBatchSize = 100;
+                });
             });
         });
-    });
+        config.AddMemoryGrainStorage("PubSubStore");
+    }
+    else
+    {
+        if ((builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower() == "eventhub")
+        {
+            config.AddEventHubStreams(
+                "EventStreamProvider",
+                configurator =>
+                {
+                    // Existing Event Hub connection settings
+                    configurator.ConfigureEventHub(ob => ob.Configure(options =>
+                    {
+                        options.ConfigureEventHubConnection(
+                            builder.Configuration.GetConnectionString("OrleansEventHub"),
+                            builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
+                            "$Default");
+                    }));
+                    // 🔑 NEW –‑ tell Orleans where to persist checkpoints
+                    configurator.UseAzureTableCheckpointer(ob => ob.Configure(cp =>
+                    {
+                        cp.TableName = "EventHubCheckpointsEventStreamsProvider"; // any table name you like
+                        cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
+                        cp.TableServiceClient = new TableServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
+                    }));
+                });
+            config.AddEventHubStreams(
+                "DcbOrleansQueue",
+                configurator =>
+                {
+                    // Existing Event Hub connection settings
+                    configurator.ConfigureEventHub(ob => ob.Configure(options =>
+                    {
+                        options.ConfigureEventHubConnection(
+                            builder.Configuration.GetConnectionString("OrleansEventHub"),
+                            builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
+                            "$Default");
+                    }));
 
-    // Add memory storage for PubSubStore when using in-memory streams
-    config.AddMemoryGrainStorage("PubSubStore");
+                    // 🔑 NEW –‑ tell Orleans where to persist checkpoints
+                    configurator.UseAzureTableCheckpointer(ob => ob.Configure(cp =>
+                    {
+                        cp.TableName = "EventHubCheckpointsOrleansSekibanQueue"; // any table name you like
+                        cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
+                        cp.TableServiceClient = new TableServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
+                    }));
 
-    // Flag to track that we're using in-memory streams
-    var useInMemoryStreams = true;
+                    // …your cache, queue‑mapper, pulling‑agent settings remain unchanged …
+                });
+        }
+        else
+        {
+            config.AddAzureQueueStreams(
+                "EventStreamProvider",
+                options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = new QueueServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansQueue"));
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-eventstreamprovider-0",
+                            "dcborleans-eventstreamprovider-1",
+                            "dcborleans-eventstreamprovider-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    });
+                });
+            config.ConfigureServices(services =>
+            {
+                services.Configure<HashRingStreamQueueMapperOptions>(
+                    "EventStreamProvider",
+                    o => o.TotalQueueCount = 3);
+                services.Configure<StreamPullingAgentOptions>(
+                    "EventStreamProvider",
+                    opt =>
+                    {
+                        opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                        opt.BatchContainerBatchSize = 256;
+                        opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                    });
+            });
+            config.AddAzureQueueStreams(
+                "DcbOrleansQueue",
+                options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = new QueueServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansQueue"));
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-queue-0",
+                            "dcborleans-queue-1",
+                            "dcborleans-queue-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    });
+                });
+            config.ConfigureServices(services =>
+            {
+                services.Configure<HashRingStreamQueueMapperOptions>(
+                    "DcbOrleansQueue",
+                    o => o.TotalQueueCount = 3);
+                services.Configure<StreamPullingAgentOptions>(
+                    "DcbOrleansQueue",
+                    opt =>
+                    {
+                        opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                        opt.BatchContainerBatchSize = 256;
+                        opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                    });
+            });
+        }
+    }
 
     // Configure grain storage providers
     if (cfgGrainDefault == "cosmos")
@@ -319,6 +429,31 @@ builder.UseOrleans(config =>
     }
 
     // Orleans will automatically discover grains in the same assembly
+    // Check for VNet IP Address from environment variable APP Service specific setting
+    if (!string.IsNullOrWhiteSpace(builder.Configuration["WEBSITE_PRIVATE_IP"]) &&
+        !string.IsNullOrWhiteSpace(builder.Configuration["WEBSITE_PRIVATE_PORTS"]))
+    {
+        // Get IP and ports from environment variables
+        var ip = IPAddress.Parse(builder.Configuration["WEBSITE_PRIVATE_IP"]!);
+        var ports = builder.Configuration["WEBSITE_PRIVATE_PORTS"]!.Split(',');
+        if (ports.Length < 2) throw new Exception("Insufficient number of private ports");
+        int siloPort = int.Parse(ports[0]), gatewayPort = int.Parse(ports[1]);
+        config.ConfigureEndpoints(ip, siloPort, gatewayPort, true);
+    }
+
+    else if (!builder.Environment.IsDevelopment())
+    {
+        // Container Apps ports match the shipped additionalPortMappings.
+        config.Configure<EndpointOptions>(options =>
+        {
+            options.SiloPort = 11111;
+            options.GatewayPort = 30000;
+            options.AdvertisedIPAddress = GetPrivateIpAddress();
+            options.SiloListeningEndpoint = new IPEndPoint(IPAddress.Any, 11111);
+            options.GatewayListeningEndpoint = new IPEndPoint(IPAddress.Any, 30000);
+        });
+    }
+
     config.ConfigureServices(services =>
     {
         services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
@@ -442,7 +577,6 @@ builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
     return new AzureBlobStorageSnapshotAccessor(blobServiceClient, containerName);
 });
 // Note: IEventSubscription is now created per-grain via IEventSubscriptionResolver
-builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 
@@ -1132,6 +1266,23 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
 app.MapDefaultEndpoints();
 
 app.Run();
+
+static IPAddress GetPrivateIpAddress()
+{
+    // Get the first non-loopback IPv4 address
+    var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
+    foreach (var ip in host.AddressList)
+    {
+        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+            !IPAddress.IsLoopback(ip))
+        {
+            return ip;
+        }
+    }
+
+    // Last resort: return loopback
+    return IPAddress.Loopback;
+}
 
 // Response shape for /api/weatherforecast-uwmv. Declared as a file-scoped record so the
 // endpoint can avoid `SELECT *` (which would couple the API to framework-managed metadata
