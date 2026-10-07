@@ -70,7 +70,8 @@ if (string.IsNullOrEmpty(authConnectionString))
         authConnectionString = $"Host={identityHost};Port={identityPort};Database={identityDatabase};Username={identityUsername};Password={identityPassword}";
     }
 }
-if (!string.IsNullOrEmpty(authConnectionString))
+JwtSettings.ValidateStartup(builder.Environment.EnvironmentName, builder.Configuration["Jwt:SecretKey"], authConnectionString);
+if (!string.IsNullOrWhiteSpace(authConnectionString))
 {
     builder.Services.AddAuthServices(builder.Configuration, authConnectionString);
     // Add background service to initialize auth database and seed users

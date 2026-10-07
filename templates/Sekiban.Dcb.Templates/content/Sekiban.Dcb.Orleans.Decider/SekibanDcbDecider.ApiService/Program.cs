@@ -76,8 +76,10 @@ builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // Add Authentication & Identity
-var authConnectionString = builder.Configuration.GetConnectionString("IdentityPostgres")
-    ?? throw new InvalidOperationException("PostgreSQL connection string 'IdentityPostgres' not found");
+var authConnectionString = builder.Configuration.GetConnectionString("IdentityPostgres");
+JwtSettings.ValidateStartup(builder.Environment.EnvironmentName, builder.Configuration["Jwt:SecretKey"], authConnectionString);
+if (string.IsNullOrWhiteSpace(authConnectionString))
+    throw new InvalidOperationException("PostgreSQL connection string 'IdentityPostgres' not found");
 if (builder.Configuration.GetValue<bool>(EnsurePostgresDatabaseExistsConfigKey))
 {
     await EnsurePostgresDatabaseExistsAsync(builder.Configuration.GetConnectionString("DcbPostgres"));

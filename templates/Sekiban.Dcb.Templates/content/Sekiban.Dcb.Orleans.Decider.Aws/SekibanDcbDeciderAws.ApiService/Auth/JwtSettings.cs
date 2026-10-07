@@ -8,6 +8,14 @@ public class JwtSettings
 {
     public const string SectionName = "Jwt";
 
+    public static void ValidateStartup(string environment, string? secretKey, string? identityConnectionString)
+    {
+        if (TemplateEnvironment.IsDevelopment(environment)) return;
+        ValidateSecretKey(secretKey);
+        if (string.IsNullOrWhiteSpace(identityConnectionString))
+            throw new InvalidOperationException("Identity configuration is required: configure ConnectionStrings:IdentityPostgres or the Identity RDS settings.");
+    }
+
     public static void ValidateSecretKey(string? secretKey)
     {
         if (string.IsNullOrWhiteSpace(secretKey) || secretKey.Length < 32)
