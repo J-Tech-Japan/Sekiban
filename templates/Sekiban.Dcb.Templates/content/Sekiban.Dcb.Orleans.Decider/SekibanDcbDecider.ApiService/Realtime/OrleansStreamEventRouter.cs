@@ -1,3 +1,5 @@
+using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Orleans.Streams;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Events;
@@ -24,6 +26,7 @@ public sealed class OrleansStreamEventRouter : IHostedService, IDisposable
         "ApprovalDecisionRecorded"
     };
 
+    private readonly IServiceIdProvider _serviceIdProvider;
     private readonly IClusterClient _clusterClient;
     private readonly IEventSubscriptionResolver _subscriptionResolver;
     private readonly SseTopicHub _hub;
@@ -33,11 +36,13 @@ public sealed class OrleansStreamEventRouter : IHostedService, IDisposable
 
     public OrleansStreamEventRouter(
         IClusterClient clusterClient,
+        IServiceIdProvider serviceIdProvider,
         IEventSubscriptionResolver subscriptionResolver,
         SseTopicHub hub,
         ILogger<OrleansStreamEventRouter> logger)
     {
         _clusterClient = clusterClient;
+        _serviceIdProvider = serviceIdProvider;
         _subscriptionResolver = subscriptionResolver;
         _hub = hub;
         _logger = logger;
@@ -58,7 +63,7 @@ public sealed class OrleansStreamEventRouter : IHostedService, IDisposable
             {
                 await Task.Delay(delayMs, cancellationToken);
                 // Try to resolve stream to verify Orleans is ready
-                var testDescriptor = _subscriptionResolver.Resolve("ReservationProjector") as OrleansSekibanStream;
+                var testDescriptor = _subscriptionResolver.Resolve(ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), "ReservationProjector")) as OrleansSekibanStream;
                 if (testDescriptor != null)
                 {
                     var testProvider = _clusterClient.GetStreamProvider(testDescriptor.ProviderName);
@@ -75,7 +80,7 @@ public sealed class OrleansStreamEventRouter : IHostedService, IDisposable
 
         try
         {
-            var streamDescriptor = _subscriptionResolver.Resolve("ReservationProjector") as OrleansSekibanStream;
+            var streamDescriptor = _subscriptionResolver.Resolve(ServiceIdGrainKey.Build(_serviceIdProvider.GetCurrentServiceId(), "ReservationProjector")) as OrleansSekibanStream;
             if (streamDescriptor == null)
             {
                 _logger.LogError("Failed to resolve Orleans stream for realtime events.");
