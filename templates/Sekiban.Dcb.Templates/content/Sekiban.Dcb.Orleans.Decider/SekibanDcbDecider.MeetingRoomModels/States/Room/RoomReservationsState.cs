@@ -78,15 +78,20 @@ public record RoomReservationsState : ITagStatePayload
         Guid organizerId,
         ReservationSlotStatus status)
     {
+        var updated = this with
+        {
+            ActiveReservations = new(ActiveReservations),
+            ActiveReservationsByDay = new(ActiveReservationsByDay)
+        };
         if (ActiveReservations.TryGetValue(reservationId, out var existing))
         {
-            RemoveFromDayBuckets(reservationId, existing.StartTime, existing.EndTime);
+            updated.RemoveFromDayBuckets(reservationId, existing.StartTime, existing.EndTime);
         }
 
         var slot = new ReservationSlot(startTime, endTime, purpose, organizerId, status);
-        ActiveReservations[reservationId] = slot;
-        AddToDayBuckets(reservationId, slot);
-        return this;
+        updated.ActiveReservations[reservationId] = slot;
+        updated.AddToDayBuckets(reservationId, slot);
+        return updated;
     }
 
     /// <summary>
@@ -94,13 +99,19 @@ public record RoomReservationsState : ITagStatePayload
     /// </summary>
     public RoomReservationsState RemoveReservation(Guid reservationId)
     {
-        if (!ActiveReservations.Remove(reservationId, out var existing))
+        if (!ActiveReservations.TryGetValue(reservationId, out var existing))
         {
             return this;
         }
 
-        RemoveFromDayBuckets(reservationId, existing.StartTime, existing.EndTime);
-        return this;
+        var updated = this with
+        {
+            ActiveReservations = new(ActiveReservations),
+            ActiveReservationsByDay = new(ActiveReservationsByDay)
+        };
+        updated.ActiveReservations.Remove(reservationId);
+        updated.RemoveFromDayBuckets(reservationId, existing.StartTime, existing.EndTime);
+        return updated;
     }
 
     private IEnumerable<Dictionary<Guid, ReservationSlot>> EnumerateDayBuckets(DateTime startTime, DateTime endTime)
@@ -124,6 +135,9 @@ public record RoomReservationsState : ITagStatePayload
                 ActiveReservationsByDay[day] = bucket;
             }
 
+            // The outer index is copied; copy each touched bucket before writing.
+            bucket = new(bucket);
+            ActiveReservationsByDay[day] = bucket;
             bucket[reservationId] = slot;
         }
     }
@@ -137,6 +151,8 @@ public record RoomReservationsState : ITagStatePayload
                 continue;
             }
 
+            bucket = new(bucket);
+            ActiveReservationsByDay[day] = bucket;
             bucket.Remove(reservationId);
             if (bucket.Count == 0)
             {
