@@ -26,6 +26,8 @@ Azure テンプレートのイベントストアは生成後に `Sekiban:Databas
 dotnet new sekiban-dcb-orleans -n YourProjectName
 ```
 
+プロジェクト名には、`Program` などの C# の型名を使用しないでください。
+
 各テンプレートに共通して含まれるもの:
 
 - Orleans クラスタ + .NET Aspire AppHost

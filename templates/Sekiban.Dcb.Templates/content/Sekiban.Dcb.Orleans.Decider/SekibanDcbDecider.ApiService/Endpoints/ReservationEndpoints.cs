@@ -87,7 +87,7 @@ public static class ReservationEndpoints
         HttpContext httpContext,
         [FromServices] ISekibanExecutor executor)
     {
-        var organizerResult = ReservationOrganizerResolver.Resolve(httpContext, command.OrganizerId, command.OrganizerName);
+        var organizerResult = ReservationOrganizerResolver.Resolve(httpContext);
         if (!organizerResult.IsSuccess)
         {
             return Results.Problem(

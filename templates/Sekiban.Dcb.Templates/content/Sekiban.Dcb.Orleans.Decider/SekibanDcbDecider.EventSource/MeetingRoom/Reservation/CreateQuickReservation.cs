@@ -52,7 +52,7 @@ public record CreateQuickReservation : ICommandWithHandler<CreateQuickReservatio
             throw new ApplicationException("Cannot create reservation in the past");
         }
 
-        ValidateReservationMonth(command.StartTime, DateTime.UtcNow);
+        await ReservationCreationRules.ValidateAsync(context, command.OrganizerId, command.StartTime);
 
         var roomTag = new RoomTag(command.RoomId);
         var roomStateTyped = await context.GetStateAsync<RoomState, RoomProjector>(roomTag);
@@ -137,18 +137,6 @@ public record CreateQuickReservation : ICommandWithHandler<CreateQuickReservatio
             command.Purpose,
             DateTime.UtcNow,
             null).GetEventWithTags());
-    }
-
-    private static void ValidateReservationMonth(DateTime startTime, DateTime nowUtc)
-    {
-        var startMonth = new DateOnly(startTime.Year, startTime.Month, 1);
-        var currentMonth = new DateOnly(nowUtc.Year, nowUtc.Month, 1);
-        var nextMonth = currentMonth.AddMonths(1);
-
-        if (startMonth != currentMonth && startMonth != nextMonth)
-        {
-            throw new ApplicationException("Reservations can only be made for this month or next month.");
-        }
     }
 
     private static List<string> NormalizeSelectedEquipment(

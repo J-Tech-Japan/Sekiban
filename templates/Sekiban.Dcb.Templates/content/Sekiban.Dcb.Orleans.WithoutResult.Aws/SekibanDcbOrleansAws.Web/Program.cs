@@ -61,7 +61,7 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
-app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+app.MapRazorComponents<global::SekibanDcbOrleansAws.Web.Components.App>().AddInteractiveServerRenderMode();
 
 app.MapDefaultEndpoints();
 

@@ -9,12 +9,12 @@ public static class WeatherForecastDeletedDecider
     /// <summary>
     ///     Validate preconditions for applying WeatherForecastDeleted event
     /// </summary>
-    /// <exception cref="InvalidOperationException">When forecast is already deleted</exception>
+    /// <exception cref="ApplicationException">When forecast is already deleted</exception>
     public static void Validate(this WeatherForecastState state)
     {
         if (state.IsDeleted)
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"Cannot delete weather forecast {state.ForecastId} because it has already been deleted");
         }
     }

@@ -15,11 +15,11 @@ Debug event inspection and projection persist, deactivate, refresh, snapshot and
 
 Sample users (including `admin@example.com`, password `Sekiban1234%`) and the fixed JWT signing key are Development-only. Identity tables and roles are initialized in every environment. Registration grants only User. The Blazor Web has no authentication client or login page; use WebNext for registration and login. The AppHost runs WebNext with `next dev`. Its server uses `NODE_ENV` to gate quick login and test-data controls and rejects test-data procedures outside development. Test-data API routes still require authentication in Development.
 
-`Benchmark:AllowDebugUserHeaders` is also a Development-only diagnostic setting.
-
 `Orleans:UseInMemoryStreams` selects memory streams locally. For deployed Azure Queue or Event Hub streams, supply the existing storage/queue configuration in the infrastructure guides; PubSubStore must be persistent.
 
 ## Before production
+
+If the auth database cannot be initialized, `/health` stays unhealthy and the instance must be restarted; hosting platform probes handle this, but a local run does not.
 
 - Set and keep `Sekiban:ServiceId` stable. Its default is `sekiban-app`; it partitions events, projections, streams and materialized views. Use a distinct identity when applications share a backend. `Orleans:ServiceId` is a separate cluster setting. For a project generated earlier with data under `default`, retain its existing identity.
 - Configure durable storage, clustering, stream delivery, snapshot access and allowed CORS origins for your deployment. Test restart recovery and your multi-silo topology.

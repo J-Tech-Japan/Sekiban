@@ -42,7 +42,7 @@ public class WeatherForecastDeciderTests
     {
         var state = new WeatherForecastState(_forecastId, "Tokyo", new DateOnly(2026, 3, 20), 25, "Sunny", IsDeleted: true);
 
-        Assert.Throws<InvalidOperationException>(() => WeatherForecastUpdatedDecider.Validate(state));
+        Assert.Throws<ApplicationException>(() => WeatherForecastUpdatedDecider.Validate(state));
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class WeatherForecastDeciderTests
     {
         var state = new WeatherForecastState(_forecastId, "Tokyo", new DateOnly(2026, 3, 20), 25, "Sunny", IsDeleted: true);
 
-        Assert.Throws<InvalidOperationException>(() => WeatherForecastDeletedDecider.Validate(state));
+        Assert.Throws<ApplicationException>(() => WeatherForecastDeletedDecider.Validate(state));
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class WeatherForecastDeciderTests
     {
         var state = new WeatherForecastState(_forecastId, "Tokyo", new DateOnly(2026, 3, 20), 25, "Sunny", IsDeleted: true);
 
-        Assert.Throws<InvalidOperationException>(() => LocationNameChangedDecider.Validate(state, "Osaka"));
+        Assert.Throws<ApplicationException>(() => LocationNameChangedDecider.Validate(state, "Osaka"));
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class WeatherForecastDeciderTests
     {
         var state = new WeatherForecastState(_forecastId, "Tokyo", new DateOnly(2026, 3, 20), 25, "Sunny");
 
-        Assert.Throws<InvalidOperationException>(() => LocationNameChangedDecider.Validate(state, "Tokyo"));
+        Assert.Throws<ApplicationException>(() => LocationNameChangedDecider.Validate(state, "Tokyo"));
     }
 
     [Fact]

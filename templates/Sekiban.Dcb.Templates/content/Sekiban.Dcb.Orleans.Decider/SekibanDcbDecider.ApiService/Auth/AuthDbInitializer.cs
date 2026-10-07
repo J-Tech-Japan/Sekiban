@@ -1,3 +1,4 @@
+using SekibanDcbDecider.ApiService.Health;
 using Dcb.EventSource.MeetingRoom.User;
 using Dcb.MeetingRoomModels.States.UserAccess;
 using Dcb.MeetingRoomModels.States.UserDirectory;
@@ -22,6 +23,7 @@ public class AuthDbInitializer : BackgroundService
     private readonly IClusterClient _clusterClient;
     private readonly IHostEnvironment _environment;
     private readonly IConfiguration _configuration;
+    private readonly AuthInitializationHealthCheck _readiness;
     private const int MaxRetries = 10;
     private const int RetryDelayMs = 2000;
     private const int OrleansWaitDelayMs = 1000;
@@ -32,13 +34,15 @@ public class AuthDbInitializer : BackgroundService
         ILogger<AuthDbInitializer> logger,
         IClusterClient clusterClient,
         IHostEnvironment environment,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        AuthInitializationHealthCheck readiness)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
         _clusterClient = clusterClient;
         _environment = environment;
         _configuration = configuration;
+        _readiness = readiness;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -77,13 +81,15 @@ public class AuthDbInitializer : BackgroundService
                 else
                     await SeedInitialAdminAsync(userManager, executor);
 
+                _readiness.MarkInitialized();
                 _logger.LogInformation("Authentication database initialization completed successfully");
                 return;
             }
-            catch (Exception ex) when (i < MaxRetries - 1)
+            catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Database initialization attempt {Attempt} failed, retrying...", i + 1);
-                await Task.Delay(RetryDelayMs, stoppingToken);
+                _logger.LogWarning(ex, "Database initialization attempt {Attempt} failed", i + 1);
+                if (i < MaxRetries - 1)
+                    await Task.Delay(RetryDelayMs, stoppingToken);
             }
         }
 
@@ -192,7 +198,9 @@ public class AuthDbInitializer : BackgroundService
             if (!await roleManager.RoleExistsAsync(role))
             {
                 _logger.LogInformation("Creating role: {Role}", role);
-                await roleManager.CreateAsync(new IdentityRole(role));
+                var result = await roleManager.CreateAsync(new IdentityRole(role));
+                if (!result.Succeeded)
+                    throw new InvalidOperationException($"Failed to create role {role}: {string.Join(", ", result.Errors.Select(e => e.Code))}");
             }
         }
     }

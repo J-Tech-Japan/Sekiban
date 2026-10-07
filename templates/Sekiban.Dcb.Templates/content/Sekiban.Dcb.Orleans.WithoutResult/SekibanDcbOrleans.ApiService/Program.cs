@@ -68,7 +68,6 @@ builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 
-
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
@@ -903,7 +902,6 @@ apiRoute
         })
     .WithName("InputWeatherForecast");
 
-
 apiRoute
     .MapPost(
         "/updateweatherforecastlocation",
@@ -920,7 +918,6 @@ apiRoute
                 });
         })
     .WithName("UpdateWeatherForecastLocation");
-
 
 // Weather Count endpoint
 apiRoute
@@ -1143,7 +1140,6 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
             .WithName("OverwriteProjectionPersistedVersion");
 }
 
-
 apiRoute
     .MapPost(
         "/removeweatherforecast",
@@ -1161,29 +1157,6 @@ apiRoute
         })
     .WithName("RemoveWeatherForecast");
 
-// Health check endpoint
-apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithName("HealthCheck");
-
-// Orleans test endpoint
-apiRoute
-    .MapGet(
-        "/orleans/test",
-        async ([FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
-        {
-            logger.LogInformation("Testing Orleans connectivity...");
-
-            var query = new GetWeatherForecastListQuery();
-            var result = await executor.QueryAsync(query);
-
-            return Results.Ok(
-                new
-                {
-                    status = "Orleans is working",
-                    message = "Successfully executed query through Orleans",
-                    itemCount = result.TotalCount
-                });
-        })
-        .WithName("TestOrleans");
 
 // Materialized view endpoints depend on the Orleans MV runtime, which is registered only when a
 // `DcbMaterializedViewPostgres` connection string is supplied. Skip the route when MV is off so

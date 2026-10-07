@@ -403,7 +403,6 @@ builder.UseOrleans(config =>
                 });
     }
 
-
     // Check for VNet IP Address from environment variable APP Service specific setting
     if (!string.IsNullOrWhiteSpace(builder.Configuration["WEBSITE_PRIVATE_IP"]) &&
         !string.IsNullOrWhiteSpace(builder.Configuration["WEBSITE_PRIVATE_PORTS"]))
@@ -1178,44 +1177,6 @@ apiRoute
         })
     .WithName("RemoveWeatherForecast");
 
-apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithName("HealthCheck");
-apiRoute
-    .MapGet(
-        "/orleans/test",
-        async ([FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
-        {
-            try
-            {
-                logger.LogInformation("Testing Orleans connectivity...");
-                var query = new GetWeatherForecastListQuery();
-                var result = await executor.QueryAsync(query);
-                if (result.IsSuccess)
-                    return Results.Ok(
-                        new
-                        {
-                            status = "Orleans is working",
-                            message = "Successfully executed query through Orleans",
-                            itemCount = result.GetValue().TotalCount
-                        });
-                return ProjectionErrors.Map(result.GetException(), Results.Ok(
-                    new
-                    {
-                        status = "Orleans query failed",
-                        error = result.GetException()?.Message ?? "Unknown error"
-                    }));
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Orleans test failed");
-                return ProjectionErrors.Map(ex, Results.Ok(
-                    new
-                    {
-                        status = "Orleans test failed",
-                        error = ex.Message
-                    }));
-            }
-        })
-        .WithName("TestOrleans");
 
 // Materialized view endpoints depend on the Orleans MV runtime, which is registered only when a
 // `DcbMaterializedViewPostgres` connection string is supplied. Skip the route when MV is off so
