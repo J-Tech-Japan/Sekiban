@@ -88,10 +88,12 @@ jobs:
         run: |
           dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
           dotnet restore Sekiban.slnx
+          dotnet restore dcb/tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj
 
       - name: dotnet build
         run: |
           dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
+          dotnet build dcb/tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj -c Release --no-restore -f net9.0 -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
 
       - name: Verify DCB Orleans version authorities
         run: |
@@ -134,6 +136,7 @@ jobs:
 
       - name: dotnet test DCB projects sequentially (net9.0)
         run: |
+          dotnet test dcb/tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
@@ -190,10 +193,12 @@ jobs:
         run: |
           dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
           dotnet restore Sekiban.slnx
+          dotnet restore dcb/tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj
 
       - name: dotnet build
         run: |
           dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
+          dotnet build dcb/tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj -c Release --no-restore -f net10.0 -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
 
       - name: Verify DCB Orleans version authorities
         run: |
@@ -236,6 +241,7 @@ jobs:
 
       - name: dotnet test DCB projects sequentially (net10.0)
         run: |
+          dotnet test dcb/tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
           # These net10-only projects have no coverage collector; run without --collect.
           dotnet test dcb/tests/Sekiban.Dcb.SortableUniqueIdWait.Tests/Sekiban.Dcb.SortableUniqueIdWait.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal -- RunConfiguration.MaxCpuCount=1
           dotnet test dcb/tests/Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests/Sekiban.Dcb.SortableUniqueIdWait.WithoutResult.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal -- RunConfiguration.MaxCpuCount=1

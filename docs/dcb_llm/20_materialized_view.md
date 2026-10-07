@@ -760,3 +760,11 @@ choice in the application deployment policy rather than changing the template de
 - [Storage Providers](11_storage_providers.md)
 - `internalUsages/Dcb.Domain.WithoutResult/MaterializedViews/WeatherForecastMvV1.cs`
 - `internalUsages/DcbOrleans.WithoutResult.ApiService/Program.cs`
+
+## Cold history during catch-up
+
+Register the event store and `IEventStoreFactory` before `AddSekibanDcbColdEventHybridRead()`. It decorates the last factory registration as well as the singleton, so classic MV catch-up, durable subscriptions, and service-scoped projection catch-up read cold segments followed by the hot tail. The grain's factory branches use the hybrid cold batch size and segment-boundary snapshots when configured. Cold data exists only for services with an exporter; others read hot because they have no manifest.
+
+MV keeps using `MvOptions.BatchSize`. Sequential list reads share one immutable retained segment per service, saving repeated opens and parses; the stream path does not use it. Memory is up to one parsed segment per holder (default 100,000 events, export bounded by `SegmentMaxBytes`, plus parsed-object overhead). Earlier cursors, retries from the filling cursor, other segments and other services miss; alternating segments can parse a whole segment every time. An idle segment is released only on the next list read after a fixed short timeout, so an abandoned consumer keeps it referenced until then. See [the exact hit conditions and limitations](19_cold_events.md#retained-segment-for-list-reads).
+
+Hybrid reads concatenate cold ranges and the hot tail partitioned at the safe boundary, without de-duplication or result sorting. A segment open/parse failure falls back to the complete hot read from the original cursor and retains nothing. A fill parses to the end, so a broken line after the requested batch also triggers fallback. A failed read never advances the MV checkpoint. A failed manifest storage read means no manifest; a manifest that cannot be deserialized throws for MV and subscriptions too. Hot events are not deleted. Manifest gaps and successfully parsed but short segments are not detected.

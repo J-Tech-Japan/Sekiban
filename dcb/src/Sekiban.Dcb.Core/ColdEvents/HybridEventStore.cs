@@ -117,6 +117,8 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             WriteConditionKind.ExpectedTagPosition,
             $"HybridEventStore({descriptor.ProviderName})")));
     }
+    private readonly RetainedColdSegmentHolder _retainedSegment;
+    private readonly TimeProvider _timeProvider;
     private readonly IEventStore _hotStore;
     private readonly IColdObjectStorage _coldStorage;
     private readonly IColdSegmentFormatHandler _segmentFormatHandler;
@@ -131,7 +133,23 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         IServiceIdProvider serviceIdProvider,
         IOptions<ColdEventStoreOptions> options,
         ILogger<HybridEventStore> logger)
+        : this(hotStore, coldStorage, segmentFormatHandler, serviceIdProvider, options, logger,
+            new RetainedColdSegmentHolder(), TimeProvider.System)
     {
+    }
+
+    internal HybridEventStore(
+        IEventStore hotStore,
+        IColdObjectStorage coldStorage,
+        IColdSegmentFormatHandler segmentFormatHandler,
+        IServiceIdProvider serviceIdProvider,
+        IOptions<ColdEventStoreOptions> options,
+        ILogger<HybridEventStore> logger,
+        RetainedColdSegmentHolder retainedSegment,
+        TimeProvider timeProvider)
+    {
+        _retainedSegment = retainedSegment;
+        _timeProvider = timeProvider;
         _hotStore = hotStore;
         _coldStorage = coldStorage;
         _segmentFormatHandler = segmentFormatHandler;
@@ -219,6 +237,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         SortableUniqueId? since,
         int? maxCount)
     {
+        _retainedSegment.Get(_timeProvider.GetUtcNow());
         if (!_options.Enabled)
         {
             var context = StartHybridReadLogContext(_serviceIdProvider.GetCurrentServiceId(), since, maxCount);
@@ -268,7 +287,23 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     {
         var serviceId = _serviceIdProvider.GetCurrentServiceId();
         var context = StartHybridReadLogContext(serviceId, since, maxCount);
+        var retained = _retainedSegment.Get(_timeProvider.GetUtcNow());
+        if (maxCount is > 0 && CanUseRetained(retained, serviceId, since))
+        {
+            var selection = SelectRetained(retained!, since!, maxCount);
+            var events = selection.Events;
+            if (events.Count == maxCount.Value)
+            {
+                UseRetained(retained!, selection.HasMore);
+                LogHybridReadOutcome(context, new HybridReadOutcome(
+                    "cold_only", events.Count, 0, retained!.ColdBoundary, retained.SegmentCount, false, true));
+                return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
+            }
+        }
         var manifest = await ColdControlFileHelper.LoadManifestAsync(_coldStorage, serviceId, CancellationToken.None);
+        if (retained?.ServiceId == serviceId &&
+            (manifest is null || !manifest.Segments.Contains(retained.Entry)))
+            _retainedSegment.Clear(retained);
 
         if (manifest is null || manifest.LatestSafeSortableUniqueId is null)
         {
@@ -448,6 +483,7 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         var events = new List<SerializableEvent>(context.MaxCount.GetValueOrDefault());
         var alignToSegmentBoundary = ShouldAlignCatchUpReadsToSegmentBoundary();
         var coldResult = await ReadFromColdSegmentsAsync(
+            context.ServiceId,
             manifest,
             context.Since,
             context.MaxCount,
@@ -753,7 +789,58 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         bool ReachedColdSegmentBoundary,
         bool Succeeded);
 
+    private static bool CanUseRetained(RetainedColdSegment? retained, string serviceId, SortableUniqueId? since)
+        => retained is not null && retained.ServiceId == serviceId && since is not null
+           && string.Compare(since.Value, retained.LoadedFrom, StringComparison.Ordinal) >= 0
+           && string.Compare(since.Value, retained.Entry.ToSortableUniqueId, StringComparison.Ordinal) < 0;
+
+    private static (List<SerializableEvent> Events, bool HasMore) SelectRetained(
+        RetainedColdSegment retained, SortableUniqueId since, int? count)
+    {
+        if (!retained.IsSorted)
+        {
+            var eligible = retained.Events.Where(evt =>
+                string.Compare(evt.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0).ToList();
+            return (count.HasValue ? eligible.Take(count.Value).ToList() : eligible,
+                count.HasValue && eligible.Count > count.Value);
+        }
+
+        // Upper bound excludes every equal id, including duplicates at batch boundaries.
+        var low = 0;
+        var high = retained.Events.Count;
+        while (low < high)
+        {
+            var middle = low + (high - low) / 2;
+            if (string.Compare(retained.Events[middle].SortableUniqueIdValue, since.Value, StringComparison.Ordinal) <= 0)
+                low = middle + 1;
+            else
+                high = middle;
+        }
+        var length = Math.Min(count ?? int.MaxValue, retained.Events.Count - low);
+        var events = new List<SerializableEvent>(length);
+        for (var i = low; i < low + length; i++) events.Add(retained.Events[i]);
+        return (events, low + length < retained.Events.Count);
+    }
+
+    private static bool IsSorted(IReadOnlyList<SerializableEvent> events)
+    {
+        for (var i = 1; i < events.Count; i++)
+            if (string.Compare(events[i - 1].SortableUniqueIdValue, events[i].SortableUniqueIdValue, StringComparison.Ordinal) > 0)
+                return false;
+        return true;
+    }
+
+    private void UseRetained(RetainedColdSegment retained, bool hasMore)
+    {
+        // Do not trim or advance loadedFrom. Another reader may still need the same suffix.
+        if (!hasMore)
+            _retainedSegment.Clear(retained);
+        else
+            _retainedSegment.Touch(retained, _timeProvider.GetUtcNow());
+    }
+
     private async Task<ResultBox<ColdReadResult>> ReadFromColdSegmentsAsync(
+        string serviceId,
         ColdManifest manifest,
         SortableUniqueId? since,
         int? maxCount,
@@ -762,46 +849,64 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
     {
         foreach (var segment in manifest.Segments.OrderBy(s => s.FromSortableUniqueId, StringComparer.Ordinal))
         {
+            var retained = _retainedSegment.Get(_timeProvider.GetUtcNow());
             if (ShouldSkipColdSegment(segment, since))
             {
+                if (retained?.ServiceId == serviceId && retained.Entry == segment)
+                    _retainedSegment.Clear(retained);
                 continue;
             }
 
             var remainingCount = CalculateRemainingCount(maxCount, destination.Count);
             if (remainingCount == 0)
-            {
                 return CreateColdReadResult(destination.Count, reachedColdSegmentBoundary: false);
-            }
 
-            var parseResult = await StreamColdSegmentAsync(
-                segment.Path,
-                since,
-                remainingCount,
-                evt =>
+            List<SerializableEvent> parsed;
+            if (CanUseRetained(retained, serviceId, since) && retained!.Entry == segment)
+            {
+                var selection = SelectRetained(retained, since!, remainingCount);
+                parsed = selection.Events;
+                UseRetained(retained, selection.HasMore);
+            }
+            else
+            {
+                parsed = new List<SerializableEvent>();
+                // Parse once to the end, including validation of lines beyond this batch.
+                var parseResult = await StreamColdSegmentAsync(segment.Path, since, null,
+                    evt => { parsed.Add(evt); return ValueTask.CompletedTask; }, CancellationToken.None);
+                if (!parseResult.IsSuccess)
                 {
-                    destination.Add(evt);
-                    return ValueTask.CompletedTask;
-                },
-                CancellationToken.None);
-            if (!parseResult.IsSuccess)
-            {
-                _logger.LogWarning(
-                    parseResult.GetException(),
-                    "Failed to parse cold segment {Path}",
-                    segment.Path);
-                return ResultBox.Error<ColdReadResult>(parseResult.GetException());
+                    _retainedSegment.Clear(retained);
+                    _logger.LogWarning(parseResult.GetException(), "Failed to parse cold segment {Path}", segment.Path);
+                    return ResultBox.Error<ColdReadResult>(parseResult.GetException());
+                }
+
+                if (remainingCount is > 0 && parsed.Count > remainingCount.Value)
+                {
+                    var loadedFrom = parsed[remainingCount.Value - 1].SortableUniqueIdValue;
+                    // An unsorted returned prefix with ids above loadedFrom would be eligible again on a retry.
+                    // A suffix alone cannot reproduce that read, so do not retain it.
+                    if (parsed.Take(remainingCount.Value).All(evt =>
+                            string.Compare(evt.SortableUniqueIdValue, loadedFrom, StringComparison.Ordinal) <= 0))
+                    {
+                        var suffix = parsed.Skip(remainingCount.Value).ToArray();
+                        _retainedSegment.Replace(new RetainedColdSegment(serviceId, segment, loadedFrom,
+                            suffix, IsSorted(suffix), manifest.Segments.Count,
+                            manifest.LatestSafeSortableUniqueId!, _timeProvider.GetUtcNow()));
+                    }
+                    else
+                        _retainedSegment.Clear(retained);
+                }
+                else if (retained?.ServiceId == serviceId && retained.Entry.Path == segment.Path)
+                    _retainedSegment.Clear(retained);
             }
 
-            var appendResult = parseResult.GetValue();
-            if (appendResult.EventsRead == 0)
-            {
-                continue;
-            }
-
+            var returned = remainingCount.HasValue ? parsed.Take(remainingCount.Value).ToList() : parsed;
+            destination.AddRange(returned);
+            if (returned.Count == 0) continue;
             if (ShouldStopReadingColdSegments(alignToSegmentBoundary, maxCount, destination.Count))
-            {
-                return CreateColdReadResult(destination.Count, appendResult.ReachedEndOfSegment);
-            }
+                return CreateColdReadResult(destination.Count,
+                    !remainingCount.HasValue || parsed.Count < remainingCount.Value);
         }
 
         return CreateColdReadResult(destination.Count, reachedColdSegmentBoundary: false);

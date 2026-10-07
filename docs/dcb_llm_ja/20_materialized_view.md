@@ -750,3 +750,11 @@ deployment policy に置きます。
 - [ストレージプロバイダー](11_storage_providers.md)
 - `internalUsages/Dcb.Domain.WithoutResult/MaterializedViews/WeatherForecastMvV1.cs`
 - `internalUsages/DcbOrleans.WithoutResult.ApiService/Program.cs`
+
+## キャッチアップでのコールド履歴
+
+イベントストアと `IEventStoreFactory` は `AddSekibanDcbColdEventHybridRead()` より前に登録してください。このメソッドは singleton に加えて最後の factory 登録を装飾するため、classic MV キャッチアップ、durable subscription、サービス別 projection キャッチアップもコールドセグメントからホット末尾へ読み進めます。grain の factory 分岐は、設定に応じて hybrid のコールド用バッチサイズとセグメント境界 snapshot を使います。コールドデータがあるのは exporter のあるサービスだけで、その他は manifest がないためホットを読みます。
+
+MV は引き続き `MvOptions.BatchSize` を使います。連続したリスト読み取りはサービスごとに一つの不変な保持セグメントを共有し、open とパースの繰り返しを減らします。stream 経路は利用しません。メモリは holder あたり最大一つのパース済みセグメントです（既定 100,000 イベント、export は `SegmentMaxBytes` で制限され、パース後のオブジェクトの追加コストがあります）。前の cursor、充填時の cursor からの再試行、別セグメント、別サービスはミスになり、異なるセグメントを交互に読むと毎回全体をパースする場合があります。idle の内容は短い固定 timeout 後の次のリスト読み取りで初めて解放されるため、放棄された consumer の参照はそれまで残ります。[正確なヒット条件と制限](19_cold_events.md#リスト読み取りの保持セグメント)を参照してください。
+
+hybrid read は安全境界で分割したコールド範囲とホット末尾を連結し、重複除去や結果のソートを行いません。segment の open・パース失敗は元の cursor からの完全なホット読み取りへフォールバックし、何も保持しません。充填では末尾までパースするため、要求バッチより後の壊れた行でもフォールバックします。失敗した読み取りで MV checkpoint は進みません。manifest のストレージ読み取り失敗は manifest なしですが、デシリアライズ失敗は MV と subscription でも例外となります。ホットイベントは削除しません。manifest の欠落範囲や、パースに成功した短いセグメントは検出しません。

@@ -90,16 +90,30 @@ Important operational details:
 
 ## Hybrid Read Behavior
 
-`AddSekibanDcbColdEventHybridRead()` replaces the registered `IEventStore` with `HybridEventStore`.
+`AddSekibanDcbColdEventHybridRead()` wraps the registered `IEventStore` and the last registered `IEventStoreFactory`. Factory-created stores are bound to the requested service id and share a retained-segment holder for that service. Factory durability and write-condition descriptors are forwarded without upgrading capabilities. Register the hot store and its factory before calling this extension; a factory registered afterward is not decorated. No factory registration is required.
 
 Read behavior:
 
 - if cold events are disabled, reads go directly to the hot store
 - if no manifest exists, reads go directly to the hot store
 - if `since` is newer than the latest safe cold boundary, reads go directly to the hot store
-- otherwise the reader loads matching cold segments first, then appends newer hot events, removes duplicates by event id, and sorts by `SortableUniqueId`
+- otherwise the reader partitions at `LatestSafeSortableUniqueId`: it concatenates matching cold segments in manifest range order and the hot tail after that boundary. It does not de-duplicate or sort the returned events.
 
-This is the key mechanism that allows catch-up readers to continue across archived ranges.
+Classic materialized-view catch-up, durable subscriptions, and service-scoped projection catch-up through the factory now read cold and then hot. The grain's factory branches also recognize the hybrid store, use its cold catch-up batch size, and persist segment-boundary snapshots when configured. Cold data exists only for services for which an exporter runs; other services find no manifest and read hot. Sekiban does not delete hot events.
+
+### Retained segment for list reads
+
+Only `ReadAllSerializableEventsAsync` fills and uses a retained segment. The stream path neither uses nor changes the holder. A batch-limited list read parses the selected segment once to its end, returns the required prefix, and retains only the remaining events. `loadedFrom` is the id of the last event returned from that segment, even when the batch began in an earlier segment; it is never the caller's `since`. Returned events are not retained.
+
+A hit requires the same service id, a non-null `since >= loadedFrom`, and `since <` the retained entry's last id. Selection uses ordinal `id > since` in the original segment order, including the existing behavior for equal ids. If an unsorted returned prefix contains an id above `loadedFrom`, the suffix cannot reproduce an uncached read, so that fill is not retained. When enough eligible events remain for `maxCount`, the read skips manifest loading and segment opening. Otherwise it loads the manifest and reuses the suffix only if the whole segment entry is still equal. A null cursor, a retry from the filling read's original cursor, an earlier position, another service, or another segment misses. Fast reads log the normal cold-only outcome and batch metadata, using the segment count from the filling manifest.
+
+The content is immutable: hits do not trim it or advance `loadedFrom`, so readers near the same position can both hit. Content is atomically replaced; concurrent misses may both parse. It is released after consumption to the end, replacement, or a failed fill. A fixed short idle timeout is checked on the next list read through the holder, using a registered `TimeProvider` or system time. There is no timer or configurable timeout: an abandoned consumer's segment stays referenced until the next list read through that holder.
+
+Memory is up to one parsed segment per holder (default 100,000 events, bounded by `SegmentMaxBytes` for export; parsed objects add overhead). The singleton has one holder; the factory has one per service id. This cost now applies to MV and subscription hosts. Readers of the same service alternating between different segments miss each time and parse a whole segment per read; results remain correct. MV continues to use `MvOptions.BatchSize`; this does not add MV segment alignment, prefetch, or segment-boundary checkpoints.
+
+### Failure policy
+
+A segment that cannot be opened or parsed discards the entire cold part and reads hot from the original `since`. A fill parses to the end: a broken line beyond the requested batch also fails the fill, falls back to hot, and retains nothing. A failed read never advances the MV checkpoint. A failed manifest storage read is treated as no manifest; a manifest that cannot be deserialized throws, including for MV and durable subscriptions. Detection of manifest gaps and successfully parsed but short segments is not implemented.
 
 ## Configuration
 
@@ -235,7 +249,7 @@ The selection logic is centralized in `ColdObjectStorageFactory`.
 - Keep the safe window large enough to avoid exporting events that are still subject to reordering or ongoing writes.
 - When using Azure Blob, the connection string named by `AzureBlobClientName` must exist.
 - If the lease file becomes stale, the exporter can recover because lease expiration is time-based.
-- Hybrid read depends on a valid manifest. If manifest or segment parsing fails, the implementation falls back to the hot store where possible.
+- Hybrid read depends on a valid manifest. Segment open/parse failures fall back to hot from the original cursor; manifest deserialization failures throw (see the failure policy above).
 
 ## Recommended References
 

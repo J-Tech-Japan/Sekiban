@@ -26,6 +26,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <Compile Include="../Sekiban.Dcb.ColdEvents.Tests/InMemoryColdObjectStorage.cs" Link="ColdEvents/InMemoryColdObjectStorage.cs" />
         <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView\Sekiban.Dcb.MaterializedView.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.MySql\Sekiban.Dcb.MaterializedView.MySql.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Dcb.MaterializedView.Postgres\Sekiban.Dcb.MaterializedView.Postgres.csproj"/>
