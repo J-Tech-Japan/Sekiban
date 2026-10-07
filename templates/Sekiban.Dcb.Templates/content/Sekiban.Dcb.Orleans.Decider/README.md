@@ -1,10 +1,10 @@
-# SekibanDcbDeciderAws
+# SekibanDcbDecider
 
 Start locally from the solution directory with Docker running:
 
 ```bash
-dotnet build SekibanDcbDeciderAws.slnx
-dotnet run --project SekibanDcbDeciderAws.AppHost --launch-profile http
+dotnet build SekibanDcbDecider.slnx
+dotnet run --project SekibanDcbDecider.AppHost --launch-profile http
 ```
 
 Use the Aspire dashboard for the API, Blazor Web and database endpoints. The AppHost and project launch profiles set `ASPNETCORE_ENVIRONMENT=Development`. Stop the AppHost when finished. The AppHost configures the event store and the separate PostgreSQL MV target; `/api/mv/status`, `/api/mv/students`, `/api/mv/classrooms` and `/api/mv/enrollments` demonstrate the read model. `waitForSortableUniqueId` can wait for a command's position. `/api/weatherforecast-uwmv` demonstrates unsafe-window reads.
@@ -15,7 +15,9 @@ Debug event inspection and projection persist, deactivate, refresh, snapshot and
 
 Sample users (including `admin@example.com`, password `Sekiban1234%`) and the fixed JWT signing key are Development-only. Identity tables and roles are initialized in every environment. Registration grants only User. The Blazor Web has no authentication client or login page; use WebNext for registration and login. The AppHost runs WebNext with `next dev`. Its server uses `NODE_ENV` to gate quick login and test-data controls and rejects test-data procedures outside development. Test-data API routes still require authentication in Development.
 
-The AppHost deliberately pins the LocalStack image in the AppHost to a release that starts without a license token. Review licensing requirements before upgrading. DynamoDB is the only event store supported by this AWS template. The shipped cloud stack also uses memory streams and grain storage; see [infrastructure](infrastructure/README.md) for restart limitations and the role of RDS.
+`Benchmark:AllowDebugUserHeaders` is also a Development-only diagnostic setting.
+
+`Orleans:UseInMemoryStreams` selects memory streams locally. For deployed Azure Queue or Event Hub streams, supply the existing storage/queue configuration in the infrastructure guides; PubSubStore must be persistent.
 
 ## Before production
 
@@ -25,6 +27,7 @@ The AppHost deliberately pins the LocalStack image in the AppHost to a release t
 - Grant only the database and blob permissions required by the configured stores, bootstrap schemas with an appropriate deployment identity, then review runtime schema permissions.
 - Supply `Jwt__SecretKey` (at least 32 characters) from a secret store before deployment. Docker images use Production; Azure defaults to Production and AWS uses Staging/Production, so the development key is not loaded. The shipped infrastructure does not wire this secret: use an App Service Key Vault reference, a Container Apps secret reference or an ECS task definition `secrets` entry backed by Secrets Manager. Startup fails without a valid key.
 - To create the first administrator outside Development, supply `Auth__InitialAdmin__Email` and `Auth__InitialAdmin__Password` from secrets when no administrator exists. An existing registered account is never promoted. Omit these settings after bootstrap. Build WebNext with `npm install` and `npm run build`; production startup uses `npm start` and `NODE_ENV=production`.
+- Configure the bundled CLI with the same `Sekiban:ServiceId` (environment variable `Sekiban__ServiceId` or CLI user secrets) and store connection as the API. Its SQLite cache path includes the service identity.
 
 ## Design guidance
 
