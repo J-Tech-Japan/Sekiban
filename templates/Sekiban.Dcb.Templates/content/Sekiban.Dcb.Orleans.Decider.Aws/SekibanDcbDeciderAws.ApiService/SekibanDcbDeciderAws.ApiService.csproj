@@ -7,7 +7,6 @@
         <Nullable>enable</Nullable>
         <IsPackable>true</IsPackable>
         <RootNamespace>SekibanDcbDeciderAws.ApiService</RootNamespace>
-        <NoWarn>$(NoWarn);CS0618;ASPDEPR002</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

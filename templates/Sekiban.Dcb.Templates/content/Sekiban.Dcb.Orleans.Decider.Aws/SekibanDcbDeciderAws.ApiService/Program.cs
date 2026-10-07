@@ -423,7 +423,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                         cancellationToken: ct));
                 return Results.Ok(rows);
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMv");
 
     apiRoute
@@ -464,7 +463,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                     tombstoneCount
                 });
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMvDiagnostics");
 }
 

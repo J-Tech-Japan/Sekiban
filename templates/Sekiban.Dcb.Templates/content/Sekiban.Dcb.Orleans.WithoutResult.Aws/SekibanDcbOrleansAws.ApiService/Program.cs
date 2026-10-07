@@ -372,7 +372,6 @@ apiRoute
                     message = "Student created successfully"
                 });
         })
-    .WithOpenApi()
     .WithName("CreateStudent");
 
 apiRoute
@@ -393,7 +392,6 @@ apiRoute
             var result = await executor.QueryAsync(query);
             return Results.Ok(result.Items);
         })
-    .WithOpenApi()
     .WithName("GetStudentList");
 
 apiRoute
@@ -412,7 +410,6 @@ apiRoute
                     version = state.Version
                 });
         })
-    .WithOpenApi()
     .WithName("GetStudent");
 
 // ClassRoom endpoints
@@ -431,7 +428,6 @@ apiRoute
                     message = "ClassRoom created successfully"
                 });
         })
-    .WithOpenApi()
     .WithName("CreateClassRoom");
 
 apiRoute
@@ -452,7 +448,6 @@ apiRoute
             var result = await executor.QueryAsync(query);
             return Results.Ok(result.Items);
         })
-    .WithOpenApi()
     .WithName("GetClassRoomList");
 
 apiRoute
@@ -471,7 +466,6 @@ apiRoute
                     version = state.Version
                 });
         })
-    .WithOpenApi()
     .WithName("GetClassRoom");
 
 // Enrollment endpoints
@@ -491,7 +485,6 @@ apiRoute
                     message = "Student enrolled successfully"
                 });
         })
-    .WithOpenApi()
     .WithName("EnrollStudent");
 
 apiRoute
@@ -510,7 +503,6 @@ apiRoute
                     message = "Student dropped successfully"
                 });
         })
-    .WithOpenApi()
     .WithName("DropStudent");
 
 // Debug endpoint to check database
@@ -537,7 +529,6 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                         })
                     });
             })
-        .WithOpenApi()
         .WithName("DebugGetEvents");
 }
 
@@ -562,7 +553,6 @@ apiRoute
             var result = await executor.QueryAsync(query);
             return Results.Ok(result.Items);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecast");
 
 // Weather endpoints (GenericTagMultiProjector)
@@ -586,7 +576,6 @@ apiRoute
             var result = await executor.QueryAsync(query);
             return Results.Ok(result.Items);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastGeneric");
 
 // Weather endpoints (Single projector with SafeUnsafeProjectionState)
@@ -610,7 +599,6 @@ apiRoute
             var result = await executor.QueryAsync(query);
             return Results.Ok(result.Items);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastSingle");
 
 apiRoute
@@ -630,7 +618,7 @@ apiRoute
                 });
         })
     .WithName("InputWeatherForecast")
-    .WithOpenApi();
+    ;
 
 
 apiRoute
@@ -649,7 +637,7 @@ apiRoute
                 });
         })
     .WithName("UpdateWeatherForecastLocation")
-    .WithOpenApi();
+    ;
 
 
 // Weather Count endpoint
@@ -672,7 +660,6 @@ apiRoute
                 totalCount = countResult.TotalCount
             });
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastCount");
 
 // Weather Count endpoint for Generic projector
@@ -696,7 +683,6 @@ apiRoute
                 isGeneric = true
             });
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastCountGeneric");
 
 // Weather Count endpoint for Single projector
@@ -720,7 +706,6 @@ apiRoute
                 isSingle = true
             });
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastCountSingle");
 
 // Event delivery statistics endpoint
@@ -733,7 +718,6 @@ apiRoute
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
-    .WithOpenApi()
     .WithName("GetEventDeliveryStatistics");
 
 // Event delivery statistics endpoint for Generic projector
@@ -746,7 +730,6 @@ apiRoute
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
-    .WithOpenApi()
     .WithName("GetEventDeliveryStatisticsGeneric");
 
 // Event delivery statistics endpoint for Single projector
@@ -759,7 +742,6 @@ apiRoute
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
-    .WithOpenApi()
     .WithName("GetEventDeliveryStatisticsSingle");
 
 // Projection status endpoints (do not execute projections)
@@ -772,7 +754,6 @@ apiRoute
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastStatus");
 
 apiRoute
@@ -784,7 +765,6 @@ apiRoute
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastGenericStatus");
 
 apiRoute
@@ -796,7 +776,6 @@ apiRoute
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastSingleStatus");
 
 // Generic projection control endpoints (for persistence + restore testing)
@@ -821,7 +800,6 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
                 return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds }));
             })
-        .WithOpenApi()
         .WithName("PersistProjectionState");
 }
 
@@ -836,7 +814,6 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 await grain.RequestDeactivationAsync();
                 return Results.Ok(new { success = true });
             })
-        .WithOpenApi()
         .WithName("DeactivateProjection");
 }
 
@@ -851,7 +828,6 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 await grain.RefreshAsync();
                 return Results.Ok(new { success = true });
             })
-        .WithOpenApi()
         .WithName("RefreshProjection");
 }
 
@@ -867,7 +843,6 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 if (!rb.IsSuccess) return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = rb.GetException()?.Message }));
                 return Results.Text(rb.GetValue(), "application/json");
             })
-        .WithOpenApi()
         .WithName("GetProjectionSnapshot");
 }
 
@@ -882,7 +857,6 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
                 return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
             })
-        .WithOpenApi()
         .WithName("OverwriteProjectionPersistedVersion");
 }
 
@@ -903,10 +877,10 @@ apiRoute
                 });
         })
     .WithName("RemoveWeatherForecast")
-    .WithOpenApi();
+    ;
 
 // Health check endpoint
-apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithOpenApi().WithName("HealthCheck");
+apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithName("HealthCheck");
 
 // Orleans test endpoint
 apiRoute
@@ -927,7 +901,6 @@ apiRoute
                     itemCount = result.TotalCount
                 });
         })
-    .WithOpenApi()
     .WithName("TestOrleans");
 
 // Materialized view endpoints depend on the Orleans MV runtime, which is registered only when a
@@ -974,7 +947,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                         cancellationToken: ct));
                 return Results.Ok(rows);
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMv");
 
     apiRoute
@@ -1015,7 +987,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                     tombstoneCount
                 });
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMvDiagnostics");
 }
 
