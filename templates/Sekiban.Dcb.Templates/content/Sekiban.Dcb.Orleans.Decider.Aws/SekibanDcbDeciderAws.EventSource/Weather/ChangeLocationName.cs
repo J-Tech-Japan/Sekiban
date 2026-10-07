@@ -34,7 +34,7 @@ public record ChangeLocationName : ICommandWithHandler<ChangeLocationName>
         {
             state.Payload.Validate(command.NewLocationName);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("already"))
+        catch (ApplicationException ex) when (ex.Message.Contains("already"))
         {
             // Same location name - return empty (idempotent)
             return EventOrNone.Empty;

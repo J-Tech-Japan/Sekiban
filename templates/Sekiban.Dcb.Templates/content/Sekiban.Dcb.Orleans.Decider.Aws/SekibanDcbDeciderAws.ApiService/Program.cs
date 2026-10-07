@@ -1,3 +1,4 @@
+using SekibanDcbDeciderAws.ApiService.Health;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Orleans.ServiceId;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +45,10 @@ if (builder.Environment.IsDevelopment())
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
+builder.Services.AddSingleton<AuthInitializationHealthCheck>();
+builder.Services.AddHealthChecks()
+    .AddCheck<OrleansHealthCheck>("orleans", tags: ["ready"])
+    .AddCheck<AuthInitializationHealthCheck>("auth-initialization", tags: ["ready"]);
 
 // Add services to the container.
 builder.Services.AddProblemDetails();

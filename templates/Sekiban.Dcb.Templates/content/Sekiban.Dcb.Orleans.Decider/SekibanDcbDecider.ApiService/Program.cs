@@ -160,8 +160,10 @@ else
 }
 
 // Orleans health check registration (Readiness: Silo has joined the cluster)
+builder.Services.AddSingleton<AuthInitializationHealthCheck>();
 builder.Services.AddHealthChecks()
-    .AddCheck<OrleansHealthCheck>("orleans", tags: ["ready"]);
+    .AddCheck<OrleansHealthCheck>("orleans", tags: ["ready"])
+    .AddCheck<AuthInitializationHealthCheck>("auth-initialization", tags: ["ready"]);
 
 var domainTypes = DomainType.GetDomainTypes();
 builder.Services.AddSingleton(domainTypes);

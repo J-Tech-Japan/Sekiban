@@ -11,18 +11,18 @@ public static class LocationNameChangedDecider
     /// </summary>
     /// <param name="state">Current state</param>
     /// <param name="newLocationName">New location name to validate</param>
-    /// <exception cref="InvalidOperationException">When forecast is deleted or location is same</exception>
+    /// <exception cref="ApplicationException">When forecast is deleted or location is same</exception>
     public static void Validate(this WeatherForecastState state, string newLocationName)
     {
         if (state.IsDeleted)
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"Cannot change location name for weather forecast {state.ForecastId} because it has been deleted");
         }
 
         if (state.Location == newLocationName)
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"Location name is already '{newLocationName}'");
         }
     }

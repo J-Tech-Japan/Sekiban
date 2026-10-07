@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using NUnit.Framework;
-using SekibanDcbDecider.ApiService.Endpoints;
+using SekibanDcbDeciderAws.ApiService.Endpoints;
 
 namespace SekibanDcbOrleans.Unit;
 

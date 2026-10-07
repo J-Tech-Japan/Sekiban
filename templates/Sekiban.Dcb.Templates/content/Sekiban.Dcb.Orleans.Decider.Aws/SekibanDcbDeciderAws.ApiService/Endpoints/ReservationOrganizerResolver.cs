@@ -1,6 +1,6 @@
 using System.Security.Claims;
 
-namespace SekibanDcbDecider.ApiService.Endpoints;
+namespace SekibanDcbDeciderAws.ApiService.Endpoints;
 
 internal static class ReservationOrganizerResolver
 {

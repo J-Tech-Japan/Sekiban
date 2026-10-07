@@ -15,8 +15,6 @@ Debug event inspection and projection persist, deactivate, refresh, snapshot and
 
 Sample users (including `admin@example.com`, password `Sekiban1234%`) and the fixed JWT signing key are Development-only. Identity tables and roles are initialized in every environment. Registration grants only User. The Blazor Web has no authentication client or login page; use WebNext for registration and login. The AppHost runs WebNext with `next dev`. Its server uses `NODE_ENV` to gate quick login and test-data controls and rejects test-data procedures outside development. Test-data API routes still require authentication in Development.
 
-`Benchmark:AllowDebugUserHeaders` is also a Development-only diagnostic setting.
-
 `Orleans:UseInMemoryStreams` selects memory streams locally. For deployed Azure Queue or Event Hub streams, supply the existing storage/queue configuration in the infrastructure guides; PubSubStore must be persistent.
 
 ## Before production

@@ -1,13 +1,5 @@
 using Projects;
-var benchmarkProfile = Environment.GetEnvironmentVariable("BENCHMARK_PROFILE");
-var isBenchmarkRun = !string.IsNullOrWhiteSpace(benchmarkProfile);
-var isStrictBenchmarkProfile = string.Equals(benchmarkProfile, "tagstategrain-memory", StringComparison.OrdinalIgnoreCase);
-var builder = DistributedApplication.CreateBuilder(new DistributedApplicationOptions
-{
-    Args = args,
-    DisableDashboard = isStrictBenchmarkProfile,
-    EnableResourceLogging = isStrictBenchmarkProfile
-});
+var builder = DistributedApplication.CreateBuilder(args);
 var apiServicePort = ConfiguredPortResolver.Resolve(5141, "E2E_API_SERVICE_PORT", "API_SERVICE_PORT");
 var webPort = ConfiguredPortResolver.Resolve(5180, "E2E_WEB_PORT");
 var webNextPort = ConfiguredPortResolver.Resolve(3000, "E2E_WEBNEXT_PORT", "WEBNEXT_PORT");
@@ -55,6 +47,8 @@ var orleans = builder
 // Add the API Service
 var apiService = builder
     .AddProject<SekibanDcbDecider_ApiService>("apiservice")
+    .WithHttpHealthCheck("/health")
+    .WithReference(orleans)
     .WithReference(postgres)
     .WithReference(identityPostgres)
     .WithReference(materializedViewPostgres)
@@ -71,90 +65,27 @@ var apiService = builder
     })
     .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + apiServicePort);
 
-apiService = ApplyTagStateDiagnostics(
-    apiService,
-    defaultRuntimeLabel: "native");
+// Add the Web frontend
+builder
+    .AddProject<SekibanDcbDecider_Web>("webfrontend")
+    .WithExternalHttpEndpoints()
+    .WithReference(apiService)
+    .WaitFor(apiService)
+    .WithEndpoint("http", endpoint =>
+    {
+        endpoint.Port = webPort;
+        endpoint.TargetPort = webPort;
+        endpoint.UriScheme = "http";
+        endpoint.IsProxied = false;
+    })
+    .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + webPort);
 
-if (!isStrictBenchmarkProfile)
-{
-    apiService = apiService.WithReference(orleans);
-}
-
-if (isStrictBenchmarkProfile)
-{
-    apiService = apiService
-        .WithEnvironment("Orleans__UseInMemoryStreams", "true")
-        .WithEnvironment("Orleans__UseInMemoryGrainStorage", "true")
-        .WithEnvironment("SEKIBAN_BENCHMARK_SKIP_USER_RESERVATION_RULES", "true");
-}
-
-#if !BENCHMARK_PROFILE_ACTIVE
-if (!isBenchmarkRun)
-{
-    // Add the Web frontend
-    builder
-        .AddProject<SekibanDcbDecider_Web>("webfrontend")
-        .WithExternalHttpEndpoints()
-        .WithReference(apiService)
-        .WaitFor(apiService)
-        .WithEndpoint("http", endpoint =>
-        {
-            endpoint.Port = webPort;
-            endpoint.TargetPort = webPort;
-            endpoint.UriScheme = "http";
-            endpoint.IsProxied = false;
-        })
-        .WithEnvironment("ASPNETCORE_URLS", "http://127.0.0.1:" + webPort);
-
-    // Add the Next.js Web frontend (uses tRPC as BFF within Next.js)
-    builder
-        .AddJavaScriptApp("webnext", "../SekibanDcbDecider.WebNext")
-        .WithHttpEndpoint(port: webNextPort, env: "PORT")
-        .WithExternalHttpEndpoints()
-        .WithEnvironment("API_BASE_URL", apiService.GetEndpoint("http"))
-        .WaitFor(apiService);
-}
-#endif
+// Add the Next.js Web frontend (uses tRPC as BFF within Next.js)
+builder
+    .AddJavaScriptApp("webnext", "../SekibanDcbDecider.WebNext")
+    .WithHttpEndpoint(port: webNextPort, env: "PORT")
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("API_BASE_URL", apiService.GetEndpoint("http"))
+    .WaitFor(apiService);
 
 builder.Build().Run();
-
-static IResourceBuilder<ProjectResource> ApplyTagStateDiagnostics(
-    IResourceBuilder<ProjectResource> resource,
-    string defaultRuntimeLabel)
-{
-    string? enabled = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_ENABLED");
-    if (string.IsNullOrWhiteSpace(enabled))
-    {
-        return resource;
-    }
-
-    resource = resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_ENABLED", enabled);
-
-    string? slowMs = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_SLOW_MS");
-    if (!string.IsNullOrWhiteSpace(slowMs))
-    {
-        resource = resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_SLOW_MS", slowMs);
-    }
-
-    string? summaryEvery = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_SUMMARY_EVERY");
-    if (!string.IsNullOrWhiteSpace(summaryEvery))
-    {
-        resource = resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_SUMMARY_EVERY", summaryEvery);
-    }
-
-    string? projectors = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_PROJECTORS");
-    if (!string.IsNullOrWhiteSpace(projectors))
-    {
-        resource = resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_PROJECTORS", projectors);
-    }
-
-    string? outputPath = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_FILE");
-    if (!string.IsNullOrWhiteSpace(outputPath))
-    {
-        resource = resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_FILE", outputPath);
-    }
-
-    string runtimeLabel = Environment.GetEnvironmentVariable("SEKIBAN_TAG_STATE_DIAGNOSTICS_RUNTIME_LABEL")
-        ?? defaultRuntimeLabel;
-    return resource.WithEnvironment("SEKIBAN_TAG_STATE_DIAGNOSTICS_RUNTIME_LABEL", runtimeLabel);
-}

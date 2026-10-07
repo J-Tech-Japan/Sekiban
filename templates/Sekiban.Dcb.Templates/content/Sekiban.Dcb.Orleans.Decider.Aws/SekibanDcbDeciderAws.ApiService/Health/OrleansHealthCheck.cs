@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Orleans.Runtime;
 
-namespace SekibanDcbDecider.ApiService.Health;
+namespace SekibanDcbDeciderAws.ApiService.Health;
 
 /// <summary>
 ///     Readiness: checks whether the local Orleans silo is Active.

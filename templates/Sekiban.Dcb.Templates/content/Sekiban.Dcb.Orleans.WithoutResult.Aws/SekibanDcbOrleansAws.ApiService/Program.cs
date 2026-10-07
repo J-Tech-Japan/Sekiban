@@ -1,3 +1,4 @@
+using SekibanDcbOrleansAws.ApiService.Health;
 using Sekiban.Dcb.ServiceId;
 using Sekiban.Dcb.Orleans.ServiceId;
 using SekibanDcbOrleansAws.ApiService;
@@ -46,6 +47,8 @@ if (builder.Environment.IsDevelopment())
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
+builder.Services.AddHealthChecks()
+    .AddCheck<OrleansHealthCheck>("orleans", tags: ["ready"]);
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
@@ -53,7 +56,6 @@ builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
 
 // Add global exception handler
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-
 
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -631,7 +633,6 @@ apiRoute
     .WithName("InputWeatherForecast")
     ;
 
-
 apiRoute
     .MapPost(
         "/updateweatherforecastlocation",
@@ -649,7 +650,6 @@ apiRoute
         })
     .WithName("UpdateWeatherForecastLocation")
     ;
-
 
 // Weather Count endpoint
 apiRoute
@@ -871,7 +871,6 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
         .WithName("OverwriteProjectionPersistedVersion");
 }
 
-
 apiRoute
     .MapPost(
         "/removeweatherforecast",
@@ -891,28 +890,6 @@ apiRoute
     ;
 
 // Health check endpoint
-apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithName("HealthCheck");
-
-// Orleans test endpoint
-apiRoute
-    .MapGet(
-        "/orleans/test",
-        async ([FromServices] ISekibanExecutor executor, [FromServices] ILogger<Program> logger) =>
-        {
-            logger.LogInformation("Testing Orleans connectivity...");
-
-            var query = new GetWeatherForecastListQuery();
-            var result = await executor.QueryAsync(query);
-
-            return Results.Ok(
-                new
-                {
-                    status = "Orleans is working",
-                    message = "Successfully executed query through Orleans",
-                    itemCount = result.TotalCount
-                });
-        })
-    .WithName("TestOrleans");
 
 // Materialized view endpoints depend on the Orleans MV runtime, which is registered only when a
 // `DcbMaterializedViewPostgres` connection string is supplied. Skip the route when MV is off so

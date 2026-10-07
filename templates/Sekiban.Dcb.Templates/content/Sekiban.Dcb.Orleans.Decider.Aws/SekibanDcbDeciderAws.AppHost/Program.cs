@@ -25,6 +25,7 @@ var materializedViewPostgres = postgresServer.AddDatabase("DcbMaterializedViewPo
 // Add the API Service with DynamoDB configuration
 var apiService = builder
     .AddProject<SekibanDcbDeciderAws_ApiService>("apiservice")
+    .WithHttpHealthCheck("/health")
     .WaitFor(localstack)
     .WaitFor(identityPostgres)
     .WaitFor(materializedViewPostgres)
