@@ -290,10 +290,11 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
         var retained = _retainedSegment.Get(_timeProvider.GetUtcNow());
         if (maxCount is > 0 && CanUseRetained(retained, serviceId, since))
         {
-            var events = SelectRetained(retained!, since!).Take(maxCount.Value).ToList();
+            var selection = SelectRetained(retained!, since!, maxCount);
+            var events = selection.Events;
             if (events.Count == maxCount.Value)
             {
-                UseRetained(retained!, since!, maxCount);
+                UseRetained(retained!, selection.HasMore);
                 LogHybridReadOutcome(context, new HybridReadOutcome(
                     "cold_only", events.Count, 0, retained!.ColdBoundary, retained.SegmentCount, false, true));
                 return ResultBox.FromValue<IEnumerable<SerializableEvent>>(events);
@@ -793,13 +794,46 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
            && string.Compare(since.Value, retained.LoadedFrom, StringComparison.Ordinal) >= 0
            && string.Compare(since.Value, retained.Entry.ToSortableUniqueId, StringComparison.Ordinal) < 0;
 
-    private static IEnumerable<SerializableEvent> SelectRetained(RetainedColdSegment retained, SortableUniqueId since)
-        => retained.Events.Where(evt => string.Compare(evt.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0);
+    private static (List<SerializableEvent> Events, bool HasMore) SelectRetained(
+        RetainedColdSegment retained, SortableUniqueId since, int? count)
+    {
+        if (!retained.IsSorted)
+        {
+            var eligible = retained.Events.Where(evt =>
+                string.Compare(evt.SortableUniqueIdValue, since.Value, StringComparison.Ordinal) > 0).ToList();
+            return (count.HasValue ? eligible.Take(count.Value).ToList() : eligible,
+                count.HasValue && eligible.Count > count.Value);
+        }
 
-    private void UseRetained(RetainedColdSegment retained, SortableUniqueId since, int? count)
+        // Upper bound excludes every equal id, including duplicates at batch boundaries.
+        var low = 0;
+        var high = retained.Events.Count;
+        while (low < high)
+        {
+            var middle = low + (high - low) / 2;
+            if (string.Compare(retained.Events[middle].SortableUniqueIdValue, since.Value, StringComparison.Ordinal) <= 0)
+                low = middle + 1;
+            else
+                high = middle;
+        }
+        var length = Math.Min(count ?? int.MaxValue, retained.Events.Count - low);
+        var events = new List<SerializableEvent>(length);
+        for (var i = low; i < low + length; i++) events.Add(retained.Events[i]);
+        return (events, low + length < retained.Events.Count);
+    }
+
+    private static bool IsSorted(IReadOnlyList<SerializableEvent> events)
+    {
+        for (var i = 1; i < events.Count; i++)
+            if (string.Compare(events[i - 1].SortableUniqueIdValue, events[i].SortableUniqueIdValue, StringComparison.Ordinal) > 0)
+                return false;
+        return true;
+    }
+
+    private void UseRetained(RetainedColdSegment retained, bool hasMore)
     {
         // Do not trim or advance loadedFrom. Another reader may still need the same suffix.
-        if (!count.HasValue || !SelectRetained(retained, since).Skip(count.Value).Any())
+        if (!hasMore)
             _retainedSegment.Clear(retained);
         else
             _retainedSegment.Touch(retained, _timeProvider.GetUtcNow());
@@ -830,8 +864,9 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
             List<SerializableEvent> parsed;
             if (CanUseRetained(retained, serviceId, since) && retained!.Entry == segment)
             {
-                parsed = SelectRetained(retained, since!).ToList();
-                UseRetained(retained, since!, remainingCount);
+                var selection = SelectRetained(retained, since!, remainingCount);
+                parsed = selection.Events;
+                UseRetained(retained, selection.HasMore);
             }
             else
             {
@@ -853,9 +888,12 @@ public sealed class HybridEventStore : IEventStore, IStreamingSerializableEventS
                     // A suffix alone cannot reproduce that read, so do not retain it.
                     if (parsed.Take(remainingCount.Value).All(evt =>
                             string.Compare(evt.SortableUniqueIdValue, loadedFrom, StringComparison.Ordinal) <= 0))
+                    {
+                        var suffix = parsed.Skip(remainingCount.Value).ToArray();
                         _retainedSegment.Replace(new RetainedColdSegment(serviceId, segment, loadedFrom,
-                            parsed.Skip(remainingCount.Value).ToArray(), manifest.Segments.Count,
+                            suffix, IsSorted(suffix), manifest.Segments.Count,
                             manifest.LatestSafeSortableUniqueId!, _timeProvider.GetUtcNow()));
+                    }
                     else
                         _retainedSegment.Clear(retained);
                 }

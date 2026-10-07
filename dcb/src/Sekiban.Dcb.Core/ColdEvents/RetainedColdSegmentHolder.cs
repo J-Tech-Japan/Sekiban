@@ -1,6 +1,16 @@
+using System.Collections.Concurrent;
 using Sekiban.Dcb.Events;
 
 namespace Sekiban.Dcb.ColdEvents;
+
+// Shared across factory lifetimes and scopes within one service provider.
+internal sealed class RetainedColdSegmentHolders
+{
+    private readonly ConcurrentDictionary<string, RetainedColdSegmentHolder> _holders = new(StringComparer.Ordinal);
+
+    internal RetainedColdSegmentHolder Get(string normalizedServiceId)
+        => _holders.GetOrAdd(normalizedServiceId, _ => new RetainedColdSegmentHolder());
+}
 
 // One immutable suffix per holder. Readers keep their snapshot even if another read replaces it.
 internal sealed class RetainedColdSegmentHolder
@@ -51,6 +61,7 @@ internal sealed record RetainedColdSegment(
     ColdSegmentInfo Entry,
     string LoadedFrom,
     IReadOnlyList<SerializableEvent> Events,
+    bool IsSorted,
     int SegmentCount,
     string ColdBoundary,
     DateTimeOffset LastUsed);

@@ -90,13 +90,15 @@ public static class SekibanDcbColdEventExtensions
         {
             // Replace the last registration in place: that is the one DI resolves.
             var index = services.IndexOf(factoryDescriptor);
-            services[index] = ServiceDescriptor.Singleton<IEventStoreFactory>(sp => new HybridEventStoreFactory(
+            services.TryAddSingleton<RetainedColdSegmentHolders>();
+            services[index] = new ServiceDescriptor(typeof(IEventStoreFactory), sp => new HybridEventStoreFactory(
                 ResolveFromDescriptor<IEventStoreFactory>(sp, factoryDescriptor),
                 sp.GetRequiredService<IColdObjectStorage>(),
                 sp.GetRequiredService<IColdSegmentFormatHandler>(),
                 sp.GetRequiredService<IOptions<ColdEventStoreOptions>>(),
                 sp.GetRequiredService<ILogger<HybridEventStore>>(),
-                sp.GetService<TimeProvider>() ?? TimeProvider.System));
+                sp.GetService<TimeProvider>() ?? TimeProvider.System,
+                sp.GetRequiredService<RetainedColdSegmentHolders>()), factoryDescriptor.Lifetime);
         }
 
         return services;

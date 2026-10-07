@@ -105,13 +105,26 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
         Assert.True(f.Storage.Manifests < 10);
     }
 
-    [Fact]
-    public async Task Equal_ids_at_loadedFrom_and_batch_boundary_and_unsorted_suffix_equal_uncached()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Equal_ids_at_loadedFrom_and_batch_boundary_equal_uncached(bool sorted)
     {
         using var f = new Fixture();
-        await f.Seed("a", new[] { 1, 2, 2, 2, 4, 3, 4, 4, 5, 6, 7, 8 }.Select(n => Event(n)).ToArray());
+        var ids = sorted
+            ? new[] { 1, 2, 2, 2, 3, 4, 4, 4, 5, 6, 7, 8 }
+            : new[] { 1, 2, 2, 2, 4, 3, 4, 4, 5, 6, 7, 8 };
+        await f.Seed("a", ids.Select(n => Event(n)).ToArray());
         await Read(f.Singleton, null, 2);
+        var opens = f.Storage.Opens;
         foreach (var since in new[] { 2, 3, 4, 2, 5 }) await f.Compare(f.Singleton, since, 2);
+        Assert.Equal(opens, f.Storage.Opens);
+        foreach (var count in new int?[] { 1, 2, 3, 6, 20, null })
+            foreach (var since in new[] { 2, 3, 4, 5, 6, 7, 8 })
+            {
+                await Read(f.Singleton, null, 2); // Refill so each case exercises retained selection.
+                await f.Compare(f.Singleton, since, count);
+            }
     }
 
     [Fact]
@@ -128,12 +141,68 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
     {
         using var f = new Fixture();
         foreach (var s in new[] { "a", "b" }) await f.Seed(s, Enumerable.Range(1, 10).Select(n => Event(n, s)).ToArray());
+        Assert.Same(f.Factory, f.Factory);
         Assert.IsType<HybridEventStore>(f.Factory.CreateForService("a"));
         await Read(f.Factory.CreateForService("a"), null, 2);
         await Read(f.Factory.CreateForService("b"), null, 2);
         var opens = f.Storage.Opens;
         await f.Compare(f.Factory.CreateForService("a"), 2, 2, "a");
         await f.Compare(f.Factory.CreateForService("b"), 2, 2, "b");
+        Assert.Equal(opens, f.Storage.Opens);
+    }
+
+    [Fact]
+    public async Task Factory_shares_holder_for_normalized_service_id()
+    {
+        using var f = new Fixture();
+        await f.Seed("a", Enumerable.Range(1, 10).Select(n => Event(n)).ToArray());
+        await f.Compare(f.Factory.CreateForService("A"), null, 2);
+        var opens = f.Storage.Opens;
+        await f.Compare(f.Factory.CreateForService("a"), 2, 2);
+        Assert.Equal(opens, f.Storage.Opens);
+    }
+
+    [Theory]
+    [InlineData(ServiceLifetime.Scoped)]
+    [InlineData(ServiceLifetime.Transient)]
+    public async Task Factory_preserves_lifetime_and_scope_dependencies_but_shares_holder(ServiceLifetime lifetime)
+    {
+        using var f = new Fixture();
+        await f.Seed("a", Enumerable.Range(1, 10).Select(n => Event(n)).ToArray());
+        var services = f.Services();
+        services.AddScoped<ScopedDependency>();
+        ((ICollection<ServiceDescriptor>)services).Add(
+            new ServiceDescriptor(typeof(IEventStoreFactory), typeof(ScopedFactory), lifetime));
+        services.AddSekibanDcbColdEventHybridRead();
+        Assert.Equal(lifetime, services.Last(d => d.ServiceType == typeof(IEventStoreFactory)).Lifetime);
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateScopes = true,
+            ValidateOnBuild = true
+        });
+        ScopedDependency firstDependency;
+        IEventStoreFactory firstFactory;
+        using (var scope = provider.CreateScope())
+        {
+            firstDependency = scope.ServiceProvider.GetRequiredService<ScopedDependency>();
+            firstFactory = scope.ServiceProvider.GetRequiredService<IEventStoreFactory>();
+            var anotherFactory = scope.ServiceProvider.GetRequiredService<IEventStoreFactory>();
+            if (lifetime == ServiceLifetime.Scoped) Assert.Same(firstFactory, anotherFactory);
+            else Assert.NotSame(firstFactory, anotherFactory);
+            await f.Compare(firstFactory.CreateForService("a"), null, 2);
+            Assert.Equal(1, firstDependency.Calls);
+        }
+        var opens = f.Storage.Opens;
+        using (var scope = provider.CreateScope())
+        {
+            var dependency = scope.ServiceProvider.GetRequiredService<ScopedDependency>();
+            Assert.NotSame(firstDependency, dependency);
+            var factory = scope.ServiceProvider.GetRequiredService<IEventStoreFactory>();
+            Assert.NotSame(firstFactory, factory);
+            await f.Compare(factory.CreateForService("a"), 2, 2);
+            Assert.Equal(1, dependency.Calls);
+            Assert.Equal(1, firstDependency.Calls);
+        }
         Assert.Equal(opens, f.Storage.Opens);
     }
 
@@ -265,6 +334,31 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task Aligned_list_reads_with_projection_match_uncached_events_and_boundary_metadata()
+    {
+        using var f = new Fixture(align: true, hot: Enumerable.Range(21, 3).Select(n => Event(n)).ToArray());
+        await f.Seed("a", Enumerable.Range(1, 10).Select(n => Event(n)).ToArray(),
+            Enumerable.Range(11, 10).Select(n => Event(n)).ToArray());
+        using var context = HybridReadProjectionContext.Push("aligned-retained-test");
+        var sawBoundary = false;
+        var sawInterior = false;
+        foreach (var (since, count) in new (int?, int)[] { (null, 3), (3, 3), (6, 3), (9, 3), (10, 3), (13, 3), (16, 3), (19, 3), (20, 3) })
+        {
+            var expected = await Read(f.Uncached("a"), since, count);
+            var expectedMetadata = HybridReadProjectionContext.BatchMetadata;
+            var actual = await Read(f.Singleton, since, count);
+            Assert.Equal(expected.Select(e => e.Id), actual.Select(e => e.Id));
+            Assert.NotNull(expectedMetadata);
+            Assert.Equal(expectedMetadata, HybridReadProjectionContext.BatchMetadata);
+            sawBoundary |= expectedMetadata.ReachedColdSegmentBoundary;
+            sawInterior |= expectedMetadata.UsedCold && !expectedMetadata.ReachedColdSegmentBoundary;
+        }
+        Assert.True(sawBoundary);
+        Assert.True(sawInterior);
+        Assert.Equal(2, f.Storage.Opens);
+    }
+
+    [Fact]
     public async Task End_and_idle_release_are_observed_as_new_opens()
     {
         using var f = new Fixture();
@@ -355,6 +449,20 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
         public WriteConditionCapabilityDescriptor DescribeWriteConditions() => new(new HashSet<WriteConditionKind> { WriteConditionKind.SingleEventUniqueKey }, "test factory");
     }
 
+    private sealed class ScopedDependency
+    {
+        public int Calls { get; set; }
+    }
+
+    private sealed class ScopedFactory(ScopedDependency dependency) : IEventStoreFactory
+    {
+        public IEventStore CreateForService(string serviceId)
+        {
+            dependency.Calls++;
+            return new ListEventStore([]);
+        }
+    }
+
     private sealed class Factory(IReadOnlyList<SerializableEvent> hot) : IEventStoreFactory
     {
         public IEventStore CreateForService(string serviceId) => new ListEventStore(hot);
@@ -381,15 +489,21 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
         private readonly IColdSegmentFormatHandler _handler;
         private readonly IReadOnlyList<SerializableEvent> _hot;
         private readonly ServiceProvider _sp;
+        private readonly bool _align;
         public IEventStoreFactory InnerFactory { get; }
-        public Fixture(IColdSegmentFormatHandler? handler = null, IReadOnlyList<SerializableEvent>? hot = null)
+        public Fixture(IColdSegmentFormatHandler? handler = null, IReadOnlyList<SerializableEvent>? hot = null, bool align = false)
         {
+            _align = align;
             _hot = hot ?? [];
             _handler = handler ?? new JsonlColdSegmentFormatHandler();
             InnerFactory = new Factory(_hot);
             var services = Services();
             services.AddSekibanDcbColdEventHybridRead();
-            _sp = services.BuildServiceProvider();
+            _sp = services.BuildServiceProvider(new ServiceProviderOptions
+            {
+                ValidateScopes = true,
+                ValidateOnBuild = true
+            });
         }
         public ServiceCollection Services()
         {
@@ -401,13 +515,13 @@ public class HybridRetainedSegmentTests(ITestOutputHelper output)
             services.AddSingleton(_handler);
             services.AddSingleton<IServiceIdProvider>(Service);
             services.AddSingleton<TimeProvider>(Time);
-            services.AddSingleton<IOptions<ColdEventStoreOptions>>(Options.Create(new ColdEventStoreOptions { Enabled = true, AlignCatchUpReadsToSegmentBoundary = false }));
+            services.AddSingleton<IOptions<ColdEventStoreOptions>>(Options.Create(new ColdEventStoreOptions { Enabled = true, AlignCatchUpReadsToSegmentBoundary = _align }));
             return services;
         }
         public IEventStore Singleton => _sp.GetRequiredService<IEventStore>();
         public IEventStoreFactory Factory => _sp.GetRequiredService<IEventStoreFactory>();
         public IEventStore Uncached(string service) => new HybridEventStore(new ListEventStore(_hot), Storage.Inner, _handler,
-            new FixedServiceIdProvider(service), Options.Create(new ColdEventStoreOptions { Enabled = true }), Microsoft.Extensions.Logging.Abstractions.NullLogger<HybridEventStore>.Instance);
+            new FixedServiceIdProvider(service), Options.Create(new ColdEventStoreOptions { Enabled = true, AlignCatchUpReadsToSegmentBoundary = _align }), Microsoft.Extensions.Logging.Abstractions.NullLogger<HybridEventStore>.Instance);
         public async Task Compare(IEventStore cached, int? since, int? count, string service = "a")
             => Assert.Equal((await Read(Uncached(service), since, count)).Select(e => e.Id), (await Read(cached, since, count)).Select(e => e.Id));
         public async Task Seed(string service, params SerializableEvent[][] segments)
