@@ -73,33 +73,49 @@ public static class SekibanDcbColdEventExtensions
 
         services.Replace(ServiceDescriptor.Singleton<IEventStore>(sp =>
         {
-            var hotStore = ResolveFromDescriptor(sp, existingDescriptor);
+            var hotStore = ResolveFromDescriptor<IEventStore>(sp, existingDescriptor);
             return new HybridEventStore(
                 hotStore,
                 sp.GetRequiredService<IColdObjectStorage>(),
                 sp.GetRequiredService<IColdSegmentFormatHandler>(),
                 sp.GetRequiredService<IServiceIdProvider>(),
                 sp.GetRequiredService<IOptions<ColdEventStoreOptions>>(),
-                sp.GetRequiredService<ILogger<HybridEventStore>>());
+                sp.GetRequiredService<ILogger<HybridEventStore>>(),
+                new RetainedColdSegmentHolder(),
+                sp.GetService<TimeProvider>() ?? TimeProvider.System);
         }));
+
+        var factoryDescriptor = services.LastOrDefault(d => d.ServiceType == typeof(IEventStoreFactory));
+        if (factoryDescriptor is not null)
+        {
+            // Replace the last registration in place: that is the one DI resolves.
+            var index = services.IndexOf(factoryDescriptor);
+            services[index] = ServiceDescriptor.Singleton<IEventStoreFactory>(sp => new HybridEventStoreFactory(
+                ResolveFromDescriptor<IEventStoreFactory>(sp, factoryDescriptor),
+                sp.GetRequiredService<IColdObjectStorage>(),
+                sp.GetRequiredService<IColdSegmentFormatHandler>(),
+                sp.GetRequiredService<IOptions<ColdEventStoreOptions>>(),
+                sp.GetRequiredService<ILogger<HybridEventStore>>(),
+                sp.GetService<TimeProvider>() ?? TimeProvider.System));
+        }
 
         return services;
     }
 
-    private static IEventStore ResolveFromDescriptor(IServiceProvider sp, ServiceDescriptor descriptor)
+    private static T ResolveFromDescriptor<T>(IServiceProvider sp, ServiceDescriptor descriptor) where T : class
     {
-        if (descriptor.ImplementationInstance is IEventStore instance)
+        if (descriptor.ImplementationInstance is T instance)
         {
             return instance;
         }
         if (descriptor.ImplementationFactory is not null)
         {
-            return (IEventStore)descriptor.ImplementationFactory(sp);
+            return (T)descriptor.ImplementationFactory(sp);
         }
         if (descriptor.ImplementationType is not null)
         {
-            return (IEventStore)ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType);
+            return (T)ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType);
         }
-        throw new InvalidOperationException("Cannot resolve inner IEventStore from existing registration");
+        throw new InvalidOperationException("Cannot resolve inner store from existing registration");
     }
 }
