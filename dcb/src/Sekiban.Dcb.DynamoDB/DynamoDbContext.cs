@@ -120,7 +120,14 @@ public class DynamoDbContext
                 // Continue to create table
             }
 
-            await _client.CreateTableAsync(request, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await _client.CreateTableAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ResourceInUseException)
+            {
+                // Another caller is creating, or has already created, the table.
+            }
             await WaitForTableActiveAsync(request.TableName, cancellationToken).ConfigureAwait(false);
 
             if (_logger != null)
