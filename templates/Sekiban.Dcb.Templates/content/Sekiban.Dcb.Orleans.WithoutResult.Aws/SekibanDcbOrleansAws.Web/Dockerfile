@@ -1,6 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+COPY ["SekibanDcbTemplateVersion.props", "./"]
+
 COPY ["SekibanDcbOrleansAws.Web/SekibanDcbOrleansAws.Web.csproj", "SekibanDcbOrleansAws.Web/"]
 COPY ["SekibanDcbOrleansAws.Domain/SekibanDcbOrleansAws.Domain.csproj", "SekibanDcbOrleansAws.Domain/"]
 COPY ["SekibanDcbOrleansAws.ServiceDefaults/SekibanDcbOrleansAws.ServiceDefaults.csproj", "SekibanDcbOrleansAws.ServiceDefaults/"]

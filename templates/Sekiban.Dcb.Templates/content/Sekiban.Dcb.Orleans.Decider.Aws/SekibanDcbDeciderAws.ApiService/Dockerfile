@@ -1,6 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+COPY ["SekibanDcbTemplateVersion.props", "./"]
+
 COPY ["SekibanDcbDeciderAws.ApiService/SekibanDcbDeciderAws.ApiService.csproj", "SekibanDcbDeciderAws.ApiService/"]
 COPY ["SekibanDcbDeciderAws.EventSource/SekibanDcbDeciderAws.EventSource.csproj", "SekibanDcbDeciderAws.EventSource/"]
 COPY ["SekibanDcbDeciderAws.Interactions/SekibanDcbDeciderAws.Interactions.csproj", "SekibanDcbDeciderAws.Interactions/"]

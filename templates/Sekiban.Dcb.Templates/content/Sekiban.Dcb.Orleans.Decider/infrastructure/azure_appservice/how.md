@@ -172,7 +172,7 @@ on:
     paths:
       - "src/OrleansSekiban/**"
 env:
-  DOTNET_VERSION: 9.0.x
+  DOTNET_VERSION: 10.0.x
 
 jobs:
   deploy-municipality:
@@ -209,7 +209,7 @@ on:
     paths:
       - "src/OrleansSekiban/**"
 env:
-  DOTNET_VERSION: 9.0.x
+  DOTNET_VERSION: 10.0.x
 
 jobs:
   deploy-municipality:

@@ -1,5 +1,7 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
+
+COPY ["SekibanDcbTemplateVersion.props", "./"]
 
 COPY ["SekibanDcbDecider.Web/SekibanDcbDecider.Web.csproj", "SekibanDcbDecider.Web/"]
 COPY ["SekibanDcbDecider.EventSource/SekibanDcbDecider.EventSource.csproj", "SekibanDcbDecider.EventSource/"]
@@ -14,7 +16,7 @@ COPY . .
 WORKDIR /src/SekibanDcbDecider.Web
 RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-preview AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 ENV ASPNETCORE_URLS=http://+:8080 \
     ASPNETCORE_ENVIRONMENT=Production \

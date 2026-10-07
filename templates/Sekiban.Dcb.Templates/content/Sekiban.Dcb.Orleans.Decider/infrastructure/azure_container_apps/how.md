@@ -282,7 +282,7 @@ on:
     paths:
       - "src/MyProject/**"
 env:
-  DOTNET_VERSION: 9.0.x
+  DOTNET_VERSION: 10.0.x
   RESOUCE_GROUP_NAME: <resouce_group_name>
   BACKEND_IMAGE_NAME: backend-${{ env.RESOUCE_GROUP_NAME }}
 
@@ -342,7 +342,7 @@ on:
     paths:
       - "src/MyProject/**"
 env:
-  DOTNET_VERSION: 9.0.x
+  DOTNET_VERSION: 10.0.x
   RESOUCE_GROUP_NAME: <resouce_group_name>
   FRONTEND_IMAGE_NAME: frontend-${{ env.RESOUCE_GROUP_NAME }}
 

@@ -1,17 +1,19 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-COPY ["SekibanDcbOrleans.Web/SekibanDcbOrleans.Web.csproj", "SekibanDcbOrleans.Web/"]
-COPY ["SekibanDcbOrleans.EventSource/SekibanDcbOrleans.EventSource.csproj", "SekibanDcbOrleans.EventSource/"]
-COPY ["SekibanDcbOrleans.Interactions/SekibanDcbOrleans.Interactions.csproj", "SekibanDcbOrleans.Interactions/"]
-COPY ["SekibanDcbOrleans.ImmutableModels/SekibanDcbOrleans.ImmutableModels.csproj", "SekibanDcbOrleans.ImmutableModels/"]
-COPY ["SekibanDcbOrleans.MeetingRoomModels/SekibanDcbOrleans.MeetingRoomModels.csproj", "SekibanDcbOrleans.MeetingRoomModels/"]
-COPY ["SekibanDcbOrleans.ServiceDefaults/SekibanDcbOrleans.ServiceDefaults.csproj", "SekibanDcbOrleans.ServiceDefaults/"]
+COPY ["SekibanDcbTemplateVersion.props", "./"]
 
-RUN dotnet restore "SekibanDcbOrleans.Web/SekibanDcbOrleans.Web.csproj"
+COPY ["SekibanDcbDeciderAws.Web/SekibanDcbDeciderAws.Web.csproj", "SekibanDcbDeciderAws.Web/"]
+COPY ["SekibanDcbDeciderAws.EventSource/SekibanDcbDeciderAws.EventSource.csproj", "SekibanDcbDeciderAws.EventSource/"]
+COPY ["SekibanDcbDeciderAws.Interactions/SekibanDcbDeciderAws.Interactions.csproj", "SekibanDcbDeciderAws.Interactions/"]
+COPY ["SekibanDcbDeciderAws.ImmutableModels/SekibanDcbDeciderAws.ImmutableModels.csproj", "SekibanDcbDeciderAws.ImmutableModels/"]
+COPY ["SekibanDcbDeciderAws.MeetingRoomModels/SekibanDcbDeciderAws.MeetingRoomModels.csproj", "SekibanDcbDeciderAws.MeetingRoomModels/"]
+COPY ["SekibanDcbDeciderAws.ServiceDefaults/SekibanDcbDeciderAws.ServiceDefaults.csproj", "SekibanDcbDeciderAws.ServiceDefaults/"]
+
+RUN dotnet restore "SekibanDcbDeciderAws.Web/SekibanDcbDeciderAws.Web.csproj"
 
 COPY . .
-WORKDIR /src/SekibanDcbOrleans.Web
+WORKDIR /src/SekibanDcbDeciderAws.Web
 RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
@@ -21,4 +23,4 @@ ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 COPY --from=build /app/publish .
 EXPOSE 8080
-ENTRYPOINT ["dotnet", "SekibanDcbOrleans.Web.dll"]
+ENTRYPOINT ["dotnet", "SekibanDcbDeciderAws.Web.dll"]
