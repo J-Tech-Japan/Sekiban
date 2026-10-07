@@ -1,3 +1,5 @@
+using Sekiban.Dcb.ServiceId;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Reflection;
@@ -15,6 +17,9 @@ using Sekiban.Dcb.Sqlite;
 using Sekiban.Dcb.Sqlite.Services;
 using Sekiban.Dcb.Storage;
 using System.Text.Encodings.Web;
+
+// This identity partitions all data; it must match the API and stay stable.
+const string defaultServiceId = "sekiban-app";
 
 // Build configuration from environment variables and user secrets
 var configuration = new ConfigurationBuilder()
@@ -519,6 +524,15 @@ rootCommand.Add(profilesCommand);
 var parseResult = rootCommand.Parse(args);
 return await parseResult.InvokeAsync();
 
+static string GetServiceId()
+{
+    var configuration = new ConfigurationBuilder()
+        .AddEnvironmentVariables()
+        .AddUserSecrets(Assembly.GetExecutingAssembly(), optional: true)
+        .Build();
+    return ServiceIdValidator.NormalizeAndValidate(configuration["Sekiban:ServiceId"] ?? defaultServiceId);
+}
+
 // Helper to resolve profile configuration
 static IConfiguration? ResolveProfile(IConfiguration configuration, string? profileName)
 {
@@ -722,7 +736,7 @@ static CacheOptions BuildCacheOptions(string? cacheMode, string? cacheDir)
 
 static bool TryResolveCachePath(CacheOptions cacheOptions, out string? cachePath)
 {
-    var resolvedPath = Path.Combine(cacheOptions.CacheDir, "events.db");
+    var resolvedPath = Path.Combine(cacheOptions.CacheDir, Uri.EscapeDataString(GetServiceId()), "events.db");
 
     if (cacheOptions.Mode == SimpleCacheMode.Clear && File.Exists(resolvedPath))
     {
@@ -1573,13 +1587,13 @@ static ServiceProvider BuildServices(
         // Register Cosmos DB services with options
         var cosmosContext = new CosmosDbContext(connectionString, cosmosDatabaseName, options: cosmosOptions);
         services.AddSingleton(cosmosOptions);
-        services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
+
         services.AddSingleton<ICosmosContainerResolver, DefaultCosmosContainerResolver>();
         services.AddSingleton(cosmosContext);
         if (useCache)
         {
             services.AddSingleton<IEventStore>(sp =>
-                SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath!, sp.GetRequiredService<DcbDomainTypes>().EventTypes));
+                new SqliteEventStore(cachePath!, sp.GetRequiredService<DcbDomainTypes>().EventTypes, serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
         }
         else
         {
@@ -1596,11 +1610,11 @@ static ServiceProvider BuildServices(
         });
 
         // Register event store
-        services.AddSingleton<Sekiban.Dcb.ServiceId.IServiceIdProvider, Sekiban.Dcb.ServiceId.DefaultServiceIdProvider>();
+
         if (useCache)
         {
             services.AddSingleton<IEventStore>(sp =>
-                SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath!, sp.GetRequiredService<DcbDomainTypes>().EventTypes));
+                new SqliteEventStore(cachePath!, sp.GetRequiredService<DcbDomainTypes>().EventTypes, serviceIdProvider: sp.GetRequiredService<IServiceIdProvider>()));
         }
         else
         {
@@ -1625,6 +1639,8 @@ static ServiceProvider BuildServices(
     services.AddSingleton<TagStateService>();
     services.AddSingleton<TagListService>();
 
+    services.RemoveAll<IServiceIdProvider>();
+    services.AddSingleton<IServiceIdProvider>(new FixedServiceIdProvider(GetServiceId()));
     return services.BuildServiceProvider();
 }
 
@@ -1706,7 +1722,9 @@ static async Task SyncCacheAsync(string connectionString, string databaseType, s
 
     // Create cache directory
     Directory.CreateDirectory(cacheDir);
-    var cachePath = Path.Combine(cacheDir, "events.db");
+    var cachePath = Path.Combine(cacheDir, Uri.EscapeDataString(GetServiceId()), "events.db");
+
+    Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
 
     // Build remote services
     var services = BuildServices(connectionString, databaseType, cosmosDatabaseName);
@@ -1714,7 +1732,7 @@ static async Task SyncCacheAsync(string connectionString, string databaseType, s
     var domainTypes = services.GetRequiredService<DcbDomainTypes>();
 
     // Create local SQLite cache
-    var localStore = SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath, domainTypes.EventTypes);
+    var localStore = new SqliteEventStore(cachePath, domainTypes.EventTypes, serviceIdProvider: new FixedServiceIdProvider(GetServiceId()));
 
     // Create cache sync helper
     var syncOptions = new CacheSyncOptions
@@ -1749,7 +1767,7 @@ static async Task ShowCacheStatsAsync(string cacheDir)
     Console.WriteLine($"Cache Directory: {cacheDir}");
     Console.WriteLine();
 
-    var cachePath = Path.Combine(cacheDir, "events.db");
+    var cachePath = Path.Combine(cacheDir, Uri.EscapeDataString(GetServiceId()), "events.db");
 
     if (!File.Exists(cachePath))
     {
@@ -1767,7 +1785,7 @@ static async Task ShowCacheStatsAsync(string cacheDir)
 
     // Create a minimal SQLite store to read stats
     var domainTypes = DomainType.GetDomainTypes();
-    var localStore = SekibanDcbSqliteExtensions.CreateSqliteCache(cachePath, domainTypes.EventTypes);
+    var localStore = new SqliteEventStore(cachePath, domainTypes.EventTypes, serviceIdProvider: new FixedServiceIdProvider(GetServiceId()));
 
     // Get event count
     var countResult = await localStore.GetEventCountAsync();
@@ -1817,7 +1835,7 @@ static async Task ClearCacheAsync(string cacheDir)
     Console.WriteLine($"Cache Directory: {cacheDir}");
     Console.WriteLine();
 
-    var cachePath = Path.Combine(cacheDir, "events.db");
+    var cachePath = Path.Combine(cacheDir, Uri.EscapeDataString(GetServiceId()), "events.db");
 
     if (!File.Exists(cachePath))
     {

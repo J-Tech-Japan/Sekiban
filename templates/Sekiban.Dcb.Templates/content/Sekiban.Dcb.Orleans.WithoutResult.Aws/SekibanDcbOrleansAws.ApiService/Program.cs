@@ -1,3 +1,5 @@
+using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Orleans.ServiceId;
 using SekibanDcbOrleansAws.ApiService;
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.ClassRoom;
@@ -30,6 +32,10 @@ using Dcb.Domain.WithoutResult.MaterializedViews;
 using Dapper;
 
 var builder = WebApplication.CreateBuilder(args);
+// This identity partitions all event, projection and MV data. Keep it stable once data exists.
+// Use a distinct identity for each application sharing storage in a multi-service deployment.
+const string defaultServiceId = "sekiban-app";
+var serviceId = ServiceIdentity.Resolve(builder.Configuration, defaultServiceId);
 
 // Configure logging to suppress noisy AWS SDK logs in development
 if (builder.Environment.IsDevelopment())
@@ -271,6 +277,7 @@ builder.Services.AddSekibanDcbColdEventDefaults();
 // DynamoDB by default but can opt into a Postgres-backed read model.
 builder.Services.AddSekibanDcbMaterializedView(options =>
 {
+    options.ServiceId = serviceId;
     options.BatchSize = 100;
     options.PollInterval = TimeSpan.FromSeconds(1);
 });
@@ -338,6 +345,9 @@ if (builder.Environment.IsDevelopment())
 // Development only logs the banner. Must come AFTER the Sekiban registrations. Contract:
 // https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md
 builder.Services.AddSekibanDcbProductionGuard();
+
+// Storage registrations may supply the legacy provider: replace them after ALL storage registrations.
+ServiceIdentity.Register(builder.Services, serviceId);
 
 var app = builder.Build();
 
@@ -714,7 +724,7 @@ apiRoute
         "/weatherforecast/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjection"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
@@ -726,7 +736,7 @@ apiRoute
         "/weatherforecastgeneric/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
@@ -738,7 +748,7 @@ apiRoute
         "/weatherforecastsingle/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjectorWithTagStateProjector"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
@@ -750,7 +760,7 @@ apiRoute
         "/weatherforecast/status",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjection"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
@@ -761,7 +771,7 @@ apiRoute
         "/weatherforecastgeneric/status",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
@@ -772,7 +782,7 @@ apiRoute
         "/weatherforecastsingle/status",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjectorWithTagStateProjector"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
@@ -788,7 +798,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
             {
                 var start = DateTime.UtcNow;
                 Console.WriteLine($"[PersistEndpoint] Request name={name} start={start:O}");
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
                 var rb = await grain.PersistStateAsync();
                 var end = DateTime.UtcNow;
                 if (rb.IsSuccess)
@@ -810,7 +820,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
             "/projections/deactivate",
             async ([FromQuery] string name, [FromServices] IClusterClient client) =>
             {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
                 await grain.RequestDeactivationAsync();
                 return Results.Ok(new { success = true });
             })
@@ -824,7 +834,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
             "/projections/refresh",
             async ([FromQuery] string name, [FromServices] IClusterClient client) =>
             {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
                 await grain.RefreshAsync();
                 return Results.Ok(new { success = true });
             })
@@ -838,7 +848,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
             "/projections/snapshot",
             async ([FromQuery] string name, [FromQuery] bool? unsafeState, [FromServices] IClusterClient client) =>
             {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
                 var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
                 if (!rb.IsSuccess) return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = rb.GetException()?.Message }));
                 return Results.Text(rb.GetValue(), "application/json");
@@ -853,7 +863,7 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
             "/projections/overwrite-version",
             async ([FromQuery] string name, [FromQuery] string newVersion, [FromServices] IClusterClient client) =>
             {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
                 var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
                 return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
             })

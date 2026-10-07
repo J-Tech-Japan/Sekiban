@@ -1,3 +1,5 @@
+using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Dcb.EventSource.Queries;
 using Dcb.EventSource.Weather;
 using Dcb.ImmutableModels.Events.Weather;
@@ -176,49 +178,55 @@ public static class WeatherEndpoints
     }
 
     private static async Task<IResult> GetWeatherForecastStatusAsync(
+        [FromServices] IServiceIdProvider serviceIdProvider,
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+        var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), "WeatherForecastProjection"));
         var status = await grain.GetStatusAsync();
         return Results.Ok(status);
     }
 
     private static async Task<IResult> GetWeatherForecastGenericStatusAsync(
+        [FromServices] IServiceIdProvider serviceIdProvider,
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+        var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), "WeatherForecastProjection"));
         var status = await grain.GetStatusAsync();
         return Results.Ok(status);
     }
 
     private static async Task<IResult> GetWeatherForecastSingleStatusAsync(
+        [FromServices] IServiceIdProvider serviceIdProvider,
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+        var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), "WeatherForecastProjectorWithTagStateProjector"));
         var status = await grain.GetStatusAsync();
         return Results.Ok(status);
     }
 
     private static async Task<IResult> GetEventDeliveryStatisticsAsync(
+        [FromServices] IServiceIdProvider serviceIdProvider,
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+        var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), "WeatherForecastProjection"));
         var stats = await grain.GetEventDeliveryStatisticsAsync();
         return Results.Ok(stats);
     }
 
     private static async Task<IResult> GetEventDeliveryStatisticsGenericAsync(
+        [FromServices] IServiceIdProvider serviceIdProvider,
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+        var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), "WeatherForecastProjection"));
         var stats = await grain.GetEventDeliveryStatisticsAsync();
         return Results.Ok(stats);
     }
 
     private static async Task<IResult> GetEventDeliveryStatisticsSingleAsync(
+        [FromServices] IServiceIdProvider serviceIdProvider,
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+        var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), "WeatherForecastProjectorWithTagStateProjector"));
         var stats = await grain.GetEventDeliveryStatisticsAsync();
         return Results.Ok(stats);
     }

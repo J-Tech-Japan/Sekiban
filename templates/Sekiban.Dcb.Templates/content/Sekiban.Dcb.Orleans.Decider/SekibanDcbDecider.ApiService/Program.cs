@@ -1,3 +1,4 @@
+using Sekiban.Dcb.Orleans.ServiceId;
 using System.Net;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
@@ -51,6 +52,10 @@ const string InsufficientPrivilegeSqlState = "42501";
 const int MaxEnsureDatabaseAttempts = 20;
 
 var builder = WebApplication.CreateBuilder(args);
+// This identity partitions all event, projection and MV data. Keep it stable once data exists.
+// Use a distinct identity for each application sharing storage in a multi-service deployment.
+const string defaultServiceId = "sekiban-app";
+var serviceId = ServiceIdentity.Resolve(builder.Configuration, defaultServiceId);
 
 // Configure logging to suppress Azure Storage warnings in development
 if (builder.Environment.IsDevelopment())
@@ -166,6 +171,7 @@ builder.Services.AddSekibanDcbColdEventDefaults();
 // Register materialized view runtime (only effective when Postgres is the storage backend)
 builder.Services.AddSekibanDcbMaterializedView(options =>
 {
+    options.ServiceId = serviceId;
     options.BatchSize = 100;
     options.PollInterval = TimeSpan.FromSeconds(1);
 });
@@ -261,6 +267,9 @@ builder.Services.AddCors(options =>
 // Development only logs the banner. Must come AFTER the Sekiban registrations. Contract:
 // https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md
 builder.Services.AddSekibanDcbProductionGuard();
+
+// Storage registrations may supply the legacy provider: replace them after ALL storage registrations.
+ServiceIdentity.Register(builder.Services, serviceId);
 
 var app = builder.Build();
 

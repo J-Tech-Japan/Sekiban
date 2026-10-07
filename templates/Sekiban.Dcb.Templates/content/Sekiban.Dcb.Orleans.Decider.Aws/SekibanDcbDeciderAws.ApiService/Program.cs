@@ -1,3 +1,5 @@
+using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Microsoft.Extensions.DependencyInjection;
 using Dcb.EventSource;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +30,10 @@ using SekibanDcbDeciderAws.ApiService.Exceptions;
 using SekibanDcbDeciderAws.ApiService.Realtime;
 
 var builder = WebApplication.CreateBuilder(args);
+// This identity partitions all event, projection and MV data. Keep it stable once data exists.
+// Use a distinct identity for each application sharing storage in a multi-service deployment.
+const string defaultServiceId = "sekiban-app";
+var serviceId = ServiceIdentity.Resolve(builder.Configuration, defaultServiceId);
 
 // Configure logging to suppress AWS SDK warnings in development
 if (builder.Environment.IsDevelopment())
@@ -262,6 +268,7 @@ builder.Services.AddSekibanDcbColdEventDefaults();
 // DynamoDB by default but can opt into a Postgres-backed read model.
 builder.Services.AddSekibanDcbMaterializedView(options =>
 {
+    options.ServiceId = serviceId;
     options.BatchSize = 100;
     options.PollInterval = TimeSpan.FromSeconds(1);
 });
@@ -326,6 +333,9 @@ if (builder.Environment.IsDevelopment())
 // Development only logs the banner. Must come AFTER the Sekiban registrations. Contract:
 // https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md
 builder.Services.AddSekibanDcbProductionGuard();
+
+// Storage registrations may supply the legacy provider: replace them after ALL storage registrations.
+ServiceIdentity.Register(builder.Services, serviceId);
 
 var app = builder.Build();
 
