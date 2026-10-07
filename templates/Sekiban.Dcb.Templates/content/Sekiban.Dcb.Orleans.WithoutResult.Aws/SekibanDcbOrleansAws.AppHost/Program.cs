@@ -4,7 +4,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 // Add LocalStack for AWS services (DynamoDB + S3)
 var localstack = builder
-    .AddContainer("localstack", "localstack/localstack")
+    .AddContainer("localstack", "localstack/localstack", "4.9")
     .WithEndpoint(targetPort: 4566, port: 4566, scheme: "http", name: "edge")
     .WithEnvironment("SERVICES", "dynamodb,s3")
     .WithEnvironment("PERSISTENCE", "1")
