@@ -1157,7 +1157,6 @@ apiRoute
         })
     .WithName("RemoveWeatherForecast");
 
-// Health check endpoint
 
 // Materialized view endpoints depend on the Orleans MV runtime, which is registered only when a
 // `DcbMaterializedViewPostgres` connection string is supplied. Skip the route when MV is off so

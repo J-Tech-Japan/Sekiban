@@ -26,7 +26,7 @@ Azure テンプレートのイベントストアは生成後に `Sekiban:Databas
 dotnet new sekiban-dcb-orleans -n YourProjectName
 ```
 
-Do not use a C# type name such as `Program` as the project name.
+プロジェクト名には、`Program` などの C# の型名を使用しないでください。
 
 各テンプレートに共通して含まれるもの:
 

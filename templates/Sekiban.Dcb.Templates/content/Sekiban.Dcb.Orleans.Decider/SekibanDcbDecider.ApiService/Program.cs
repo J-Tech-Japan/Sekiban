@@ -159,7 +159,7 @@ else
     });
 }
 
-// Orleans health check registration (Readiness: Silo has joined the cluster)
+// Readiness checks: Orleans cluster membership and authentication initialization
 builder.Services.AddSingleton<AuthInitializationHealthCheck>();
 builder.Services.AddHealthChecks()
     .AddCheck<OrleansHealthCheck>("orleans", tags: ["ready"])
