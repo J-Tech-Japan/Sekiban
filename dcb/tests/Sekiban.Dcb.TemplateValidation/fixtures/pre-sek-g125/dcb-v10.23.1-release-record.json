@@ -1,0 +1,19 @@
+{
+  "schema_version": 3,
+  "version": "10.23.1",
+  "stage": "prepared",
+  "merged_sha": "20e025441cd95cc831c3bdc1bb901fc92929e77f",
+  "candidate_pr": 1320,
+  "checks": [
+    { "name": "dcbTestsNet9", "run_id": 37541879620 },
+    { "name": "dcbTestsNet10", "run_id": 37541879620 },
+    { "name": "packagedConsumer", "run_id": 37541883237 },
+    { "name": "templateConsumer", "run_id": 37541886995 }
+  ],
+  "release_bodies": {
+    "library_en_sha256": "b7d2fb2b3ae874ad4aa7a7079690d513a279882d040e00d90e76bcd6227eafa1",
+    "library_ja_sha256": "0fef1aa3e01ebe8711456855a7ecd7023b2ce5b40ca6c62d12d54c35e4661009",
+    "template_en_sha256": "58f34399fff2ca974b2ad29f2f3a26f6f175b4df06ab557c4a344582f28a34dd",
+    "template_ja_sha256": "20dd90183ea05c2834307a5cae9fa0d179fe095ec8e747552ab31114b89a6a1c"
+  }
+}

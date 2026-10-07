@@ -2,12 +2,11 @@
 # Read exactly one host-owned schema-3 record at an immutable commit. No evidence graph.
 set -euo pipefail
 host_repository="J-Tech-Japan/SekibanIntentHost"
-record_kind=""; version=""; state=""; output_dir=""; manifest_path=""
+version=""; state=""; output_dir=""; manifest_path=""
 ref="${SEKIBAN_RELEASE_RECORD_REF:-}"
-usage() { echo 'Usage: read-host-release-record.sh --kind library|template --version <x.y.z> --state prepared|complete --output-dir <dir> --manifest <dir>/bundle.json [--ref <40-hex>]' >&2; exit 2; }
+usage() { echo 'Usage: read-host-release-record.sh --version <x.y.z> --state prepared|complete --output-dir <dir> --manifest <dir>/bundle.json [--ref <40-hex>]' >&2; exit 2; }
 while (( $# )); do
   case "$1" in
-    --kind) record_kind="$2"; shift 2 ;;
     --version) version="$2"; shift 2 ;;
     --state) state="$2"; shift 2 ;;
     --output-dir) output_dir="$2"; shift 2 ;;
@@ -17,7 +16,6 @@ while (( $# )); do
   esac
 done
 [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && -n "$output_dir" && -n "$manifest_path" ]] || usage
-[[ "$record_kind" == library || "$record_kind" == template ]] || usage
 [[ "$state" == prepared || "$state" == complete ]] || usage
 [[ -n "${GH_TOKEN:-}" ]] || { echo 'SEKIBAN_RELEASE_RECORD_TOKEN is required as GH_TOKEN.' >&2; exit 1; }
 [[ "$ref" =~ ^[0-9a-fA-F]{40}$ ]] || { echo 'SEKIBAN_RELEASE_RECORD_REF must be an immutable 40-hex commit.' >&2; exit 1; }
@@ -25,9 +23,7 @@ output_dir="$(mkdir -p "$output_dir" && cd "$output_dir" && pwd)"
 manifest_path="$(mkdir -p "$(dirname "$manifest_path")" && cd "$(dirname "$manifest_path")" && pwd)/$(basename "$manifest_path")"
 [[ "$manifest_path" == "$output_dir/bundle.json" ]] || { echo 'Detached manifest is not accepted.' >&2; exit 1; }
 [[ -z "$(find "$output_dir" -mindepth 1 -maxdepth 1 -print -quit)" ]] || { echo 'Output directory must be empty.' >&2; exit 1; }
-prefix=dcb
-[[ "$record_kind" == template ]] && prefix=dcbTemplates
-record_path="intents/sekiban/releases/${prefix}-v${version}-release-record.json"
+record_path="intents/sekiban/releases/dcb-v${version}-release-record.json"
 temporary="$(mktemp -d "${TMPDIR:-/tmp}/sek-release-record.XXXXXX")"
 trap 'rm -rf "$temporary"' EXIT
 gh api --method GET "repos/${host_repository}/contents/${record_path}?ref=${ref}" > "$temporary/envelope.json"

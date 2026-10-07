@@ -166,7 +166,7 @@ internal static class Program
         var sha = Schema3ReleaseRecordValidator.Validate(
             Required(options, "bundle"), Required(options, "manifest"),
             Required(options, "repo-root"), expectedVersion, RequiredValue(options, "state"),
-            new GitHubReleaseApi());
+            RequiredValue(options, "kind"), new GitHubReleaseApi());
         var temporary = output + ".tmp-" + Guid.NewGuid().ToString("N");
         try
         {
@@ -605,6 +605,20 @@ internal static class Program
         Assert(File.Exists(dcbPackageWorkflow), "The DCB package workflow is missing.");
         Assert(File.Exists(azureQueueConsumerWorkflow), "The Azure Queue PR packaged-consumer workflow is missing.");
         Assert(File.Exists(publishWorkflow), "The DCB template publish workflow is missing.");
+        var publicWorkflow = File.ReadAllText(Path.Combine(workflowRoot, "dcb_template_validation.yml"));
+        Assert(publicWorkflow.Contains("public_libraries:", StringComparison.Ordinal) &&
+               publicWorkflow.Contains("default: false", StringComparison.Ordinal) &&
+               publicWorkflow.Contains("  public-library-applicability:", StringComparison.Ordinal) &&
+               publicWorkflow.Contains("GH_TOKEN: ${{ github.token }}", StringComparison.Ordinal) &&
+               !publicWorkflow.Contains("continue-on-error", StringComparison.Ordinal),
+            "Public applicability must be a separate read-only workflow-token job with dispatch default off.");
+        var publicJob = publicWorkflow.Split("  published-library-consumer:")[1].Split("  packaged-consumer:")[0];
+        Assert(publicJob.Contains("    if: needs.public-library-applicability.outputs.applicable == 'true'", StringComparison.Ordinal) &&
+               publicJob.Contains("name: Published-library template consumer", StringComparison.Ordinal) &&
+               publicJob.Contains("run-packaged-consumer.sh", StringComparison.Ordinal) &&
+               !publicJob.Contains("      if:", StringComparison.Ordinal) && !publicJob.Contains("--feed", StringComparison.Ordinal) &&
+               !publicJob.Contains("continue-on-error", StringComparison.Ordinal),
+            "Published-library evidence requires a conditioned job with an unconditional nuget.org consumer.");
         Assert(File.Exists(stageCheckWorkflow), "The DCB release record stage-check workflow is missing.");
         Assert(File.Exists(workflowHarnessScript), "The workflow harness script is missing.");
         Assert(File.Exists(libraryPackDeterminismScript), "The library pack determinism script is missing.");
@@ -740,7 +754,7 @@ internal static class Program
 
         Assert(validation.Contains("if: github.event_name == 'schedule'", StringComparison.Ordinal) &&
                !validation.Contains("if: github.event_name != 'pull_request'", StringComparison.Ordinal),
-            "The currency-drift job must be schedule-only; workflow_dispatch must remain packaged-consumer-only.");
+            "The currency-drift job must be schedule-only.");
         Assert(File.ReadAllText(libraryPackDeterminismScript).Contains(
                 "LIBRARY PACK DETERMINISM: 26/26 equal",
                 StringComparison.Ordinal),
@@ -750,7 +764,7 @@ internal static class Program
             "PR-triggered template validation must neither read the release-record token nor declare dcb-release.");
 
         RequireStepWithRun(
-            ReadNamedWorkflowSteps(validation),
+            ReadNamedWorkflowSteps(validation.Split("  packaged-consumer:")[1].Split("  production-pack-first:")[0]),
             "dcb/tests/Sekiban.Dcb.TemplateValidation/run-packaged-consumer.sh",
             "The PR validation workflow must run the packaged-consumer path.");
         ValidatePublishWorkflow(dcbPackage, publish);
@@ -900,9 +914,10 @@ internal static class Program
             "The publish parity workflow step must run the parity gate.");
         Assert(publishParity.Body.Contains("--check-library-verified", StringComparison.Ordinal),
             "The template workflow must require live library release verification before packing.");
-        Assert(publishParity.Body.Contains("git rev-list -n 1", StringComparison.Ordinal) &&
-               publishParity.Body.Contains("dcb-v${VERSION}", StringComparison.Ordinal),
-            "The template workflow must prove library and template tags share the current peeled commit.");
+        Assert(!publishParity.Body.Contains("git rev-list -n 1 \"dcb-v${VERSION}\"", StringComparison.Ordinal) &&
+               publishParity.Body.Contains("git rev-list -n 1 \"$GITHUB_REF_NAME\"", StringComparison.Ordinal) &&
+               publishParity.Body.Contains("--check-library-verified", StringComparison.Ordinal),
+            "The template workflow must delegate live library identity and ancestry to the evidence gate.");
         Assert(packageAvailability.Body.Contains("validate-release-tags.sh --wait-for-published-packages", StringComparison.Ordinal),
             "The package-availability workflow step must run the availability gate.");
         Assert(publishParity.Ordinal < pack.Ordinal && packageAvailability.Ordinal < pack.Ordinal,
@@ -960,6 +975,14 @@ internal static class Program
                text.Contains("- complete", StringComparison.Ordinal) &&
                !text.Contains("libraries-verified", StringComparison.Ordinal),
             "The stage-check state input must be a fixed choice over the prepared and complete.");
+        Assert(text.Contains("- library", StringComparison.Ordinal) && text.Contains("- template", StringComparison.Ordinal) &&
+               text.Contains("INPUT_KIND: ${{ inputs.kind }}", StringComparison.Ordinal) &&
+               text.Contains("--kind \"$INPUT_KIND\"", StringComparison.Ordinal) &&
+               text.Contains("ref: ${{ github.sha }}", StringComparison.Ordinal) &&
+               text.Contains("ref: ${{ inputs.candidate }}\n          path: candidate\n          fetch-depth: 0", StringComparison.Ordinal) &&
+               text.Contains("--repo-root \"$GITHUB_WORKSPACE/candidate\"", StringComparison.Ordinal) &&
+               text.Contains("git -C \"$GITHUB_WORKSPACE/candidate\"", StringComparison.Ordinal),
+            "Stage check must build dispatched tooling and inspect a separate full candidate checkout by kind.");
         Assert(text.Contains("refs/heads/main", StringComparison.Ordinal),
             "The stage-check workflow must refuse unless github.ref is refs/heads/main.");
         Assert(!WorkflowRunBlocksContainInputInterpolation(text),

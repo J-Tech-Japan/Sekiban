@@ -87,7 +87,9 @@ raise AssertionError(tool)
 
 class Fixture:
     def __init__(self, source, root, version):
+        self.source = source
         self.root, self.version = root, version
+        self.kind = 'library'
         self.repo = root/'checkout'
         self.repo.mkdir(parents=True)
         self.dotnet = shutil.which('dotnet')
@@ -106,8 +108,11 @@ class Fixture:
         template_readme.write_text(template_readme.read_text().replace(authority_version, version))
         self.bodies = {'library_en_sha256': f'dcb-v{version}-library.en.md', 'library_ja_sha256': f'dcb-v{version}-library.ja.md',
                        'template_en_sha256': f'dcbTemplates-v{version}.en.md', 'template_ja_sha256': f'dcbTemplates-v{version}.ja.md'}
-        if version != authority_version:
-            for key, name in self.bodies.items():
+        template_notes_absent = all(not (self.repo/'docs/releases'/name).exists()
+                                    for key,name in self.bodies.items() if key.startswith('template_'))
+        for key, name in self.bodies.items():
+            # Fixtures for a template phase supply their own notes after library-only preparation.
+            if version != authority_version or (template_notes_absent and key.startswith('template_')):
                 text = f'{version} template release.\n' if '_en_' in key else f'{version} テンプレートのリリース。\n'
                 (self.repo/'docs/releases'/name).write_text(text)
         run(['git','init','-b','main'], self.repo)
@@ -138,13 +143,17 @@ class Fixture:
         self.record={'schema_version':3,'version':version,'stage':'prepared','merged_sha':self.sha,'candidate_pr':1316,
                      'checks':[{'name':name,'run_id':100+i} for i,(name,_,_) in enumerate(CHECKS)],
                      'release_bodies':{key:hashlib.sha256((self.repo/'docs/releases'/name).read_bytes()).hexdigest() for key,name in self.bodies.items()}}
-        for i,(_,workflow,job) in enumerate(CHECKS):
+        for i,(_,workflow,job) in enumerate(CHECKS + [('templatePublicConsumer', 'dcb_template_validation.yml', 'Published-library template consumer')]):
             route=f'repos/{REPO}/actions/runs/{100+i}'
             self.api[route]={'id':100+i,'repository':{'full_name':REPO},'head_repository':{'full_name':REPO},
                              'path':f'.github/workflows/{workflow}','event':'workflow_dispatch','head_sha':self.sha,
                              'status':'completed','conclusion':'success','run_attempt':2}
             self.api[route+'/attempts/2/jobs?per_page=100&page=1']={'total_count':1,'jobs':[{'name':job,'run_id':100+i,'run_attempt':2,
                                'head_sha':self.sha,'status':'completed','conclusion':'success'}]}
+        public_jobs=self.api[f'repos/{REPO}/actions/runs/104/attempts/2/jobs?per_page=100&page=1']
+        public_jobs['total_count']=2
+        public_jobs['jobs'].append({'name':CHECKS[-1][2], 'run_id':104, 'run_attempt':2,
+                                   'head_sha':self.sha, 'status':'completed', 'conclusion':'success'})
         # Attempt 1 may have failed; only the successful current attempt is used.
         for tag,obj in self.tags.items():
             self.api[f'repos/{REPO}/git/ref/tags/{tag}']={'ref':'refs/tags/'+tag,'object':{'sha':obj,'type':'tag'}}
@@ -173,6 +182,55 @@ class Fixture:
         (root/'public').mkdir()
         self.save()
 
+    def stage_workflow(self, state):
+        tooling=self.root/'dispatched-tooling'; tooling.mkdir()
+        (tooling/'dcb').symlink_to(self.source/'dcb', target_is_directory=True)
+        (tooling/'candidate').symlink_to(self.repo, target_is_directory=True)
+        data=yaml.safe_load((self.source/'.github/workflows/dcb_release_record_check.yml').read_text())
+        checkouts=[step for step in data['jobs']['check']['steps'] if step.get('uses','').startswith('actions/checkout')]
+        assert checkouts[0]['with']['ref']=='${{ github.sha }}'
+        assert checkouts[1]['with']=={'ref':'${{ inputs.candidate }}','path':'candidate','fetch-depth':0}
+        env={**self.env, 'GITHUB_REF':'refs/heads/main', 'GITHUB_WORKSPACE':str(tooling),
+             'INPUT_KIND':self.kind,'INPUT_VERSION':self.version,'INPUT_STATE':state,'INPUT_REF':HOST_REF,
+             'RECORD_REF':HOST_REF,'INPUT_CANDIDATE':self.sha}
+        for step in data['jobs']['check']['steps']:
+            if 'run' not in step or step.get('name')=='Build release-record validator': continue
+            token=step.get('env',{}).get('GH_TOKEN','')
+            local={**env}
+            if token: local['GH_TOKEN']='host-token' if 'SEKIBAN_RELEASE_RECORD_TOKEN' in token else 'workflow-token'
+            run(['bash','-euo','pipefail','-c',step['run']],tooling,local)
+        assert (self.temp/'validated-merged-sha.txt').read_text()==self.sha+'\n'
+
+    def template_record(self):
+        self.kind = 'template'
+        self.record = {'schema_version':3, 'version':self.version, 'stage':'prepared', 'merged_sha':self.sha,
+                       'candidate_pr':1321, 'checks':[{'name':'templatePublicConsumer','run_id':104}],
+                       'release_bodies':{k:hashlib.sha256((self.repo/'docs/releases'/v).read_bytes()).hexdigest()
+                                         for k,v in self.bodies.items() if k.startswith('template_')}}
+        self.save()
+
+    def later_template(self, edit_library=False):
+        if edit_library:
+            for k,v in self.bodies.items():
+                if k.startswith('library_'): (self.repo/'docs/releases'/v).write_text((self.repo/'docs/releases'/v).read_text() + '\nLater reviewed library body edit.\n')
+        run(['git','add','.'], self.repo)
+        run(['git','commit','--allow-empty','-m','later template candidate'], self.repo)
+        self.sha = run(['git','rev-parse','HEAD'],self.repo).strip()
+        run(['git','update-ref','refs/remotes/origin/main',self.sha],self.repo)
+        tag=f'dcbTemplates-v{self.version}'
+        run(['git','tag','-d',tag],self.repo)
+        run(['git','tag','-a',tag,'-m','later template'], self.repo, {**os.environ,'GIT_COMMITTER_DATE':'2026-09-14T19:00:00Z'})
+        self.tags[tag]=run(['git','rev-parse',f'{tag}^{{tag}}'],self.repo).strip()
+        run(['git','--git-dir',str(self.root/'origin.git'),'fetch','--force',str(self.repo),'refs/tags/'+tag+':refs/tags/'+tag],self.root)
+        self.api[f'repos/{REPO}/git/ref/tags/{tag}']={'object':{'sha':self.tags[tag],'type':'tag'}}
+        self.api[f'repos/{REPO}/git/tags/{self.tags[tag]}']={'object':{'sha':self.sha,'type':'commit'},'tagger':{'date':'2026-09-14T19:00:00Z'}}
+        for route,value in self.api.items():
+            if '/actions/runs/104' in route:
+                if 'jobs' in value:
+                    for job in value['jobs']: job['head_sha']=self.sha
+                else: value['head_sha']=self.sha
+        self.template_record()
+
     def package(self,path,id,template=False,version=None):
         version=version or self.version
         groups=''
@@ -197,7 +255,7 @@ class Fixture:
     def save(self):
         content=(json.dumps(self.record,ensure_ascii=False)+'\n').encode()
         blob=subprocess.run(['git','hash-object','--stdin'],input=content,stdout=subprocess.PIPE,check=True).stdout.decode().strip()
-        path=f'intents/sekiban/releases/dcb-v{self.version}-release-record.json'
+        path=f'intents/sekiban/releases/{"dcb" if self.kind == "library" else "dcbTemplates"}-v{self.version}-release-record.json'
         self.api[f'repos/{HOST}/contents/{path}?ref={HOST_REF}']={'type':'file','encoding':'base64','path':path,'sha':blob,'content':base64.b64encode(content).decode()}
         self.api[f'repos/{HOST}/commits/{HOST_REF}']={'sha':HOST_REF,'commit':{'tree':{'sha':TREE}}}
         for i, component in enumerate(path.split('/')):
@@ -212,14 +270,14 @@ class Fixture:
         bundle=self.temp/'dcb-release-record-bundle'
         shutil.rmtree(bundle,ignore_errors=True)
         env=self.env.copy(); env['GH_TOKEN']='host-token'
-        run(['bash',str(self.repo/REL/'read-host-release-record.sh'),'--version',self.version,'--state',state,
+        run(['bash',str(self.repo/REL/'read-host-release-record.sh'),'--kind',self.kind,'--version',self.version,'--state',state,
              '--output-dir',str(bundle),'--manifest',str(bundle/'bundle.json')],self.repo,env)
         return self.validate_bundle(state)
 
     def validate_bundle(self,state='prepared'):
         bundle=self.temp/'dcb-release-record-bundle'
         return run([self.dotnet,str(self.dll),'release-record','--bundle',str(bundle),'--manifest',str(bundle/'bundle.json'),
-             '--repo-root',str(self.repo),'--expected-version',self.version,'--state',state,'--merged-sha-output',str(self.temp/'validated-merged-sha.txt')],self.repo,{**self.env,'GH_TOKEN':'workflow-token'})
+             '--repo-root',str(self.repo),'--expected-version',self.version,'--kind',self.kind,'--state',state,'--merged-sha-output',str(self.temp/'validated-merged-sha.txt')],self.repo,{**self.env,'GH_TOKEN':'workflow-token'})
 
     def publish(self,template=False):
         for pkg in (self.repo/'out').glob('*.nupkg'):
@@ -232,6 +290,7 @@ class Fixture:
 
     def workflow(self,mode):
         template=mode=='template'
+        if template and self.kind != 'template': self.template_record()
         tag=f'dcbTemplates-v{self.version}' if template else f'dcb-v{self.version}'
         self.env.update({'GITHUB_REF_NAME':tag,'GITHUB_REF':'refs/tags/'+tag})
         data=yaml.safe_load((self.repo/'.github/workflows'/('packagesDcbTemplate.yml' if template else 'packagesDcb.yml')).read_text())
@@ -330,8 +389,8 @@ def check_incomplete_history_drift(f):
             assert phase != 'after' and 'drift' in str(error).lower(), str(error)
             print('PASS incomplete 10.23.0 history drift '+phase+': rejects as required',flush=True)
         else:
-            assert phase == 'after', result
-            print('PASS incomplete 10.23.0 history drift after: equal at 10.23.1',flush=True)
+            assert ('notice' in result) if phase != 'after' else ('aligned' in result), result
+            print('PASS incomplete 10.23.0 history drift '+phase+': notice or aligned success',flush=True)
 
 
 def retry_cases(source, root):
@@ -465,13 +524,163 @@ INTEGRATION_CASES={**{k:v for k,v in RECORD_CASES.items() if k in ['wrong-merged
  'late-library-release-wrong-body':'body does not exactly match',
  'late-library-release-recreated':'strictly later than the library release',
  'late-library-release-deleted':'Unable to read live library GitHub Release',
- 'late-library-wrong-peel':'Library tag does not point at the validated merged SHA',
+ 'late-library-wrong-peel':'Library live/local peeled commit mismatch',
  'template-guard-missing-token':'wrong token'}
+
+def detection_cases(source, root):
+    import contextlib
+    import io
+    import runpy
+    import urllib.error
+    from unittest.mock import patch
+    for case in ['all-26-public','tag-absent','one-version-absent','package-404','tag-403','package-503','transport-error','malformed-index']:
+        output=root/('detection-'+case); calls=[]
+        def tag(*args, **kwargs):
+            if case in ['tag-absent','tag-403']:
+                return subprocess.CompletedProcess(args,1,'','HTTP 404' if case=='tag-absent' else 'HTTP 403')
+            return subprocess.CompletedProcess(args,0,json.dumps({'ref':'refs/tags/dcb-v10.23.1','object':{'type':'tag','sha':'a'*40}}),'')
+        def index(url, **kwargs):
+            calls.append(url)
+            if len(calls)==1:
+                if case in ['package-404','package-503']: raise urllib.error.HTTPError(url,404 if case=='package-404' else 503,'fixture',{},None)
+                if case=='transport-error': raise urllib.error.URLError('fixture connection failure')
+                if case=='malformed-index': return io.BytesIO(b'{"versions":"10.23.1"}')
+            return io.BytesIO(json.dumps({'versions':[] if case=='one-version-absent' and len(calls)==1 else ['10.23.1']}).encode())
+        fails=case in ['tag-403','package-503','transport-error','malformed-index']
+        with patch.dict(os.environ,{'GITHUB_WORKSPACE':str(source),'GITHUB_OUTPUT':str(output)}), patch('subprocess.check_output',return_value='10.23.1\n'), patch('subprocess.run',side_effect=tag), patch('urllib.request.urlopen',side_effect=index), contextlib.redirect_stdout(io.StringIO()):
+            try: runpy.run_path(str(source/REL/'detect-public-library.py'),run_name='__main__')
+            except (RuntimeError,urllib.error.URLError,AssertionError):
+                assert fails and not output.exists(), case
+            else:
+                assert not fails, case
+                assert output.read_text()==f'applicable={str(case=="all-26-public").lower()}\n'
+                assert len(calls)==(0 if case=='tag-absent' else 26)
+        print(f'PASS public applicability {case}: {"fails closed" if fails else "applies" if case=="all-26-public" else "skips with notice"}',flush=True)
+
+
+def later_release_cases(source, root):
+    for edit in [False, True]:
+        f=Fixture(source,root/('later-'+str(edit)),'10.23.1')
+        f.workflow('library'); f.later_template(edit); f.workflow('template')
+        print(f'PASS later template commit (library bodies edited={edit}): all template workflow guards',flush=True)
+    for case,reason in [('template-record-not-head','merged_sha does not equal'),
+                        ('template-record-library-checks','Exactly one'),
+                        ('public-packages-fail-local-pass','Latest attempt job'),
+                        ('public-consumer-skipped','Latest attempt job'),
+                        ('library-not-ancestor','ancestor of the template')]:
+        f=Fixture(source,root/case,'10.23.1'); f.workflow('library'); f.later_template()
+        if case=='template-record-not-head': f.record['merged_sha']='c'*40
+        elif case=='template-record-library-checks': f.record['checks']=[{'name':n,'run_id':100+i} for i,(n,_,_) in enumerate(CHECKS)]
+        elif case in ['public-packages-fail-local-pass','public-consumer-skipped']:
+            # The local-feed job remains successful; only public-version evidence fails.
+            f.api[f'repos/{REPO}/actions/runs/104/attempts/2/jobs?per_page=100&page=1']['jobs'][0]['conclusion']='skipped' if case.endswith('skipped') else 'failure'
+            local_job=f.api[f'repos/{REPO}/actions/runs/104/attempts/2/jobs?per_page=100&page=1']['jobs'][1]
+            assert local_job['head_sha']==f.sha and local_job['conclusion']=='success'
+        else:
+            library=f'dcb-v{f.version}'
+            run(['git','checkout','--orphan','unrelated-library'],f.repo)
+            run(['git','commit','-m','unrelated library'],f.repo)
+            off=run(['git','rev-parse','HEAD'],f.repo).strip()
+            run(['git','tag','-d',library],f.repo)
+            run(['git','tag','-a',library,'-m','unrelated'],f.repo)
+            obj=run(['git','rev-parse',library+'^{tag}'],f.repo).strip()
+            run(['git','--git-dir',str(f.root/'origin.git'),'fetch','--force',str(f.repo),'refs/tags/'+library+':refs/tags/'+library],f.root)
+            f.api[f'repos/{REPO}/git/ref/tags/{library}']['object']['sha']=obj
+            f.api[f'repos/{REPO}/git/tags/{obj}']={'object':{'sha':off,'type':'commit'},'tagger':{'date':'2026-09-14T18:00:00Z'}}
+            run(['git','checkout','--detach',f.sha],f.repo)
+        f.save()
+        try: f.workflow('template')
+        except Failure as error:
+            assert reason in str(error), str(error)
+            print(f'PASS rejects {case}: {reason}',flush=True)
+        else: raise Failure(case+' unexpectedly passed')
+    for complete in [False, True]:
+        f=Fixture(source,root/('library-no-template-'+str(complete)),'10.23.1')
+        f.record['release_bodies']={k:v for k,v in f.record['release_bodies'].items() if k.startswith('library_')}
+        for k,v in f.bodies.items():
+            if k.startswith('template_'): (f.repo/'docs/releases'/v).unlink()
+        if complete:
+            f.record.update(stage='complete',published={'library_release_url':f'https://github.com/{REPO}/releases/tag/dcb-v{f.version}'})
+            f.api.pop(f'repos/{REPO}/git/ref/tags/dcbTemplates-v{f.version}')
+        f.save(); f.validate('complete' if complete else 'prepared')
+        if not complete:
+            for docs in ['dcb_llm','dcb_llm_ja']: shutil.copytree(source/'docs'/docs,f.repo/'docs'/docs)
+            run([f.dotnet,str(f.dll),'docs','--repo-root',str(f.repo),'--expected-version',f.version],f.repo,f.env)
+            f.workflow('library')
+        print(f'PASS library {"complete" if complete else "preparation and workflow"} without template hashes or bodies',flush=True)
+    for case in ['half-template-pair','missing-template-kind-body','template-complete','template-extra-library-hash','template-extra-published-url','library-extra-body-member']:
+        f=Fixture(source,root/case,'10.23.1')
+        if case=='half-template-pair':
+            (f.repo/'docs/releases'/f.bodies['template_ja_sha256']).unlink()
+            command=[f.dotnet,str(f.dll),'release-bodies','--repo-root',str(f.repo),'--expected-version',f.version]
+            reason='complete EN/JA pair'
+        elif case=='missing-template-kind-body':
+            (f.repo/'docs/releases'/f.bodies['template_ja_sha256']).unlink()
+            command=[f.dotnet,str(f.dll),'release-bodies','--repo-root',str(f.repo),'--expected-version',f.version,'--kind','template']
+            reason='Missing reviewed Japanese template release body'
+        else:
+            if case=='library-extra-body-member': f.record['release_bodies']['unknown']='0'*64
+            else:
+                f.template_record()
+                if case=='template-extra-library-hash': f.record['release_bodies']['library_en_sha256']='0'*64
+                else:
+                    f.record.update(stage='complete',published={'template_release_url':f'https://github.com/{REPO}/releases/tag/dcbTemplates-v{f.version}'})
+                    if case=='template-extra-published-url': f.record['published']['library_release_url']='ignored?'
+            f.save(); command=None; reason='schema members'
+        try:
+            if command: run(command,f.repo,f.env)
+            else: f.validate('complete' if 'published' in f.record else 'prepared')
+        except Failure as error:
+            assert case!='template-complete' and reason in str(error), str(error)
+            print(f'PASS rejects {case}: {reason}',flush=True)
+        else:
+            assert case=='template-complete',case
+            print('PASS template complete with only template published URL and tag evidence',flush=True)
+    # Candidate uses the actual pre-SEK-G125 layout; tooling stays in the dispatched source.
+    for state in ['prepared','complete']:
+        f=Fixture(source,root/('historical-'+state),'10.23.1')
+        fixture=source/REL/'fixtures/pre-sek-g125'
+        f.record=json.loads((fixture/'dcb-v10.23.1-release-record.json').read_text())
+        historical=f.record['merged_sha']
+        exists=subprocess.run(['git','cat-file','-e',historical+'^{commit}'],cwd=source,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode == 0
+        if exists:
+            run(['git','fetch',str(source),historical],f.repo)
+            run(['git','checkout','--force','--detach',historical],f.repo)
+        else:
+            # Shallow PR checkouts lack historical objects. Reproduce the old tooling layout offline.
+            for name in ['dcb_release_record_check.yml','packagesDcbTemplate.yml']:
+                shutil.copy2(fixture/name,f.repo/'.github/workflows'/name)
+            for name in ['Schema3ReleaseRecordValidator.cs','read-host-release-record.sh']:
+                shutil.copy2(fixture/(name + ".txt" if name.endswith(".cs") else name),f.repo/REL/name)
+            (f.repo/REL/'detect-public-library.py').unlink()
+            run(['git','add','.'],f.repo); run(['git','commit','-m','pre-SEK-G125 candidate layout'],f.repo)
+            historical=run(['git','rev-parse','HEAD'],f.repo).strip()
+            f.record['merged_sha']=historical
+            for key,name in f.bodies.items():
+                if key.startswith('library_'): f.record['release_bodies'][key]=hashlib.sha256((f.repo/'docs/releases'/name).read_bytes()).hexdigest()
+        run(['git','update-ref','refs/remotes/origin/main',historical],f.repo)
+        f.sha=historical; f.dll=source/REL/'bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll'
+        # The real-candidate branch retains original prepared fields; API transport is simulated.
+        for check in f.record['checks']:
+            mapping=next(c for c in CHECKS if c[0]==check['name']); id=check['run_id']
+            route=f'repos/{REPO}/actions/runs/{id}'
+            f.api[route]={'id':id,'repository':{'full_name':REPO},'head_repository':{'full_name':REPO},'path':'.github/workflows/'+mapping[1],'event':'workflow_dispatch','head_sha':historical,'status':'completed','conclusion':'success','run_attempt':1}
+            jobs=f.api.setdefault(route+'/attempts/1/jobs?per_page=100&page=1',{'total_count':0,'jobs':[]})
+            jobs['jobs'].append({'name':mapping[2],'run_id':id,'run_attempt':1,'head_sha':historical,'status':'completed','conclusion':'success'})
+            jobs['total_count']=len(jobs['jobs'])
+        f.api[f'repos/{REPO}/git/tags/{f.tags[f"dcb-v{f.version}"]}']['object']['sha']=historical
+        if state=='complete':
+            f.record.update(stage='complete',published={'library_release_url':f'https://github.com/{REPO}/releases/tag/dcb-v{f.version}'})
+            f.api.pop(f'repos/{REPO}/git/ref/tags/dcbTemplates-v{f.version}')
+        f.save()
+        f.stage_workflow(state)
+        print(f'PASS historical {"20e02544 real record" if exists else "pre-SEK-G125 layout"} library {state} with dispatched tooling and separate candidate (live API fixture)',flush=True)
+
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repo-root',type=Path,default=Path(__file__).resolve().parents[3])
-    parser.add_argument('--self-test',action='store_true',help='Validator and reader tests only')
+    parser.add_argument('--self-test',action='store_true',help='Validator, reader and read-only detection tests only')
     args=parser.parse_args(); source=args.repo_root.resolve()
     with tempfile.TemporaryDirectory(prefix='sek-g122-') as temp:
         root=Path(temp)
@@ -499,6 +708,8 @@ def main():
             for mode in ['library','template']: f.workflow(mode)
             print('PASS BOTH workflows retry with same triggering tag object',flush=True)
         if not args.self_test: retry_cases(source, root)
+        detection_cases(source, root)
+        if not args.self_test: later_release_cases(source, root)
         cases=RECORD_CASES if args.self_test else INTEGRATION_CASES
         for case,reason in cases.items():
             f=Fixture(source,root/case,VERSIONS[0])

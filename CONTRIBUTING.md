@@ -49,22 +49,32 @@ If you're ready to start contributing code or documentation, please submit a pul
 <!-- sek-g44:two-stage-template-release -->
 ## DCB template release protocol
 
-DCB libraries and DCB templates use separate NuGet and Git tag series. In the release-integration PR, bump all
-five `SekibanDcbTemplateVersion.props` authorities and the template README together, and add the four bilingual
-release bodies for that version. Merge before the library tag. Gather dispatched checks on the merged commit,
-write the host schema-3 `prepared` record, and require the prepared stage check on main before any tag.
+DCB libraries and templates release separately. The library release-integration PR moves all five
+`SekibanDcbTemplateVersion.props` authorities and the template README to V and adds the EN/JA library
+notes. PR CI requires that pair; template notes may be absent, but a half pair fails. Collect the four
+dispatched library checks, write the library schema-3 record and require the library prepared stage check.
+With operator approval, publish annotated `dcb-vV` first.
 
-With operator approval, publish the libraries first with annotated `dcb-vX.Y.Z`. The template workflow then
-verifies all 26 library packages are publicly visible, the library Release has the exact assets and bilingual body,
-both tags peel to the merged commit, and the five version authorities agree. Its packaged-consumer gate packs
-the net9 carrier, installs it into an isolated `dotnet new` hive, generates all five net10 templates, restores,
-builds, and runs the bundled tests. Only after the gates pass may annotated `dcbTemplates-vX.Y.Z` publish the
-template package. Follow [the release runbook](dcb/tests/Sekiban.Dcb.TemplateValidation/RELEASE-RUNBOOK.md)
-for record fields, mandatory preflight, operator approvals, retries and the new-version recovery rule.
+After V is public, audit and adjust templates for best practice on released V and add template notes in
+another PR. Templates may release from that later commit while the authorities still read V; moving to
+V+1 ends V's template window. Dispatch template validation with `public_libraries=true`, require every
+job green and the nuget.org consumer successful, then write the separate template record using exactly
+`templatePublicConsumer`. The host variable must point at a commit containing both records, keeping
+the library record unchanged. Require the template prepared stage check before operator approval and
+annotated `dcbTemplates-vV` tagging.
 
-The scheduled currency workflow compares stable `dcb-v*` and `dcbTemplates-v*` tags numerically. Pre-release and
-unparseable tags are logged and excluded. A stale but still restorable template version is a release failure, not a
-reason to skip the consumer gate.
+The template gates retain record/HEAD/main containment, template tag identity, authority parity,
+26 public library versions, exact non-draft library Release assets and body, public consumer,
+chronology, absence/retry identity, visibility and equality. The annotated library tag's verified
+live/local commit must be an ancestor of the template commit; its SHA supplies the library body files.
+The packaged consumer installs the net9 carrier in an isolated hive, generates all five net10 templates,
+restores, builds and tests. Follow [the release runbook](dcb/tests/Sekiban.Dcb.TemplateValidation/RELEASE-RUNBOOK.md)
+for both records, complete checks, the 10.23.1 variable sequence and recovery. The new-version stop rule
+applies to the artifact being fixed; unpublished templates normally change after library publication.
+
+The scheduled currency check compares stable tags numerically, excluding logged pre-release and
+unparseable tags. Library ahead is a notice and success; template ahead fails. The operator chooses
+how long templates may lag. Every consumer gate remains required when it applies.
 
 `CONTRIBUTING.md` is intentionally outside the EN/JA documentation parity gate: it is the single contributor-facing
 release procedure, while the paired materialized-view and storage-provider documents must remain semantically aligned.
