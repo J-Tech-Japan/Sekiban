@@ -23,7 +23,8 @@ public static class AuthServiceExtensions
         // Configure JWT settings
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         var jwtSettings = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
-            ?? throw new InvalidOperationException("JWT settings not configured");
+            ?? new JwtSettings();
+        JwtSettings.ValidateSecretKey(jwtSettings.SecretKey);
 
         // Add Identity DbContext with PostgreSQL
         services.AddDbContext<ApplicationDbContext>(options =>

@@ -78,7 +78,6 @@ if (builder.Configuration.GetValue<bool>(EnsurePostgresDatabaseExistsConfigKey))
     await EnsurePostgresDatabaseExistsAsync(authConnectionString);
 }
 builder.Services.AddAuthServices(builder.Configuration, authConnectionString);
-builder.Services.AddHostedService<AuthDbInitializer>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();

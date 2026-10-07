@@ -20,6 +20,8 @@ public class AuthDbInitializer : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<AuthDbInitializer> _logger;
     private readonly IClusterClient _clusterClient;
+    private readonly IHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
     private const int MaxRetries = 10;
     private const int RetryDelayMs = 2000;
     private const int OrleansWaitDelayMs = 1000;
@@ -28,11 +30,15 @@ public class AuthDbInitializer : BackgroundService
     public AuthDbInitializer(
         IServiceProvider serviceProvider,
         ILogger<AuthDbInitializer> logger,
-        IClusterClient clusterClient)
+        IClusterClient clusterClient,
+        IHostEnvironment environment,
+        IConfiguration configuration)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
         _clusterClient = clusterClient;
+        _environment = environment;
+        _configuration = configuration;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -66,7 +72,10 @@ public class AuthDbInitializer : BackgroundService
 
                 // Seed roles and users
                 await SeedRolesAsync(roleManager);
-                await SeedUsersAsync(userManager, executor);
+                if (TemplateEnvironment.IsDevelopment(_environment.EnvironmentName))
+                    await SeedUsersAsync(userManager, executor);
+                else
+                    await SeedInitialAdminAsync(userManager, executor);
 
                 _logger.LogInformation("Authentication database initialization completed successfully");
                 return;
@@ -186,6 +195,36 @@ public class AuthDbInitializer : BackgroundService
                 await roleManager.CreateAsync(new IdentityRole(role));
             }
         }
+    }
+
+    private async Task SeedInitialAdminAsync(UserManager<ApplicationUser> userManager, ISekibanExecutor executor)
+    {
+        var email = _configuration["Auth:InitialAdmin:Email"];
+        var password = _configuration["Auth:InitialAdmin:Password"];
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password)
+            || (await userManager.GetUsersInRoleAsync("Admin")).Count > 0)
+            return;
+
+        // Never promote a self-registered account based only on a matching email.
+        if (await userManager.FindByEmailAsync(email) != null)
+            return;
+
+        var user = new ApplicationUser
+        {
+            Id = Guid.CreateVersion7().ToString(), UserName = email, Email = email,
+            DisplayName = "Administrator", EmailConfirmed = true
+        };
+        var result = await userManager.CreateAsync(user, password);
+        if (!result.Succeeded)
+        {
+            _logger.LogError("Failed to create initial administrator: {Errors}",
+                string.Join(", ", result.Errors.Select(e => e.Code)));
+            return;
+        }
+        await userManager.AddToRoleAsync(user, "Admin");
+        await userManager.AddToRoleAsync(user, "User");
+        await EnsureUserDirectoryAsync(executor, user);
+        await EnsureUserAccessAsync(executor, user, await userManager.GetRolesAsync(user));
     }
 
     private async Task SeedUsersAsync(UserManager<ApplicationUser> userManager, ISekibanExecutor executor)

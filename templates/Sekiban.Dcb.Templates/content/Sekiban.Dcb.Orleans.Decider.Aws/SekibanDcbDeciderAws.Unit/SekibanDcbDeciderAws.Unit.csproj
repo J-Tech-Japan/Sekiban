@@ -22,6 +22,7 @@
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\SekibanDcbDeciderAws.ApiService\SekibanDcbDeciderAws.ApiService.csproj" />
     <ProjectReference Include="..\SekibanDcbDeciderAws.EventSource\SekibanDcbDeciderAws.EventSource.csproj" />
   </ItemGroup>
 </Project>

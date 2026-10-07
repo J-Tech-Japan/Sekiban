@@ -67,7 +67,6 @@ if (!string.IsNullOrEmpty(authConnectionString))
 {
     builder.Services.AddAuthServices(builder.Configuration, authConnectionString);
     // Add background service to initialize auth database and seed users
-    builder.Services.AddHostedService<AuthDbInitializer>();
 }
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi

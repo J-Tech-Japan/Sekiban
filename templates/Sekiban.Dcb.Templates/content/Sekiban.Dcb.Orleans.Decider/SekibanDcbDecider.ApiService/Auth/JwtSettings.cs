@@ -8,6 +8,12 @@ public class JwtSettings
 {
     public const string SectionName = "Jwt";
 
+    public static void ValidateSecretKey(string? secretKey)
+    {
+        if (string.IsNullOrWhiteSpace(secretKey) || secretKey.Length < 32)
+            throw new InvalidOperationException("JWT settings not configured: Jwt:SecretKey must contain at least 32 characters.");
+    }
+
     /// <summary>
     ///     Secret key for signing tokens (minimum 32 characters)
     /// </summary>

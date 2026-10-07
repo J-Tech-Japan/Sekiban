@@ -102,3 +102,5 @@ dotnet run
 | CloudFront | ~$1-5 |
 | DynamoDB/S3/SQS | ~$0-10 |
 | **Total** | **~$79-115** |
+
+Before deploying the API, supply `Jwt__SecretKey` (at least 32 characters) from a secret store. For Azure, add an App Service Key Vault reference or a Container Apps secret reference to that environment variable; for ECS, add a Secrets Manager reference in the task definition's `secrets`. The shipped infrastructure does not provision this secret. Startup fails without it. Sample users are created only in Development; to bootstrap the first administrator outside Development, also supply `Auth__InitialAdmin__Email` and `Auth__InitialAdmin__Password` from secrets. An existing account is never promoted by this setting. Identity tables and roles are initialized in every environment.
