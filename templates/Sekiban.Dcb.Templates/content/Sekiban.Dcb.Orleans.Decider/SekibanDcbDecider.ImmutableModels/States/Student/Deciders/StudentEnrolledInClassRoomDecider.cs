@@ -11,18 +11,18 @@ public static class StudentEnrolledInClassRoomDecider
     /// </summary>
     /// <param name="state">Current student state</param>
     /// <param name="classRoomId">ClassRoom to enroll in</param>
-    /// <exception cref="InvalidOperationException">When student has reached max or already enrolled</exception>
+    /// <exception cref="ApplicationException">When student has reached max or already enrolled</exception>
     public static void Validate(this StudentState state, Guid classRoomId)
     {
         if (state.GetRemaining() <= 0)
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"Student {state.StudentId} has reached maximum class count of {state.MaxClassCount}");
         }
 
         if (state.EnrolledClassRoomIds.Contains(classRoomId))
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"Student {state.StudentId} is already enrolled in classroom {classRoomId}");
         }
     }

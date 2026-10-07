@@ -24,7 +24,7 @@ public class GlobalExceptionHandler : IExceptionHandler
         {
             BadHttpRequestException badRequest => new ProblemDetails
             {
-                Status = StatusCodes.Status400BadRequest,
+                Status = badRequest.StatusCode,
                 Title = "Bad Request",
                 Detail = badRequest.Message
             },

@@ -57,6 +57,7 @@ builder.Services.AddHealthChecks()
     .AddCheck<OrleansHealthCheck>("orleans", tags: ["ready"]);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
+builder.Services.AddExceptionHandler<BadRequestExceptionHandler>();
 builder.Services.AddOpenApi();
 
 // Configuration switches for Orleans

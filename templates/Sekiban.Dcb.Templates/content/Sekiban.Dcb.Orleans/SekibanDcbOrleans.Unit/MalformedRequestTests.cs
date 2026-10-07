@@ -2,9 +2,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
-using DcbOrleans.WithoutResult.ApiService.Exceptions;
+using SekibanDcbOrleans.ApiService;
 
-namespace SekibanDcbOrleansAws.Unit;
+namespace SekibanDcbOrleans.Unit;
 
 public class MalformedRequestTests
 {
@@ -14,7 +14,7 @@ public class MalformedRequestTests
     {
         var context = new DefaultHttpContext
         { RequestServices = new ServiceCollection().BuildServiceProvider(), Response = { Body = new MemoryStream() } };
-        await new GlobalExceptionHandler(NullLogger<GlobalExceptionHandler>.Instance)
+        await new BadRequestExceptionHandler(NullLogger<BadRequestExceptionHandler>.Instance)
             .TryHandleAsync(context, new BadHttpRequestException("Malformed JSON", status), default);
         Assert.That(context.Response.StatusCode, Is.EqualTo(status));
     }

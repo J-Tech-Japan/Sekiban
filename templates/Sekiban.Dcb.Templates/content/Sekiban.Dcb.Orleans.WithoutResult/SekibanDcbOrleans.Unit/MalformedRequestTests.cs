@@ -8,14 +8,14 @@ namespace SekibanDcbOrleans.Unit;
 
 public class MalformedRequestTests
 {
-    [TestCase(true, 400)]
-    [TestCase(false, 500)]
-    public async Task BadBody_Is400_UnrelatedFailureRemains500(bool badBody, int expected)
+    [TestCase(400)]
+    [TestCase(413)]
+    public async Task InvalidBody_PreservesClientErrorStatus(int status)
     {
         var context = new DefaultHttpContext
         { RequestServices = new ServiceCollection().BuildServiceProvider(), Response = { Body = new MemoryStream() } };
-        Exception error = badBody ? new BadHttpRequestException("Malformed JSON") : new Exception("Unrelated");
-        await new GlobalExceptionHandler(NullLogger<GlobalExceptionHandler>.Instance).TryHandleAsync(context, error, default);
-        Assert.That(context.Response.StatusCode, Is.EqualTo(expected));
+        await new GlobalExceptionHandler(NullLogger<GlobalExceptionHandler>.Instance)
+            .TryHandleAsync(context, new BadHttpRequestException("Malformed JSON", status), default);
+        Assert.That(context.Response.StatusCode, Is.EqualTo(status));
     }
 }

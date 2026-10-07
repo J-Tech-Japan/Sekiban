@@ -2,9 +2,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
-using DcbOrleans.WithoutResult.ApiService.Exceptions;
+using SekibanDcbDecider.ApiService.Exceptions;
 
-namespace SekibanDcbOrleansAws.Unit;
+namespace SekibanDcbDecider.Unit;
 
 public class MalformedRequestTests
 {
