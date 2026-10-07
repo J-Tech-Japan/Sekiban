@@ -1,3 +1,4 @@
+using SekibanDcbOrleansAws.ApiService;
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.ClassRoom;
 using Dcb.Domain.WithoutResult.Enrollment;
@@ -512,29 +513,32 @@ apiRoute
     .WithName("DropStudent");
 
 // Debug endpoint to check database
-apiRoute
-    .MapGet(
-        "/debug/events",
-        async ([FromServices] IEventStore eventStore) =>
-        {
-            var result = await eventStore.ReadAllEventsAsync();
-            var events = result.GetValue().ToList();
-            Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
-            return Results.Ok(
-                new
-                {
-                    totalEvents = events.Count,
-                    events = events.Select(e => new
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapGet(
+            "/debug/events",
+            async ([FromServices] IEventStore eventStore) =>
+            {
+                var result = await eventStore.ReadAllEventsAsync();
+                var events = result.GetValue().ToList();
+                Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
+                return Results.Ok(
+                    new
                     {
-                        id = e.Id,
-                        type = e.EventType,
-                        sortableId = e.SortableUniqueIdValue,
-                        tags = e.Tags
-                    })
-                });
-        })
-    .WithOpenApi()
-    .WithName("DebugGetEvents");
+                        totalEvents = events.Count,
+                        events = events.Select(e => new
+                        {
+                            id = e.Id,
+                            type = e.EventType,
+                            sortableId = e.SortableUniqueIdValue,
+                            tags = e.Tags
+                        })
+                    });
+            })
+        .WithOpenApi()
+        .WithName("DebugGetEvents");
+}
 
 // Weather endpoints
 apiRoute
@@ -795,76 +799,91 @@ apiRoute
     .WithName("GetWeatherForecastSingleStatus");
 
 // Generic projection control endpoints (for persistence + restore testing)
-apiRoute
-    .MapPost(
-        "/projections/persist",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
-        {
-            var start = DateTime.UtcNow;
-            Console.WriteLine($"[PersistEndpoint] Request name={name} start={start:O}");
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            var rb = await grain.PersistStateAsync();
-            var end = DateTime.UtcNow;
-            if (rb.IsSuccess)
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/persist",
+            async ([FromQuery] string name, [FromServices] IClusterClient client) =>
             {
-                Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end - start).TotalMilliseconds:F1}ms");
-                return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
-            }
-            var err = rb.GetException()?.Message;
-            Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
-            return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
-        })
-    .WithOpenApi()
-    .WithName("PersistProjectionState");
+                var start = DateTime.UtcNow;
+                Console.WriteLine($"[PersistEndpoint] Request name={name} start={start:O}");
+                var grain = client.GetGrain<IMultiProjectionGrain>(name);
+                var rb = await grain.PersistStateAsync();
+                var end = DateTime.UtcNow;
+                if (rb.IsSuccess)
+                {
+                    Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end - start).TotalMilliseconds:F1}ms");
+                    return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
+                }
+                var err = rb.GetException()?.Message;
+                Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
+                return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
+            })
+        .WithOpenApi()
+        .WithName("PersistProjectionState");
+}
 
-apiRoute
-    .MapPost(
-        "/projections/deactivate",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            await grain.RequestDeactivationAsync();
-            return Results.Ok(new { success = true });
-        })
-    .WithOpenApi()
-    .WithName("DeactivateProjection");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/deactivate",
+            async ([FromQuery] string name, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(name);
+                await grain.RequestDeactivationAsync();
+                return Results.Ok(new { success = true });
+            })
+        .WithOpenApi()
+        .WithName("DeactivateProjection");
+}
 
-apiRoute
-    .MapPost(
-        "/projections/refresh",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            await grain.RefreshAsync();
-            return Results.Ok(new { success = true });
-        })
-    .WithOpenApi()
-    .WithName("RefreshProjection");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/refresh",
+            async ([FromQuery] string name, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(name);
+                await grain.RefreshAsync();
+                return Results.Ok(new { success = true });
+            })
+        .WithOpenApi()
+        .WithName("RefreshProjection");
+}
 
-apiRoute
-    .MapGet(
-        "/projections/snapshot",
-        async ([FromQuery] string name, [FromQuery] bool? unsafeState, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
-            if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
-            return Results.Text(rb.GetValue(), "application/json");
-        })
-    .WithOpenApi()
-    .WithName("GetProjectionSnapshot");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapGet(
+            "/projections/snapshot",
+            async ([FromQuery] string name, [FromQuery] bool? unsafeState, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(name);
+                var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
+                if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
+                return Results.Text(rb.GetValue(), "application/json");
+            })
+        .WithOpenApi()
+        .WithName("GetProjectionSnapshot");
+}
 
-apiRoute
-    .MapPost(
-        "/projections/overwrite-version",
-        async ([FromQuery] string name, [FromQuery] string newVersion, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
-            return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
-        })
-    .WithOpenApi()
-    .WithName("OverwriteProjectionPersistedVersion");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/overwrite-version",
+            async ([FromQuery] string name, [FromQuery] string newVersion, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(name);
+                var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
+                return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
+            })
+        .WithOpenApi()
+        .WithName("OverwriteProjectionPersistedVersion");
+}
 
 
 apiRoute

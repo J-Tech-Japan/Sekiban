@@ -21,6 +21,7 @@
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\SekibanDcbOrleansAws.ApiService\SekibanDcbOrleansAws.ApiService.csproj" />
     <ProjectReference Include="..\SekibanDcbOrleansAws.Domain\SekibanDcbOrleansAws.Domain.csproj" />
   </ItemGroup>
 </Project>

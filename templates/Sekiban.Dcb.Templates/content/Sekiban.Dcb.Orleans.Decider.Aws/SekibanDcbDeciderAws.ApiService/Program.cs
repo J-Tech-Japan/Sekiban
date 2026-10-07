@@ -362,8 +362,10 @@ apiRoute.MapStudentEndpoints();
 apiRoute.MapClassRoomEndpoints();
 apiRoute.MapEnrollmentEndpoints();
 apiRoute.MapWeatherEndpoints();
-apiRoute.MapProjectionEndpoints();
-apiRoute.MapDebugEndpoints();
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+    apiRoute.MapProjectionEndpoints();
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+    apiRoute.MapDebugEndpoints();
 
 // MeetingRoom endpoints
 apiRoute.MapRoomEndpoints();
@@ -373,7 +375,8 @@ apiRoute.MapUserDirectoryEndpoints();
 apiRoute.MapStreamEndpoints();
 
 // Test data endpoints
-apiRoute.MapTestDataEndpoints();
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+    apiRoute.MapTestDataEndpoints();
 
 // Materialized view endpoints depend on the Orleans MV runtime, which is registered only when a
 // `DcbMaterializedViewPostgres` connection string is supplied. Skip the route when MV is off so
