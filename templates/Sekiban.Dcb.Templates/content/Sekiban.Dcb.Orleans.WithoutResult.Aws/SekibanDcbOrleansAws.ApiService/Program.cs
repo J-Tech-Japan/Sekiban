@@ -58,7 +58,7 @@ var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemo
 
 // Determine if running locally (Aspire/LocalStack) vs in AWS
 // Only check DynamoDb:ServiceUrl - this is set when using LocalStack
-// Do NOT rely on IsDevelopment() as AWS "dev" environments still use ASPNETCORE_ENVIRONMENT=Development
+// The shipped AWS dev stack uses Staging; local AppHost runs use Development.
 var isLocalDevelopment = !string.IsNullOrEmpty(builder.Configuration["DynamoDb:ServiceUrl"]);
 
 // In AWS deployment, we use RDS for Orleans (SQS streams not yet available due to SDK version conflict)

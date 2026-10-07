@@ -516,7 +516,6 @@ builder.Services.AddSingleton<IEventSubscriptionResolver>(sp =>
     new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
 // Snapshot offload: Azure Blob Storage accessor using Aspire-configured BlobServiceClient
-// Using a minimal implementation since Sekiban.Dcb.BlobStorage.AzureStorage is not yet published
 builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 {
     var blobServiceClient = sp.GetRequiredKeyedService<BlobServiceClient>("MultiProjectionOffload");
