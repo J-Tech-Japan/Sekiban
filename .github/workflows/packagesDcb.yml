@@ -68,7 +68,7 @@ jobs:
         run: |
           rm -rf "$RUNNER_TEMP/dcb-release-record-bundle"
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh \
-            --version "$VERSION" --state prepared \
+            --kind library --version "$VERSION" --state prepared \
             --output-dir "$RUNNER_TEMP/dcb-release-record-bundle" \
             --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json"
 
@@ -97,7 +97,7 @@ jobs:
             release-record --bundle "$RUNNER_TEMP/dcb-release-record-bundle" \
             --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json" \
             --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
-            --state prepared \
+            --state prepared --kind library \
             --merged-sha-output "$RUNNER_TEMP/validated-merged-sha.txt"
           test "$(tr -d '\n' < "$RUNNER_TEMP/validated-merged-sha.txt")" = "$(git rev-parse 'HEAD^{commit}')"
 

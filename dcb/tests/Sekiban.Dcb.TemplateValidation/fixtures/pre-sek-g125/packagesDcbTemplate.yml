@@ -63,7 +63,7 @@ jobs:
         run: |
           rm -rf "$RUNNER_TEMP/dcb-release-record-bundle"
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-host-release-record.sh \
-            --kind template --version "$VERSION" --state prepared \
+            --version "$VERSION" --state prepared \
             --output-dir "$RUNNER_TEMP/dcb-release-record-bundle" \
             --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json"
 
@@ -80,7 +80,7 @@ jobs:
             release-record --bundle "$RUNNER_TEMP/dcb-release-record-bundle" \
             --manifest "$RUNNER_TEMP/dcb-release-record-bundle/bundle.json" \
             --repo-root "$GITHUB_WORKSPACE" --expected-version "$VERSION" \
-            --state prepared --kind template \
+            --state prepared \
             --merged-sha-output "$RUNNER_TEMP/validated-merged-sha.txt"
           test "$(tr -d '\n' < "$RUNNER_TEMP/validated-merged-sha.txt")" = "$(git rev-parse 'HEAD^{commit}')"
 
@@ -108,6 +108,7 @@ jobs:
             --workflow-file "$GITHUB_WORKSPACE/.github/workflows/packagesDcb.yml"
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh \
             --check-library-verified --repo-root "$GITHUB_WORKSPACE" --version "$VERSION"
+          test "$(git rev-list -n 1 "dcb-v${VERSION}")" = "$MERGED_SHA"
           test "$(git rev-list -n 1 "$GITHUB_REF_NAME")" = "$MERGED_SHA"
           dcb/tests/Sekiban.Dcb.TemplateValidation/validate-release-tags.sh --check-publish-parity --repo-root "$GITHUB_WORKSPACE" --version "$VERSION" --template-tag "$GITHUB_REF_NAME"
 

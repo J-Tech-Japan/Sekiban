@@ -386,8 +386,18 @@ copy_release_docs_fixture() {
 
 missing_release_body="$work_root/docs-missing-release-body"
 copy_release_docs_fixture "$missing_release_body"
+# Library-phase source may have no template notes. Seed only this killing fixture.
+if [[ ! -f "$missing_release_body/docs/releases/dcbTemplates-v${version}.en.md" &&
+      ! -f "$missing_release_body/docs/releases/dcbTemplates-v${version}.ja.md" ]]; then
+  printf '%s template release fixture.\n' "$version" > "$missing_release_body/docs/releases/dcbTemplates-v${version}.en.md"
+  printf '%s テンプレートのリリース検証用。\n' "$version" > "$missing_release_body/docs/releases/dcbTemplates-v${version}.ja.md"
+fi
 rm "$missing_release_body/docs/releases/dcbTemplates-v${version}.ja.md"
-expect_failure_reason "Missing reviewed Japanese template release body:" run_net10 "$validator" docs --repo-root "$missing_release_body" --expected-version "$version"
+expect_failure_reason "Template release bodies must be present as a complete EN/JA pair." run_net10 "$validator" docs --repo-root "$missing_release_body" --expected-version "$version"
+expect_failure_reason "Missing reviewed Japanese template release body:" run_net10 "$validator" release-bodies --repo-root "$missing_release_body" --expected-version "$version" --kind template
+rm "$missing_release_body/docs/releases/dcbTemplates-v${version}.en.md"
+run_net10 "$validator" docs --repo-root "$missing_release_body" --expected-version "$version"
+expect_failure_reason "Missing reviewed English template release body:" run_net10 "$validator" release-bodies --repo-root "$missing_release_body" --expected-version "$version" --kind template
 
 blank_release_body="$work_root/docs-blank-release-body"
 copy_release_docs_fixture "$blank_release_body"

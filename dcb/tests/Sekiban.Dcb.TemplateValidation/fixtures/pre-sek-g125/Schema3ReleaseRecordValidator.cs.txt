@@ -52,19 +52,16 @@ internal static class Schema3ReleaseRecordValidator
         ("templateConsumer", "dcb_template_validation.yml", "Pack, install, generate, restore, build, and test templates")
     ];
 
-    internal static string Validate(string bundle, string manifest, string repoRoot, string version, string state, string recordKind, IReleaseApi api)
+    internal static string Validate(string bundle, string manifest, string repoRoot, string version, string state, IReleaseApi api)
     {
         Require(Regex.IsMatch(version, @"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$", RegexOptions.None, TimeSpan.FromSeconds(1)), "Invalid release version.");
-        Require(recordKind is "library" or "template", "Kind must be library or template.");
-        var checks = recordKind == "library" ? Checks : [("templatePublicConsumer", "dcb_template_validation.yml", "Published-library template consumer")];
         Require(state is "prepared" or "complete", "Stage must be prepared or complete.");
         Require(Path.GetFullPath(manifest) == Path.Combine(Path.GetFullPath(bundle), "bundle.json"), "Detached manifest is not accepted.");
         var index = Read(manifest);
         Members(index, "host_repository", "host_ref", "record_path", "record_blob_sha");
         var hostRef = Text(index, "host_ref");
         Require(Hex(hostRef, 40) && Text(index, "host_repository") == Host, "Invalid immutable host source.");
-        var prefix = recordKind == "library" ? "dcb" : "dcbTemplates";
-        var path = $"intents/sekiban/releases/{prefix}-v{version}-release-record.json";
+        var path = $"intents/sekiban/releases/dcb-v{version}-release-record.json";
         Require(Text(index, "record_path") == path, "Record path must be version-derived.");
         var bytes = File.ReadAllBytes(Path.Combine(bundle, "record.json"));
         var blob = ReleaseProcess.Run("git", repoRoot, "hash-object", "--no-filters", "--", Path.GetFullPath(Path.Combine(bundle, "record.json"))).Trim();
@@ -102,16 +99,16 @@ internal static class Schema3ReleaseRecordValidator
         // A full checkout/fetch of main is mandatory. merge-base accepts any ancestor, not only its tip.
         ReleaseProcess.Run("git", repoRoot, "merge-base", "--is-ancestor", merged, "origin/main");
         var recordedChecks = record.GetProperty("checks").EnumerateArray().ToArray();
-        Require(recordedChecks.Length == checks.Length, $"Exactly {(recordKind == "library" ? "four" : "one")} check aliases are required.");
+        Require(recordedChecks.Length == Checks.Length, "Exactly four check aliases are required.");
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var check in recordedChecks)
         {
             Members(check, "name", "run_id");
             var name = Text(check, "name");
-            Require(names.Add(name) && checks.Any(c => c.Alias == name), "Missing, duplicate or unknown check alias.");
+            Require(names.Add(name) && Checks.Any(c => c.Alias == name), "Missing, duplicate or unknown check alias.");
             var runId = check.GetProperty("run_id").GetInt64();
             Require(runId > 0, "run_id must be positive.");
-            var mapping = checks.Single(c => c.Alias == name);
+            var mapping = Checks.Single(c => c.Alias == name);
             var endpoint = $"repos/{Repository}/actions/runs/{runId}";
             var run = api.Get(endpoint);
             var attempt = ValidateRun(run, runId, merged, mapping.Workflow);
@@ -134,24 +131,20 @@ internal static class Schema3ReleaseRecordValidator
             Require(ValidateRun(api.Get(endpoint), runId, merged, mapping.Workflow) == attempt, "Run attempt changed during validation.");
         }
         var bodies = record.GetProperty("release_bodies");
-        if (recordKind == "library")
-            RequiredAndOptionalMembers(bodies, ["library_en_sha256", "library_ja_sha256"], ["template_en_sha256", "template_ja_sha256"]);
-        else Members(bodies, "template_en_sha256", "template_ja_sha256");
-        foreach (var (key, file) in (recordKind == "library"
-            ? new[] { ("library_en_sha256", $"dcb-v{version}-library.en.md"), ("library_ja_sha256", $"dcb-v{version}-library.ja.md") }
-            : new[] { ("template_en_sha256", $"dcbTemplates-v{version}.en.md"), ("template_ja_sha256", $"dcbTemplates-v{version}.ja.md") }))
+        Members(bodies, "library_en_sha256", "library_ja_sha256", "template_en_sha256", "template_ja_sha256");
+        foreach (var (key, file) in new[] {
+            ("library_en_sha256", $"dcb-v{version}-library.en.md"), ("library_ja_sha256", $"dcb-v{version}-library.ja.md"),
+            ("template_en_sha256", $"dcbTemplates-v{version}.en.md"), ("template_ja_sha256", $"dcbTemplates-v{version}.ja.md") })
         {
             var hash = Text(bodies, key);
             Require(Hex(hash, 64) && hash == Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(repoRoot, "docs/releases", file)))), $"Body hash mismatch: {key}.");
         }
-        ReleaseBodyValidator.Validate(repoRoot, version, recordKind);
+        ReleaseBodyValidator.Validate(repoRoot, version, null);
         if (state == "complete")
         {
             var published = record.GetProperty("published");
-            if (recordKind == "library")
-                RequiredAndOptionalMembers(published, ["library_release_url"], ["template_release_url"]);
-            else Members(published, "template_release_url");
-            foreach (var (tag, key) in new[] { ($"{prefix}-v{version}", $"{recordKind}_release_url") })
+            Members(published, "library_release_url", "template_release_url");
+            foreach (var (tag, key) in new[] { ($"dcb-v{version}", "library_release_url"), ($"dcbTemplates-v{version}", "template_release_url") })
             {
                 var reference = api.Get($"repos/{Repository}/git/ref/tags/{tag}");
                 var obj = reference.GetProperty("object");
@@ -192,12 +185,6 @@ internal static class Schema3ReleaseRecordValidator
     {
         var actual = value.EnumerateObject().Select(p => p.Name).ToArray();
         Require(actual.Length == names.Length && new HashSet<string>(actual).SetEquals(names), "Unexpected, missing or duplicate schema members.");
-    }
-    private static void RequiredAndOptionalMembers(JsonElement value, string[] required, string[] optional)
-    {
-        var names = value.EnumerateObject().Select(p => p.Name).ToArray();
-        Require(names.Distinct().Count() == names.Length && required.All(names.Contains) &&
-            names.All(n => required.Contains(n) || optional.Contains(n)), "Unexpected, missing or duplicate schema members.");
     }
     private static void Require(bool success, string message) { if (!success) throw new InvalidOperationException(message); }
 }

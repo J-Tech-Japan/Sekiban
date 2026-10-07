@@ -225,12 +225,24 @@ check_library_release_evidence() {
   require_value repo-root "$repo_root"
   require_value version "$version"
   local tag="dcb-v${version}"
-  local peeled
-  peeled="$(git -C "$repo_root" rev-list -n 1 "${tag}^{commit}" 2>/dev/null || true)"
-  if [[ -z "$peeled" || "$peeled" != "$(git -C "$repo_root" rev-parse HEAD)" ]]; then
-    echo "Library tag ${tag} must peel to the current integration commit." >&2
-    return 1
+  local peeled live_ref live_tag="${4:-}"
+  # The live guard supplies its annotated tag response so chronology, ancestry
+  # and body reads use the same live commit snapshot. Other callers read it here.
+  if [[ -z "$live_tag" ]]; then
+    live_ref="$(gh api "repos/${GITHUB_REPOSITORY:-J-Tech-Japan/Sekiban}/git/ref/tags/${tag}")" || return 1
+    [[ "$(jq -r '.object.type' <<<"$live_ref")" == tag ]] || {
+      echo "${tag} must be an annotated tag." >&2; return 1;
+    }
+    live_tag="$(gh api "repos/${GITHUB_REPOSITORY:-J-Tech-Japan/Sekiban}/git/tags/$(jq -r '.object.sha' <<<"$live_ref")")" || return 1
   fi
+  peeled="$(jq -r '.object.sha' <<<"$live_tag")"
+  [[ "$(jq -r '.object.type' <<<"$live_tag")" == commit && "$peeled" =~ ^[0-9a-fA-F]{40}$ &&
+     "$peeled" == "$(git -C "$repo_root" rev-parse "${tag}^{commit}")" ]] || {
+    echo "Library live/local peeled commit mismatch." >&2; return 1;
+  }
+  git -C "$repo_root" merge-base --is-ancestor "$peeled" HEAD || {
+    echo "Library commit must be an ancestor of the template commit." >&2; return 1;
+  }
 
   local repository="${GITHUB_REPOSITORY:-J-Tech-Japan/Sekiban}"
   local release="${3:-}"
@@ -257,13 +269,14 @@ check_library_release_evidence() {
     fi
   done
   local expected_body actual_body
-  expected_body="$(cat "$repo_root/docs/releases/dcb-v${version}-library.en.md" "$repo_root/docs/releases/dcb-v${version}-library.ja.md")"
+  expected_body="$(git -C "$repo_root" show "${peeled}:docs/releases/dcb-v${version}-library.en.md" &&
+    git -C "$repo_root" show "${peeled}:docs/releases/dcb-v${version}-library.ja.md")" || return 1
   actual_body="$(jq -r '.body' <<<"$release")"
   if [[ "$actual_body" != "$expected_body" ]]; then
     echo "GitHub Release ${tag} body does not exactly match the reviewed EN/JA library body." >&2
     return 1
   fi
-  echo "Live library release verification passed: ${tag}, 26 exact assets, non-draft release, reviewed body, and current peeled commit."
+  echo "Live library release verification passed: ${tag}, 26 exact assets, non-draft release, reviewed body, and verified ancestor commit."
 }
 
 # Checkout-safe live tag check (AC2/AC3): compare API identity plus peeled commit
@@ -508,14 +521,11 @@ check_template_live_guard() {
     return 1
   fi
   library_tagger_date="$(jq -r '.tagger.date' <<<"$library_tag_object")"
-  [[ "$(jq -r '.object.sha' <<<"$library_tag_object")" == "$merged_sha" ]] || {
-    echo "Library tag does not point at the validated merged SHA." >&2; return 1;
-  }
   if ! library_release="$(gh api "repos/${repository}/releases/tags/${library_tag}")"; then
     echo "Unable to read live library GitHub Release ${library_tag}." >&2
     return 1
   fi
-  check_library_release_evidence "$repo_root" "$version" "$library_release" || return 1
+  check_library_release_evidence "$repo_root" "$version" "$library_release" "$library_tag_object" || return 1
   published_at="$(jq -r '.published_at' <<<"$library_release")"
 
   if ! live_ref="$(gh api "repos/${repository}/git/ref/tags/${tag}")"; then
@@ -675,7 +685,11 @@ check_drift() {
   local library_version template_version
   library_version="$(latest_stable_tag_version "$repo_root" "dcb-v" "$library_tags_file" "library")" || return 1
   template_version="$(latest_stable_tag_version "$repo_root" "dcbTemplates-v" "$template_tags_file" "template")" || return 1
-  if [[ "$(version_core "$library_version")" != "$(version_core "$template_version")" ]]; then
+  if version_greater_than "$library_version" "$template_version"; then
+    echo "::notice::Libraries ${library_version} are ahead of templates ${template_version}; template adjustment/release is pending."
+    return 0
+  fi
+  if version_greater_than "$template_version" "$library_version"; then
     echo "DCB template currency drift: library=${library_version}, templates=${template_version}." >&2
     return 1
   fi
@@ -1001,7 +1015,8 @@ self_test() {
     "$fixture_root/library-${fixture_version}.txt" "$fixture_root/authorities-one-mismatch-${fixture_version}.txt" 0
   expect_failure check_publish_parity "$repo_root" "${fixture_version}" "dcbTemplates-v10.21.0" \
     "$fixture_root/library-${fixture_version}.txt" "$fixture_root/authorities-matching-${fixture_version}.txt" 0
-  expect_failure check_drift "$repo_root" "$fixture_root/library-10.23.0.txt" "$fixture_root/template-${fixture_version}.txt"
+  check_drift "$repo_root" "$fixture_root/library-10.23.0.txt" "$fixture_root/template-${fixture_version}.txt"
+  expect_failure check_drift "$repo_root" "$fixture_root/library-${fixture_version}.txt" "$fixture_root/template-10.23.0.txt"
 
   local exclusion_output
   exclusion_output="$(check_drift "$repo_root" "$fixture_root/library-${fixture_version}-with-exclusions.txt" "$fixture_root/template-${fixture_version}-with-exclusions.txt" 2>&1)"

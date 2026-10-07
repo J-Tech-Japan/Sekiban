@@ -21,6 +21,13 @@ internal static class ReleaseBodyValidator
         }.Where(file => bodyKind is null || string.Equals(file.Item2, bodyKind, StringComparison.OrdinalIgnoreCase)).ToArray();
         Assert(files.Length > 0, $"Unknown release-body kind '{bodyKind}'.");
 
+        if (bodyKind is null)
+        {
+            var templateFiles = files.Where(f => f.Item2 == "template").ToArray();
+            var count = templateFiles.Count(f => File.Exists(f.Item1));
+            Assert(count is 0 or 2, "Template release bodies must be present as a complete EN/JA pair.");
+            if (count == 0) files = files.Where(f => f.Item2 == LibraryKind).ToArray();
+        }
         foreach (var (path, kind, language) in files)
         {
             Assert(File.Exists(path), $"Missing reviewed {language} {kind} release body: {path}");
