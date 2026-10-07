@@ -992,7 +992,7 @@ apiRoute
         async ([FromServices] IClusterClient client) =>
         {
             var grain = client.GetGrain<IMultiProjectionGrain>(
-                "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+                ServiceIdGrainKey.Build(serviceId, "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
@@ -1030,7 +1030,7 @@ apiRoute
         async ([FromServices] IClusterClient client) =>
         {
             var grain = client.GetGrain<IMultiProjectionGrain>(
-                "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+                ServiceIdGrainKey.Build(serviceId, "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
