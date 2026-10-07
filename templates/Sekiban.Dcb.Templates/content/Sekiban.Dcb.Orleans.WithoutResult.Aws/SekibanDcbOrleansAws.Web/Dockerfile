@@ -1,6 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+COPY ["SekibanDcbTemplateVersion.props", "./"]
+
 COPY ["SekibanDcbOrleansAws.Web/SekibanDcbOrleansAws.Web.csproj", "SekibanDcbOrleansAws.Web/"]
 COPY ["SekibanDcbOrleansAws.Domain/SekibanDcbOrleansAws.Domain.csproj", "SekibanDcbOrleansAws.Domain/"]
 COPY ["SekibanDcbOrleansAws.ServiceDefaults/SekibanDcbOrleansAws.ServiceDefaults.csproj", "SekibanDcbOrleansAws.ServiceDefaults/"]
@@ -18,4 +20,6 @@ ENV ASPNETCORE_URLS=http://+:8081 \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 COPY --from=build /app/publish .
 EXPOSE 8081
+USER $APP_UID
+
 ENTRYPOINT ["dotnet", "SekibanDcbOrleansAws.Web.dll"]

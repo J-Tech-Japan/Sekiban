@@ -1,3 +1,5 @@
+using Sekiban.Dcb.Orleans.ServiceId;
+using SekibanDcbOrleans.ApiService;
 using System.Net;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
@@ -39,6 +41,10 @@ using Sekiban.Dcb.Tags;
 using SekibanDcbOrleans.ApiService.Health;
 
 var builder = WebApplication.CreateBuilder(args);
+// This identity partitions all event, projection and MV data. Keep it stable once data exists.
+// Use a distinct identity for each application sharing storage in a multi-service deployment.
+const string defaultServiceId = "sekiban-app";
+var serviceId = ServiceIdentity.Resolve(builder.Configuration, defaultServiceId);
 if (builder.Environment.IsDevelopment())
 {
     builder.Logging.AddFilter("Azure.Core", LogLevel.Error);
@@ -50,6 +56,8 @@ builder.AddServiceDefaults();
 builder.Services.AddHealthChecks()
     .AddCheck<OrleansHealthCheck>("orleans", tags: ["ready"]);
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
+builder.Services.AddExceptionHandler<BadRequestExceptionHandler>();
 builder.Services.AddOpenApi();
 
 // Configuration switches for Orleans
@@ -438,6 +446,7 @@ builder.Services.AddSekibanDcbColdEventDefaults();
 // dedicated `DcbMaterializedViewPostgres` connection string is supplied (see below).
 builder.Services.AddSekibanDcbMaterializedView(options =>
 {
+    options.ServiceId = serviceId;
     options.BatchSize = 100;
     options.PollInterval = TimeSpan.FromSeconds(1);
 });
@@ -509,12 +518,12 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DcbMat
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>
-    new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "AllEvents", Guid.Empty));
+    new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "AllEvents", Guid.Empty,
+        sp.GetRequiredService<IServiceIdProvider>()));
 builder.Services.AddSingleton<IEventSubscriptionResolver>(sp =>
     new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
 // Snapshot offload: Azure Blob Storage accessor using Aspire-configured BlobServiceClient
-// Using a minimal implementation since Sekiban.Dcb.BlobStorage.AzureStorage is not yet published
 builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
 {
     var blobServiceClient = sp.GetRequiredKeyedService<BlobServiceClient>("MultiProjectionOffload");
@@ -532,6 +541,9 @@ if (builder.Environment.IsDevelopment())
 // Development only logs the banner. Must come AFTER the Sekiban registrations. Contract:
 // https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md
 builder.Services.AddSekibanDcbProductionGuard();
+
+// Storage registrations may supply the legacy provider: replace them after ALL storage registrations.
+ServiceIdentity.Register(builder.Services, serviceId);
 
 var app = builder.Build();
 
@@ -565,7 +577,7 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student created successfully"
                     });
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("CreateStudent");
 apiRoute
@@ -590,7 +602,7 @@ apiRoute
                 return Results.Ok(queryResult.Items);
             }
 
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("GetStudentList");
 apiRoute
@@ -631,7 +643,7 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "ClassRoom created successfully"
                     });
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("CreateClassRoom");
 apiRoute
@@ -656,7 +668,7 @@ apiRoute
                 return Results.Ok(queryResult.Items);
             }
 
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("GetClassRoomList");
 apiRoute
@@ -698,7 +710,7 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student enrolled successfully"
                     });
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("EnrollStudent");
 apiRoute
@@ -717,42 +729,45 @@ apiRoute
                         sortableUniqueId = result.GetValue().SortableUniqueId,
                         message = "Student dropped successfully"
                     });
-            return Results.BadRequest(new { error = result.GetException().Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException().Message }));
         })
         .WithName("DropStudent");
-apiRoute
-    .MapGet(
-        "/debug/events",
-        async ([FromServices] IEventStore eventStore) =>
-        {
-            try
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapGet(
+            "/debug/events",
+            async ([FromServices] IEventStore eventStore) =>
             {
-                var result = await eventStore.ReadAllEventsAsync();
-                if (result.IsSuccess)
+                try
                 {
-                    var events = result.GetValue().ToList();
-                    return Results.Ok(
-                        new
-                        {
-                            totalEvents = events.Count,
-                            events = events.Select(e => new
+                    var result = await eventStore.ReadAllEventsAsync();
+                    if (result.IsSuccess)
+                    {
+                        var events = result.GetValue().ToList();
+                        return Results.Ok(
+                            new
                             {
-                                id = e.Id,
-                                type = e.EventType,
-                                sortableId = e.SortableUniqueIdValue,
-                                tags = e.Tags
-                            })
-                        });
-                }
+                                totalEvents = events.Count,
+                                events = events.Select(e => new
+                                {
+                                    id = e.Id,
+                                    type = e.EventType,
+                                    sortableId = e.SortableUniqueIdValue,
+                                    tags = e.Tags
+                                })
+                            });
+                    }
 
-                return Results.BadRequest(new { error = result.GetException()?.Message });
-            }
-            catch (Exception ex)
-            {
-                return Results.Problem(ex.Message);
-            }
-        })
-        .WithName("DebugGetEvents");
+                    return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message }));
+                }
+                catch (Exception ex)
+                {
+                    return ProjectionErrors.Map(ex, Results.Problem(ex.Message));
+                }
+            })
+            .WithName("DebugGetEvents");
+}
 apiRoute
     .MapGet(
         "/weatherforecast",
@@ -777,7 +792,7 @@ apiRoute
                 return Results.Ok(queryResult.Items);
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message }));
         })
         .WithName("GetWeatherForecast");
 apiRoute
@@ -804,7 +819,7 @@ apiRoute
                 return Results.Ok(queryResult.Items);
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message }));
         })
         .WithName("GetWeatherForecastGeneric");
 apiRoute
@@ -831,7 +846,7 @@ apiRoute
                 return Results.Ok(queryResult.Items);
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message }));
         })
         .WithName("GetWeatherForecastSingle");
 apiRoute
@@ -849,12 +864,12 @@ apiRoute
                         aggregateId = result.GetValue().Events.FirstOrDefault(m => m.Payload is WeatherForecastCreated)?.Payload.As<WeatherForecastCreated>()?.ForecastId,
                         sortableUniqueId = result.GetValue().SortableUniqueId
                     });
-            return Results.BadRequest(
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(
                 new
                 {
                     success = false,
                     error = result.GetException()?.Message
-                });
+                }));
         })
     .WithName("InputWeatherForecast");
 
@@ -873,12 +888,12 @@ apiRoute
                         aggregateId = command.ForecastId,
                         sortableUniqueId = result.GetValue().SortableUniqueId
                     });
-            return Results.BadRequest(
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(
                 new
                 {
                     success = false,
                     error = result.GetException()?.Message
-                });
+                }));
         })
     .WithName("UpdateWeatherForecastLocation");
 
@@ -905,7 +920,7 @@ apiRoute
                 });
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" }));
         })
         .WithName("GetWeatherForecastCount");
 apiRoute
@@ -932,7 +947,7 @@ apiRoute
                 });
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" }));
         })
         .WithName("GetWeatherForecastCountGeneric");
 apiRoute
@@ -959,7 +974,7 @@ apiRoute
                 });
             }
 
-            return Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" });
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(new { error = result.GetException()?.Message ?? "Query failed" }));
         })
         .WithName("GetWeatherForecastCountSingle");
 apiRoute
@@ -967,7 +982,7 @@ apiRoute
         "/weatherforecast/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjection"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
@@ -978,7 +993,7 @@ apiRoute
         async ([FromServices] IClusterClient client) =>
         {
             var grain = client.GetGrain<IMultiProjectionGrain>(
-                "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+                ServiceIdGrainKey.Build(serviceId, "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
@@ -988,7 +1003,7 @@ apiRoute
         "/weatherforecastsingle/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjectorWithTagStateProjector"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
@@ -1000,7 +1015,7 @@ apiRoute
         {
             try
             {
-                var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjection"));
                 var status = await grain.GetStatusAsync();
                 return Results.Ok(status);
             }
@@ -1016,7 +1031,7 @@ apiRoute
         async ([FromServices] IClusterClient client) =>
         {
             var grain = client.GetGrain<IMultiProjectionGrain>(
-                "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+                ServiceIdGrainKey.Build(serviceId, "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
@@ -1026,104 +1041,119 @@ apiRoute
         "/weatherforecastsingle/status",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjectorWithTagStateProjector"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
         .WithName("GetWeatherForecastSingleStatus");
-apiRoute
-    .MapPost(
-        "/projections/persist",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
-        {
-            try
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/persist",
+            async ([FromQuery] string name, [FromServices] IClusterClient client) =>
             {
-                var start = DateTime.UtcNow;
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
-                var rb = await grain.PersistStateAsync();
-                var end = DateTime.UtcNow;
-                if (rb.IsSuccess)
-                    return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
-                var err = rb.GetException()?.Message;
-                return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
-            }
-            catch (Exception ex)
+                try
+                {
+                    var start = DateTime.UtcNow;
+                    var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                    var rb = await grain.PersistStateAsync();
+                    var end = DateTime.UtcNow;
+                    if (rb.IsSuccess)
+                        return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
+                    var err = rb.GetException()?.Message;
+                    return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds }));
+                }
+                catch (Exception ex)
+                {
+                    return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
+                }
+            })
+            .WithName("PersistProjectionState");
+}
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/deactivate",
+            async ([FromQuery] string name, [FromServices] IClusterClient client) =>
             {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        })
-        .WithName("PersistProjectionState");
-apiRoute
-    .MapPost(
-        "/projections/deactivate",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
-        {
-            try
+                try
+                {
+                    var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                    await grain.RequestDeactivationAsync();
+                    return Results.Ok(new { success = true });
+                }
+                catch (Exception ex)
+                {
+                    return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
+                }
+            })
+            .WithName("DeactivateProjection");
+}
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/refresh",
+            async ([FromQuery] string name, [FromServices] IClusterClient client) =>
             {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
-                await grain.RequestDeactivationAsync();
-                return Results.Ok(new { success = true });
-            }
-            catch (Exception ex)
+                try
+                {
+                    var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                    await grain.RefreshAsync();
+                    return Results.Ok(new { success = true });
+                }
+                catch (Exception ex)
+                {
+                    return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
+                }
+            })
+            .WithName("RefreshProjection");
+}
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapGet(
+            "/projections/snapshot",
+            async ([FromQuery] string name, [FromQuery] bool? unsafeState, [FromServices] IClusterClient client) =>
             {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        })
-        .WithName("DeactivateProjection");
-apiRoute
-    .MapPost(
-        "/projections/refresh",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
-        {
-            try
+                try
+                {
+                    var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                    var rb = await grain.GetSnapshotJsonAsync(unsafeState ?? true);
+                    if (!rb.IsSuccess) return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = rb.GetException()?.Message }));
+                    return Results.Text(rb.GetValue(), "application/json");
+                }
+                catch (Exception ex)
+                {
+                    return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
+                }
+            })
+            .WithName("GetProjectionSnapshot");
+}
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/overwrite-version",
+            async ([FromQuery] string name, [FromQuery] string newVersion, [FromServices] IClusterClient client) =>
             {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
-                await grain.RefreshAsync();
-                return Results.Ok(new { success = true });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        })
-        .WithName("RefreshProjection");
-apiRoute
-    .MapGet(
-        "/projections/snapshot",
-        async ([FromQuery] string name, [FromQuery] bool? unsafeState, [FromServices] IClusterClient client) =>
-        {
-            try
-            {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
-                var rb = await grain.GetSnapshotJsonAsync(unsafeState ?? true);
-                if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
-                return Results.Text(rb.GetValue(), "application/json");
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        })
-        .WithName("GetProjectionSnapshot");
-apiRoute
-    .MapPost(
-        "/projections/overwrite-version",
-        async ([FromQuery] string name, [FromQuery] string newVersion, [FromServices] IClusterClient client) =>
-        {
-            try
-            {
-                var grain = client.GetGrain<IMultiProjectionGrain>(name);
-                var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
-                return ok
-                    ? Results.Ok(new { success = true })
-                    : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        })
-        .WithName("OverwriteProjectionPersistedVersion");
+                try
+                {
+                    var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                    var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
+                    return ok
+                        ? Results.Ok(new { success = true })
+                        : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
+                }
+                catch (Exception ex)
+                {
+                    return ProjectionErrors.Map(ex, Results.BadRequest(new { error = ex.Message }));
+                }
+            })
+            .WithName("OverwriteProjectionPersistedVersion");
+}
 apiRoute
     .MapPost(
         "/removeweatherforecast",
@@ -1139,12 +1169,12 @@ apiRoute
                         aggregateId = command.ForecastId,
                         sortableUniqueId = result.GetValue().SortableUniqueId
                     });
-            return Results.BadRequest(
+            return ProjectionErrors.Map(result.GetException(), Results.BadRequest(
                 new
                 {
                     success = false,
                     error = result.GetException()?.Message
-                });
+                }));
         })
     .WithName("RemoveWeatherForecast");
 
@@ -1167,22 +1197,22 @@ apiRoute
                             message = "Successfully executed query through Orleans",
                             itemCount = result.GetValue().TotalCount
                         });
-                return Results.Ok(
+                return ProjectionErrors.Map(result.GetException(), Results.Ok(
                     new
                     {
                         status = "Orleans query failed",
                         error = result.GetException()?.Message ?? "Unknown error"
-                    });
+                    }));
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Orleans test failed");
-                return Results.Ok(
+                return ProjectionErrors.Map(ex, Results.Ok(
                     new
                     {
                         status = "Orleans test failed",
                         error = ex.Message
-                    });
+                    }));
             }
         })
         .WithName("TestOrleans");

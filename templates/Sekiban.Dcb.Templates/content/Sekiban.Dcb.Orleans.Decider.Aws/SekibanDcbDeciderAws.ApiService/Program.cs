@@ -1,3 +1,5 @@
+using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Orleans.ServiceId;
 using Microsoft.Extensions.DependencyInjection;
 using Dcb.EventSource;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +30,10 @@ using SekibanDcbDeciderAws.ApiService.Exceptions;
 using SekibanDcbDeciderAws.ApiService.Realtime;
 
 var builder = WebApplication.CreateBuilder(args);
+// This identity partitions all event, projection and MV data. Keep it stable once data exists.
+// Use a distinct identity for each application sharing storage in a multi-service deployment.
+const string defaultServiceId = "sekiban-app";
+var serviceId = ServiceIdentity.Resolve(builder.Configuration, defaultServiceId);
 
 // Configure logging to suppress AWS SDK warnings in development
 if (builder.Environment.IsDevelopment())
@@ -41,6 +47,7 @@ builder.AddServiceDefaults();
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
 
 // Add global exception handler
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -63,11 +70,11 @@ if (string.IsNullOrEmpty(authConnectionString))
         authConnectionString = $"Host={identityHost};Port={identityPort};Database={identityDatabase};Username={identityUsername};Password={identityPassword}";
     }
 }
-if (!string.IsNullOrEmpty(authConnectionString))
+JwtSettings.ValidateStartup(builder.Environment.EnvironmentName, builder.Configuration["Jwt:SecretKey"], authConnectionString);
+if (!string.IsNullOrWhiteSpace(authConnectionString))
 {
     builder.Services.AddAuthServices(builder.Configuration, authConnectionString);
     // Add background service to initialize auth database and seed users
-    builder.Services.AddHostedService<AuthDbInitializer>();
 }
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -262,6 +269,7 @@ builder.Services.AddSekibanDcbColdEventDefaults();
 // DynamoDB by default but can opt into a Postgres-backed read model.
 builder.Services.AddSekibanDcbMaterializedView(options =>
 {
+    options.ServiceId = serviceId;
     options.BatchSize = 100;
     options.PollInterval = TimeSpan.FromSeconds(1);
 });
@@ -304,7 +312,8 @@ builder.Services.AddSekibanDcbS3BlobStorage(builder.Configuration);
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>
-    new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "AllEvents", Guid.Empty));
+    new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "AllEvents", Guid.Empty,
+        sp.GetRequiredService<IServiceIdProvider>()));
 builder.Services.AddSingleton<IEventSubscriptionResolver>(sp =>
     new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
@@ -326,6 +335,9 @@ if (builder.Environment.IsDevelopment())
 // Development only logs the banner. Must come AFTER the Sekiban registrations. Contract:
 // https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md
 builder.Services.AddSekibanDcbProductionGuard();
+
+// Storage registrations may supply the legacy provider: replace them after ALL storage registrations.
+ServiceIdentity.Register(builder.Services, serviceId);
 
 var app = builder.Build();
 
@@ -363,8 +375,10 @@ apiRoute.MapStudentEndpoints();
 apiRoute.MapClassRoomEndpoints();
 apiRoute.MapEnrollmentEndpoints();
 apiRoute.MapWeatherEndpoints();
-apiRoute.MapProjectionEndpoints();
-apiRoute.MapDebugEndpoints();
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+    apiRoute.MapProjectionEndpoints();
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+    apiRoute.MapDebugEndpoints();
 
 // MeetingRoom endpoints
 apiRoute.MapRoomEndpoints();
@@ -374,7 +388,8 @@ apiRoute.MapUserDirectoryEndpoints();
 apiRoute.MapStreamEndpoints();
 
 // Test data endpoints
-apiRoute.MapTestDataEndpoints();
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+    apiRoute.MapTestDataEndpoints();
 
 // Materialized view endpoints depend on the Orleans MV runtime, which is registered only when a
 // `DcbMaterializedViewPostgres` connection string is supplied. Skip the route when MV is off so
@@ -420,7 +435,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                         cancellationToken: ct));
                 return Results.Ok(rows);
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMv");
 
     apiRoute
@@ -461,7 +475,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                     tombstoneCount
                 });
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMvDiagnostics");
 }
 

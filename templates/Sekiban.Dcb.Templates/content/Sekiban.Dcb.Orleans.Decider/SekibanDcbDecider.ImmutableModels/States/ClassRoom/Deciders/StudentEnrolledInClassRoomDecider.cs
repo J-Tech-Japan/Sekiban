@@ -11,18 +11,18 @@ public static class StudentEnrolledInClassRoomDecider
     /// </summary>
     /// <param name="state">Current classroom state</param>
     /// <param name="studentId">Student to enroll</param>
-    /// <exception cref="InvalidOperationException">When classroom is full or student already enrolled</exception>
+    /// <exception cref="ApplicationException">When classroom is full or student already enrolled</exception>
     public static void Validate(this AvailableClassRoomState state, Guid studentId)
     {
         if (state.GetRemaining() <= 0)
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"ClassRoom {state.ClassRoomId} is full (max: {state.MaxStudents})");
         }
 
         if (state.EnrolledStudentIds.Contains(studentId))
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"Student {studentId} is already enrolled in classroom {state.ClassRoomId}");
         }
     }
@@ -32,18 +32,18 @@ public static class StudentEnrolledInClassRoomDecider
     /// </summary>
     /// <param name="state">Current classroom state</param>
     /// <param name="studentId">Student to enroll</param>
-    /// <exception cref="InvalidOperationException">When classroom is full or student already enrolled</exception>
+    /// <exception cref="ApplicationException">When classroom is full or student already enrolled</exception>
     public static void Validate(this FilledClassRoomState state, Guid studentId)
     {
         if (state.IsFull)
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"ClassRoom {state.ClassRoomId} is full");
         }
 
         if (state.EnrolledStudentIds.Contains(studentId))
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"Student {studentId} is already enrolled in classroom {state.ClassRoomId}");
         }
     }

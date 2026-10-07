@@ -11,12 +11,12 @@ public static class StudentDroppedFromClassRoomDecider
     /// </summary>
     /// <param name="state">Current student state</param>
     /// <param name="classRoomId">ClassRoom to drop from</param>
-    /// <exception cref="InvalidOperationException">When student is not enrolled</exception>
+    /// <exception cref="ApplicationException">When student is not enrolled</exception>
     public static void Validate(this StudentState state, Guid classRoomId)
     {
         if (!state.EnrolledClassRoomIds.Contains(classRoomId))
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"Student {state.StudentId} is not enrolled in classroom {classRoomId}");
         }
     }

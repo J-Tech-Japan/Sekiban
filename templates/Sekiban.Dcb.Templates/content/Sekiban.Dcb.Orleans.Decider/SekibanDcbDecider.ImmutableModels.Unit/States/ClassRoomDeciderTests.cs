@@ -57,7 +57,7 @@ public class ClassRoomDeciderTests
         var existingStudents = Enumerable.Range(0, 2).Select(_ => Guid.CreateVersion7()).ToList();
         var state = new AvailableClassRoomState(classRoomId, "Math 101", 2, existingStudents);
 
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.Throws<ApplicationException>(() =>
             StudentEnrolledInClassRoomDecider.Validate(state, Guid.CreateVersion7()));
     }
 
@@ -68,7 +68,7 @@ public class ClassRoomDeciderTests
         var studentId = Guid.CreateVersion7();
         var state = new AvailableClassRoomState(classRoomId, "Math 101", 30, [studentId]);
 
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.Throws<ApplicationException>(() =>
             StudentEnrolledInClassRoomDecider.Validate(state, studentId));
     }
 
@@ -92,7 +92,7 @@ public class ClassRoomDeciderTests
         var classRoomId = Guid.CreateVersion7();
         var state = new AvailableClassRoomState(classRoomId, "Math 101", 30, []);
 
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.Throws<ApplicationException>(() =>
             StudentDroppedFromClassRoomDecider.Validate(state, Guid.CreateVersion7()));
     }
 
@@ -115,7 +115,7 @@ public class ClassRoomDeciderTests
     {
         var state = new FilledClassRoomState(Guid.CreateVersion7(), "Math 101", [], true);
 
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.Throws<ApplicationException>(() =>
             StudentEnrolledInClassRoomDecider.Validate(state, Guid.CreateVersion7()));
     }
 }

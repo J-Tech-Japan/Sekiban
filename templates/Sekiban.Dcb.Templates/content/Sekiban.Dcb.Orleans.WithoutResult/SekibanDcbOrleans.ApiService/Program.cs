@@ -1,3 +1,7 @@
+using Sekiban.Dcb.Orleans.ServiceId;
+using Azure.Storage.Queues;
+using System.Net;
+using SekibanDcbOrleans.ApiService;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.Configuration;
@@ -38,6 +42,10 @@ using Dcb.Domain.WithoutResult.MaterializedViews;
 using Dapper;
 
 var builder = WebApplication.CreateBuilder(args);
+// This identity partitions all event, projection and MV data. Keep it stable once data exists.
+// Use a distinct identity for each application sharing storage in a multi-service deployment.
+const string defaultServiceId = "sekiban-app";
+var serviceId = ServiceIdentity.Resolve(builder.Configuration, defaultServiceId);
 
 // Configure logging to suppress Azure Storage warnings in development
 if (builder.Environment.IsDevelopment())
@@ -54,6 +62,7 @@ builder.Services.AddHealthChecks()
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
 
 // Add global exception handler
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -117,43 +126,151 @@ builder.UseOrleans(config =>
         }
     }
 
-    // Use in-memory streams (configured via Orleans:UseInMemoryStreams in appsettings)
-    config.AddMemoryStreams("EventStreamProvider", configurator =>
+    var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams");
+    if (useInMemoryStreams)
     {
-        // Increase partitions for better parallelism
-        configurator.ConfigurePartitioning(8);
-
-        // Configure pulling agent for better batch processing
-        configurator.ConfigurePullingAgent(options =>
+        config.AddMemoryStreams("EventStreamProvider", configurator =>
         {
-            options.Configure(opt =>
+            configurator.ConfigurePartitioning(8);
+            configurator.ConfigurePullingAgent(options =>
             {
-                // Process events more frequently
-                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
-                // Increase batch size for better throughput
-                opt.BatchContainerBatchSize = 100;
+                options.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                    opt.BatchContainerBatchSize = 100;
+                });
             });
         });
-    });
-
-    config.AddMemoryStreams("DcbOrleansQueue", configurator =>
-    {
-        configurator.ConfigurePartitioning(8);
-        configurator.ConfigurePullingAgent(options =>
+        config.AddMemoryStreams("DcbOrleansQueue", configurator =>
         {
-            options.Configure(opt =>
+            configurator.ConfigurePartitioning(8);
+            configurator.ConfigurePullingAgent(options =>
             {
-                opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
-                opt.BatchContainerBatchSize = 100;
+                options.Configure(opt =>
+                {
+                    opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(100);
+                    opt.BatchContainerBatchSize = 100;
+                });
             });
         });
-    });
+        config.AddMemoryGrainStorage("PubSubStore");
+    }
+    else
+    {
+        if ((builder.Configuration["ORLEANS_QUEUE_TYPE"] ?? "").ToLower() == "eventhub")
+        {
+            config.AddEventHubStreams(
+                "EventStreamProvider",
+                configurator =>
+                {
+                    // Existing Event Hub connection settings
+                    configurator.ConfigureEventHub(ob => ob.Configure(options =>
+                    {
+                        options.ConfigureEventHubConnection(
+                            builder.Configuration.GetConnectionString("OrleansEventHub"),
+                            builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
+                            "$Default");
+                    }));
+                    // 🔑 NEW –‑ tell Orleans where to persist checkpoints
+                    configurator.UseAzureTableCheckpointer(ob => ob.Configure(cp =>
+                    {
+                        cp.TableName = "EventHubCheckpointsEventStreamsProvider"; // any table name you like
+                        cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
+                        cp.TableServiceClient = new TableServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
+                    }));
+                });
+            config.AddEventHubStreams(
+                "DcbOrleansQueue",
+                configurator =>
+                {
+                    // Existing Event Hub connection settings
+                    configurator.ConfigureEventHub(ob => ob.Configure(options =>
+                    {
+                        options.ConfigureEventHubConnection(
+                            builder.Configuration.GetConnectionString("OrleansEventHub"),
+                            builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
+                            "$Default");
+                    }));
 
-    // Add memory storage for PubSubStore when using in-memory streams
-    config.AddMemoryGrainStorage("PubSubStore");
+                    // 🔑 NEW –‑ tell Orleans where to persist checkpoints
+                    configurator.UseAzureTableCheckpointer(ob => ob.Configure(cp =>
+                    {
+                        cp.TableName = "EventHubCheckpointsOrleansSekibanQueue"; // any table name you like
+                        cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
+                        cp.TableServiceClient = new TableServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
+                    }));
 
-    // Flag to track that we're using in-memory streams
-    var useInMemoryStreams = true;
+                    // …your cache, queue‑mapper, pulling‑agent settings remain unchanged …
+                });
+        }
+        else
+        {
+            config.AddAzureQueueStreams(
+                "EventStreamProvider",
+                options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = new QueueServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansQueue"));
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-eventstreamprovider-0",
+                            "dcborleans-eventstreamprovider-1",
+                            "dcborleans-eventstreamprovider-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    });
+                });
+            config.ConfigureServices(services =>
+            {
+                services.Configure<HashRingStreamQueueMapperOptions>(
+                    "EventStreamProvider",
+                    o => o.TotalQueueCount = 3);
+                services.Configure<StreamPullingAgentOptions>(
+                    "EventStreamProvider",
+                    opt =>
+                    {
+                        opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                        opt.BatchContainerBatchSize = 256;
+                        opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                    });
+            });
+            config.AddAzureQueueStreams(
+                "DcbOrleansQueue",
+                options =>
+                {
+                    options.Configure<IServiceProvider>((queueOptions, sp) =>
+                    {
+                        queueOptions.QueueServiceClient = new QueueServiceClient(
+                            builder.Configuration.GetConnectionString("DcbOrleansQueue"));
+                        queueOptions.QueueNames =
+                        [
+                            "dcborleans-queue-0",
+                            "dcborleans-queue-1",
+                            "dcborleans-queue-2"
+                        ];
+                        queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
+                    });
+                });
+            config.ConfigureServices(services =>
+            {
+                services.Configure<HashRingStreamQueueMapperOptions>(
+                    "DcbOrleansQueue",
+                    o => o.TotalQueueCount = 3);
+                services.Configure<StreamPullingAgentOptions>(
+                    "DcbOrleansQueue",
+                    opt =>
+                    {
+                        opt.GetQueueMsgsTimerPeriod = TimeSpan.FromMilliseconds(1000);
+                        opt.BatchContainerBatchSize = 256;
+                        opt.StreamInactivityPeriod = TimeSpan.FromMinutes(10);
+                    });
+            });
+        }
+    }
 
     // Configure grain storage providers
     if (cfgGrainDefault == "cosmos")
@@ -318,6 +435,31 @@ builder.UseOrleans(config =>
     }
 
     // Orleans will automatically discover grains in the same assembly
+    // Check for VNet IP Address from environment variable APP Service specific setting
+    if (!string.IsNullOrWhiteSpace(builder.Configuration["WEBSITE_PRIVATE_IP"]) &&
+        !string.IsNullOrWhiteSpace(builder.Configuration["WEBSITE_PRIVATE_PORTS"]))
+    {
+        // Get IP and ports from environment variables
+        var ip = IPAddress.Parse(builder.Configuration["WEBSITE_PRIVATE_IP"]!);
+        var ports = builder.Configuration["WEBSITE_PRIVATE_PORTS"]!.Split(',');
+        if (ports.Length < 2) throw new Exception("Insufficient number of private ports");
+        int siloPort = int.Parse(ports[0]), gatewayPort = int.Parse(ports[1]);
+        config.ConfigureEndpoints(ip, siloPort, gatewayPort, true);
+    }
+
+    else if (!builder.Environment.IsDevelopment())
+    {
+        // Container Apps ports match the shipped additionalPortMappings.
+        config.Configure<EndpointOptions>(options =>
+        {
+            options.SiloPort = 11111;
+            options.GatewayPort = 30000;
+            options.AdvertisedIPAddress = GetPrivateIpAddress();
+            options.SiloListeningEndpoint = new IPEndPoint(IPAddress.Any, 11111);
+            options.GatewayListeningEndpoint = new IPEndPoint(IPAddress.Any, 30000);
+        });
+    }
+
     config.ConfigureServices(services =>
     {
         services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
@@ -360,6 +502,7 @@ builder.Services.AddSekibanDcbColdEventDefaults();
 // dedicated `DcbMaterializedViewPostgres` connection string is supplied (see below).
 builder.Services.AddSekibanDcbMaterializedView(options =>
 {
+    options.ServiceId = serviceId;
     options.BatchSize = 100;
     options.PollInterval = TimeSpan.FromSeconds(1);
 });
@@ -429,7 +572,8 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DcbMat
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>
-    new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "AllEvents", Guid.Empty));
+    new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "AllEvents", Guid.Empty,
+        sp.GetRequiredService<IServiceIdProvider>()));
 builder.Services.AddSingleton<IEventSubscriptionResolver>(sp =>
     new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
@@ -441,7 +585,6 @@ builder.Services.AddSingleton<IBlobStorageSnapshotAccessor>(sp =>
     return new AzureBlobStorageSnapshotAccessor(blobServiceClient, containerName);
 });
 // Note: IEventSubscription is now created per-grain via IEventSubscriptionResolver
-builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddTransient<ISekibanExecutor, OrleansDcbExecutor>();
 builder.Services.AddScoped<IActorObjectAccessor, OrleansActorObjectAccessor>();
 
@@ -465,6 +608,9 @@ if (builder.Environment.IsDevelopment())
 // Development only logs the banner. Must come AFTER the Sekiban registrations. Contract:
 // https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md
 builder.Services.AddSekibanDcbProductionGuard();
+
+// Storage registrations may supply the legacy provider: replace them after ALL storage registrations.
+ServiceIdentity.Register(builder.Services, serviceId);
 
 var app = builder.Build();
 
@@ -644,28 +790,31 @@ apiRoute
         .WithName("DropStudent");
 
 // Debug endpoint to check database
-apiRoute
-    .MapGet(
-        "/debug/events",
-        async ([FromServices] IEventStore eventStore, [FromServices] ILogger<Program> logger) =>
-        {
-            var result = await eventStore.ReadAllEventsAsync();
-            var events = result.GetValue().ToList();
-            logger.LogDebug("ReadAllEventsAsync returned {EventCount} events", events.Count);
-            return Results.Ok(
-                new
-                {
-                    totalEvents = events.Count,
-                    events = events.Select(e => new
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapGet(
+            "/debug/events",
+            async ([FromServices] IEventStore eventStore, [FromServices] ILogger<Program> logger) =>
+            {
+                var result = await eventStore.ReadAllEventsAsync();
+                var events = result.GetValue().ToList();
+                logger.LogDebug("ReadAllEventsAsync returned {EventCount} events", events.Count);
+                return Results.Ok(
+                    new
                     {
-                        id = e.Id,
-                        type = e.EventType,
-                        sortableId = e.SortableUniqueIdValue,
-                        tags = e.Tags
-                    })
-                });
-        })
-        .WithName("DebugGetEvents");
+                        totalEvents = events.Count,
+                        events = events.Select(e => new
+                        {
+                            id = e.Id,
+                            type = e.EventType,
+                            sortableId = e.SortableUniqueIdValue,
+                            tags = e.Tags
+                        })
+                    });
+            })
+            .WithName("DebugGetEvents");
+}
 
 // Weather endpoints
 apiRoute
@@ -847,7 +996,7 @@ apiRoute
         "/weatherforecast/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjection"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
@@ -859,7 +1008,7 @@ apiRoute
         "/weatherforecastgeneric/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
@@ -871,7 +1020,7 @@ apiRoute
         "/weatherforecastsingle/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjectorWithTagStateProjector"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
@@ -883,7 +1032,7 @@ apiRoute
         "/weatherforecast/status",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjection"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
@@ -894,7 +1043,7 @@ apiRoute
         "/weatherforecastgeneric/status",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
@@ -905,79 +1054,94 @@ apiRoute
         "/weatherforecastsingle/status",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjectorWithTagStateProjector"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
         .WithName("GetWeatherForecastSingleStatus");
 
 // Generic projection control endpoints (for persistence + restore testing)
-apiRoute
-    .MapPost(
-        "/projections/persist",
-        async ([FromQuery] string name, [FromServices] IClusterClient client, [FromServices] ILogger<Program> logger) =>
-        {
-            var start = DateTime.UtcNow;
-            logger.LogDebug("PersistProjectionState request: name={Name}, start={Start:O}", name, start);
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            var rb = await grain.PersistStateAsync();
-            var end = DateTime.UtcNow;
-            var elapsedMs = (end - start).TotalMilliseconds;
-            if (rb.IsSuccess)
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/persist",
+            async ([FromQuery] string name, [FromServices] IClusterClient client, [FromServices] ILogger<Program> logger) =>
             {
-                logger.LogDebug("PersistProjectionState success: name={Name}, elapsed={ElapsedMs:F1}ms", name, elapsedMs);
-                return Results.Ok(new { success = rb.GetValue(), elapsedMs });
-            }
-            var err = rb.GetException()?.Message;
-            logger.LogWarning("PersistProjectionState failure: name={Name}, elapsed={ElapsedMs:F1}ms, error={Error}", name, elapsedMs, err);
-            return Results.BadRequest(new { error = err, elapsedMs });
-        })
-        .WithName("PersistProjectionState");
+                var start = DateTime.UtcNow;
+                logger.LogDebug("PersistProjectionState request: name={Name}, start={Start:O}", name, start);
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                var rb = await grain.PersistStateAsync();
+                var end = DateTime.UtcNow;
+                var elapsedMs = (end - start).TotalMilliseconds;
+                if (rb.IsSuccess)
+                {
+                    logger.LogDebug("PersistProjectionState success: name={Name}, elapsed={ElapsedMs:F1}ms", name, elapsedMs);
+                    return Results.Ok(new { success = rb.GetValue(), elapsedMs });
+                }
+                var err = rb.GetException()?.Message;
+                logger.LogWarning("PersistProjectionState failure: name={Name}, elapsed={ElapsedMs:F1}ms, error={Error}", name, elapsedMs, err);
+                return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = err, elapsedMs }));
+            })
+            .WithName("PersistProjectionState");
+}
 
-apiRoute
-    .MapPost(
-        "/projections/deactivate",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            await grain.RequestDeactivationAsync();
-            return Results.Ok(new { success = true });
-        })
-        .WithName("DeactivateProjection");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/deactivate",
+            async ([FromQuery] string name, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                await grain.RequestDeactivationAsync();
+                return Results.Ok(new { success = true });
+            })
+            .WithName("DeactivateProjection");
+}
 
-apiRoute
-    .MapPost(
-        "/projections/refresh",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            await grain.RefreshAsync();
-            return Results.Ok(new { success = true });
-        })
-        .WithName("RefreshProjection");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/refresh",
+            async ([FromQuery] string name, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                await grain.RefreshAsync();
+                return Results.Ok(new { success = true });
+            })
+            .WithName("RefreshProjection");
+}
 
-apiRoute
-    .MapGet(
-        "/projections/snapshot",
-        async ([FromQuery] string name, [FromQuery] bool? unsafeState, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
-            if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
-            return Results.Text(rb.GetValue(), "application/json");
-        })
-        .WithName("GetProjectionSnapshot");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapGet(
+            "/projections/snapshot",
+            async ([FromQuery] string name, [FromQuery] bool? unsafeState, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
+                if (!rb.IsSuccess) return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = rb.GetException()?.Message }));
+                return Results.Text(rb.GetValue(), "application/json");
+            })
+            .WithName("GetProjectionSnapshot");
+}
 
-apiRoute
-    .MapPost(
-        "/projections/overwrite-version",
-        async ([FromQuery] string name, [FromQuery] string newVersion, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
-            return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
-        })
-        .WithName("OverwriteProjectionPersistedVersion");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/overwrite-version",
+            async ([FromQuery] string name, [FromQuery] string newVersion, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
+                return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
+            })
+            .WithName("OverwriteProjectionPersistedVersion");
+}
 
 
 apiRoute
@@ -1113,6 +1277,23 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
 app.MapDefaultEndpoints();
 
 app.Run();
+
+static IPAddress GetPrivateIpAddress()
+{
+    // Get the first non-loopback IPv4 address
+    var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
+    foreach (var ip in host.AddressList)
+    {
+        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+            !IPAddress.IsLoopback(ip))
+        {
+            return ip;
+        }
+    }
+
+    // Last resort: return loopback
+    return IPAddress.Loopback;
+}
 
 // Response shape for /api/weatherforecast-uwmv. Declared as a file-scoped record so the
 // endpoint can avoid `SELECT *` (which would couple the API to framework-managed metadata

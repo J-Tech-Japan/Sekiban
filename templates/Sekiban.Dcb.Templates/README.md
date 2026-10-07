@@ -16,11 +16,11 @@ dotnet new install Sekiban.Dcb.Templates
 |---|---|---|---|---|
 | `sekiban-dcb-orleans` | WithResult (`ResultBox`) | Cosmos DB / Postgres / SQLite | Azure Blob | Azure |
 | `sekiban-dcb-orleans-withoutresult` | WithoutResult (例外ベース) | Cosmos DB / Postgres / SQLite | Azure Blob | Azure |
-| `sekiban-dcb-orleans-aws` | WithoutResult (例外ベース) | DynamoDB / Postgres | Amazon S3 | AWS |
+| `sekiban-dcb-orleans-aws` | WithoutResult (例外ベース) | DynamoDB | Amazon S3 | AWS |
 | `sekiban-dcb-decider` | WithoutResult (Decider パターン) | Cosmos DB / Postgres / SQLite | Azure Blob | Azure |
-| `sekiban-dcb-decider-aws` | WithoutResult (Decider パターン) | DynamoDB / Postgres | Amazon S3 | AWS |
+| `sekiban-dcb-decider-aws` | WithoutResult (Decider パターン) | DynamoDB | Amazon S3 | AWS |
 
-イベントストアは生成後に `Sekiban:Database` 設定で切り替えます(既定は Postgres)。
+Azure テンプレートのイベントストアは生成後に `Sekiban:Database` 設定で切り替えます (既定は Postgres)。AWS テンプレートは DynamoDB のみをサポートし、既定も DynamoDB です。
 
 ```bash
 dotnet new sekiban-dcb-orleans -n YourProjectName

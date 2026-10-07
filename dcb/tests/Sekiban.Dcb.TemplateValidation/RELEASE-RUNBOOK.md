@@ -149,3 +149,5 @@ The `dcb-release` environment remains the token/publication boundary. Stage
 checks run only on main; tag workflows run on their respective tag series.
 Offline verification never proves environment configuration, private-host
 credential validity, or actual public publication.
+
+Raise the stale currency-fixture version when templates begin using a newer library API so that the stale consumer still restores and builds before currency validation rejects it.

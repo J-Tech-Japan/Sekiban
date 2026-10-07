@@ -31,10 +31,12 @@ public record ApprovalRequestListProjection : IMultiProjector<ApprovalRequestLis
         var approvalRequestTags = tags.OfType<ApprovalRequestTag>().ToList();
         if (approvalRequestTags.Count == 0) return payload;
 
+        var updatedApprovalRequests = new Dictionary<Guid, ApprovalRequestState>(payload.ApprovalRequests);
+
         foreach (var tag in approvalRequestTags)
         {
             var approvalRequestId = tag.ApprovalRequestId;
-            var currentState = payload.ApprovalRequests.TryGetValue(approvalRequestId, out var existing)
+            var currentState = updatedApprovalRequests.TryGetValue(approvalRequestId, out var existing)
                 ? existing
                 : ApprovalRequestState.Empty;
 
@@ -47,11 +49,11 @@ public record ApprovalRequestListProjection : IMultiProjector<ApprovalRequestLis
 
             if (newState is not ApprovalRequestState.ApprovalRequestEmpty)
             {
-                payload.ApprovalRequests[approvalRequestId] = newState;
+                updatedApprovalRequests[approvalRequestId] = newState;
             }
         }
 
-        return payload;
+        return payload with { ApprovalRequests = updatedApprovalRequests };
     }
 
     /// <summary>

@@ -1,6 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+COPY ["SekibanDcbTemplateVersion.props", "./"]
+
 COPY ["SekibanDcbDeciderAws.ApiService/SekibanDcbDeciderAws.ApiService.csproj", "SekibanDcbDeciderAws.ApiService/"]
 COPY ["SekibanDcbDeciderAws.EventSource/SekibanDcbDeciderAws.EventSource.csproj", "SekibanDcbDeciderAws.EventSource/"]
 COPY ["SekibanDcbDeciderAws.Interactions/SekibanDcbDeciderAws.Interactions.csproj", "SekibanDcbDeciderAws.Interactions/"]
@@ -29,5 +31,8 @@ COPY --from=build /app/publish .
 EXPOSE 8080
 EXPOSE 11111
 EXPOSE 30000
+
+RUN chown "$APP_UID" /app
+USER $APP_UID
 
 ENTRYPOINT ["dotnet", "SekibanDcbDeciderAws.ApiService.dll"]

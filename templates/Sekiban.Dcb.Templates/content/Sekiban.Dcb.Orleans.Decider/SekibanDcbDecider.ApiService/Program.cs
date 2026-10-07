@@ -1,3 +1,4 @@
+using Sekiban.Dcb.Orleans.ServiceId;
 using System.Net;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
@@ -51,6 +52,10 @@ const string InsufficientPrivilegeSqlState = "42501";
 const int MaxEnsureDatabaseAttempts = 20;
 
 var builder = WebApplication.CreateBuilder(args);
+// This identity partitions all event, projection and MV data. Keep it stable once data exists.
+// Use a distinct identity for each application sharing storage in a multi-service deployment.
+const string defaultServiceId = "sekiban-app";
+var serviceId = ServiceIdentity.Resolve(builder.Configuration, defaultServiceId);
 
 // Configure logging to suppress Azure Storage warnings in development
 if (builder.Environment.IsDevelopment())
@@ -65,20 +70,22 @@ builder.AddServiceDefaults();
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
 
 // Add global exception handler
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // Add Authentication & Identity
-var authConnectionString = builder.Configuration.GetConnectionString("IdentityPostgres")
-    ?? throw new InvalidOperationException("PostgreSQL connection string 'IdentityPostgres' not found");
+var authConnectionString = builder.Configuration.GetConnectionString("IdentityPostgres");
+JwtSettings.ValidateStartup(builder.Environment.EnvironmentName, builder.Configuration["Jwt:SecretKey"], authConnectionString);
+if (string.IsNullOrWhiteSpace(authConnectionString))
+    throw new InvalidOperationException("PostgreSQL connection string 'IdentityPostgres' not found");
 if (builder.Configuration.GetValue<bool>(EnsurePostgresDatabaseExistsConfigKey))
 {
     await EnsurePostgresDatabaseExistsAsync(builder.Configuration.GetConnectionString("DcbPostgres"));
     await EnsurePostgresDatabaseExistsAsync(authConnectionString);
 }
 builder.Services.AddAuthServices(builder.Configuration, authConnectionString);
-builder.Services.AddHostedService<AuthDbInitializer>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -166,6 +173,7 @@ builder.Services.AddSekibanDcbColdEventDefaults();
 // Register materialized view runtime (only effective when Postgres is the storage backend)
 builder.Services.AddSekibanDcbMaterializedView(options =>
 {
+    options.ServiceId = serviceId;
     options.BatchSize = 100;
     options.PollInterval = TimeSpan.FromSeconds(1);
 });
@@ -234,7 +242,8 @@ if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DcbMat
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>
-    new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "AllEvents", Guid.Empty));
+    new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "AllEvents", Guid.Empty,
+        sp.GetRequiredService<IServiceIdProvider>()));
 builder.Services.AddSingleton<IEventSubscriptionResolver>(sp =>
     new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
@@ -251,7 +260,8 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        if (TemplateEnvironment.IsDevelopment(builder.Environment.EnvironmentName))
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
     });
 });
 
@@ -260,6 +270,9 @@ builder.Services.AddCors(options =>
 // Development only logs the banner. Must come AFTER the Sekiban registrations. Contract:
 // https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md
 builder.Services.AddSekibanDcbProductionGuard();
+
+// Storage registrations may supply the legacy provider: replace them after ALL storage registrations.
+ServiceIdentity.Register(builder.Services, serviceId);
 
 var app = builder.Build();
 
@@ -289,14 +302,17 @@ apiRoute.MapStudentEndpoints();
 apiRoute.MapClassRoomEndpoints();
 apiRoute.MapEnrollmentEndpoints();
 apiRoute.MapWeatherEndpoints();
-apiRoute.MapProjectionEndpoints();
-apiRoute.MapDebugEndpoints();
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+    apiRoute.MapProjectionEndpoints();
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+    apiRoute.MapDebugEndpoints();
 apiRoute.MapRoomEndpoints();
 apiRoute.MapReservationEndpoints();
 apiRoute.MapApprovalEndpoints();
 apiRoute.MapUserDirectoryEndpoints();
 apiRoute.MapStreamEndpoints();
-apiRoute.MapTestDataEndpoints();
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+    apiRoute.MapTestDataEndpoints();
 
 // Materialized view endpoints depend on the Orleans MV runtime, which is only registered when a
 // `DcbMaterializedViewPostgres` connection string is provided. When MV is not configured, skip the

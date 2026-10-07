@@ -23,7 +23,8 @@ public static class AuthServiceExtensions
         // Configure JWT settings
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         var jwtSettings = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
-            ?? throw new InvalidOperationException("JWT settings not configured");
+            ?? new JwtSettings();
+        JwtSettings.ValidateSecretKey(jwtSettings.SecretKey);
 
         // Add Identity DbContext with PostgreSQL
         services.AddDbContext<ApplicationDbContext>(options =>
@@ -65,27 +66,6 @@ public static class AuthServiceExtensions
                 options.DefaultChallengeScheme = "MultiAuth";
                 options.DefaultScheme = "MultiAuth";
             })
-            .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
-            {
-                options.Cookie.Name = "SekibanAuth";
-                options.Cookie.HttpOnly = true;
-                options.Cookie.SameSite = SameSiteMode.Lax;
-                options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-                options.ExpireTimeSpan = TimeSpan.FromDays(7);
-                options.SlidingExpiration = true;
-
-                // API-friendly responses (no redirects)
-                options.Events.OnRedirectToLogin = context =>
-                {
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    return Task.CompletedTask;
-                };
-                options.Events.OnRedirectToAccessDenied = context =>
-                {
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    return Task.CompletedTask;
-                };
-            })
             .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
             {
                 options.TokenValidationParameters = new TokenValidationParameters
@@ -111,7 +91,29 @@ public static class AuthServiceExtensions
                     {
                         return JwtBearerDefaults.AuthenticationScheme;
                     }
-                    return CookieAuthenticationDefaults.AuthenticationScheme;
+                    return IdentityConstants.ApplicationScheme;
+                };
+            });
+
+        services.ConfigureApplicationCookie(options =>
+            {
+                options.Cookie.Name = "SekibanAuth";
+                options.Cookie.HttpOnly = true;
+                options.Cookie.SameSite = SameSiteMode.Lax;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                options.ExpireTimeSpan = TimeSpan.FromDays(7);
+                options.SlidingExpiration = true;
+
+                // API-friendly responses (no redirects)
+                options.Events.OnRedirectToLogin = context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                };
+                options.Events.OnRedirectToAccessDenied = context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
                 };
             });
 

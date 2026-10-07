@@ -11,12 +11,12 @@ public static class StudentDroppedFromClassRoomDecider
     /// </summary>
     /// <param name="state">Current classroom state</param>
     /// <param name="studentId">Student to drop</param>
-    /// <exception cref="InvalidOperationException">When student is not enrolled</exception>
+    /// <exception cref="ApplicationException">When student is not enrolled</exception>
     public static void Validate(this AvailableClassRoomState state, Guid studentId)
     {
         if (!state.EnrolledStudentIds.Contains(studentId))
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"Student {studentId} is not enrolled in classroom {state.ClassRoomId}");
         }
     }
@@ -26,12 +26,12 @@ public static class StudentDroppedFromClassRoomDecider
     /// </summary>
     /// <param name="state">Current classroom state</param>
     /// <param name="studentId">Student to drop</param>
-    /// <exception cref="InvalidOperationException">When student is not enrolled</exception>
+    /// <exception cref="ApplicationException">When student is not enrolled</exception>
     public static void Validate(this FilledClassRoomState state, Guid studentId)
     {
         if (!state.EnrolledStudentIds.Contains(studentId))
         {
-            throw new InvalidOperationException(
+            throw new ApplicationException(
                 $"Student {studentId} is not enrolled in classroom {state.ClassRoomId}");
         }
     }

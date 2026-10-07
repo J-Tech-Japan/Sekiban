@@ -1,3 +1,6 @@
+using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Orleans.ServiceId;
+using SekibanDcbOrleansAws.ApiService;
 using Dcb.Domain.WithoutResult;
 using Dcb.Domain.WithoutResult.ClassRoom;
 using Dcb.Domain.WithoutResult.Enrollment;
@@ -29,6 +32,10 @@ using Dcb.Domain.WithoutResult.MaterializedViews;
 using Dapper;
 
 var builder = WebApplication.CreateBuilder(args);
+// This identity partitions all event, projection and MV data. Keep it stable once data exists.
+// Use a distinct identity for each application sharing storage in a multi-service deployment.
+const string defaultServiceId = "sekiban-app";
+var serviceId = ServiceIdentity.Resolve(builder.Configuration, defaultServiceId);
 
 // Configure logging to suppress noisy AWS SDK logs in development
 if (builder.Environment.IsDevelopment())
@@ -42,6 +49,7 @@ builder.AddServiceDefaults();
 
 // Add services to the container.
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<RetryableProjectionExceptionHandler>();
 
 // Add global exception handler
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -56,7 +64,7 @@ var useInMemoryStreams = builder.Configuration.GetValue<bool>("Orleans:UseInMemo
 
 // Determine if running locally (Aspire/LocalStack) vs in AWS
 // Only check DynamoDb:ServiceUrl - this is set when using LocalStack
-// Do NOT rely on IsDevelopment() as AWS "dev" environments still use ASPNETCORE_ENVIRONMENT=Development
+// The shipped AWS dev stack uses Staging; local AppHost runs use Development.
 var isLocalDevelopment = !string.IsNullOrEmpty(builder.Configuration["DynamoDb:ServiceUrl"]);
 
 // In AWS deployment, we use RDS for Orleans (SQS streams not yet available due to SDK version conflict)
@@ -269,6 +277,7 @@ builder.Services.AddSekibanDcbColdEventDefaults();
 // DynamoDB by default but can opt into a Postgres-backed read model.
 builder.Services.AddSekibanDcbMaterializedView(options =>
 {
+    options.ServiceId = serviceId;
     options.BatchSize = 100;
     options.PollInterval = TimeSpan.FromSeconds(1);
 });
@@ -308,7 +317,8 @@ builder.Services.AddSekibanDcbS3BlobStorage(builder.Configuration);
 builder.Services.AddTransient<IGrainStorageSerializer, NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddTransient<NewtonsoftJsonDcbOrleansSerializer>();
 builder.Services.AddSingleton<IStreamDestinationResolver>(sp =>
-    new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "AllEvents", Guid.Empty));
+    new DefaultOrleansStreamDestinationResolver("EventStreamProvider", "AllEvents", Guid.Empty,
+        sp.GetRequiredService<IServiceIdProvider>()));
 builder.Services.AddSingleton<IEventSubscriptionResolver>(sp =>
     new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
 builder.Services.AddSingleton<IEventPublisher, OrleansEventPublisher>();
@@ -336,6 +346,9 @@ if (builder.Environment.IsDevelopment())
 // Development only logs the banner. Must come AFTER the Sekiban registrations. Contract:
 // https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md
 builder.Services.AddSekibanDcbProductionGuard();
+
+// Storage registrations may supply the legacy provider: replace them after ALL storage registrations.
+ServiceIdentity.Register(builder.Services, serviceId);
 
 var app = builder.Build();
 
@@ -370,7 +383,6 @@ apiRoute
                     message = "Student created successfully"
                 });
         })
-    .WithOpenApi()
     .WithName("CreateStudent");
 
 apiRoute
@@ -391,7 +403,6 @@ apiRoute
             var result = await executor.QueryAsync(query);
             return Results.Ok(result.Items);
         })
-    .WithOpenApi()
     .WithName("GetStudentList");
 
 apiRoute
@@ -410,7 +421,6 @@ apiRoute
                     version = state.Version
                 });
         })
-    .WithOpenApi()
     .WithName("GetStudent");
 
 // ClassRoom endpoints
@@ -429,7 +439,6 @@ apiRoute
                     message = "ClassRoom created successfully"
                 });
         })
-    .WithOpenApi()
     .WithName("CreateClassRoom");
 
 apiRoute
@@ -450,7 +459,6 @@ apiRoute
             var result = await executor.QueryAsync(query);
             return Results.Ok(result.Items);
         })
-    .WithOpenApi()
     .WithName("GetClassRoomList");
 
 apiRoute
@@ -469,7 +477,6 @@ apiRoute
                     version = state.Version
                 });
         })
-    .WithOpenApi()
     .WithName("GetClassRoom");
 
 // Enrollment endpoints
@@ -489,7 +496,6 @@ apiRoute
                     message = "Student enrolled successfully"
                 });
         })
-    .WithOpenApi()
     .WithName("EnrollStudent");
 
 apiRoute
@@ -508,33 +514,34 @@ apiRoute
                     message = "Student dropped successfully"
                 });
         })
-    .WithOpenApi()
     .WithName("DropStudent");
 
 // Debug endpoint to check database
-apiRoute
-    .MapGet(
-        "/debug/events",
-        async ([FromServices] IEventStore eventStore) =>
-        {
-            var result = await eventStore.ReadAllEventsAsync();
-            var events = result.GetValue().ToList();
-            Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
-            return Results.Ok(
-                new
-                {
-                    totalEvents = events.Count,
-                    events = events.Select(e => new
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapGet(
+            "/debug/events",
+            async ([FromServices] IEventStore eventStore) =>
+            {
+                var result = await eventStore.ReadAllEventsAsync();
+                var events = result.GetValue().ToList();
+                Console.WriteLine($"[Debug] ReadAllEventsAsync returned {events.Count} events");
+                return Results.Ok(
+                    new
                     {
-                        id = e.Id,
-                        type = e.EventType,
-                        sortableId = e.SortableUniqueIdValue,
-                        tags = e.Tags
-                    })
-                });
-        })
-    .WithOpenApi()
-    .WithName("DebugGetEvents");
+                        totalEvents = events.Count,
+                        events = events.Select(e => new
+                        {
+                            id = e.Id,
+                            type = e.EventType,
+                            sortableId = e.SortableUniqueIdValue,
+                            tags = e.Tags
+                        })
+                    });
+            })
+        .WithName("DebugGetEvents");
+}
 
 // Weather endpoints
 apiRoute
@@ -557,7 +564,6 @@ apiRoute
             var result = await executor.QueryAsync(query);
             return Results.Ok(result.Items);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecast");
 
 // Weather endpoints (GenericTagMultiProjector)
@@ -581,7 +587,6 @@ apiRoute
             var result = await executor.QueryAsync(query);
             return Results.Ok(result.Items);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastGeneric");
 
 // Weather endpoints (Single projector with SafeUnsafeProjectionState)
@@ -605,7 +610,6 @@ apiRoute
             var result = await executor.QueryAsync(query);
             return Results.Ok(result.Items);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastSingle");
 
 apiRoute
@@ -625,7 +629,7 @@ apiRoute
                 });
         })
     .WithName("InputWeatherForecast")
-    .WithOpenApi();
+    ;
 
 
 apiRoute
@@ -644,7 +648,7 @@ apiRoute
                 });
         })
     .WithName("UpdateWeatherForecastLocation")
-    .WithOpenApi();
+    ;
 
 
 // Weather Count endpoint
@@ -667,7 +671,6 @@ apiRoute
                 totalCount = countResult.TotalCount
             });
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastCount");
 
 // Weather Count endpoint for Generic projector
@@ -691,7 +694,6 @@ apiRoute
                 isGeneric = true
             });
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastCountGeneric");
 
 // Weather Count endpoint for Single projector
@@ -715,7 +717,6 @@ apiRoute
                 isSingle = true
             });
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastCountSingle");
 
 // Event delivery statistics endpoint
@@ -724,11 +725,10 @@ apiRoute
         "/weatherforecast/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjection"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
-    .WithOpenApi()
     .WithName("GetEventDeliveryStatistics");
 
 // Event delivery statistics endpoint for Generic projector
@@ -737,11 +737,10 @@ apiRoute
         "/weatherforecastgeneric/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
-    .WithOpenApi()
     .WithName("GetEventDeliveryStatisticsGeneric");
 
 // Event delivery statistics endpoint for Single projector
@@ -750,11 +749,10 @@ apiRoute
         "/weatherforecastsingle/event-statistics",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjectorWithTagStateProjector"));
             var stats = await grain.GetEventDeliveryStatisticsAsync();
             return Results.Ok(stats);
         })
-    .WithOpenApi()
     .WithName("GetEventDeliveryStatisticsSingle");
 
 // Projection status endpoints (do not execute projections)
@@ -763,11 +761,10 @@ apiRoute
         "/weatherforecast/status",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjection");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjection"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastStatus");
 
 apiRoute
@@ -775,11 +772,10 @@ apiRoute
         "/weatherforecastgeneric/status",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "GenericTagMultiProjector_WeatherForecastProjector_WeatherForecast"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastGenericStatus");
 
 apiRoute
@@ -787,84 +783,93 @@ apiRoute
         "/weatherforecastsingle/status",
         async ([FromServices] IClusterClient client) =>
         {
-            var grain = client.GetGrain<IMultiProjectionGrain>("WeatherForecastProjectorWithTagStateProjector");
+            var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, "WeatherForecastProjectorWithTagStateProjector"));
             var status = await grain.GetStatusAsync();
             return Results.Ok(status);
         })
-    .WithOpenApi()
     .WithName("GetWeatherForecastSingleStatus");
 
 // Generic projection control endpoints (for persistence + restore testing)
-apiRoute
-    .MapPost(
-        "/projections/persist",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
-        {
-            var start = DateTime.UtcNow;
-            Console.WriteLine($"[PersistEndpoint] Request name={name} start={start:O}");
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            var rb = await grain.PersistStateAsync();
-            var end = DateTime.UtcNow;
-            if (rb.IsSuccess)
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/persist",
+            async ([FromQuery] string name, [FromServices] IClusterClient client) =>
             {
-                Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end - start).TotalMilliseconds:F1}ms");
-                return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
-            }
-            var err = rb.GetException()?.Message;
-            Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
-            return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
-        })
-    .WithOpenApi()
-    .WithName("PersistProjectionState");
+                var start = DateTime.UtcNow;
+                Console.WriteLine($"[PersistEndpoint] Request name={name} start={start:O}");
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                var rb = await grain.PersistStateAsync();
+                var end = DateTime.UtcNow;
+                if (rb.IsSuccess)
+                {
+                    Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end - start).TotalMilliseconds:F1}ms");
+                    return Results.Ok(new { success = rb.GetValue(), elapsedMs = (end - start).TotalMilliseconds });
+                }
+                var err = rb.GetException()?.Message;
+                Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
+                return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds }));
+            })
+        .WithName("PersistProjectionState");
+}
 
-apiRoute
-    .MapPost(
-        "/projections/deactivate",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            await grain.RequestDeactivationAsync();
-            return Results.Ok(new { success = true });
-        })
-    .WithOpenApi()
-    .WithName("DeactivateProjection");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/deactivate",
+            async ([FromQuery] string name, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                await grain.RequestDeactivationAsync();
+                return Results.Ok(new { success = true });
+            })
+        .WithName("DeactivateProjection");
+}
 
-apiRoute
-    .MapPost(
-        "/projections/refresh",
-        async ([FromQuery] string name, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            await grain.RefreshAsync();
-            return Results.Ok(new { success = true });
-        })
-    .WithOpenApi()
-    .WithName("RefreshProjection");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/refresh",
+            async ([FromQuery] string name, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                await grain.RefreshAsync();
+                return Results.Ok(new { success = true });
+            })
+        .WithName("RefreshProjection");
+}
 
-apiRoute
-    .MapGet(
-        "/projections/snapshot",
-        async ([FromQuery] string name, [FromQuery] bool? unsafeState, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
-            if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
-            return Results.Text(rb.GetValue(), "application/json");
-        })
-    .WithOpenApi()
-    .WithName("GetProjectionSnapshot");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapGet(
+            "/projections/snapshot",
+            async ([FromQuery] string name, [FromQuery] bool? unsafeState, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
+                if (!rb.IsSuccess) return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = rb.GetException()?.Message }));
+                return Results.Text(rb.GetValue(), "application/json");
+            })
+        .WithName("GetProjectionSnapshot");
+}
 
-apiRoute
-    .MapPost(
-        "/projections/overwrite-version",
-        async ([FromQuery] string name, [FromQuery] string newVersion, [FromServices] IClusterClient client) =>
-        {
-            var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
-            return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
-        })
-    .WithOpenApi()
-    .WithName("OverwriteProjectionPersistedVersion");
+if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
+{
+    apiRoute
+        .MapPost(
+            "/projections/overwrite-version",
+            async ([FromQuery] string name, [FromQuery] string newVersion, [FromServices] IClusterClient client) =>
+            {
+                var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
+                var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
+                return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
+            })
+        .WithName("OverwriteProjectionPersistedVersion");
+}
 
 
 apiRoute
@@ -883,10 +888,10 @@ apiRoute
                 });
         })
     .WithName("RemoveWeatherForecast")
-    .WithOpenApi();
+    ;
 
 // Health check endpoint
-apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithOpenApi().WithName("HealthCheck");
+apiRoute.MapGet("/health", () => Results.Ok("Healthy")).WithName("HealthCheck");
 
 // Orleans test endpoint
 apiRoute
@@ -907,7 +912,6 @@ apiRoute
                     itemCount = result.TotalCount
                 });
         })
-    .WithOpenApi()
     .WithName("TestOrleans");
 
 // Materialized view endpoints depend on the Orleans MV runtime, which is registered only when a
@@ -954,7 +958,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                         cancellationToken: ct));
                 return Results.Ok(rows);
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMv");
 
     apiRoute
@@ -995,7 +998,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                     tombstoneCount
                 });
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMvDiagnostics");
 }
 

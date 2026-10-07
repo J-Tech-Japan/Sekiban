@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, publicProcedure } from "../api/trpc";
 import { createAuthHeaders } from "../lib/auth-helpers";
@@ -12,8 +13,15 @@ const timeZoneOffsetSchema = z.object({
   timeZoneOffsetMinutes: z.number().int().optional(),
 });
 
+const developmentProcedure = publicProcedure.use(async ({ next }) => {
+  if (process.env.NODE_ENV !== "development") {
+    throw new TRPCError({ code: "NOT_FOUND" });
+  }
+  return next();
+});
+
 export const testDataRouter = router({
-  generate: publicProcedure.input(timeZoneOffsetSchema.optional()).mutation(async ({ input }) => {
+  generate: developmentProcedure.input(timeZoneOffsetSchema.optional()).mutation(async ({ input }) => {
     const headers = await createAuthHeaders();
     const params = new URLSearchParams();
     if (input?.timeZoneOffsetMinutes !== undefined) {
@@ -34,7 +42,7 @@ export const testDataRouter = router({
     return testDataResultSchema.parse(await res.json());
   }),
 
-  generateRooms: publicProcedure.mutation(async () => {
+  generateRooms: developmentProcedure.mutation(async () => {
     const headers = await createAuthHeaders();
     const res = await fetch(`${process.env.API_BASE_URL}/api/test-data/generate-rooms`, {
       method: "POST",
@@ -50,7 +58,7 @@ export const testDataRouter = router({
     return res.json();
   }),
 
-  generateReservations: publicProcedure
+  generateReservations: developmentProcedure
     .input(z.object({ roomId: z.string().uuid().optional(), timeZoneOffsetMinutes: z.number().int().optional() }))
     .mutation(async ({ input }) => {
       const params = new URLSearchParams();

@@ -1255,7 +1255,7 @@ internal static class Program
             case "currency":
                 var props = Directory.EnumerateFiles(destination, PropsFileName, SearchOption.AllDirectories).Single();
                 var propsDocument = XDocument.Load(props, LoadOptions.PreserveWhitespace);
-                propsDocument.Descendants().Single(element => element.Name.LocalName == VersionProperty).Value = "10.8.2";
+                propsDocument.Descendants().Single(element => element.Name.LocalName == VersionProperty).Value = "10.23.0";
                 propsDocument.Save(props);
                 return;
 

@@ -1,3 +1,6 @@
+using Sekiban.Dcb.ServiceId;
+using Sekiban.Dcb.Orleans.ServiceId;
+using SekibanDcbDecider.ApiService;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Dcb.Orleans.Grains;
 
@@ -28,12 +31,13 @@ public static class ProjectionEndpoints
 
     private static async Task<IResult> PersistProjectionStateAsync(
         [FromQuery] string name,
+        [FromServices] IServiceIdProvider serviceIdProvider,
         [FromServices] IClusterClient client,
         [FromServices] ILogger<Program> logger)
     {
         var start = DateTime.UtcNow;
         logger.LogDebug("PersistProjectionState request: name={Name}, start={Start:O}", name, start);
-        var grain = client.GetGrain<IMultiProjectionGrain>(name);
+        var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), name));
         var rb = await grain.PersistStateAsync();
         var end = DateTime.UtcNow;
         var elapsedMs = (end - start).TotalMilliseconds;
@@ -44,23 +48,25 @@ public static class ProjectionEndpoints
         }
         var err = rb.GetException()?.Message;
         logger.LogWarning("PersistProjectionState failure: name={Name}, elapsed={ElapsedMs:F1}ms, error={Error}", name, elapsedMs, err);
-        return Results.BadRequest(new { error = err, elapsedMs });
+        return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = err, elapsedMs }));
     }
 
     private static async Task<IResult> DeactivateProjectionAsync(
         [FromQuery] string name,
+        [FromServices] IServiceIdProvider serviceIdProvider,
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>(name);
+        var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), name));
         await grain.RequestDeactivationAsync();
         return Results.Ok(new { success = true });
     }
 
     private static async Task<IResult> RefreshProjectionAsync(
         [FromQuery] string name,
+        [FromServices] IServiceIdProvider serviceIdProvider,
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>(name);
+        var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), name));
         await grain.RefreshAsync();
         return Results.Ok(new { success = true });
     }
@@ -68,20 +74,22 @@ public static class ProjectionEndpoints
     private static async Task<IResult> GetProjectionSnapshotAsync(
         [FromQuery] string name,
         [FromQuery] bool? unsafeState,
+        [FromServices] IServiceIdProvider serviceIdProvider,
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>(name);
+        var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), name));
         var rb = await grain.GetSnapshotJsonAsync(canGetUnsafeState: unsafeState ?? true);
-        if (!rb.IsSuccess) return Results.BadRequest(new { error = rb.GetException()?.Message });
+        if (!rb.IsSuccess) return ProjectionErrors.Map(rb.GetException(), Results.BadRequest(new { error = rb.GetException()?.Message }));
         return Results.Text(rb.GetValue(), "application/json");
     }
 
     private static async Task<IResult> OverwriteProjectionPersistedVersionAsync(
         [FromQuery] string name,
         [FromQuery] string newVersion,
+        [FromServices] IServiceIdProvider serviceIdProvider,
         [FromServices] IClusterClient client)
     {
-        var grain = client.GetGrain<IMultiProjectionGrain>(name);
+        var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceIdProvider.GetCurrentServiceId(), name));
         var ok = await grain.OverwritePersistedStateVersionAsync(newVersion);
         return ok ? Results.Ok(new { success = true }) : Results.BadRequest(new { error = "No persisted state to overwrite or invalid envelope" });
     }

@@ -1,6 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+COPY ["SekibanDcbTemplateVersion.props", "./"]
+
 COPY ["SekibanDcbOrleans.ApiService/SekibanDcbOrleans.ApiService.csproj", "SekibanDcbOrleans.ApiService/"]
 COPY ["SekibanDcbOrleans.Domain/SekibanDcbOrleans.Domain.csproj", "SekibanDcbOrleans.Domain/"]
 COPY ["SekibanDcbOrleans.ServiceDefaults/SekibanDcbOrleans.ServiceDefaults.csproj", "SekibanDcbOrleans.ServiceDefaults/"]
@@ -22,5 +24,8 @@ ENV ASPNETCORE_URLS=http://+:8080 \
 COPY --from=build /app/publish .
 
 EXPOSE 8080
+
+RUN chown "$APP_UID" /app
+USER $APP_UID
 
 ENTRYPOINT ["dotnet", "SekibanDcbOrleans.ApiService.dll"]
