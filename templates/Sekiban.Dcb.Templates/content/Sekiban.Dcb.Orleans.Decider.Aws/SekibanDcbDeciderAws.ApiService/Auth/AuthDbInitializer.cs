@@ -221,8 +221,17 @@ public class AuthDbInitializer : BackgroundService
                 string.Join(", ", result.Errors.Select(e => e.Code)));
             return;
         }
-        await userManager.AddToRoleAsync(user, "Admin");
-        await userManager.AddToRoleAsync(user, "User");
+        foreach (var role in new[] { "Admin", "User" })
+        {
+            var roleResult = await userManager.AddToRoleAsync(user, role);
+            if (roleResult.Succeeded) continue;
+
+            // Do not leave an administrator account without its roles: the next start would skip it.
+            _logger.LogError("Failed to grant {Role} to the initial administrator: {Errors}",
+                role, string.Join(", ", roleResult.Errors.Select(e => e.Code)));
+            await userManager.DeleteAsync(user);
+            return;
+        }
         await EnsureUserDirectoryAsync(executor, user);
         await EnsureUserAccessAsync(executor, user, await userManager.GetRolesAsync(user));
     }
