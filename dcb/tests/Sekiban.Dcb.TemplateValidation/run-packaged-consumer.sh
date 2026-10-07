@@ -356,7 +356,15 @@ if [[ -z "$currency_solution" ]]; then
 fi
 run_net10 restore "$currency_solution" --configfile "$nuget_config" --no-http-cache --nologo
 run_net10 build "$currency_solution" -c Release --no-restore --nologo
-expect_failure run_net10 "$validator" generated --output "$currency_mutant" --expected-version "$version"
+if currency_validation_output="$(run_net10 "$validator" generated --output "$currency_mutant" --expected-version "$version" 2>&1)"; then
+  echo "The stale currency mutant unexpectedly passed validation." >&2
+  exit 1
+fi
+printf '%s\n' "$currency_validation_output"
+if [[ "$currency_validation_output" != *"must set SekibanDcbVersion to $version"* ]]; then
+  echo "The currency mutant did not fail with the expected version diagnostic." >&2
+  exit 1
+fi
 
 mv_mutant="$work_root/mutant-mv-registration"
 run_net10 "$validator" mutate --source "$negative_output" --destination "$mv_mutant" --kind missing-mv-registration
