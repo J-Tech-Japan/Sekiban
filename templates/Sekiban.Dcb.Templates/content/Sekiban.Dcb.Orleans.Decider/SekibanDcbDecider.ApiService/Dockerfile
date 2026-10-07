@@ -28,4 +28,7 @@ COPY --from=build /app/publish .
 
 EXPOSE 8080
 
+RUN chown "$APP_UID" /app
+USER $APP_UID
+
 ENTRYPOINT ["dotnet", "SekibanDcbDecider.ApiService.dll"]

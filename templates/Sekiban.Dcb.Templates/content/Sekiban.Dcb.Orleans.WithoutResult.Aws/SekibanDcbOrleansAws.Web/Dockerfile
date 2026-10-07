@@ -20,4 +20,6 @@ ENV ASPNETCORE_URLS=http://+:8081 \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 COPY --from=build /app/publish .
 EXPOSE 8081
+USER $APP_UID
+
 ENTRYPOINT ["dotnet", "SekibanDcbOrleansAws.Web.dll"]
