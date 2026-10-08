@@ -19,7 +19,7 @@ Sample users (including `admin@example.com`, password `Sekiban1234%`) and the fi
 
 ## Before production
 
-If the auth database cannot be initialized, `/health` stays unhealthy and the instance must be restarted; hosting platform probes handle this, but a local run does not.
+If the auth database cannot be initialized, `/health` stays unhealthy and the instance must be restarted. The shipped Azure Container Apps definition restarts it through its startup probe; the shipped App Service definitions configure no health probe, and a local run is not restarted.
 
 - Set and keep `Sekiban:ServiceId` stable. Its default is `sekiban-app`; it partitions events, projections, streams and materialized views. Use a distinct identity when applications share a backend. `Orleans:ServiceId` is a separate cluster setting. For a project generated earlier with data under `default`, retain its existing identity.
 - Configure durable storage, clustering, stream delivery, snapshot access and allowed CORS origins for your deployment. Test restart recovery and your multi-silo topology.
