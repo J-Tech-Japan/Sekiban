@@ -52,6 +52,8 @@ var executor = new GeneralSekibanExecutor(eventStore, accessor, domainTypes);
 
 `Sekiban.Dcb.InMemory` の旧型はこれまでどおり同一に動作し、削除ではなく `[Obsolete]` です。非推奨にした理由は、**ある本番システムがこれらで自身を構成してしまったから**です。分類(実環境 / ローカル / テスト)と移行表は [localhost Orleans](22_localhost_orleans.md) を参照してください。
 
+**並列の呼び出し。** インメモリハーネスは、呼び出しを順に処理しません。projector ごとに 1 つの projection actor を通常のオブジェクトとして保持し、クエリも、新しく書き込まれたイベントの配信も、その actor の状態を変更します。そのため、1 つの executor を並列に呼ぶと競合することがあります（例: `DualStateProjectionWrapper` からの `InvalidOperationException: Collection was modified`）。Orleans は grain の activation ごとに 1 つのスレッドで、1 ターンずつ実行するので、projection への呼び出しが同時に実行されることはありません（`await` の箇所で交互に進むことはありますが、同時には実行されません）。このハーネスには、そのような仕組みがありません。テストで 1 つの executor に並列のリクエストを送る場合は、テストの側で順に処理する（例: executor の呼び出しをすべて 1 つの `SemaphoreSlim` で囲む）か、そのテストを Orleans で実行してください（[localhost Orleans](22_localhost_orleans.md)）。
+
 ## 楽観的同時実行のテスト
 
 `tests/Sekiban.Dcb.Tests/OptimisticLockingTest.cs` では、正しいバージョンと誤ったバージョンで予約が成功/失敗する様子を
