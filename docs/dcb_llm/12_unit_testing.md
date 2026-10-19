@@ -55,6 +55,8 @@ The old types in `Sekiban.Dcb.InMemory` still work identically and are `[Obsolet
 because a production system once composed itself out of them — see
 [Localhost Orleans](22_localhost_orleans.md) for the taxonomy (real / local / test) and the migration table.
 
+**Concurrent calls.** The in-memory harness does not serialize calls. It keeps one projection actor per projector as a plain object, and both queries and the delivery of newly written events change that actor's state, so concurrent calls to one executor can race (for example `InvalidOperationException: Collection was modified` from `DualStateProjectionWrapper`). Orleans runs each grain activation on one thread, one turn at a time, so calls on a projection never run in parallel there (they can interleave at `await` points, but never at the same moment); the harness has no such scheduler. If a test sends concurrent requests through one executor, serialize them in the test (for example one `SemaphoreSlim` around every executor call), or run that test against Orleans ([Localhost Orleans](22_localhost_orleans.md), or a test cluster as in "Integration Tests with Orleans" below).
+
 ## Testing Optimistic Concurrency
 
 `tests/Sekiban.Dcb.Tests/OptimisticLockingTest.cs` demonstrates how to assert reservation behavior:
