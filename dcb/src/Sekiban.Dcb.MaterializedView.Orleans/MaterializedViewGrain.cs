@@ -744,11 +744,10 @@ public sealed class MaterializedViewGrain : Grain, IMaterializedViewGrain
                     $"first observed at {firstObservedAt:O}, exhausted {_options.CatchUpStallThreshold} at {DateTimeOffset.UtcNow:O}.");
             }
 
-            if (newerHintOutstanding &&
-                (result.Outcome is MvCatchUpOutcome.Empty or MvCatchUpOutcome.UnsafeWindow || result.ReachedUnsafeWindow))
+            // A partial Applied/Progressed batch can also stop below the consumed hint. Keep one scalar wake-up
+            // marker until durable progress reaches it so the next poll retries without retaining its payload.
+            if (newerHintOutstanding)
             {
-                // Do not let an empty/unsafe read settle a receipt that is newer than the durable position observed by
-                // this tick. Keep one scalar wake-up marker; the next poll retries without retaining its payload.
                 RequeueStreamHint(consumedStreamHint);
             }
 
