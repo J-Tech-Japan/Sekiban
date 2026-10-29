@@ -775,6 +775,72 @@ public class MaterializedViewGrainTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PartialCatchUpProgress_KeepsNewerHintUntilDurablePositionReachesIt()
+    {
+        SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Success(1);
+        var grain = await StartServingGrainAsync();
+        await WaitUntilAsync(async () =>
+        {
+            var status = await grain.GetStatusAsync();
+            return status.LastCatchUpCompletedAt is not null &&
+                   !status.IsCatchUpActive && !status.CatchUpInProgress;
+        });
+
+        // Startup and idle probes share the scripted queue. Settle startup first, then allow exactly one
+        // executor call per step so no later tick can consume a result before its status is asserted.
+        var allowedCatchUpCalls = SharedExecutor.CatchUpCalls;
+        using var gate = MaterializedViewGrain.PushBeforeCatchUpTestGate(
+            _ => SharedExecutor.CatchUpCalls >= Volatile.Read(ref allowedCatchUpCalls));
+        // Drain any idle probe that passed the gate before it was installed, before scripting results.
+        await grain.EnsureStartedAsync();
+        Volatile.Write(ref allowedCatchUpCalls, SharedExecutor.CatchUpCalls);
+        var timestamp = DateTime.UtcNow.AddSeconds(-30);
+        var partialPosition = CreateSerializableEvent(800, timestamp).SortableUniqueIdValue;
+        var hint = CreateSerializableEvent(801, timestamp.AddSeconds(1));
+        Assert.True(string.CompareOrdinal(partialPosition, hint.SortableUniqueIdValue) < 0);
+
+        SharedExecutor.ScriptedCatchUpResults.Enqueue(new MvCatchUpResult(1, false, partialPosition));
+        SharedExecutor.ScriptedCatchUpResults.Enqueue(new MvCatchUpResult(0, true, partialPosition));
+        SharedExecutor.ScriptedCatchUpResults.Enqueue(new MvCatchUpResult(1, false, hint.SortableUniqueIdValue));
+        SharedExecutor.ScriptedCatchUpResults.Enqueue(new MvCatchUpResult(0, true, hint.SortableUniqueIdValue));
+
+        await GetEventStream().OnNextAsync(hint);
+        await WaitUntilAsync(async () => (await grain.GetStatusAsync()).BufferedEventCount == 1);
+
+        async Task<MaterializedViewGrainStatus> RunNextTickAsync()
+        {
+            var expectedCalls = Interlocked.Increment(ref allowedCatchUpCalls);
+            await WaitUntilAsync(() => Task.FromResult(SharedExecutor.CatchUpCalls == expectedCalls));
+            // This non-interleaving call waits for the permitted timer turn to finish before reading status.
+            await grain.EnsureStartedAsync();
+            return await grain.GetStatusAsync();
+        }
+
+        var partial = await RunNextTickAsync();
+        Assert.Equal(partialPosition, partial.CurrentPosition);
+        Assert.Equal(1, partial.BufferedEventCount);
+        Assert.True(partial.IsCatchUpActive);
+
+        var unsafeBelowHint = await RunNextTickAsync();
+        Assert.Equal(partialPosition, unsafeBelowHint.CurrentPosition);
+        Assert.Equal(1, unsafeBelowHint.BufferedEventCount);
+        Assert.True(unsafeBelowHint.IsCatchUpActive);
+
+        var reachedHint = await RunNextTickAsync();
+        Assert.Equal(hint.SortableUniqueIdValue, reachedHint.CurrentPosition);
+        Assert.Equal(0, reachedHint.BufferedEventCount);
+        Assert.True(reachedHint.IsCatchUpActive);
+
+        // Progress alone does not settle catch-up; the following unsafe observation does.
+        var settled = await RunNextTickAsync();
+        Assert.Equal(hint.SortableUniqueIdValue, settled.CurrentPosition);
+        Assert.Equal(0, settled.BufferedEventCount);
+        Assert.False(settled.IsCatchUpActive);
+        Assert.False(settled.CatchUpHalted);
+        Assert.Empty(SharedExecutor.ScriptedCatchUpResults);
+    }
+
+    [Fact]
     public async Task SafeEligibleOutstandingHint_HaltsWithHintAndObservationTime()
     {
         SharedRegistry.ActiveStatusRestoreResult = MvActivationResult.Success(1);
