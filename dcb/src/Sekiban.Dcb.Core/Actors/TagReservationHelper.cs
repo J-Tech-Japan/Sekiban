@@ -1,4 +1,5 @@
-using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ResultBoxes;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Actors;
@@ -104,10 +105,14 @@ public static class TagReservationHelper
                 var actor = actorResult.GetValue();
                 await actor.CancelReservationAsync(reservation);
             }
+            else
+            {
+                LogFailure(actorAccessor, "cancel", tag, actorResult.GetException(), reservation.ReservationCode);
+            }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to cancel reservation for tag {tag.GetTag()}: {ex}");
+            LogFailure(actorAccessor, "cancel", tag, ex, reservation.ReservationCode);
         }
     }
 
@@ -126,10 +131,14 @@ public static class TagReservationHelper
                 var actor = actorResult.GetValue();
                 await actor.ConfirmReservationAsync(reservation);
             }
+            else
+            {
+                LogFailure(actorAccessor, "confirm", tag, actorResult.GetException(), reservation.ReservationCode);
+            }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to confirm reservation for tag {tag.GetTag()}: {ex}");
+            LogFailure(actorAccessor, "confirm", tag, ex, reservation.ReservationCode);
         }
     }
 
@@ -148,12 +157,51 @@ public static class TagReservationHelper
             }
             else
             {
-                Debug.WriteLine($"Failed to resolve tag {tag.GetTag()} for notification: {actorResult.GetException()}");
+                LogFailure(actorAccessor, "notify", tag, actorResult.GetException());
             }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to notify tag {tag.GetTag()}: {ex}");
+            LogFailure(actorAccessor, "notify", tag, ex);
+        }
+    }
+
+    private static void LogFailure(
+        IActorObjectAccessor actorAccessor,
+        string operation,
+        ITag tag,
+        Exception exception,
+        string? reservationCode = null)
+    {
+        try
+        {
+            var tagValue = "<unknown>";
+            try
+            {
+                tagValue = tag.GetTag();
+            }
+            catch
+            {
+                // A broken tag must not hide the original failure.
+            }
+
+            var logger = (actorAccessor as ITagReservationLoggerSource)?.TagReservationLogger
+                ?? NullLogger.Instance;
+            if (reservationCode is not null)
+            {
+                logger.LogWarning(exception,
+                    "Tag reservation {Operation} failed for tag {Tag}, reservation {ReservationCode}",
+                    operation, tagValue, reservationCode);
+            }
+            else
+            {
+                logger.LogWarning(exception, "Tag reservation {Operation} failed for tag {Tag}",
+                    operation, tagValue);
+            }
+        }
+        catch
+        {
+            // Logging is best effort and must never affect the append result.
         }
     }
 }
