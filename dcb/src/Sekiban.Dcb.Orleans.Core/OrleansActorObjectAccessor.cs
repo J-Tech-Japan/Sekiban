@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Capabilities;
@@ -12,11 +14,39 @@ namespace Sekiban.Dcb.Orleans;
 ///     Orleans-specific implementation of IActorObjectAccessor
 ///     Manages Orleans grains for tag consistency and state management
 /// </summary>
-public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntimeDescriptorProvider
+public class OrleansActorObjectAccessor : IActorObjectAccessor, IExecutorRuntimeDescriptorProvider, ITagReservationLoggerSource
 {
     /// <summary>Actors are Orleans grains, placed and coordinated across the cluster.</summary>
     public ExecutorRuntimeDescriptor DescribeRuntime() =>
         new(ExecutorRuntimeKind.DistributedRuntime, "Orleans");
+
+    private readonly object _tagReservationLoggerLock = new();
+    private ILogger? _tagReservationLogger;
+
+    ILogger ITagReservationLoggerSource.TagReservationLogger
+    {
+        get
+        {
+            lock (_tagReservationLoggerLock)
+            {
+                return _tagReservationLogger ??= ResolveTagReservationLogger();
+            }
+        }
+    }
+
+    private ILogger ResolveTagReservationLogger()
+    {
+        try
+        {
+            var factory = _clusterClient.ServiceProvider.GetService(typeof(ILoggerFactory)) as ILoggerFactory;
+            return factory?.CreateLogger(typeof(TagReservationHelper).FullName!) ?? NullLogger.Instance;
+        }
+        catch
+        {
+            // Some clients cannot expose a service provider; cache the fallback too.
+            return NullLogger.Instance;
+        }
+    }
 
     private readonly IClusterClient _clusterClient;
     private readonly DcbDomainTypes _domainTypes;
