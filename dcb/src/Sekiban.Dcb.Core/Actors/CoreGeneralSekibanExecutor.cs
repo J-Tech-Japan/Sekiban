@@ -898,17 +898,16 @@ public class CoreGeneralSekibanExecutor
             // Step 3: Reserve consistency tags
             var reservations = new Dictionary<ITag, TagWriteReservation>();
             var failedReservations = new List<(ITag Tag, Exception Error)>();
-            foreach (var tag in allTags)
+            cancellationToken.ThrowIfCancellationRequested();
+            var consistencyTags = allTags.Where(tag => tag.IsConsistencyTag()).ToArray();
+            var reservationTasks = consistencyTags.Select(tag =>
+                TagReservationHelper.RequestReservationAsync(_actorAccessor, tag, consistencyEntryMap[tag.GetTag()]))
+                .ToArray();
+            var reservationResults = await Task.WhenAll(reservationTasks);
+            for (var index = 0; index < consistencyTags.Length; index++)
             {
-                if (!tag.IsConsistencyTag())
-                {
-                    continue;
-                }
-
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var lastSortableUniqueId = consistencyEntryMap[tag.GetTag()];
-                var result = await TagReservationHelper.RequestReservationAsync(_actorAccessor, tag, lastSortableUniqueId);
+                var tag = consistencyTags[index];
+                var result = reservationResults[index];
                 if (result.IsSuccess)
                 {
                     reservations[tag] = result.GetValue();

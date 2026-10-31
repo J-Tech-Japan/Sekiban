@@ -849,6 +849,12 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
         }
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        if (writer == TagHeadWriter.ExpectedPositionBatch)
+        {
+            // The seam rolls back the whole transaction on failure; savepoints add round trips while tag-head locks are held.
+            context.Database.AutoSavepointsEnabled = false;
+        }
+
         if (!useExecutionStrategy)
         {
             return await PersistThroughCanonicalHeadSeamAsync(context, events, specification, writer, cancellationToken);
