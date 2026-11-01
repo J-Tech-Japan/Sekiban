@@ -480,27 +480,19 @@ public class CoreGeneralSekibanExecutor
             //  - If tag.IsConsistencyTag() == true AND (ConsistencyTag without SortableUniqueId OR not ConsistencyTag class) ->
             //       look up accessed tag state via ICommandContext (GeneralCommandContext) and use its LastSortableUniqueId
             var reservations = new Dictionary<ITag, TagWriteReservation>();
-            var reservationTasks = new List<Task<(ITag Tag, ResultBox<TagWriteReservation> Result)>>();
-
-            foreach (var tag in allTags)
-            {
-                if (!tag.IsConsistencyTag())
-                {
-                    continue; // skip non-consistency tags (no reservation)
-                }
-
-                var lastSortableUniqueId = reservationInputs[tag];
-                var task = TagReservationHelper.RequestReservationAsync(_actorAccessor, tag, lastSortableUniqueId)
-                    .ContinueWith(t => (tag, t.Result), cancellationToken);
-                reservationTasks.Add(task);
-            }
-
+            cancellationToken.ThrowIfCancellationRequested();
+            var consistencyTags = allTags.Where(tag => tag.IsConsistencyTag()).ToArray();
+            var reservationTasks = consistencyTags.Select(tag =>
+                TagReservationHelper.RequestReservationAsync(_actorAccessor, tag, reservationInputs[tag]))
+                .ToArray();
             var reservationResults = await Task.WhenAll(reservationTasks);
 
             // Check if all reservations succeeded
             var failedReservations = new List<(ITag Tag, Exception Error)>();
-            foreach (var (tag, result) in reservationResults)
+            for (var index = 0; index < consistencyTags.Length; index++)
             {
+                var tag = consistencyTags[index];
+                var result = reservationResults[index];
                 if (result.IsSuccess)
                 {
                     reservations[tag] = result.GetValue();
@@ -525,6 +517,8 @@ public class CoreGeneralSekibanExecutor
 
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 SeedAboveObservedPositions(reservationInputs.Values);
 
                 // Step 5: Write event to EventStore (handles both events and tags)
