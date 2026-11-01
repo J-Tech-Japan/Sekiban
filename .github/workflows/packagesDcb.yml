@@ -1,12 +1,18 @@
 name: nuget package release for DCB
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'dcb-v*'
 
 jobs:
   build:
+    if: github.event_name == 'push'
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
     runs-on: ubuntu-latest
     environment: dcb-release
 
@@ -166,8 +172,16 @@ jobs:
             --run-attempt "${GITHUB_RUN_ATTEMPT}" \
             --trigger-tag-object "$TRIGGER_TAG_OBJECT_ID"
 
+      - name: Mint short-lived NuGet key
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Push to NuGet.org
-        run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        env:
+          NUGET_APIKEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push out/*.nupkg --api-key "$NUGET_APIKEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Wait for exact public library visibility
         run: |
@@ -187,3 +201,15 @@ jobs:
           files: out/*.nupkg
           body_path: out/library-release-body.md
           draft: false
+
+  trusted-publishing-check:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: dcb-release
+    permissions:
+      id-token: write
+    steps:
+      - name: Verify Trusted Publishing login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841
+        with:
+          user: ${{ secrets.NUGET_USER }}

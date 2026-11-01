@@ -788,6 +788,10 @@ internal static class Program
 
     private static void ValidatePublishWorkflow(string dcbPackage, string publish)
     {
+        ValidateTrustedPublishing(dcbPackage, "Push to NuGet.org", "Enforce library live guard before push");
+        ValidateTrustedPublishing(publish, "Push Template", "Enforce template live guard before push");
+        dcbPackage = RequireWorkflowJob(dcbPackage, "build");
+        publish = RequireWorkflowJob(publish, "build");
         var dcbPackageSteps = ReadNamedWorkflowSteps(dcbPackage);
         Assert(dcbPackage.Contains("environment: dcb-release", StringComparison.Ordinal),
             "The library workflow job must declare environment: dcb-release.");
@@ -1034,8 +1038,12 @@ internal static class Program
 
             Assert(expected.ContainsKey(name),
                 $"Unexpected workflow reads SEKIBAN_RELEASE_RECORD_TOKEN without dcb-release ownership: {name}");
-            Assert(text.Contains("environment: dcb-release", StringComparison.Ordinal),
-                $"Token-reading workflow {name} must declare environment: dcb-release.");
+            var jobs = ReadWorkflowJobs(text);
+            var tokenJobs = jobs.Where(job => job.Body.Contains("SEKIBAN_RELEASE_RECORD_TOKEN", StringComparison.Ordinal)).ToArray();
+            Assert(tokenJobs.Length == 1 && tokenJobs[0].Name == expected[name],
+                $"Token-reading workflow {name} must use only its expected token-reading job.");
+            Assert(Regex.IsMatch(tokenJobs[0].Body, @"^    environment: dcb-release\s*$", RegexOptions.Multiline, RegexTimeout),
+                $"Token-reading job in {name} must declare environment: dcb-release.");
             observed[name] = expected[name];
         }
 
@@ -1148,6 +1156,71 @@ internal static class Program
 
     private static string ToRepoPath(string repoRoot, string path) =>
         Path.GetRelativePath(repoRoot, path).Replace(Path.DirectorySeparatorChar, '/');
+
+    // These repository workflows use block YAML with two-space job headers.
+    private static IReadOnlyList<(string Name, string Body)> ReadWorkflowJobs(string workflow)
+    {
+        var text = workflow.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var jobs = text[(text.IndexOf("jobs:\n", StringComparison.Ordinal) + "jobs:\n".Length)..];
+        var headers = Regex.Matches(jobs, @"^  (?<name>[\w-]+):\s*$", RegexOptions.Multiline, RegexTimeout);
+        return headers.Cast<Match>().Select((match, index) =>
+            (match.Groups["name"].Value, jobs[match.Index..(index + 1 < headers.Count ? headers[index + 1].Index : jobs.Length)])).ToArray();
+    }
+
+    private static string RequireWorkflowJob(string workflow, string name)
+    {
+        var jobs = ReadWorkflowJobs(workflow).Where(job => job.Name == name).ToArray();
+        Assert(jobs.Length == 1, $"Expected exactly one workflow job named '{name}'.");
+        return jobs[0].Body;
+    }
+
+    private static void ValidateTrustedPublishing(string workflow, string pushName, string guardName)
+    {
+        const string loginAction = "NuGet/login@8d196754b4036150537f80ac539e15c2f1028841";
+        Assert(workflow.Contains("  workflow_dispatch:", StringComparison.Ordinal),
+            "Trusted Publishing requires workflow_dispatch.");
+        Assert(!workflow.Contains("secrets.NUGET_APIKEY", StringComparison.Ordinal),
+            "Trusted Publishing must not use secrets.NUGET_APIKEY.");
+        var build = RequireWorkflowJob(workflow, "build");
+        var check = RequireWorkflowJob(workflow, "trusted-publishing-check");
+        bool JobLine(string job, string line) => Regex.IsMatch(job, "^    " + Regex.Escape(line) + @"\s*$", RegexOptions.Multiline, RegexTimeout);
+        Assert(JobLine(build, "environment: dcb-release"), "Trusted Publishing build must declare environment: dcb-release.");
+        Assert(JobLine(build, "if: github.event_name == 'push'"), "Trusted Publishing build must run only on push.");
+        string[] Permissions(string job)
+        {
+            var block = Regex.Match(job, @"^    permissions:\s*\n(?<entries>(?:^      [^\n]*\n)+)", RegexOptions.Multiline, RegexTimeout);
+            return block.Groups["entries"].Value.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.Trim()).Order(StringComparer.Ordinal).ToArray();
+        }
+        Assert(Permissions(build).SequenceEqual(new[] { "actions: read", "contents: write", "id-token: write" }),
+            "Trusted Publishing build requires actions: read, contents: write, id-token: write.");
+        var steps = ReadNamedWorkflowSteps(build);
+        var login = RequireNamedStep(steps, "Mint short-lived NuGet key");
+        var push = RequireNamedStep(steps, pushName);
+        var guard = RequireNamedStep(steps, guardName);
+        bool PinnedLogin(WorkflowStep step) => step.Body.Contains("        uses: " + loginAction + "\n", StringComparison.Ordinal) &&
+            step.Body.Contains("          user: ${{ secrets.NUGET_USER }}", StringComparison.Ordinal);
+        Assert(PinnedLogin(login) && login.Body.Contains("        id: nuget-login", StringComparison.Ordinal),
+            "Trusted Publishing build requires the pinned nuget-login with NUGET_USER.");
+        // Count every step, including unnamed uses/run steps, for adjacency.
+        var allSteps = Regex.Matches(build, @"^      - ", RegexOptions.Multiline, RegexTimeout).Cast<Match>().Select(match => match.Index).ToArray();
+        var loginIndex = build.IndexOf(login.Body, StringComparison.Ordinal);
+        var pushIndex = build.IndexOf(push.Body, StringComparison.Ordinal);
+        Assert(guard.Ordinal < login.Ordinal && Array.IndexOf(allSteps, pushIndex) == Array.IndexOf(allSteps, loginIndex) + 1,
+            "Trusted Publishing login must follow the live guard and be directly before push.");
+        Assert(push.Body.Contains("        env:\n          NUGET_APIKEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}", StringComparison.Ordinal) &&
+               push.Body.Contains("--api-key \"$NUGET_APIKEY\"", StringComparison.Ordinal) &&
+               push.Body.Contains("--skip-duplicate", StringComparison.Ordinal),
+            "Trusted Publishing push must use the login output through env and --skip-duplicate.");
+        Assert(JobLine(check, "environment: dcb-release") && JobLine(check, "if: github.event_name == 'workflow_dispatch'") &&
+               Permissions(check).SequenceEqual(new[] { "id-token: write" }),
+            "Trusted Publishing check requires its dispatch condition, environment and only id-token: write.");
+        var checkSteps = ReadNamedWorkflowSteps(check);
+        Assert(Regex.Matches(check, @"^      - ", RegexOptions.Multiline, RegexTimeout).Count == 1 &&
+               checkSteps.Count == 1 && checkSteps[0].Name == "Verify Trusted Publishing login" && PinnedLogin(checkSteps[0]) &&
+               !Regex.IsMatch(check, @"^\s*(?:- )?run:", RegexOptions.Multiline, RegexTimeout) &&
+               !check.Contains("actions/checkout", StringComparison.Ordinal) && !check.Contains("dotnet nuget push", StringComparison.Ordinal),
+            "Trusted Publishing check must contain exactly one pinned login step, no checkout, run or push.");
+    }
 
     private static IReadOnlyList<WorkflowStep> ReadNamedWorkflowSteps(string workflow)
     {

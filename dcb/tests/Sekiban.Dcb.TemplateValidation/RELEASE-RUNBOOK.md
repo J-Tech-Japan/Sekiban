@@ -31,8 +31,9 @@ or a later main commit containing it. Never move an existing tag.
    with `kind=library`, `version=V`, `state=prepared`, `ref` equal to the
    variable, and `candidate=merged_sha`. Require success. Main's dispatched
    tooling inspects a separate full candidate checkout, including older layouts.
-6. Obtain operator approval. Require all 26 public library versions and the
-   current-version template tag absent; push an annotated library tag at the
+6. Dispatch `packagesDcb.yml` on main and require `trusted-publishing-check`
+   to succeed before each library tag. Obtain operator approval. Require all 26
+   public library versions and the current-version template tag absent; push an annotated library tag at the
    candidate. The workflow checks the record, source manifest, bodies, 26 packs,
    identities/dependencies and Azure Queue consumer, then the live tag and
    first-attempt absence before push. Visibility and public/local equality
@@ -65,7 +66,9 @@ or a later main commit containing it. Never move an existing tag.
    present and unchanged in this host commit. Point the variable at that commit.
 4. Require main stage check with `kind=template`, `state=prepared`, candidate
    equal to the template commit and ref equal to the variable. Obtain operator
-   approval, then push the annotated template tag at that candidate. Tagger date
+   approval. Before each template tag, dispatch `packagesDcbTemplate.yml` on main
+   and require `trusted-publishing-check` to succeed, then push the annotated
+   template tag at that candidate. Tagger date
    must be strictly later than the library tagger date and Release `published_at`.
 5. Before push the tag workflow verifies template record/HEAD/main containment,
    live successful public-consumer evidence and template body hashes; annotated
@@ -98,6 +101,35 @@ library ahead emits a notice and succeeds; template ahead fails; equal succeeds.
 It does not inspect authorities. Incomplete 10.23.0 history needs no exemption.
 This builder unit creates no tags, dispatches or publications.
 
+## Trusted Publishing policy and permissions
+
+Configure these two nuget.org Trusted Publishing policies outside the repository:
+
+| Repository owner | Repository | Workflow file | Environment | Push scopes | Package glob |
+| --- | --- | --- | --- | --- | --- |
+| J-Tech-Japan | Sekiban | packagesDcb.yml | dcb-release | Push new packages and package versions | Sekiban.Dcb* |
+| J-Tech-Japan | Sekiban | packagesDcbTemplate.yml | dcb-release | Push new packages and package versions | Sekiban.Dcb* |
+
+The policy's Environment **must** be set to `dcb-release`: nuget.org does not
+check the ref. Keep the GitHub environment restricted to `main`, `dcb-v*` and
+`dcbTemplates-v*`. `NUGET_USER` is the username of the policy's creator; store
+it as a secret. Do not record its value in the repository. The dispatch check
+proves the username and policy match; it does not prove package scope or owner.
+It runs only the pinned login, without checkout or publication. Real login
+requires GitHub Actions OIDC and cannot run locally.
+
+The build mints a one-hour key immediately after the live guard and before push.
+Residual risk: job-level `id-token: write` reaches every `build` step, including
+checkout, setup, build and validation steps. The check job has only
+`id-token: write`; build also needs `actions: read` for live run/job evidence and
+`contents: write` for the Release action (which includes the contents reads).
+The private host reader separately uses `SEKIBAN_RELEASE_RECORD_TOKEN` with
+contents read access to `J-Tech-Japan/SekibanIntentHost`.
+
+A re-run of a tag from before this change uses the API key from the tagged
+workflow. A new tag on a commit before this change also uses the API key.
+Retain `NUGET_APIKEY` for those workflows and the other package workflows.
+
 ## Irreversible actions and recovery
 
 Tag pushes trigger publication; NuGet pushes and public GitHub Releases are
@@ -105,16 +137,25 @@ irreversible release operations. Stop if any reader, validator, live guard,
 visibility or equality check fails. Never bypass a guard, move an existing tag,
 or substitute another package under the same version.
 
-Before re-running a failed tag run, dispatch `dcb_release_reproducibility.yml`
-for that released library version on GitHub-hosted runners. Require 26/26 public
+A push stopped part way, including `.snupkg` symbol publication, is a stop for
+operator decision. Do not automatically retry a partial publication.
+
+For a partly or fully public library version, before re-running a failed tag run,
+dispatch `dcb_release_reproducibility.yml` for that released library version on GitHub-hosted runners. Require 26/26 public
 packages to equal the clean rebuild. If it fails, do not retry: report all differing
 packages (distinguishing download failures and missing local files) and the SDK
 and runner image beside those of the original run, then use a new version. For
 this PR, the 10.23.0 result remains required before merge unless the operator
 explicitly decides otherwise. Never widen the exclusions or relax another guard.
 
-Retry promptly on the same run/tag object. A retry **re-packs** the exact tagged
-commit; it does not reuse the original build output. Equality ignores entries
+Exception: when no public package exists for the version,
+`dcb_release_reproducibility.yml` has nothing to compare. A retry in this case
+needs operator approval after investigating the failure; the failed comparison
+is not evidence of reproducibility. This exception does not apply to a partly
+or fully public version, for which the rule above remains mandatory.
+
+After the applicable checks and operator decision, retry promptly on the same
+run/tag object. A retry **re-packs** the exact tagged commit; it does not reuse the original build output. Equality ignores entries
 starting with `_manifest/` at the package root in addition to the existing ZIP
 relationship, signature and core-properties exclusions. It compares assemblies,
 nuspec, README and every other canonical entry, including `lib/_manifest/x`.

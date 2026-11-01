@@ -527,6 +527,57 @@ copy_workflow_fixture() {
   cp -R "$repo_root/dcb/src/." "$destination/dcb/src/"
 }
 
+# SEK-G141: each mutation is checked independently in each publish workflow.
+for publish_workflow in packagesDcb.yml packagesDcbTemplate.yml; do
+  for trusted_mutation in legacy-key build-environment build-permission early-login check-push unnamed-between wrong-output extra-check-step; do
+    trusted_mutant="$work_root/trusted-${publish_workflow}-${trusted_mutation}"
+    copy_workflow_fixture "$trusted_mutant"
+    trusted_file="$trusted_mutant/.github/workflows/$publish_workflow"
+    python3 - "$trusted_file" "$trusted_mutation" <<'TRUSTED_MUTANT'
+from pathlib import Path
+import re
+import sys
+path = Path(sys.argv[1])
+text = path.read_text()
+build, check = text.split('  trusted-publishing-check:', 1)
+mutation = sys.argv[2]
+if mutation == 'legacy-key':
+    build = build.replace('steps.nuget-login.outputs.NUGET_API_KEY', 'secrets.NUGET_APIKEY')
+elif mutation == 'build-environment':
+    build = build.replace('    environment: dcb-release\n', '')
+elif mutation == 'build-permission':
+    build = build.replace('      contents: write\n', '')
+elif mutation == 'early-login':
+    login = re.search(r'      - name: Mint short-lived NuGet key\n.*?(?=      - name:)', build, re.S).group()
+    build = build.replace(login, '')
+    pack = '      - name: Pack NuGet packages' if 'packagesDcb.yml' == path.name else '      - name: Pack Template'
+    build = build.replace(pack, login + pack)
+elif mutation == 'check-push':
+    check += '\n      - name: Forbidden push\n        run: dotnet nuget push out/*.nupkg\n'
+elif mutation == 'unnamed-between':
+    build = re.sub(r'(      - name: Push (?:to NuGet.org|Template))', '      - run: echo intervening step\n\n' + r'\1', build)
+elif mutation == 'wrong-output':
+    build = build.replace('steps.nuget-login.outputs.NUGET_API_KEY', 'steps.other.outputs.NUGET_API_KEY')
+elif mutation == 'extra-check-step':
+    check += '\n      - uses: actions/setup-dotnet@v4\n'
+path.write_text(build + '  trusted-publishing-check:' + check)
+TRUSTED_MUTANT
+    if cmp -s "$repo_root/.github/workflows/$publish_workflow" "$trusted_file"; then
+      echo "Could not construct the $trusted_mutation Trusted Publishing mutant for $publish_workflow." >&2
+      exit 1
+    fi
+    case "$trusted_mutation" in
+      legacy-key) trusted_reason="Trusted Publishing must not use secrets.NUGET_APIKEY." ;;
+      build-environment) trusted_reason="Trusted Publishing build must declare environment: dcb-release." ;;
+      build-permission) trusted_reason="Trusted Publishing build requires actions: read, contents: write, id-token: write." ;;
+      early-login|unnamed-between) trusted_reason="Trusted Publishing login must follow the live guard and be directly before push." ;;
+      wrong-output) trusted_reason="Trusted Publishing push must use the login output through env and --skip-duplicate." ;;
+      check-push|extra-check-step) trusted_reason="Trusted Publishing check must contain exactly one pinned login step, no checkout, run or push." ;;
+    esac
+    expect_failure_reason "$trusted_reason" run_net10 "$validator" workflow --repo-root "$trusted_mutant"
+  done
+done
+
 # SEK-G47 fixture family 5: route removal and step reordering must fail structurally.
 workflow_route_mutant="$work_root/workflow-route-mutant"
 copy_workflow_fixture "$workflow_route_mutant"
