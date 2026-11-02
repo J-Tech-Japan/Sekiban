@@ -295,7 +295,7 @@ class Fixture:
         self.env.update({'GITHUB_REF_NAME':tag,'GITHUB_REF':'refs/tags/'+tag})
         data=yaml.safe_load((self.repo/'.github/workflows'/('packagesDcbTemplate.yml' if template else 'packagesDcb.yml')).read_text())
         expr={'github.event.after':getattr(self,'trigger_override',self.tags[tag]),'github.ref_name':tag,'github.token':'workflow-token',
-              'secrets.SEKIBAN_RELEASE_RECORD_TOKEN':'host-token','secrets.NUGET_APIKEY':'offline-never-used',
+              'secrets.SEKIBAN_RELEASE_RECORD_TOKEN':'host-token',
               'vars.SEKIBAN_RELEASE_RECORD_REF':HOST_REF}
         trace=[]
         self.workflow_trace=trace
@@ -312,6 +312,8 @@ class Fixture:
                 assert step.get('with',{}).get('fetch-depth')==0
                 run(['git','update-ref','refs/tags/'+tag,self.sha],self.repo)
                 continue
+            # Offline only: real OIDC login requires GitHub Actions and nuget.org.
+            if name == 'Mint short-lived NuGet key': continue
             if step.get('uses','').startswith('actions/setup-dotnet'): continue
             if name in ['Restore dependencies','Build with dotnet','Build release-record and package validators','Build release validators']: continue
             if name in ['Pack NuGet packages','Pack Template']:
