@@ -72,7 +72,7 @@ takeover. A stale owner cannot overwrite the first durable halt position, reason
 closed when `PreProvisioned` and `LegacyAutoProvision` are mixed, regardless of registration order; no partial provider
 registration is left to silently change the provisioning mode.
 
-The Orleans integration follows the DCB-supported `Microsoft.Orleans.*` **10.3.1** line. Upgrade the whole cluster
+The Orleans integration follows the DCB-supported `Microsoft.Orleans.*` **10.4.2** line. Upgrade the whole cluster
 together; mixing Orleans versions is not a supported compatibility guarantee. This subscriber is the durable
 store-driven catch-up boundary only. It does not provide a relay/outbox, replay arbitrary external subscriber effects,
 or perform automatic historical repair; those concerns remain a separate later design.
@@ -83,3 +83,5 @@ or perform automatic historical repair; those concerns remain a separate later d
 before the hosted runner starts. `GetStateAsync`, `ResumeAsync`, and `HaltAsync` expose the persisted phase and halt
 evidence through `IDurableSubscriptionHandle`. Orleans subscription delivery does not provide the authoritative event
 payload to the handler.
+
+> **10.4.2 upgrade:** Upgrade the whole cluster together; mixed Orleans versions are unsupported. AWS template PostgreSQL scripts were refreshed. See [the deployment upgrade steps](16_deployment.md#orleans-1042-postgresql-upgrade). Orleans 10.4.0 changed request-latency instruments and grain metric dimensions; update dashboards and alerts.

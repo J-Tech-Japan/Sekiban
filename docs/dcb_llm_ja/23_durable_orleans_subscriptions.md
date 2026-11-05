@@ -71,7 +71,7 @@ lease の所有、期限、再試行可能時刻、halt のフェンシングは
 位置、理由、時刻を上書きできません。`PreProvisioned` と `LegacyAutoProvision` を混在させた登録は登録順にかかわらず
 fail-closed となり、provider 登録が一部だけ残って provisioning mode が暗黙に変わることもありません。
 
-Orleans 統合は DCB がサポートする `Microsoft.Orleans.*` **10.3.1** 系列に従います。クラスタ全体を同時に更新し、
+Orleans 統合は DCB がサポートする `Microsoft.Orleans.*` **10.4.2** 系列に従います。クラスタ全体を同時に更新し、
 Orleans バージョンを混在させないでください。これは durable store を正とする catch-up 境界だけを提供します。
 relay/outbox、任意の外部 subscriber 副作用の replay、または自動的な過去イベント修復は提供しません。これらは
 後続の別設計の対象です。
@@ -81,3 +81,5 @@ relay/outbox、任意の外部 subscriber 副作用の replay、または自動�
 `SafeWindow`、`LeaseDuration`、`PollInterval`、`RetryDelay`、`MaxHandlerAttempts`、`MaxBatchSize` は hosted runner
 起動前に検証されます。`IDurableSubscriptionHandle` の `GetStateAsync`、`ResumeAsync`、`HaltAsync` で永続化された
 フェーズと停止証跡を確認できます。Orleans の通知は authoritative なイベント payload をハンドラーへ渡しません。
+
+> **10.4.2 更新:** クラスタ全体を同時に更新し、Orleans の異なるバージョンを混在させないでください。AWS テンプレートの PostgreSQL スクリプトを更新しました。[デプロイ時の更新手順](16_deployment.md#orleans-1042-postgresql-upgrade)を参照してください。Orleans 10.4.0 でリクエスト遅延の計器と grain メトリクスのディメンションが変わったため、ダッシュボードとアラートを更新してください。

@@ -25,13 +25,15 @@ DCB は複数のストレージプロバイダーをサポートしています�
 ## Orleans 依存関係の整合 (SEK-G74)
 
 `Sekiban.Dcb.Orleans.*` を利用するホストは、ホストとクラスタ全体で安定版の
-`Microsoft.Orleans.*` を同じバージョンに揃えてください。DCB 10.22 系では、公開 Orleans パッケージ、内部ホスト、
-テスト、生成 DCB テンプレートを **10.3.1** に統一します。10.3.1 は `net8.0` と `net10.0` のアセットグループだけを
+`Microsoft.Orleans.*` を同じバージョンに揃えてください。現在の DCB Orleans 統合では、公開 Orleans パッケージ、内部ホスト、
+テスト、生成 DCB テンプレートを **10.4.2** に統一します。10.4.2 のホスト/ランタイムパッケージは `net8.0` と `net10.0` のアセットグループだけを
 公開し、net9 は net8 グループ（適用される `Microsoft.Extensions.*` の下限は 8.0.x、例: `Microsoft.Extensions.Hosting`
 8.0.1）、net10 は net10 グループ（下限 10.0.5）を解決します。`Polly` 8.6.4 と `Polly.Extensions` 8.6.5 は両グループの
-通常の推移依存です。クラスタの全ノードを同時に更新してください。10.0.1/10.3.1 が混在するローリング
-クラスタは検証済みサポートではありません。この依存関係整合に保存データやスキーマの移行は不要で、Azure Queue を
+通常の推移依存です。クラスタの全ノードを同時に更新してください。旧 Orleans/10.4.2 が混在するローリング
+クラスタは検証済みサポートではありません。PostgreSQL スキーマの更新手順はデプロイガイドを参照してください。この変更は、Azure Queue を
 巻き戻し可能にはせず、#1185 subscriber recovery は含みません。Pure と Samples は DCB の対象外です。
+
+Orleans 10.4.2 では Core、Runtime、Serialization、Streaming.AzureStorage が `Microsoft.Orleans.Analyzers` と `Microsoft.Orleans.CodeGenerator` を直接依存に追加します。Serialization には `.NETStandard2.1` グループもあります。Serialization のみを参照する Domain/EventSource プロジェクトでも generator と analyzer が実行されます。推移依存の `Microsoft.CodeAnalysis.Analyzers` は 3.11.0 から 5.9.0 へ上がります。DCB 側で別のパッケージ参照は引き上げません。
 
 ## 対応クラウドプラットフォーム
 
@@ -1185,3 +1187,5 @@ application handler が独立して呼び出される可能性があるため、
 retry と queue の options は配信制御であり、任意の byte 上限ではありません。この publisher は Orleans provider の envelope、queue service
 limit、batch limit、または custom application side effect を保証しません。provider 固有の size gate を設定した場合は、その capability
 契約が別途適用されます。未設定の場合、この publisher options から provider byte limit を推測してはいけません。
+
+> **10.4.2 更新:** クラスタ全体を同時に更新し、Orleans の異なるバージョンを混在させないでください。AWS テンプレートの PostgreSQL スクリプトを更新しました。[デプロイ時の更新手順](16_deployment.md#orleans-1042-postgresql-upgrade)を参照してください。Orleans 10.4.0 でリクエスト遅延の計器と grain メトリクスのディメンションが変わったため、ダッシュボードとアラートを更新してください。

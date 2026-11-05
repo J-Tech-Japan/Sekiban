@@ -154,16 +154,40 @@ Keeping DCB healthy hinges on monitoring reservation conflicts, watching project
 provisioned for peak throughput. With those practices in place you gain the flexibility of dynamic consistency while
 retaining operational confidence.
 
-## Orleans 10.3.1 dependency migration
+## Orleans 10.4.2 dependency migration
 
-DCB hosts consuming `Sekiban.Dcb.Orleans.*` must align their direct `Microsoft.Orleans.*` references on 10.3.1 and
+DCB hosts consuming `Sekiban.Dcb.Orleans.*` must align their direct `Microsoft.Orleans.*` references on 10.4.2 and
 upgrade the whole cluster together. The DCB authority keeps the source, internal-use projects, tests, and five
-generated template families on that same version. `Microsoft.Orleans.*` 10.3.1 publishes only `net8.0` and `net10.0`
+generated template families on that same version. The Orleans 10.4.2 host/runtime packages publish only `net8.0` and `net10.0`
 groups: net9 resolves the net8 group with applicable `Microsoft.Extensions.*` 8.0.x floors (for example,
 `Microsoft.Extensions.Hosting` 8.0.1), while net10 resolves the net10 group with a 10.0.5 floor. `Polly` 8.6.4
-and `Polly.Extensions` 8.6.5 are normal transitives in both groups. Do not treat a mixed
-10.0.1/10.3.1 rolling cluster as verified support.
+and `Polly.Extensions` 8.6.5 are normal transitives in both groups. Do not mix Orleans versions during a rolling upgrade.
 
-This is a package/runtime alignment only: it requires no stored-data or schema migration, does not make Azure Queue
+The PostgreSQL schema upgrade below preserves stored state and reminders. This alignment does not make Azure Queue
 rewindable, and does not include #1185 subscriber recovery. Pure and Samples are deliberately outside this DCB
 upgrade boundary.
+
+> **10.4.2 upgrade:** Upgrade the whole cluster together; mixed Orleans versions are unsupported. AWS template PostgreSQL scripts were refreshed. See [the deployment upgrade steps](16_deployment.md#orleans-1042-postgresql-upgrade). Orleans 10.4.0 changed request-latency instruments and grain metric dimensions; update dashboards and alerts.
+
+<a id="orleans-1042-postgresql-upgrade"></a>
+
+### Orleans 10.4.2 PostgreSQL upgrade
+
+New AWS template databases and the DynamoDB internal host use the v10.4.2 PostgreSQL scripts. Main and Reminders are unchanged; Clustering updates membership concurrency and dead-silo cleanup; Persistence uses `timestamptz`/`now()` and includes `DeleteStorageKey`.
+
+`OrleansSchemaInitializer` does **not** upgrade an existing valid database: it only checks for `orleansquery` and `CleanupDefunctSiloEntriesKey`. Keep those checks intact. Forcing reinitialization drops grain state and reminder tables. Back up the database and stop all cluster nodes, then apply these changes in a transaction without dropping tables:
+
+1. From the shipped `PostgreSQL-Clustering.sql`, execute only the definitions of `update_i_am_alive_time`, `insert_membership`, and `update_membership`, changing `CREATE FUNCTION` to `CREATE OR REPLACE FUNCTION`. Leave the unchanged `insert_membership_version` alone.
+2. Replace the existing `CleanupDefunctSiloEntriesKey` row's `QueryText` using `UPDATE OrleansQuery SET QueryText = ... WHERE QueryKey = 'CleanupDefunctSiloEntriesKey'`, taking the complete query string from the refreshed script. It now requires old `IAmAliveTime` **and** `StartTime`, empty `SuspectTimes`, and dead status (`6`). Execute the script's `INSERT` for `CleanupDefunctSiloEntryKey` if absent (or update its query text if already installed).
+3. Optionally align the storage timestamp column, interpreting the old values as UTC:
+
+   ```sql
+   ALTER TABLE OrleansStorage
+     ALTER COLUMN modifiedon TYPE timestamptz
+     USING modifiedon AT TIME ZONE 'UTC';
+   ```
+
+   Execute the `CREATE OR REPLACE FUNCTION writetostorage` definition from the refreshed Persistence script. If retaining the old timestamp column, keep database sessions in UTC so `now()` is converted consistently. The new `DeleteStorageKey` row can also be inserted if absent; no existing state is deleted merely by registering this query. Do not rerun the full table-creation scripts.
+4. Commit, then start the whole cluster on 10.4.2 together. The [10.4.2 query reader](https://github.com/dotnet/orleans/blob/v10.4.2/src/AdoNet/Shared/Storage/DbStoredQueries.cs) treats `CleanupDefunctSiloEntryKey` as optional and [falls back to the installed bulk query](https://github.com/dotnet/orleans/blob/v10.4.2/src/AdoNet/Shared/Storage/RelationalOrleansQueries.cs), so the previous schema can still start; it does not gain the refreshed cleanup behavior until explicitly upgraded.
+
+Orleans 10.4.0 replaced `orleans-app-requests-latency-bucket`, `-count`, and `-sum` with the `orleans-app-requests-latency` histogram in fractional milliseconds. Configure OpenTelemetry View boundaries and update dashboards/alerts. `orleans-grains` replaces the `type` label with canonical `grain_type`; activation lifecycle metrics also gain `grain_type`. See the [10.4.0 upgrade notes](https://github.com/dotnet/orleans/releases/tag/v10.4.0).

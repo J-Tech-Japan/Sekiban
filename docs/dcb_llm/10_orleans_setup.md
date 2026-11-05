@@ -179,7 +179,7 @@ Dashboard. Add `app.MapHealthChecks("/health")` for readiness probes.
 
 ## Grain directory and duplicate activations
 
-Orleans 10.3.1 defaults to the eventually consistent `LocalGrainDirectory`. Sekiban's hosts and templates do not
+Orleans 10.4.2 defaults to the eventually consistent `LocalGrainDirectory`. Sekiban's hosts and templates do not
 configure a grain directory, so they use this default. Membership churn can briefly produce duplicate activations;
 Orleans resolves directory duplicates by deactivating the duplicate, but the overlap matters for writes. Azure Table
 or Cosmos **clustering** configures membership, not the grain directory or an event-store fence.
@@ -188,7 +188,7 @@ See the [Orleans grain directory guide](https://learn.microsoft.com/en-us/dotnet
 ### Experimental strongly consistent directory (opt-in)
 
 Consider the strongly consistent in-cluster directory: it lowers the probability of competing writes for `TagConsistentGrain`
-and `MaterializedViewGrain`. In 10.3.1, `AddDistributedGrainDirectory` is an experimental extension in
+and `MaterializedViewGrain`. In 10.4.2, `AddDistributedGrainDirectory` is an experimental extension in
 `Orleans.Hosting.CoreHostingExtensions` (`Microsoft.Orleans.Runtime`), marked `ORLEANSEXP003`.
 It is an opt-in, not a template or drop-in production default. With no name, it becomes the cluster-wide default:
 
@@ -212,7 +212,7 @@ siloBuilder.AddDistributedGrainDirectory("ConsistencyDirectory");
 Import `Orleans.GrainDirectory` for the attribute. It belongs on the grain class, not its interface. Applying this
 per-type option to Sekiban's built-in grains requires changing their implementation classes; host registration alone
 does not select the named directory for them.
-See the [10.3.1 registration API source](https://github.com/dotnet/orleans/blob/v10.3.1/src/Orleans.Runtime/Hosting/CoreHostingExtensions.cs).
+See the [10.4.2 registration API source](https://github.com/dotnet/orleans/blob/v10.4.2/src/Orleans.Runtime/Hosting/CoreHostingExtensions.cs).
 After an ungraceful failure, recovery uses range leases (`RangeLeaseDuration`, 30 seconds). Plan for this recovery delay.
 
 ### External directories and the remaining boundary
@@ -259,15 +259,14 @@ batch, or retry limits and does not change Orleans retry behavior.
 
 ## DCB Orleans version authority and whole-cluster upgrades
 
-The DCB product line is aligned on `Microsoft.Orleans.*` **10.3.1**. Direct Orleans references in DCB source,
+The DCB product line is aligned on `Microsoft.Orleans.*` **10.4.2**. Direct Orleans references in DCB source,
 internal hosts, tests, and generated DCB templates are governed by the single DCB authority (or the template's
-self-contained authority); keep every host on one consistent stable Orleans 10.x version. `Microsoft.Orleans.*`
-10.3.1 publishes `net8.0` and `net10.0` asset groups only: a `net9.0` host resolves the `net8.0` group, whose
+self-contained authority); keep every host on one consistent stable Orleans 10.x version. The Orleans 10.4.2 host/runtime packages publish `net8.0` and `net10.0` asset groups only: a `net9.0` host resolves the `net8.0` group, whose
 applicable `Microsoft.Extensions.*` floors are 8.0.x (for example, `Microsoft.Extensions.Hosting` 8.0.1), while a
 `net10.0` host resolves the `net10.0` group, whose floor is 10.0.5. `Polly` 8.6.4 and `Polly.Extensions` 8.6.5 are
 transitive in both groups.
 
-Upgrade the whole Orleans cluster together. A rolling cluster which mixes 10.0.1 and 10.3.1 is not a supported or
-verified compatibility guarantee. This dependency alignment changes runtime/package inputs only: it does not perform
-a data or schema migration, does not make Azure Queue rewindable, and does not implement the separate #1185
+Upgrade the whole Orleans cluster together. Mixed Orleans versions in a rolling cluster are unsupported. The PostgreSQL schema upgrade is described in the deployment guide; this alignment does not make Azure Queue rewindable or implement the separate #1185
 subscriber-recovery work. Pure and Samples remain on their own supported dependency line.
+
+> **10.4.2 upgrade:** Upgrade the whole cluster together; mixed Orleans versions are unsupported. AWS template PostgreSQL scripts were refreshed. See [the deployment upgrade steps](16_deployment.md#orleans-1042-postgresql-upgrade). Orleans 10.4.0 changed request-latency instruments and grain metric dimensions; update dashboards and alerts.

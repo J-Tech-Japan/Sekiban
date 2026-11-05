@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../../.." && pwd)"
-version="10.3.1"
+version="10.4.2"
 
 usage() {
   echo "Usage: $0 [--repo-root <path>] [--version <stable-version>]" >&2
@@ -59,7 +59,7 @@ expect_failure missing-authority "$missing_authority"
 
 wrong_authority="$work_root/wrong-authority"
 copy_fixture "$wrong_authority"
-perl -0pi -e 's{<MicrosoftOrleansVersion>10\.3\.1</MicrosoftOrleansVersion>}{<MicrosoftOrleansVersion>10.0.1</MicrosoftOrleansVersion>}' \
+perl -0pi -e 's{<MicrosoftOrleansVersion>10\.4\.2</MicrosoftOrleansVersion>}{<MicrosoftOrleansVersion>10.0.1</MicrosoftOrleansVersion>}' \
   "$wrong_authority/dcb/OrleansVersion.props"
 expect_failure wrong-authority "$wrong_authority"
 
@@ -67,11 +67,11 @@ mixed_reference="$work_root/mixed-reference"
 copy_fixture "$mixed_reference"
 perl -0pi -e 's{Version="\$\(MicrosoftOrleansVersion\)"}{Version="10.0.1"}' \
   "$mixed_reference/dcb/src/Sekiban.Dcb.Orleans.Core/Sekiban.Dcb.Orleans.Core.csproj"
-expect_failure mixed-10.3.1-10.0.1-reference "$mixed_reference"
+expect_failure mixed-10.4.2-10.0.1-reference "$mixed_reference"
 
 disagreement="$work_root/disagreement"
 copy_fixture "$disagreement"
-perl -0pi -e 's{<MicrosoftOrleansVersion>10\.3\.1</MicrosoftOrleansVersion>}{<MicrosoftOrleansVersion>10.0.2</MicrosoftOrleansVersion>}' \
+perl -0pi -e 's{<MicrosoftOrleansVersion>10\.4\.2</MicrosoftOrleansVersion>}{<MicrosoftOrleansVersion>10.0.2</MicrosoftOrleansVersion>}' \
   "$disagreement/templates/Sekiban.Dcb.Templates/content/Sekiban.Dcb.Orleans/SekibanDcbTemplateVersion.props"
 expect_failure authority-disagreement "$disagreement"
 

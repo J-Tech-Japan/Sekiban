@@ -170,7 +170,7 @@ builder.Services.AddSingleton<ISekibanExecutor, OrleansDcbExecutor>();
 
 ## Grain ディレクトリと重複活性化
 
-Orleans 10.3.1 の既定値は、結果整合性を持つ `LocalGrainDirectory` です。Sekiban のホストとテンプレートは
+Orleans 10.4.2 の既定値は、結果整合性を持つ `LocalGrainDirectory` です。Sekiban のホストとテンプレートは
 Grain ディレクトリを構成していないため、この既定値を使います。メンバーシップの変動時には一時的に重複活性化が
 発生し得ます。Orleans は重複側を非活性化して解消しますが、共存期間中の書き込みには影響があります。Azure Table や
 Cosmos による**クラスタリング**はメンバーシップの構成であり、Grain ディレクトリやイベントストアのフェンスの構成では
@@ -179,7 +179,7 @@ Cosmos による**クラスタリング**はメンバーシップの構成であ
 ### 強整合ディレクトリの試験的なオプトイン
 
 `TagConsistentGrain` と `MaterializedViewGrain` の競合する書き込みの確率を下げるため、クラスタ内の強整合ディレクトリを
-検討してください。10.3.1 の `AddDistributedGrainDirectory` は `Orleans.Hosting.CoreHostingExtensions` の拡張メソッド
+検討してください。10.4.2 の `AddDistributedGrainDirectory` は `Orleans.Hosting.CoreHostingExtensions` の拡張メソッド
 （`Microsoft.Orleans.Runtime`）で、`ORLEANSEXP003` が付いた試験的 API です。オプトイン機能であり、テンプレートの
 既定値でも、そのまま本番に導入できる既定構成でもありません。名前を省略するとクラスタ全体の既定値になります。
 
@@ -202,7 +202,7 @@ siloBuilder.AddDistributedGrainDirectory("ConsistencyDirectory");
 
 属性には `Orleans.GrainDirectory` 名前空間を使います。インターフェースではなく Grain クラスに付けます。
 Sekiban の組み込み Grain に型ごとの設定を適用するには、実装クラスの変更が必要です。ホストで名前付きディレクトリを登録するだけでは、それらの Grain は選択しません。
-[10.3.1 の登録 API ソース](https://github.com/dotnet/orleans/blob/v10.3.1/src/Orleans.Runtime/Hosting/CoreHostingExtensions.cs)を参照してください。
+[10.4.2 の登録 API ソース](https://github.com/dotnet/orleans/blob/v10.4.2/src/Orleans.Runtime/Hosting/CoreHostingExtensions.cs)を参照してください。
 異常終了後の復旧には範囲リース（`RangeLeaseDuration`、30秒）が使われるため、この復旧待ち時間を考慮してください。
 
 ### 外部ディレクトリと残る保証境界
@@ -248,14 +248,15 @@ retry 動作も変更しません。
 
 ## DCB Orleans のバージョン権威とクラスタ全体のアップグレード
 
-DCB 製品ラインの `Microsoft.Orleans.*` は **10.3.1** に揃えます。DCB のソース、内部ホスト、テスト、生成
+DCB 製品ラインの `Microsoft.Orleans.*` は **10.4.2** に揃えます。DCB のソース、内部ホスト、テスト、生成
 テンプレートにある直接参照は、DCB 共通の権威ファイル（テンプレートでは各テンプレート固有の権威）で管理し、
-各ホストでは同じ安定した Orleans 10.x のバージョンを使ってください。`Microsoft.Orleans.*` 10.3.1 は
+各ホストでは同じ安定した Orleans 10.x のバージョンを使ってください。Orleans 10.4.2 のホスト/ランタイムパッケージは
 `net8.0` と `net10.0` のアセットグループだけを公開します。net9 は `net8.0` グループを解決し、適用される
 `Microsoft.Extensions.*` の下限は 8.0.x（例: `Microsoft.Extensions.Hosting` 8.0.1）です。net10 は `net10.0`
 グループを解決し、下限は 10.0.5 です。`Polly` 8.6.4 と `Polly.Extensions` 8.6.5 は両グループの推移依存です。
 
-アップグレードは Orleans クラスタ全体を同時に行ってください。10.0.1 と 10.3.1 を混在させるローリング
-運用は、サポートまたは検証済みの互換性保証ではありません。この変更はランタイム/パッケージの入力を揃える
-だけで、データやスキーマの移行は行わず、Azure Queue を巻き戻し可能にもせず、別スコープの #1185
+アップグレードは Orleans クラスタ全体を同時に行ってください。旧 Orleans と 10.4.2 を混在させるローリング
+運用は、サポートまたは検証済みの互換性保証ではありません。PostgreSQL スキーマの更新手順はデプロイガイドを参照してください。この変更は、Azure Queue を巻き戻し可能にもせず、別スコープの #1185
 subscriber-recovery を実装しません。Pure と Samples は従来の依存ラインを維持します。
+
+> **10.4.2 更新:** クラスタ全体を同時に更新し、Orleans の異なるバージョンを混在させないでください。AWS テンプレートの PostgreSQL スクリプトを更新しました。[デプロイ時の更新手順](16_deployment.md#orleans-1042-postgresql-upgrade)を参照してください。Orleans 10.4.0 でリクエスト遅延の計器と grain メトリクスのディメンションが変わったため、ダッシュボードとアラートを更新してください。

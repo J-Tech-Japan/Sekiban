@@ -43,8 +43,8 @@ internal static class PackageArtifactValidator
             "Sekiban.Dcb.Orleans.Core must remain Azure-free.");
         ValidateDependency(nuspecs[AzureQueuePackageId], "net9.0", "Azure.Storage.Queues", "12.25.0");
         ValidateDependency(nuspecs[AzureQueuePackageId], "net10.0", "Azure.Storage.Queues", "12.25.0");
-        ValidateDependency(nuspecs[AzureQueuePackageId], "net9.0", "Microsoft.Orleans.Streaming.AzureStorage", "10.3.1");
-        ValidateDependency(nuspecs[AzureQueuePackageId], "net10.0", "Microsoft.Orleans.Streaming.AzureStorage", "10.3.1");
+        ValidateDependency(nuspecs[AzureQueuePackageId], "net9.0", "Microsoft.Orleans.Streaming.AzureStorage", "10.4.2");
+        ValidateDependency(nuspecs[AzureQueuePackageId], "net10.0", "Microsoft.Orleans.Streaming.AzureStorage", "10.4.2");
         Console.WriteLine($"Package artifact validation passed: {ids.Count} packages, PostgreSQL net9/net10 relational closure, Azure-free Core, and Azure Queue groups.");
     }
 
