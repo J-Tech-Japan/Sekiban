@@ -24,9 +24,10 @@ internal sealed class GitHubReleaseApi : IReleaseApi
 
 internal static class ReleaseProcess
 {
-    internal static int ExitCode(string cwd, params string[] args)
+    internal static int ExitCode(string command, string? cwd, params string[] args)
     {
-        var start = new ProcessStartInfo("git") { WorkingDirectory = cwd, RedirectStandardOutput = true, RedirectStandardError = true };
+        var start = new ProcessStartInfo(command) { RedirectStandardOutput = true, RedirectStandardError = true };
+        if (cwd is not null) start.WorkingDirectory = cwd;
         foreach (var arg in args) start.ArgumentList.Add(arg);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Cannot start git.");
         var stdout = process.StandardOutput.ReadToEndAsync();
@@ -114,11 +115,11 @@ internal static class Schema3ReleaseRecordValidator
         // fetch-depth: 0 supplies remote branches, including dcb/v11 when it exists.
         if (version.Contains("-preview", StringComparison.Ordinal))
         {
-            Require(ReleaseProcess.ExitCode(repoRoot, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/dcb/v11") == 0,
+            Require(ReleaseProcess.ExitCode("git", repoRoot, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/dcb/v11") == 0,
                 "Prerelease requires origin/dcb/v11; remote branch is missing.");
-            Require(ReleaseProcess.ExitCode(repoRoot, "merge-base", "--is-ancestor", merged, "origin/dcb/v11") == 0,
+            Require(ReleaseProcess.ExitCode("git", repoRoot, "merge-base", "--is-ancestor", merged, "origin/dcb/v11") == 0,
                 "Prerelease merged_sha must be an ancestor of origin/dcb/v11.");
-            Require(ReleaseProcess.ExitCode(repoRoot, "merge-base", "--is-ancestor", merged, "origin/main") == 1,
+            Require(ReleaseProcess.ExitCode("git", repoRoot, "merge-base", "--is-ancestor", merged, "origin/main") == 1,
                 "Prerelease merged_sha must not be an ancestor of origin/main.");
         }
         else
