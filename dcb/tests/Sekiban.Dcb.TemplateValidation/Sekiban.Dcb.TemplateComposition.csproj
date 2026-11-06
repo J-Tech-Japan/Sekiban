@@ -16,7 +16,8 @@
   <ItemGroup>
     <Compile Remove="Program.cs" />
     <Compile Remove="LegacyStatusCompositionProgram.cs" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0-rc.3.26522.148" Condition="'$(TargetFramework)' == 'net11.0'" />
     <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="$(DcbVersion)" />
     <PackageReference Include="Sekiban.Dcb.DynamoDB" Version="$(DcbVersion)" />
     <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="$(DcbVersion)" />

@@ -47,7 +47,7 @@ done
 
 nuspec="$(unzip -p "$package" '*.nuspec')"
 for required in \
-  '<group targetFramework="net9.0">' \
+  '<group targetFramework="net11.0">' \
   '<group targetFramework="net10.0">' \
   'id="Sekiban.Dcb.Core" version="'$version'"' \
   'id="Sekiban.Dcb.Orleans.Core" version="'$version'"' \
@@ -65,6 +65,15 @@ export DOTNET_CLI_HOME="$temp_root/dotnet-home"
 export NUGET_PACKAGES="$temp_root/nuget-packages"
 export NUGET_HTTP_CACHE_PATH="$temp_root/nuget-http-cache"
 mkdir -p "$DOTNET_CLI_HOME" "$NUGET_PACKAGES" "$NUGET_HTTP_CACHE_PATH"
+
+net10_host="$temp_root/net10-host"
+mkdir -p "$net10_host"
+printf '%s\n' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allowPrerelease":false}}' > "$net10_host/global.json"
+run_net10() { (cd "$net10_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
+net11_host="$temp_root/net11-host"
+mkdir -p "$net11_host"
+printf '%s\n' '{"sdk":{"version":"11.0.100-rc.3.26522.148","rollForward":"disable","allowPrerelease":true}}' > "$net11_host/global.json"
+run_net11() { (cd "$net11_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
 
 config="$temp_root/NuGet.Config"
 cat > "$config" <<EOF
@@ -111,7 +120,7 @@ cat > "$config" <<EOF
 </configuration>
 EOF
 
-for tfm in net9.0 net10.0; do
+for tfm in net10.0 net11.0; do
   project="$temp_root/consumer-$tfm"
   mkdir -p "$project"
   cat > "$project/consumer.csproj" <<EOF
@@ -150,8 +159,11 @@ EOF
 throw new InvalidOperationException("deterministic packaged-consumer failure probe");
 EOF
   fi
+  (cd "${temp_root}/${tfm%.*}-host"
+  dotnet() { echo "SDK $(command dotnet --version): dotnet $*" >&2; command dotnet "$@"; }
   dotnet restore "$project/consumer.csproj" --configfile "$config" --no-http-cache --nologo -p:NuGetAudit=false
   dotnet build "$project/consumer.csproj" -c Release --no-restore --nologo -p:NuGetAudit=false
   dotnet run --project "$project/consumer.csproj" -c Release --no-build --no-restore --nologo -p:NuGetAudit=false
+  )
   echo "Azure Queue packaged consumer passed for $tfm."
 done

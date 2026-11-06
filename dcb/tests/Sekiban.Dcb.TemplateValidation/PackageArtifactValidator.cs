@@ -37,15 +37,27 @@ internal static class PackageArtifactValidator
         }
 
         Assert(ids.SetEquals(PackageManifest.PackageIds), "The local package feed is not the exact DCB package set.");
-        ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], "net9.0", "Microsoft.EntityFrameworkCore.Relational", "9.0.13");
-        ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], "net10.0", "Microsoft.EntityFrameworkCore.Relational", "10.0.3");
+        foreach (var (id, document) in nuspecs)
+        {
+            var groups = document.Descendants()
+                .Where(element => element.Name.LocalName == "group" && element.Parent?.Name.LocalName == "dependencies")
+                .Select(element => element.Attribute("targetFramework")?.Value)
+                .OrderBy(value => value, StringComparer.Ordinal).ToArray();
+            Assert(groups.SequenceEqual(new[] { "net10.0", "net11.0" }),
+                $"Package {id} must have exactly net10.0 and net11.0 dependency groups.");
+        }
+        foreach (var tfm in new[] { "net10.0", "net11.0" })
+        {
+            var runtimeVersion = tfm == "net10.0" ? "10.0.3" : "11.0.0-rc.3.26522.148";
+            ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], tfm, "Microsoft.EntityFrameworkCore.Relational", runtimeVersion);
+            ValidateDependency(nuspecs["Sekiban.Dcb.Core"], tfm, "Microsoft.Extensions.Logging.Abstractions", runtimeVersion);
+            ValidateDependency(nuspecs["Sekiban.Dcb.Sqlite"], tfm, "Microsoft.Data.Sqlite", runtimeVersion);
+            ValidateDependency(nuspecs[AzureQueuePackageId], tfm, "Azure.Storage.Queues", "12.25.0");
+            ValidateDependency(nuspecs[AzureQueuePackageId], tfm, "Microsoft.Orleans.Streaming.AzureStorage", "10.4.2");
+        }
         Assert(!DependencyIds(nuspecs["Sekiban.Dcb.Orleans.Core"]).Any(IsAzureDependency),
             "Sekiban.Dcb.Orleans.Core must remain Azure-free.");
-        ValidateDependency(nuspecs[AzureQueuePackageId], "net9.0", "Azure.Storage.Queues", "12.25.0");
-        ValidateDependency(nuspecs[AzureQueuePackageId], "net10.0", "Azure.Storage.Queues", "12.25.0");
-        ValidateDependency(nuspecs[AzureQueuePackageId], "net9.0", "Microsoft.Orleans.Streaming.AzureStorage", "10.4.2");
-        ValidateDependency(nuspecs[AzureQueuePackageId], "net10.0", "Microsoft.Orleans.Streaming.AzureStorage", "10.4.2");
-        Console.WriteLine($"Package artifact validation passed: {ids.Count} packages, PostgreSQL net9/net10 relational closure, Azure-free Core, and Azure Queue groups.");
+        Console.WriteLine($"Package artifact validation passed: {ids.Count} packages, exact net10/net11 groups and dependency versions, Azure-free Core, and Azure Queue groups.");
     }
 
     private static void ValidateDependency(XDocument document, string targetFramework, string id, string expectedVersion)

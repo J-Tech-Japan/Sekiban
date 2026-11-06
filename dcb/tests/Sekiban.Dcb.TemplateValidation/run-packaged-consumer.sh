@@ -54,8 +54,8 @@ net10_host="$work_root/net10-host"
 mkdir -p "$net9_host" "$net10_host"
 printf '%s\n' '{"sdk":{"version":"9.0.100","rollForward":"latestFeature","allowPrerelease":false}}' > "$net9_host/global.json"
 printf '%s\n' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allowPrerelease":false}}' > "$net10_host/global.json"
-run_net9() { (cd "$net9_host" && dotnet "$@"); }
-run_net10() { (cd "$net10_host" && dotnet "$@"); }
+run_net9() { (cd "$net9_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
+run_net10() { (cd "$net10_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
 
 write_nuget_config() {
   local destination="$1"
@@ -78,7 +78,7 @@ write_nuget_config() {
     for pattern in \
       'Microsoft.*' 'Aspire.*' 'Azure.*' 'AWSSDK.*' 'Npgsql*' 'MySqlConnector' \
       'OpenTelemetry.*' 'CommunityToolkit.*' 'AspNetCore.HealthChecks.*' 'Polly*' \
-      'SQLitePCLRaw.*' 'Grpc.*' 'Google.*' 'JsonPatch.*' 'KubernetesClient' \
+      'SQLitePCLRaw.*' 'SQLite' 'Grpc.*' 'Google.*' 'JsonPatch.*' 'KubernetesClient' \
       'ModelContextProtocol' 'Semver' 'StreamJsonRpc' 'Humanizer.*' 'Dapper' 'DuckDB.*' \
       'Newtonsoft.Json' 'ResultBoxes' 'Scalar.*' \
       'OpenTelemetry' 'Polly' 'Polly.Core' 'Polly.Extensions' 'Polly.RateLimiting' \

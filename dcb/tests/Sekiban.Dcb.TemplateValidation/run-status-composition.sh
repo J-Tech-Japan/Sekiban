@@ -42,7 +42,11 @@ mkdir -p "$NUGET_PACKAGES" "$NUGET_HTTP_CACHE_PATH" "$DOTNET_CLI_HOME"
 net10_host="$work_root/net10-host"
 mkdir -p "$net10_host"
 printf '%s\n' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allowPrerelease":false}}' > "$net10_host/global.json"
-run_net10() { (cd "$net10_host" && dotnet "$@"); }
+run_net10() { (cd "$net10_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
+net11_host="$work_root/net11-host"
+mkdir -p "$net11_host"
+printf '%s\n' '{"sdk":{"version":"11.0.100-rc.3.26522.148","rollForward":"disable","allowPrerelease":true}}' > "$net11_host/global.json"
+run_net11() { (cd "$net11_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
 legacy_nuget_packages="$work_root/legacy-nuget-packages"
 legacy_nuget_http_cache="$work_root/legacy-nuget-http-cache"
 mkdir -p "$legacy_nuget_packages" "$legacy_nuget_http_cache"
@@ -71,7 +75,7 @@ write_nuget_config() {
     for pattern in \
       'Microsoft.*' 'Aspire.*' 'Azure.*' 'AWSSDK.*' 'Npgsql*' 'MySqlConnector' \
       'OpenTelemetry.*' 'CommunityToolkit.*' 'AspNetCore.HealthChecks.*' 'Polly*' \
-      'SQLitePCLRaw.*' 'Grpc.*' 'Google.*' 'JsonPatch.*' 'KubernetesClient' \
+      'SQLitePCLRaw.*' 'SQLite' 'Grpc.*' 'Google.*' 'JsonPatch.*' 'KubernetesClient' \
       'ModelContextProtocol' 'Semver' 'StreamJsonRpc' 'Humanizer.*' 'Dapper' 'DuckDB.*' \
       'Newtonsoft.Json' 'ResultBoxes' 'Scalar.*' \
       'OpenTelemetry' 'Polly' 'Polly.Core' 'Polly.Extensions' 'Polly.RateLimiting' \
@@ -116,9 +120,13 @@ printf '%s\n' \
   '</configuration>' > "$legacy_nuget_config"
 
 composition_project="$script_dir/Sekiban.Dcb.TemplateComposition.csproj"
-run_net10 restore "$composition_project" --configfile "$nuget_config" --no-http-cache -p:DcbVersion="$version" --nologo
-run_net10 build "$composition_project" -c Release --no-restore -p:DcbVersion="$version" --nologo
-run_net10 "$script_dir/bin/Release/net10.0/Sekiban.Dcb.TemplateComposition.dll"
+for tfm in net10.0 net11.0; do
+  dotnet_for_tfm=run_net10
+  if [[ "$tfm" == net11.0 ]]; then dotnet_for_tfm=run_net11; fi
+  "$dotnet_for_tfm" restore "$composition_project" --configfile "$nuget_config" --no-http-cache -p:DcbVersion="$version" -p:TargetFramework="$tfm" --nologo
+  "$dotnet_for_tfm" build "$composition_project" -c Release --no-restore -p:DcbVersion="$version" -p:TargetFramework="$tfm" --nologo
+  "$dotnet_for_tfm" "$script_dir/bin/Release/$tfm/Sekiban.Dcb.TemplateComposition.dll"
+done
 
 legacy_project="$script_dir/Sekiban.Dcb.TemplateLegacyComposition.csproj"
 run_legacy_net10 restore "$legacy_project" --configfile "$legacy_nuget_config" --no-http-cache -p:DcbVersion=10.8.2 --nologo

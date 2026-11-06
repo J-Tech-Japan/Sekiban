@@ -4,7 +4,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
-        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -13,7 +13,6 @@
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
         <PackageReference Include="xunit" Version="2.9.3" />
         <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
             <PrivateAssets>all</PrivateAssets>
@@ -21,6 +20,14 @@
         </PackageReference>
         <PackageReference Include="ResultBoxes" Version="0.4.0"/>
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0-rc.3.26522.148" />
     </ItemGroup>
 
     <ItemGroup>
