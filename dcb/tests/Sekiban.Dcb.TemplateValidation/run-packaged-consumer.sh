@@ -8,7 +8,7 @@ feed=""
 version=""
 
 usage() {
-  echo "Usage: $0 [--repo-root <path>] [--package <nupkg>] [--feed <directory>] [--version <stable-version>]" >&2
+  echo "Usage: $0 [--repo-root <path>] [--package <nupkg>] [--feed <directory>] [--version <version>]" >&2
   exit 2
 }
 
@@ -348,7 +348,11 @@ fi
 expect_unavailable_package_restore_and_build "$broken_reference_solution" "$broken_reference_version"
 
 currency_mutant="$work_root/mutant-currency"
-run_net10 "$validator" mutate --source "$negative_output" --destination "$currency_mutant" --kind currency
+stale_version="10.23.0"
+if [[ "$version" == *-preview* ]]; then
+  stale_version="10.23.0-preview01"
+fi
+run_net10 "$validator" mutate --source "$negative_output" --destination "$currency_mutant" --kind currency --stale-version "$stale_version"
 currency_solution="$(find "$currency_mutant" -maxdepth 1 -name '*.slnx' -print -quit)"
 if [[ -z "$currency_solution" ]]; then
   echo "The currency mutant did not contain a solution file." >&2
