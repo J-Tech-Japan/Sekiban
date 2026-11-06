@@ -152,14 +152,39 @@ cp lib/config/dev.sample.json lib/config/dev.json
 DCB を安定運用するには、予約衝突・プロジェクション遅延・ストレージ負荷を継続的に観測し、タグ設計と
 インフラ容量を調整することが重要です。
 
-## Orleans 10.3.1 依存関係の移行
+## Orleans 10.4.2 依存関係の移行
 
-`Sekiban.Dcb.Orleans.*` を使う DCB ホストは、直接参照する `Microsoft.Orleans.*` を 10.3.1 に揃え、
+`Sekiban.Dcb.Orleans.*` を使う DCB ホストは、直接参照する `Microsoft.Orleans.*` を 10.4.2 に揃え、
 クラスタ全体を同時にアップグレードしてください。DCB の権威ファイルはソース、内部利用プロジェクト、テスト、
-5 種類の生成テンプレートを同じバージョンで管理します。`Microsoft.Orleans.*` 10.3.1 は `net8.0` と `net10.0` の
+5 種類の生成テンプレートを同じバージョンで管理します。Orleans 10.4.2 のホスト/ランタイムパッケージは `net8.0` と `net10.0` の
 アセットグループだけを公開します。net9 は net8 グループ（適用される `Microsoft.Extensions.*` の下限は 8.0.x、例:
 `Microsoft.Extensions.Hosting` 8.0.1）を解決し、net10 は net10 グループ（下限 10.0.5）を解決します。`Polly` 8.6.4 と
-`Polly.Extensions` 8.6.5 は両グループの通常の推移依存です。10.0.1/10.3.1 が混在するローリングクラスタは検証済みサポートとはみなしません。
+`Polly.Extensions` 8.6.5 は両グループの通常の推移依存です。旧 Orleans/10.4.2 が混在するローリングクラスタは検証済みサポートとはみなしません。
 
-これはパッケージ/ランタイムの整合だけを行う変更です。保存データやスキーマの移行は不要で、Azure Queue を
+以下の PostgreSQL スキーマ更新は保存状態とリマインダーを保持します。この変更は、Azure Queue を
 巻き戻し可能にはせず、#1185 subscriber-recovery は含みません。Pure と Samples はこの DCB 更新の対象外です。
+
+> **10.4.2 更新:** クラスタ全体を同時に更新し、Orleans の異なるバージョンを混在させないでください。AWS テンプレートの PostgreSQL スクリプトを更新しました。[デプロイ時の更新手順](16_deployment.md#orleans-1042-postgresql-upgrade)を参照してください。Orleans 10.4.0 でリクエスト遅延の計器と grain メトリクスのディメンションが変わったため、ダッシュボードとアラートを更新してください。
+
+<a id="orleans-1042-postgresql-upgrade"></a>
+
+### Orleans 10.4.2 PostgreSQL 更新手順
+
+新規 AWS テンプレート DB と DynamoDB 内部ホストには v10.4.2 の PostgreSQL スクリプトを使用します。Main と Reminders は変更なし、Clustering はメンバーシップの同時実行制御と停止 silo の削除を更新し、Persistence は `timestamptz` / `now()` と `DeleteStorageKey` を使用します。
+
+`OrleansSchemaInitializer` は既存の正常な DB を更新しません。確認するのは `orleansquery` と `CleanupDefunctSiloEntriesKey` の存在だけです。この判定を変更しないでください。再初期化を強制すると grain 状態とリマインダーのテーブルが削除されます。バックアップを取得してクラスタの全ノードを停止し、テーブルを削除せずトランザクション内で次を適用してください。
+
+1. 配布する `PostgreSQL-Clustering.sql` から `update_i_am_alive_time`、`insert_membership`、`update_membership` の関数定義だけを取り出し、`CREATE FUNCTION` を `CREATE OR REPLACE FUNCTION` にして実行します。変更のない `insert_membership_version` はそのままにします。
+2. `UPDATE OrleansQuery SET QueryText = ... WHERE QueryKey = 'CleanupDefunctSiloEntriesKey'` で既存行を更新します。クエリ文字列全体は更新済みスクリプトから取得してください。新しい条件は古い `IAmAliveTime` と `StartTime`、空の `SuspectTimes`、停止状態 (`6`) です。`CleanupDefunctSiloEntryKey` がなければスクリプトの該当 `INSERT` を実行し、既存ならクエリ文字列を更新します。
+3. 任意で、旧値を UTC と解釈してストレージの日時列を揃えます。
+
+   ```sql
+   ALTER TABLE OrleansStorage
+     ALTER COLUMN modifiedon TYPE timestamptz
+     USING modifiedon AT TIME ZONE 'UTC';
+   ```
+
+   更新済み Persistence スクリプトの `CREATE OR REPLACE FUNCTION writetostorage` を実行します。旧 timestamp 列を維持する場合は、`now()` の変換が一貫するよう DB セッションを UTC にしてください。`DeleteStorageKey` がなければ該当行も追加できます。クエリを登録するだけでは既存状態は削除されません。テーブル作成スクリプト全体の再実行は避けてください。
+4. コミット後、全ノードを 10.4.2 で同時に起動します。[10.4.2 のクエリ読み込み](https://github.com/dotnet/orleans/blob/v10.4.2/src/AdoNet/Shared/Storage/DbStoredQueries.cs)は `CleanupDefunctSiloEntryKey` を任意として扱い、[既存の一括削除クエリにフォールバック](https://github.com/dotnet/orleans/blob/v10.4.2/src/AdoNet/Shared/Storage/RelationalOrleansQueries.cs)します。旧スキーマでも起動できますが、明示的に更新するまで新しい削除動作は適用されません。
+
+Orleans 10.4.0 は `orleans-app-requests-latency-bucket`、`-count`、`-sum` を小数ミリ秒単位の `orleans-app-requests-latency` ヒストグラムへ変更しました。OpenTelemetry View の境界とダッシュボード・アラートを更新してください。`orleans-grains` の `type` ラベルは正規の `grain_type` に変わり、activation ライフサイクルのメトリクスにも `grain_type` が追加されました。[10.4.0 更新情報](https://github.com/dotnet/orleans/releases/tag/v10.4.0)を参照してください。

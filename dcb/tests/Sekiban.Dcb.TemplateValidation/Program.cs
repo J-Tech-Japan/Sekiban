@@ -8,7 +8,7 @@ internal static class Program
 {
     private const string VersionProperty = "SekibanDcbVersion";
     private const string PropsFileName = "SekibanDcbTemplateVersion.props";
-    private const string OrleansVersion = "10.3.1";
+    private const string OrleansVersion = "10.4.2";
     private const string NonexistentPackageVersion = "999.999.999";
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex DcbVersionMention = new(

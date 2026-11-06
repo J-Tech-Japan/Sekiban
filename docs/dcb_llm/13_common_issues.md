@@ -698,7 +698,7 @@ selection, folding, retention, or cleanup policy.
 
 **Cause.** Applying a catch-up batch and the snapshot serialization that may follow perform synchronous work inside a grain turn. A large batch or state can keep that activation busy. Orleans measures each synchronous scheduler-task execution, not the total elapsed time of an asynchronous batch (I/O awaits can split it into multiple turns). The warning itself reports a busy activation, not a correctness failure; calls to that activation wait while the long turn runs.
 
-**Threshold.** After diagnosing the warning as catch-up work, raise Orleans `SchedulingOptions.TurnWarningLengthThreshold` only as far as needed. The Orleans 10.3.1 default is **1 second**. For example, in the silo's service configuration:
+**Threshold.** After diagnosing the warning as catch-up work, raise Orleans `SchedulingOptions.TurnWarningLengthThreshold` only as far as needed. The Orleans 10.4.2 default is **1 second**. For example, in the silo's service configuration:
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
@@ -710,6 +710,8 @@ services.Configure<SchedulingOptions>(options =>
 
 This setting is silo-wide: raising it also silences long-turn warnings from every other grain for durations below the new threshold, and reduces the long-turn metric observations counted at that threshold.
 
+The [10.4.2 scheduling options](https://github.com/dotnet/orleans/blob/v10.4.2/src/Orleans.Runtime/Configuration/Options/SchedulingOptions.cs) retain this default; the [scheduler logger registration](https://github.com/dotnet/orleans/blob/v10.4.2/src/Orleans.Runtime/Catalog/GrainTypeSharedContext.cs) still uses `WorkItemGroup`.
+
 **Log filtering alternative.** Filter `Orleans.Runtime.Scheduler.WorkItemGroup`, for example:
 
 ```csharp
@@ -718,7 +720,7 @@ using Microsoft.Extensions.Logging;
 logging.AddFilter("Orleans.Runtime.Scheduler.WorkItemGroup", LogLevel.Error);
 ```
 
-This is the category of the scheduler logger that emits the warning in Orleans 10.3.1. The category filter is equally broad across grains and also suppresses other scheduler warnings in that category. Neither raising the threshold nor filtering logs makes catch-up or calls faster.
+This is the category of the scheduler logger that emits the warning in Orleans 10.4.2. The category filter is equally broad across grains and also suppresses other scheduler warnings in that category. Neither raising the threshold nor filtering logs makes catch-up or calls faster.
 
 **Batch sizes and queries.** The other lever is to lower the two configurable batch sizes: `GeneralMultiProjectionActorOptions.CatchUpBatchSize` (default **500**) and `ColdEventStoreOptions.ColdCatchUpBatchSize` (default **100,000**). After a cold read, the requested batch size is at least the configured cold size (the maximum of the normal and cold sizes). The streaming path applies fixed chunks of **4096** (`StreamingCatchUpApplyChunkSize`), which is not configurable. Smaller configurable batches can reduce synchronous work per batch; snapshot serialization can still be expensive. For the query side, see [First query times out during catch-up](#first-query-times-out-during-catch-up-sek-g90-1253-item-5): `FirstQueryCatchUpMaxWaitMs` bounds the first-query gate wait when positive, but excludes activation and request queuing and is not a total response-time guarantee.
 
@@ -876,3 +878,5 @@ The end-to-end contract is in
 deactivation, a fresh Active checkpoint, then restore without full replay. It uses the in-memory
 provider; PostgreSQL/Cosmos administration and a whole-host restart are not exercised by this test.
 The product's store-ahead check is unchanged.
+
+> **10.4.2 upgrade:** Upgrade the whole cluster together; mixed Orleans versions are unsupported. AWS template PostgreSQL scripts were refreshed. See [the deployment upgrade steps](16_deployment.md#orleans-1042-postgresql-upgrade). Orleans 10.4.0 changed request-latency instruments and grain metric dimensions; update dashboards and alerts.

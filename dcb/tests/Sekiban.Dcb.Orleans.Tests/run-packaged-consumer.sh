@@ -52,7 +52,7 @@ for required in \
   'id="Sekiban.Dcb.Core" version="'$version'"' \
   'id="Sekiban.Dcb.Orleans.Core" version="'$version'"' \
   'id="Azure.Storage.Queues" version="12.25.0"' \
-  'id="Microsoft.Orleans.Streaming.AzureStorage" version="10.3.1"'; do
+  'id="Microsoft.Orleans.Streaming.AzureStorage" version="10.4.2"'; do
   grep -Fq "$required" <<<"$nuspec" || {
     echo "Azure Queue package nuspec is missing: $required" >&2
     exit 1

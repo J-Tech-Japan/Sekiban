@@ -25,14 +25,14 @@ DCB supports multiple cloud platforms for event persistence and projection snaps
 ## Orleans dependency alignment (SEK-G74)
 
 Hosts consuming `Sekiban.Dcb.Orleans.*` must use one stable `Microsoft.Orleans.*` version throughout the
-host and cluster. The DCB 10.22 line is aligned to **10.3.1** across the shipped Orleans package, internal
-hosts, tests, and generated DCB templates. `Microsoft.Orleans.*` 10.3.1 publishes only `net8.0` and `net10.0`
+host and cluster. The current DCB Orleans integration is aligned to **10.4.2** across the shipped Orleans package, internal
+hosts, tests, and generated DCB templates. The Orleans 10.4.2 host/runtime packages publish only `net8.0` and `net10.0`
 asset groups: net9 resolves the net8 group with applicable `Microsoft.Extensions.*` 8.0.x floors (for example,
 `Microsoft.Extensions.Hosting` 8.0.1), while net10 resolves the net10 group with a 10.0.5 floor. `Polly` 8.6.4
-and `Polly.Extensions` 8.6.5 remain normal transitive dependencies in both groups. Upgrade all cluster nodes together. A mixed 10.0.1/10.3.1
-rolling cluster is not a verified support mode. This dependency alignment has no stored-data or schema
-migration, does not make Azure Queue rewindable, and does not include #1185 subscriber recovery; Pure and
+and `Polly.Extensions` 8.6.5 remain normal transitive dependencies in both groups. Upgrade all cluster nodes together. Mixed Orleans versions in a rolling cluster are unsupported. The PostgreSQL schema upgrade is described in the deployment guide; this alignment does not make Azure Queue rewindable, and does not include #1185 subscriber recovery; Pure and
 Samples remain outside the DCB boundary.
+
+Orleans 10.4.2 also brings `Microsoft.Orleans.Analyzers` and `Microsoft.Orleans.CodeGenerator` as direct dependencies of Core, Runtime, Serialization, and Streaming.AzureStorage. Serialization also ships a `.NETStandard2.1` group. Serialization-only Domain/EventSource projects now run the generator and analyzers too. The transitive `Microsoft.CodeAnalysis.Analyzers` version rises from 3.11.0 to 5.9.0; no separate DCB package reference is raised.
 
 ## Platform Comparison
 
@@ -1181,3 +1181,5 @@ application handlers must remain idempotent.
 The retry and queue settings are delivery controls, not an arbitrary byte ceiling. This publisher does not certify an Orleans
 provider envelope, queue-service limit, batch limit, or custom application side effect. If a provider-specific size gate is
 configured, its separate capability contract applies; otherwise no provider byte limit is implied by these publisher options.
+
+> **10.4.2 upgrade:** Upgrade the whole cluster together; mixed Orleans versions are unsupported. AWS template PostgreSQL scripts were refreshed. See [the deployment upgrade steps](16_deployment.md#orleans-1042-postgresql-upgrade). Orleans 10.4.0 changed request-latency instruments and grain metric dimensions; update dashboards and alerts.

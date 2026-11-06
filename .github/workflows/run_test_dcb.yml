@@ -98,7 +98,7 @@ jobs:
       - name: Verify DCB Orleans version authorities
         run: |
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/run-orleans-version-validation.sh \
-            --repo-root "$GITHUB_WORKSPACE" --version 10.3.1
+            --repo-root "$GITHUB_WORKSPACE" --version 10.4.2
 
       - name: Start pinned DynamoDB Local for G67
         run: |
@@ -203,7 +203,7 @@ jobs:
       - name: Verify DCB Orleans version authorities
         run: |
           bash dcb/tests/Sekiban.Dcb.TemplateValidation/run-orleans-version-validation.sh \
-            --repo-root "$GITHUB_WORKSPACE" --version 10.3.1
+            --repo-root "$GITHUB_WORKSPACE" --version 10.4.2
 
       - name: Start pinned DynamoDB Local for G67
         run: |

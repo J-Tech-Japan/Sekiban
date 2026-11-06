@@ -237,7 +237,7 @@ class Fixture:
         for framework, relational in [('net9.0','9.0.13'),('net10.0','10.0.3')]:
             deps=[]
             if id=='Sekiban.Dcb.Postgres': deps=[('Microsoft.EntityFrameworkCore.Relational',relational)]
-            if id=='Sekiban.Dcb.Orleans.AzureQueue': deps=[('Azure.Storage.Queues','12.25.0'),('Microsoft.Orleans.Streaming.AzureStorage','10.3.1')]
+            if id=='Sekiban.Dcb.Orleans.AzureQueue': deps=[('Azure.Storage.Queues','12.25.0'),('Microsoft.Orleans.Streaming.AzureStorage','10.4.2')]
             groups+=f'<group targetFramework="{framework}">'+''.join(f'<dependency id="{n}" version="{v}" />' for n,v in deps)+'</group>'
         with zipfile.ZipFile(path,'w') as archive:
             archive.writestr(f'{id}.nuspec',f'<package><metadata><id>{id}</id><version>{version}</version><dependencies>{groups}</dependencies></metadata></package>')
