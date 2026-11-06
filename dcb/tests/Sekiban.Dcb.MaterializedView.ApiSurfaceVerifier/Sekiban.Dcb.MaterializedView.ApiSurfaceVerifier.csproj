@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- net10 consumers resolve the MV hosting abstractions from the shared framework. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="10.0.3" />
   </ItemGroup>
 </Project>
