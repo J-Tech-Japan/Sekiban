@@ -241,9 +241,11 @@ class Fixture:
     def package(self,path,id,template=False,version=None):
         version=version or self.version
         groups=''
-        for framework, relational in [('net9.0','9.0.13'),('net10.0','10.0.3')]:
+        for framework, relational in [('net10.0','10.0.3'),('net11.0','11.0.0-rc.3.26522.148')]:
             deps=[]
             if id=='Sekiban.Dcb.Postgres': deps=[('Microsoft.EntityFrameworkCore.Relational',relational)]
+            if id=='Sekiban.Dcb.Core': deps=[('Microsoft.Extensions.Logging.Abstractions',relational)]
+            if id=='Sekiban.Dcb.Sqlite': deps=[('Microsoft.Data.Sqlite',relational)]
             if id=='Sekiban.Dcb.Orleans.AzureQueue': deps=[('Azure.Storage.Queues','12.25.0'),('Microsoft.Orleans.Streaming.AzureStorage','10.4.2')]
             groups+=f'<group targetFramework="{framework}">'+''.join(f'<dependency id="{n}" version="{v}" />' for n,v in deps)+'</group>'
         with zipfile.ZipFile(path,'w') as archive:
@@ -755,6 +757,35 @@ def later_release_cases(source, root):
         print(f'PASS historical {"20e02544 real record" if exists else "pre-SEK-G125 layout"} library {state} with dispatched tooling and separate candidate (live API fixture)',flush=True)
 
 
+def package_group_cases(source, root):
+    f = Fixture(source, root/'package-groups', VERSIONS[0])
+    feed = f.root/'library-feed'
+    feed.mkdir()
+    for id in f.ids:
+        shutil.copy2(f.local/f'{id}.{f.version}.nupkg', feed)
+    command = [f.dotnet, str(f.dll), 'packages', '--directory', str(feed), '--expected-version', f.version]
+    run(command, f.repo, f.env)
+    path = feed/f'Sekiban.Dcb.Core.{f.version}.nupkg'
+    original = path.read_bytes()
+    for case, reason in [('third-net9-group', 'must have exactly net10.0 and net11.0 dependency groups'),
+                         ('wrong-net11-version', 'Microsoft.Extensions.Logging.Abstractions in net11.0 must be 11.0.0-rc.3.26522.148')]:
+        path.write_bytes(original)
+        with zipfile.ZipFile(path) as archive:
+            entries = {entry.filename: archive.read(entry) for entry in archive.infolist()}
+        name = next(name for name in entries if name.endswith('.nuspec'))
+        if case == 'third-net9-group':
+            entries[name] = entries[name].replace(b'</dependencies>', b'<group targetFramework="net9.0" /></dependencies>')
+        else:
+            entries[name] = entries[name].replace(b'11.0.0-rc.3.26522.148', b'10.0.3')
+        with zipfile.ZipFile(path, 'w') as archive:
+            for name, content in entries.items(): archive.writestr(name, content)
+        try: run(command, f.repo, f.env)
+        except Failure as error:
+            if reason not in str(error): raise
+            print(f'PASS rejects {case}: {reason}', flush=True)
+        else: raise Failure(case+' unexpectedly passed')
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repo-root',type=Path,default=Path(__file__).resolve().parents[3])
@@ -768,6 +799,7 @@ def main():
         write_json(build_host/'global.json',{'sdk':{'version':'10.0.100','rollForward':'latestFeature','allowPrerelease':False}})
         print(run(['dotnet','build',str(source/REL/'Sekiban.Dcb.TemplateValidation.csproj'),
                    '-c','Release','--nologo','-p:NuGetAudit=false'],build_host),flush=True)
+        package_group_cases(source, root)
         preview_cases(source, root, args.self_test)
         for version in VERSIONS:
             f=Fixture(source,root/('pass-'+version),version)

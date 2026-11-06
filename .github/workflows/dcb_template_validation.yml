@@ -66,6 +66,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+
+      - name: Setup .NET 11 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.100-rc.3.26522.148
       - name: Run template consumer against nuget.org
         run: |
           VERSION="$(bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-template-version.sh --repo-root "$GITHUB_WORKSPACE")"
@@ -87,6 +92,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+
+      - name: Setup .NET 11 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.100-rc.3.26522.148
 
       - name: Derive version from the five template authorities
         run: |
@@ -146,6 +156,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Setup .NET 11 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.100-rc.3.26522.148
+
       - name: Log SDK and runner image
         run: |
           dotnet --info
@@ -187,6 +202,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+
+      - name: Setup .NET 11 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.100-rc.3.26522.148
 
       - name: Log SDK and runner image
         run: |

@@ -67,13 +67,14 @@ export NUGET_HTTP_CACHE_PATH="$temp_root/nuget-http-cache"
 export NUGET_PACKAGES="$temp_root/nuget-packages"
 mkdir -p "$DOTNET_CLI_HOME" "$NUGET_HTTP_CACHE_PATH" "$NUGET_PACKAGES"
 
-net9_host="$temp_root/net9-host"
 net10_host="$temp_root/net10-host"
-mkdir -p "$net9_host" "$net10_host"
-printf '%s\n' '{"sdk":{"version":"9.0.100","rollForward":"latestFeature","allowPrerelease":false}}' > "$net9_host/global.json"
+mkdir -p "$net10_host"
 printf '%s\n' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allowPrerelease":false}}' > "$net10_host/global.json"
-run_net9() { (cd "$net9_host" && dotnet "$@"); }
-run_net10() { (cd "$net10_host" && dotnet "$@"); }
+run_net10() { (cd "$net10_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
+net11_host="$temp_root/net11-host"
+mkdir -p "$net11_host"
+printf '%s\n' '{"sdk":{"version":"11.0.100-rc.3.26522.148","rollForward":"latestFeature","allowPrerelease":true}}' > "$net11_host/global.json"
+run_net11() { (cd "$net11_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
 
 feed="$temp_root/candidate-feed"
 mutant_feed="$temp_root/mutant-feed"
@@ -110,7 +111,7 @@ pack_chain() {
     "$source_root/dcb/src/Sekiban.Dcb.Core.Model/Sekiban.Dcb.Core.Model.csproj" \
     "$source_root/dcb/src/Sekiban.Dcb.Core/Sekiban.Dcb.Core.csproj" \
     "$source_root/dcb/src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj"; do
-    run_net10 restore "$project" \
+    run_net11 restore "$project" \
       --configfile "$config" \
       --no-http-cache \
       --nologo \
@@ -118,7 +119,7 @@ pack_chain() {
       -p:PackageVersion="$package_version" \
       -p:Version="$package_version" \
       -p:GeneratePackageOnBuild=false
-    run_net10 pack "$project" \
+    run_net11 pack "$project" \
       -c Release \
       --no-restore \
       --nologo \
@@ -143,7 +144,7 @@ pack_chain_no_build() {
     "$source_root/dcb/src/Sekiban.Dcb.Core.Model/Sekiban.Dcb.Core.Model.csproj" \
     "$source_root/dcb/src/Sekiban.Dcb.Core/Sekiban.Dcb.Core.csproj" \
     "$source_root/dcb/src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj"; do
-    run_net10 restore "$project" \
+    run_net11 restore "$project" \
       --configfile "$config" \
       --no-http-cache \
       --nologo \
@@ -151,7 +152,7 @@ pack_chain_no_build() {
       -p:PackageVersion="$package_version" \
       -p:Version="$package_version" \
       -p:GeneratePackageOnBuild=false
-    run_net10 pack "$project" \
+    run_net11 pack "$project" \
       -c Release \
       --no-restore \
       --no-build \
@@ -201,13 +202,13 @@ for package_name in Sekiban.Dcb.Core.Model Sekiban.Dcb.Core Sekiban.Dcb.Postgres
   assert_package "$feed/$package_name.$version.nupkg"
 done
 postgres_package="$feed/Sekiban.Dcb.Postgres.$version.nupkg"
-assert_nuspec_dependency "$postgres_package" '9.0' '9.0.13'
+assert_nuspec_dependency "$postgres_package" '11.0' '11.0.0-rc.3.26522.148'
 assert_nuspec_dependency "$postgres_package" '10.0' '10.0.3'
 if unzip -p "$postgres_package" '*.nuspec' | grep -q 'Microsoft.EntityFrameworkCore.Design'; then
   echo 'EF Core Design leaked into the Sekiban.Dcb.Postgres nuspec.' >&2
   exit 1
 fi
-echo "nuspec: Relational 9.0.13 and 10.0.3 present; EF Core Design absent"
+echo "nuspec: Relational 10.0.3 and 11.0.0-rc.3.26522.148 present; EF Core Design absent"
 
 consumer_project="$repo_root/dcb/tests/Sekiban.Dcb.Postgres.PackagedConsumer/Sekiban.Dcb.Postgres.PackagedConsumer.csproj"
 
@@ -217,14 +218,20 @@ run_consumer() {
   local config="$3"
   local cache="$4"
   local tfm="$5"
+  # Npgsql 11 rc.3 pins Relational to exactly the same prerelease as this build,
+  # so its transitive edge masks a missing direct reference at runtime. Check the
+  # direct closure as well; the net10 mutant still exercises the assembly failure.
+  if [[ "$label" == mutant && "$tfm" == net11.0 ]]; then
+    (assert_nuspec_dependency "$mutant_feed/Sekiban.Dcb.Postgres.$package_version.nupkg" '11.0' '11.0.0-rc.3.26522.148') || return 1
+  fi
   local output_root="$temp_root/consumer-$label-$tfm"
   local output="$output_root/Release/$tfm/Sekiban.Dcb.Postgres.PackagedConsumer.dll"
   mkdir -p "$cache" "$output_root"
   local dotnet_for_tfm=run_net10
-  if [[ "$tfm" == 'net9.0' ]]; then
-    dotnet_for_tfm=run_net9
+  if [[ "$tfm" == 'net11.0' ]]; then
+    dotnet_for_tfm=run_net11
   fi
-  NUGET_PACKAGES="$cache" run_net10 restore "$consumer_project" \
+  NUGET_PACKAGES="$cache" "$dotnet_for_tfm" restore "$consumer_project" \
     --configfile "$config" \
     --no-http-cache \
     --nologo \
@@ -233,7 +240,7 @@ run_consumer() {
     -p:G62CandidatePackageVersion="$package_version" \
     -p:BaseOutputPath="$output_root/" \
     -p:BaseIntermediateOutputPath="$output_root/obj/"
-  NUGET_PACKAGES="$cache" run_net10 build "$consumer_project" \
+  NUGET_PACKAGES="$cache" "$dotnet_for_tfm" build "$consumer_project" \
     --framework "$tfm" \
     -c Release \
     --no-restore \
@@ -245,14 +252,14 @@ run_consumer() {
   NUGET_PACKAGES="$cache" "$dotnet_for_tfm" "$output"
 }
 
-for tfm in net9.0 net10.0; do
+for tfm in net10.0 net11.0; do
   echo "--- positive packaged consumer $tfm ---"
   run_consumer positive "$version" "$candidate_config" "$temp_root/positive-cache-$tfm" "$tfm"
 done
 
 # Do not let a compiler server carrying candidate absolute paths affect the independently
 # repacked omission mutant.
-run_net10 build-server shutdown --vbcs --node >/dev/null 2>&1 || true
+run_net11 build-server shutdown --vbcs --node >/dev/null 2>&1 || true
 
 mutant_root="$temp_root/mutant-source"
 mkdir -p "$mutant_root"
@@ -271,7 +278,7 @@ for project_root in \
 done
 mutant_project="$mutant_root/dcb/src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj"
 before_mutant_refs="$(grep -c 'Microsoft.EntityFrameworkCore.Relational' "$mutant_project")"
-perl -0pi -e 's/^\s*<PackageReference Include="Microsoft\.EntityFrameworkCore\.Relational" Version="(?:9\.0\.13|10\.0\.3)"\/>\s*\n//mg' "$mutant_project"
+perl -0pi -e 's/^\s*<PackageReference Include="Microsoft\.EntityFrameworkCore\.Relational" Version="(?:10\.0\.3|11\.0\.0-rc\.3\.26522\.148)"\/>\s*\n//mg' "$mutant_project"
 after_mutant_refs="$(grep -c 'Microsoft.EntityFrameworkCore.Relational' "$mutant_project" || true)"
 if [[ "$before_mutant_refs" != 2 || "$after_mutant_refs" != 0 ]]; then
   echo "Omission mutant removed an unexpected number of Relational references: before=$before_mutant_refs after=$after_mutant_refs" >&2
@@ -283,7 +290,7 @@ for package_name in Sekiban.Dcb.Core.Model Sekiban.Dcb.Core Sekiban.Dcb.Postgres
   assert_package "$mutant_feed/$package_name.$mutant_version.nupkg"
 done
 
-for tfm in net9.0 net10.0; do
+for tfm in net10.0 net11.0; do
   echo "--- omission mutant expected failure $tfm ---"
   mutant_log="$temp_root/mutant-$tfm.log"
   if run_consumer mutant "$mutant_version" "$mutant_config" "$temp_root/mutant-cache-$tfm" "$tfm" >"$mutant_log" 2>&1; then
@@ -293,10 +300,10 @@ for tfm in net9.0 net10.0; do
   fi
   cat "$mutant_log"
   if ! grep -Eqi 'FileNotFoundException|Microsoft\.EntityFrameworkCore\.Relational' "$mutant_log"; then
-    echo "The ${tfm} omission mutant failed without the expected missing Relational assembly diagnostic." >&2
+    echo "The ${tfm} omission mutant failed without the expected missing Relational dependency diagnostic." >&2
     exit 1
   fi
-  echo "mutant $tfm: expected missing Relational assembly failure observed"
+  echo "mutant $tfm: expected missing Relational dependency failure observed"
 done
 
-echo 'G62 packaged consumer regression passed for net9.0 and net10.0.'
+echo 'G62 packaged consumer regression passed for net10.0 and net11.0.'

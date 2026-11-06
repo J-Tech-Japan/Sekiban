@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <LangVersion>preview</LangVersion>
+        <LangVersion>15</LangVersion>
+        <!-- Keep the per-TFM dependency contract explicit in the packed nuspec. -->
+        <RestoreEnablePackagePruning Condition="'$(TargetFramework)' == 'net11.0'">false</RestoreEnablePackagePruning>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <AssemblyName>Sekiban.Dcb.MaterializedView</AssemblyName>
@@ -22,20 +24,30 @@
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <GenerateSBOM>true</GenerateSBOM>
-        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App"/>
-        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3"/>
-        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.3"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <None Include="../../README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.3"/>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="11.0.0-rc.3.26522.148"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="11.0.0-rc.3.26522.148"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="11.0.0-rc.3.26522.148"/>
+        <PackageReference Include="Microsoft.Extensions.Options" Version="11.0.0-rc.3.26522.148"/>
     </ItemGroup>
 
     <ItemGroup>

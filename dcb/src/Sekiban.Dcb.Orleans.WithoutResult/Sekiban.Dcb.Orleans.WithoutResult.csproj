@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <LangVersion>preview</LangVersion>
+        <LangVersion>15</LangVersion>
+        <!-- Keep the per-TFM dependency contract explicit in the packed nuspec. -->
+        <RestoreEnablePackagePruning Condition="'$(TargetFramework)' == 'net11.0'">false</RestoreEnablePackagePruning>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <AssemblyName>Sekiban.Dcb.Orleans.WithoutResult</AssemblyName>
@@ -21,7 +23,7 @@
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <GenerateSBOM>true</GenerateSBOM>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
         <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
 
