@@ -140,7 +140,10 @@ internal static class Program
                     CreateMutation(
                         Required(options, "source"),
                         Required(options, "destination"),
-                        RequiredValue(options, "kind"));
+                        RequiredValue(options, "kind"),
+                        RequiredValue(options, "kind") == "currency"
+                            ? RequiredValue(options, "stale-version")
+                            : null);
                     break;
 
                 default:
@@ -1314,7 +1317,7 @@ internal static class Program
         writer.Write(readme.Replace(requiredPayload, replacement, StringComparison.Ordinal));
     }
 
-    private static void CreateMutation(string source, string destination, string kind)
+    private static void CreateMutation(string source, string destination, string kind, string? staleVersion)
     {
         source = Path.GetFullPath(source);
         destination = Path.GetFullPath(destination);
@@ -1336,7 +1339,7 @@ internal static class Program
             case "currency":
                 var props = Directory.EnumerateFiles(destination, PropsFileName, SearchOption.AllDirectories).Single();
                 var propsDocument = XDocument.Load(props, LoadOptions.PreserveWhitespace);
-                propsDocument.Descendants().Single(element => element.Name.LocalName == VersionProperty).Value = "10.23.0";
+                propsDocument.Descendants().Single(element => element.Name.LocalName == VersionProperty).Value = staleVersion!;
                 propsDocument.Save(props);
                 return;
 

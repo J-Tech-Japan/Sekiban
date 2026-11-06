@@ -65,10 +65,10 @@ Preview GitHub Releases are prereleases and never Latest. Drift and
 latest-stable selection ignore previews. Template previews are not tagged for
 now, even though the authority reader and release validation accept their form.
 
-For reproducibility after SEK-G144, dispatch `dcb_release_reproducibility.yml`
-on the `dcb/v11` ref to rebuild a preview, or add SDK 11 to that workflow first.
-The workflow dispatched from main currently installs SDKs 8, 9 and 10 only.
-Its pull-request path continues selecting the highest stable tag.
+For reproducibility, preview rebuilds are dispatched with
+`dcb_release_reproducibility.yml` on the `dcb/v11` ref, whose workflow installs
+SDK 11 for preview versions. The pull-request path keeps selecting the highest
+stable tag.
 
 ## Template adjustment and release
 
