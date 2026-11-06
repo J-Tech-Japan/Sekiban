@@ -15,7 +15,7 @@ names = ['Sekiban.Dcb.Orleans', 'Sekiban.Dcb.Orleans.WithoutResult', 'Sekiban.Dc
 versions = []
 for name in names:
     values = [e.text.strip() for e in ET.parse(root / name / 'SekibanDcbTemplateVersion.props').iter('SekibanDcbVersion') if e.text]
-    if len(values) != 1 or not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', values[0]):
+    if len(values) != 1 or not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-preview(0[1-9]|[1-9][0-9]))?', values[0]):
         sys.exit(f'Invalid version authority: {name}')
     versions += values
 if len(set(versions)) != 1:

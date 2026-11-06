@@ -44,6 +44,32 @@ or a later main commit containing it. Never move an existing tag.
    update the variable and require `kind=library`, `state=complete` stage check.
    Only the library tag must peel to this record's `merged_sha`.
 
+## Preview releases (11 line)
+
+Library previews accept only `X.Y.Z-previewNN`, where NN is 01 through 99
+(for example `11.0.1-preview01`). They release only from `dcb/v11`:
+`merged_sha` must be an ancestor of `origin/dcb/v11` and must not be an
+ancestor of `origin/main`, including the fork point or main commits merged
+into v11. A missing `origin/dcb/v11` rejects previews; stable releases remain
+main-only. Full-depth checkouts fetch the branch when it exists.
+
+`dcb/v11` must contain this change before its first preview tag. Dispatch the
+workflows supplying all four record check aliases (`dcbTestsNet9`,
+`dcbTestsNet10`, `packagedConsumer`, `templateConsumer`) with `workflow_dispatch`
+on the exact `dcb/v11` candidate commit. Dispatch the stage check and
+`packagesDcb.yml` `trusted-publishing-check` on `main`; the stage check's
+candidate SHA may be on `dcb/v11`. All remaining record, body, consumer,
+publication and recovery guards apply unchanged.
+
+Preview GitHub Releases are prereleases and never Latest. Drift and
+latest-stable selection ignore previews. Template previews are not tagged for
+now, even though the authority reader and release validation accept their form.
+
+For reproducibility after SEK-G144, dispatch `dcb_release_reproducibility.yml`
+on the `dcb/v11` ref to rebuild a preview, or add SDK 11 to that workflow first.
+The workflow dispatched from main currently installs SDKs 8, 9 and 10 only.
+Its pull-request path continues selecting the highest stable tag.
+
 ## Template adjustment and release
 
 1. After V is public, audit the templates against best practice for a person

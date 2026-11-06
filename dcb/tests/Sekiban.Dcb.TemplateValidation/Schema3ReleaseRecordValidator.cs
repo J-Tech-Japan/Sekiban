@@ -24,6 +24,18 @@ internal sealed class GitHubReleaseApi : IReleaseApi
 
 internal static class ReleaseProcess
 {
+    internal static int ExitCode(string cwd, params string[] args)
+    {
+        var start = new ProcessStartInfo("git") { WorkingDirectory = cwd, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var arg in args) start.ArgumentList.Add(arg);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Cannot start git.");
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        process.WaitForExit();
+        Task.WaitAll(stdout, stderr);
+        return process.ExitCode;
+    }
+
     internal static string Run(string command, string? cwd, params string[] args)
     {
         var start = new ProcessStartInfo(command) { RedirectStandardOutput = true, RedirectStandardError = true };
@@ -54,7 +66,7 @@ internal static class Schema3ReleaseRecordValidator
 
     internal static string Validate(string bundle, string manifest, string repoRoot, string version, string state, string recordKind, IReleaseApi api)
     {
-        Require(Regex.IsMatch(version, @"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$", RegexOptions.None, TimeSpan.FromSeconds(1)), "Invalid release version.");
+        Require(Regex.IsMatch(version, @"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-preview(0[1-9]|[1-9][0-9]))?$", RegexOptions.None, TimeSpan.FromSeconds(1)), "Invalid release version.");
         Require(recordKind is "library" or "template", "Kind must be library or template.");
         var checks = recordKind == "library" ? Checks : [("templatePublicConsumer", "dcb_template_validation.yml", "Published-library template consumer")];
         Require(state is "prepared" or "complete", "Stage must be prepared or complete.");
@@ -99,8 +111,18 @@ internal static class Schema3ReleaseRecordValidator
         var merged = Text(record, "merged_sha");
         Require(Hex(merged, 40), "Invalid merged_sha.");
         Require(ReleaseProcess.Run("git", repoRoot, "rev-parse", "HEAD^{commit}").Trim() == merged, "merged_sha does not equal checked-out HEAD.");
-        // A full checkout/fetch of main is mandatory. merge-base accepts any ancestor, not only its tip.
-        ReleaseProcess.Run("git", repoRoot, "merge-base", "--is-ancestor", merged, "origin/main");
+        // fetch-depth: 0 supplies remote branches, including dcb/v11 when it exists.
+        if (version.Contains("-preview", StringComparison.Ordinal))
+        {
+            Require(ReleaseProcess.ExitCode(repoRoot, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/dcb/v11") == 0,
+                "Prerelease requires origin/dcb/v11; remote branch is missing.");
+            Require(ReleaseProcess.ExitCode(repoRoot, "merge-base", "--is-ancestor", merged, "origin/dcb/v11") == 0,
+                "Prerelease merged_sha must be an ancestor of origin/dcb/v11.");
+            Require(ReleaseProcess.ExitCode(repoRoot, "merge-base", "--is-ancestor", merged, "origin/main") == 1,
+                "Prerelease merged_sha must not be an ancestor of origin/main.");
+        }
+        else
+            ReleaseProcess.Run("git", repoRoot, "merge-base", "--is-ancestor", merged, "origin/main");
         var recordedChecks = record.GetProperty("checks").EnumerateArray().ToArray();
         Require(recordedChecks.Length == checks.Length, $"Exactly {(recordKind == "library" ? "four" : "one")} check aliases are required.");
         var names = new HashSet<string>(StringComparer.Ordinal);

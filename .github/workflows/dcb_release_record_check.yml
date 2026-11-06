@@ -11,7 +11,7 @@ on:
           - library
           - template
       version:
-        description: SemVer x.y.z release version
+        description: Release version x.y.z or x.y.z-previewNN (01-99)
         required: true
         type: string
       state:
@@ -56,8 +56,8 @@ jobs:
       - name: Validate dispatch inputs
         run: |
           [[ "$INPUT_KIND" == library || "$INPUT_KIND" == template ]] || exit 1
-          [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-            echo "version must match ^[0-9]+\\.[0-9]+\\.[0-9]+$." >&2
+          [[ "$INPUT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-preview(0[1-9]|[1-9][0-9]))?$ ]] || {
+            echo "version must be x.y.z or x.y.z-previewNN (01-99), without leading zeros." >&2
             exit 1
           }
           [[ "$INPUT_REF" =~ ^[0-9a-fA-F]{40}$ ]] || {

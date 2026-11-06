@@ -12,7 +12,7 @@ internal static class Program
     private const string NonexistentPackageVersion = "999.999.999";
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex DcbVersionMention = new(
-        @"Sekiban\.Dcb[ \t]+(?<version>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(?![0-9A-Za-z.+-])",
+        @"Sekiban\.Dcb[ \t]+(?<version>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-preview(?:0[1-9]|[1-9][0-9]))?)(?![0-9A-Za-z.+-])",
         RegexOptions.CultureInvariant,
         RegexTimeout);
 
@@ -619,6 +619,14 @@ internal static class Program
                !publicJob.Contains("      if:", StringComparison.Ordinal) && !publicJob.Contains("--feed", StringComparison.Ordinal) &&
                !publicJob.Contains("continue-on-error", StringComparison.Ordinal),
             "Published-library evidence requires a conditioned job with an unconditional nuget.org consumer.");
+        foreach (var releaseWorkflow in new[] { dcbPackageWorkflow, publishWorkflow })
+        {
+            var release = File.ReadAllText(releaseWorkflow).Split("uses: softprops/action-gh-release@v2")[1].Split("  trusted-publishing-check:")[0];
+            Assert(release.Contains("          prerelease: ${{ contains(github.ref_name, '-preview') }}\n", StringComparison.Ordinal),
+                "Release prerelease input must use the preview expression.");
+            Assert(release.Contains("          make_latest: ${{ contains(github.ref_name, '-preview') && 'false' || 'true' }}\n", StringComparison.Ordinal),
+                "Release make_latest input must use the preview expression.");
+        }
         Assert(File.Exists(stageCheckWorkflow), "The DCB release record stage-check workflow is missing.");
         Assert(File.Exists(workflowHarnessScript), "The workflow harness script is missing.");
         Assert(File.Exists(libraryPackDeterminismScript), "The library pack determinism script is missing.");
@@ -996,7 +1004,7 @@ internal static class Program
                text.Contains("INPUT_REF: ${{ inputs.ref }}", StringComparison.Ordinal) &&
                text.Contains("INPUT_CANDIDATE: ${{ inputs.candidate }}", StringComparison.Ordinal),
             "Stage-check inputs must reach scripts only through env:.");
-        Assert(text.Contains("^[0-9]+\\.[0-9]+\\.[0-9]+$", StringComparison.Ordinal) &&
+        Assert(text.Contains(@"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-preview(0[1-9]|[1-9][0-9]))?$", StringComparison.Ordinal) &&
                text.Contains("^[0-9a-fA-F]{40}$", StringComparison.Ordinal),
             "Stage-check must validate version and 40-hex ref/candidate patterns.");
         Assert(text.Contains("read-host-release-record.sh", StringComparison.Ordinal) &&
