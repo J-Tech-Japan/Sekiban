@@ -446,6 +446,10 @@ run_net10 "$validator" docs-currency --repo-root "$false_positive_fixture" --exp
 invalid_versions=(
   "${version}.1"
   "${version}-preview"
+  "${version}-preview1"
+  "${version}-preview00"
+  "${version}-rc01"
+  "${version}-preview01"
   "${version}x"
   "0${version}"
   '10.01.0'
@@ -459,7 +463,7 @@ for invalid_version in "${invalid_versions[@]}"; do
   currency_failure_reason="Expected exactly one whole-token Sekiban.Dcb version mention"
   # Appending a digit can form a valid but wrong version (10.23.1 -> 10.23.10).
   # Keep requiring rejection, with the validator's precise reason for that case.
-  if [[ "$invalid_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+  if [[ "$invalid_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-preview(0[1-9]|[1-9][0-9]))?$ ]]; then
     currency_failure_reason="The sole template Markdown Sekiban.Dcb version must be $version"
   fi
   expect_failure_reason "$currency_failure_reason" run_net10 "$validator" docs-currency --repo-root "$invalid_fixture" --expected-version "$version"
@@ -529,6 +533,25 @@ copy_workflow_fixture() {
 
 # SEK-G141: each mutation is checked independently in each publish workflow.
 for publish_workflow in packagesDcb.yml packagesDcbTemplate.yml; do
+  for release_mutation in remove-prerelease remove-make_latest fixed-prerelease fixed-make_latest; do
+    release_mutant="$work_root/release-${publish_workflow}-${release_mutation}"
+    copy_workflow_fixture "$release_mutant"
+    release_file="$release_mutant/.github/workflows/$publish_workflow"
+    python3 - "$release_file" "$release_mutation" <<'RELEASE_MUTANT'
+from pathlib import Path
+import re, sys
+path = Path(sys.argv[1])
+operation, key = sys.argv[2].split('-', 1)
+replacement = '' if operation == 'remove' else f"          {key}: {'false' if key == 'prerelease' else 'true'}\n"
+path.write_text(re.sub(r'^          ' + key + r':.*\n', replacement, path.read_text(), flags=re.M))
+RELEASE_MUTANT
+    if cmp -s "$repo_root/.github/workflows/$publish_workflow" "$release_file"; then
+      echo "Could not construct $release_mutation for $publish_workflow." >&2
+      exit 1
+    fi
+    release_key="${release_mutation#*-}"
+    expect_failure_reason "Release $release_key input must use the preview expression." run_net10 "$validator" workflow --repo-root "$release_mutant"
+  done
   for trusted_mutation in legacy-key build-environment build-permission early-login check-push unnamed-between wrong-output extra-check-step; do
     trusted_mutant="$work_root/trusted-${publish_workflow}-${trusted_mutation}"
     copy_workflow_fixture "$trusted_mutant"

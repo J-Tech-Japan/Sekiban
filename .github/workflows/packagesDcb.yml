@@ -201,6 +201,8 @@ jobs:
           files: out/*.nupkg
           body_path: out/library-release-body.md
           draft: false
+          prerelease: ${{ contains(github.ref_name, '-preview') }}
+          make_latest: ${{ contains(github.ref_name, '-preview') && 'false' || 'true' }}
 
   trusted-publishing-check:
     if: github.event_name == 'workflow_dispatch'

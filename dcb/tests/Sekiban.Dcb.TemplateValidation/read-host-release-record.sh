@@ -4,7 +4,7 @@ set -euo pipefail
 host_repository="J-Tech-Japan/SekibanIntentHost"
 record_kind=""; version=""; state=""; output_dir=""; manifest_path=""
 ref="${SEKIBAN_RELEASE_RECORD_REF:-}"
-usage() { echo 'Usage: read-host-release-record.sh --kind library|template --version <x.y.z> --state prepared|complete --output-dir <dir> --manifest <dir>/bundle.json [--ref <40-hex>]' >&2; exit 2; }
+usage() { echo 'Usage: read-host-release-record.sh --kind library|template --version <x.y.z[-previewNN]> --state prepared|complete --output-dir <dir> --manifest <dir>/bundle.json [--ref <40-hex>]' >&2; exit 2; }
 while (( $# )); do
   case "$1" in
     --kind) record_kind="$2"; shift 2 ;;
@@ -16,7 +16,7 @@ while (( $# )); do
     *) usage ;;
   esac
 done
-[[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && -n "$output_dir" && -n "$manifest_path" ]] || usage
+[[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-preview(0[1-9]|[1-9][0-9]))?$ && -n "$output_dir" && -n "$manifest_path" ]] || usage
 [[ "$record_kind" == library || "$record_kind" == template ]] || usage
 [[ "$state" == prepared || "$state" == complete ]] || usage
 [[ -n "${GH_TOKEN:-}" ]] || { echo 'SEKIBAN_RELEASE_RECORD_TOKEN is required as GH_TOKEN.' >&2; exit 1; }

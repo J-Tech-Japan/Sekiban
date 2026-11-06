@@ -38,7 +38,7 @@ jobs:
           else
             VERSION="$REQUESTED_VERSION"
           fi
-          [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || exit 1
+          [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-preview(0[1-9]|[1-9][0-9]))?$ ]] || exit 1
           echo "TOOLING_SHA=$TOOLING_SHA" >> "$GITHUB_ENV"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           git checkout --detach "dcb-v${VERSION}"

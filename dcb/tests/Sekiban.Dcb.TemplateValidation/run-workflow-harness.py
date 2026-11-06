@@ -119,11 +119,18 @@ class Fixture:
         run(['git','config','user.name','SEK-G122 offline fixture'], self.repo)
         run(['git','config','user.email','offline@example.invalid'], self.repo)
         run(['git','add','.'], self.repo)
-        run(['git','commit','-m','offline merged candidate'], self.repo)
+        if '-preview' in version:
+            run(['git','commit','-m','main fork point'], self.repo)
+            self.main=run(['git','rev-parse','HEAD'],self.repo).strip()
+            run(['git','checkout','-b','dcb/v11'],self.repo)
+        run(['git','commit','--allow-empty','-m','offline merged candidate'], self.repo)
         self.sha=run(['git','rev-parse','HEAD'], self.repo).strip()
-        # Main has advanced: the candidate must pass as an older ancestor.
-        run(['git','commit','--allow-empty','-m','newer main tip'], self.repo)
-        self.main=run(['git','rev-parse','HEAD'],self.repo).strip()
+        if '-preview' in version:
+            run(['git','update-ref','refs/remotes/origin/dcb/v11',self.sha],self.repo)
+        else:
+            # Main has advanced: the candidate must pass as an older ancestor.
+            run(['git','commit','--allow-empty','-m','newer main tip'], self.repo)
+            self.main=run(['git','rev-parse','HEAD'],self.repo).strip()
         run(['git','update-ref','refs/remotes/origin/main',self.main],self.repo)
         run(['git','checkout','--detach',self.sha],self.repo)
         self.tags={}
@@ -329,6 +336,8 @@ class Fixture:
                 self.publish(template); continue
             if name=='Create GitHub Release':
                 assert step['with']['draft'] is False
+                assert step['with']['prerelease'] == "${{ contains(github.ref_name, '-preview') }}"
+                assert step['with']['make_latest'] == "${{ contains(github.ref_name, '-preview') && 'false' || 'true' }}"
                 assert list(out.glob('*.nupkg'))
                 assert (out/('template-release-body.md' if template else 'library-release-body.md')).stat().st_size
                 continue
@@ -448,6 +457,73 @@ def retry_cases(source, root):
         assert '23/26 equal; 3 failed' in str(error)
         print('PASS library equality aggregates missing locally, could not download, content differs',flush=True)
     else: raise Failure('diagnostics case unexpectedly passed')
+
+def preview_cases(source, root, self_test):
+    def rejected(label, reason, action):
+        try: action()
+        except Failure as error:
+            assert reason in str(error), f'{label}: {error}'
+            print(f'PASS rejects {label}: {reason}', flush=True)
+        else: raise Failure(label + ' unexpectedly passed')
+
+    for version in ['11.0.1-preview01', '11.0.1-preview09', '11.0.1-preview10', '11.0.1-preview99']:
+        f=Fixture(source, root/('preview-'+version), version)
+        f.validate()
+        run([f.dotnet,str(f.dll),'docs-currency','--repo-root',str(f.repo),'--expected-version',version],f.repo)
+        f.stage_workflow('prepared')
+        f.record.update(stage='complete', published={'library_release_url':f'https://github.com/{REPO}/releases/tag/dcb-v{version}'})
+        f.save(); f.validate('complete')
+        f.record.pop('published'); f.record['stage']='prepared'; f.save()
+        if not self_test and version == '11.0.1-preview01': f.workflow('library')
+        print(f'PASS preview authority, reader, prepared/complete validator and main-dispatched stage check {version}', flush=True)
+
+    for case,reason in [
+        ('missing-v11', 'Prerelease requires origin/dcb/v11; remote branch is missing.'),
+        ('preview-main-only', 'Prerelease merged_sha must be an ancestor of origin/dcb/v11.'),
+        ('preview-fork-point', 'Prerelease merged_sha must not be an ancestor of origin/main.'),
+        ('preview-main-merged-into-v11', 'Prerelease merged_sha must not be an ancestor of origin/main.'),
+        ('stable-v11-only', 'git failed')]:
+        f=Fixture(source,root/case,'10.22.0' if case=='stable-v11-only' else '11.0.1-preview01')
+        if case=='missing-v11': run(['git','update-ref','-d','refs/remotes/origin/dcb/v11'],f.repo)
+        elif case=='preview-main-only':
+            run(['git','update-ref','refs/remotes/origin/main',f.sha],f.repo)
+            run(['git','update-ref','refs/remotes/origin/dcb/v11',f.main],f.repo)
+        elif case=='preview-fork-point':
+            run(['git','update-ref','refs/remotes/origin/main',f.sha],f.repo)
+        elif case=='preview-main-merged-into-v11':
+            run(['git','checkout','--detach',f.main],f.repo)
+            run(['git','commit','--allow-empty','-m','v11 side commit'],f.repo)
+            run(['git','merge','--no-ff',f.sha,'-m','merge main commit into v11'],f.repo)
+            tip=run(['git','rev-parse','HEAD'],f.repo).strip()
+            run(['git','update-ref','refs/remotes/origin/dcb/v11',tip],f.repo)
+            run(['git','update-ref','refs/remotes/origin/main',f.sha],f.repo)
+            run(['git','checkout','--detach',f.sha],f.repo)
+        else:
+            mutate(f,'merged-sha-not-on-main')
+            run(['git','update-ref','refs/remotes/origin/dcb/v11',f.sha],f.repo)
+        rejected(case,reason,f.validate)
+
+    f=Fixture(source,root/'malformed-versions','10.22.0'); f.validate()
+    stage=yaml.safe_load((source/'.github/workflows/dcb_release_record_check.yml').read_text())
+    guard=next(s['run'] for s in stage['jobs']['check']['steps'] if s.get('name')=='Validate dispatch inputs')
+    repro=yaml.safe_load((source/'.github/workflows/dcb_release_reproducibility.yml').read_text())
+    script=next(s['run'] for s in repro['jobs']['public-reproducibility']['steps'] if s.get('name','').startswith('Fetch tags'))
+    # Execute the literal version guard without network fetch or tag checkout.
+    repro_guard=next(line.strip() for line in script.splitlines() if '[[ "$VERSION" =~' in line)
+    for version in ['11.0.1-preview', '11.0.1-preview1', '11.0.1-preview.1', '11.0.1-preview00',
+                    '11.0.1-rc01', '11.0.1+meta', '11.0.1-preview01+meta', '11.0.1-preview100',
+                    '011.0.1-preview01', '11.00.1', '11.0.01']:
+        f.version=version
+        rejected('reader '+version,'Usage:',f.validate)
+        rejected('validator '+version,'Invalid release version.',f.validate_bundle)
+        for props in (f.repo/'templates/Sekiban.Dcb.Templates/content').glob('*/SekibanDcbTemplateVersion.props'):
+            props.write_text(re.sub(r'<SekibanDcbVersion>.*?</SekibanDcbVersion>',f'<SekibanDcbVersion>{version}</SekibanDcbVersion>',props.read_text()))
+        rejected('authority '+version,'Invalid version authority:',lambda:run(['bash',str(f.repo/REL/'read-template-version.sh'),'--repo-root',str(f.repo)],f.repo))
+        rejected('stage '+version,'version must be x.y.z or x.y.z-previewNN',lambda:run(['bash','-euo','pipefail','-c',guard],f.repo,{**f.env,'INPUT_KIND':'library','INPUT_VERSION':version}))
+        rejected('reproducibility '+version,'',lambda:run(['bash','-euo','pipefail','-c',repro_guard],f.repo,{**f.env,'VERSION':version}))
+    for version in ['0.0.0','11.0.1-preview01','11.0.1-preview99']:
+        run(['bash','-euo','pipefail','-c',repro_guard],f.repo,{**f.env,'VERSION':version})
+    print('PASS reproducibility dispatch stable/preview boundaries; PR selection remains stable-only',flush=True)
 
 def mutate(f,case):
     route=f'repos/{REPO}/actions/runs/100'; run_api=f.api[route]
@@ -692,6 +768,7 @@ def main():
         write_json(build_host/'global.json',{'sdk':{'version':'10.0.100','rollForward':'latestFeature','allowPrerelease':False}})
         print(run(['dotnet','build',str(source/REL/'Sekiban.Dcb.TemplateValidation.csproj'),
                    '-c','Release','--nologo','-p:NuGetAudit=false'],build_host),flush=True)
+        preview_cases(source, root, args.self_test)
         for version in VERSIONS:
             f=Fixture(source,root/('pass-'+version),version)
             if version == '10.23.1': check_incomplete_history_drift(f)
