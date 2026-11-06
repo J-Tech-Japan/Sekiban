@@ -73,7 +73,7 @@ printf '%s\n' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allow
 run_net10() { (cd "$net10_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
 net11_host="$temp_root/net11-host"
 mkdir -p "$net11_host"
-printf '%s\n' '{"sdk":{"version":"11.0.100-rc.3.26522.148","rollForward":"latestFeature","allowPrerelease":true}}' > "$net11_host/global.json"
+printf '%s\n' '{"sdk":{"version":"11.0.100-rc.3.26522.148","rollForward":"disable","allowPrerelease":true}}' > "$net11_host/global.json"
 run_net11() { (cd "$net11_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
 
 feed="$temp_root/candidate-feed"
