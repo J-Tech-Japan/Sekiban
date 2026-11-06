@@ -188,7 +188,7 @@ assert_nuspec_dependency() {
   group="$(printf '%s' "$nuspec" | TFM="net${tfm}" perl -0ne 'while (/<group\b[^>]*targetFramework="([^"]*)"[^>]*>(.*?)<\/group>/sg) { print "$2\n" if $1 eq $ENV{TFM}; }')"
   if [[ "$group" != *'id="Microsoft.EntityFrameworkCore.Relational"'* ||
         "$group" != *"version=\"$expected_version\""* ]]; then
-    echo "${package##*/} does not declare Relational ${expected_version} in the ${tfm} nuspec group" >&2
+    echo "${package##*/} does not declare Microsoft.EntityFrameworkCore.Relational ${expected_version} in the ${tfm} nuspec group" >&2
     printf '%s\n' "$group" >&2
     exit 1
   fi

@@ -78,7 +78,7 @@ write_nuget_config() {
     for pattern in \
       'Microsoft.*' 'Aspire.*' 'Azure.*' 'AWSSDK.*' 'Npgsql*' 'MySqlConnector' \
       'OpenTelemetry.*' 'CommunityToolkit.*' 'AspNetCore.HealthChecks.*' 'Polly*' \
-      'SQLitePCLRaw.*' 'Grpc.*' 'Google.*' 'JsonPatch.*' 'KubernetesClient' \
+      'SQLitePCLRaw.*' 'SQLite' 'Grpc.*' 'Google.*' 'JsonPatch.*' 'KubernetesClient' \
       'ModelContextProtocol' 'Semver' 'StreamJsonRpc' 'Humanizer.*' 'Dapper' 'DuckDB.*' \
       'Newtonsoft.Json' 'ResultBoxes' 'Scalar.*' \
       'OpenTelemetry' 'Polly' 'Polly.Core' 'Polly.Extensions' 'Polly.RateLimiting' \
