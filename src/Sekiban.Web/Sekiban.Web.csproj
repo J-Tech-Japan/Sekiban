@@ -30,7 +30,7 @@
         </PackageReference>
         <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="Sekiban.Core" Version="0.24.3"/>
+        <PackageReference Include="Sekiban.Core" Version="0.25.1"/>
     </ItemGroup>
 
     <ItemGroup>

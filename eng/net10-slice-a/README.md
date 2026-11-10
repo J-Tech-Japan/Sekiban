@@ -4,6 +4,11 @@ These inventories characterize the 0.25.0 `net10.0` conversion on top of the
 SEK-G48 authority foundation. The validator evaluates all 69 C# projects after
 each change and requires an exact match with `evaluated-target-frameworks.tsv`.
 
+For the 0.25.1 snapshot-service fix (#1375), the package authority, thirteen
+internal dependency pins, and expected nuspec dependencies advance together.
+`package-reference-allowed-delta.tsv` records these version-only updates against
+the frozen inventory so NuGet consumers receive the fixed Core.DotNet package.
+
 The SDK authority is the exact stable `10.0.400` SDK (the current `10.0.x`
 band at implementation time); `global.json` and all three CI workflows are
 validated together, including a wrong-exact-version negative mutation.

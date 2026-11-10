@@ -9,7 +9,7 @@
     <repository type="git" url="https://github.com/J-Tech-Japan/Sekiban" commit="__SEK_G49_SOURCE_COMMIT__" />
     <dependencies>
       <group targetFramework="net10.0">
-        <dependency id="Sekiban.Core" version="0.24.3" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Core" version="0.25.1" exclude="Build,Analyzers" />
         <dependency id="Jtechs.OpenApi.AspNetCore.Swashbuckle" version="0.2.5" exclude="Build,Analyzers" />
         <dependency id="Swashbuckle.AspNetCore" version="7.2.0" exclude="Build,Analyzers" />
       </group>

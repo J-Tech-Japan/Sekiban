@@ -27,7 +27,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="SharpZipLib" Version="1.4.2"/>
-        <PackageReference Include="Sekiban.Core.DotNet" Version="0.24.3"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.25.1"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.1"/>
     </ItemGroup>
