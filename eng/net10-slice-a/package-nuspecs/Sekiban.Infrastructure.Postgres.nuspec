@@ -9,9 +9,9 @@
     <repository type="git" url="https://github.com/J-Tech-Japan/Sekiban" commit="__SEK_G49_SOURCE_COMMIT__" />
     <dependencies>
       <group targetFramework="net10.0">
-        <dependency id="Sekiban.Core.DotNet" version="0.24.3" exclude="Build,Analyzers" />
-        <dependency id="Sekiban.Infrastructure.Aws.S3" version="0.25.0" exclude="Build,Analyzers" />
-        <dependency id="Sekiban.Infrastructure.Azure.Storage.Blobs" version="0.25.0" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Core.DotNet" version="0.25.1" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Infrastructure.Aws.S3" version="0.25.1" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Infrastructure.Azure.Storage.Blobs" version="0.25.1" exclude="Build,Analyzers" />
         <dependency id="Microsoft.EntityFrameworkCore" version="9.0.1" exclude="Build,Analyzers" />
         <dependency id="Npgsql.EntityFrameworkCore.PostgreSQL" version="9.0.3" exclude="Build,Analyzers" />
         <dependency id="System.Configuration.ConfigurationManager" version="9.0.1" exclude="Build,Analyzers" />

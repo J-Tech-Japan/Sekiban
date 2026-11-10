@@ -193,8 +193,8 @@ pack_current_graph() {
       --output "$package_output" \
       -p:GeneratePackageOnBuild=false \
       -p:GenerateSBOM=false >&2
-    [[ -f "$package_output/$package_id.0.25.0.nupkg" ]] ||
-      die "current package graph did not create $package_id 0.25.0"
+    [[ -f "$package_output/$package_id.0.25.1.nupkg" ]] ||
+      die "current package graph did not create $package_id 0.25.1"
   done <<'EOF'
 src/Sekiban.Core.DotNet/Sekiban.Core.DotNet.csproj	Sekiban.Core.DotNet
 src/Sekiban.Infrastructure.Aws.S3/Sekiban.Infrastructure.Aws.S3.csproj	Sekiban.Infrastructure.Aws.S3
@@ -273,10 +273,10 @@ run_gate() {
 
   pack_current_graph "$feed"
   current_sources="$feed;$nuget_source"
-  new_worker="$(create_worker current-net10 net10.0 0.25.0 "$current_sources")"
+  new_worker="$(create_worker current-net10 net10.0 0.25.1 "$current_sources")"
   old_net8_worker="$(create_worker old-net8 net8.0 0.24.3 "$nuget_source")"
   old_net9_worker="$(create_worker old-net9 net9.0 0.24.3 "$nuget_source")"
-  build_worker "$new_worker" net10.0 0.25.0
+  build_worker "$new_worker" net10.0 0.25.1
   build_worker "$old_net8_worker" net8.0 0.24.3
   build_worker "$old_net9_worker" net9.0 0.24.3
 

@@ -4,6 +4,6 @@
     <SekibanCoreNet9TargetFramework>net10.0</SekibanCoreNet9TargetFramework>
     <SekibanCoreNet8Net9TargetFrameworks>net10.0</SekibanCoreNet8Net9TargetFrameworks>
     <SekibanCoreNet9Net8TargetFrameworks>net10.0</SekibanCoreNet9Net8TargetFrameworks>
-    <SekibanCorePackageVersion>0.25.0</SekibanCorePackageVersion>
+    <SekibanCorePackageVersion>0.25.1</SekibanCorePackageVersion>
   </PropertyGroup>
 </Project>

@@ -32,7 +32,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="Sekiban.Core.DotNet" Version="0.24.3"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.25.1"/>
     </ItemGroup>
 
     <ItemGroup>

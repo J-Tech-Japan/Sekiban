@@ -32,32 +32,53 @@ public class MultiProjectionSnapshotCollectionBackgroundService<TSettings> : Bac
         var multiProjectionCollectionGenerator = scope.ServiceProvider.GetService<MultiProjectionCollectionGenerator>();
         if (multiProjectionCollectionGenerator is null) { return; }
 
-        await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken); // 10秒待機
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            logger?.LogInformation(
-                "Starting to Make Snapshots... UTCTime:{DateTime}",
-                dateUtil?.UtcNow.ToString("yyyy/MM/dd HH:mm:ss"));
+            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken); // 10秒待機
 
-            var setting = GetSetting(configuration);
-            if (setting is null) { break; }
-            await multiProjectionCollectionGenerator.GenerateAsync(setting);
-
-            logger?.LogInformation(
-                "End Making Snapshots UTCTime:{DateTime}",
-                dateUtil?.UtcNow.ToString("yyyy/MM/dd HH:mm:ss"));
-
-            logger?.LogInformation(
-                "Waiting for next execution {Seconds} Seconds...",
-                setting.GetExecuteIntervalSeconds());
-
-            await Task.Delay(TimeSpan.FromSeconds(setting.GetExecuteIntervalSeconds()), stoppingToken);
-
-            if (stoppingToken.IsCancellationRequested)
+            while (!stoppingToken.IsCancellationRequested)
             {
-                break;
+                logger?.LogInformation(
+                    "Starting to Make Snapshots... UTCTime:{DateTime}",
+                    dateUtil?.UtcNow.ToString("yyyy/MM/dd HH:mm:ss"));
+
+                var setting = GetSetting(configuration);
+                if (setting is null) { break; }
+                try
+                {
+                    await multiProjectionCollectionGenerator.GenerateAsync(setting);
+
+                    logger?.LogInformation(
+                        "End Making Snapshots UTCTime:{DateTime}",
+                        dateUtil?.UtcNow.ToString("yyyy/MM/dd HH:mm:ss"));
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogError(
+                        ex,
+                        "Failed to make snapshots. Retrying after {Seconds} seconds.",
+                        setting.GetExecuteIntervalSeconds());
+                }
+
+                logger?.LogInformation(
+                    "Waiting for next execution {Seconds} Seconds...",
+                    setting.GetExecuteIntervalSeconds());
+
+                await Task.Delay(TimeSpan.FromSeconds(setting.GetExecuteIntervalSeconds()), stoppingToken);
+
+                if (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
             }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Cancellation during the initial or recurring delay is normal shutdown.
         }
         logger?.LogInformation("Ending Background Task - MultiProjectionSnapshotCollectionBackgroundService");
     }

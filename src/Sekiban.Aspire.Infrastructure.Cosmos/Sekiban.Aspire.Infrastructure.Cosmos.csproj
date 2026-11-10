@@ -28,8 +28,8 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.24.3"/>
-        <PackageReference Include="Sekiban.Web" Version="0.24.3"/>
+        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.25.1"/>
+        <PackageReference Include="Sekiban.Web" Version="0.25.1"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
         <ProjectReference Include="..\Sekiban.Web\Sekiban.Web.csproj"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>

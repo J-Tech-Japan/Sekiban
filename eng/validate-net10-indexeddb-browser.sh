@@ -168,8 +168,8 @@ pack_current_packages() {
       --output "$output_dir" \
       -p:GeneratePackageOnBuild=false \
       -p:GenerateSBOM=false >&2
-    [[ -f "$output_dir/$package_id.0.25.0.nupkg" ]] ||
-      die "current pack did not create $package_id 0.25.0"
+    [[ -f "$output_dir/$package_id.0.25.1.nupkg" ]] ||
+      die "current pack did not create $package_id 0.25.1"
   done <<'EOF'
 src/Sekiban.Core.DotNet/Sekiban.Core.DotNet.csproj	Sekiban.Core.DotNet
 src/Sekiban.Infrastructure.IndexedDb/Sekiban.Infrastructure.IndexedDb.csproj	Sekiban.Infrastructure.IndexedDb
@@ -234,7 +234,7 @@ run_browser_consumer() {
     --no-restore \
     --nologo \
     --output "$consumer/publish" >&2
-  archive="$feed/Sekiban.Infrastructure.IndexedDb.0.25.0.nupkg"
+  archive="$feed/Sekiban.Infrastructure.IndexedDb.0.25.1.nupkg"
   assert_packed_runtime_is_served "$archive" "$consumer"
 
   node "$fixture_dir/browser-gate.mjs" \

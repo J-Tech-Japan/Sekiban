@@ -9,8 +9,8 @@
     <repository type="git" url="https://github.com/J-Tech-Japan/Sekiban" commit="__SEK_G49_SOURCE_COMMIT__" />
     <dependencies>
       <group targetFramework="net10.0">
-        <dependency id="Sekiban.Core.DotNet" version="0.24.3" exclude="Build,Analyzers" />
-        <dependency id="Sekiban.Infrastructure.Azure.Storage.Blobs" version="0.24.3" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Core.DotNet" version="0.25.1" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Infrastructure.Azure.Storage.Blobs" version="0.25.1" exclude="Build,Analyzers" />
         <dependency id="Microsoft.Azure.Cosmos" version="3.46.1" exclude="Build,Analyzers" />
         <dependency id="Microsoft.Extensions.Configuration" version="9.0.1" exclude="Build,Analyzers" />
         <dependency id="Microsoft.Extensions.Configuration.Binder" version="9.0.1" exclude="Build,Analyzers" />

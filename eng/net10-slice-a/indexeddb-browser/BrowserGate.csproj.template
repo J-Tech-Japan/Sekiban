@@ -10,6 +10,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.11" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.11" PrivateAssets="all" />
-    <PackageReference Include="Sekiban.Infrastructure.IndexedDb" Version="0.25.0" />
+    <PackageReference Include="Sekiban.Infrastructure.IndexedDb" Version="0.25.1" />
   </ItemGroup>
 </Project>
