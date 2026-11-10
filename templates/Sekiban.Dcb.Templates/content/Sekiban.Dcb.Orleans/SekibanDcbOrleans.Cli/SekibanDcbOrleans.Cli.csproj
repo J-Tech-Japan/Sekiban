@@ -10,15 +10,17 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.57.1" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.3" />
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
-        <PackageReference Include="System.CommandLine" Version="2.0.2" />
+        <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.64.0" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.14"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.14" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
+        <PackageReference Include="System.CommandLine" Version="2.0.14" />
         <PackageReference Include="Sekiban.Dcb.WithResult" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.Postgres" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.Sqlite" Version="$(SekibanDcbVersion)" />
+        <!-- Overrides vulnerable SQLitePCLRaw 2.1.11 from Sekiban.Dcb.Sqlite 10.24.0; remove when Sekiban.Dcb depends on a fixed Microsoft.Data.Sqlite. -->
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 

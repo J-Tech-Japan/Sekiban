@@ -14,14 +14,14 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.Azure" Version="1.13.1" />
-        <PackageReference Include="Aspire.Azure.Data.Tables" Version="13.2.2" />
-        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.2.2" />
-        <PackageReference Include="Aspire.Azure.Storage.Queues" Version="13.2.2" />
-        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="13.2.2" />
-        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.2" />
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Extensions.Azure" Version="1.14.1" />
+        <PackageReference Include="Aspire.Azure.Data.Tables" Version="13.6.4" />
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="13.6.4" />
+        <PackageReference Include="Aspire.Azure.Storage.Queues" Version="13.6.4" />
+        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="13.6.4" />
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.6.4" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.14" />
         <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="$(MicrosoftOrleansVersion)" />
         <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="$(MicrosoftOrleansVersion)" />
         <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="$(MicrosoftOrleansVersion)" />
@@ -31,16 +31,18 @@
         <PackageReference Include="Microsoft.Orleans.Streaming" Version="$(MicrosoftOrleansVersion)" />
         <PackageReference Include="Microsoft.Orleans.Streaming.EventHubs" Version="$(MicrosoftOrleansVersion)" />
         <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="$(MicrosoftOrleansVersion)" />
-        <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.19.0" />
         <PackageReference Include="Sekiban.Dcb.BlobStorage.AzureStorage" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.Postgres" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.Sqlite" Version="$(SekibanDcbVersion)" />
+        <!-- Overrides vulnerable SQLitePCLRaw 2.1.11 from Sekiban.Dcb.Sqlite 10.24.0; remove when Sekiban.Dcb depends on a fixed Microsoft.Data.Sqlite. -->
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
         <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.MaterializedView.Postgres" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.MaterializedView.Orleans" Version="$(SekibanDcbVersion)" />
-        <PackageReference Include="Dapper" Version="2.1.66" />
+        <PackageReference Include="Dapper" Version="2.1.89" />
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 
