@@ -201,13 +201,13 @@ for package_name in Sekiban.Dcb.Core.Model Sekiban.Dcb.Core Sekiban.Dcb.Postgres
   assert_package "$feed/$package_name.$version.nupkg"
 done
 postgres_package="$feed/Sekiban.Dcb.Postgres.$version.nupkg"
-assert_nuspec_dependency "$postgres_package" '9.0' '9.0.13'
-assert_nuspec_dependency "$postgres_package" '10.0' '10.0.3'
+assert_nuspec_dependency "$postgres_package" '9.0' '9.0.23'
+assert_nuspec_dependency "$postgres_package" '10.0' '10.0.15'
 if unzip -p "$postgres_package" '*.nuspec' | grep -q 'Microsoft.EntityFrameworkCore.Design'; then
   echo 'EF Core Design leaked into the Sekiban.Dcb.Postgres nuspec.' >&2
   exit 1
 fi
-echo "nuspec: Relational 9.0.13 and 10.0.3 present; EF Core Design absent"
+echo "nuspec: Relational 9.0.23 and 10.0.15 present; EF Core Design absent"
 
 consumer_project="$repo_root/dcb/tests/Sekiban.Dcb.Postgres.PackagedConsumer/Sekiban.Dcb.Postgres.PackagedConsumer.csproj"
 

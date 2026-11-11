@@ -18,7 +18,7 @@
     <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="13.2.2" />
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.2" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.15" />
     <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="$(MicrosoftOrleansVersion)" />
     <PackageReference Include="Microsoft.Orleans.Clustering.Cosmos" Version="$(MicrosoftOrleansVersion)" />
     <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="$(MicrosoftOrleansVersion)" />
