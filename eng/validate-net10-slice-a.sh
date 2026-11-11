@@ -135,8 +135,8 @@ validate_root_authority() {
     die "root authority does not define the net10 target-frameworks value"
   grep -Fq '<SekibanCoreNet9Net8TargetFrameworks>net10.0</SekibanCoreNet9Net8TargetFrameworks>' "$root_props" ||
     die "root authority does not define the alternate net10 target-frameworks value"
-  grep -Fq '<SekibanCorePackageVersion>0.25.1</SekibanCorePackageVersion>' "$root_props" ||
-    die "root authority does not define package version 0.25.1"
+  grep -Fq '<SekibanCorePackageVersion>0.25.2</SekibanCorePackageVersion>' "$root_props" ||
+    die "root authority does not define package version 0.25.2"
 
   local nested
   nested="$(find "$repo_root/src" "$repo_root/tests" "$repo_root/internalUsages" "$repo_root/Samples" "$repo_root/tools" -name Directory.Build.props -print)"
@@ -335,7 +335,7 @@ validate_package_reference_inventory() {
   [[ "$(awk -F '\t' '$1 == "remove" { count++ } END { print count + 0 }' "$baseline_dir/package-reference-allowed-delta.tsv")" == "16" ]] ||
     die "the dependency delta must remove three conversion references and thirteen prior internal version pins"
   [[ "$(awk -F '\t' '$1 == "add" { count++ } END { print count + 0 }' "$baseline_dir/package-reference-allowed-delta.tsv")" == "14" ]] ||
-    die "the dependency delta must add WebAssembly 10.x and thirteen internal 0.25.1 version pins"
+    die "the dependency delta must add WebAssembly 10.x and thirteen internal 0.25.2 version pins"
 
   awk -F '\t' '$1 == "remove" { print $2 "\t" $3 "\t" $4 }' "$baseline_dir/package-reference-allowed-delta.tsv" |
     LC_ALL=C sort > "$removals"
@@ -345,7 +345,7 @@ validate_package_reference_inventory() {
   grep -Fvx -f "$removals" "$baseline_dir/package-reference-versions.tsv" > "$retained" || true
   cat "$retained" "$additions" | LC_ALL=C sort > "$expected"
   diff -u "$expected" "$actual" ||
-    die "PackageReference inventory changed outside the approved conversion and 0.25.1 release edits"
+    die "PackageReference inventory changed outside the approved conversion and 0.25.2 release edits"
   [[ "$(wc -l < "$actual" | tr -d ' ')" == "242" ]] ||
     die "net10 conversion must leave exactly 242 literal PackageReference versions after the approved conversion and release delta"
 
@@ -367,26 +367,26 @@ validate_package_version_authority() {
   while IFS=$'\034' read -r project package_id; do
     [[ "$package_id" == "MemStat.Net" ]] && continue
     grep -Fq '<Version>$(SekibanCorePackageVersion)</Version>' "$repo_root/$project" ||
-      die "package producer does not consume the 0.25.1 version authority: $project"
+      die "package producer does not consume the 0.25.2 version authority: $project"
     grep -Fq '<PackageVersion>$(SekibanCorePackageVersion)</PackageVersion>' "$repo_root/$project" ||
       die "package producer does not consume the package-version authority: $project"
     props="$(dotnet msbuild "$repo_root/$project" -nologo -getProperty:Version -getProperty:PackageVersion)" ||
       die "MSBuild package-version evaluation failed for $project"
     version="$(printf '%s' "$props" | jq -r '.Properties.Version // ""')"
     package_version="$(printf '%s' "$props" | jq -r '.Properties.PackageVersion // ""')"
-    [[ "$version" == "0.25.1" && "$package_version" == "0.25.1" ]] ||
-      die "package producer did not evaluate to version 0.25.1: $project"
+    [[ "$version" == "0.25.2" && "$package_version" == "0.25.2" ]] ||
+      die "package producer did not evaluate to version 0.25.2: $project"
     count=$((count + 1))
   done < <(records3 "$baseline_dir/package-assets.tsv" | awk -F '\034' '{ print $1 FS $2 }')
 
   [[ "$count" == "11" ]] ||
-    die "expected eleven Sekiban package producers to consume the 0.25.1 authority"
+    die "expected eleven Sekiban package producers to consume the 0.25.2 authority"
 }
 
 # Project references compile the sibling source project, while an explicit
 # Sekiban.* PackageReference is the intentionally published compatibility
 # dependency. Keep those roles distinguishable: a direct pin remains exact,
-# whereas an unshadowed sibling ProjectReference must become a 0.25.1 package
+# whereas an unshadowed sibling ProjectReference must become a 0.25.2 package
 # dependency in this release.
 explicit_internal_dependencies_from_project() {
   local project="$1"
@@ -410,7 +410,7 @@ expected_internal_dependencies_from_project() {
     cat "$direct_dependencies"
     while IFS= read -r project_reference_id; do
       if ! awk -F '\t' -v package_id="$project_reference_id" '$1 == package_id { found = 1 } END { exit !found }' "$direct_dependencies"; then
-        printf '%s\t0.25.1\n' "$project_reference_id"
+        printf '%s\t0.25.2\n' "$project_reference_id"
       fi
     done < <(project_reference_internal_package_ids "$project")
   } | LC_ALL=C sort -u
@@ -432,7 +432,7 @@ validate_internal_nuspec_dependency_provenance() {
   expected_internal_dependencies_from_project "$project" > "$source_dependencies"
   internal_dependencies_from_nuspec "$nuspec" > "$nuspec_dependencies"
   diff -u "$source_dependencies" "$nuspec_dependencies" ||
-    die "internal nuspec dependency does not match its explicit source pin or 0.25.1 project-reference edge for $package_id"
+    die "internal nuspec dependency does not match its explicit source pin or 0.25.2 project-reference edge for $package_id"
 }
 
 validate_baselined_internal_nuspec_dependency_provenance() {
@@ -463,7 +463,7 @@ normalize_root_nuspec() {
     die "root nuspec identity changed for $package_id: found $root_nuspec"
 
   unzip -p "$archive" "$root_nuspec" |
-      perl -0pe 's/^\xEF\xBB\xBF//; s/\r\n?/\n/g; s/\n*\z/\n/; s{<version>0\.0\.0-sek-g49</version>}{<version>__SEK_G49_PACKAGE_VERSION__</version>}g; s{(<dependency id="Sekiban\.[^"]+" version=")0\.0\.0-sek-g49"}{$1 . "0.25.1\""}ge; s{commit="[0-9a-f]{40}"}{commit="__SEK_G49_SOURCE_COMMIT__"}g' \
+      perl -0pe 's/^\xEF\xBB\xBF//; s/\r\n?/\n/g; s/\n*\z/\n/; s{<version>0\.0\.0-sek-g49</version>}{<version>__SEK_G49_PACKAGE_VERSION__</version>}g; s{(<dependency id="Sekiban\.[^"]+" version=")0\.0\.0-sek-g49"}{$1 . "0.25.2\""}ge; s{commit="[0-9a-f]{40}"}{commit="__SEK_G49_SOURCE_COMMIT__"}g' \
       > "$output"
 
   grep -Fq "<id>$package_id</id>" "$output" ||
@@ -780,21 +780,21 @@ run_self_tests() {
 
   mutant="$work_dir/mutant-package-version"
   copy_mutant "$mutant"
-  perl -0pi -e 's{(PackageReference Include="Sekiban\.Core\.DotNet" Version=")0\.25\.1"}{${1}0.25.2"}' \
+  perl -0pi -e 's{(PackageReference Include="Sekiban\.Core\.DotNet" Version=")0\.25\.2"}{${1}0.25.3"}' \
     "$mutant/src/Sekiban.Core/Sekiban.Core.csproj"
   expect_failure "package-reference-version" "$mutant" packages
 
   mutant="$work_dir/mutant-internal-nuspec-source-pin"
   copy_mutant "$mutant"
-  perl -0pi -e 's{(<dependency id="Sekiban\.Core\.DotNet" version=")0\.25\.1"}{${1}0.24.3"}' \
+  perl -0pi -e 's{(<dependency id="Sekiban\.Core\.DotNet" version=")0\.25\.2"}{${1}0.24.3"}' \
     "$mutant/eng/net10-slice-a/package-nuspecs/Sekiban.Core.nuspec"
-  expect_failure_with_message "internal-nuspec-source-pin" "$mutant" packages "internal nuspec dependency does not match its explicit source pin or 0.25.1 project-reference edge"
+  expect_failure_with_message "internal-nuspec-source-pin" "$mutant" packages "internal nuspec dependency does not match its explicit source pin or 0.25.2 project-reference edge"
 
   mutant="$work_dir/mutant-project-reference-nuspec-version"
   copy_mutant "$mutant"
-  perl -0pi -e 's{(<dependency id="Sekiban\.Infrastructure\.Aws\.S3" version=")0\.25\.1"}{${1}0.24.3"}' \
+  perl -0pi -e 's{(<dependency id="Sekiban\.Infrastructure\.Aws\.S3" version=")0\.25\.2"}{${1}0.24.3"}' \
     "$mutant/eng/net10-slice-a/package-nuspecs/Sekiban.Infrastructure.Postgres.nuspec"
-  expect_failure_with_message "project-reference-nuspec-version" "$mutant" packages "internal nuspec dependency does not match its explicit source pin or 0.25.1 project-reference edge"
+  expect_failure_with_message "project-reference-nuspec-version" "$mutant" packages "internal nuspec dependency does not match its explicit source pin or 0.25.2 project-reference edge"
 
   mutant="$work_dir/mutant-package-nuspec-dependencies"
   copy_mutant "$mutant"

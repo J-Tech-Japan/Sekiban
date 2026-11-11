@@ -44,6 +44,7 @@
         <ProjectReference Include="..\..\internalUsages\MultiTenant.Domain\MultiTenant.Domain.csproj"/>
         <ProjectReference Include="..\..\internalUsages\SampleProject.Common\SampleProject.Common.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Aspire.Infrastructure.Cosmos\Sekiban.Aspire.Infrastructure.Cosmos.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Dynamo\Sekiban.Infrastructure.Dynamo.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj"/>
         <ProjectReference Include="..\Sekiban.Test.Abstructs\Sekiban.Test.Abstructs.csproj"/>

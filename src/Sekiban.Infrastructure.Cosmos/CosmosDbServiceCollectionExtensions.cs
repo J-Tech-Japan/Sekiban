@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Sekiban.Core.Documents;
 using Sekiban.Infrastructure.Azure.Storage.Blobs;
@@ -153,6 +154,7 @@ public static class CosmosDbServiceCollectionExtensions
     {
         services.AddSingleton(options ?? new SekibanCosmosClientOptions());
         services.AddSingleton(cosmosDbOptions);
+        services.TryAddSingleton<CosmosClientStore>();
         services.AddTransient<ICosmosDbFactory, CosmosDbFactory>();
         services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
         services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
