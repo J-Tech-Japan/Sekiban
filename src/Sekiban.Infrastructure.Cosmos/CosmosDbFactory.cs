@@ -1,22 +1,50 @@
 using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
-using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
-using Sekiban.Core.Exceptions;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 namespace Sekiban.Infrastructure.Cosmos;
 
-public class CosmosDbFactory(
-    IMemoryCacheAccessor memoryCache,
-    IServiceProvider serviceProvider,
-    SekibanCosmosClientOptions options,
-    SekibanCosmosDbOptions cosmosDbOptions) : ICosmosDbFactory
+public class CosmosDbFactory : ICosmosDbFactory, IDisposable
 {
+    private readonly IServiceProvider serviceProvider;
+    private readonly SekibanCosmosClientOptions options;
+    private readonly SekibanCosmosDbOptions cosmosDbOptions;
+    private readonly CosmosClientStore clientStore;
+    private readonly bool ownsClientStore;
+
+    public CosmosDbFactory(
+        IMemoryCacheAccessor memoryCache,
+        IServiceProvider serviceProvider,
+        SekibanCosmosClientOptions options,
+        SekibanCosmosDbOptions cosmosDbOptions)
+    {
+        // Keep the existing constructor; Cosmos handles now follow the client owner's lifetime.
+        ArgumentNullException.ThrowIfNull(memoryCache);
+        this.serviceProvider = serviceProvider;
+        this.options = options;
+        this.cosmosDbOptions = cosmosDbOptions;
+        var sharedStore = serviceProvider.GetService<CosmosClientStore>();
+        ownsClientStore = sharedStore is null;
+        clientStore = sharedStore ?? new CosmosClientStore();
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        // DI owns the shared store. A directly constructed factory owns its fallback store.
+        if (disposing && ownsClientStore) { clientStore.Dispose(); }
+    }
+
     public Func<Task<CosmosClient?>> SearchCosmosClientAsync { get; set; } = async () =>
     {
         await Task.CompletedTask;
@@ -37,31 +65,12 @@ public class CosmosDbFactory(
         AggregateContainerGroup containerGroup,
         Func<Container, Task<T>> cosmosAction)
     {
-        try
-        {
-            var result = await cosmosAction(await GetContainerAsync(documentType, containerGroup));
-            return result;
-        }
-        catch
-        {
-            ResetMemoryCache(documentType, containerGroup);
-            throw;
-        }
+        return await cosmosAction(await GetContainerAsync(documentType, containerGroup));
     }
 
     public async Task CosmosActionAsync(DocumentType documentType, AggregateContainerGroup containerGroup, Func<Container, Task> cosmosAction)
     {
-        try
-        {
-            await cosmosAction(await GetContainerAsync(documentType, containerGroup));
-        }
-        catch
-        {
-            // There may be a network error, so initialize the container.
-            // This allows reconnection when recovered next time.
-            ResetMemoryCache(documentType, containerGroup);
-            throw;
-        }
+        await cosmosAction(await GetContainerAsync(documentType, containerGroup));
     }
     private SekibanAzureCosmosDbOption GetSekibanCosmosDbOption() => cosmosDbOptions.GetContextOption(serviceProvider);
     public string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
@@ -87,39 +96,25 @@ public class CosmosDbFactory(
         return !dbOption.LegacyPartitions;
     }
 
-    private static string GetMemoryCacheContainerKey(
+    private static object GetMemoryCacheContainerKey(
         DocumentType documentType,
         string databaseId,
         string containerId,
-        string sekibanContextIdentifier) =>
-        $"{(documentType == DocumentType.Event ? "event." : "")}cosmosdb.container.{databaseId}.{containerId}.{sekibanContextIdentifier}";
+        CosmosClientKey clientKey) =>
+        (clientKey, "container", documentType == DocumentType.Event, databaseId, containerId);
 
-    private static string GetMemoryCacheClientKey(DocumentType documentType, string sekibanContextIdentifier) =>
-        $"{(documentType == DocumentType.Event ? "event." : "")}cosmosdb.client.{sekibanContextIdentifier}";
+    private static object GetMemoryCacheDatabaseKey(
+        DocumentType documentType, string databaseId, CosmosClientKey clientKey) =>
+        (clientKey, "database", documentType == DocumentType.Event, databaseId);
 
-    private static string GetMemoryCacheDatabaseKey(DocumentType documentType, string databaseId, string sekibanContextIdentifier) =>
-        $"{(documentType == DocumentType.Event ? "event." : "")}cosmosdb.container.{databaseId}.{sekibanContextIdentifier}";
-
-    private string GetUri()
+    private CosmosClientKey GetClientKey()
     {
-        var dbOption = GetSekibanCosmosDbOption();
-        return dbOption.CosmosEndPointUrl ?? string.Empty;
+        var context = SekibanContextIdentifier();
+        var setting = cosmosDbOptions.GetContextOption(context);
+        return new CosmosClientKey(context, setting.CosmosConnectionString, setting.CosmosEndPointUrl,
+            setting.CosmosAuthorizationKey, options.ClientOptions);
     }
 
-    private string GetSecurityKey()
-    {
-        var dbOption = GetSekibanCosmosDbOption();
-        return dbOption.CosmosAuthorizationKey ?? string.Empty;
-    }
-
-    private ResultBox<string> GetConnectionString() =>
-        ResultBox<SekibanAzureCosmosDbOption>.FromValue(GetSekibanCosmosDbOption())
-            .Conveyor(
-                azureOptions => azureOptions.CosmosConnectionString switch
-                {
-                    { } v when !string.IsNullOrWhiteSpace(v) => ResultBox<string>.FromValue(v),
-                    _ => new SekibanConfigurationException("CosmosConnectionString is not set.")
-                });
     public string GetDatabaseId()
     {
         var dbOption = GetSekibanCosmosDbOption();
@@ -130,28 +125,28 @@ public class CosmosDbFactory(
     {
         var databaseId = GetDatabaseId();
         var containerId = GetContainerId(documentType, containerGroup);
-        return (Container?)memoryCache.Cache.Get(GetMemoryCacheContainerKey(documentType, databaseId, containerId, SekibanContextIdentifier()));
+        return (Container?)clientStore.Cache.Get(GetMemoryCacheContainerKey(documentType, databaseId, containerId, GetClientKey()));
 
     }
     public void SetContainerToCache(DocumentType documentType, AggregateContainerGroup containerGroup, Container container)
     {
         var databaseId = GetDatabaseId();
         var containerId = GetContainerId(documentType, containerGroup);
-        memoryCache.Cache.Set(
-            GetMemoryCacheContainerKey(documentType, databaseId, containerId, SekibanContextIdentifier()),
+        clientStore.Cache.Set(
+            GetMemoryCacheContainerKey(documentType, databaseId, containerId, GetClientKey()),
             container,
             new MemoryCacheEntryOptions());
     }
     public async Task<Database> GetDatabaseAsync(DocumentType documentType, CosmosClient client)
     {
-        var database = memoryCache.Cache.Get<Database?>(GetMemoryCacheDatabaseKey(documentType, GetDatabaseId(), SekibanContextIdentifier()));
-        if (database is not null)
+        var database = clientStore.Cache.Get<Database?>(GetMemoryCacheDatabaseKey(documentType, GetDatabaseId(), GetClientKey()));
+        if (database is not null && ReferenceEquals(database.Client, client))
         {
             return database;
         }
         database = await client.CreateDatabaseIfNotExistsAsync(GetDatabaseId());
-        memoryCache.Cache.Set(
-            GetMemoryCacheDatabaseKey(documentType, GetDatabaseId(), SekibanContextIdentifier()),
+        clientStore.Cache.Set(
+            GetMemoryCacheDatabaseKey(documentType, GetDatabaseId(), GetClientKey()),
             database,
             new MemoryCacheEntryOptions());
         return database;
@@ -168,38 +163,26 @@ public class CosmosDbFactory(
 
     public async Task<CosmosClient> GetCosmosClientAsync(DocumentType documentType)
     {
-        await Task.CompletedTask;
-        var client = memoryCache.Cache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()));
-        if (client is not null)
-        {
-            return client;
-        }
-        var clientOptions = options.ClientOptions;
-        client = await SearchCosmosClientAsync() ??
-            GetConnectionString() switch
-            {
-                { IsSuccess: true } value => new CosmosClient(value.GetValue(), clientOptions),
-                _ => GetCosmosClientFromUriAndKey()
-            };
-        memoryCache.Cache.Set(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()), client, new MemoryCacheEntryOptions());
-        return client;
-    }
-    private CosmosClient GetCosmosClientFromUriAndKey()
-    {
-        var uri = GetUri();
-        var securityKey = GetSecurityKey();
-        var clientOptions = options.ClientOptions;
-        return new CosmosClient(uri, securityKey, clientOptions);
+        var key = GetClientKey();
+        clientStore.ThrowIfDisposed();
+        var externalClient = await SearchCosmosClientAsync();
+        clientStore.ThrowIfDisposed();
+        // Aspire and other external providers retain ownership of the returned client.
+        if (externalClient is not null) { return externalClient; }
+        return clientStore.GetOrCreate(key, () =>
+            !string.IsNullOrWhiteSpace(key.ConnectionString)
+                ? new CosmosClient(key.ConnectionString, key.Options)
+                : new CosmosClient(key.Endpoint ?? string.Empty, key.AuthorizationKey ?? string.Empty, key.Options));
     }
 
     public async Task<Container> GetContainerAsync(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
+        var client = await GetCosmosClientAsync(documentType);
         var container = GetContainerFromCache(documentType, containerGroup);
-        if (container is not null)
+        if (container is not null && ReferenceEquals(container.Database.Client, client))
         {
             return container;
         }
-        var client = await GetCosmosClientAsync(documentType);
 
         var database = await GetDatabaseAsync(documentType, client);
         return await GetContainerFromDatabaseAsync(documentType, containerGroup, database);
@@ -251,11 +234,9 @@ public class CosmosDbFactory(
     {
         var containerId = GetContainerId(documentType, containerGroup);
         var databaseId = GetDatabaseId();
-        // There may be a network error, so initialize the container.
-        // This allows reconnection when recovered next time.
-        memoryCache.Cache.Remove(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()));
-        memoryCache.Cache.Remove(GetMemoryCacheDatabaseKey(documentType, databaseId, SekibanContextIdentifier()));
-        memoryCache.Cache.Remove(GetMemoryCacheContainerKey(documentType, databaseId, containerId, SekibanContextIdentifier()));
+        // Explicitly invalidate only lightweight handles; the SDK client manages reconnection.
+        clientStore.Cache.Remove(GetMemoryCacheDatabaseKey(documentType, databaseId, GetClientKey()));
+        clientStore.Cache.Remove(GetMemoryCacheContainerKey(documentType, databaseId, containerId, GetClientKey()));
     }
 
     private static IReadOnlyList<string> GetPartitionKeyPaths(bool supportsHierarchicalPartitions) =>

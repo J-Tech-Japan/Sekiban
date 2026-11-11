@@ -28,7 +28,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.1"/>
-        <PackageReference Include="Sekiban.Core.DotNet" Version="0.25.1"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.25.2"/>
     </ItemGroup>
 
     <ItemGroup>

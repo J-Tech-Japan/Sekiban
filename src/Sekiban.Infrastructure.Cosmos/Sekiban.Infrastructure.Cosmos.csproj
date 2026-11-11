@@ -30,8 +30,8 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
-        <PackageReference Include="Sekiban.Core.DotNet" Version="0.25.1"/>
-        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.25.1"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.25.2"/>
+        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.25.2"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
@@ -40,5 +40,8 @@
         <ProjectReference Include="..\Sekiban.Infrastructure.Azure.Storage.Blobs\Sekiban.Infrastructure.Azure.Storage.Blobs.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="Sekiban.Test.CosmosDb" />
+    </ItemGroup>
 
 </Project>

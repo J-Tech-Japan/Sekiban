@@ -5,7 +5,7 @@ written by `CompatibilityWorker.cs` while it targeted the corresponding TFM
 and directly restored all six relevant Sekiban packages at `0.24.3`.
 
 The validator deliberately does not compare JSON text. It rebuilds the shared
-worker against the current `0.25.1` net10 package feed and verifies old event
+worker against the current `0.25.2` net10 package feed and verifies old event
 and snapshot vectors semantically. Each vector carries the actual
 `AssemblyQualifiedName` of its derived event; the net10 writer and both real
 `net8.0` and `net9.0` pinned reader processes resolve it with `Type.GetType`.

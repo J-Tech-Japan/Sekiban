@@ -11,9 +11,20 @@ public class AspireCosmosDbFactory(
     IMemoryCacheAccessor memoryCache,
     IServiceProvider serviceProvider,
     SekibanCosmosClientOptions options,
-    SekibanCosmosDbOptions cosmosDbOptions) : ICosmosDbFactory
+    SekibanCosmosDbOptions cosmosDbOptions) : ICosmosDbFactory, IDisposable
 {
     public readonly CosmosDbFactory cosmosDbFactory = new(memoryCache, serviceProvider, options, cosmosDbOptions);
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing) { cosmosDbFactory.Dispose(); }
+    }
 
     public async Task DeleteAllFromEventContainer(AggregateContainerGroup containerGroup)
     {

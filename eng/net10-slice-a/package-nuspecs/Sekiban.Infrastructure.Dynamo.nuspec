@@ -9,8 +9,8 @@
     <repository type="git" url="https://github.com/J-Tech-Japan/Sekiban" commit="__SEK_G49_SOURCE_COMMIT__" />
     <dependencies>
       <group targetFramework="net10.0">
-        <dependency id="Sekiban.Core.DotNet" version="0.25.1" exclude="Build,Analyzers" />
-        <dependency id="Sekiban.Infrastructure.Aws.S3" version="0.25.1" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Core.DotNet" version="0.25.2" exclude="Build,Analyzers" />
+        <dependency id="Sekiban.Infrastructure.Aws.S3" version="0.25.2" exclude="Build,Analyzers" />
         <dependency id="AWSSDK.DynamoDBv2" version="3.7.405.12" exclude="Build,Analyzers" />
         <dependency id="System.Configuration.ConfigurationManager" version="9.0.1" exclude="Build,Analyzers" />
       </group>
