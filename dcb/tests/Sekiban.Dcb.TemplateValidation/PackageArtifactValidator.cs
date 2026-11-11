@@ -37,8 +37,8 @@ internal static class PackageArtifactValidator
         }
 
         Assert(ids.SetEquals(PackageManifest.PackageIds), "The local package feed is not the exact DCB package set.");
-        ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], "net9.0", "Microsoft.EntityFrameworkCore.Relational", "9.0.13");
-        ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], "net10.0", "Microsoft.EntityFrameworkCore.Relational", "10.0.3");
+        ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], "net9.0", "Microsoft.EntityFrameworkCore.Relational", "9.0.23");
+        ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], "net10.0", "Microsoft.EntityFrameworkCore.Relational", "10.0.15");
         Assert(!DependencyIds(nuspecs["Sekiban.Dcb.Orleans.Core"]).Any(IsAzureDependency),
             "Sekiban.Dcb.Orleans.Core must remain Azure-free.");
         ValidateDependency(nuspecs[AzureQueuePackageId], "net9.0", "Azure.Storage.Queues", "12.25.0");

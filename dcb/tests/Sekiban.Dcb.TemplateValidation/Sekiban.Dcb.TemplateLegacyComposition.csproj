@@ -13,7 +13,7 @@
   <ItemGroup>
     <Compile Remove="Program.cs" />
     <Compile Remove="StatusCompositionProgram.cs" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
     <PackageReference Include="Sekiban.Dcb.CosmosDb" Version="$(DcbVersion)" />
     <PackageReference Include="Sekiban.Dcb.DynamoDB" Version="$(DcbVersion)" />
     <PackageReference Include="Sekiban.Dcb.Postgres" Version="$(DcbVersion)" />

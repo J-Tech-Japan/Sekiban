@@ -35,8 +35,8 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Queues" Version="12.25.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.15" />
     <PackageReference Include="Microsoft.Orleans.Streaming.AzureStorage" Version="$(MicrosoftOrleansVersion)" />
     <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
       <PrivateAssets>all</PrivateAssets>
