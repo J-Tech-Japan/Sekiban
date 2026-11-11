@@ -28,11 +28,11 @@
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App"/>
         <PackageReference Include="Dapper" Version="2.1.66"/>
-        <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.2"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.3"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3"/>
-        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.8"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.15"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.15"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.15"/>
+        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.15"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.5">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

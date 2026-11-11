@@ -80,6 +80,7 @@ write_nuget_config() {
       'AspNetCore.HealthChecks.NpgSql' 'Grpc.AspNetCore' 'Grpc.Net.ClientFactory' 'Grpc.Tools' \
       'JsonPointer.Net' 'Json.More.Net' 'Fractions' 'YamlDotNet' 'ModelContextProtocol.Core' \
       'MessagePack' 'MessagePack.Annotations' 'Nerdbank.Streams' 'SQLitePCLRaw.core' \
+      'Hex1b' 'Nerdbank.MessagePack' 'PolyType' 'QRCoder' \
       'SQLitePCLRaw.bundle_e_sqlite3' 'SQLitePCLRaw.lib_e_sqlite3' 'SQLitePCLRaw.lib.e_sqlite3' \
       'System.*' 'runtime.*' 'NETStandard.Library' 'NuGet.*' 'NUnit*' 'xunit*' \
       'coverlet.*' 'Microsoft.NET.Test.Sdk'; do

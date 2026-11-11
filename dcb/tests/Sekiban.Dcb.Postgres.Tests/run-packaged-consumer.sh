@@ -201,13 +201,13 @@ for package_name in Sekiban.Dcb.Core.Model Sekiban.Dcb.Core Sekiban.Dcb.Postgres
   assert_package "$feed/$package_name.$version.nupkg"
 done
 postgres_package="$feed/Sekiban.Dcb.Postgres.$version.nupkg"
-assert_nuspec_dependency "$postgres_package" '9.0' '9.0.13'
-assert_nuspec_dependency "$postgres_package" '10.0' '10.0.3'
+assert_nuspec_dependency "$postgres_package" '9.0' '9.0.23'
+assert_nuspec_dependency "$postgres_package" '10.0' '10.0.15'
 if unzip -p "$postgres_package" '*.nuspec' | grep -q 'Microsoft.EntityFrameworkCore.Design'; then
   echo 'EF Core Design leaked into the Sekiban.Dcb.Postgres nuspec.' >&2
   exit 1
 fi
-echo "nuspec: Relational 9.0.13 and 10.0.3 present; EF Core Design absent"
+echo "nuspec: Relational 9.0.23 and 10.0.15 present; EF Core Design absent"
 
 consumer_project="$repo_root/dcb/tests/Sekiban.Dcb.Postgres.PackagedConsumer/Sekiban.Dcb.Postgres.PackagedConsumer.csproj"
 
@@ -271,7 +271,7 @@ for project_root in \
 done
 mutant_project="$mutant_root/dcb/src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj"
 before_mutant_refs="$(grep -c 'Microsoft.EntityFrameworkCore.Relational' "$mutant_project")"
-perl -0pi -e 's/^\s*<PackageReference Include="Microsoft\.EntityFrameworkCore\.Relational" Version="(?:9\.0\.13|10\.0\.3)"\/>\s*\n//mg' "$mutant_project"
+perl -0pi -e 's/^\s*<PackageReference Include="Microsoft\.EntityFrameworkCore\.Relational" Version="(?:9\.0\.23|10\.0\.15)"\/>\s*\n//mg' "$mutant_project"
 after_mutant_refs="$(grep -c 'Microsoft.EntityFrameworkCore.Relational' "$mutant_project" || true)"
 if [[ "$before_mutant_refs" != 2 || "$after_mutant_refs" != 0 ]]; then
   echo "Omission mutant removed an unexpected number of Relational references: before=$before_mutant_refs after=$after_mutant_refs" >&2

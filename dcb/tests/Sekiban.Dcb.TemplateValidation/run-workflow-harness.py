@@ -241,7 +241,7 @@ class Fixture:
     def package(self,path,id,template=False,version=None):
         version=version or self.version
         groups=''
-        for framework, relational in [('net9.0','9.0.13'),('net10.0','10.0.3')]:
+        for framework, relational in [('net9.0','9.0.23'),('net10.0','10.0.15')]:
             deps=[]
             if id=='Sekiban.Dcb.Postgres': deps=[('Microsoft.EntityFrameworkCore.Relational',relational)]
             if id=='Sekiban.Dcb.Orleans.AzureQueue': deps=[('Azure.Storage.Queues','12.25.0'),('Microsoft.Orleans.Streaming.AzureStorage','10.4.2')]
