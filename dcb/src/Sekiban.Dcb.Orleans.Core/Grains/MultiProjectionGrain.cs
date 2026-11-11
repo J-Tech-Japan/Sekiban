@@ -95,7 +95,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // state and arms this grain's query barrier on a tombstone rejection. Null only when no external store is configured.
     private CheckpointMutationCoordinator? _checkpointMutation;
     private bool _orderedRebuildFromFreshHost;
-    private CancellationToken _activationRestoreToken;
+    private volatile bool _activationRestoreCancellationRequested;
     private bool _activationRestoreCompleted;
     private bool _restoreActivationCancelled;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
@@ -1018,6 +1018,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private async Task<bool> RetireIntegrityWatermarkAsync(
         string projectorName, string failureReason, CancellationToken cancellationToken)
     {
+        var baseline = _stateStore.Committed;
+        var watermarkCleared = false;
         try
         {
             ThrowIfRestoreCancelled(cancellationToken);
@@ -1032,6 +1034,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     s.LastGoodEventsProcessed = 0;
                 });
 
+            watermarkCleared = outcome == GrainStateWriteOutcome.Committed;
             ThrowIfRestoreCancelled(cancellationToken);
             if (outcome == GrainStateWriteOutcome.Committed)
             {
@@ -1062,6 +1065,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
+            if (watermarkCleared && (cancellationToken.IsCancellationRequested || IsRestoreCancellation(ex)))
+            {
+                // The invalidation read can outlive activation. Undo the metadata retirement before failing activation;
+                // the coordinator checks cancellation before mutating the external checkpoint.
+                await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.MetadataMaintenance, s =>
+                {
+                    s.LastGoodSafeVersion = baseline.LastGoodSafeVersion;
+                    s.LastGoodPayloadBytes = baseline.LastGoodPayloadBytes;
+                    s.LastGoodOriginalSizeBytes = baseline.LastGoodOriginalSizeBytes;
+                    s.LastGoodEventsProcessed = baseline.LastGoodEventsProcessed;
+                });
+            }
             ThrowIfRestoreCancelled(cancellationToken, ex);
             _lastPersistOutcome = PersistOutcomeNoDurableWrite;
             _lastError = $"Integrity watermark retirement failed: {ex.Message}";
@@ -1602,9 +1617,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task<ResultBox<bool>> PersistStateCoreAsync(bool isCompletionPersist)
     {
-        if (_restoreActivationCancelled || (!_activationRestoreCompleted && _activationRestoreToken.IsCancellationRequested))
+        if (_restoreActivationCancelled || (!_activationRestoreCompleted && _activationRestoreCancellationRequested))
         {
-            return ResultBox.Error<bool>(new OperationCanceledException(_activationRestoreToken));
+            return ResultBox.Error<bool>(new OperationCanceledException("Snapshot restore cancelled"));
         }
         var lastErrorBeforePersist = _lastError;
         _lastPersistOutcome = PersistOutcomeNotAttempted;
@@ -2586,7 +2601,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
-        _activationRestoreToken = cancellationToken;
+        using var cancellationRegistration = cancellationToken.Register(
+            () => _activationRestoreCancellationRequested = true);
         try
         {
             await ActivateWithRestoreAsync(cancellationToken);
@@ -2778,9 +2794,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             record,
                             cancellationToken);
 
-                        ThrowIfRestoreCancelled(cancellationToken, stateStreamResult.IsSuccess ? null : stateStreamResult.GetException());
                         if (!stateStreamResult.IsSuccess)
                         {
+                            ThrowIfRestoreCancelled(cancellationToken, stateStreamResult.GetException());
                             var errorMsg = record.IsOffloaded
                                 ? $"State stream open failed for offloaded key: {record.OffloadKey}"
                                 : stateStreamResult.GetException().Message;
@@ -2806,6 +2822,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         else
                         {
                             await using var snapshotStream = stateStreamResult.GetValue();
+                            ThrowIfRestoreCancelled(cancellationToken);
                             long? restoredSnapshotBytes = null;
                             if (snapshotStream.CanSeek)
                             {
@@ -3326,17 +3343,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             // A queued restore retirement must re-check after acquiring the external mutation gate too.
             cancellationToken.ThrowIfCancellationRequested();
-            return PerformCheckpointInvalidationCoreAsync();
+            return PerformCheckpointInvalidationCoreAsync(cancellationToken);
         });
     }
 
     // The SINGLE capability-aware invalidation shared by the retrograde-rebuild path and the admin DeleteExternalStateAsync
     // path — always run inside the external-store coordinator. Delegates to the sole CheckpointMutationCoordinator (durable
     // bump+tombstone CAS on a capable store; legacy delete otherwise). The grain holds no raw checkpoint mutation reach.
-    private async Task PerformCheckpointInvalidationCoreAsync()
+    private async Task PerformCheckpointInvalidationCoreAsync(CancellationToken cancellationToken = default)
     {
         _orderedRebuildFromFreshHost = false;
-        await _checkpointMutation!.InvalidateAsync(GetProjectorName(), _host!.GetProjectorVersion());
+        await _checkpointMutation!.InvalidateAsync(GetProjectorName(), _host!.GetProjectorVersion(), cancellationToken);
     }
 
     // True while a fault exists on the live actor OR the committed persisted descriptor. No external snapshot may be
