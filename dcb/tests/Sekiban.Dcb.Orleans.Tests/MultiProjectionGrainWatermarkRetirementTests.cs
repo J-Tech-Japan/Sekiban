@@ -65,23 +65,30 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
     }
 
     [Theory]
-    [InlineData("query-result")]
-    [InlineData("query-throw")]
-    [InlineData("open-result")]
-    [InlineData("open-throw")]
-    [InlineData("host-result")]
-    [InlineData("host-throw")]
-    [InlineData("dispose")]
-    [InlineData("slot-result")]
-    public async Task Cancelled_restore_fails_without_mutation_and_next_activation_restores(string site)
+    [InlineData("query-result", false, false)]
+    [InlineData("query-throw", false, false)]
+    [InlineData("open-result", false, false)]
+    [InlineData("open-throw", false, false)]
+    [InlineData("host-result", false, false)]
+    [InlineData("host-throw", false, false)]
+    [InlineData("dispose", false, false)]
+    [InlineData("slot-result", false, false)]
+    [InlineData("host-result", false, true)]
+    [InlineData("host-throw", false, true)]
+    [InlineData("dispose", true, false)]
+    public async Task Cancelled_restore_fails_without_mutation_and_next_activation_restores(
+        string site, bool hostFailure, bool disposalFailure)
     {
         const string name = "g149-cancel";
         _harness.UseCapableStore = true;
         var seed = await _harness.SeedKnownPresentCheckpointAsync(name, 10_000, []);
         var before = (await _harness.CapableStore.ReadCheckpointSlotAsync(name, "v1")).GetValue();
         _harness.StateStore.CancellationSite = site;
+        _harness.RestoreBehavior = hostFailure ? RestoreBehavior.ResultBoxFailure : RestoreBehavior.None;
+        _harness.StreamBehavior = disposalFailure ? StateStreamBehavior.DisposeThrows : StateStreamBehavior.Success;
         var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(name);
-        await Assert.ThrowsAnyAsync<Exception>(() => grain.GetStatusAsync());
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() => grain.GetStatusAsync());
+        Assert.True(ContainsCancellation(failure), failure.ToString());
         Assert.Equal(before, (await _harness.StateStore.Inner.ReadCheckpointSlotAsync(name, "v1")).GetValue());
         AssertWatermarkUnchanged(name);
         Assert.Empty(_harness.EventStore.SnapshotReadSinceValues());
@@ -89,6 +96,8 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.Equal(0, _harness.ProviderStorage.WriteCalls);
         Assert.Single(_harness.LoggerProvider.Entries, log => log.LogLevel == LogLevel.Warning && log.Message.Contains("Snapshot restore cancelled"));
         _harness.StateStore.CancellationSite = null;
+        _harness.RestoreBehavior = RestoreBehavior.None;
+        _harness.StreamBehavior = StateStreamBehavior.Success;
         await grain.GetStatusAsync();
         await WaitUntilAsync(() => _harness.EventStore.SnapshotReadSinceValues().Count > 0, TimeSpan.FromSeconds(10));
         Assert.All(_harness.EventStore.SnapshotReadSinceValues(), since => Assert.Equal(seed.OldPosition, since));
@@ -1766,6 +1775,11 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             return _inner.UpsertFromStreamAsync(request, stream, offloadThresholdBytes, cancellationToken);
         }
     }
+
+    private static bool ContainsCancellation(Exception exception) =>
+        exception is OperationCanceledException ||
+        (exception is AggregateException aggregate && aggregate.InnerExceptions.Any(ContainsCancellation)) ||
+        (exception.InnerException is { } inner && ContainsCancellation(inner));
 
     private static Exception CancellationFailure() => new AggregateException(
         new InvalidOperationException("unrelated"),

@@ -2810,108 +2810,113 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             _stateRestoreSource = StateRestoreSource.Failed;
                             _activationFailureReason = errorMsg;
                             knownRecordFailureHandled = true;
-                            if (await RetireIntegrityWatermarkAsync(projectorName, errorMsg, cancellationToken))
-                            {
-                                forceFullCatchUp = true;
-                            }
-                            else
-                            {
-                                _restoreRetirementFailed = true;
-                            }
                         }
                         else
                         {
-                            await using var snapshotStream = stateStreamResult.GetValue();
-                            ThrowIfRestoreCancelled(cancellationToken);
-                            long? restoredSnapshotBytes = null;
-                            if (snapshotStream.CanSeek)
+                            var snapshotStream = stateStreamResult.GetValue();
+                            Exception? snapshotFailure = null;
+                            try
                             {
-                                restoredSnapshotBytes = snapshotStream.Length;
-                                snapshotStream.Position = 0;
-                            }
-                            var restoreResult = await _host.RestoreSnapshotFromStreamAsync(snapshotStream, cancellationToken);
-
-                            ThrowIfRestoreCancelled(cancellationToken, restoreResult.IsSuccess ? null : restoreResult.GetException());
-                            if (!restoreResult.IsSuccess)
-                            {
-                                _logger.LogError(
-                                    MultiProjectionLogEvents.StateRestoreFailed,
-                                    restoreResult.GetException(),
-                                    "Snapshot restore failed: {ProjectorName}",
-                                    projectorName);
-                                var errorMsg = restoreResult.GetException().Message;
-                                _stateRestoreSource = StateRestoreSource.Failed;
-                                _activationFailureReason = errorMsg;
-                                knownRecordFailureHandled = true;
-                                if (await RetireIntegrityWatermarkAsync(projectorName, errorMsg, cancellationToken))
+                                ThrowIfRestoreCancelled(cancellationToken);
+                                long? restoredSnapshotBytes = null;
+                                if (snapshotStream.CanSeek)
                                 {
-                                    forceFullCatchUp = true;
+                                    restoredSnapshotBytes = snapshotStream.Length;
+                                    snapshotStream.Position = 0;
+                                }
+                                var restoreResult = await _host.RestoreSnapshotFromStreamAsync(snapshotStream, cancellationToken);
+
+                                ThrowIfRestoreCancelled(cancellationToken, restoreResult.IsSuccess ? null : restoreResult.GetException());
+                                if (!restoreResult.IsSuccess)
+                                {
+                                    _logger.LogError(
+                                        MultiProjectionLogEvents.StateRestoreFailed,
+                                        restoreResult.GetException(),
+                                        "Snapshot restore failed: {ProjectorName}",
+                                        projectorName);
+                                    var errorMsg = restoreResult.GetException().Message;
+                                    _stateRestoreSource = StateRestoreSource.Failed;
+                                    _activationFailureReason = errorMsg;
+                                    knownRecordFailureHandled = true;
                                 }
                                 else
                                 {
-                                    _restoreRetirementFailed = true;
+                                    _hostIsPristine = false;
+                                    _eventsProcessed = record.EventsProcessed;
+                                    MarkProjectionStatusDirty(record.LastSortableUniqueId, record.LastSortableUniqueId);
+                                    ClearProcessedEventCache();
+
+                                    // SEK-G18 (#1086): take the catch-up start verbatim from the restored checkpoint record, so
+                                    // catch-up reads strictly AFTER the durable safe position (exclusive) without re-folding it.
+                                    _catchUpStartPositions.Restore(
+                                        string.IsNullOrEmpty(record.LastSortableUniqueId)
+                                            ? null
+                                            : new SortableUniqueId(record.LastSortableUniqueId));
+
+                                    // SEK-G18 (#1086): seed the last-persisted SafeWindowThreshold verbatim so a no-progress
+                                    // re-persist writes the SAME value instead of a fresh wall-clock threshold (no drift).
+                                    _lastPersistedSafeWindowThreshold = record.SafeWindowThreshold;
+
+                                    int? postSafeVersion = null;
+                                    int? postUnsafeVersion = null;
+                                    try
+                                    {
+                                        var metadataResult = await _host.GetStateMetadataAsync(includeUnsafe: true);
+                                        if (metadataResult.IsSuccess)
+                                        {
+                                            var metadata = metadataResult.GetValue();
+                                            postSafeVersion = metadata.SafeVersion;
+                                            postUnsafeVersion = metadata.UnsafeVersion;
+                                        }
+                                    }
+                                    catch (Exception ex) { ThrowIfRestoreCancelled(cancellationToken, ex); }
+                                    ThrowIfRestoreCancelled(cancellationToken);
+
+                                    _logger.LogInformation(
+                                        MultiProjectionLogEvents.RestoreDetails,
+                                        "Restore: {ProjectorName}, RecordEvents={RecordEvents}, StateDataLen={StateDataLen}, Original={OriginalSize}, Compressed={CompressedSize}, PostSafeVer={PostSafeVersion}, PostUnsafeVer={PostUnsafeVersion}",
+                                        projectorName,
+                                        record.EventsProcessed,
+                                        restoredSnapshotBytes ?? 0,
+                                        record.OriginalSizeBytes,
+                                        record.CompressedSizeBytes,
+                                        postSafeVersion,
+                                        postUnsafeVersion);
+
+                                    if (record.EventsProcessed > 1000 && postSafeVersion == 0)
+                                    {
+                                        _logger.LogWarning(
+                                            MultiProjectionLogEvents.SafeVersionZero,
+                                            "SUSPICIOUS: {ProjectorName} - {EventsProcessed} events but safeVersion=0 after restore",
+                                            projectorName,
+                                            record.EventsProcessed);
+                                    }
+
+                                    _logger.LogInformation(
+                                        MultiProjectionLogEvents.StateRestoreSuccess,
+                                        "State restored: {ProjectorName}, Position: {Position}, Events: {Events}",
+                                        projectorName, record.LastSortableUniqueId, record.EventsProcessed);
+                                    restoredFromExternalStore = true;
+                                    _stateRestoredAt = DateTime.UtcNow;
+                                    _stateRestoreSource = StateRestoreSource.ExternalStore;
                                 }
                             }
-                            else
+                            catch (Exception ex)
                             {
-                                _hostIsPristine = false;
-                                _eventsProcessed = record.EventsProcessed;
-                                MarkProjectionStatusDirty(record.LastSortableUniqueId, record.LastSortableUniqueId);
-                                ClearProcessedEventCache();
-
-                                // SEK-G18 (#1086): take the catch-up start verbatim from the restored checkpoint record, so
-                                // catch-up reads strictly AFTER the durable safe position (exclusive) without re-folding it.
-                                _catchUpStartPositions.Restore(
-                                    string.IsNullOrEmpty(record.LastSortableUniqueId)
-                                        ? null
-                                        : new SortableUniqueId(record.LastSortableUniqueId));
-
-                                // SEK-G18 (#1086): seed the last-persisted SafeWindowThreshold verbatim so a no-progress
-                                // re-persist writes the SAME value instead of a fresh wall-clock threshold (no drift).
-                                _lastPersistedSafeWindowThreshold = record.SafeWindowThreshold;
-
-                                int? postSafeVersion = null;
-                                int? postUnsafeVersion = null;
+                                snapshotFailure = ex;
+                                throw;
+                            }
+                            finally
+                            {
                                 try
                                 {
-                                    var metadataResult = await _host.GetStateMetadataAsync(includeUnsafe: true);
-                                    if (metadataResult.IsSuccess)
-                                    {
-                                        var metadata = metadataResult.GetValue();
-                                        postSafeVersion = metadata.SafeVersion;
-                                        postUnsafeVersion = metadata.UnsafeVersion;
-                                    }
+                                    await snapshotStream.DisposeAsync();
                                 }
-                                catch (Exception ex) { ThrowIfRestoreCancelled(cancellationToken, ex); }
-                                ThrowIfRestoreCancelled(cancellationToken);
-
-                                _logger.LogInformation(
-                                    MultiProjectionLogEvents.RestoreDetails,
-                                    "Restore: {ProjectorName}, RecordEvents={RecordEvents}, StateDataLen={StateDataLen}, Original={OriginalSize}, Compressed={CompressedSize}, PostSafeVer={PostSafeVersion}, PostUnsafeVer={PostUnsafeVersion}",
-                                    projectorName,
-                                    record.EventsProcessed,
-                                    restoredSnapshotBytes ?? 0,
-                                    record.OriginalSizeBytes,
-                                    record.CompressedSizeBytes,
-                                    postSafeVersion,
-                                    postUnsafeVersion);
-
-                                if (record.EventsProcessed > 1000 && postSafeVersion == 0)
+                                catch (Exception) when (snapshotFailure is not null && IsRestoreCancellation(snapshotFailure))
                                 {
-                                    _logger.LogWarning(
-                                        MultiProjectionLogEvents.SafeVersionZero,
-                                        "SUSPICIOUS: {ProjectorName} - {EventsProcessed} events but safeVersion=0 after restore",
-                                        projectorName,
-                                        record.EventsProcessed);
+                                    // Disposal must complete before cancellation escapes, but its failure must not
+                                    // replace cancellation already detected while restoring the snapshot.
                                 }
-
-                                _logger.LogInformation(
-                                    MultiProjectionLogEvents.StateRestoreSuccess,
-                                    "State restored: {ProjectorName}, Position: {Position}, Events: {Events}",
-                                    projectorName, record.LastSortableUniqueId, record.EventsProcessed);
-                                restoredFromExternalStore = true;
-                                _stateRestoredAt = DateTime.UtcNow;
-                                _stateRestoreSource = StateRestoreSource.ExternalStore;
                             }
                         }
                     }
@@ -2973,20 +2978,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         knownRecordFailureHandled = true;
                         _stateRestoreSource = StateRestoreSource.Failed;
                         _activationFailureReason = ex.Message;
-                        if (await RetireIntegrityWatermarkAsync(projectorName, ex.Message, cancellationToken))
-                        {
-                            forceFullCatchUp = true;
-                        }
-                        else
-                        {
-                            _restoreRetirementFailed = true;
-                        }
                     }
                     else if (!knownRecordObtained)
                     {
                         _stateRestoreSource = StateRestoreSource.Failed;
                         _activationFailureReason = ex.Message;
                         forceFullCatchUp = true;
+                    }
+                }
+                // Classify all restore and disposal failures before making any durable retirement decision.
+                ThrowIfRestoreCancelled(cancellationToken);
+                if (knownRecordFailureHandled)
+                {
+                    if (await RetireIntegrityWatermarkAsync(projectorName, _activationFailureReason!, cancellationToken))
+                    {
+                        forceFullCatchUp = true;
+                    }
+                    else
+                    {
+                        _restoreRetirementFailed = true;
                     }
                 }
             }
