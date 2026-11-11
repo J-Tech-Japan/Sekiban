@@ -150,7 +150,42 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         Assert.Single(_harness.Hosts);
 
         options.ActivationTimeout = TimeSpan.FromSeconds(10);
-        _harness.RestoreBehavior = RestoreBehavior.Success;
+        _harness.RestoreBehavior = RestoreBehavior.None;
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(() => _harness.EventStore.SnapshotReadSinceValues().Count > 0, TimeSpan.FromSeconds(10));
+        Assert.All(_harness.EventStore.SnapshotReadSinceValues(), since => Assert.Equal(seed.OldPosition, since));
+        AssertWatermarkUnchanged(name);
+    }
+
+    [Fact]
+    public async Task Activation_timeout_during_provider_tombstone_read_preserves_checkpoint_and_watermark()
+    {
+        const string name = "g149-provider-invalidation-timeout";
+        _harness.UseCapableStore = true;
+        var seed = await _harness.SeedKnownPresentCheckpointAsync(name, 10_000, []);
+        var before = (await _harness.StateStore.Inner.ReadCheckpointSlotAsync(name, "v1")).GetValue();
+        var options = ((InProcessSiloHandle)_cluster.Silos[0]).ServiceProvider
+            .GetRequiredService<IOptions<GrainCollectionOptions>>().Value;
+        options.ActivationTimeout = TimeSpan.FromSeconds(1);
+        _harness.RestoreBehavior = RestoreBehavior.ResultBoxFailure;
+        _harness.CapableStore.ProviderTombstoneReadDelay = TimeSpan.FromSeconds(3);
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(name);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => grain.GetStatusAsync());
+        await _harness.CapableStore.ProviderTombstoneReadFinished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await WaitUntilAsync(() => _harness.LoggerProvider.Entries.Any(log =>
+            log.Message.Contains("needs a larger activation timeout")), TimeSpan.FromSeconds(10));
+        Assert.Equal(1, _harness.CapableStore.InvalidationCalls);
+        Assert.True(_harness.CapableStore.ProviderTombstoneReadWasCancelled);
+        var after = (await _harness.StateStore.Inner.ReadCheckpointSlotAsync(name, "v1")).GetValue();
+        Assert.False(after.IsTombstoned);
+        Assert.Equal(before, after);
+        AssertWatermarkUnchanged(name);
+        Assert.Empty(_harness.EventStore.SnapshotReadSinceValues());
+        Assert.Single(_harness.Hosts);
+
+        options.ActivationTimeout = TimeSpan.FromSeconds(10);
+        _harness.RestoreBehavior = RestoreBehavior.None;
         await grain.GetStatusAsync();
         await WaitUntilAsync(() => _harness.EventStore.SnapshotReadSinceValues().Count > 0, TimeSpan.FromSeconds(10));
         Assert.All(_harness.EventStore.SnapshotReadSinceValues(), since => Assert.Equal(seed.OldPosition, since));
@@ -1769,6 +1804,9 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         private int _slotReads;
         public int InvalidationCalls { get; private set; }
         public bool InvalidationReadWasCancelled { get; private set; }
+        public TimeSpan ProviderTombstoneReadDelay { get; set; }
+        public TaskCompletionSource ProviderTombstoneReadFinished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool ProviderTombstoneReadWasCancelled { get; private set; }
         public override async Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default)
         {
             if (store.CancellationSite == "slot-result") return ResultBox.Error<CheckpointSlot>(CancellationFailure());
@@ -1783,11 +1821,28 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             }
             return await base.ReadCheckpointSlotAsync(p, v, ct);
         }
-        public override Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(
+        public override async Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(
             string p, string v, CheckpointExpectation e, CancellationToken ct = default)
         {
             InvalidationCalls++;
-            return base.InvalidateWithTombstoneAsync(p, v, e, ct);
+            if (ProviderTombstoneReadDelay > TimeSpan.Zero)
+            {
+                try
+                {
+                    // Like Cosmos, read the document with the supplied token before attempting the tombstone CAS.
+                    await Task.Delay(ProviderTombstoneReadDelay, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    ProviderTombstoneReadWasCancelled = true;
+                    throw;
+                }
+                finally
+                {
+                    ProviderTombstoneReadFinished.TrySetResult();
+                }
+            }
+            return await base.InvalidateWithTombstoneAsync(p, v, e, ct);
         }
         public new Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) =>
             store.GetLatestForVersionAsync(p, v, ct);

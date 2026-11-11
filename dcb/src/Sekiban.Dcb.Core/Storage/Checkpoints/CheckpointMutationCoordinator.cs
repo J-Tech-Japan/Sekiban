@@ -144,7 +144,8 @@ internal sealed class CheckpointMutationCoordinator
     {
         if (_cas is not null)
         {
-            var slotResult = await _cas.ReadCheckpointSlotAsync(projectorName, projectorVersion, cancellationToken);
+            var slotResult = await _cas.ReadCheckpointSlotAsync(projectorName, projectorVersion, cancellationToken)
+                .WaitAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (!slotResult.IsSuccess)
             {
