@@ -46,6 +46,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
     private static async Task<TestCluster> BuildClusterAsync(string name)
     {
         var builder = new TestClusterBuilder();
+        MultiProjectionGrainWatermarkRetirementTests.ConfigureTestPorts(builder, name == "A" ? 4 : 8);
         builder.Options.InitialSilosCount = 1;
         var uniqueId = Guid.NewGuid().ToString("N")[..8];
         builder.Options.ClusterId = $"G20-retro-{name}-{uniqueId}";
@@ -138,8 +139,10 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterB.Client, SharedStores.EventStore, SharedStores.Domain), "earlier");
     }
 
-    [Fact]
-    public async Task DeterministicParkedStaleWriter_RejectedAgainstTombstone_ArmsBarrier_NoRecontamination()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeterministicParkedStaleWriter_RejectedAgainstTombstone_ArmsBarrier_NoRecontamination(bool tombstoneAhead)
     {
         // The packet-critical race, executed DETERMINISTICALLY through product code: cluster B captures the old Active
         // token and PARKS its real grain persist at the store boundary; cluster A retrograde-rebuilds and its tombstone is
@@ -174,7 +177,7 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         var bUpsert = new GatingCheckpointStore.Gate { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
         gateB.UpsertGate = bUpsert;
         var bPersist = grainB.PersistStateAsync();
-        await bUpsert.Arrived.Task;
+        await bUpsert.Arrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
 
         // (4) Arm A's rebuilt-commit gate, then deliver the globally-earlier retrograde event to A and drive its rebuild
         //     FIRE-AND-FORGET (never awaited — the driving call itself parks at the commit gate, so awaiting it would
@@ -182,11 +185,26 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         //     tombstone OPEN. B's stale writer is now guaranteed to meet a tombstone, not a fresh Active row.
         var aCommit = new GatingCheckpointStore.Gate { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
         gateA.CommitRebuiltGate = aCommit;
+        if (tombstoneAhead)
+        {
+            // The peer's retained checkpoint count is ahead of B's two-event live host.
+            await MultiProjectionGrainWatermarkRetirementTests.ReplaceCheckpointCountAsync(SharedStores.StateStore, slot0.Record!, 10_000);
+        }
         var earlier = CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31));
         await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) });
         await grainA.AddEventsAsync(new[] { ToSerializable(earlier) });
         var aDrive = grainA.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);   // drives invalidate -> parks at commit
-        await aCommit.Arrived.Task;   // A reached the rebuilt-commit boundary => the invalidate (tombstone) already committed
+        try
+        {
+            await aCommit.Arrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        }
+        catch
+        {
+            bUpsert.Release!.TrySetResult();
+            aCommit.Release!.TrySetResult();
+            var status = await grainA.GetStatusAsync();
+            Assert.Fail($"Rebuilt commit gate not reached: {status.LastError}; slot={(await ReadSlotAsync()).Lifecycle}");
+        }   // A reached the rebuilt-commit boundary => the invalidate (tombstone) already committed
         var tomb = await PollUntilTombstoneAsync();
         Assert.True(tomb.IsTombstoned);
         Assert.Equal(1, tomb.Generation);
@@ -201,6 +219,17 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
         Assert.True(afterB.IsTombstoned, $"the shared row was re-contaminated by the stale writer: {afterB.Lifecycle} gen{afterB.Generation}");
         Assert.Equal(1, afterB.Generation);
         Assert.Equal(tomb.Revision, afterB.Revision);   // exact same token — B did not touch the row
+
+        if (tombstoneAhead)
+        {
+            // AdoptAfterRejection armed the barrier but did not recreate B's host. Repeated persists must
+            // not gain the fresh-host ordering bypass while A's tombstone remains open.
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                _ = await grainB.PersistStateAsync();
+                Assert.Equal(tomb, await ReadSlotAsync());
+            }
+        }
 
         // (6) Release A's rebuilt commit -> Active(gen1) with the rebuilt 2-event checkpoint, winner "earlier".
         aCommit.Release!.SetResult();

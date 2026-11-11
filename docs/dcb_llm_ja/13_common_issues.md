@@ -744,7 +744,13 @@ Resetting integrity guard: LastGoodSafeVersion was {LastGood} but external snaps
 
 ### store-ahead チェックで恒久的に tombstone のままになる checkpoint (SEK-G97)
 
-**症状。** Catch-up 完了後も Warning **1030** (`DurableRebuildObligationNotSaved`) と
+**10.24.2 以降。** この checkpoint は次の activation で自動的に回復し、手作業は不要です。
+Activation は整合性の watermark をリセットし、新しい host で replay して、最初の persist で
+再構築した checkpoint を保存します。保持されたイベント数が replay 可能なイベント総数を超えていても
+回復します。Catch-up 完了まではクエリは fail-closed のままです。その後の activation は Active な
+checkpoint を全 replay なしで restore します。
+
+**10.24.2 より前の症状。** Catch-up 完了後も Warning **1030** (`DurableRebuildObligationNotSaved`) と
 `GetStatusAsync().LastError` に
 `External store has newer safe state (X) than local (Y)` が残ります。Checkpoint slot は
 `Tombstoned` のままで、activation のたびに全イベントを replay します。Fail-closed の
@@ -761,27 +767,25 @@ Fail-closed クエリ (`GetStateAsync(canGetUnsafeState: false, waitForCatchUp: 
 
 **考えられる原因。** Projection store を残したまま event store をリセット・復元した場合や、
 legacy checkpoint の `EventsProcessed` が過大な場合です。Tombstone 化は payload と count を保持し、
-store-ahead の整合性チェックは再構築した safe count と比較し続けます。この runbook は上記の
-store-ahead 診断を対象とします。Orleans に保持された `LastGoodSafeVersion` によって、1030 や
-store-ahead エラーより先に `Integrity guard blocked persist` (1021) で保存が止まる別のケースは、
-このテストの検証対象外です。
+10.24.2 より前では store-ahead の整合性チェックが再構築した safe count と比較し続けます。
+Orleans に保持された `LastGoodSafeVersion` によって、1030 や store-ahead エラーより先に
+`Integrity guard blocked persist` (1021) で保存が止まる場合もあります。10.24.2 以降は、新しい
+activation が tombstone の checkpoint を replay する前に、その watermark もリセットします。
 
-**対象 checkpoint の復旧。** **ServiceId、projector name、projector version** を特定します。
+**10.24.2 より前のバージョンでの対象 checkpoint の復旧。** **ServiceId、projector name、projector version** を特定します。
 Service scope も checkpoint の識別情報の一部です。
 
 1. Multi-projection state table/container の対象 checkpoint 行・document を **provider レベル**で
    削除します。PostgreSQL と Cosmos DB では、その service、projector name、version の checkpoint
-   だけを lifecycle/generation metadata ごと削除します。イベントは削除しません。テストは test service
-   に明示的に scope を固定した store の `IMultiProjectionStateStore.DeleteAsync(projectorName,
-   projectorVersion)` を使います。
+   だけを lifecycle/generation metadata ごと削除します。イベントは削除しません。
    Checkpoint payload が blob storage に offload されている（行に `OffloadKey` がある）場合、行を削除しても
    blob は削除されず、キーも行と一緒に失われます。削除前に `OffloadKey` を記録し、他の checkpoint
    から参照されていないことを確認したうえで、blob の保持方針に従って片付けてください。
    `IBlobStorageSnapshotAccessor` には削除 API がなく、PostgreSQL/Cosmos の `DeleteAsync` も blob の
    cleanup は運用側に委ねています。
 2. 直ちに `RequestDeactivationAsync` で grain を deactivate し、次のリクエストを新しい activation で
-   処理させます。Host の再起動も activation を置き換える方法ですが、検証テストは grain deactivation
-   を実行します。Provider 削除直後の deactivation 中に古い token の保存が拒否されるのは想定内で、
+   処理させます。Host の再起動も activation を置き換える方法です。
+   Provider 削除直後の deactivation 中に古い token の保存が拒否されるのは想定内で、
    ログに保存失敗として現れる場合があります。
 3. 上記の fail-closed オプションでクエリを実行し、catch-up 完了を待ちます。正しいクエリ結果と、
    再構築したイベント数を持つ **Active** checkpoint を provider store で確認します。さらに一度
@@ -789,15 +793,15 @@ Service scope も checkpoint の識別情報の一部です。
 
 `DeleteExternalStateAsync` は手順 1 の provider 削除ではありません。対応 store では Active 行を
 削除せず tombstone 化し、すでに tombstone の行は既存の tombstone を保持します（generation は変わりません）。
-この stuck 状態の解消にはなりません。
+10.24.2 より前では、この stuck 状態の解消にはなりません。
 
 End-to-end の契約は
 [`PermanentlyTombstonedCheckpointRunbookTests`](../../dcb/tests/Sekiban.Dcb.Orleans.Tests/PermanentlyTombstonedCheckpointRunbookTests.cs)
-にあります。Safe な replay 可能イベント 50 件に対して retained count を 100 とし、複数 activation で
-正しいクエリ結果と 1030、`DeleteExternalStateAsync` 後も同じ tombstone、provider 削除と deactivation、
-新しい Active checkpoint、その後の全 replay なしの restore を確認します。In-memory provider を使うため、
-PostgreSQL/Cosmos の管理操作と host 全体の再起動はこのテストでは実行しません。
-製品の store-ahead チェックは変更していません。
+にあります。Safe な replay 可能イベント 50 件に対して retained count を 100 とし、
+`DeleteExternalStateAsync` 後も同じ tombstone が保持されることを確認します。最初の新しい activation は
+正しいクエリ結果を返し、50 件の Active checkpoint を保存します。Warning 1030 と store-ahead エラーは
+ありません。その後の activation では全 replay なしで restore することを確認します。
+In-memory provider を使い、provider 削除や host 全体の再起動はこのテストでは実行しません。
 
 ## プロセス間の clock skew (SEK-G116)
 
