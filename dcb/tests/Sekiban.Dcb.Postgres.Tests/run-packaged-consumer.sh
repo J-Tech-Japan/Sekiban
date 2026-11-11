@@ -271,7 +271,7 @@ for project_root in \
 done
 mutant_project="$mutant_root/dcb/src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj"
 before_mutant_refs="$(grep -c 'Microsoft.EntityFrameworkCore.Relational' "$mutant_project")"
-perl -0pi -e 's/^\s*<PackageReference Include="Microsoft\.EntityFrameworkCore\.Relational" Version="(?:9\.0\.13|10\.0\.3)"\/>\s*\n//mg' "$mutant_project"
+perl -0pi -e 's/^\s*<PackageReference Include="Microsoft\.EntityFrameworkCore\.Relational" Version="(?:9\.0\.23|10\.0\.15)"\/>\s*\n//mg' "$mutant_project"
 after_mutant_refs="$(grep -c 'Microsoft.EntityFrameworkCore.Relational' "$mutant_project" || true)"
 if [[ "$before_mutant_refs" != 2 || "$after_mutant_refs" != 0 ]]; then
   echo "Omission mutant removed an unexpected number of Relational references: before=$before_mutant_refs after=$after_mutant_refs" >&2
