@@ -46,8 +46,8 @@ var orleans = builder
 
 // Add the API Service
 var apiService = builder
-    .AddProject<SekibanDcbDecider_ApiService>("apiservice")
-    .WithHttpHealthCheck("/health")
+    .AddProject<SekibanDcbDecider_ApiService>("apiservice", launchProfileName: "http")
+    .WithHttpHealthCheck("/health", endpointName: "http")
     .WithReference(orleans)
     .WithReference(postgres)
     .WithReference(identityPostgres)
@@ -67,7 +67,7 @@ var apiService = builder
 
 // Add the Web frontend
 builder
-    .AddProject<SekibanDcbDecider_Web>("webfrontend")
+    .AddProject<SekibanDcbDecider_Web>("webfrontend", launchProfileName: "http")
     .WithExternalHttpEndpoints()
     .WithReference(apiService)
     .WaitFor(apiService)

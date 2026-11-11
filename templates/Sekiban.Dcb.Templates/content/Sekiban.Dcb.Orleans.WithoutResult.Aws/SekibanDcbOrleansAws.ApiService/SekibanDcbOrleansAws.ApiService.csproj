@@ -25,8 +25,8 @@
         <PackageReference Include="Npgsql" Version="10.0.3" />
         <!-- Note: Microsoft.Orleans.Streaming.SQS conflicts with AWS SDK v4 used by DynamoDB -->
         <!-- SQS streaming will be added when Orleans SQS package supports AWS SDK v4 -->
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
-        <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.15" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.20.0" />
         <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.DynamoDB" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.BlobStorage.S3" Version="$(SekibanDcbVersion)" />
@@ -34,7 +34,7 @@
         <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.MaterializedView.Postgres" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.MaterializedView.Orleans" Version="$(SekibanDcbVersion)" />
-        <PackageReference Include="Dapper" Version="2.1.66" />
+        <PackageReference Include="Dapper" Version="2.1.89" />
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 

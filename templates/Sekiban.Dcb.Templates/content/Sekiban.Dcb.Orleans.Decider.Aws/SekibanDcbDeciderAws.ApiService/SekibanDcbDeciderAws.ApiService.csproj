@@ -16,9 +16,9 @@
 
     <ItemGroup>
         <!-- Authentication / Identity -->
-        <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.3" />
-        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.3" />
-        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.2" />
+        <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.15" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.6.5" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.15" />
 
         <!-- Orleans Core -->
@@ -31,8 +31,8 @@
         <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="$(MicrosoftOrleansVersion)" />
         <PackageReference Include="Npgsql" Version="10.0.3" />
 
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
-        <PackageReference Include="Scalar.AspNetCore" Version="2.12.50" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.15" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.20.0" />
         <PackageReference Include="Sekiban.Dcb.Orleans.WithoutResult" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.DynamoDB" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.BlobStorage.S3" Version="$(SekibanDcbVersion)" />
@@ -40,7 +40,7 @@
         <PackageReference Include="Sekiban.Dcb.MaterializedView" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.MaterializedView.Postgres" Version="$(SekibanDcbVersion)" />
         <PackageReference Include="Sekiban.Dcb.MaterializedView.Orleans" Version="$(SekibanDcbVersion)" />
-        <PackageReference Include="Dapper" Version="2.1.66" />
+        <PackageReference Include="Dapper" Version="2.1.89" />
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 
