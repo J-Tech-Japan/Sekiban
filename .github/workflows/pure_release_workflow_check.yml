@@ -1,0 +1,20 @@
+name: Validate Pure release workflow
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/packagesPure.yml'
+      - 'eng/validate-pure-release-workflow.sh'
+      - '.github/workflows/pure_release_workflow_check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the Pure release workflow wiring and mutants
+        run: ./eng/validate-pure-release-workflow.sh --repo-root . --self-test
