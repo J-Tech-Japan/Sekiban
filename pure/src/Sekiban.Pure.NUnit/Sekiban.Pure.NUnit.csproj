@@ -20,7 +20,7 @@
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <GenerateSBOM>true</GenerateSBOM>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -28,14 +28,13 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.8"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15"/>
         <PackageReference Include="NUnit" Version="4.4.0"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <None Include="../../README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="9.0.0"/>
     </ItemGroup>
 
 </Project>

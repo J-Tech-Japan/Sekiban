@@ -20,12 +20,12 @@
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <GenerateSBOM>true</GenerateSBOM>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
         <UserSecretsId>d1e5185f-fa78-4690-9093-521ed6432bbd</UserSecretsId>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Orleans.Serialization.Abstractions" Version="9.2.1"/>
+        <PackageReference Include="Microsoft.Orleans.Serialization.Abstractions" Version="10.4.2"/>
         <PackageReference Include="ResultBoxes" Version="0.4.0"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
             <PrivateAssets>all</PrivateAssets>
