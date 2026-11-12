@@ -54,6 +54,10 @@ jobs:
           --health-retries 5
     steps:
     - uses: actions/checkout@v4
+    - name: Setup .NET 9 (targeting packs for the API compatibility baseline)
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
     - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
@@ -76,8 +80,6 @@ jobs:
     - name: dotnet test all projects sequentially (net10.0)
       run: |
         dotnet test pure/tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-        # User secrets are added after environment variables in the Cosmos test configuration.
-        dotnet user-secrets set "Sekiban:Azure:CosmosDatabase" "GithubActionsPure-net10.0" --project pure/tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj
         dotnet test pure/tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
         dotnet test pure/tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
         dotnet test pure/tests/Sekiban.Pure.Dapr.Tests/Sekiban.Pure.Dapr.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
@@ -85,8 +87,6 @@ jobs:
     - name: dotnet test all projects sequentially (net11.0)
       run: |
         dotnet test pure/tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-        # User secrets are added after environment variables in the Cosmos test configuration.
-        dotnet user-secrets set "Sekiban:Azure:CosmosDatabase" "GithubActionsPure-net11.0" --project pure/tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj
         dotnet test pure/tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
         dotnet test pure/tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
         dotnet test pure/tests/Sekiban.Pure.Dapr.Tests/Sekiban.Pure.Dapr.Tests.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
