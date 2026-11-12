@@ -144,135 +144,216 @@ public class TwoClusterRetrogradeRecontaminationTests : IAsyncLifetime
     [InlineData(true)]
     public async Task DeterministicParkedStaleWriter_RejectedAgainstTombstone_ArmsBarrier_NoRecontamination(bool tombstoneAhead)
     {
-        // The packet-critical race, executed DETERMINISTICALLY through product code: cluster B captures the old Active
-        // token and PARKS its real grain persist at the store boundary; cluster A retrograde-rebuilds and its tombstone is
-        // held OPEN; B is released and its stale CAS is ConditionRejected against the tombstone — which arms B's query
-        // barrier — so the shared row is NEVER re-contaminated with B's stale winner. A then commits its rebuild and both
-        // converge on the globally-earliest winner. No polling for the race window: both critical writes are gated.
-        var grainA = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
-        var grainB = _clusterB.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
-        var gateA = SharedStores.GatesByCluster["A"];
-        var gateB = SharedStores.GatesByCluster["B"];
-        var execB = new OrleansDcbExecutor(_clusterB.Client, SharedStores.EventStore, SharedStores.Domain);
 
-        // (1) One already-safe event; both clusters catch up + persist through the CAS -> shared row Active(gen0), winner
-        //     "later"; both adopt the gen0 token.
-        var later = CreateEvent(new CreatedWithId("team-1", "later"), DateTime.UtcNow.AddSeconds(-30));
-        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) });
-        await grainA.RefreshAsync();
-        Assert.True((await grainA.PersistStateAsync()).IsSuccess);
-        await grainB.RefreshAsync();
-        _ = await grainB.PersistStateAsync();   // whoever loses the create adopts the gen0 token
-        var slot0 = await ReadSlotAsync();
-        Assert.True(slot0.IsActive);
-        Assert.Equal(0, slot0.Generation);
-
-        // (2) Deliver a B-ONLY safe event (not in the shared store) so B has a genuine pending persist on the gen0 token
-        //     whose stale winner ("team-2") would be detectable if it ever contaminated the row.
-        var bLocal = CreateEvent(new CreatedWithId("team-2", "B-stale"), DateTime.UtcNow.AddSeconds(-20));
-        await grainB.AddEventsAsync(new[] { ToSerializable(bLocal) });
-        await PollUnsafeContainsAsync(grainB, "team-2");
-
-        // (3) Arm B's upsert gate and launch B's REAL grain persist; it parks at the store boundary holding the gen0 token.
         var bUpsert = new GatingCheckpointStore.Gate { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
-        gateB.UpsertGate = bUpsert;
-        var bPersist = grainB.PersistStateAsync();
-        await bUpsert.Arrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
-
-        // (4) Arm A's rebuilt-commit gate, then deliver the globally-earlier retrograde event to A and drive its rebuild
-        //     FIRE-AND-FORGET (never awaited — the driving call itself parks at the commit gate, so awaiting it would
-        //     deadlock). A invalidates the shared row (tombstone gen1) and then parks at its rebuilt commit, holding the
-        //     tombstone OPEN. B's stale writer is now guaranteed to meet a tombstone, not a fresh Active row.
         var aCommit = new GatingCheckpointStore.Gate { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
-        gateA.CommitRebuiltGate = aCommit;
-        if (tombstoneAhead)
-        {
-            // The peer's retained checkpoint count is ahead of B's two-event live host.
-            await MultiProjectionGrainWatermarkRetirementTests.ReplaceCheckpointCountAsync(SharedStores.StateStore, slot0.Record!, 10_000);
-        }
-        var earlier = CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31));
-        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) });
-        await grainA.AddEventsAsync(new[] { ToSerializable(earlier) });
-        var aDrive = grainA.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);   // drives invalidate -> parks at commit
         try
         {
-            await aCommit.Arrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            // The packet-critical race, executed DETERMINISTICALLY through product code: cluster B captures the old Active
+            // token and PARKS its real grain persist at the store boundary; cluster A retrograde-rebuilds and its tombstone is
+            // held OPEN; B is released and its stale CAS is ConditionRejected against the tombstone — which arms B's query
+            // barrier — so the shared row is NEVER re-contaminated with B's stale winner. A then commits its rebuild and both
+            // converge on the globally-earliest winner. No polling for the race window: both critical writes are gated.
+            var grainA = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
+            var grainB = _clusterB.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
+            var gateA = SharedStores.GatesByCluster["A"];
+            var gateB = SharedStores.GatesByCluster["B"];
+            var execB = new OrleansDcbExecutor(_clusterB.Client, SharedStores.EventStore, SharedStores.Domain);
+
+            // (1) One already-safe event; both clusters catch up + persist through the CAS -> shared row Active(gen0), winner
+            //     "later"; both adopt the gen0 token.
+            var later = CreateEvent(new CreatedWithId("team-1", "later"), DateTime.UtcNow.AddSeconds(-30));
+            await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) });
+            await grainA.RefreshAsync();
+            Assert.True((await grainA.PersistStateAsync()).IsSuccess);
+            await grainB.RefreshAsync();
+            _ = await grainB.PersistStateAsync();   // whoever loses the create adopts the gen0 token
+            var slot0 = await ReadSlotAsync();
+            Assert.True(slot0.IsActive);
+            Assert.Equal(0, slot0.Generation);
+
+            // (2) Deliver a B-ONLY safe event (not in the shared store) so B has a genuine pending persist on the gen0 token
+            //     whose stale winner ("team-2") would be detectable if it ever contaminated the row.
+            var bLocal = CreateEvent(new CreatedWithId("team-2", "B-stale"), DateTime.UtcNow.AddSeconds(-20));
+            await grainB.AddEventsAsync(new[] { ToSerializable(bLocal) });
+            await PollUnsafeContainsAsync(grainB, "team-2");
+
+            // (3) Arm B's upsert gate and launch B's REAL grain persist; it parks at the store boundary holding the gen0 token.
+            gateB.UpsertGate = bUpsert;
+            var bPersist = grainB.PersistStateAsync();
+            await bUpsert.Arrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
+
+            // (4) Arm A's rebuilt-commit gate, then deliver the globally-earlier retrograde event to A and drive its rebuild
+            //     FIRE-AND-FORGET (never awaited — the driving call itself parks at the commit gate, so awaiting it would
+            //     deadlock). A invalidates the shared row (tombstone gen1) and then parks at its rebuilt commit, holding the
+            //     tombstone OPEN. B's stale writer is now guaranteed to meet a tombstone, not a fresh Active row.
+            gateA.CommitRebuiltGate = aCommit;
+            if (tombstoneAhead)
+            {
+                // The peer's retained checkpoint count is ahead of B's two-event live host.
+                await MultiProjectionGrainWatermarkRetirementTests.ReplaceCheckpointCountAsync(SharedStores.StateStore, slot0.Record!, 10_000);
+            }
+            var earlier = CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31));
+            await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) });
+            await grainA.AddEventsAsync(new[] { ToSerializable(earlier) });
+            var aDrive = grainA.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);   // drives invalidate -> parks at commit
+            try
+            {
+                await aCommit.Arrived.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            }
+            catch
+            {
+                bUpsert.Release!.TrySetResult();
+                aCommit.Release!.TrySetResult();
+                var status = await grainA.GetStatusAsync();
+                Assert.Fail($"Rebuilt commit gate not reached: {status.LastError}; slot={(await ReadSlotAsync()).Lifecycle}");
+            }   // A reached the rebuilt-commit boundary => the invalidate (tombstone) already committed
+            var tomb = await PollUntilTombstoneAsync();
+            Assert.True(tomb.IsTombstoned);
+            Assert.Equal(1, tomb.Generation);
+
+            // (5) Release B's parked stale persist. Its external-checkpoint CAS on the OLD gen0 token meets the tombstone ->
+            //     ConditionRejected, so the grain arms its query barrier and the shared row is byte-for-byte unchanged. (The
+            //     PersistStateAsync bool reflects the grain-state snapshot write, which is a SEPARATE store from the external
+            //     checkpoint row — the anti-recontamination guarantee is on the row itself, asserted here.)
+            bUpsert.Release!.SetResult();
+            _ = await bPersist;
+            var afterB = await ReadSlotAsync();
+            Assert.True(afterB.IsTombstoned, $"the shared row was re-contaminated by the stale writer: {afterB.Lifecycle} gen{afterB.Generation}");
+            Assert.Equal(1, afterB.Generation);
+            Assert.Equal(tomb.Revision, afterB.Revision);   // exact same token — B did not touch the row
+
+            {
+                // AdoptAfterRejection armed the barrier but did not recreate B's host. Repeated persists must
+                // not gain the fresh-host ordering bypass while A's tombstone remains open.
+                for (var attempt = 0; attempt < 3; attempt++)
+                {
+                    _ = await grainB.PersistStateAsync();
+                    Assert.Equal(tomb, await ReadSlotAsync());
+                }
+            }
+
+            // (6) Release A's rebuilt commit -> Active(gen1) with the rebuilt 2-event checkpoint, winner "earlier".
+            aCommit.Release!.SetResult();
+            _ = await aDrive;
+            var final = await ReadSlotAsync();
+            Assert.True(final.IsActive);
+            Assert.Equal(1, final.Generation);
+            Assert.Equal(2, final.Record!.EventsProcessed);
+
+            // (7) QUERY-BARRIER OBSERVATION: the ConditionRejected armed B's first-query barrier, so B CANNOT serve a normal
+            //     success carrying its stale local winner ("team-2"). The retrograde "earlier" is delivered to B; its barrier
+            //     drives a from-scratch rebuild over the authoritative history (which has NO team-2, and folds "earlier" first)
+            //     so B converges on the globally-earliest winner. team-2 never re-contaminated the shared row and is gone.
+            await grainB.AddEventsAsync(new[] { ToSerializable(earlier) });
+            var safeB = await PollSafeWinnerAsync(grainB, "earlier");
+            Assert.Equal("earlier", WinnerOf(safeB));                 // the barrier-rebuilt SAFE winner
+            Assert.True(safeB.IsSafeState);                            // a genuine safe state, not a stale unsafe success
+            Assert.False(((FirstWinsProjector)safeB.Payload).Winners.ContainsKey("team-2"));   // stale local winner discarded
+            var listB = await execB.QueryAsync(new WinnerListQuery());
+            Assert.True(listB.IsSuccess, listB.IsSuccess ? "" : listB.GetException().ToString());
+            Assert.DoesNotContain(listB.GetValue().Items, r => r.Id == "team-2");
+            Assert.Contains(listB.GetValue().Items, r => r.Id == "team-1" && r.Value == "earlier");
+
+            // (8) Restart BOTH clusters. A fresh activation reads the control plane before binding any payload, so neither
+            //     serves a stale value; both converge to the EXACT globally-earliest winner + safe state + position + scalar +
+            //     list, byte-identical across clusters.
+            await grainA.RequestDeactivationAsync();
+            await grainB.RequestDeactivationAsync();
+            await Task.Delay(1500);
+            var grainA2 = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
+            var grainB2 = _clusterB.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
+
+            var restartA = await PollSafeWinnerAsync(grainA2, "earlier");
+            var restartB = await PollSafeWinnerAsync(grainB2, "earlier");
+            Assert.Equal("earlier", WinnerOf(restartA));
+            Assert.Equal("earlier", WinnerOf(restartB));
+            Assert.True(restartA.IsSafeState);
+            Assert.True(restartB.IsSafeState);
+            Assert.Equal(restartA.LastSortableUniqueId, restartB.LastSortableUniqueId);   // same converged position on both
+            // The safe POSITION is the LAST folded event (max SortableUniqueId = "later"); the WINNER is the globally-earliest.
+            Assert.Equal(later.SortableUniqueIdValue, restartA.LastSortableUniqueId);
+            await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterA.Client, SharedStores.EventStore, SharedStores.Domain), "earlier");
+            await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterB.Client, SharedStores.EventStore, SharedStores.Domain), "earlier");
         }
-        catch
+        finally
         {
             bUpsert.Release!.TrySetResult();
             aCommit.Release!.TrySetResult();
-            var status = await grainA.GetStatusAsync();
-            Assert.Fail($"Rebuilt commit gate not reached: {status.LastError}; slot={(await ReadSlotAsync()).Lifecycle}");
-        }   // A reached the rebuilt-commit boundary => the invalidate (tombstone) already committed
-        var tomb = await PollUntilTombstoneAsync();
-        Assert.True(tomb.IsTombstoned);
-        Assert.Equal(1, tomb.Generation);
-
-        // (5) Release B's parked stale persist. Its external-checkpoint CAS on the OLD gen0 token meets the tombstone ->
-        //     ConditionRejected, so the grain arms its query barrier and the shared row is byte-for-byte unchanged. (The
-        //     PersistStateAsync bool reflects the grain-state snapshot write, which is a SEPARATE store from the external
-        //     checkpoint row — the anti-recontamination guarantee is on the row itself, asserted here.)
-        bUpsert.Release!.SetResult();
-        _ = await bPersist;
-        var afterB = await ReadSlotAsync();
-        Assert.True(afterB.IsTombstoned, $"the shared row was re-contaminated by the stale writer: {afterB.Lifecycle} gen{afterB.Generation}");
-        Assert.Equal(1, afterB.Generation);
-        Assert.Equal(tomb.Revision, afterB.Revision);   // exact same token — B did not touch the row
-
-        if (tombstoneAhead)
-        {
-            // AdoptAfterRejection armed the barrier but did not recreate B's host. Repeated persists must
-            // not gain the fresh-host ordering bypass while A's tombstone remains open.
-            for (var attempt = 0; attempt < 3; attempt++)
-            {
-                _ = await grainB.PersistStateAsync();
-                Assert.Equal(tomb, await ReadSlotAsync());
-            }
         }
+    }
 
-        // (6) Release A's rebuilt commit -> Active(gen1) with the rebuilt 2-event checkpoint, winner "earlier".
-        aCommit.Release!.SetResult();
-        _ = await aDrive;
-        var final = await ReadSlotAsync();
-        Assert.True(final.IsActive);
-        Assert.Equal(1, final.Generation);
-        Assert.Equal(2, final.Record!.EventsProcessed);
-
-        // (7) QUERY-BARRIER OBSERVATION: the ConditionRejected armed B's first-query barrier, so B CANNOT serve a normal
-        //     success carrying its stale local winner ("team-2"). The retrograde "earlier" is delivered to B; its barrier
-        //     drives a from-scratch rebuild over the authoritative history (which has NO team-2, and folds "earlier" first)
-        //     so B converges on the globally-earliest winner. team-2 never re-contaminated the shared row and is gone.
-        await grainB.AddEventsAsync(new[] { ToSerializable(earlier) });
-        var safeB = await PollSafeWinnerAsync(grainB, "earlier");
-        Assert.Equal("earlier", WinnerOf(safeB));                 // the barrier-rebuilt SAFE winner
-        Assert.True(safeB.IsSafeState);                            // a genuine safe state, not a stale unsafe success
-        Assert.False(((FirstWinsProjector)safeB.Payload).Winners.ContainsKey("team-2"));   // stale local winner discarded
-        var listB = await execB.QueryAsync(new WinnerListQuery());
-        Assert.True(listB.IsSuccess, listB.IsSuccess ? "" : listB.GetException().ToString());
-        Assert.DoesNotContain(listB.GetValue().Items, r => r.Id == "team-2");
-        Assert.Contains(listB.GetValue().Items, r => r.Id == "team-1" && r.Value == "earlier");
-
-        // (8) Restart BOTH clusters. A fresh activation reads the control plane before binding any payload, so neither
-        //     serves a stale value; both converge to the EXACT globally-earliest winner + safe state + position + scalar +
-        //     list, byte-identical across clusters.
-        await grainA.RequestDeactivationAsync();
-        await grainB.RequestDeactivationAsync();
-        await Task.Delay(1500);
-        var grainA2 = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
-        var grainB2 = _clusterB.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
-
-        var restartA = await PollSafeWinnerAsync(grainA2, "earlier");
-        var restartB = await PollSafeWinnerAsync(grainB2, "earlier");
-        Assert.Equal("earlier", WinnerOf(restartA));
-        Assert.Equal("earlier", WinnerOf(restartB));
-        Assert.True(restartA.IsSafeState);
-        Assert.True(restartB.IsSafeState);
-        Assert.Equal(restartA.LastSortableUniqueId, restartB.LastSortableUniqueId);   // same converged position on both
-        // The safe POSITION is the LAST folded event (max SortableUniqueId = "later"); the WINNER is the globally-earliest.
-        Assert.Equal(later.SortableUniqueIdValue, restartA.LastSortableUniqueId);
-        await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterA.Client, SharedStores.EventStore, SharedStores.Domain), "earlier");
-        await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterB.Client, SharedStores.EventStore, SharedStores.Domain), "earlier");
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StaleHost_RejectsTombstoneOrActive_PersistsStayBlockedUntilQueryReplay(bool peerCommitsFirst)
+    {
+        var a = _clusterA.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
+        var b = _clusterB.Client.GetGrain<IMultiProjectionGrain>(FirstWinsProjector.MultiProjectorName);
+        var later = CreateEvent(new CreatedWithId("team-1", "later"), DateTime.UtcNow.AddSeconds(-30));
+        await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(later) });
+        await a.RefreshAsync();
+        _ = await a.PersistStateAsync();
+        await b.RefreshAsync();
+        _ = await b.PersistStateAsync();
+        // Equal safe counts after A's two-event rebuild: the count guard cannot hide stale writes.
+        await b.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("local", "stale"), DateTime.UtcNow.AddSeconds(-20))) });
+        await PollUnsafeContainsAsync(b, "local");
+        var parked = new GatingCheckpointStore.Gate { Release = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        var rebuilt = new GatingCheckpointStore.Gate { Release = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        SharedStores.GatesByCluster["B"].UpsertGate = parked;
+        SharedStores.GatesByCluster["A"].CommitRebuiltGate = rebuilt;
+        var persist = b.PersistStateAsync();
+        Task<ResultBox<MultiProjectionState>>? drive = null;
+        try
+        {
+            await parked.Arrived.Task.WaitAsync(TimeSpan.FromMinutes(2));
+            var earlier = CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31));
+            await SharedStores.EventStore.WriteSerializableEventsAsync(new[] { ToSerializable(earlier) });
+            await a.AddEventsAsync(new[] { ToSerializable(earlier) });
+            drive = a.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);
+            await rebuilt.Arrived.Task.WaitAsync(TimeSpan.FromMinutes(2));
+            if (peerCommitsFirst)
+            {
+                rebuilt.Release!.TrySetResult();
+                _ = await drive.WaitAsync(TimeSpan.FromMinutes(2));
+            }
+            parked.Release!.TrySetResult();
+            _ = await persist.WaitAsync(TimeSpan.FromMinutes(2));
+            var adopted = await ReadSlotAsync();
+            Assert.Equal(peerCommitsFirst, adopted.IsActive);
+            for (var i = 0; i < 3; i++)
+            {
+                _ = await b.PersistStateAsync();
+                Assert.Equal(adopted, await ReadSlotAsync());
+            }
+            rebuilt.Release!.TrySetResult();
+            _ = await drive.WaitAsync(TimeSpan.FromMinutes(2));
+            var active = await ReadSlotAsync();
+            Assert.True(active.IsActive);
+            Assert.Equal(2, active.Record!.EventsProcessed);
+            for (var i = 0; i < 3; i++)
+            {
+                _ = await b.PersistStateAsync();
+                Assert.Equal(active, await ReadSlotAsync());
+            }
+            // No retrograde delivery to B: only query entry can discard its host and replay from zero.
+            var replayed = await PollSafeWinnerAsync(b, "earlier");
+            Assert.NotNull(replayed);
+            Assert.Equal("earlier", WinnerOf(replayed));
+            Assert.DoesNotContain("local", ((FirstWinsProjector)replayed.Payload).Winners.Keys);
+            _ = await b.PersistStateAsync();
+            var saved = await ReadSlotAsync();
+            Assert.True(saved.IsActive);
+            Assert.Equal(active.Generation, saved.Generation);
+            Assert.NotEqual(active.Revision, saved.Revision);
+            Assert.Equal(2, saved.Record!.EventsProcessed);
+        }
+        finally
+        {
+            parked.Release!.TrySetResult();
+            rebuilt.Release!.TrySetResult();
+        }
     }
 
     private static async Task<CheckpointSlot> ReadSlotAsync() =>

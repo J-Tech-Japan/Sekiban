@@ -33,6 +33,103 @@ namespace Sekiban.Dcb.Orleans.Tests;
 /// </summary>
 public sealed class MultiProjectionGrainCatchUpProductionPathTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StaleHost_BlockedPersists_LogDebugOnly_KeepLastGoodAndMarker(bool streaming)
+    {
+        var checkpoints = new Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore();
+        var logger = new DurableRebuildMarkerPersistTests.ObligationLogger();
+        var host = new ProductionCatchUpProjectionHost { FailInitialStateRead = false, SafeVersion = 1 };
+        var state = new RecordingPersistentState<MultiProjectionGrainState>();
+        var directory = Path.Combine(Path.GetTempPath(), "sekiban-g156-" + Guid.NewGuid().ToString("N"));
+        var manager = streaming ? new TempFileSnapshotManager(new SnapshotTempFileOptions { TempDirectory = directory },
+            NullLogger<TempFileSnapshotManager>.Instance) : null;
+        var grain = CreateGrain(new ProductionCatchUpEventStore([0]), host, checkpointStore: checkpoints,
+            persistentState: state, logger: logger, tempFileSnapshotManager: manager,
+            actorOptions: new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = false, UseStreamingSnapshotIO = streaming });
+        SetPrivateField(grain, "_hostIsPristine", false);
+        try
+        {
+            _ = await grain.PersistStateAsync();
+            var active = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue();
+            var invalidation = await checkpoints.InvalidateWithTombstoneAsync("production-catch-up", "v1", CheckpointExpectation.FromSlot(active));
+            Assert.Equal(CheckpointCasStatus.Committed, invalidation.Status);
+            _ = await grain.PersistStateAsync();
+            Assert.Single(logger.Entries, e => e == (LogLevel.Warning, 1031));
+            Assert.Single(logger.Entries, e => e.Item1 >= LogLevel.Warning);
+            var lastGood = state.State.LastGoodSafeVersion;
+            var lastGoodEvents = state.State.LastGoodEventsProcessed;
+            var writes = state.WriteCalls;
+            for (var i = 0; i < 3; i++)
+            {
+                _ = await grain.PersistStateAsync();
+                Assert.Equal(invalidation.ResultingSlot, (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue());
+                Assert.Equal(lastGood, state.State.LastGoodSafeVersion);
+                Assert.Equal(lastGoodEvents, state.State.LastGoodEventsProcessed);
+                Assert.False(state.State.RebuildRequired);
+                Assert.Null(state.State.FaultEventId);
+            }
+            Assert.Equal(writes + 3, state.WriteCalls);
+            Assert.Single(logger.Entries, e => e.Item1 >= LogLevel.Warning);
+            Assert.Contains(logger.Entries, e => e.Item1 == LogLevel.Debug);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task StaleHost_ParkedCatchUp_BlocksQueryReset_CompletionCannotSaveReplacement()
+    {
+        var checkpoints = new Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore();
+        var log = new CatchUpCompletionLogger();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var store = new ProductionCatchUpEventStore([1, 0], entered, release);
+        var stale = new ProductionCatchUpProjectionHost { AllowApply = true, FailInitialStateRead = false, SafeVersion = 1 };
+        var fresh = new ProductionCatchUpProjectionHost { AllowApply = true, FailInitialStateRead = false };
+        var grain = CreateGrain(store, stale, processedEvents: [], checkpointStore: checkpoints, logger: log,
+            actorOptions: new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = false },
+            hostFactory: new ProductionCatchUpProjectionHostFactory(fresh));
+        SetPrivateField(grain, "_hostIsPristine", false);
+        _ = await grain.PersistStateAsync();
+        var active = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue();
+        var invalidated = await checkpoints.InvalidateWithTombstoneAsync("production-catch-up", "v1", CheckpointExpectation.FromSlot(active));
+        Assert.Equal(CheckpointCasStatus.Committed, invalidated.Status);
+        _ = await grain.PersistStateAsync(); // real rejection adopts the peer's generation
+        var tomb = (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue();
+        var catchUp = grain.RefreshAsync();
+        Task<Exception?>? queryEntry = null;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            queryEntry = (Task<Exception?>)InvokePrivate(grain, "ResolveRebuildBeforeQueryAsync", [])!;
+            await Task.WhenAny(queryEntry, Task.Delay(100));
+            Assert.False(queryEntry.IsCompleted, "query must wait for the read holding the catch-up gate");
+            Assert.Same(stale, GetPrivateField<IProjectionActorHost>(grain, "_host"));
+            release.TrySetResult();
+            await catchUp.WaitAsync(TimeSpan.FromSeconds(20));
+            Assert.Null(await queryEntry.WaitAsync(TimeSpan.FromSeconds(20)));
+            Assert.Equal(store.Events.Select(e => e.Id), stale.AppliedEventIds);
+            Assert.Empty(fresh.AppliedEventIds);
+            Assert.Same(fresh, GetPrivateField<IProjectionActorHost>(grain, "_host"));
+            Assert.Equal(0L, GetPrivateField<long>(grain, "_eventsProcessed"));
+            Assert.Null(GetCatchUpCurrentPosition(grain));
+            // CompleteCatchUp attempted its pending-tombstone persist before releasing the gate. No commit escaped.
+            Assert.Equal(tomb, (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1")).GetValue());
+            Assert.Equal(new[] { "catch_up_complete" }, log.Reasons);
+            Assert.Equal(2, stale.SnapshotWriteCalls); // initial save + rejected save, no serialization on completion
+            Assert.Equal(0, fresh.SnapshotWriteCalls);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await catchUp.WaitAsync(TimeSpan.FromSeconds(20));
+        }
+    }
+
     [Fact]
     public async Task Empty_completion_commits_pending_tombstone_once_then_skips_final_persist()
     {
@@ -1534,7 +1631,8 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         RecordingPersistentState<MultiProjectionGrainState>? persistentState = null,
         TempFileSnapshotManager? tempFileSnapshotManager = null,
         IMultiProjectionStateStore? checkpointStore = null,
-        ILogger<MultiProjectionGrain>? logger = null)
+        ILogger<MultiProjectionGrain>? logger = null,
+        IProjectionActorHostFactory? hostFactory = null)
     {
         host ??= new ProductionCatchUpProjectionHost();
         persistentState ??= new RecordingPersistentState<MultiProjectionGrainState>
@@ -1544,7 +1642,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         store.PersistentState = persistentState;
         var grain = new MultiProjectionGrain(
             persistentState,
-            new ProductionCatchUpProjectionHostFactory(host),
+            hostFactory ?? new ProductionCatchUpProjectionHostFactory(host),
             store,
             new DefaultOrleansEventSubscriptionResolver(),
             multiProjectionStateStore: checkpointStore,
