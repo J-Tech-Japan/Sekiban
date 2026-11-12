@@ -145,6 +145,8 @@ decide() {
     local name
     local code
     local text
+    local status
+    local extracted
     local findings="$tmp_dir/findings.tsv"
     local unique="$tmp_dir/findings-unique.tsv"
     local blocking_count=0
@@ -179,9 +181,18 @@ decide() {
             errors=$((errors + 1))
             continue
         fi
-        text="$(jq -r '(.problems // [])[] | select(.level == "error") | .text' "$results/$name.json" 2>/dev/null | head -n 1)"
-        if [[ -n "$text" ]]; then
-            printf 'ERROR: %s: dotnet reported an error: %s\n' "$name" "$text" >&2
+        status=0
+        jq -e '(type == "object") and ((.problems // []) | type == "array")' "$results/$name.json" >/dev/null 2>&1 || status=$?
+        if [[ "$status" -ne 0 ]]; then
+            printf 'ERROR: %s: the output is not a dotnet JSON document with a readable problems list\n' "$name" >&2
+            errors=$((errors + 1))
+            continue
+        fi
+        status=0
+        jq -e '(.problems // []) | any(type != "object" or .level == "error")' "$results/$name.json" >/dev/null 2>&1 || status=$?
+        if [[ "$status" -ne 1 ]]; then
+            text="$(jq -r '[(.problems // [])[] | select(type == "object" and .level == "error") | (.text // "" | if . == "" then "(no message)" else . end)] | join("; ")' "$results/$name.json" 2>/dev/null || true)"
+            printf 'ERROR: %s: dotnet reported an error: %s\n' "$name" "${text:-(unreadable problems entry)}" >&2
             errors=$((errors + 1))
             continue
         fi
@@ -196,7 +207,8 @@ decide() {
         jq -r '(.problems // [])[] | select(.level == "warning") | .text' "$results/$name.json" 2>/dev/null \
             | while IFS= read -r text; do printf 'WARNING: %s: %s\n' "$name" "$text"; done || true
 
-        checked=$((checked + 1))
+        extracted="$tmp_dir/extracted-$name.tsv"
+        status=0
         jq -r --arg name "$name" '
             .projects[0].frameworks[]?
             | .framework as $framework
@@ -206,7 +218,14 @@ decide() {
             | (.vulnerabilities // [])[]?
             | [((.severity | tostring) | ascii_downcase), $id, $version, ((.advisoryurl // "") | if . == "" then "n/a" else . end), $name]
             | @tsv
-        ' "$results/$name.json" >> "$findings"
+        ' "$results/$name.json" > "$extracted" 2>/dev/null || status=$?
+        if [[ "$status" -ne 0 ]]; then
+            printf 'ERROR: %s: the vulnerability data could not be read from the JSON\n' "$name" >&2
+            errors=$((errors + 1))
+            continue
+        fi
+        cat "$extracted" >> "$findings"
+        checked=$((checked + 1))
     done < "$list"
 
     # severity<TAB>package<TAB>version<TAB>advisory<TAB>comma separated projects
@@ -527,6 +546,27 @@ run_self_test() {
     printf '{"version":1,"problems":[{"text":"Restore failed. Run `dotnet restore` for more details on the issue.","level":"error"}]}\n' \
         > "$dir/$(project_name "$(st_nth_rel 9)").json"
     st_expect "problems-error-fails" fail "dotnet reported an error: Restore failed" "$dir"
+
+    dir="$(st_new_dir problems-error-empty-text)"
+    printf '{"version":1,"problems":[{"level":"error","text":""}],"projects":[{"path":"%s"}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "problems-error-with-empty-text-fails" fail "dotnet reported an error: (no message)" "$dir"
+
+    dir="$(st_new_dir problems-first-error-empty)"
+    printf '{"version":1,"problems":[{"level":"error","text":""},{"level":"error","text":"Restore failed."}],"projects":[{"path":"%s"}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "problems-later-error-not-hidden-by-empty-first" fail "dotnet reported an error: (no message); Restore failed." "$dir"
+
+    dir="$(st_new_dir problems-not-a-list)"
+    printf '{"version":1,"problems":"Restore failed","projects":[{"path":"%s"}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "problems-not-a-list-fails" fail "readable problems list" "$dir"
+
+    dir="$(st_new_dir frameworks-malformed)"
+    printf '{"version":1,"projects":[{"path":"%s","frameworks":[42]}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "malformed-frameworks-fail-and-are-not-counted" fail "the vulnerability data could not be read from the JSON" "$dir"
+    st_expect "malformed-frameworks-checked-count" fail "Checked 11 of 12 projects." "$dir"
 
     dir="$(st_new_dir wrong-project)"
     st_write_clean "$dir" "$(st_nth_rel 10)"
