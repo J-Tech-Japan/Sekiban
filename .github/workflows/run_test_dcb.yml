@@ -78,6 +78,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Setup .NET 11
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+
       # SEK-G52: WithResult's frozen serialized-commit interop tests invoke the dependency-free Node runner.
       - name: Setup Node for serialized-commit interop runner
         uses: actions/setup-node@v4
@@ -182,6 +187,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+
+      - name: Setup .NET 11
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
 
       # SEK-G52: WithResult's frozen serialized-commit interop tests invoke the dependency-free Node runner.
       - name: Setup Node for serialized-commit interop runner

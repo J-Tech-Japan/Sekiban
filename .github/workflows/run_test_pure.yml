@@ -21,6 +21,13 @@ on:
       - 'pure/tests/MemStat.Net.Test/**'
       - 'pure/tests/Pure.Domain.Test/**'
       - 'pure/tests/Pure.Domain.xUnit/**'
+      - 'pure/tests/**'
+      - 'pure/internalUsages/**'
+      - 'pure/Directory.Build.props'
+      - 'pure/Sekiban.Pure.slnx'
+      - 'eng/validate-pure-api-compat.sh'
+      - 'eng/pure-api-compat-suppressions.xml'
+      - '.github/workflows/run_test_pure.yml'
 concurrency:
   group: CosmosDbConnect
   cancel-in-progress: false
@@ -47,22 +54,45 @@ jobs:
           --health-retries 5
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET 9
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.x
+    - name: Setup .NET 11
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 11.0.x
     - name: Secret Settings
       run: |
         pushd ./pure/tests/Pure.Domain.xUnit
         dotnet user-secrets set "Sekiban:Azure:CosmosDatabase" "GithubActionsPure"
         dotnet user-secrets set "ConnectionStrings:SekibanCosmos" "${{ secrets.COSMOSDB_CONNECTION_STRING }}"
         dotnet user-secrets set "ConnectionStrings:SekibanPostgres" "Host=127.0.0.1;Port=5432;Database=mydb;Username=myuser;Password=mypassword;"
+    - name: Restore Pure solution
+      run: dotnet restore pure/Sekiban.Pure.slnx
     - name: dotnet build
       run: |
-        dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
-    - name: dotnet test all projects sequentially
+        dotnet build pure/Sekiban.Pure.slnx -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
+    - name: dotnet test all projects sequentially (net10.0)
       run: |
-        dotnet test pure/tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-        dotnet test pure/tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-        dotnet test pure/tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-
+        dotnet test pure/tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        # User secrets are added after environment variables in the Cosmos test configuration.
+        dotnet user-secrets set "Sekiban:Azure:CosmosDatabase" "GithubActionsPure-net10.0" --project pure/tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj
+        dotnet test pure/tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test pure/tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test pure/tests/Sekiban.Pure.Dapr.Tests/Sekiban.Pure.Dapr.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test pure/tests/Sekiban.Pure.Compatibility.Tests/Sekiban.Pure.Compatibility.Tests.csproj -c Release --no-build -f net10.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+    - name: dotnet test all projects sequentially (net11.0)
+      run: |
+        dotnet test pure/tests/MemStat.Net.Test/MemStat.Net.Test.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        # User secrets are added after environment variables in the Cosmos test configuration.
+        dotnet user-secrets set "Sekiban:Azure:CosmosDatabase" "GithubActionsPure-net11.0" --project pure/tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj
+        dotnet test pure/tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test pure/tests/Pure.Domain.Test/Pure.Domain.Test.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test pure/tests/Sekiban.Pure.Dapr.Tests/Sekiban.Pure.Dapr.Tests.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+        dotnet test pure/tests/Sekiban.Pure.Compatibility.Tests/Sekiban.Pure.Compatibility.Tests.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+    - name: Verify API compatibility and negative controls
+      run: |
+        command -v python3
+        command -v curl
+        ./eng/validate-pure-api-compat.sh --self-test
