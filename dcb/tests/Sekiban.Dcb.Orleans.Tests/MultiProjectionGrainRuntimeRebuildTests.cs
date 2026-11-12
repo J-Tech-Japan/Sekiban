@@ -6,9 +6,12 @@ using ResultBoxes;
 using Sekiban.Dcb.Actors;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Events;
+using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Runtime;
+using Sekiban.Dcb.Runtime.Native;
 using Sekiban.Dcb.Storage;
+using Sekiban.Dcb.Storage.Checkpoints;
 using Sekiban.Dcb.Testing;
 using Xunit;
 
@@ -16,6 +19,187 @@ namespace Sekiban.Dcb.Orleans.Tests;
 
 public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(100)]
+    public async Task First_query_completion_pending_late_receipt_starts_rebuild_before_query_can_settle(int waitMs)
+    {
+        using var services = CreateNativeRebuildServices();
+        var factory = services.GetRequiredService<IProjectionActorHostFactory>();
+        var options = new GeneralMultiProjectionActorOptions { SafeWindowMs = 0, PersistIntervalSeconds = 0 };
+        var name = ForceFullResumeClusterTests.CountProjector.MultiProjectorName;
+        var host = factory.Create(name, options);
+        var events = CreateNativeRebuildEvents();
+        // A compacted safe head makes this a genuinely late arrival, rather than a reorderable fresh history.
+        await host.AddSerializableEventsAsync([events[1]]);
+        host.ForcePromoteAllBufferedEvents();
+        host.CompactSafeHistory();
+        var store = new CursorAwareProductionCatchUpEventStore(events);
+        var checkpoints = new RecordingRebuildCheckpointStore();
+        var log = new CatchUpCompletionLogger();
+        var grain = CreateGrain(store, host, actorOptions: options, processedEvents: [events[1]],
+            checkpointStore: checkpoints, logger: log, hostFactory: factory);
+        SetPrivateField(grain, "_projectorName", name);
+        SetPrivateField(grain, "_grainKey", name);
+        SetPrivateField(grain, "_eventsProcessed", 1L);
+        SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", waitMs);
+        AttachDeactivationRuntime(grain);
+        var gate = GetPrivateField<FirstQueryCatchUpGate>(grain, "_firstQueryGate");
+        gate.Arm();
+        var replacementRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocations = 0;
+        using var hook = CatchUpProductionTestHooks.Register(
+            Sekiban.Dcb.ServiceId.DefaultServiceIdProvider.DefaultServiceId, name,
+            async (point, _) =>
+            {
+                if (point == CatchUpProductionHookPoint.HostRecreated && waitMs > 0)
+                {
+                    var progress = GetPrivateField<object>(grain, "_catchUpProgress");
+                    progress.GetType().GetProperty("IsActive")!.SetValue(progress, true);
+                    SetPrivateField(grain, "_catchUpTimer", new NoOpDisposable());
+                }
+                if (point != CatchUpProductionHookPoint.InvocationBeforeRead) return;
+                if (++invocations == 1)
+                {
+                    // The read starts at the existing head and returns no events. Only the pending-receipt
+                    // drain in CompleteCatchUp can see this earlier, previously unapplied stream event.
+                    GetPrivateField<Queue<SerializableEvent>>(grain, "_pendingStreamEvents").Enqueue(events[0]);
+                }
+                else if (invocations == 2)
+                {
+                    replacementRead.TrySetResult();
+                    await release.Task;
+                }
+            });
+        var query = InvokePrivateTaskAsync(grain, "AwaitFirstQueryCatchUpAsync", []);
+        Task? background = null;
+        try
+        {
+            if (waitMs > 0)
+            {
+                var error = await Assert.ThrowsAsync<InvalidOperationException>(() => query.WaitAsync(TimeSpan.FromSeconds(5)));
+                Assert.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, error.Message);
+                background = InvokePrivateTaskAsync(grain, "EnsureFirstQuerySyncCatchUpAsync", []);
+            }
+            await replacementRead.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(events[1].SortableUniqueIdValue, store.ReadSinceValues[0]);
+            Assert.True(gate.IsPending);
+            if (waitMs == 0) Assert.False(query.IsCompleted);
+            Assert.Empty(GetPrivateField<Queue<SerializableEvent>>(grain, "_pendingStreamEvents"));
+            Assert.True(store.PersistentState.State.RebuildRequired);
+            Assert.Equal(events[0].Id.ToString(), store.PersistentState.State.RebuildOffendingEventId);
+            Assert.Equal(events[0].SortableUniqueIdValue, store.PersistentState.State.RebuildOffendingPosition);
+            var replacement = GetPrivateField<IProjectionActorHost>(grain, "_host");
+            Assert.NotSame(host, replacement);
+            Assert.Empty((await checkpoints.ListAllAsync()).GetValue());
+            Assert.Equal(0, checkpoints.SnapshotSaveCalls);
+            Assert.Empty(log.Reasons);
+            var warning = Assert.Single(log.Rebuilds);
+            Assert.Equal(LogLevel.Warning, warning.Level);
+            Assert.Equal(1031, warning.EventId.Id);
+            Assert.Equal("catch-up completion", warning.Fields["ObservingPath"]);
+            Assert.Equal(events[0].Id.ToString(), warning.Fields["OffendingEventId"]);
+            Assert.Equal(events[0].SortableUniqueIdValue, warning.Fields["OffendingPosition"]);
+
+            release.TrySetResult();
+            await (background ?? query).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(gate.IsPending);
+            var result = (await replacement.GetStateAsync(false)).GetValue();
+            Assert.Equal(2, Assert.IsType<ForceFullResumeClusterTests.CountProjector>(result.Payload).Count);
+            Assert.Single(log.Rebuilds);
+        }
+        finally { release.TrySetResult(); }
+    }
+
+    [Fact]
+    public async Task Deactivation_retries_failed_non_capable_fault_write_and_next_activation_stays_fail_closed()
+    {
+        using var services = CreateNativeRebuildServices();
+        var factory = services.GetRequiredService<IProjectionActorHostFactory>();
+        var options = new GeneralMultiProjectionActorOptions { SafeWindowMs = 0, PersistIntervalSeconds = 0 };
+        var name = ForceFullResumeClusterTests.CountProjector.MultiProjectorName;
+        var host = factory.Create(name, options);
+        var events = CreateNativeRebuildEvents();
+        await host.AddSerializableEventsAsync([events[1]]);
+        host.ForcePromoteAllBufferedEvents();
+        host.CompactSafeHistory();
+        var store = new CursorAwareProductionCatchUpEventStore(events);
+        var checkpoints = new CheckpointNonCapableFailClosedTests.NonCapableStore();
+        var log = new CatchUpCompletionLogger();
+        var grain = CreateGrain(store, host, actorOptions: options, processedEvents: [events[1]],
+            checkpointStore: checkpoints, logger: log, hostFactory: factory);
+        SetPrivateField(grain, "_projectorName", name);
+        SetPrivateField(grain, "_grainKey", name);
+        AttachDeactivationRuntime(grain);
+        store.PersistentState.FailNextFaultWrite = true;
+        await grain.ProcessEventBatch([events[0]]);
+        Assert.True(Assert.IsAssignableFrom<IRebuildSignalingHost>(host).RebuildRequired);
+        Assert.Equal(1, store.PersistentState.FailedFaultWrites);
+        Assert.Null(store.PersistentState.State.FaultMessage);
+        Assert.Contains("SEK-G20", GetPrivateField<ProjectionFaultDescriptor>(grain, "_projectionFault").Message);
+        Assert.Empty((await checkpoints.ListAllAsync()).GetValue());
+
+        // The injected failure is one-shot; deactivation must retry the in-memory descriptor.
+        await grain.OnDeactivateAsync(default, CancellationToken.None);
+        var committed = store.PersistentState.State;
+        Assert.Contains("SEK-G20", committed.FaultMessage);
+        Assert.Equal(events[0].Id.ToString(), committed.FaultEventId);
+        Assert.Equal(events[0].SortableUniqueIdValue, committed.FaultPosition);
+        Assert.False(committed.RebuildRequired);
+        Assert.Equal(1, store.PersistentState.FailedFaultWrites);
+        Assert.Equal(2, store.PersistentState.WriteCalls);
+        Assert.Empty((await checkpoints.ListAllAsync()).GetValue());
+        Assert.Single(log.Rebuilds);
+
+        var nextHost = factory.Create(name, options);
+        var next = CreateGrain(new CursorAwareProductionCatchUpEventStore(events), nextHost,
+            actorOptions: options, persistentState: store.PersistentState, checkpointStore: checkpoints, hostFactory: factory);
+        SetPrivateField(next, "_projectorName", name);
+        SetPrivateField(next, "_grainKey", name);
+        // Use the activation restore seam while suppressing unrelated background subscription/timer setup.
+        SetPrivateField(next, "_restoreRetirementFailed", true);
+        await next.OnActivateAsync(CancellationToken.None);
+        SetPrivateField(next, "_restoreRetirementFailed", false);
+        SetPrivateField(next, "_subscriptionResolver", new InProcessSubscriptionResolver());
+        Assert.Equal(events[0].Id, GetPrivateField<ProjectionFaultDescriptor>(next, "_projectionFault").EventId);
+        var answer = await next.GetStateAsync();
+        Assert.False(answer.IsSuccess);
+        Assert.Contains("SEK-G20", answer.GetException().Message);
+        Assert.Empty((await checkpoints.ListAllAsync()).GetValue());
+    }
+
+    private static ServiceProvider CreateNativeRebuildServices() => new ServiceCollection()
+        .AddSingleton(ForceFullResumeClusterTests.Env.Domain).AddSekibanDcbNativeRuntime().BuildServiceProvider();
+
+    private static SerializableEvent[] CreateNativeRebuildEvents() =>
+        new[] { DateTime.UtcNow.AddMinutes(-2), DateTime.UtcNow.AddMinutes(-1) }
+            .Select((time, i) => new SerializableEvent(
+                System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(new ForceFullResumeClusterTests.Counted($"e{i}"))),
+                SortableUniqueId.Generate(time, Guid.NewGuid()), Guid.NewGuid(),
+                new EventMetadata("aggregate", "command", "test"), [], "Counted")).ToArray();
+
+    private sealed class RecordingRebuildCheckpointStore : InMemoryMultiProjectionStateStore, IGenerationAwareCheckpointStore
+    {
+        public int SnapshotSaveCalls { get; private set; }
+
+        Task<CheckpointCasOutcome> IGenerationAwareCheckpointStore.ConditionalUpsertAsync(
+            MultiProjectionStateWriteRequest payload, Stream stream, CheckpointExpectation expectation,
+            int offloadThresholdBytes, CancellationToken cancellationToken)
+        {
+            SnapshotSaveCalls++;
+            return ConditionalUpsertAsync(payload, stream, expectation, offloadThresholdBytes, cancellationToken);
+        }
+
+        Task<CheckpointCasOutcome> IGenerationAwareCheckpointStore.CommitRebuiltAsync(
+            MultiProjectionStateWriteRequest payload, Stream stream, CheckpointExpectation expectation,
+            int offloadThresholdBytes, CancellationToken cancellationToken)
+        {
+            SnapshotSaveCalls++;
+            return CommitRebuiltAsync(payload, stream, expectation, offloadThresholdBytes, cancellationToken);
+        }
+    }
+
     [Theory]
     [InlineData("timer")]
     [InlineData("completion")]
@@ -98,15 +282,24 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
     [Fact]
     public async Task Deactivation_pending_signal_preserves_existing_fault()
     {
-        var state = new MultiProjectionGrainState { FaultMessage = "existing fault", FaultEventId = Guid.NewGuid().ToString() };
+        var state = new MultiProjectionGrainState
+        {
+            FaultMessage = "existing fault", FaultEventId = Guid.NewGuid().ToString(),
+            FaultPosition = "existing-position", FaultedAtUtcTicks = 12345
+        };
         var host = new ProductionCatchUpProjectionHost { RebuildRequired = true };
         var store = new ProductionCatchUpEventStore();
         var grain = CreateGrain(store, host, state,
             checkpointStore: new CheckpointNonCapableFailClosedTests.NonCapableStore());
+        SetPrivateField(grain, "_projectionFault", new ProjectionFaultDescriptor(
+            Guid.NewGuid(), "different-event", "production-catch-up", "different-position", "different fault", 67890));
         AttachDeactivationRuntime(grain);
         await grain.OnDeactivateAsync(default, CancellationToken.None);
         Assert.Equal("existing fault", store.PersistentState.State.FaultMessage);
         Assert.Equal(state.FaultEventId, store.PersistentState.State.FaultEventId);
+        Assert.Equal("existing-position", store.PersistentState.State.FaultPosition);
+        Assert.Equal(12345, store.PersistentState.State.FaultedAtUtcTicks);
+        Assert.Equal(0, store.PersistentState.WriteCalls);
         Assert.False(store.PersistentState.State.RebuildRequired);
         Assert.Equal(0, host.SnapshotWriteCalls);
     }

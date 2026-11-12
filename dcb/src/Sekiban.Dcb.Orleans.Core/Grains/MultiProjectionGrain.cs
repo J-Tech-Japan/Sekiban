@@ -1397,7 +1397,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         // A pre-existing fault remains the durable fail-closed authority.
         if (_isDeactivating && (_projectionFault is not null || _host?.CurrentFault is not null ||
-            !string.IsNullOrEmpty(_stateStore.Committed.FaultMessage))) return;
+            !string.IsNullOrEmpty(_stateStore.Committed.FaultMessage)))
+        {
+            // Keep a committed fault as is. A fault held only in memory (its earlier write failed) is persisted now,
+            // so the next activation stays fail-closed instead of restoring the old checkpoint.
+            if (string.IsNullOrEmpty(_stateStore.Committed.FaultMessage) &&
+                (_projectionFault ?? _host?.CurrentFault) is { } pendingFault)
+            {
+                try
+                {
+                    await _stateStore.ExecuteWriteAsync(
+                        GrainStateWriteKind.FaultDescriptor, s => WriteFaultIntoState(s, pendingFault));
+                }
+                catch (Exception ex)
+                {
+                    _lastError = $"Projection fault persist on deactivation failed: {ex.Message}";
+                }
+            }
+            return;
+        }
         await CatchUpProductionTestHooks.PublishAsync(
             CatchUpProductionHookPoint.RebuildRequiredDetected,
             new CatchUpProductionObservation(_serviceId, GetProjectorName(), _catchUpProgress.StartLease, _catchUpProgress.CurrentPosition));
@@ -5600,8 +5618,14 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Pending stream receipts are event-bearing work too. Drain them before the final promotion so the
             // completion decision covers every state mutation accepted during this catch-up window.
             await ProcessPendingStreamEvents();
-            if (!ReferenceEquals(progress, _catchUpProgress) ||
-                _host is IRebuildSignalingHost { RebuildRequired: true }) return;
+            if (!ReferenceEquals(progress, _catchUpProgress)) return;
+            if (_host is IRebuildSignalingHost { RebuildRequired: true })
+            {
+                // Applying a pending receipt behind the safe head only signals; start the rebuild in this turn so a
+                // query waiting on this catch-up cannot settle on the incomplete host.
+                await TriggerDurableFullRebuildAsync("catch-up completion");
+                return;
+            }
 
             var shouldPersist = _catchUpProgress.HadNewEvents ||
                 (_checkpointMutation is { PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true } &&

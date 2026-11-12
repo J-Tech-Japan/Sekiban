@@ -1537,7 +1537,8 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         RecordingPersistentState<MultiProjectionGrainState>? persistentState = null,
         TempFileSnapshotManager? tempFileSnapshotManager = null,
         IMultiProjectionStateStore? checkpointStore = null,
-        ILogger<MultiProjectionGrain>? logger = null)
+        ILogger<MultiProjectionGrain>? logger = null,
+        IProjectionActorHostFactory? hostFactory = null)
     {
         host ??= new ProductionCatchUpProjectionHost();
         persistentState ??= new RecordingPersistentState<MultiProjectionGrainState>
@@ -1547,7 +1548,7 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         store.PersistentState = persistentState;
         var grain = new MultiProjectionGrain(
             persistentState,
-            new ProductionCatchUpProjectionHostFactory(host),
+            hostFactory ?? new ProductionCatchUpProjectionHostFactory(host),
             store,
             new DefaultOrleansEventSubscriptionResolver(),
             multiProjectionStateStore: checkpointStore,
@@ -1691,6 +1692,8 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         public string Etag => "test-etag";
         public bool RecordExists => true;
         public int WriteCalls { get; private set; }
+        public bool FailNextFaultWrite { get; set; }
+        public int FailedFaultWrites { get; private set; }
 
         public Task ClearStateAsync()
         {
@@ -1703,6 +1706,12 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         public Task WriteStateAsync()
         {
             WriteCalls++;
+            if (FailNextFaultWrite && State is MultiProjectionGrainState { FaultMessage: not null })
+            {
+                FailNextFaultWrite = false;
+                FailedFaultWrites++;
+                throw new IOException("injected fault-descriptor write failure");
+            }
             return Task.CompletedTask;
         }
     }
