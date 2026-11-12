@@ -8,6 +8,7 @@ using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Executors;
+using Sekiban.Pure.Orleans.Parts;
 using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Query;
 using Sekiban.Pure.Repositories;
@@ -142,7 +143,8 @@ public abstract class SekibanOrleansTestBase<TDomainTypesGetter> : ISiloConfigur
     public virtual void Configure(ISiloBuilder siloBuilder)
     {
         siloBuilder.AddMemoryGrainStorage("PubSubStore");
-        siloBuilder.AddMemoryGrainStorageAsDefault();
+        siloBuilder.AddMemoryGrainStorageAsDefault(options =>
+            options.GrainStorageSerializer = new NewtonsoftJsonSekibanOrleansSerializer());
         siloBuilder.AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
         siloBuilder.ConfigureServices(services =>
         {

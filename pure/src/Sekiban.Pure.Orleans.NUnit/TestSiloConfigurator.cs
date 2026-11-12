@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.TestingHost;
 using Sekiban.Pure.Events;
+using Sekiban.Pure.Orleans.Parts;
 using Sekiban.Pure.Repositories;
 namespace Sekiban.Pure.Orleans.NUnit;
 
@@ -12,7 +13,8 @@ public class TestSiloConfigurator<TDomainTypesGetter> : ISiloConfigurator
         var domainTypes = new TDomainTypesGetter().GetDomainTypes();
         var repository = new Repository();
         siloBuilder.AddMemoryGrainStorage("PubSubStore");
-        siloBuilder.AddMemoryGrainStorageAsDefault();
+        siloBuilder.AddMemoryGrainStorageAsDefault(options =>
+            options.GrainStorageSerializer = new NewtonsoftJsonSekibanOrleansSerializer());
         siloBuilder.AddMemoryStreams("EventStreamProvider").AddMemoryGrainStorage("EventStreamProvider");
         siloBuilder.ConfigureServices(services =>
         {
