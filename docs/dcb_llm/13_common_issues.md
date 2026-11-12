@@ -823,7 +823,13 @@ See [#1253](https://github.com/J-Tech-Japan/Sekiban/issues/1253) item 7.
 
 ### Permanently tombstoned checkpoint blocked by the store-ahead check (SEK-G97)
 
-**Symptoms.** After catch-up completes, Warning **1030** (`DurableRebuildObligationNotSaved`)
+**From 10.24.2.** This checkpoint heals on the next activation with no manual step. The activation
+resets the integrity watermark, replays from a fresh host, and saves the rebuilt checkpoint at its
+first persist, even when the retained event count exceeds every replayable event. Queries remain
+fail-closed until catch-up completes; a later activation restores the Active checkpoint without a
+full replay.
+
+**Symptoms before 10.24.2.** After catch-up completes, Warning **1030** (`DurableRebuildObligationNotSaved`)
 and `GetStatusAsync().LastError` report
 `External store has newer safe state (X) than local (Y)`. The checkpoint slot remains
 `Tombstoned`, and every activation fully replays the events. Queries remain correct after
@@ -841,27 +847,25 @@ events and X still exceeds Y, no waiting can fix this checkpoint.
 
 **Likely causes.** The event store was reset or restored while the projection store was retained,
 or a legacy checkpoint has an inflated `EventsProcessed` count. Tombstoning preserves that
-payload and count; the store-ahead integrity check still compares them against the rebuilt safe
-count. This runbook covers that store-ahead diagnostic. A retained Orleans `LastGoodSafeVersion`
-can instead stop persistence earlier with `Integrity guard blocked persist` (1021), without 1030
-or the store-ahead error; that diagnostic variant is outside this test's coverage.
+payload and count; before 10.24.2, the store-ahead integrity check still compares them against the
+rebuilt safe count. A retained Orleans `LastGoodSafeVersion` can instead stop persistence earlier
+with `Integrity guard blocked persist` (1021), without 1030 or the store-ahead error. From 10.24.2,
+the fresh activation also resets that watermark before replaying the tombstoned checkpoint.
 
-**Recovery for the affected checkpoint only.** Identify the **ServiceId, projector name, and
+**Recovery for versions before 10.24.2, for the affected checkpoint only.** Identify the **ServiceId, projector name, and
 projector version**; the service scope is part of the checkpoint identity.
 
 1. Delete that checkpoint row/document at the **provider level** from the multi-projection state
    table/container. For PostgreSQL and Cosmos DB, delete only the checkpoint for that service,
    projector name, and version, including its lifecycle/generation metadata. Do not delete events.
-   The test uses `IMultiProjectionStateStore.DeleteAsync(projectorName, projectorVersion)` with
-   a store explicitly scoped to the test service.
    If the checkpoint payload is offloaded to blob storage (an `OffloadKey` is set on the row), deleting
    the row does not delete the blob, and the key is lost with the row. Record the `OffloadKey` before
    deleting, confirm no other checkpoint references it, and clean it up under your blob retention
    policy; `IBlobStorageSnapshotAccessor` has no delete API, and the PostgreSQL/Cosmos `DeleteAsync`
    leave blob cleanup to the operator.
 2. Immediately deactivate the grain with `RequestDeactivationAsync` so the next request uses a
-   fresh activation. Restarting the host is an alternative way to replace the activation; the
-   verification test exercises grain deactivation. A stale-token save rejection during deactivation
+   fresh activation. Restarting the host is an alternative way to replace the activation.
+   A stale-token save rejection during deactivation
    just after the provider delete is expected and may appear as a persistence failure in logs.
 3. Query with the fail-closed options above until catch-up completes. Confirm correct query results
    and an **Active** checkpoint in the provider store with the rebuilt event count. A subsequent
@@ -869,14 +873,14 @@ projector version**; the service scope is part of the checkpoint identity.
 
 `DeleteExternalStateAsync` is **not** the provider delete in step 1. On capable stores it tombstones
 an Active row rather than removing it; on an already tombstoned row it preserves the existing
-tombstone (no generation change). It does not clear this stuck state.
+tombstone (no generation change). Before 10.24.2, it does not clear this stuck state.
 
 The end-to-end contract is in
 [`PermanentlyTombstonedCheckpointRunbookTests`](../../dcb/tests/Sekiban.Dcb.Orleans.Tests/PermanentlyTombstonedCheckpointRunbookTests.cs):
-50 safe replayable events, retained count 100, repeated stuck activations with correct queries and
-1030, unchanged tombstone after `DeleteExternalStateAsync`, provider deletion followed by
-deactivation, a fresh Active checkpoint, then restore without full replay. It uses the in-memory
-provider; PostgreSQL/Cosmos administration and a whole-host restart are not exercised by this test.
-The product's store-ahead check is unchanged.
+50 safe replayable events, retained count 100, and an unchanged tombstone after
+`DeleteExternalStateAsync`. The first fresh activation serves the correct count and saves an
+Active checkpoint with 50 events, no Warning 1030 and no store-ahead error. A later activation
+restores it without a full replay. It uses the in-memory provider; no provider deletion or whole-host
+restart is exercised by this test.
 
 > **10.4.2 upgrade:** Upgrade the whole cluster together; mixed Orleans versions are unsupported. AWS template PostgreSQL scripts were refreshed. See [the deployment upgrade steps](16_deployment.md#orleans-1042-postgresql-upgrade). Orleans 10.4.0 changed request-latency instruments and grain metric dimensions; update dashboards and alerts.

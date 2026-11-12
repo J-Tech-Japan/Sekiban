@@ -139,11 +139,14 @@ internal sealed class CheckpointMutationCoordinator
     ///     stores keep the legacy delete byte-for-byte. There is NO direct DeleteAsync bypass anywhere else in a product
     ///     mutation path. MUST run inside the caller's external-store serialisation gate.
     /// </summary>
-    public async Task InvalidateAsync(string projectorName, string projectorVersion)
+    public async Task InvalidateAsync(
+        string projectorName, string projectorVersion, CancellationToken cancellationToken = default)
     {
         if (_cas is not null)
         {
-            var slotResult = await _cas.ReadCheckpointSlotAsync(projectorName, projectorVersion);
+            var slotResult = await _cas.ReadCheckpointSlotAsync(projectorName, projectorVersion, cancellationToken)
+                .WaitAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (!slotResult.IsSuccess)
             {
                 throw new InvalidOperationException(
@@ -153,8 +156,9 @@ internal sealed class CheckpointMutationCoordinator
             var slot = slotResult.GetValue();
             if (slot.IsActive)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var outcome = await _cas.InvalidateWithTombstoneAsync(
-                    projectorName, projectorVersion, CheckpointExpectation.FromSlot(slot));
+                    projectorName, projectorVersion, CheckpointExpectation.FromSlot(slot), cancellationToken);
                 var resulting = outcome.ResultingSlot ?? outcome.CurrentSlot;
                 AdoptedSlot = resulting ?? slot;
                 PendingRebuiltCommit = true;
@@ -173,7 +177,8 @@ internal sealed class CheckpointMutationCoordinator
         }
 
         // Non-capable store: legacy delete-based invalidation (byte-for-byte unchanged). LEGACY-FALLBACK (non-capable).
-        var deleteResult = await _store.DeleteAsync(projectorName, projectorVersion);
+        cancellationToken.ThrowIfCancellationRequested();
+        var deleteResult = await _store.DeleteAsync(projectorName, projectorVersion, cancellationToken);
         if (!deleteResult.IsSuccess)
         {
             throw new InvalidOperationException(
