@@ -1261,6 +1261,15 @@ public class GeneralMultiProjectionActor
     internal string? RebuildOffendingPosition =>
         _singleStateAccessor is IDualStateRebuildSignals signals ? signals.RebuildOffendingPosition : null;
 
+    internal string? RebuildReason =>
+        _singleStateAccessor is IDualStateRebuildSignals signals ? signals.RebuildReason : null;
+    internal string? RebuildSafeHeadPosition =>
+        _singleStateAccessor is IDualStateRebuildSignals signals ? signals.RebuildSafeHeadPosition : null;
+    internal string? RebuildSafeHeadEventId =>
+        _singleStateAccessor is IDualStateRebuildSignals signals ? signals.RebuildSafeHeadEventId : null;
+    internal DateTime? RebuildSignaledAtUtc =>
+        _singleStateAccessor is IDualStateRebuildSignals signals ? signals.RebuildSignaledAtUtc : null;
+
     public void ForcePromoteAllBufferedEvents()
     {
         ThrowIfSnapshotRestoreUnavailable();

@@ -16,6 +16,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Orleans.Grains;
 using Sekiban.Dcb.Orleans.Serialization;
+using Sekiban.Dcb.Runtime.Native;
 using Sekiban.Dcb.Orleans.Streams;
 using Sekiban.Dcb.Runtime;
 using Sekiban.Dcb.ServiceId;
@@ -31,7 +32,7 @@ namespace Sekiban.Dcb.Orleans.Tests;
 ///     which reaches the real enumerable or streaming reader and the real common post-fetch seam. They deliberately do
 ///     not call the private persist-decision function in isolation.
 /// </summary>
-public sealed class MultiProjectionGrainCatchUpProductionPathTests
+public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
 {
     [Fact]
     public async Task Empty_completion_commits_pending_tombstone_once_then_skips_final_persist()
@@ -263,7 +264,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
 
     [Theory]
     [InlineData(100, false, true)]
-    [InlineData(100, true, false)]
+    [InlineData(100, true, true)]
     [InlineData(0, false, false)]
     [InlineData(-1, false, false)]
     public void BoundedWait_ActivationArmEligibility(int waitMs, bool durableMarker, bool expected)
@@ -278,9 +279,8 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
 
     [Theory]
     [InlineData("recreate")]
-    [InlineData("rebuild")]
     [InlineData("rearm")]
-    public async Task BoundedWait_ExcludedRearmsEndEpisode_AndCannotReportOldError(string site)
+    public void BoundedWait_ExcludedRearmsEndEpisode_AndCannotReportOldError(string site)
     {
         var grain = CreateGrain(new ProductionCatchUpEventStore([1]));
         SetPrivateField(grain, "_firstQueryCatchUpMaxWaitMs", 100);
@@ -289,7 +289,6 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         InvokePrivate(grain, "RecordBackgroundCatchUpFailure", [new Exception("old episode"), gate.ArmGeneration]);
         Assert.True(IsBounded(grain));
         if (site == "recreate") InvokePrivate(grain, "RecreateHostForFullRebuild", []);
-        else if (site == "rebuild") await (Task)InvokePrivate(grain, "TriggerDurableFullRebuildAsync", [])!;
         else gate.Arm();
         Assert.False(IsBounded(grain));
         Assert.Null(grain.GetType().GetProperty("LastBackgroundCatchUpError", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(grain));
@@ -761,7 +760,8 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
                 0,
                 null,
                 null,
-                "empty"
+                "empty",
+                false
             ]);
 
         Assert.Equal(1, store.PersistentState.WriteCalls);
@@ -784,7 +784,8 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
                 0,
                 null,
                 null,
-                "empty"
+                "empty",
+                false
             ]);
 
         Assert.Equal(1, store.PersistentState.WriteCalls);
@@ -808,7 +809,8 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
                 0,
                 null,
                 null,
-                "empty"
+                "empty",
+                false
             ]);
 
         Assert.Equal(2, store.PersistentState.WriteCalls);
@@ -1504,7 +1506,8 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
                 0,
                 hybridCatchUpStore,
                 hybridReadBatchMetadata,
-                "empty"
+                "empty",
+                false
             ]);
     }
 
@@ -1714,7 +1717,10 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         public IProjectionActorHost Create(
             string projectorName,
             GeneralMultiProjectionActorOptions? options = null,
-            Microsoft.Extensions.Logging.ILogger? logger = null) => host;
+            Microsoft.Extensions.Logging.ILogger? logger = null) =>
+            host is ProductionCatchUpProjectionHost { RebuildRequired: true }
+                ? new ProductionCatchUpProjectionHost { AllowApply = true, FailInitialStateRead = false }
+                : host;
     }
 
     private sealed record DeterministicMaterializedProjection(
@@ -1739,8 +1745,18 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
     {
     }
 
-    private sealed class ProductionCatchUpProjectionHost : IProjectionActorHost
+    private sealed class ProductionCatchUpProjectionHost : IProjectionActorHost, IRebuildSignalingHost
     {
+        public bool RebuildRequired { get; set; }
+        public bool SignalOnPromotion { get; init; }
+        public int SignalOnPromotionCall { get; init; }
+        public bool SignalOnForcePromotion { get; init; }
+        public string? RebuildOffendingEventId => "00000000-0000-0000-0000-000000000002";
+        public string? RebuildOffendingPosition => "late-position";
+        public string? RebuildReason => "promotion behind safe head";
+        public string? RebuildSafeHeadPosition => "head-position";
+        public string? RebuildSafeHeadEventId => "00000000-0000-0000-0000-000000000003";
+        public DateTime? RebuildSignaledAtUtc => new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         public bool FailSnapshotWrite { get; init; }
         public bool ThrowSnapshotWrite { get; init; }
         public Exception? SnapshotWriteThrownException { get; init; }
@@ -1802,6 +1818,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         public Task<ResultBox<MultiProjectionState>> GetStateAsync(bool canGetUnsafeState = true)
         {
             StateCalls++;
+            if (SignalOnPromotion && (SignalOnPromotionCall == 0 || StateCalls == SignalOnPromotionCall)) RebuildRequired = true;
             if (StateCalls == 1 && FailInitialStateRead)
             {
                 return Task.FromResult(ResultBox.Error<MultiProjectionState>(new InvalidOperationException("no state payload")));
@@ -1901,7 +1918,10 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
             DateTime? safeThresholdTime,
             int? unsafeVersion) => throw new NotSupportedException();
 
-        public void ForcePromoteBufferedEvents() { }
+        public void ForcePromoteBufferedEvents()
+        {
+            if (SignalOnForcePromotion) RebuildRequired = true;
+        }
         public void CompactSafeHistory() { }
         public void ForcePromoteAllBufferedEvents() { }
         public Task<string> GetSafeLastSortableUniqueIdAsync()
@@ -2020,6 +2040,9 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
     private sealed class CursorAwareProductionCatchUpEventStore(IReadOnlyList<SerializableEvent> events)
         : ProductionCatchUpEventStore([], events: events)
     {
+        public override Task<ResultBox<string>> GetLatestSortableUniqueIdAsync() =>
+            Task.FromResult(ResultBox.FromValue(Events.LastOrDefault()?.SortableUniqueIdValue ?? string.Empty));
+
         public override Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(SortableUniqueId? since = null) =>
             ReadAllSerializableEventsAsync(since, null);
 

@@ -20,6 +20,10 @@ internal interface IRebuildSignalingHost
     /// <summary>SEK-G20: the offending event id + position behind <see cref="RebuildRequired" /> (null if none).</summary>
     string? RebuildOffendingEventId { get; }
     string? RebuildOffendingPosition { get; }
+    string? RebuildReason => null;
+    string? RebuildSafeHeadPosition => null;
+    string? RebuildSafeHeadEventId => null;
+    DateTime? RebuildSignaledAtUtc => null;
 }
 
 /// <summary>
@@ -184,6 +188,10 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
     bool IRebuildSignalingHost.RebuildRequired => _actor.RebuildRequired;
     string? IRebuildSignalingHost.RebuildOffendingEventId => _actor.RebuildOffendingEventId;
     string? IRebuildSignalingHost.RebuildOffendingPosition => _actor.RebuildOffendingPosition;
+    string? IRebuildSignalingHost.RebuildReason => _actor.RebuildReason;
+    string? IRebuildSignalingHost.RebuildSafeHeadPosition => _actor.RebuildSafeHeadPosition;
+    string? IRebuildSignalingHost.RebuildSafeHeadEventId => _actor.RebuildSafeHeadEventId;
+    DateTime? IRebuildSignalingHost.RebuildSignaledAtUtc => _actor.RebuildSignaledAtUtc;
 
     public void ForcePromoteAllBufferedEvents()
     {

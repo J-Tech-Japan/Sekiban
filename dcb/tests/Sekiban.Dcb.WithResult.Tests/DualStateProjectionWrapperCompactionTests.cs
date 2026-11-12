@@ -126,6 +126,61 @@ public class DualStateProjectionWrapperCompactionTests
         Assert.Equal(0, GetPrivateCount(wrapper, "_allSafeEvents"));
     }
 
+    [Theory]
+    [InlineData("restore")]
+    [InlineData("compact-before")]
+    [InlineData("compact-after")]
+    [InlineData("fresh")]
+    public void AlreadySafeArrival_PromotesOlderBufferInOrder(string mode)
+    {
+        var now = DateTime.UtcNow;
+        var zero = new SortableUniqueId(new string('0', 48));
+        var future = SortableUniqueId.Generate(now.AddMinutes(1), Guid.Empty);
+        var wrapper = mode == "restore"
+            ? new DualStateProjectionWrapper<CountingProjector>(new CountingProjector(),
+                CountingProjector.MultiProjectorName, _multiProjectorTypes, _domainTypes.JsonSerializerOptions,
+                initialVersion: 1, initialLastEventId: Guid.NewGuid(),
+                initialLastSortableUniqueId: SortableUniqueId.Generate(now.AddMinutes(-1), Guid.Empty))
+            : CreateWrapper();
+        if (mode == "compact-before") ((IDualStateAccessor)wrapper).CompactSafeHistory();
+        var b = CreateEvent(new CountedEvent(2), now);
+        var c = CreateEvent(new CountedEvent(3), now.AddSeconds(1));
+        wrapper.ProcessEvent(b, zero, _domainTypes);
+        if (mode == "compact-after") ((IDualStateAccessor)wrapper).CompactSafeHistory();
+        wrapper.ProcessEvent(c, future, _domainTypes);
+        var safe = wrapper.GetSafeProjection(future, _domainTypes);
+        Assert.False(ReadSignal<bool>(wrapper, "RebuildRequired"));
+        Assert.Equal("23", safe.State.Order);
+        Assert.Equal(5, safe.State.Total);
+        Assert.Equal("23", wrapper.GetUnsafeProjection(_domainTypes).State.Order);
+        Assert.Equal(0, GetPrivateCount(wrapper, "_bufferedEvents"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GenuineLateEvent_PreservesSignalTimeSafeHead(bool promotion)
+    {
+        var now = DateTime.UtcNow;
+        var zero = new SortableUniqueId(new string('0', 48));
+        var future = SortableUniqueId.Generate(now.AddMinutes(1), Guid.Empty);
+        var wrapper = CreateWrapper();
+        var head = CreateEvent(new CountedEvent(3), now);
+        wrapper.ProcessEvent(head, future, _domainTypes);
+        ((IDualStateAccessor)wrapper).CompactSafeHistory();
+        var late = CreateEvent(new CountedEvent(2), now.AddSeconds(-1));
+        var before = DateTime.UtcNow;
+        wrapper.ProcessEvent(late, promotion ? zero : future, _domainTypes);
+        if (promotion) ((IDualStateAccessor)wrapper).PromoteBufferedEvents(future, _domainTypes);
+        Assert.True(ReadSignal<bool>(wrapper, "RebuildRequired"));
+        Assert.Equal(late.Id.ToString(), ReadSignal<string?>(wrapper, "RebuildOffendingEventId"));
+        Assert.Equal(late.SortableUniqueIdValue, ReadSignal<string?>(wrapper, "RebuildOffendingPosition"));
+        Assert.Equal(head.Id.ToString(), ReadSignal<string?>(wrapper, "RebuildSafeHeadEventId"));
+        Assert.Equal(head.SortableUniqueIdValue, ReadSignal<string?>(wrapper, "RebuildSafeHeadPosition"));
+        Assert.Equal(promotion ? "promotion behind safe head" : "safe arrival behind safe head", ReadSignal<string?>(wrapper, "RebuildReason"));
+        Assert.InRange(ReadSignal<DateTime?>(wrapper, "RebuildSignaledAtUtc")!.Value, before, DateTime.UtcNow);
+    }
+
     private DualStateProjectionWrapper<CountingProjector> CreateWrapper() =>
         new(
             CountingProjector.GenerateInitialPayload(),
@@ -143,6 +198,12 @@ public class DualStateProjectionWrapperCompactionTests
             eventId,
             new EventMetadata(eventId.ToString(), eventId.ToString(), "TestUser"),
             new List<string>());
+    }
+
+    private static T ReadSignal<T>(object wrapper, string property)
+    {
+        var contract = wrapper.GetType().GetInterfaces().Single(type => type.Name == "IDualStateRebuildSignals");
+        return (T)contract.GetProperty(property)!.GetValue(wrapper)!;
     }
 
     private static int GetPrivateCount(object target, string fieldName)
@@ -164,6 +225,7 @@ public class DualStateProjectionWrapperCompactionTests
     public record CountingProjector : IMultiProjector<CountingProjector>
     {
         public int Total { get; init; }
+        public string Order { get; init; } = string.Empty;
 
         public static string MultiProjectorName => "CountingProjector";
         public static string MultiProjectorVersion => "1.0.0";
@@ -177,7 +239,7 @@ public class DualStateProjectionWrapperCompactionTests
             SortableUniqueId safeWindowThreshold)
         {
             return ev.Payload is CountedEvent counted
-                ? ResultBox.FromValue(payload with { Total = payload.Total + counted.Amount })
+                ? ResultBox.FromValue(payload with { Total = payload.Total + counted.Amount, Order = payload.Order + counted.Amount })
                 : ResultBox.FromValue(payload);
         }
     }
