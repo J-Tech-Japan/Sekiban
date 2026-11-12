@@ -163,7 +163,11 @@ def validate(root, directory, version, commit):
                 errors.append(f'{package_id}: project file {project.relative_to(root).as_posix()} has <{tag}> {actual}, expected {version}')
 
     expected = {f'{package_id}.{version}.nupkg' for package_id, _ in projects}
-    present = {path.name for path in directory.glob('*.nupkg')} if directory.is_dir() else set()
+    candidates = list(directory.glob('*.nupkg')) if directory.is_dir() else []
+    present = {path.name for path in candidates if path.is_file()}
+    for path in candidates:
+        if not path.is_file():
+            errors.append(f'{path.name}: not a regular file')
     for name in sorted(expected - present):
         errors.append(f'{name[:-len(f".{version}.nupkg")]}: missing package {name}')
     for name in sorted(present - expected):
@@ -172,7 +176,7 @@ def validate(root, directory, version, commit):
     for package_id, _ in projects:
         path = directory / f'{package_id}.{version}.nupkg'
         if not path.is_file():
-            continue
+            continue  # already reported as a missing package
         before = len(errors)
         check_package(path, package_id, version, commit, banner, errors)
         if len(errors) == before:
@@ -325,6 +329,22 @@ def self_test():
     run('misleading-superstring-without-a-known-commit',
         {'package': {first: {'bytes': {'net10.0': fake_assembly('1' + version, None)}}}},
         f'lib/net10.0/{first}.dll lacks the informational version', with_commit=None)
+    # a directory (or anything that is not a regular file) in place of a package must be reported, never counted as present
+    with tempfile.TemporaryDirectory(prefix='sekiban-pure-packages.') as temp:
+        root, packages = make_fixture(Path(temp), version, commit, {})
+        victim = packages / f'{second}.{version}.nupkg'
+        victim.unlink()
+        victim.mkdir()
+        errors, oks = validate(root, packages, version, commit)
+    if (any(f'{second}.{version}.nupkg: not a regular file' in error for error in errors)
+            and any(f'missing package {second}.{version}.nupkg' in error for error in errors)
+            and len(oks) == EXPECTED_PACKAGE_COUNT - 1):
+        print('mutant killed: directory-in-place-of-a-package')
+    else:
+        print('case FAILED: a directory in place of a package was not rejected for its reason', file=sys.stderr)
+        for error in errors:
+            print(f'  ERROR: {error}', file=sys.stderr)
+        failures += 1
     # the validator must also notice a repository with the wrong number of project files
     with tempfile.TemporaryDirectory(prefix='sekiban-pure-packages.') as temp:
         root, packages = make_fixture(Path(temp), version, commit, {})
