@@ -4890,6 +4890,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
+            // A read superseded by an interleaving rebuild must not count against, or stop, the replacement run.
+            if (!ReferenceEquals(scheduledRun, _catchUpProgress)) return;
             RecordBackgroundCatchUpFailure(ex, generation);
             await HandleCatchUpBatchFailureAsync(ex, projectorName);
         }

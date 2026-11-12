@@ -86,6 +86,101 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
         finally { store.ReleaseRead.TrySetResult(); }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Superseded_throwing_background_read_cannot_stop_or_fail_replacement_replay(bool streaming)
+    {
+        using var services = CreateNativeRebuildServices();
+        var factory = services.GetRequiredService<IProjectionActorHostFactory>();
+        var options = new GeneralMultiProjectionActorOptions
+        {
+            SafeWindowMs = 0, PersistIntervalSeconds = 0, CatchUpMaxConsecutiveFailures = 1
+        };
+        var name = ForceFullResumeClusterTests.CountProjector.MultiProjectorName;
+        var host = factory.Create(name, options);
+        var events = CreateNativeRebuildEvents();
+        await host.AddSerializableEventsAsync([events[1]]);
+        host.ForcePromoteAllBufferedEvents();
+        host.CompactSafeHistory();
+        var store = streaming ? new ParkedStreamingRebuildStore(events) : new ParkedRebuildStore(events);
+        var checkpoints = new RecordingRebuildCheckpointStore();
+        var grain = CreateGrain(store, host, actorOptions: options, processedEvents: [events[1]],
+            checkpointStore: checkpoints, hostFactory: factory);
+        SetPrivateField(grain, "_projectorName", name);
+        SetPrivateField(grain, "_grainKey", name);
+        SetPrivateField(grain, "_eventsProcessed", 1L);
+        // CreateGrain bypasses activation's option merge. Mirror the configured failure threshold here.
+        SetPrivateField(grain, "_catchUpMaxConsecutiveFailures", options.CatchUpMaxConsecutiveFailures);
+        SetPrivateField(grain, "_catchUpBatchSize", 1);
+        AttachDeactivationRuntime(grain);
+        SetActiveCatchUp(grain, new CatchUpStartPositionLease(new SortableUniqueId(events[1].SortableUniqueIdValue),
+            CatchUpStartPositionSource.InferredCheckpoint));
+        var oldRead = InvokePrivateTaskAsync(grain, "ProcessCatchUpBatchAsync");
+        try
+        {
+            await store.ReadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await host.AddSerializableEventsAsync([events[0]]);
+            Assert.True(Assert.IsAssignableFrom<IRebuildSignalingHost>(host).RebuildRequired);
+            await grain.PersistStateAsync();
+            var replacement = GetPrivateField<IProjectionActorHost>(grain, "_host");
+            Assert.NotSame(host, replacement);
+
+            // Drive the real background initiation and callback through a manually ticked timer, so no
+            // query/refresh recovery can conceal the replacement being stopped by the stale exception.
+            using var timer = new ManuallyTickedCatchUpTimer(grain);
+            SetPrivateField(grain, "_catchUpTimer", timer);
+            await InvokePrivateTaskAsync(grain, "InitiateCatchUpIfNeeded", [true]);
+            var progress = GetPrivateField<object>(grain, "_catchUpProgress");
+            Assert.Equal(true, progress.GetType().GetProperty("IsActive")!.GetValue(progress));
+            Assert.Null(GetCatchUpCurrentPosition(grain));
+            store.ReleaseRead.TrySetException(new IOException("superseded background read failed"));
+            await oldRead.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Same(progress, GetPrivateField<object>(grain, "_catchUpProgress"));
+            Assert.Equal(true, progress.GetType().GetProperty("IsActive")!.GetValue(progress));
+            Assert.Same(timer, GetPrivateFieldValue(grain, "_catchUpTimer"));
+            Assert.False(timer.IsDisposed);
+            Assert.Equal(0, GetPrivateField<int>(grain, "_catchUpConsecutiveFailureCount"));
+            Assert.Null(GetPrivateFieldValue(grain, "_catchUpFailureWindowStartUtc"));
+            Assert.Null(GetPrivateFieldValue(grain, "_lastBackgroundCatchUpError"));
+            Assert.Null(GetPrivateFieldValue(grain, "_lastError"));
+            Assert.Equal(0L, GetPrivateField<long>(grain, "_eventsProcessed"));
+            Assert.Equal(0, checkpoints.SnapshotSaveCalls);
+
+            // One event per tick verifies the replacement traverses the full stream in order.
+            for (var i = 0; i < events.Length; i++)
+            {
+                await timer.TickAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Equal(events[i].SortableUniqueIdValue, GetCatchUpCurrentPosition(grain));
+                Assert.Equal(i + 1L, GetPrivateField<long>(grain, "_eventsProcessed"));
+                Assert.Equal(i + 1, Assert.IsType<ForceFullResumeClusterTests.CountProjector>(
+                    (await replacement.GetStateAsync(false)).GetValue().Payload).Count);
+            }
+            for (var i = 0; i < 10 && !timer.IsDisposed; i++)
+                await timer.TickAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(false, progress.GetType().GetProperty("IsActive")!.GetValue(progress));
+            Assert.True(timer.IsDisposed);
+            Assert.Null(GetPrivateFieldValue(grain, "_catchUpTimer"));
+            Assert.Equal(events.Length, Assert.IsType<ForceFullResumeClusterTests.CountProjector>(
+                (await replacement.GetStateAsync(false)).GetValue().Payload).Count);
+            Assert.Equal(0, GetPrivateField<int>(grain, "_catchUpConsecutiveFailureCount"));
+            Assert.Null(GetPrivateFieldValue(grain, "_lastBackgroundCatchUpError"));
+        }
+        finally { store.ReleaseRead.TrySetResult(); }
+    }
+
+    private sealed class ManuallyTickedCatchUpTimer(MultiProjectionGrain grain) : IDisposable
+    {
+        public bool IsDisposed { get; private set; }
+        public Task TickAsync()
+        {
+            Assert.False(IsDisposed);
+            return InvokePrivateTaskAsync(grain, "ProcessCatchUpBatchAsync");
+        }
+        public void Dispose() => IsDisposed = true;
+    }
+
     private class ParkedRebuildStore(IReadOnlyList<SerializableEvent> events)
         : ProductionCatchUpEventStore([], events: events)
     {
