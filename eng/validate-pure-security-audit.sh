@@ -14,6 +14,7 @@ readonly retry_delay_seconds=5
 readonly workflow_path=".github/workflows/pure_security_audit.yml"
 readonly fixture_frameworks="net10.0,net11.0"
 readonly fixture_first_framework="net10.0"
+readonly unreadable_message="the vulnerability data could not be read from the JSON"
 
 script_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
 repo_root="$(cd -- "$(dirname -- "$script_path")/.." && pwd)"
@@ -220,7 +221,7 @@ decide() {
                 and (collection("topLevelPackages") | packages) and (collection("transitivePackages") | packages))
         ' "$results/$name.json" >/dev/null 2>&1 || status=$?
         if [[ "$status" -ne 0 ]]; then
-            printf 'ERROR: %s: the vulnerability data could not be read from the JSON\n' "$name" >&2
+            printf 'ERROR: %s: %s\n' "$name" "$unreadable_message" >&2
             errors=$((errors + 1))
             continue
         fi
@@ -240,7 +241,7 @@ decide() {
             | @tsv
         ' "$results/$name.json" > "$extracted" 2>/dev/null || status=$?
         if [[ "$status" -ne 0 ]]; then
-            printf 'ERROR: %s: the vulnerability data could not be read from the JSON\n' "$name" >&2
+            printf 'ERROR: %s: %s\n' "$name" "$unreadable_message" >&2
             errors=$((errors + 1))
             continue
         fi
@@ -588,28 +589,28 @@ run_self_test() {
     dir="$(st_new_dir frameworks-malformed)"
     printf '{"version":1,"projects":[{"path":"%s","frameworks":[42]}]}\n' \
         "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
-    st_expect "malformed-frameworks-fail-and-are-not-counted" fail "the vulnerability data could not be read from the JSON" "$dir"
+    st_expect "malformed-frameworks-fail-and-are-not-counted" fail "$unreadable_message" "$dir"
     st_expect "malformed-frameworks-checked-count" fail "Checked 11 of 12 projects." "$dir"
 
     dir="$(st_new_dir frameworks-not-array)"
     printf '{"version":1,"projects":[{"path":"%s","frameworks":42}]}\n' \
         "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
-    st_expect "frameworks-not-an-array-fails" fail "the vulnerability data could not be read from the JSON" "$dir"
+    st_expect "frameworks-not-an-array-fails" fail "$unreadable_message" "$dir"
 
     dir="$(st_new_dir vulnerabilities-not-array)"
     printf '{"version":1,"projects":[{"path":"%s","frameworks":[{"framework":"net10.0","topLevelPackages":[{"id":"Example.Package","resolvedVersion":"1.0.0","vulnerabilities":"unreadable"}]}]}]}\n' \
         "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
-    st_expect "vulnerabilities-not-an-array-fails" fail "the vulnerability data could not be read from the JSON" "$dir"
+    st_expect "vulnerabilities-not-an-array-fails" fail "$unreadable_message" "$dir"
 
     dir="$(st_new_dir packages-not-array)"
     printf '{"version":1,"projects":[{"path":"%s","frameworks":[{"framework":"net10.0","transitivePackages":"none"}]}]}\n' \
         "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
-    st_expect "packages-not-an-array-fails" fail "the vulnerability data could not be read from the JSON" "$dir"
+    st_expect "packages-not-an-array-fails" fail "$unreadable_message" "$dir"
 
     dir="$(st_new_dir severity-missing)"
     printf '{"version":1,"projects":[{"path":"%s","frameworks":[{"framework":"net10.0","topLevelPackages":[{"id":"Example.Package","resolvedVersion":"1.0.0","vulnerabilities":[{"advisoryurl":"https://github.com/advisories/GHSA-test-test-test"}]}]}]}]}\n' \
         "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
-    st_expect "advisory-without-severity-fails" fail "the vulnerability data could not be read from the JSON" "$dir"
+    st_expect "advisory-without-severity-fails" fail "$unreadable_message" "$dir"
 
     dir="$(st_new_dir wrong-project)"
     st_write_clean "$dir" "$(st_nth_rel 10)"
