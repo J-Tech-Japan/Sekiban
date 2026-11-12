@@ -64,3 +64,7 @@ f76bfebc338632d480efffd4db139ff0119cd3acdec8fbc7101f8b3ea3aea530  orleans-system
 f76bfebc338632d480efffd4db139ff0119cd3acdec8fbc7101f8b3ea3aea530  orleans-newtonsoft-json.json
 2482249cdfa37764803a7bd8ea244da1f3c298325818541055df6d0485c709cc  cosmos-event-document.json
 ```
+
+## Byte comparison and the gzip OS byte
+
+`aggregate-snapshot.json`, `orleans-system-text-json.json` and `orleans-newtonsoft-json.json` embed the aggregate payload as base64 gzip data (`compressedPayloadJson`). Byte 9 of a gzip header is the OS code of the compressing machine (`0x13` on macOS, where these fixtures were generated; `0x03` on Linux, which CI uses). It does not depend on the package version, and readers ignore it. `Serialization_matches_900_bytes` therefore sets that single byte to a constant on both sides before the exact comparison; the rest of the gzip stream (flags, deflate data, CRC, length) and every other byte are compared unchanged. Found in CI run 43130482884 (Linux), where only that byte differed.

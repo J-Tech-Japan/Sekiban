@@ -20,7 +20,23 @@ public class CompatibilityTests
     public async Task Serialization_matches_900_bytes(string name)
     {
         var actual = (await FixedInputs.SerializeAll())[name];
-        Assert.Equal(Fixture(name), actual);
+        Assert.Equal(NormalizeGzipOsByte(Fixture(name)), NormalizeGzipOsByte(actual));
+    }
+
+    // The snapshot payload is gzip data embedded as base64. Byte 9 of a gzip header is the "OS" code of the
+    // machine that compressed it (0x13 on macOS, where the 9.0.0 fixtures were generated, 0x03 on Linux). It does
+    // not depend on the package version and readers ignore it, so only that one byte is set to a constant before
+    // the exact byte comparison. Everything else, including the deflate stream, is compared as is.
+    private static byte[] NormalizeGzipOsByte(byte[] json)
+    {
+        var text = System.Text.Encoding.UTF8.GetString(json);
+        var normalized = System.Text.RegularExpressions.Regex.Replace(text, "H4sI[A-Za-z0-9+/=]+", match =>
+        {
+            var gzip = Convert.FromBase64String(match.Value);
+            gzip[9] = 0xFF;
+            return Convert.ToBase64String(gzip);
+        });
+        return System.Text.Encoding.UTF8.GetBytes(normalized);
     }
 
     [Fact]
