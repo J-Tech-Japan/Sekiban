@@ -56,7 +56,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
             var invalidation = await checkpoints.InvalidateWithTombstoneAsync("production-catch-up", "v1", CheckpointExpectation.FromSlot(active));
             Assert.Equal(CheckpointCasStatus.Committed, invalidation.Status);
             _ = await grain.PersistStateAsync();
-            Assert.Single(logger.Entries, e => e == (LogLevel.Warning, 1031));
+            Assert.Single(logger.Entries, e => e == (LogLevel.Warning, MultiProjectionLogEvents.StaleCheckpointHost.Id));
             Assert.Single(logger.Entries, e => e.Item1 >= LogLevel.Warning);
             var lastGood = state.State.LastGoodSafeVersion;
             var lastGoodEvents = state.State.LastGoodEventsProcessed;
