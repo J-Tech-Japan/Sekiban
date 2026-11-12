@@ -12,8 +12,17 @@ readonly release_workflow=".github/workflows/packagesPure.yml"
 readonly check_workflow=".github/workflows/pure_release_workflow_check.yml"
 readonly release_label="packagesPure.yml"
 readonly check_label="pure_release_workflow_check.yml"
+readonly package_check_workflow=".github/workflows/pure_package_check.yml"
+readonly package_check_label="pure_package_check.yml"
 readonly login_sha="8d196754b4036150537f80ac539e15c2f1028841"
+readonly step_sdk10="Setup .NET 10"
+readonly step_sdk11="Setup .NET 11"
+readonly step_restore="Restore dependencies"
+readonly step_build="Build with dotnet"
 readonly step_pack="Pack NuGet packages"
+readonly step_audit="Audit shipped packages for vulnerabilities"
+readonly step_validate="Validate packed packages"
+readonly step_compose="Compose release body"
 readonly step_login="Mint short-lived NuGet key"
 readonly step_push="Push to NuGet.org"
 readonly step_release="Create GitHub Release"
@@ -22,7 +31,16 @@ readonly id_line="        id: nuget-login"
 readonly uses_line="        uses: NuGet/login@${login_sha}"
 readonly user_line='          user: ${{ secrets.NUGET_USER }}'
 readonly key_env_line='          NUGET_APIKEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}'
-readonly push_line='        run: dotnet nuget push out/*.nupkg --api-key "$NUGET_APIKEY" --source https://api.nuget.org/v3/index.json'
+readonly push_line='        run: dotnet nuget push out/*.nupkg --api-key "$NUGET_APIKEY" --source https://api.nuget.org/v3/index.json --skip-duplicate'
+readonly sdk10_line="          dotnet-version: 10.0.x"
+readonly sdk11_line="          dotnet-version: 11.0.x"
+readonly restore_line="        run: dotnet restore pure/Sekiban.Pure.slnx"
+readonly build_line="        run: dotnet build pure/Sekiban.Pure.slnx -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1"
+readonly audit_line='        run: ./eng/validate-pure-security-audit.sh --repo-root .'
+readonly validate_packages_line='        run: ./eng/validate-pure-packages.sh --repo-root . --dir out --version "$VERSION"'
+readonly compose_line='        run: ./eng/compose-pure-release-body.sh --repo-root . --version "$VERSION" --output out/release-body.md'
+readonly body_path_line="          body_path: out/release-body.md"
+readonly make_latest_line="          make_latest: 'false'"
 readonly validator_line='        run: ./eng/validate-pure-release-workflow.sh --repo-root . --self-test'
 
 script_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
@@ -133,6 +151,9 @@ validate_release_workflow() {
     local root="$1"
     local file="$root/$release_workflow"
     local pack
+    local audit
+    local validate
+    local compose
     local login
     local push
     local release
@@ -178,14 +199,68 @@ validate_release_workflow() {
         forbid_step_prefix "$file" "$step_push" "        uses:"
     fi
 
+    validate_release_scope "$file"
+
     pack="$(step_line_number "$file" "$step_pack")"
+    audit="$(step_line_number "$file" "$step_audit")"
+    validate="$(step_line_number "$file" "$step_validate")"
+    compose="$(step_line_number "$file" "$step_compose")"
     login="$(step_line_number "$file" "$step_login")"
     push="$(step_line_number "$file" "$step_push")"
     release="$(step_line_number "$file" "$step_release")"
-    if [[ -z "$pack" || -z "$login" || -z "$push" || -z "$release" ]] \
-        || ! ((pack < login && login < push && push < release)); then
-        violation "$release_label: steps are not in the order $step_pack, $step_login, $step_push, $step_release"
+    if [[ -z "$pack" || -z "$audit" || -z "$validate" || -z "$compose" || -z "$login" || -z "$push" || -z "$release" ]] \
+        || ! ((pack < audit && audit < validate && validate < compose && compose < login && login < push && push < release)); then
+        violation "$release_label: steps are not in the order $step_pack, $step_audit, $step_validate, $step_compose, $step_login, $step_push, $step_release"
     fi
+}
+
+# Requires the step to exist and to contain the line; one violation otherwise.
+require_step_with_line() {
+    local file="$1"
+    local step="$2"
+    local line="$3"
+
+    if [[ -z "$(step_text "$file" "$step")" ]]; then
+        violation "$release_label: step [$step] not found"
+    else
+        require_step_line "$file" "$step" "$line"
+    fi
+}
+
+# The SDK, build scope, pre-push gates and release step of packagesPure.yml.
+validate_release_scope() {
+    local file="$1"
+    local text
+
+    require_step_with_line "$file" "$step_sdk10" "$sdk10_line"
+    require_step_with_line "$file" "$step_sdk11" "$sdk11_line"
+    require_step_with_line "$file" "$step_restore" "$restore_line"
+    require_step_with_line "$file" "$step_build" "$build_line"
+    require_step_with_line "$file" "$step_audit" "$audit_line"
+    require_step_with_line "$file" "$step_validate" "$validate_packages_line"
+    require_step_with_line "$file" "$step_compose" "$compose_line"
+    require_step_with_line "$file" "$step_release" "$body_path_line"
+    require_step_with_line "$file" "$step_release" "$make_latest_line"
+    for text in "dotnet-version: 8.0.x" "dotnet-version: 9.0.x" "Sekiban.slnx"; do
+        if [[ "$(count_text "$text" "$file")" != "0" ]]; then
+            violation "$release_label: forbidden text [$text]"
+        fi
+    done
+}
+
+validate_package_check_workflow() {
+    local root="$1"
+    local file="$root/$package_check_workflow"
+
+    if [[ ! -f "$file" ]]; then
+        violation "missing workflow: $package_check_workflow"
+        return
+    fi
+    require_line "$package_check_label" "$file" "      - '$release_workflow'"
+    require_line "$package_check_label" "$file" "      - '$package_check_workflow'"
+    require_line "$package_check_label" "$file" "$validate_packages_line"
+    require_line "$package_check_label" "$file" "$validator_line"
+    require_line "$package_check_label" "$file" "$audit_line"
 }
 
 validate_check_workflow() {
@@ -208,6 +283,7 @@ validate_all() {
     errors=0
     validate_release_workflow "$root"
     validate_check_workflow "$root"
+    validate_package_check_workflow "$root"
     if ((errors > 0)); then
         printf 'ERROR: %s rule(s) violated\n' "$errors" >&2
         return 1
@@ -226,6 +302,7 @@ st_fixture() {
     mkdir -p "$fixture/.github/workflows"
     cp "$repo_root/$release_workflow" "$fixture/$release_workflow"
     cp "$repo_root/$check_workflow" "$fixture/$check_workflow"
+    cp "$repo_root/$package_check_workflow" "$fixture/$package_check_workflow"
     printf '%s\n' "$fixture"
 }
 
@@ -318,6 +395,40 @@ run_self_test() {
         "$check_label: missing line [$validator_line]"
     st_mutant "release-workflow-path-filter-removed" "$check_workflow" "s/^      - '\\.github\\/workflows\\/packagesPure\\.yml'\\n//m" \
         "$check_label: missing line [      - '$release_workflow']"
+
+    st_mutant "sdk-8-reintroduced" "$release_workflow" 's/dotnet-version: 10\.0\.x/dotnet-version: 8.0.x/' \
+        "$release_label: forbidden text [dotnet-version: 8.0.x]" "dotnet-version: 8.0.x"
+    st_mutant "sdk-9-reintroduced" "$release_workflow" 's/dotnet-version: 11\.0\.x/dotnet-version: 9.0.x/' \
+        "$release_label: forbidden text [dotnet-version: 9.0.x]" "dotnet-version: 9.0.x"
+    st_mutant "restore-scope-reverted-to-the-root-solution" "$release_workflow" 's/pure\/Sekiban\.Pure\.slnx/Sekiban.slnx/' \
+        "$release_label: forbidden text [Sekiban.slnx]" "Sekiban.slnx"
+    st_mutant "audit-step-removed" "$release_workflow" 's/      - name: Audit shipped packages for vulnerabilities\n.*?\n\n//s' \
+        "$release_label: step [$step_audit] not found"
+    st_mutant "package-validation-step-removed" "$release_workflow" 's/      - name: Validate packed packages\n.*?\n\n//s' \
+        "$release_label: step [$step_validate] not found"
+    st_mutant "release-body-step-removed" "$release_workflow" 's/      - name: Compose release body\n.*?\n\n//s' \
+        "$release_label: step [$step_compose] not found"
+    st_mutant "skip-duplicate-removed" "$release_workflow" 's/ --skip-duplicate//' \
+        "index.json --skip-duplicate]"
+    st_mutant "body-path-removed" "$release_workflow" 's/^          body_path: out\/release-body\.md\n//m' \
+        "$release_label: step [$step_release] lacks line [$body_path_line]"
+    st_mutant "make-latest-set-to-true" "$release_workflow" "s/make_latest: 'false'/make_latest: 'true'/" \
+        "$release_label: step [$step_release] lacks line [$make_latest_line]" "make_latest: 'true'"
+    st_mutant "audit-step-moved-after-the-login-step" "$release_workflow" \
+        's/(      - name: Audit shipped packages for vulnerabilities\n.*?\n\n)(      - name: Validate packed packages\n.*?\n\n)(      - name: Compose release body\n.*?\n\n)(      - name: Mint short-lived NuGet key\n.*?\n\n)/$2$3$4$1/s' \
+        "$release_label: steps are not in the order"
+    st_mutant "package-check-package-validator-command-removed" "$package_check_workflow" \
+        's/^        run: \.\/eng\/validate-pure-packages\.sh --repo-root \. --dir out[^\n]*\n//m' \
+        "$package_check_label: missing line [$validate_packages_line]"
+    st_mutant "package-check-release-workflow-validator-removed" "$package_check_workflow" \
+        's/^        run: \.\/eng\/validate-pure-release-workflow\.sh[^\n]*\n//m' \
+        "$package_check_label: missing line [$validator_line]"
+    st_mutant "package-check-audit-command-removed" "$package_check_workflow" \
+        's/^        run: \.\/eng\/validate-pure-security-audit\.sh[^\n]*\n//m' \
+        "$package_check_label: missing line [$audit_line]"
+    st_mutant "package-check-release-workflow-path-filter-removed" "$package_check_workflow" \
+        "s/^      - '\\.github\\/workflows\\/packagesPure\\.yml'\\n//m" \
+        "$package_check_label: missing line [      - '$release_workflow']"
 
     ((st_failures == 0)) || fail "$st_failures self-test case(s) failed"
     printf 'Self-test passed.\n'
