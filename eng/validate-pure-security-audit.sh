@@ -14,6 +14,7 @@ readonly retry_delay_seconds=5
 readonly workflow_path=".github/workflows/pure_security_audit.yml"
 readonly fixture_frameworks="net10.0,net11.0"
 readonly fixture_first_framework="net10.0"
+readonly field_separator=$'\037'
 readonly unreadable_message="the vulnerability data could not be read from the JSON"
 
 script_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
@@ -124,7 +125,7 @@ collect_results() {
             code=$?
             set -e
             printf '%s\n' "$code" > "$results/$name.exit"
-            if [[ "$code" -eq 0 ]] && jq -e . "$results/$name.json" >/dev/null 2>&1; then
+            if [[ "$code" -eq 0 ]] && jq -s -e 'length == 1' "$results/$name.json" >/dev/null 2>&1; then
                 break
             fi
             if ((attempt >= max_attempts)); then
@@ -183,8 +184,8 @@ decide() {
             errors=$((errors + 1))
             continue
         fi
-        if ! jq -e . "$results/$name.json" >/dev/null 2>&1; then
-            printf 'ERROR: %s: the output is not valid JSON\n' "$name" >&2
+        if ! jq -s -e 'length == 1' "$results/$name.json" >/dev/null 2>&1; then
+            printf 'ERROR: %s: the output is not a single valid JSON document\n' "$name" >&2
             errors=$((errors + 1))
             continue
         fi
@@ -214,8 +215,14 @@ decide() {
         status=0
         jq -e '
             def collection(k): if has(k) then .[k] else [] end;
-            def packages: type == "array" and all(.[]; type == "object" and (.id | type == "string")
-                and (collection("vulnerabilities") | type == "array" and all(.[]; type == "object" and (.severity | type == "string"))));
+            def word: type == "string" and test("^[A-Za-z0-9._-]+$");
+            def text: type == "string" and (explode | all(. >= 32));
+            def advisory: type == "object" and (.severity | word)
+                and ((if has("advisoryurl") then .advisoryurl else "" end) | text);
+            def packages: type == "array" and all(.[]; type == "object" and (.id | word)
+                and ((if has("resolvedVersion") then .resolvedVersion else "" end) | text)
+                and ((if has("requestedVersion") then .requestedVersion else "" end) | text)
+                and (collection("vulnerabilities") | type == "array" and all(.[]; advisory)));
             .projects[0] | collection("frameworks")
             | type == "array" and all(.[]; type == "object" and (.framework | type == "string")
                 and (collection("topLevelPackages") | packages) and (collection("transitivePackages") | packages))
@@ -237,8 +244,8 @@ decide() {
             | .id as $id
             | ((.resolvedVersion // .requestedVersion // "") | if . == "" then "unknown" else . end) as $version
             | (.vulnerabilities // [])[]?
-            | [((.severity | tostring) | ascii_downcase), $id, $version, ((.advisoryurl // "") | if . == "" then "n/a" else . end), $name]
-            | @tsv
+            | [(.severity | ascii_downcase), $id, $version, ((.advisoryurl // "") | if . == "" then "n/a" else . end), $name]
+            | join("\u001f")
         ' "$results/$name.json" > "$extracted" 2>/dev/null || status=$?
         if [[ "$status" -ne 0 ]]; then
             printf 'ERROR: %s: %s\n' "$name" "$unreadable_message" >&2
@@ -249,15 +256,15 @@ decide() {
         checked=$((checked + 1))
     done < "$list"
 
-    # severity<TAB>package<TAB>version<TAB>advisory<TAB>comma separated projects
+    # severity, package, version, advisory, comma separated projects (unit separator delimited)
     if ! LC_ALL=C sort -u "$findings" \
-        | awk -F '\t' '
+        | awk -F '\037' '
             {
-                key = $1 "\t" $2 "\t" $3 "\t" $4
+                key = $1 "\037" $2 "\037" $3 "\037" $4
                 if (!(key in projects)) { order[++n] = key; projects[key] = $5 }
                 else projects[key] = projects[key] "," $5
             }
-            END { for (i = 1; i <= n; i++) print order[i] "\t" projects[order[i]] }
+            END { for (i = 1; i <= n; i++) print order[i] "\037" projects[order[i]] }
         ' > "$unique"; then
         printf 'ERROR: the advisories could not be aggregated\n' >&2
         errors=$((errors + 1))
@@ -267,9 +274,9 @@ decide() {
     local reported_lines="$tmp_dir/reported.txt"
     : > "$blocking_lines"
     : > "$reported_lines"
-    while IFS=$'\t' read -r severity package version advisory projects; do
+    while IFS="$field_separator" read -r severity package version advisory projects; do
         projects="$(printf '%s\n' "$projects" | tr ',' '\n' | LC_ALL=C sort -u | paste -sd ',' - | sed 's/,/, /g')"
-        line="$(printf '%s\t%s\t%s\t%s\t%s' "$severity" "$package" "$version" "$advisory" "$projects")"
+        line="$(printf '%s\037%s\037%s\037%s\037%s' "$severity" "$package" "$version" "$advisory" "$projects")"
         case "$severity" in
             critical|high)
                 blocking_count=$((blocking_count + 1))
@@ -288,11 +295,11 @@ decide() {
 
     printf 'Checked %s of %s projects.\n' "$checked" "$expected_project_count"
     printf 'Blocking advisories (High/Critical): %s\n' "$blocking_count"
-    while IFS=$'\t' read -r severity package version advisory projects; do
+    while IFS="$field_separator" read -r severity package version advisory projects; do
         printf '  %s  %s %s  %s  [%s]\n' "$severity" "$package" "$version" "$advisory" "$projects"
     done < "$blocking_lines"
     printf 'Reported advisories (Moderate/Low): %s\n' "$reported_count"
-    while IFS=$'\t' read -r severity package version advisory projects; do
+    while IFS="$field_separator" read -r severity package version advisory projects; do
         printf '  %s  %s %s  %s  [%s]\n' "$severity" "$package" "$version" "$advisory" "$projects"
     done < "$reported_lines"
 
@@ -329,10 +336,10 @@ write_summary() {
         printf '### Sekiban.Pure security audit\n\n'
         printf 'Projects checked: %s of %s\n\n' "$checked" "$expected_project_count"
         printf '| Severity | Package | Version | Advisory | Projects |\n|---|---|---|---|---|\n'
-        while IFS=$'\t' read -r severity package version advisory projects; do
+        while IFS="$field_separator" read -r severity package version advisory projects; do
             printf '| %s (blocking) | %s | %s | %s | %s |\n' "$severity" "$package" "$version" "$advisory" "$projects"
         done < "$blocking_lines"
-        while IFS=$'\t' read -r severity package version advisory projects; do
+        while IFS="$field_separator" read -r severity package version advisory projects; do
             printf '| %s | %s | %s | %s | %s |\n' "$severity" "$package" "$version" "$advisory" "$projects"
         done < "$reported_lines"
     } >> "$GITHUB_STEP_SUMMARY"
@@ -564,7 +571,7 @@ run_self_test() {
     dir="$(st_new_dir plain-text)"
     printf 'error: Unable to load the service index for source https://127.0.0.1:9/v3/index.json.\nerror:   Connection refused (127.0.0.1:9)\n' \
         > "$dir/$(project_name "$(st_nth_rel 8)").json"
-    st_expect "non-json-output-fails" fail "the output is not valid JSON" "$dir"
+    st_expect "non-json-output-fails" fail "the output is not a single valid JSON document" "$dir"
 
     dir="$(st_new_dir problems-error)"
     printf '{"version":1,"problems":[{"text":"Restore failed. Run `dotnet restore` for more details on the issue.","level":"error"}]}\n' \
@@ -611,6 +618,26 @@ run_self_test() {
     printf '{"version":1,"projects":[{"path":"%s","frameworks":[{"framework":"net10.0","topLevelPackages":[{"id":"Example.Package","resolvedVersion":"1.0.0","vulnerabilities":[{"advisoryurl":"https://github.com/advisories/GHSA-test-test-test"}]}]}]}]}\n' \
         "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
     st_expect "advisory-without-severity-fails" fail "$unreadable_message" "$dir"
+
+    dir="$(st_new_dir two-documents)"
+    printf '{"version":1,"problems":[{"level":"error","text":"Restore failed."}]}\n{"version":1,"projects":[{"path":"%s"}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "two-json-documents-fail" fail "the output is not a single valid JSON document" "$dir"
+
+    dir="$(st_new_dir empty-severity)"
+    printf '{"version":1,"projects":[{"path":"%s","frameworks":[{"framework":"net10.0","topLevelPackages":[{"id":"low","resolvedVersion":"1.0.0","vulnerabilities":[{"severity":"","advisoryurl":"https://github.com/advisories/GHSA-test-test-test"}]}]}]}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "empty-severity-with-low-package-id-fails" fail "$unreadable_message" "$dir"
+
+    dir="$(st_new_dir empty-package-id)"
+    printf '{"version":1,"projects":[{"path":"%s","frameworks":[{"framework":"net10.0","topLevelPackages":[{"id":"","resolvedVersion":"1.0.0","vulnerabilities":[{"severity":"High","advisoryurl":"https://github.com/advisories/GHSA-test-test-test"}]}]}]}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "empty-package-id-fails" fail "$unreadable_message" "$dir"
+
+    dir="$(st_new_dir control-character-in-version)"
+    printf '{"version":1,"projects":[{"path":"%s","frameworks":[{"framework":"net10.0","topLevelPackages":[{"id":"Example.Package","resolvedVersion":"1.0.0\\u001f9","vulnerabilities":[{"severity":"High","advisoryurl":"https://github.com/advisories/GHSA-test-test-test"}]}]}]}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "control-character-in-version-fails" fail "$unreadable_message" "$dir"
 
     dir="$(st_new_dir wrong-project)"
     st_write_clean "$dir" "$(st_nth_rel 10)"
