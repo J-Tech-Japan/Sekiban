@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly expected_policy_bytes=1181
-readonly expected_policy_sha256="03dbd1f2192fee07936aa02db467867080d5e0379749d20a4e82a63c00f8564a"
+readonly expected_policy_bytes=976
+readonly expected_policy_sha256="9fef3b63f57d0fe3853d264f924eeca6630c2a9bec14f3159c91d4c57ceaf985"
 readonly expected_target_count=38
 readonly policy_start="<!-- SEKIBAN_PURE_POLICY_START -->"
 readonly policy_end="<!-- SEKIBAN_PURE_POLICY_END -->"
@@ -10,12 +10,10 @@ readonly policy_end="<!-- SEKIBAN_PURE_POLICY_END -->"
 script_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
 repo_root="$(cd -- "$(dirname -- "$script_path")" && pwd)"
 self_test=false
-tracking_fixture=""
-tracking_issue=1169
 changed_files_file=""
 
 usage() {
-    printf '%s\n' "Usage: $0 [--repo-root <path>] [--self-test] [--tracking-fixture <path>] [--tracking-issue <number>] [--changed-files-file <path>]" >&2
+    printf '%s\n' "Usage: $0 [--repo-root <path>] [--self-test] [--changed-files-file <path>]" >&2
 }
 
 while (($# > 0)); do
@@ -27,14 +25,6 @@ while (($# > 0)); do
         --self-test)
             self_test=true
             shift
-            ;;
-        --tracking-fixture)
-            tracking_fixture="$2"
-            shift 2
-            ;;
-        --tracking-issue)
-            tracking_issue="$2"
-            shift 2
             ;;
         --changed-files-file)
             changed_files_file="$2"
@@ -267,28 +257,6 @@ check_ci_wiring() {
     require_fixed_line "$workflow" "      - '.github/workflows/pure_maintenance_policy.yml'"
 }
 
-check_tracking_issue() {
-    local tracking_json
-    local query
-
-    if [[ -n "$tracking_fixture" ]]; then
-        require_file "$tracking_fixture"
-        tracking_json="$tracking_fixture"
-    else
-        command -v gh >/dev/null 2>&1 || fail "gh is required to verify tracking issue #1169"
-        command -v jq >/dev/null 2>&1 || fail "jq is required to verify tracking issue #1169"
-        tracking_json="$tmp_dir/tracking-issue.json"
-        query='query { repository(owner: "J-Tech-Japan", name: "Sekiban") { pinnedIssues(first: 100) { nodes { issue { number state } } } } }'
-        gh api graphql -f query="$query" > "$tracking_json" || fail "GitHub API lookup for pinned issue #1169 failed"
-    fi
-
-    command -v jq >/dev/null 2>&1 || fail "jq is required to inspect the tracking issue response"
-    jq -e --argjson issue "$tracking_issue" '
-        .data.repository.pinnedIssues.nodes
-        | any((.issue.number == $issue) and (.issue.state == "OPEN"))
-    ' "$tracking_json" >/dev/null || fail "tracking issue #$tracking_issue must be OPEN and pinned"
-}
-
 is_allowed_change() {
     case "$1" in
         README.md|pure/README.md|templates/Sekiban.Pure.Templates/README.md|\
@@ -338,7 +306,6 @@ run_validation() {
     check_package_readmes
     check_dcb_redirects
     check_ci_wiring
-    check_tracking_issue
     check_docs_only_scope
 }
 
@@ -347,19 +314,6 @@ copy_relative() {
     local relative="$2"
     mkdir -p "$destination/$(dirname -- "$relative")"
     cp "$repo_root/$relative" "$destination/$relative"
-}
-
-write_tracking_fixture() {
-    local destination="$1"
-    local number="$2"
-    local state="$3"
-    local pinned="$4"
-
-    if [[ "$pinned" == "true" ]]; then
-        printf '{"data":{"repository":{"pinnedIssues":{"nodes":[{"issue":{"number":%s,"state":"%s"}}]}}}}\n' "$number" "$state" > "$destination"
-    else
-        printf '{"data":{"repository":{"pinnedIssues":{"nodes":[]}}}}\n' > "$destination"
-    fi
 }
 
 copy_fixture() {
@@ -380,7 +334,6 @@ copy_fixture() {
         copy_relative "$destination" "${project#$repo_root/}"
     done < "$projects"
     copy_relative "$destination" "$dcb_template_metadata"
-    write_tracking_fixture "$destination/tracking.json" 1169 OPEN true
 }
 
 expect_failure() {
@@ -410,78 +363,64 @@ run_self_test() {
     fixture="$tmp_dir/mutant-policy-deleted"
     copy_fixture "$fixture"
     remove_policy "$fixture/README.md"
-    expect_failure "policy-deleted" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+    expect_failure "policy-deleted" "$script_path" --repo-root "$fixture"
 
     fixture="$tmp_dir/mutant-policy-english-half"
     copy_fixture "$fixture"
     perl -0pi -e 's/For new projects we recommend Sekiban DCB\./For new projects should choose something else./' "$fixture/docs/llm/01_core_concepts.md"
-    expect_failure "policy-english-half-replaced" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+    expect_failure "policy-english-half-replaced" "$script_path" --repo-root "$fixture"
 
-    fixture="$tmp_dir/mutant-policy-link"
+    fixture="$tmp_dir/mutant-policy-japanese-half"
     copy_fixture "$fixture"
-    perl -0pi -e 's#issues/1169#issues/9999#' "$fixture/docs/llm_ja/01_core_concepts.md"
-    expect_failure "policy-link-altered" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+    perl -0pi -e 's/新規プロジェクトには Sekiban DCB を推奨します。/新規プロジェクトには別の選択肢を推奨します。/' "$fixture/docs/llm_ja/01_core_concepts.md"
+    expect_failure "policy-japanese-half-replaced" "$script_path" --repo-root "$fixture"
 
     fixture="$tmp_dir/mutant-manifest-count"
     copy_fixture "$fixture"
     sed '$d' "$fixture/eng/pure-maintenance-mode/targets.txt" > "$fixture/eng/pure-maintenance-mode/targets.txt.mutated"
     mv "$fixture/eng/pure-maintenance-mode/targets.txt.mutated" "$fixture/eng/pure-maintenance-mode/targets.txt"
-    expect_failure "manifest-target-removed" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+    expect_failure "manifest-target-removed" "$script_path" --repo-root "$fixture"
 
     fixture="$tmp_dir/mutant-deprecated"
     copy_fixture "$fixture"
     printf '\nDeprecated\n' >> "$fixture/pure/README.md"
-    expect_failure "deprecated-reinserted" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+    expect_failure "deprecated-reinserted" "$script_path" --repo-root "$fixture"
 
     fixture="$tmp_dir/mutant-package-readme"
     copy_fixture "$fixture"
     first_project="$(find "$fixture/pure/src" -type f -name 'Sekiban.Pure*.csproj' -print | LC_ALL=C sort | sed -n '1p')"
     perl -0pi -e 's#\.\./\.\./README\.md#README.md#' "$first_project"
-    expect_failure "package-readme-mapping-altered" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+    expect_failure "package-readme-mapping-altered" "$script_path" --repo-root "$fixture"
 
     fixture="$tmp_dir/mutant-root-dcb"
     copy_fixture "$fixture"
     perl -0pi -e 's/Sekiban\.Dcb\.Templates/Sekiban.Pure.Templates/' "$fixture/README.md"
-    expect_failure "root-dcb-redirect-reverted" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+    expect_failure "root-dcb-redirect-reverted" "$script_path" --repo-root "$fixture"
 
     fixture="$tmp_dir/mutant-pure-dcb"
     copy_fixture "$fixture"
     perl -0pi -e 's/sekiban-dcb-orleans/sekiban-orleans-aspire/' "$fixture/pure/README.md"
-    expect_failure "pure-dcb-redirect-reverted" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
-
-    fixture="$tmp_dir/mutant-tracking-wrong"
-    copy_fixture "$fixture"
-    expect_failure "tracking-wrong-issue" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json" --tracking-issue 9999
-
-    fixture="$tmp_dir/mutant-tracking-closed"
-    copy_fixture "$fixture"
-    write_tracking_fixture "$fixture/tracking.json" 1169 CLOSED true
-    expect_failure "tracking-closed" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
-
-    fixture="$tmp_dir/mutant-tracking-unpinned"
-    copy_fixture "$fixture"
-    write_tracking_fixture "$fixture/tracking.json" 1169 OPEN false
-    expect_failure "tracking-unpinned" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+    expect_failure "pure-dcb-redirect-reverted" "$script_path" --repo-root "$fixture"
 
     fixture="$tmp_dir/mutant-scope"
     copy_fixture "$fixture"
     printf '%s\n' 'pure/src/Sekiban.Pure/Sekiban.Pure.csproj' > "$fixture/changed-files.txt"
-    expect_failure "docs-only-scope" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json" --changed-files-file "$fixture/changed-files.txt"
+    expect_failure "docs-only-scope" "$script_path" --repo-root "$fixture" --changed-files-file "$fixture/changed-files.txt"
 
     fixture="$tmp_dir/mutant-workflow-command"
     copy_fixture "$fixture"
     perl -0pi -e 's/--self-test/--without-self-test/' "$fixture/$workflow_path"
-    expect_failure "workflow-command-removed" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+    expect_failure "workflow-command-removed" "$script_path" --repo-root "$fixture"
 
     fixture="$tmp_dir/mutant-workflow-path"
     copy_fixture "$fixture"
     perl -0pi -e 's#eng/pure-maintenance-mode/\*\*#eng/pure-maintenance-policy/\*\*#' "$fixture/$workflow_path"
-    expect_failure "workflow-path-filter-altered" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+    expect_failure "workflow-path-filter-altered" "$script_path" --repo-root "$fixture"
 
     fixture="$tmp_dir/mutant-workflow-fetch-depth"
     copy_fixture "$fixture"
     perl -0pi -e 's/fetch-depth: 0/fetch-depth: 1/' "$fixture/$workflow_path"
-    expect_failure "workflow-fetch-depth-altered" "$script_path" --repo-root "$fixture" --tracking-fixture "$fixture/tracking.json"
+    expect_failure "workflow-fetch-depth-altered" "$script_path" --repo-root "$fixture"
 }
 
 run_validation
