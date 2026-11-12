@@ -81,6 +81,113 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
     }
 
     [Fact]
+    public async Task StaleHost_ParkedStoreRead_SupersededHostCannotSaveAfterStaleMarkMoves()
+    {
+        var timeout = TimeSpan.FromMinutes(2);
+        var checkpoints = new ParkedCheckpointReadStore();
+        var h1 = new ProductionCatchUpProjectionHost { FailInitialStateRead = false, SafeVersion = 10 };
+        var h2 = new ProductionCatchUpProjectionHost { FailInitialStateRead = false, SafeVersion = 2 };
+        var grain = CreateGrain(new ProductionCatchUpEventStore([0]), h1, checkpointStore: checkpoints,
+            actorOptions: new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = false },
+            hostFactory: new ProductionCatchUpProjectionHostFactory(h2));
+        SetPrivateField(grain, "_hostIsPristine", false);
+
+        async Task PersistAsync()
+        {
+            var result = await grain.PersistStateAsync().WaitAsync(timeout);
+            Assert.True(result.IsSuccess, result.IsSuccess ? "" : result.GetException().ToString());
+        }
+        async Task<CheckpointSlot> ReadAsync() =>
+            (await checkpoints.ReadCheckpointSlotAsync("production-catch-up", "v1").WaitAsync(timeout)).GetValue();
+        async Task InvalidateAsync(CheckpointSlot slot)
+        {
+            var result = await checkpoints.InvalidateWithTombstoneAsync("production-catch-up", "v1",
+                CheckpointExpectation.FromSlot(slot)).WaitAsync(timeout);
+            Assert.Equal(CheckpointCasStatus.Committed, result.Status);
+        }
+        async Task<byte[]> PayloadAsync(MultiProjectionStateRecord record)
+        {
+            await using var stream = (await checkpoints.OpenStateDataReadStreamAsync(record).WaitAsync(timeout)).GetValue();
+            using var bytes = new MemoryStream();
+            await stream.CopyToAsync(bytes).WaitAsync(timeout);
+            return bytes.ToArray();
+        }
+
+        await PersistAsync();
+        checkpoints.ParkNextRead = true;
+        var delayedH1 = grain.PersistStateAsync();
+        try
+        {
+            // Capture H1, then stop in CanSaveToExternalStoreAsync before it can serialize or enter the CAS gate.
+            await checkpoints.ReadEntered.Task.WaitAsync(timeout);
+            await InvalidateAsync(await ReadAsync());
+            await PersistAsync(); // A second H1 persist rejects gen0, adopts gen1, and marks H1 stale.
+            Assert.Same(h1, GetPrivateField<IProjectionActorHost>(grain, "_staleCheckpointHost"));
+
+            var queryEntry = (Task<Exception?>)InvokePrivate(grain, "ResolveRebuildBeforeQueryAsync", [])!;
+            Assert.Null(await queryEntry.WaitAsync(timeout));
+            Assert.Same(h2, GetPrivateField<IProjectionActorHost>(grain, "_host"));
+            // The recreated host represents the rebuilt checkpoint; allow its real persist to commit gen1.
+            SetPrivateField(grain, "_hostIsPristine", false);
+            await PersistAsync();
+            var rebuilt = await ReadAsync();
+            Assert.True(rebuilt.IsActive);
+            Assert.Equal(1, rebuilt.Generation);
+            Assert.Equal(2, rebuilt.Record!.EventsProcessed);
+
+            await InvalidateAsync(rebuilt);
+            await PersistAsync(); // H2's next commit rejects gen1 and moves the stale mark to H2.
+            Assert.Same(h2, GetPrivateField<IProjectionActorHost>(grain, "_staleCheckpointHost"));
+            var before = await ReadAsync();
+            Assert.True(before.IsTombstoned);
+            Assert.Equal(2, before.Generation);
+            Assert.True(h1.SafeVersion >= before.Record!.EventsProcessed); // The count guard cannot save us.
+            var payload = await PayloadAsync(before.Record);
+            var h1SnapshotWrites = h1.SnapshotWriteCalls;
+
+            checkpoints.ReleaseRead.TrySetResult();
+            var resumed = await delayedH1.WaitAsync(timeout);
+            Assert.True(resumed.IsSuccess, resumed.IsSuccess ? "" : resumed.GetException().ToString());
+            var after = await ReadAsync();
+            Assert.Equal(before.Generation, after.Generation);
+            Assert.Equal(before.Revision, after.Revision);
+            Assert.Equal(before.Lifecycle, after.Lifecycle);
+            Assert.Equal(before.Record.EventsProcessed, after.Record!.EventsProcessed);
+            Assert.Equal(before.Record, after.Record);
+            Assert.Equal(payload, await PayloadAsync(after.Record));
+            Assert.Equal(h1SnapshotWrites, h1.SnapshotWriteCalls);
+        }
+        finally
+        {
+            checkpoints.ReleaseRead.TrySetResult();
+            await delayedH1.WaitAsync(timeout);
+        }
+    }
+
+    // Rebind only the read interface method; all payload and generation-aware CAS operations delegate to the
+    // existing in-memory store. Consume the gate before awaiting so interleaving persists remain unblocked.
+    private sealed class ParkedCheckpointReadStore : Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore,
+        IMultiProjectionStateStore
+    {
+        public bool ParkNextRead { get; set; }
+        public TaskCompletionSource ReadEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseRead { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> IMultiProjectionStateStore.GetLatestForVersionAsync(
+            string projectorName, string projectorVersion, CancellationToken cancellationToken)
+        {
+            if (ParkNextRead)
+            {
+                ParkNextRead = false;
+                ReadEntered.TrySetResult();
+                await ReleaseRead.Task.WaitAsync(TimeSpan.FromMinutes(2), cancellationToken);
+            }
+            return await base.GetLatestForVersionAsync(projectorName, projectorVersion, cancellationToken)
+                .WaitAsync(TimeSpan.FromMinutes(2), cancellationToken);
+        }
+    }
+
+    [Fact]
     public async Task StaleHost_ParkedCatchUp_BlocksQueryReset_CompletionCannotSaveReplacement()
     {
         var checkpoints = new Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore();

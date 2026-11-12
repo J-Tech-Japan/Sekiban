@@ -256,12 +256,15 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             await recreated.Task.WaitAsync(TimeSpan.FromSeconds(20));
             Assert.True(MarkerGrainStorage.Read().RebuildRequired);
             var writes = Env.StateStore.WriteCount;
+            var metadataWrites = MarkerGrainStorage.WriteCount;
             saveGate.Release.TrySetResult();
+            // SEK-G156: the swapped-out host is superseded, so the resumed persist finishes as a skipped save (grain
+            // bookkeeping only) and A's old snapshot never commits over B's tombstone.
             await FirstQueryBoundedWaitClusterTests.PollUntilAsync(() =>
-                Task.FromResult(Env.StateStore.WriteCount > writes && MarkerGrainStorage.Read().LastGoodSafeVersion == 1));
-            var staleSlot = await SlotAsync();
-            Assert.True(staleSlot.IsActive); // A's old snapshot really committed over B's tombstone.
-            Assert.Equal(1L, staleSlot.Record!.EventsProcessed);
+                Task.FromResult(MarkerGrainStorage.WriteCount > metadataWrites));
+            Assert.Equal(writes, Env.StateStore.WriteCount);
+            Assert.True((await SlotAsync()).IsTombstoned);
+            Assert.NotEqual(1, MarkerGrainStorage.Read().LastGoodSafeVersion);
             Assert.True(MarkerGrainStorage.Read().RebuildRequired);
             await WaitForIdleAsync(grain);
             var readsBeforeDeactivation = MarkerGrainStorage.ReadCount;

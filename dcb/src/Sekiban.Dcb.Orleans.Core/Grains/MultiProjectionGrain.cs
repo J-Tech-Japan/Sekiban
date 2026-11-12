@@ -138,8 +138,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             : base("External checkpoint persistence is blocked until the stale host is replayed.") { }
     }
 
+    // A host replaced while its persist was in flight is superseded: its snapshot predates the replacement, so it is
+    // treated like a stale host and never written, whichever host is marked now.
     private bool IsStaleCheckpointHost(IProjectionActorHost? host) =>
-        host is not null && ReferenceEquals(host, _staleCheckpointHost);
+        host is not null &&
+        (ReferenceEquals(host, _staleCheckpointHost) || (_host is not null && !ReferenceEquals(host, _host)));
 
     // Simple tracking
     private bool _isInitialized;
@@ -3496,6 +3499,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // cycle is required and no early healthy answer is possible before the barrier's synchronous catch-up.
     private void RecreateHostForFullRebuild()
     {
+        // The replaced host stays blocked as superseded; drop the reference so its state can be collected.
+        _staleCheckpointHost = null;
         _eventsProcessed = 0;
         ClearProcessedEventCache();
         _unsafeEventIds.Clear();
