@@ -1,0 +1,69 @@
+name: Validate Pure packages
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'pure/src/**'
+      - 'pure/README.md'
+      - 'pure/Sekiban.Pure.slnx'
+      - 'pure/Directory.Build.props'
+      - 'Directory.Build.props'
+      - 'global.json'
+      - 'eng/validate-pure-packages.sh'
+      - 'eng/compose-pure-release-body.sh'
+      - 'eng/validate-pure-release-workflow.sh'
+      - 'eng/validate-pure-security-audit.sh'
+      - 'eng/pure-maintenance-mode/canonical-block.md'
+      - '.github/workflows/packagesPure.yml'
+      - '.github/workflows/pure_package_check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup .NET 11
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+
+      - name: Self-test of the package validator (fixtures, no network)
+        run: ./eng/validate-pure-packages.sh --repo-root . --self-test
+
+      - name: Self-test of the release body composer (fixtures)
+        run: ./eng/compose-pure-release-body.sh --repo-root . --self-test
+
+      - name: Check the wiring of the release workflows
+        run: ./eng/validate-pure-release-workflow.sh --repo-root . --self-test
+
+      - name: Audit shipped packages for vulnerabilities
+        run: ./eng/validate-pure-security-audit.sh --repo-root .
+
+      - name: Restore dependencies
+        run: dotnet restore pure/Sekiban.Pure.slnx
+
+      - name: Build with dotnet
+        run: dotnet build pure/Sekiban.Pure.slnx -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
+
+      - name: Pack the 12 shipped packages at the version of their project files
+        run: |
+          VERSION="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' pure/src/Sekiban.Pure/Sekiban.Pure.csproj | head -n 1)"
+          [[ -n "$VERSION" ]] || { echo "No <Version> in Sekiban.Pure.csproj" >&2; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          while IFS= read -r project; do
+            dotnet pack "$project" -c Release -o out -p:PackageVersion="$VERSION" --no-build
+          done < <(grep -l '<PackageId>Sekiban.Pure' pure/src/Sekiban.Pure*/*.csproj | sort)
+
+      - name: Validate packed packages
+        run: ./eng/validate-pure-packages.sh --repo-root . --dir out --version "$VERSION"
