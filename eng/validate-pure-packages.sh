@@ -152,6 +152,12 @@ def validate(root, directory, version, commit):
     projects = discover(root)
     if len(projects) != EXPECTED_PACKAGE_COUNT:
         errors.append(f'repository: expected {EXPECTED_PACKAGE_COUNT} package projects, found {len(projects)}')
+    owners = {}
+    for package_id, project in projects:
+        owners.setdefault(package_id, []).append(project.relative_to(root).as_posix())
+    for package_id, files in sorted(owners.items()):
+        if len(files) > 1:
+            errors.append(f'{package_id}: duplicate PackageId in {", ".join(files)}')
     banner_path = root / BANNER_FILE
     if not banner_path.is_file():
         errors.append(f'repository: missing {BANNER_FILE}')
@@ -216,8 +222,9 @@ def make_fixture(workdir, version, commit, options=None):
         project_package_version = options.get('project_package_version', {}).get(package_id, version)
         project_dir = root / 'pure' / 'src' / package_id
         project_dir.mkdir(parents=True)
+        declared_id = options.get('package_id_override', {}).get(package_id, package_id)
         (project_dir / f'{package_id}.csproj').write_text(
-            f'<Project><PropertyGroup><PackageId>{package_id}</PackageId><Version>{project_version}</Version>'
+            f'<Project><PropertyGroup><PackageId>{declared_id}</PackageId><Version>{project_version}</Version>'
             f'<PackageVersion>{project_package_version}</PackageVersion></PropertyGroup></Project>', encoding='utf-8')
     migration = root / 'pure' / 'src' / 'Sekiban.Pure.Postgres.MigrationHost'
     migration.mkdir(parents=True)
@@ -336,6 +343,8 @@ def self_test():
         else:
             print(f'mutant killed: {name}')
 
+    # two projects declaring the same PackageId collapse to eleven expected packages and must be rejected for that reason
+    run('duplicate-package-id', {'package_id_override': {second: first}, 'skip_packages': (second,)}, 'duplicate PackageId')
     run('valid-fixture-set', {}, '', expect_pass=True)
     run('valid-fixture-set-without-a-known-commit', {}, '', expect_pass=True, with_commit=None)
     run('valid-fixture-with-a-short-commit-suffix-and-no-known-commit',
