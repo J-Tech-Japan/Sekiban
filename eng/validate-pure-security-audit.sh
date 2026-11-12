@@ -210,6 +210,20 @@ decide() {
             errors=$((errors + 1))
             continue
         fi
+        status=0
+        jq -e '
+            def collection(k): if has(k) then .[k] else [] end;
+            def packages: type == "array" and all(.[]; type == "object" and (.id | type == "string")
+                and (collection("vulnerabilities") | type == "array" and all(.[]; type == "object" and (.severity | type == "string"))));
+            .projects[0] | collection("frameworks")
+            | type == "array" and all(.[]; type == "object" and (.framework | type == "string")
+                and (collection("topLevelPackages") | packages) and (collection("transitivePackages") | packages))
+        ' "$results/$name.json" >/dev/null 2>&1 || status=$?
+        if [[ "$status" -ne 0 ]]; then
+            printf 'ERROR: %s: the vulnerability data could not be read from the JSON\n' "$name" >&2
+            errors=$((errors + 1))
+            continue
+        fi
         jq -r '(.problems // [])[] | select(.level == "warning") | .text' "$results/$name.json" 2>/dev/null \
             | while IFS= read -r text; do printf 'WARNING: %s: %s\n' "$name" "$text"; done || true
 
@@ -235,7 +249,7 @@ decide() {
     done < "$list"
 
     # severity<TAB>package<TAB>version<TAB>advisory<TAB>comma separated projects
-    LC_ALL=C sort -u "$findings" \
+    if ! LC_ALL=C sort -u "$findings" \
         | awk -F '\t' '
             {
                 key = $1 "\t" $2 "\t" $3 "\t" $4
@@ -243,7 +257,10 @@ decide() {
                 else projects[key] = projects[key] "," $5
             }
             END { for (i = 1; i <= n; i++) print order[i] "\t" projects[order[i]] }
-        ' > "$unique"
+        ' > "$unique"; then
+        printf 'ERROR: the advisories could not be aggregated\n' >&2
+        errors=$((errors + 1))
+    fi
 
     local blocking_lines="$tmp_dir/blocking.txt"
     local reported_lines="$tmp_dir/reported.txt"
@@ -573,6 +590,26 @@ run_self_test() {
         "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
     st_expect "malformed-frameworks-fail-and-are-not-counted" fail "the vulnerability data could not be read from the JSON" "$dir"
     st_expect "malformed-frameworks-checked-count" fail "Checked 11 of 12 projects." "$dir"
+
+    dir="$(st_new_dir frameworks-not-array)"
+    printf '{"version":1,"projects":[{"path":"%s","frameworks":42}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "frameworks-not-an-array-fails" fail "the vulnerability data could not be read from the JSON" "$dir"
+
+    dir="$(st_new_dir vulnerabilities-not-array)"
+    printf '{"version":1,"projects":[{"path":"%s","frameworks":[{"framework":"net10.0","topLevelPackages":[{"id":"Example.Package","resolvedVersion":"1.0.0","vulnerabilities":"unreadable"}]}]}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "vulnerabilities-not-an-array-fails" fail "the vulnerability data could not be read from the JSON" "$dir"
+
+    dir="$(st_new_dir packages-not-array)"
+    printf '{"version":1,"projects":[{"path":"%s","frameworks":[{"framework":"net10.0","transitivePackages":"none"}]}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "packages-not-an-array-fails" fail "the vulnerability data could not be read from the JSON" "$dir"
+
+    dir="$(st_new_dir severity-missing)"
+    printf '{"version":1,"projects":[{"path":"%s","frameworks":[{"framework":"net10.0","topLevelPackages":[{"id":"Example.Package","resolvedVersion":"1.0.0","vulnerabilities":[{"advisoryurl":"https://github.com/advisories/GHSA-test-test-test"}]}]}]}]}\n' \
+        "$repo_root/$(st_nth_rel 2)" > "$dir/$(project_name "$(st_nth_rel 2)").json"
+    st_expect "advisory-without-severity-fails" fail "the vulnerability data could not be read from the JSON" "$dir"
 
     dir="$(st_new_dir wrong-project)"
     st_write_clean "$dir" "$(st_nth_rel 10)"
