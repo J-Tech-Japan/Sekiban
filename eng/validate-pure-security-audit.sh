@@ -12,6 +12,8 @@ readonly expected_project_count=12
 readonly max_attempts=3
 readonly retry_delay_seconds=5
 readonly workflow_path=".github/workflows/pure_security_audit.yml"
+readonly fixture_frameworks="net10.0,net11.0"
+readonly fixture_first_framework="net10.0"
 
 script_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
 repo_root="$(cd -- "$(dirname -- "$script_path")/.." && pwd)"
@@ -54,7 +56,9 @@ fail() {
 }
 
 require_command() {
-    command -v "$1" >/dev/null 2>&1 || fail "$1 is required"
+    local command_name="$1"
+
+    command -v "$command_name" >/dev/null 2>&1 || fail "$command_name is required"
 }
 
 # --- project discovery -------------------------------------------------------
@@ -90,7 +94,9 @@ check_project_count() {
 }
 
 project_name() {
-    basename -- "$1" .csproj
+    local project_path="$1"
+
+    basename -- "$project_path" .csproj
 }
 
 # --- collection --------------------------------------------------------------
@@ -501,32 +507,32 @@ run_self_test() {
     st_expect "all-clean" pass "Checked 12 of 12 projects." "$dir"
 
     dir="$(st_new_dir moderate)"
-    st_write_vuln "$dir" "$(st_nth_rel 3)" Moderate top "net10.0,net11.0" "net10.0,net11.0"
+    st_write_vuln "$dir" "$(st_nth_rel 3)" Moderate top "$fixture_frameworks" "$fixture_frameworks"
     st_expect "moderate-only-reported" pass "Reported advisories (Moderate/Low): 1" "$dir"
     st_expect "moderate-report-names-package" pass "Example.Package 1.0.0  https://github.com/advisories/GHSA-test-test-test" "$dir"
 
     dir="$(st_new_dir low)"
-    st_write_vuln "$dir" "$(st_nth_rel 4)" Low transitive "net10.0,net11.0" "net10.0,net11.0"
+    st_write_vuln "$dir" "$(st_nth_rel 4)" Low transitive "$fixture_frameworks" "$fixture_frameworks"
     st_expect "low-only-reported" pass "Reported advisories (Moderate/Low): 1" "$dir"
 
     dir="$(st_new_dir high-top)"
-    st_write_vuln "$dir" "$(st_nth_rel 1)" High top "net10.0,net11.0" "net10.0,net11.0"
+    st_write_vuln "$dir" "$(st_nth_rel 1)" High top "$fixture_frameworks" "$fixture_frameworks"
     st_expect "high-top-level-fails" fail "blocking advisory" "$dir"
 
     dir="$(st_new_dir critical-transitive)"
-    st_write_vuln "$dir" "$(st_nth_rel 2)" Critical transitive "net10.0,net11.0" "net10.0,net11.0"
+    st_write_vuln "$dir" "$(st_nth_rel 2)" Critical transitive "$fixture_frameworks" "$fixture_frameworks"
     st_expect "critical-transitive-fails" fail "blocking advisory" "$dir"
 
     dir="$(st_new_dir high-second-framework)"
-    st_write_vuln "$dir" "$(st_nth_rel 5)" High top "net10.0,net11.0" "net11.0"
+    st_write_vuln "$dir" "$(st_nth_rel 5)" High top "$fixture_frameworks" "net11.0"
     st_expect "high-only-in-second-framework-fails" fail "blocking advisory" "$dir"
 
     dir="$(st_new_dir high-twelfth)"
-    st_write_vuln "$dir" "$twelfth" High transitive "net10.0,net11.0" "net10.0"
+    st_write_vuln "$dir" "$twelfth" High transitive "$fixture_frameworks" "$fixture_first_framework"
     st_expect "high-only-in-twelfth-project-fails" fail "blocking advisory" "$dir"
 
     dir="$(st_new_dir unknown-severity)"
-    st_write_vuln "$dir" "$(st_nth_rel 6)" Catastrophic top "net10.0,net11.0" "net10.0,net11.0"
+    st_write_vuln "$dir" "$(st_nth_rel 6)" Catastrophic top "$fixture_frameworks" "$fixture_frameworks"
     st_expect "unknown-severity-fails" fail 'unknown severity "catastrophic"' "$dir"
 
     dir="$(st_new_dir missing-result)"
@@ -590,7 +596,7 @@ run_self_test() {
     summary="$tmp_dir/summary-moderate.md"
     : > "$summary"
     dir="$(st_new_dir summary-moderate)"
-    st_write_vuln "$dir" "$(st_nth_rel 3)" Moderate top "net10.0" "net10.0"
+    st_write_vuln "$dir" "$(st_nth_rel 3)" Moderate top "$fixture_first_framework" "$fixture_first_framework"
     GITHUB_STEP_SUMMARY="$summary" decide "$dir" "$st_list" >/dev/null 2>&1 || true
     if grep -Fq '| Example.Package | 1.0.0 | https://github.com/advisories/GHSA-test-test-test |' "$summary" && grep -Fq 'moderate' "$summary"; then
         printf 'case passed: step-summary-lists-reported-advisory (pass)\n'
@@ -602,7 +608,7 @@ run_self_test() {
     summary="$tmp_dir/summary-high.md"
     : > "$summary"
     dir="$(st_new_dir summary-high)"
-    st_write_vuln "$dir" "$(st_nth_rel 3)" High top "net10.0" "net10.0"
+    st_write_vuln "$dir" "$(st_nth_rel 3)" High top "$fixture_first_framework" "$fixture_first_framework"
     GITHUB_STEP_SUMMARY="$summary" decide "$dir" "$st_list" >/dev/null 2>&1 || true
     if grep -Fq '| Example.Package | 1.0.0 | https://github.com/advisories/GHSA-test-test-test |' "$summary" && grep -Fq '(blocking)' "$summary"; then
         printf 'case passed: step-summary-lists-blocking-advisory (pass)\n'
