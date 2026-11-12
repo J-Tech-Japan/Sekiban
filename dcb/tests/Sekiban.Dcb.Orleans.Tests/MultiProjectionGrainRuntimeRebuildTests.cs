@@ -20,6 +20,111 @@ namespace Sekiban.Dcb.Orleans.Tests;
 public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
 {
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Superseded_parked_read_cannot_apply_account_or_persist_on_replacement(bool streaming, bool inCall)
+    {
+        using var services = CreateNativeRebuildServices();
+        var factory = services.GetRequiredService<IProjectionActorHostFactory>();
+        var options = new GeneralMultiProjectionActorOptions { SafeWindowMs = 0, PersistIntervalSeconds = 0 };
+        var name = ForceFullResumeClusterTests.CountProjector.MultiProjectorName;
+        var host = factory.Create(name, options);
+        var events = Enumerable.Range(0, 3).Select(i => new SerializableEvent(
+            System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(new ForceFullResumeClusterTests.Counted($"e{i}"))),
+            SortableUniqueId.Generate(DateTime.UtcNow.AddMinutes(-3).AddSeconds(i), Guid.NewGuid()), Guid.NewGuid(),
+            new EventMetadata("aggregate", "command", "test"), [], "Counted")).ToArray();
+        await host.AddSerializableEventsAsync([events[1]]);
+        host.ForcePromoteAllBufferedEvents();
+        host.CompactSafeHistory();
+        var store = streaming ? new ParkedStreamingRebuildStore(events) : new ParkedRebuildStore(events);
+        var checkpoints = new RecordingRebuildCheckpointStore();
+        var grain = CreateGrain(store, host, actorOptions: options, processedEvents: [events[1]],
+            checkpointStore: checkpoints, hostFactory: factory);
+        SetPrivateField(grain, "_projectorName", name);
+        SetPrivateField(grain, "_grainKey", name);
+        SetPrivateField(grain, "_eventsProcessed", 1L);
+        AttachDeactivationRuntime(grain);
+        SetActiveCatchUp(grain, new CatchUpStartPositionLease(new SortableUniqueId(events[1].SortableUniqueIdValue),
+            CatchUpStartPositionSource.InferredCheckpoint));
+        var oldRead = inCall
+            ? InvokePrivateTaskAsync(grain, "RefreshWithAuthoritativeCursorAsync", [true])
+            : InvokePrivateTaskAsync(grain, "ProcessSingleCatchUpBatch", []);
+        try
+        {
+            await store.ReadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            // Signal a genuinely late event on the held host while the read is parked. The interleaving
+            // persist must observe that signal and recreate the host before it captures any snapshot.
+            await host.AddSerializableEventsAsync([events[0]]);
+            Assert.True(Assert.IsAssignableFrom<IRebuildSignalingHost>(host).RebuildRequired);
+            await grain.PersistStateAsync();
+            var replacement = GetPrivateField<IProjectionActorHost>(grain, "_host");
+            Assert.NotSame(host, replacement);
+            var progress = GetPrivateField<object>(grain, "_catchUpProgress");
+            var saves = checkpoints.SnapshotSaveCalls;
+            Assert.Equal(0, saves);
+            store.ReleaseRead.TrySetResult();
+            await oldRead.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Same(progress, GetPrivateField<object>(grain, "_catchUpProgress"));
+            Assert.Null(progress.GetType().GetProperty("CurrentPosition")!.GetValue(progress));
+            Assert.Equal(0, progress.GetType().GetProperty("BatchesProcessed")!.GetValue(progress));
+            Assert.Equal(false, progress.GetType().GetProperty("HadNewEvents")!.GetValue(progress));
+            Assert.Equal(0L, GetPrivateField<long>(grain, "_eventsProcessed"));
+            Assert.True(GetPrivateField<bool>(grain, "_hostIsPristine"));
+            Assert.Empty(GetPrivateField<HashSet<Guid>>(grain, "_processedEventIds"));
+            Assert.Equal(saves, checkpoints.SnapshotSaveCalls);
+            Assert.Equal(0, Assert.IsType<ForceFullResumeClusterTests.CountProjector>(
+                (await replacement.GetStateAsync(false)).GetValue().Payload).Count);
+
+            await InvokePrivateTaskAsync(grain, "RefreshWithAuthoritativeCursorAsync", [true]);
+            Assert.Equal(3, Assert.IsType<ForceFullResumeClusterTests.CountProjector>(
+                (await replacement.GetStateAsync(false)).GetValue().Payload).Count);
+            Assert.Equal(3L, GetPrivateField<long>(grain, "_eventsProcessed"));
+        }
+        finally { store.ReleaseRead.TrySetResult(); }
+    }
+
+    private class ParkedRebuildStore(IReadOnlyList<SerializableEvent> events)
+        : ProductionCatchUpEventStore([], events: events)
+    {
+        public TaskCompletionSource ReadStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseRead { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _parked;
+
+        protected async Task<SerializableEvent[]> ReadAsync(SortableUniqueId? since, int? maxCount)
+        {
+            var batch = Events.Where(ev => since is null || string.CompareOrdinal(ev.SortableUniqueIdValue, since.Value) > 0)
+                .Take(maxCount ?? int.MaxValue).ToArray();
+            if (!_parked)
+            {
+                _parked = true;
+                ReadStarted.TrySetResult();
+                await ReleaseRead.Task;
+            }
+            return batch;
+        }
+
+        public override async Task<ResultBox<IEnumerable<SerializableEvent>>> ReadAllSerializableEventsAsync(
+            SortableUniqueId? since, int? maxCount) =>
+            ResultBox.FromValue<IEnumerable<SerializableEvent>>(await ReadAsync(since, maxCount));
+    }
+
+    private sealed class ParkedStreamingRebuildStore(IReadOnlyList<SerializableEvent> events)
+        : ParkedRebuildStore(events), IStreamingSerializableEventStore
+    {
+        public async Task<ResultBox<SerializableEventStreamReadResult>> StreamAllSerializableEventsAsync(
+            SortableUniqueId? since, int? maxCount, Func<SerializableEvent, ValueTask> onEvent,
+            CancellationToken cancellationToken = default)
+        {
+            var batch = await ReadAsync(since, maxCount);
+            foreach (var ev in batch) await onEvent(ev);
+            return ResultBox.FromValue(new SerializableEventStreamReadResult(batch.Length, batch.LastOrDefault()?.SortableUniqueIdValue));
+        }
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(100)]
     public async Task First_query_completion_pending_late_receipt_starts_rebuild_before_query_can_settle(int waitMs)

@@ -928,7 +928,15 @@ public class DualStateProjectionWrapper<T>
                 return;
             }
 
-            ProjectSafeInOrder(ev, domainTypes);
+            try
+            {
+                ProjectSafeInOrder(ev, domainTypes);
+            }
+            catch (Exception exception)
+            {
+                DeferredSafeRepairFaultAttribution.AnnotateReplayEvent(exception, ev);
+                throw;
+            }
         }
     }
 

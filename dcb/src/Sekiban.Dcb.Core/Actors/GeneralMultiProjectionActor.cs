@@ -1087,14 +1087,18 @@ public class GeneralMultiProjectionActor
 
     /// <summary>
     ///     The one place a projection fault is born: the per-event fold boundary, where the poison event can be named.
-    ///     The event's identity and position are captured from <paramref name="ev" /> — BEFORE any tracking field
+    ///     The event's identity and position come from an annotated promotion failure, or <paramref name="ev" />
+    ///     for a direct fold — BEFORE any tracking field
     ///     advanced, because the fold threw — so the descriptor points at the event that could not be folded, not at
     ///     wherever execution went next. The ORIGINAL exception instance is rethrown, never re-wrapped, carrying the
     ///     fault's identifiers on its Data (SEK-G9's boundaries then read them like any other annotated failure).
     /// </summary>
     private void CaptureFaultAndRethrow(Event ev, Exception ex)
     {
-        var original = CaptureFault(ev.Id, ev.EventType, ev.SortableUniqueIdValue, ex);
+        var original = DeferredSafeRepairFaultAttribution.TryGetReplayEvent(
+            ex, out var eventId, out var eventType, out var position)
+            ? CaptureFault(eventId, eventType, position, ex)
+            : CaptureFault(ev.Id, ev.EventType, ev.SortableUniqueIdValue, ex);
         ExceptionDispatchInfo.Capture(original).Throw();
     }
 

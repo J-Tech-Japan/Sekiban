@@ -746,6 +746,8 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             updateMethod!,
             grain,
             [
+                GetPrivateFieldValue(grain, "_catchUpProgress"),
+                GetPrivateFieldValue(grain, "_host"),
                 1,
                 "beginning",
                 Array.Empty<Guid>(),
@@ -770,6 +772,8 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             updateMethod!,
             grain,
             [
+                GetPrivateFieldValue(grain, "_catchUpProgress"),
+                GetPrivateFieldValue(grain, "_host"),
                 2,
                 "beginning",
                 Array.Empty<Guid>(),
@@ -795,6 +799,8 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             updateMethod!,
             grain,
             [
+                GetPrivateFieldValue(grain, "_catchUpProgress"),
+                GetPrivateFieldValue(grain, "_host"),
                 3,
                 "beginning",
                 Array.Empty<Guid>(),
@@ -1492,6 +1498,8 @@ public sealed partial class MultiProjectionGrainCatchUpProductionPathTests
             updateMethod!,
             grain,
             [
+                GetPrivateFieldValue(grain, "_catchUpProgress"),
+                GetPrivateFieldValue(grain, "_host"),
                 batchNumber,
                 "beginning",
                 Array.Empty<Guid>(),
