@@ -229,12 +229,13 @@ st_fixture() {
     printf '%s\n' "$fixture"
 }
 
-# st_mutant <name> <file under the fixture> <perl transformation> <message substring>
+# st_mutant <name> <file under the fixture> <perl transformation> <message substring> [text the mutated file must contain]
 st_mutant() {
     local name="$1"
     local relative="$2"
     local transform="$3"
     local needle="$4"
+    local expected_text="${5:-}"
     local fixture
     local output
     local status=0
@@ -243,6 +244,11 @@ st_mutant() {
     perl -0pi -e "$transform" "$fixture/$relative"
     if cmp -s "$repo_root/$relative" "$fixture/$relative"; then
         printf 'mutant FAILED (the transformation changed nothing): %s\n' "$name" >&2
+        st_failures=$((st_failures + 1))
+        return
+    fi
+    if [[ -n "$expected_text" ]] && ! grep -Fq -- "$expected_text" "$fixture/$relative"; then
+        printf 'mutant FAILED (the mutated file lacks "%s"): %s\n' "$expected_text" "$name" >&2
         st_failures=$((st_failures + 1))
         return
     fi
@@ -286,8 +292,8 @@ run_self_test() {
         "$release_label: missing line [      id-token: write]"
     st_mutant "contents-write-removed" "$release_workflow" 's/^      contents: write\n//m' \
         "$release_label: missing line [      contents: write]"
-    st_mutant "login-referenced-by-tag" "$release_workflow" 's/NuGet\/login@[0-9a-f]{40}/NuGet\/login@v1/' \
-        "$release_label: step [$step_login] lacks line [$uses_line]"
+    st_mutant "login-referenced-by-tag" "$release_workflow" 's/NuGet\/login@[0-9a-f]{40}/NuGet\/login\@v1/' \
+        "$release_label: step [$step_login] lacks line [$uses_line]" "NuGet/login@v1"
     st_mutant "login-id-removed" "$release_workflow" 's/^        id: nuget-login\n//m' \
         "$release_label: step [$step_login] lacks line [$id_line]"
     st_mutant "login-id-renamed" "$release_workflow" 's/id: nuget-login/id: nuget/' \
