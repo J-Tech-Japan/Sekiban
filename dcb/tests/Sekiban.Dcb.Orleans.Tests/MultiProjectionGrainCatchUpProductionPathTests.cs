@@ -188,6 +188,107 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
     }
 
     [Fact]
+    public async Task StaleHost_ParkedOperatorReset_InterleavedPoisonPreservesFaultAndHost()
+    {
+        var timeout = TimeSpan.FromMinutes(2);
+        using var services = new ServiceCollection().AddSingleton(ProjectionFaultOrleansTests.CreateDomain())
+            .AddSekibanDcbNativeRuntime().BuildServiceProvider();
+        var factory = services.GetRequiredService<IProjectionActorHostFactory>();
+        var name = ProjectionFaultOrleansTests.FaultTestProjector.MultiProjectorName;
+        var version = ProjectionFaultOrleansTests.FaultTestProjector.MultiProjectorVersion;
+        var stale = factory.Create(name);
+        var checkpoints = new CountingCheckpointWriteStore();
+        var state = new RecordingPersistentState<MultiProjectionGrainState>();
+        var grain = CreateGrain(new ProductionCatchUpEventStore([0]), stale, processedEvents: [],
+            persistentState: state, checkpointStore: checkpoints,
+            actorOptions: new GeneralMultiProjectionActorOptions { SkipPersistWhenSafeCheckpointUnchanged = false },
+            hostFactory: factory);
+        SetPrivateField(grain, "_projectorName", name);
+        SetPrivateField(grain, "_grainKey", name);
+        await grain.AddEventsAsync([ProjectionFaultOrleansTests.Event(false, 1_000)]).WaitAsync(timeout);
+        Assert.True((await grain.PersistStateAsync().WaitAsync(timeout)).IsSuccess);
+        var active = (await checkpoints.ReadCheckpointSlotAsync(name, version).WaitAsync(timeout)).GetValue();
+        Assert.True(active.IsActive);
+        var invalidated = await checkpoints.InvalidateWithTombstoneAsync(name, version,
+            CheckpointExpectation.FromSlot(active)).WaitAsync(timeout);
+        Assert.Equal(CheckpointCasStatus.Committed, invalidated.Status);
+        Assert.True((await grain.PersistStateAsync().WaitAsync(timeout)).IsSuccess);
+        Assert.Same(stale, GetPrivateField<IProjectionActorHost>(grain, "_staleCheckpointHost"));
+        Assert.Null(stale.CurrentFault);
+        var writes = checkpoints.WriteCalls;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        state.NextWrite = async () =>
+        {
+            entered.TrySetResult();
+            await release.Task.WaitAsync(timeout);
+        };
+        // No other write is in flight: this parks the OperatorReset candidate before it is committed.
+        var reset = (Task<Exception?>)InvokePrivate(grain, "ResolveRebuildBeforeQueryAsync", [])!;
+        try
+        {
+            await entered.Task.WaitAsync(timeout);
+            Assert.False(reset.IsCompleted);
+            var poison = ProjectionFaultOrleansTests.Event(true, 2_000);
+            // The public apply path, like the Interleave=true flush timer, does not acquire the catch-up gate.
+            // Use the real native projector's throwing fold; never inject a fault descriptor into the host.
+            await Assert.ThrowsAnyAsync<Exception>(() => grain.AddEventsAsync([poison]).WaitAsync(timeout));
+            var fault = Assert.IsType<ProjectionFaultDescriptor>(stale.CurrentFault);
+            Assert.Equal(poison.Id, fault.EventId);
+            Assert.Equal(poison.SortableUniqueIdValue, fault.Position);
+            Assert.Contains("poison event", fault.Message);
+            Assert.False(reset.IsCompleted);
+            release.TrySetResult();
+            Assert.Null(await reset.WaitAsync(timeout));
+            Assert.Same(stale, GetPrivateField<IProjectionActorHost>(grain, "_host"));
+            Assert.Same(fault, stale.CurrentFault);
+
+            var query = await grain.GetSnapshotJsonAsync().WaitAsync(timeout);
+            Assert.False(query.IsSuccess);
+            var error = Assert.IsType<SekibanProjectionFaultException>(query.GetException());
+            Assert.Equal(poison.Id, error.Fault.EventId);
+            _ = await grain.PersistStateAsync().WaitAsync(timeout);
+            Assert.Equal(poison.Id.ToString(), state.State.FaultEventId);
+            Assert.Equal(poison.SortableUniqueIdValue, state.State.FaultPosition);
+            Assert.Contains("poison event", state.State.FaultMessage);
+            var committed = await grain.TryGetProjectionFaultAsync().WaitAsync(timeout);
+            Assert.True(committed.IsSuccess);
+            Assert.True(committed.GetValue().HasFault);
+            Assert.Equal(poison.Id, committed.GetValue().Fault!.FaultEventId);
+            Assert.Equal(writes, checkpoints.WriteCalls);
+            Assert.Equal(invalidated.ResultingSlot,
+                (await checkpoints.ReadCheckpointSlotAsync(name, version).WaitAsync(timeout)).GetValue());
+        }
+        finally
+        {
+            release.TrySetResult();
+            await reset.WaitAsync(timeout);
+        }
+    }
+
+    private sealed class CountingCheckpointWriteStore : Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore,
+        IGenerationAwareCheckpointStore
+    {
+        public int WriteCalls { get; private set; }
+
+        Task<CheckpointCasOutcome> IGenerationAwareCheckpointStore.ConditionalUpsertAsync(
+            MultiProjectionStateWriteRequest payload, Stream stream, CheckpointExpectation expectation,
+            int offloadThresholdBytes, CancellationToken cancellationToken)
+        {
+            WriteCalls++;
+            return base.ConditionalUpsertAsync(payload, stream, expectation, offloadThresholdBytes, cancellationToken);
+        }
+
+        Task<CheckpointCasOutcome> IGenerationAwareCheckpointStore.CommitRebuiltAsync(
+            MultiProjectionStateWriteRequest payload, Stream stream, CheckpointExpectation expectation,
+            int offloadThresholdBytes, CancellationToken cancellationToken)
+        {
+            WriteCalls++;
+            return base.CommitRebuiltAsync(payload, stream, expectation, offloadThresholdBytes, cancellationToken);
+        }
+    }
+
+    [Fact]
     public async Task StaleHost_ParkedCatchUp_BlocksQueryReset_CompletionCannotSaveReplacement()
     {
         var checkpoints = new Sekiban.Dcb.Testing.InMemoryMultiProjectionStateStore();
@@ -1893,6 +1994,7 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         public string Etag => "test-etag";
         public bool RecordExists => true;
         public int WriteCalls { get; private set; }
+        public Func<Task>? NextWrite { get; set; }
 
         public Task ClearStateAsync()
         {
@@ -1905,7 +2007,9 @@ public sealed class MultiProjectionGrainCatchUpProductionPathTests
         public Task WriteStateAsync()
         {
             WriteCalls++;
-            return Task.CompletedTask;
+            var nextWrite = NextWrite;
+            NextWrite = null;
+            return nextWrite?.Invoke() ?? Task.CompletedTask;
         }
     }
 

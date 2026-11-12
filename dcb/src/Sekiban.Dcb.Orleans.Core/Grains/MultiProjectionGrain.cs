@@ -1532,9 +1532,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             GrainStateWriteKind.OperatorReset, ResetDerivedStateForFullRebuild);
                         if (outcome != GrainStateWriteOutcome.Committed)
                             throw new InvalidOperationException("Projection rebuild checkpoint clear was not committed.");
-                        RecreateHostForFullRebuild();
-                        _orderedRebuildFromFreshHost =
-                            _checkpointMutation is { IsCapable: true, PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true };
+                        // Interleaved timer work (e.g. the buffer flush) may have faulted the stale host while the write
+                        // was awaited. A fault keeps its G14 operator-reset semantics, so never discard it here.
+                        if (ReferenceEquals(_host, staleHost) && _host?.CurrentFault is null &&
+                            !ExternalPersistenceBlockedByFault() && _projectionFault is null)
+                        {
+                            RecreateHostForFullRebuild();
+                            _orderedRebuildFromFreshHost =
+                                _checkpointMutation is { IsCapable: true, PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true };
+                        }
                     }
                     catch (Exception ex)
                     {
