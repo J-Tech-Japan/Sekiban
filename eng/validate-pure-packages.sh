@@ -7,6 +7,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 exec python3 - "$repo_root" "$@" <<'PY'
 """Validate the packed Sekiban.Pure packages (see eng/validate-pure-packages.sh)."""
 import argparse
+import contextlib
+import io
 import re
 import subprocess
 import sys
@@ -60,7 +62,7 @@ def informational_blob(data, version, commit):
                 if commit:
                     if value == f'{version}+{commit}':
                         return True
-                elif value == version or (value.startswith(version + '+') and HEX.match(value[len(version) + 1:])):
+                elif value == version or (value.startswith(version + '+') and HEX.fullmatch(value[len(version) + 1:])):
                     return True
         position = data.find(needle, position + 1)
     return False
@@ -121,6 +123,9 @@ def check_package(path, package_id, version, commit, banner, errors):
                 errors.append(f'{package_id}: dependency groups are {sorted(groups)}, expected [.NETStandard2.0]')
             return
 
+        for name in names:
+            if name.startswith('lib/') and name.count('/') == 1 and not name.endswith('/'):
+                errors.append(f'{package_id}: unexpected file {name}')
         frameworks = sorted({name.split('/')[1] for name in names if name.startswith('lib/') and name.count('/') >= 2})
         for framework in RUNTIME_FRAMEWORKS:
             if framework not in frameworks:
@@ -245,6 +250,8 @@ def make_fixture(workdir, version, commit, options=None):
         else:
             lib_frameworks = [framework for framework in RUNTIME_FRAMEWORKS if framework not in spec.get('drop_lib', ())]
             lib_frameworks += list(spec.get('extra_lib', ()))
+            for stray in spec.get('stray_files', ()):
+                entries[stray] = b'x'
             for framework in lib_frameworks:
                 data = spec.get('bytes', {}).get(framework) or fake_assembly(*info.get(framework, (version, commit)))
                 entries[f'lib/{framework}/{package_id}.dll'] = data
@@ -257,6 +264,17 @@ def make_fixture(workdir, version, commit, options=None):
         with zipfile.ZipFile(packages / extra, 'w') as archive:
             archive.writestr('x.nuspec', '<package />')
     return root, packages
+
+
+def run_cli(root, packages, version, commit):
+    """Run the real entry point on a fixture; return (exit status, stdout, stderr)."""
+    argv = ['--repo-root', str(root), '--dir', str(packages), '--version', version]
+    if commit:
+        argv += ['--commit', commit]
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        status = cli(argv, root)
+    return status, out.getvalue(), err.getvalue()
 
 
 def self_test():
@@ -290,6 +308,7 @@ def self_test():
          f'lib/net10.0/{first}.dll lacks the informational version'),
         ('source-generator-with-a-lib-folder', {'package': {GENERATOR: {'with_lib': True}}}, 'must not contain lib/ files'),
         ('source-generator-without-the-analyzer', {'package': {GENERATOR: {'no_analyzer': True}}}, 'missing analyzers/dotnet/cs/'),
+        ('stray-file-directly-under-lib', {'package': {first: {'stray_files': ('lib/stray.dll',)}}}, 'unexpected file lib/stray.dll'),
         ('old-informational-version-in-the-analyzer', {'package': {GENERATOR: {'info': {'analyzer': ('9.0.0', commit)}}}},
          f'analyzers/dotnet/cs/{GENERATOR}.dll lacks the informational version'),
     ]
@@ -298,23 +317,21 @@ def self_test():
         nonlocal failures
         with tempfile.TemporaryDirectory(prefix='sekiban-pure-packages.') as temp:
             root, packages = make_fixture(Path(temp), version, commit, options)
-            errors, oks = validate(root, packages, version, with_commit)
+            status, out, err = run_cli(root, packages, version, with_commit)
         if expect_pass:
-            if errors or len(oks) != EXPECTED_PACKAGE_COUNT:
-                print(f'case FAILED (expected a pass): {name}', file=sys.stderr)
-                for error in errors:
-                    print(f'  ERROR: {error}', file=sys.stderr)
+            if status != 0 or 'validation passed (12 packages' not in out or out.count('ok: ') != EXPECTED_PACKAGE_COUNT:
+                print(f'case FAILED (expected exit 0 and a passed line): {name}', file=sys.stderr)
+                print(err, file=sys.stderr)
                 failures += 1
             else:
                 print(f'case passed: {name} (pass)')
             return
-        if not errors:
-            print(f'case FAILED (the mutant was not rejected): {name}', file=sys.stderr)
+        if status != 1:
+            print(f'case FAILED (expected exit status 1, got {status}): {name}', file=sys.stderr)
             failures += 1
-        elif not any(needle in error for error in errors):
-            print(f'case FAILED (no error contains "{needle}"): {name}', file=sys.stderr)
-            for error in errors:
-                print(f'  ERROR: {error}', file=sys.stderr)
+        elif needle not in err or 'rule(s) violated' not in err:
+            print(f'case FAILED (stderr lacks "{needle}" or the violation count): {name}', file=sys.stderr)
+            print(err, file=sys.stderr)
             failures += 1
         else:
             print(f'mutant killed: {name}')
@@ -326,6 +343,9 @@ def self_test():
         expect_pass=True, with_commit=None)
     for name, options, needle in cases:
         run(name, options, needle)
+    run('hex-suffix-with-a-trailing-newline-without-a-known-commit',
+        {'package': {first: {'info': {'net10.0': (version, 'abcdef1\n')}}}},
+        f'lib/net10.0/{first}.dll lacks the informational version', with_commit=None)
     run('misleading-superstring-without-a-known-commit',
         {'package': {first: {'bytes': {'net10.0': fake_assembly('1' + version, None)}}}},
         f'lib/net10.0/{first}.dll lacks the informational version', with_commit=None)
@@ -335,23 +355,22 @@ def self_test():
         victim = packages / f'{second}.{version}.nupkg'
         victim.unlink()
         victim.mkdir()
-        errors, oks = validate(root, packages, version, commit)
-    if (any(f'{second}.{version}.nupkg: not a regular file' in error for error in errors)
-            and any(f'missing package {second}.{version}.nupkg' in error for error in errors)
-            and len(oks) == EXPECTED_PACKAGE_COUNT - 1):
+        status, out, err = run_cli(root, packages, version, commit)
+    if (status == 1 and f'{second}.{version}.nupkg: not a regular file' in err
+            and f'missing package {second}.{version}.nupkg' in err
+            and out.count('ok: ') == EXPECTED_PACKAGE_COUNT - 1):
         print('mutant killed: directory-in-place-of-a-package')
     else:
         print('case FAILED: a directory in place of a package was not rejected for its reason', file=sys.stderr)
-        for error in errors:
-            print(f'  ERROR: {error}', file=sys.stderr)
+        print(err, file=sys.stderr)
         failures += 1
     # the validator must also notice a repository with the wrong number of project files
     with tempfile.TemporaryDirectory(prefix='sekiban-pure-packages.') as temp:
         root, packages = make_fixture(Path(temp), version, commit, {})
         for victim in (root / 'pure' / 'src' / 'Sekiban.Pure.Fixture3').glob('*.csproj'):
             victim.unlink()
-        errors, _ = validate(root, packages, version, commit)
-    if any('expected 12 package projects, found 11' in error for error in errors):
+        status, out, err = run_cli(root, packages, version, commit)
+    if status == 1 and 'expected 12 package projects, found 11' in err:
         print('mutant killed: eleven-package-projects-in-the-repository')
     else:
         print('case FAILED: eleven package projects were not noticed', file=sys.stderr)
@@ -363,17 +382,21 @@ def self_test():
     return 0
 
 
-def main():
+def make_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repo-root', type=Path)
     parser.add_argument('--dir', type=Path, help='directory with the packed .nupkg files')
     parser.add_argument('--version', help='the version being released')
     parser.add_argument('--commit', help='the commit the assemblies were built from (default: git HEAD of the repository root)')
     parser.add_argument('--self-test', action='store_true', help='run the offline fixture tests')
-    arguments = parser.parse_args(sys.argv[2:])
-    if arguments.self_test:
-        return self_test()
-    root = (arguments.repo_root or Path(sys.argv[1])).resolve()
+    return parser
+
+
+def cli(argv, default_root):
+    """The validation entry point: prints the report and returns the process exit status."""
+    parser = make_parser()
+    arguments = parser.parse_args(argv)
+    root = (arguments.repo_root or Path(default_root)).resolve()
     if not arguments.dir or not arguments.version:
         parser.error('--dir and --version are required')
     commit = arguments.commit
@@ -390,6 +413,13 @@ def main():
         return 1
     print(f'Sekiban.Pure package validation passed ({EXPECTED_PACKAGE_COUNT} packages, version {arguments.version})')
     return 0
+
+
+def main():
+    arguments = make_parser().parse_args(sys.argv[2:])
+    if arguments.self_test:
+        return self_test()
+    return cli(sys.argv[2:], sys.argv[1])
 
 
 sys.exit(main())
