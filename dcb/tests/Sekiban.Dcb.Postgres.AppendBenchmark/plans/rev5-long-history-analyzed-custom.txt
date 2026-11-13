@@ -3,7 +3,7 @@ SET
 BOOTSTRAP: UPDATE dcb_tag_heads h SET "HeadPosition" = m.position FROM (SELECT k.service_id, k.tag, m.position FROM unnest(@serviceIds, @tags) WITH ORDINALITY AS k(service_id, tag, ord) CROSS JOIN LATERAL (SELECT t."ServiceId" AS service_id, t."Tag" AS tag, t."SortableUniqueId" AS position FROM dcb_tags t WHERE (t."ServiceId", t."Tag") <= (k.service_id, k.tag) ORDER BY t."ServiceId" DESC, t."Tag" DESC, t."SortableUniqueId" DESC LIMIT 1) m WHERE m.service_id = k.service_id AND m.tag = k.tag) m WHERE h."ServiceId" = m.service_id AND h."Tag" = m.tag AND m.position IS NOT NULL RETURNING h."ServiceId", h."Tag", h."HeadPosition"
 BEGIN
 PREPARE
-                                                                                          QUERY PLAN                                                                                           
+                                                                                          QUERY PLAN
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Update on dcb_tag_heads h  (cost=1.47..1.66 rows=1 width=177) (actual time=0.068..0.082 rows=2 loops=1)
    Buffers: shared hit=13
@@ -38,7 +38,7 @@ ROLLBACK
 RECONCILIATION: SELECT k.service_id, k.tag, m.position FROM unnest(@serviceIds, @tags, @positions) WITH ORDINALITY AS k(service_id, tag, position, ord) CROSS JOIN LATERAL (SELECT t."ServiceId" AS service_id, t."Tag" AS tag, t."SortableUniqueId" AS position FROM dcb_tags t WHERE (t."ServiceId", t."Tag") <= (k.service_id, k.tag) ORDER BY t."ServiceId" DESC, t."Tag" DESC, t."SortableUniqueId" DESC LIMIT 1) m WHERE m.service_id = k.service_id AND m.tag = k.tag AND (k.position IS NULL OR m.position > k.position) ORDER BY k.ord
 BEGIN
 PREPARE
-                                                                                       QUERY PLAN                                                                                        
+                                                                                       QUERY PLAN
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop  (cost=0.42..1.19 rows=1 width=93) (actual time=0.023..0.031 rows=2 loops=1)
    Buffers: shared hit=8

@@ -5,6 +5,7 @@ Run after correctness checks with no concurrent builds/tests/profiling.
 import hashlib, json, pathlib, subprocess, tempfile
 root = pathlib.Path.cwd()
 bench = root / 'dcb/tests/Sekiban.Dcb.Postgres.AppendBenchmark'
+(bench / 'validation/rev5').mkdir(parents=True, exist_ok=True)
 store = root / 'dcb/src/Sekiban.Dcb.Postgres/PostgresEventStore.cs'
 branch = store.read_bytes()
 commit = 'e1478efefc578db03e68b06d66a1898270530db0'

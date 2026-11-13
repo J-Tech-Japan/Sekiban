@@ -1,6 +1,6 @@
 # SEK-G162 packet rev 5 — local verification
 
-Approved design from issue #1412. Existing tests (including every rev-4 test) remain unchanged. Added `PostgresSetBasedProtocolTests.cs` and embedded main SQL fixtures. The only rev-5 product edit makes `serviceIds` and `tags` explicitly `NpgsqlDbType.Array | NpgsqlDbType.Text`; nullable `positions` arrays were already explicit. No product bug was exposed and no protocol/design change was made. No commit, push, tag, PR, publication or CI run.
+Approved design from issue #1412. Existing tests (including every rev-4 test) remain unchanged. Added `PostgresSetBasedProtocolTests.cs` and embedded main SQL fixtures. The only rev-5 product edit makes `serviceIds` and `tags` explicitly `NpgsqlDbType.Array | NpgsqlDbType.Text`; nullable `positions` arrays were already explicit. No product bug was exposed and no protocol/design change was made. These were local results before the PR; CI results are on PR #1413.
 
 ## New test mapping
 
@@ -29,7 +29,7 @@ Commands: `python3 dcb/tests/Sekiban.Dcb.Postgres.AppendBenchmark/run_correctnes
 | WithResult: Postgres or ConditionalAppend | 141 passed | 141 passed |
 | Orleans TwoClusterPostgresProductTests | 12 passed | 12 passed |
 
-AC1–AC3: local PASS (SQL parity, counts/order/scope, all correctness). AC4: PASS in each existing alternating block; new main-vs-main control quantifies noise below. AC5: CI not run/no PR or publication requested; cannot claim green CI. `git diff --check`: PASS. Original source boundaries, hooks, epoch checks, public API, schema, dependencies, other stores and EF event/tag DML remain unchanged. Aspire MCP attachment was rejected by the session's `never` approval policy; tests use their existing disposable Testcontainers fixtures.
+AC1–AC3: local PASS (SQL parity, counts/order/scope, all correctness). AC4: PASS in each existing alternating block; new main-vs-main control quantifies noise below. AC5: verified by CI on PR #1413. `git diff --check`: PASS. Original source boundaries, hooks, epoch checks, public API, schema, dependencies, other stores and EF event/tag DML remain unchanged. Aspire MCP attachment was rejected by the session's `never` approval policy; tests use their existing disposable Testcontainers fixtures.
 
 ## Main source and benchmark method
 
@@ -117,7 +117,7 @@ SET
 BOOTSTRAP: UPDATE dcb_tag_heads h SET "HeadPosition" = m.position FROM (SELECT k.service_id, k.tag, m.position FROM unnest(@serviceIds, @tags) WITH ORDINALITY AS k(service_id, tag, ord) CROSS JOIN LATERAL (SELECT t."ServiceId" AS service_id, t."Tag" AS tag, t."SortableUniqueId" AS position FROM dcb_tags t WHERE (t."ServiceId", t."Tag") <= (k.service_id, k.tag) ORDER BY t."ServiceId" DESC, t."Tag" DESC, t."SortableUniqueId" DESC LIMIT 1) m WHERE m.service_id = k.service_id AND m.tag = k.tag) m WHERE h."ServiceId" = m.service_id AND h."Tag" = m.tag AND m.position IS NOT NULL RETURNING h."ServiceId", h."Tag", h."HeadPosition"
 BEGIN
 PREPARE
-                                                                                              QUERY PLAN                                                                                               
+                                                                                              QUERY PLAN
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Update on dcb_tag_heads h  (cost=0.56..11.09 rows=1 width=732) (actual time=0.071..0.086 rows=2 loops=1)
    Buffers: shared hit=16
@@ -150,7 +150,7 @@ ROLLBACK
 RECONCILIATION: SELECT k.service_id, k.tag, m.position FROM unnest(@serviceIds, @tags, @positions) WITH ORDINALITY AS k(service_id, tag, position, ord) CROSS JOIN LATERAL (SELECT t."ServiceId" AS service_id, t."Tag" AS tag, t."SortableUniqueId" AS position FROM dcb_tags t WHERE (t."ServiceId", t."Tag") <= (k.service_id, k.tag) ORDER BY t."ServiceId" DESC, t."Tag" DESC, t."SortableUniqueId" DESC LIMIT 1) m WHERE m.service_id = k.service_id AND m.tag = k.tag AND (k.position IS NULL OR m.position > k.position) ORDER BY k.ord
 BEGIN
 PREPARE
-                                                                                        QUERY PLAN                                                                                         
+                                                                                        QUERY PLAN
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop  (cost=0.41..2.91 rows=1 width=290) (actual time=0.025..0.033 rows=2 loops=1)
    Buffers: shared hit=8
@@ -177,7 +177,7 @@ ROLLBACK
 <!-- REV4_HISTORY -->
 # SEK-G162 packet rev 4 — PASS
 
-Measured 2026-11-13 against `origin/main` / `e1478efefc578db03e68b06d66a1898270530db0`. Both blocks are evaluated independently; a gate passes only if both blocks pass. All five gates pass. No commit, push, tag, PR or publication was made.
+Measured 2026-11-13 against `origin/main` / `e1478efefc578db03e68b06d66a1898270530db0`. Both blocks are evaluated independently; a gate passes only if both blocks pass. All five gates pass.
 
 ## Implementation and path selection
 
@@ -477,7 +477,7 @@ The following second-attempt report and its embedded first-attempt table are ret
 
 # SEK-G162 follow-up verification — AC4 FAIL
 
-Measured 2026-11-13 against `origin/main` / `e1478efefc578db03e68b06d66a1898270530db0`. The confirmed statistics-sensitive tag-history scans were replaced with bounded composite-index top-1 seeks. Correctness and constant statement-count checks pass on both TFMs. **Performance acceptance fails**; the complete numbers follow. Work stops here without further tuning. No commit, push, tag, PR or publication was made.
+Measured 2026-11-13 against `origin/main` / `e1478efefc578db03e68b06d66a1898270530db0`. The confirmed statistics-sensitive tag-history scans were replaced with bounded composite-index top-1 seeks. Correctness and constant statement-count checks pass on both TFMs. **Performance acceptance fails**; the complete numbers follow. Work stops here without further tuning.
 
 The timing harness (`Program.cs`), connection settings, writer workloads, seeding, truncation, warm-up and measurement duration were unchanged. Two complete invocations per implementation ran sequentially in **main-1 → branch-1 → main-2 → branch-2** order. Every invocation has six cases, each with one warm-up plus five measured five-second runs. No builds/tests/profilers/SQL observers ran alongside acceptance timing; the separate diagnostic container was stopped first. Both main substitutions used only the store source, with exact branch bytes restored afterward. SHA-256 values and byte-for-byte restoration verification (local evidence, not committed); [reproduction](README.md).
 
@@ -622,4 +622,3 @@ The first attempt's table is preserved below, unchanged. Its original report and
 | shared only | 569.40 | 489.85 | 86.0% | FAIL (≥95%) | 27.541/38.714 | 32.224/45.220 | 14343/12388 |
 | shared+4 | 276.12 | 443.40 | 160.6% | PASS (≥110%) | 57.290/73.428 | 35.273/50.627 | 6866/11027 |
 | disjoint 5 | 1198.61 | 2484.25 | 207.3% | reported | 12.854/24.485 | 5.910/14.015 | 30069/61353 |
-

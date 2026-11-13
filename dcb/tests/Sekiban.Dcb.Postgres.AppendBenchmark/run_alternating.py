@@ -14,6 +14,7 @@ import time
 
 root = pathlib.Path.cwd()
 bench = root / 'dcb/tests/Sekiban.Dcb.Postgres.AppendBenchmark'
+(bench / 'validation/rev4').mkdir(parents=True, exist_ok=True)
 store = root / 'dcb/src/Sekiban.Dcb.Postgres/PostgresEventStore.cs'
 branch_bytes = store.read_bytes()
 main = subprocess.check_output(['git', 'show', 'origin/main:dcb/src/Sekiban.Dcb.Postgres/PostgresEventStore.cs'])

@@ -7,6 +7,7 @@ using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Postgres;
 using Sekiban.Dcb.ServiceId;
 using Testcontainers.PostgreSql;
+using Sekiban.Dcb.Postgres.AppendBenchmark;
 
 var label = args.FirstOrDefault() ?? "branch";
 var seconds = args.Length > 1 ? int.Parse(args[1]) : 5;
@@ -65,8 +66,12 @@ foreach (var scenario in cases)
         p50 = measured.Select(r => r.P50).Order().ElementAt(2), p99 = measured.Select(r => r.P99).Order().ElementAt(2),
         successfulWrites = measured.Select(r => r.Successes).ToArray() } }));
 }
-record Run(double Throughput, double P50, double P99, int Successes);
-sealed class Factory(string connection) : IDbContextFactory<SekibanDcbDbContext>
+namespace Sekiban.Dcb.Postgres.AppendBenchmark
 {
-    public SekibanDcbDbContext CreateDbContext() => new(new DbContextOptionsBuilder<SekibanDcbDbContext>().UseNpgsql(connection).Options);
+    internal sealed record Run(double Throughput, double P50, double P99, int Successes);
+
+    internal sealed class Factory(string connection) : IDbContextFactory<SekibanDcbDbContext>
+    {
+        public SekibanDcbDbContext CreateDbContext() => new(new DbContextOptionsBuilder<SekibanDcbDbContext>().UseNpgsql(connection).Options);
+    }
 }
