@@ -1,0 +1,60 @@
+Pager usage is off.
+SET
+BOOTSTRAP: UPDATE dcb_tag_heads h SET "HeadPosition" = m.position FROM (SELECT k.service_id, k.tag, m.position FROM unnest(@serviceIds, @tags) WITH ORDINALITY AS k(service_id, tag, ord) CROSS JOIN LATERAL (SELECT t."ServiceId" AS service_id, t."Tag" AS tag, t."SortableUniqueId" AS position FROM dcb_tags t WHERE (t."ServiceId", t."Tag") <= (k.service_id, k.tag) ORDER BY t."ServiceId" DESC, t."Tag" DESC, t."SortableUniqueId" DESC LIMIT 1) m WHERE m.service_id = k.service_id AND m.tag = k.tag) m WHERE h."ServiceId" = m.service_id AND h."Tag" = m.tag AND m.position IS NOT NULL RETURNING h."ServiceId", h."Tag", h."HeadPosition"
+BEGIN
+PREPARE
+                                                                                              QUERY PLAN                                                                                               
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Update on dcb_tag_heads h  (cost=0.56..11.09 rows=1 width=732) (actual time=0.071..0.086 rows=2 loops=1)
+   Buffers: shared hit=16
+   ->  Nested Loop  (cost=0.56..11.09 rows=1 width=732) (actual time=0.057..0.071 rows=2 loops=1)
+         Join Filter: (((h."ServiceId")::text = (m.service_id)::text) AND (h."Tag" = m.tag))
+         Buffers: shared hit=12
+         ->  Nested Loop  (cost=0.41..2.91 rows=1 width=968) (actual time=0.051..0.062 rows=2 loops=1)
+               Buffers: shared hit=8
+               ->  Function Scan on k  (cost=0.01..0.03 rows=2 width=152) (actual time=0.011..0.011 rows=2 loops=1)
+               ->  Subquery Scan on m  (cost=0.41..1.43 rows=1 width=816) (actual time=0.025..0.025 rows=1 loops=2)
+                     Filter: ((m."position" IS NOT NULL) AND (k.service_id = (m.service_id)::text) AND (k.tag = m.tag))
+                     Buffers: shared hit=8
+                     ->  Limit  (cost=0.41..1.42 rows=1 width=396) (actual time=0.024..0.024 rows=1 loops=2)
+                           Buffers: shared hit=8
+                           ->  Index Only Scan Backward using "IX_Tags_Service_Tag_SortableUniqueId" on dcb_tags t  (cost=0.41..1441.43 rows=1430 width=396) (actual time=0.023..0.023 rows=1 loops=2)
+                                 Index Cond: (ROW("ServiceId", "Tag") <= ROW(k.service_id, k.tag))
+                                 Heap Fetches: 2
+                                 Buffers: shared hit=8
+         ->  Index Scan using dcb_tag_heads_pkey on dcb_tag_heads h  (cost=0.14..8.16 rows=1 width=184) (actual time=0.003..0.003 rows=1 loops=2)
+               Index Cond: ((("ServiceId")::text = k.service_id) AND ("Tag" = k.tag))
+               Buffers: shared hit=4
+ Planning:
+   Buffers: shared hit=202 read=8
+ Planning Time: 0.737 ms
+ Execution Time: 0.186 ms
+(24 rows)
+
+DEALLOCATE
+ROLLBACK
+RECONCILIATION: SELECT k.service_id, k.tag, m.position FROM unnest(@serviceIds, @tags, @positions) WITH ORDINALITY AS k(service_id, tag, position, ord) CROSS JOIN LATERAL (SELECT t."ServiceId" AS service_id, t."Tag" AS tag, t."SortableUniqueId" AS position FROM dcb_tags t WHERE (t."ServiceId", t."Tag") <= (k.service_id, k.tag) ORDER BY t."ServiceId" DESC, t."Tag" DESC, t."SortableUniqueId" DESC LIMIT 1) m WHERE m.service_id = k.service_id AND m.tag = k.tag AND (k.position IS NULL OR m.position > k.position) ORDER BY k.ord
+BEGIN
+PREPARE
+                                                                                        QUERY PLAN                                                                                         
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.41..2.91 rows=1 width=290) (actual time=0.025..0.033 rows=2 loops=1)
+   Buffers: shared hit=8
+   ->  Function Scan on k  (cost=0.01..0.03 rows=2 width=104) (actual time=0.011..0.012 rows=2 loops=1)
+   ->  Subquery Scan on m  (cost=0.41..1.43 rows=1 width=396) (actual time=0.010..0.010 rows=1 loops=2)
+         Filter: (((k."position" IS NULL) OR ((m."position")::text > k."position")) AND (k.service_id = (m.service_id)::text) AND (k.tag = m.tag))
+         Buffers: shared hit=8
+         ->  Limit  (cost=0.41..1.42 rows=1 width=396) (actual time=0.009..0.009 rows=1 loops=2)
+               Buffers: shared hit=8
+               ->  Index Only Scan Backward using "IX_Tags_Service_Tag_SortableUniqueId" on dcb_tags t  (cost=0.41..1441.43 rows=1430 width=396) (actual time=0.009..0.009 rows=1 loops=2)
+                     Index Cond: (ROW("ServiceId", "Tag") <= ROW(k.service_id, k.tag))
+                     Heap Fetches: 2
+                     Buffers: shared hit=8
+ Planning:
+   Buffers: shared hit=5
+ Planning Time: 0.079 ms
+ Execution Time: 0.047 ms
+(16 rows)
+
+DEALLOCATE
+ROLLBACK

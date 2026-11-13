@@ -43,4 +43,7 @@
         <ProjectReference Include="..\Sekiban.Dcb.TestSupport\Sekiban.Dcb.TestSupport.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <None Update="MainSql/*.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>
