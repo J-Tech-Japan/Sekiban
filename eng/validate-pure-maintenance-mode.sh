@@ -265,6 +265,8 @@ is_allowed_change() {
         templates/Sekiban.Pure.Templates/content/Sekiban.Dapr.Aspire/README.md|\
         docs/llm/*.md|docs/llm_ja/*.md|\
         eng/pure-maintenance-mode/canonical-block.md|eng/pure-maintenance-mode/targets.txt|\
+        templates/Sekiban.Pure.Templates/*|\
+        eng/validate-pure-templates.sh|.github/workflows/pure_template_check.yml|\
         eng/validate-pure-maintenance-mode.sh|.github/workflows/pure_maintenance_policy.yml)
             return 0
             ;;
@@ -401,6 +403,15 @@ run_self_test() {
     copy_fixture "$fixture"
     perl -0pi -e 's/sekiban-dcb-orleans/sekiban-orleans-aspire/' "$fixture/pure/README.md"
     expect_failure "pure-dcb-redirect-reverted" "$script_path" --repo-root "$fixture"
+
+    fixture="$tmp_dir/pass-template-scope"
+    copy_fixture "$fixture"
+    printf '%s\n' \
+        'templates/Sekiban.Pure.Templates/content/Sekiban.Orleans.Aspire/OrleansSekiban.ApiService/OrleansSekiban.ApiService.csproj' \
+        'eng/validate-pure-templates.sh' \
+        '.github/workflows/pure_template_check.yml' > "$fixture/changed-files.txt"
+    "$script_path" --repo-root "$fixture" --changed-files-file "$fixture/changed-files.txt"
+    printf 'pass case: template-scope\n'
 
     fixture="$tmp_dir/mutant-scope"
     copy_fixture "$fixture"

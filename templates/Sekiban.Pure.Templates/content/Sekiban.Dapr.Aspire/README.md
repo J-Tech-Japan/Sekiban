@@ -13,9 +13,11 @@ This template creates a new Sekiban application using Dapr for distributed event
 
 ## Prerequisites
 
-- .NET 9.0 SDK
+- .NET 10.0 SDK
 - Dapr CLI installed
 - Docker Desktop (for Aspire and Dapr)
+
+Status on .NET 10: the Dapr template restores, builds and passes its unit tests. It has not been run end to end against a Dapr runtime (placement service, scheduler and sidecars) for this version.
 
 ## Getting Started
 

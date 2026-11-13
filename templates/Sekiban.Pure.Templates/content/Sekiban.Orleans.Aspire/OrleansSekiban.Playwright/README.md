@@ -4,7 +4,7 @@ This project contains end-to-end tests for the OrleansSekiban application using 
 
 ## Prerequisites
 
-- .NET 9.0 SDK
+- .NET 10.0 SDK
 - Playwright browsers (installed via the `install-browsers.sh` script)
 
 ## Project Structure

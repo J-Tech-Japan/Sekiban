@@ -199,7 +199,7 @@ namespace OrleansSekiban.Playwright.Base
             // List of possible relative paths to try
             string[] possiblePaths = new[]
             {
-                "../../OrleansSekiban.AppHost",                           // From bin/Debug/net9.0
+                "../../OrleansSekiban.AppHost",                           // From bin/Debug/net10.0
                 "../../../OrleansSekiban.AppHost",                        // From bin/Debug
                 "../../../../OrleansSekiban.AppHost",                     // From bin
                 "../../../../../OrleansSekiban.AppHost",                  // From Playwright

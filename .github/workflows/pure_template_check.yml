@@ -1,0 +1,64 @@
+name: Validate Pure templates
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'templates/Sekiban.Pure.Templates/**'
+      - 'eng/validate-pure-templates.sh'
+      - '.github/workflows/pure_template_check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  templates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Self-test the static validator
+        run: ./eng/validate-pure-templates.sh --repo-root . --self-test
+
+      - name: Validate the template tree
+        run: ./eng/validate-pure-templates.sh --repo-root .
+
+      - name: Install the folder and generate both apps
+        run: |
+          dotnet new install ./templates/Sekiban.Pure.Templates --debug:custom-hive "$RUNNER_TEMP/hive"
+          dotnet new sekiban-orleans-aspire -n AcmeOrl -o "$RUNNER_TEMP/gen/AcmeOrl" --debug:custom-hive "$RUNNER_TEMP/hive"
+          dotnet new sekiban-dapr-aspire -n AcmeDapr -o "$RUNNER_TEMP/gen/AcmeDapr" --debug:custom-hive "$RUNNER_TEMP/hive"
+
+      - name: Build and unit test both apps
+        run: |
+          for name in AcmeOrl AcmeDapr; do
+            dotnet build "$RUNNER_TEMP/gen/$name/$name.sln" -c Release -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905
+            dotnet test "$RUNNER_TEMP/gen/$name/$name.Unit/$name.Unit.csproj" -c Release --no-build
+          done
+
+      - name: Pack and check the package name
+        run: |
+          dotnet pack templates/Sekiban.Pure.Templates -c Release -o "$RUNNER_TEMP/pack"
+          VERSION="$(python3 -I -c 'import xml.etree.ElementTree as E; p=E.parse("templates/Sekiban.Pure.Templates/Sekiban.Pure.Templates.csproj"); print(p.findtext(".//PackageVersion"))')"
+          [[ -n "$VERSION" && "$VERSION" != None ]]
+          shopt -s nullglob
+          packages=("$RUNNER_TEMP/pack/"*.nupkg)
+          [[ "${#packages[@]}" -eq 1 ]]
+          [[ "${packages[0]}" == "$RUNNER_TEMP/pack/Sekiban.Pure.Templates.$VERSION.nupkg" ]]
+
+      - name: Generate from the package and compare with the folder
+        run: |
+          shopt -s nullglob
+          packages=("$RUNNER_TEMP/pack/"*.nupkg)
+          [[ "${#packages[@]}" -eq 1 ]]
+          dotnet new install "${packages[0]}" --debug:custom-hive "$RUNNER_TEMP/hive2"
+          dotnet new sekiban-orleans-aspire -n AcmeOrl -o "$RUNNER_TEMP/gen2/AcmeOrl" --debug:custom-hive "$RUNNER_TEMP/hive2"
+          dotnet new sekiban-dapr-aspire -n AcmeDapr -o "$RUNNER_TEMP/gen2/AcmeDapr" --debug:custom-hive "$RUNNER_TEMP/hive2"
+          diff -r -q -x bin -x obj "$RUNNER_TEMP/gen/AcmeOrl" "$RUNNER_TEMP/gen2/AcmeOrl"
+          diff -r -q -x bin -x obj "$RUNNER_TEMP/gen/AcmeDapr" "$RUNNER_TEMP/gen2/AcmeDapr"
