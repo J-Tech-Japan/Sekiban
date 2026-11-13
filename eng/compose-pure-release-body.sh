@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Composes the GitHub Release body of a Sekiban.Pure release from the reviewed
-# English and Japanese notes: docs/releases/pure-v<version>.en.md and .ja.md.
+# English and Japanese notes: docs/releases/<prefix>-v<version>.en.md and .ja.md.
 #
 # Output: the English notes, a blank line, a line "---", a blank line and the
 # Japanese notes. Trailing newlines of each part are dropped before joining and
@@ -13,19 +13,24 @@ readonly separator=$'\n\n---\n\n'
 
 script_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
 repo_root="$(cd -- "$(dirname -- "$script_path")/.." && pwd)"
+prefix="pure"
 version=""
 output=""
 self_test=false
 
 usage() {
-    printf '%s\n' "Usage: $0 [--repo-root <path>] --version <version> --output <file> | --self-test" >&2
-    printf '%s\n' "  Writes docs/releases/pure-v<version>.en.md, a --- separator and the .ja.md file to <file>." >&2
+    printf '%s\n' "Usage: $0 [--repo-root <path>] [--prefix <pure|pureTemplates>] --version <version> --output <file> | --self-test" >&2
+    printf '%s\n' "  Writes docs/releases/<prefix>-v<version>.en.md, a --- separator and the .ja.md file to <file>." >&2
 }
 
 while (($# > 0)); do
     case "$1" in
         --repo-root)
             repo_root="$(cd -- "$2" && pwd)"
+            shift 2
+            ;;
+        --prefix)
+            prefix="$2"
             shift 2
             ;;
         --version)
@@ -72,17 +77,19 @@ read_notes() {
     printf '%s' "$content"
 }
 
-# compose <root> <version> <output>
+# compose <root> <version> <output> [prefix]
 compose() {
     local root="$1"
     local wanted="$2"
     local target="$3"
+    local prefix="${4-pure}"
     local english
     local japanese
 
+    [[ "$prefix" == pure || "$prefix" == pureTemplates ]] || { problem "not a known prefix: $prefix"; return 1; }
     [[ "$wanted" =~ $version_pattern ]] || { problem "not a plain version: $wanted"; return 1; }
-    english="$(read_notes "$root/docs/releases/pure-v${wanted}.en.md" "docs/releases/pure-v${wanted}.en.md")" || return 1
-    japanese="$(read_notes "$root/docs/releases/pure-v${wanted}.ja.md" "docs/releases/pure-v${wanted}.ja.md")" || return 1
+    english="$(read_notes "$root/docs/releases/${prefix}-v${wanted}.en.md" "docs/releases/${prefix}-v${wanted}.en.md")" || return 1
+    japanese="$(read_notes "$root/docs/releases/${prefix}-v${wanted}.ja.md" "docs/releases/${prefix}-v${wanted}.ja.md")" || return 1
     mkdir -p "$(dirname -- "$target")"
     printf '%s%s%s\n' "$english" "$separator" "$japanese" > "$target"
 }
@@ -110,7 +117,7 @@ st_expect_failure() {
     local messages
     local status=0
 
-    messages="$(compose "$root" "$wanted" "$output_file" 2>&1)" || status=$?
+    messages="$(compose "$root" "$wanted" "$output_file" "${5-pure}" 2>&1)" || status=$?
     if [[ "$status" -ne 1 ]]; then
         printf 'case FAILED (expected exit 1, got %s): %s\n' "$status" "$name" >&2
         st_failures=$((st_failures + 1))
@@ -143,6 +150,21 @@ run_self_test() {
         printf 'case FAILED: the composed body differs from the expected bytes\n' >&2
         st_failures=$((st_failures + 1))
     fi
+
+    root="$(st_root templates)"
+    printf 'EN\n\n' > "$root/docs/releases/pureTemplates-v1.2.3.en.md"
+    printf 'JA' > "$root/docs/releases/pureTemplates-v1.2.3.ja.md"
+    compose "$root" "1.2.3" "$tmp_dir/templates.md" pureTemplates
+    expected=$'EN\n\n---\n\nJA\n'
+    if [[ "$(cat "$tmp_dir/templates.md"; printf x)" == "${expected}x" ]]; then
+        printf 'case passed: pureTemplates-exact-output (pass)\n'
+    else
+        printf 'case FAILED: pureTemplates exact bytes\n' >&2
+        st_failures=$((st_failures + 1))
+    fi
+    st_expect_failure unknown-prefix 'not a known prefix: other' "$root" 1.2.3 other
+    st_expect_failure prefix-with-path-elements 'not a known prefix: ../x' "$root" 1.2.3 ../x
+    st_expect_failure missing-template-notes 'missing release notes: docs/releases/pureTemplates-v2.0.0.en.md' "$root" 2.0.0 pureTemplates
 
     root="$(st_root preview)"
     printf 'EN\n' > "$root/docs/releases/pure-v10.0.0-preview.1.en.md"
@@ -192,5 +214,5 @@ if [[ "$self_test" == "true" ]]; then
 fi
 
 [[ -n "$version" && -n "$output" ]] || { usage; exit 2; }
-compose "$repo_root" "$version" "$output" || exit 1
-printf 'Composed %s from docs/releases/pure-v%s.en.md and .ja.md\n' "$output" "$version"
+compose "$repo_root" "$version" "$output" "$prefix" || exit 1
+printf 'Composed %s from docs/releases/%s-v%s.en.md and docs/releases/%s-v%s.ja.md\n' "$output" "$prefix" "$version" "$prefix" "$version"

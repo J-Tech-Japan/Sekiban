@@ -6,6 +6,10 @@ on:
     paths:
       - 'templates/Sekiban.Pure.Templates/**'
       - 'eng/validate-pure-templates.sh'
+      - '.github/workflows/packagesPureTemplate.yml'
+      - 'eng/validate-pure-template-release-workflow.sh'
+      - 'eng/compose-pure-release-body.sh'
+      - 'docs/releases/pureTemplates-v*.md'
       - '.github/workflows/pure_template_check.yml'
 
 permissions:
@@ -29,6 +33,15 @@ jobs:
       - name: Validate the template tree
         run: ./eng/validate-pure-templates.sh --repo-root .
 
+      - name: Check the wiring of the template release workflow
+        run: ./eng/validate-pure-template-release-workflow.sh --repo-root . --self-test
+
+      - name: Compose the release body of the package version
+        run: |
+          VERSION="$(python3 -I -c 'import xml.etree.ElementTree as E; p=E.parse("templates/Sekiban.Pure.Templates/Sekiban.Pure.Templates.csproj"); print(p.findtext(".//PackageVersion"))')"
+          [[ -n "$VERSION" && "$VERSION" != None ]]
+          ./eng/compose-pure-release-body.sh --repo-root . --prefix pureTemplates --version "$VERSION" --output "$RUNNER_TEMP/release-body.md"
+
       - name: Install the folder and generate both apps
         run: |
           dotnet new install ./templates/Sekiban.Pure.Templates --debug:custom-hive "$RUNNER_TEMP/hive"
@@ -44,7 +57,7 @@ jobs:
 
       - name: Pack and check the package name
         run: |
-          dotnet pack templates/Sekiban.Pure.Templates -c Release -o "$RUNNER_TEMP/pack"
+          dotnet pack templates/Sekiban.Pure.Templates -c Release -o "$RUNNER_TEMP/pack" -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905
           VERSION="$(python3 -I -c 'import xml.etree.ElementTree as E; p=E.parse("templates/Sekiban.Pure.Templates/Sekiban.Pure.Templates.csproj"); print(p.findtext(".//PackageVersion"))')"
           [[ -n "$VERSION" && "$VERSION" != None ]]
           shopt -s nullglob

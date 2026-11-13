@@ -266,6 +266,11 @@ is_allowed_change() {
         docs/llm/*.md|docs/llm_ja/*.md|\
         eng/pure-maintenance-mode/canonical-block.md|eng/pure-maintenance-mode/targets.txt|\
         templates/Sekiban.Pure.Templates/*|\
+        .github/workflows/packageTemplate.yml|\
+        .github/workflows/packagesPureTemplate.yml|\
+        eng/validate-pure-template-release-workflow.sh|\
+        eng/compose-pure-release-body.sh|\
+        docs/releases/pureTemplates-v*.md|\
         eng/validate-pure-templates.sh|.github/workflows/pure_template_check.yml|\
         eng/validate-pure-maintenance-mode.sh|.github/workflows/pure_maintenance_policy.yml)
             return 0
@@ -409,6 +414,11 @@ run_self_test() {
     printf '%s\n' \
         'templates/Sekiban.Pure.Templates/content/Sekiban.Orleans.Aspire/OrleansSekiban.ApiService/OrleansSekiban.ApiService.csproj' \
         'eng/validate-pure-templates.sh' \
+        '.github/workflows/packageTemplate.yml' \
+        '.github/workflows/packagesPureTemplate.yml' \
+        'eng/validate-pure-template-release-workflow.sh' \
+        'eng/compose-pure-release-body.sh' \
+        'docs/releases/pureTemplates-v10.0.0.en.md' \
         '.github/workflows/pure_template_check.yml' > "$fixture/changed-files.txt"
     "$script_path" --repo-root "$fixture" --changed-files-file "$fixture/changed-files.txt"
     printf 'pass case: template-scope\n'
@@ -417,6 +427,12 @@ run_self_test() {
     copy_fixture "$fixture"
     printf '%s\n' 'pure/src/Sekiban.Pure/Sekiban.Pure.csproj' > "$fixture/changed-files.txt"
     expect_failure "docs-only-scope" "$script_path" --repo-root "$fixture" --changed-files-file "$fixture/changed-files.txt"
+
+    fixture="$tmp_dir/mutant-library-release-scope"
+    copy_fixture "$fixture"
+    printf '%s\n' '.github/workflows/packagesPure.yml' > "$fixture/changed-files.txt"
+    expect_failure "library-release-scope" "$script_path" --repo-root "$fixture" --changed-files-file "$fixture/changed-files.txt"
+    grep -Fq 'docs-only scope violation' "$tmp_dir/library-release-scope.log" || fail "library release scope failed for the wrong reason"
 
     fixture="$tmp_dir/mutant-workflow-command"
     copy_fixture "$fixture"

@@ -127,6 +127,17 @@ def validate(root):
     version = package_versions[0].text
     require(bool(version) and version.strip() == version, 'PackageVersion must be nonempty and exact')
     require(versions[0].text == version, 'Version differs from PackageVersion')
+    tools = [r for r in fields(project, 'PackageReference')
+             if r.get('Include') == 'Microsoft.TemplateEngine.Tasks']
+    require(len(tools) == 1 and bool(re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?',
+                                                tools[0].get('Version', ''))),
+            'Microsoft.TemplateEngine.Tasks must be pinned to an exact version')
+    source_link = [r for r in fields(project, 'PackageReference')
+                   if r.get('Update') == 'Microsoft.SourceLink.GitHub']
+    require(len(source_link) == 1, 'Microsoft.SourceLink.GitHub must be updated in the package project')
+    major = re.match(r'^(\d+)\.', source_link[0].get('Version', ''))
+    require(major is not None and int(major[1]) >= 10,
+            'Microsoft.SourceLink.GitHub version must be 10 or newer')
     references = {ORLEANS: 0, DAPR: 0}
     projects = [p for p in texts if p == PACKAGE or (p.suffix == '.csproj' and p.parts[0] == 'content')]
     for relative in projects:
@@ -217,6 +228,9 @@ def self_test(root, script):
         banner = (base / POLICY).read_bytes().removesuffix(b'\n')
         # (case name, file, exact old bytes, replacement bytes, diagnostic substring).
         cases = [
+            ('build-tool-floating', PACKAGE, b'Version="7.0.120"', b'Version="*"', 'Microsoft.TemplateEngine.Tasks must be pinned to an exact version'),
+            ('source-link-update-removed', PACKAGE, b'    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.404" />\n', b'', 'Microsoft.SourceLink.GitHub must be updated in the package project'),
+            ('source-link-old', PACKAGE, b'Version="10.0.404"', b'Version="8.0.0"', 'Microsoft.SourceLink.GitHub version must be 10 or newer'),
             ('version-differs', PACKAGE, b'<Version>10.0.0</Version>', b'<Version>10.0.1</Version>', 'Version differs from PackageVersion'),
             ('second-version', PACKAGE, b'<Version>10.0.0</Version>', b'<Version>10.0.1</Version><Version>10.0.2</Version>', 'exactly one Version'),
             ('preview-reference', ORLEANS / 'OrleansSekiban.Domain/OrleansSekiban.Domain.csproj', b'Include="Sekiban.Pure" Version="10.0.0"', b'Include="Sekiban.Pure" Version="1.0.1-preview21"', r'stale pattern 1\.0\.1-preview'),
