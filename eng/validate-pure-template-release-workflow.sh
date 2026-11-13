@@ -178,6 +178,7 @@ validate_release_workflow() {
     require_step_with_line "$file" 'Mint short-lived NuGet key' '          user: ${{ secrets.NUGET_USER }}'
     require_step_with_line "$file" 'Push to NuGet.org' '          NUGET_APIKEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}'
     require_step_with_line "$file" 'Push to NuGet.org' '        run: dotnet nuget push out/*.nupkg --api-key "$NUGET_APIKEY" --source https://api.nuget.org/v3/index.json --skip-duplicate'
+    require_step_with_line "$file" 'Create GitHub Release' '        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2'
     require_step_with_line "$file" 'Create GitHub Release' '          body_path: out/release-body.md'
     require_step_with_line "$file" 'Create GitHub Release' '          make_latest: '"'"'false'"'"''
     forbid_step_prefix "$file" "$step_login" "        run:"
@@ -334,6 +335,7 @@ run_self_test() {
     st_mutant build-NU1900-removed "$release_workflow" 's~\ \ \ \ \ \ \ \ \ \ \ \ dotnet\ build\ "\$RUNNER_TEMP/gen/\$name/\$name\.sln"\ \-c\ Release\ \-warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905~            dotnet build "\$RUNNER_TEMP/gen/\$name/\$name.sln" -c Release -warnaserror:NU1901,NU1902,NU1903,NU1904,NU1905~m' 'lacks line [            dotnet build "$RUNNER_TEMP/gen/$name/$name.sln" -c Release -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905]' 'dotnet build "$RUNNER_TEMP/gen/$name/$name.sln" -c Release -warnaserror:NU1901,NU1902,NU1903,NU1904,NU1905'
     st_mutant dotnet-test-removed "$release_workflow" 's~\ \ \ \ \ \ \ \ \ \ \ \ dotnet\ test\ "\$RUNNER_TEMP/gen/\$name/\$name\.Unit/\$name\.Unit\.csproj"\ \-c\ Release\ \-\-no\-build~~m' 'lacks line [            dotnet test "$RUNNER_TEMP/gen/$name/$name.Unit/$name.Unit.csproj" -c Release --no-build]'
     st_mutant compose-prefix-removed "$release_workflow" 's/ --prefix pureTemplates//' '--prefix pureTemplates --version'
+    st_mutant release-action-unpinned "$release_workflow" 's/softprops\/action-gh-release\@[0-9a-f]{40} # v2\.6\.2/softprops\/action-gh-release\@v2/' 'lacks line [        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2]' 'action-gh-release@v2'
     st_mutant body-path-removed "$release_workflow" 's/^          body_path: out\/release-body\.md\n//m' 'lacks line [          body_path: out/release-body.md]'
     st_mutant make-latest-true "$release_workflow" 's/make_latest: '"'"'false'"'"'/make_latest: '"'"'true'"'"'/' 'lacks line [          make_latest: '"'"'false'"'"']' 'make_latest: '"'"'true'"'"''
     st_mutant generate-after-login "$release_workflow" 's/(      - name: Generate, build and test both apps from the package\n.*?\n\n)(      - name: Compose release body\n.*?\n\n)(      - name: Mint short-lived NuGet key\n.*?\n\n)/$2$3$1/s' 'steps are not in the order'
@@ -345,7 +347,7 @@ run_self_test() {
     st_mutant check-strict-pack-removed "$check_workflow" 's~\ \ \ \ \ \ \ \ \ \ dotnet\ pack\ templates/Sekiban\.Pure\.Templates\ \-c\ Release\ \-o\ "\$RUNNER_TEMP/pack"\ \-warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905\
 ~~m' 'missing line [          dotnet pack templates/Sekiban.Pure.Templates -c Release -o "$RUNNER_TEMP/pack" -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905]'
     ((st_failures == 0)) || fail "$st_failures self-test case(s) failed"
-    printf 'Self-test passed: 1 pass case; 42 mutants killed (exit 1 and reason asserted).\n'
+    printf 'Self-test passed: 1 pass case; 43 mutants killed (exit 1 and reason asserted).\n'
 }
 
 validate_all "$repo_root" || exit 1
