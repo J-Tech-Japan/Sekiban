@@ -1,0 +1,14 @@
+# Sekiban DCB 10.24.3
+
+- バージョン: `10.24.3`。DCB ライブラリは 26 パッケージです。net9.0 と net10.0 を対象とします。
+- マテリアライズドビューの初期化の修正（[#1362](https://github.com/J-Tech-Japan/Sekiban/issues/1362)）と、インメモリのイベントストアの修正（[#1340](https://github.com/J-Tech-Japan/Sekiban/issues/1340)）です。公開 API と依存パッケージは 10.24.2 から変わっていません。Orleans は 10.4.2 のままです。
+- DCB のイベントデータの移行は不要です。
+
+## 修正
+
+- `MvInitializationMode.CreateOrEnsure` のマテリアライズドビューで、2 つのコンポーネントが同じデータベースを同時に初期化しても、ホストが止まらないようにしました。たとえば起動時の catch-up worker と Orleans のマテリアライズドビューの grain です。以前は両方が同時にスキーマの SQL を実行し、PostgreSQL では片方がエラー 23505（`pg_type_typname_nsp_index`）で失敗することがありました。既定の `StopHost` の動作では、そのままホストが止まっていました。今は、同じデータベースの初期化を 1 つずつ順に実行します。
+- `InMemoryEventStore.GetLatestTagAsync` が、イベントのないタグに対して、PostgreSQL と Cosmos DB のストアと同じく空のタグ状態（バージョン 0）を返すようにしました。以前はエラーを返していたため、インメモリのストアでは、いずれかの予約を確定した後、そのようなタグへの予約がすべて失敗していました（"has been modified or could not be refreshed authoritatively"）。
+
+## テンプレート
+
+10.24.3 のテンプレートは、ライブラリの後に、別途リリースします。

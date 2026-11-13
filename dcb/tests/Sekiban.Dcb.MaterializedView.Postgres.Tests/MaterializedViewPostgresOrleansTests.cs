@@ -1,3 +1,9 @@
+using Dcb.Domain.WithoutResult;
+using Dcb.Domain.WithoutResult.MaterializedViews;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Sekiban.Dcb.MaterializedView.Postgres;
+using Sekiban.Dcb.Postgres;
 using Dapper;
 using Dcb.Domain.WithoutResult.Weather;
 using Dcb.Domain.WithoutResult.Order;
@@ -17,6 +23,51 @@ public sealed class MaterializedViewPostgresOrleansCollection : ICollectionFixtu
 [Collection(nameof(MaterializedViewPostgresOrleansCollection))]
 public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgresOrleansFixture fixture)
 {
+    [SkippableFact]
+    public async Task WorkerAndOrleansGrain_ConcurrentStartup_DoesNotStopHost()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.AvailabilityMessage);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        var token = timeout.Token;
+        var serviceId = DefaultServiceIdProvider.DefaultServiceId;
+        var grain = fixture.Client.GetGrain<IMaterializedViewGrain>(MvGrainKey.Build(serviceId, "G161Startup", 1));
+        await fixture.ResetAsync();
+        using var host = new HostBuilder().ConfigureServices(services =>
+        {
+            services.AddSingleton(DomainType.GetDomainTypes());
+            services.AddSekibanDcbPostgres(fixture.ConnectionString);
+            services.AddSekibanDcbMaterializedView(options =>
+            {
+                options.ServiceId = serviceId;
+                options.AllowDefaultServiceId = true;
+                options.PollInterval = TimeSpan.FromMilliseconds(50);
+            });
+            services.AddMaterializedView<G161StartupProjector>();
+            services.AddSekibanDcbMaterializedViewPostgres(fixture.ConnectionString, registerHostedWorker: true);
+        }).Build();
+        try
+        {
+            await Task.WhenAll(host.StartAsync(token), grain.RefreshAsync()).WaitAsync(token);
+            var worker = Assert.Single(host.Services.GetServices<IHostedService>().OfType<MvCatchUpWorker>());
+            var registry = host.Services.GetRequiredService<IMvRegistryStore>();
+            while ((await registry.GetEntriesAsync(serviceId, "G161Startup", 1, token)).Count < 1)
+            {
+                await Task.Delay(20, token);
+            }
+            // Let the background worker finish its initialization/catch-up cycle before checking host survival.
+            await Task.Delay(250, token);
+            Assert.False(host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.IsCancellationRequested);
+            Assert.NotNull(worker.ExecuteTask);
+            Assert.False(worker.ExecuteTask.IsFaulted, worker.ExecuteTask.Exception?.ToString());
+            Assert.NotNull(await grain.GetStatusAsync());
+        }
+        finally
+        {
+            await host.StopAsync(CancellationToken.None);
+            await grain.RequestDeactivationAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        }
+    }
+
     [SkippableFact]
     public async Task Grain_CatchesUp_Then_Applies_Streamed_Event_To_Postgres_View()
     {
@@ -1545,4 +1596,18 @@ public sealed class MaterializedViewPostgresOrleansTests(MaterializedViewPostgre
         public string Location { get; set; } = string.Empty;
         public string LastSortableUniqueId { get; set; } = string.Empty;
     }
+}
+
+public sealed class G161StartupProjector : IMaterializedViewProjector
+{
+    public string ViewName => "G161Startup";
+    public int ViewVersion => 1;
+    public Task InitializeAsync(IMvInitContext ctx, CancellationToken cancellationToken = default)
+    {
+        var table = ctx.RegisterTable("items").PhysicalName;
+        return ctx.ExecuteAsync($"CREATE TABLE IF NOT EXISTS {table} (id INT PRIMARY KEY);",
+            cancellationToken: cancellationToken);
+    }
+    public Task<IReadOnlyList<MvSqlStatement>> ApplyToViewAsync(Event ev, IMvApplyContext ctx,
+        CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<MvSqlStatement>>([]);
 }
