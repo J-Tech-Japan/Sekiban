@@ -1,13 +1,17 @@
 # Sekiban DCB 10.24.3
 
 - バージョン: `10.24.3`。DCB ライブラリは 26 パッケージです。net9.0 と net10.0 を対象とします。
-- マテリアライズドビューの初期化の修正（[#1362](https://github.com/J-Tech-Japan/Sekiban/issues/1362)）と、インメモリのイベントストアの修正（[#1340](https://github.com/J-Tech-Japan/Sekiban/issues/1340)）です。公開 API と依存パッケージは 10.24.2 から変わっていません。Orleans は 10.4.2 のままです。
+- マテリアライズドビューの初期化の修正（[#1362](https://github.com/J-Tech-Japan/Sekiban/issues/1362)）と、インメモリのイベントストアの修正（[#1340](https://github.com/J-Tech-Japan/Sekiban/issues/1340)）、それに複数のタグを持つイベントの PostgreSQL への追記の高速化（[#1347](https://github.com/J-Tech-Japan/Sekiban/issues/1347)）です。公開 API と依存パッケージは 10.24.2 から変わっていません。Orleans は 10.4.2 のままです。
 - DCB のイベントデータの移行は不要です。
 
 ## 修正
 
 - `MvInitializationMode.CreateOrEnsure` のマテリアライズドビューで、2 つのコンポーネントが同じデータベースを同時に初期化しても、ホストが止まらないようにしました。たとえば起動時の catch-up worker と Orleans のマテリアライズドビューの grain です。以前は両方が同時にスキーマの SQL を実行し、PostgreSQL では片方がエラー 23505（`pg_type_typname_nsp_index`）で失敗することがありました。既定の `StopHost` の動作では、そのままホストが止まっていました。今は、同じデータベースの初期化を 1 つずつ順に実行します。
 - `InMemoryEventStore.GetLatestTagAsync` が、イベントのないタグに対して、PostgreSQL と Cosmos DB のストアと同じく空のタグ状態（バージョン 0）を返すようにしました。以前はエラーを返していたため、インメモリのストアでは、いずれかの予約を確定した後、そのようなタグへの予約がすべて失敗していました（"has been modified or could not be refreshed authoritatively"）。
+
+## 性能
+
+- PostgreSQL: イベントのタグが 2 つ以上あるとき、タグの head の更新を、タグごとに数本の SQL を送る方式から、タグの数によらない一定数の一括 SQL に変えました。よくある場合（タグの head がすでにあり、修復が要らない場合）、タグの数によらず tag head の SQL は 4 本です。以前はタグ 1 つにつき 4 本で、タグ 20 個なら 80 本でした。ロックの順序、競合と修復の動作、結果は変わりません。タグが 1 つの追記は、以前と同じ SQL を使います。手元のベンチマークでは、タグ 5 個の追記が約 2 倍、タグ 20 個の追記が約 2.4〜3.7 倍、共有タグ 1 つと個別のタグ 4 つで 16 並列に書き込む場合が約 1.8 倍速くなりました。タグ 1 つの追記の速さは変わりません。スキーマの変更は不要です。
 
 ## テンプレート
 
