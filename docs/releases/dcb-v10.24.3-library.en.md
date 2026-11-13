@@ -11,7 +11,7 @@
 
 ## Performance
 
-- PostgreSQL: an append whose events carry two or more distinct tags now updates the tag heads with a fixed number of set-based statements instead of several statements per tag. For tags whose heads already exist, a successful append sends 4 tag-head statements for any number of tags; before, it sent 4 per tag (80 for 20 tags). The lock order, the conflict and repair behaviour, and the results are unchanged, and an append with a single tag runs the same SQL as before. In a local benchmark, appends with 5 tags were about 2 times faster, appends with 20 tags about 2.4 to 3.7 times faster, and 16 concurrent writers sharing one tag plus 4 private tags about 1.8 times faster; single-tag appends were unchanged. No schema change is needed.
+- PostgreSQL: an append whose events carry two or more distinct tags now updates the tag heads with a fixed number of set-based statements instead of several statements per tag. In the common case (the tag heads already exist and no repair is needed), an append sends 4 tag-head statements for any number of tags; before, it sent 4 per tag (80 for 20 tags). The lock order, the conflict and repair behaviour, and the results are unchanged, and an append with a single tag runs the same SQL as before. In a local benchmark, appends with 5 tags were about 2 times faster, appends with 20 tags about 2.4 to 3.7 times faster, and 16 concurrent writers sharing one tag plus 4 private tags about 1.8 times faster; single-tag appends were unchanged. No schema change is needed.
 
 ## Templates
 
