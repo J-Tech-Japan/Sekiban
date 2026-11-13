@@ -144,6 +144,8 @@ if (!isLocalDevelopment)
 // Configure Orleans
 builder.UseOrleans(config =>
 {
+    // Restoring a large multi-projection snapshot can take longer than the default 30 s activation timeout.
+    config.Configure<Orleans.Configuration.GrainCollectionOptions>(options => options.ActivationTimeout = TimeSpan.FromMinutes(5));
     if (isLocalDevelopment)
     {
         // Local development: use localhost clustering
@@ -258,7 +260,9 @@ builder.UseOrleans(config =>
             EnableDynamicSafeWindow = !useInMemoryStreams,
             MaxExtraSafeWindowMs = 30000,
             LagEmaAlpha = 0.3,
-            LagDecayPerSecond = 0.98
+            LagDecayPerSecond = 0.98,
+            // A query during catch-up waits at most 5 s, then gets 503 + Retry-After (below the web front ends' 10 s attempt timeout).
+            FirstQueryCatchUpMaxWaitMs = 5000
         };
         // Per-activation scope is appropriate; Orleans constructs grains per activation
         services.AddTransient<GeneralMultiProjectionActorOptions>(_ => dynamicOptions);
