@@ -54,36 +54,48 @@ This template includes:
 
 ### 1. App Host Configuration
 
-Add PostgreSQL password to secrets.json:
-
-```json
-{
-  "Parameters:postgres-password": "your_strong_password"
-}
-```
-
-### 2. Optional: Cluster Settings
-
-Modify AppHost Program.cs for your clustering needs:
+No secret is needed to start: the AppHost runs Azure Storage (Azurite) and PostgreSQL in Docker containers, and Aspire generates the PostgreSQL password. To choose the password yourself, add `"Parameters:postgres-password": "your_strong_password"` to the user secrets of the AppHost project and pass the parameter to `AddPostgres`:
 
 ```csharp
-var storage = builder.AddAzureStorage("azurestorage")
-    .RunAsEmulator(r => r.WithImage("azure-storage/azurite", "3.33.0"));
-var clusteringTable = storage.AddTables("orleans-sekiban-clustering");
-var grainStorage = storage.AddBlobs("orleans-sekiban-grain-state");
-
 var postgresPassword = builder.AddParameter("postgres-password", true);
 var postgres = builder
     .AddPostgres("orleansSekibanPostgres", password: postgresPassword)
     .WithPgAdmin()
     .AddDatabase("SekibanPostgres");
+```
+
+### 2. Optional: Cluster Settings
+
+The AppHost `Program.cs` of the template wires Azure Storage, PostgreSQL and Orleans as shown below; change it for your own clustering needs:
+
+```csharp
+var storage = builder.AddAzureStorage("azurestorage")
+    // .RunAsEmulator(opt => opt.WithDataVolume());
+    .RunAsEmulator();
+var clusteringTable = storage.AddTables("OrleansSekibanClustering");
+var grainTable = storage.AddTables("OrleansSekibanGrainTable");
+var grainStorage = storage.AddBlobs("OrleansSekibanGrainState");
+var queue = storage.AddQueues("OrleansSekibanQueue");
+
+
+
+var postgres = builder
+    .AddPostgres("orleansSekibanPostgres")
+    // .WithDataVolume() // Uncomment to use a data volume
+    .WithPgAdmin()
+    .AddDatabase("SekibanPostgres");
 
 var orleans = builder.AddOrleans("default")
     .WithClustering(clusteringTable)
-    .WithGrainStorage("Default", grainStorage);
+    .WithGrainStorage("Default", grainStorage)
+    .WithGrainStorage("OrleansSekibanQueue", grainStorage)
+    .WithGrainStorage("OrleansSekibanGrainTable", grainTable)
+    .WithStreaming(queue);
 ```
 
 ## Dapr Template Configuration
+
+Status on .NET 10: the Dapr template restores, builds and passes its unit tests. It has not been run end to end against a Dapr runtime (placement service, scheduler and sidecars) for this version.
 
 ### 1. Dapr Components
 
