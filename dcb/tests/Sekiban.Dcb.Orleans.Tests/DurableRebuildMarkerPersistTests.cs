@@ -263,29 +263,15 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             Assert.True((await SlotAsync()).IsTombstoned);
             var writes = Env.StateStore.WriteCount;
             saveGate.Release.TrySetResult();
-            // A's snapshot was captured while A was clean, so A is not a signalling host (item 1c does not apply).
-            // Streaming parks the ordering read inside the external save, after the last host check, so A's stale
-            // checkpoint commits over B's tombstone. Non-streaming parks the ordering read before its last host
-            // check, which sees the swap and stops without an external write. Either way the marker survives.
-            long expectedWrites;
-            if (streaming)
-            {
-                await FirstQueryBoundedWaitClusterTests.PollUntilAsync(() =>
-                    Task.FromResult(Env.StateStore.WriteCount > writes && MarkerGrainStorage.Read().LastGoodSafeVersion == 1));
-                var staleSlot = await SlotAsync();
-                Assert.True(staleSlot.IsActive); // A's old snapshot really committed over B's tombstone.
-                Assert.Equal(1L, staleSlot.Record!.EventsProcessed);
-                Assert.Equal(staleSlot.Record.LastSortableUniqueId, MarkerGrainStorage.Read().LastSortableUniqueId);
-                expectedWrites = writes + 1;
-            }
-            else
-            {
-                await WaitForIdleAsync(grain);
-                await Task.Delay(2000); // Let the released timer persist finish; it must not write.
-                Assert.True((await SlotAsync()).IsTombstoned);
-                Assert.NotEqual(1, MarkerGrainStorage.Read().LastGoodSafeVersion);
-                expectedWrites = writes;
-            }
+            // A's snapshot was captured while A was clean, so A is not a signalling host (item 1c does not apply), but
+            // A was swapped out while its persist was parked (SEK-G156: a superseded host never writes). In both modes the
+            // resumed persist stops without an external write, A's old snapshot never commits over B's tombstone, and
+            // the marker survives.
+            await WaitForIdleAsync(grain);
+            await Task.Delay(2000); // Let the released timer persist finish; it must not write.
+            Assert.True((await SlotAsync()).IsTombstoned);
+            Assert.NotEqual(1, MarkerGrainStorage.Read().LastGoodSafeVersion);
+            var expectedWrites = writes;
             Assert.Equal(expectedWrites, Env.StateStore.WriteCount);
             var metadata = MarkerGrainStorage.Read();
             Assert.True(metadata.RebuildRequired);

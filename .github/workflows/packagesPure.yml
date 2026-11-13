@@ -8,19 +8,23 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: pure-release
+    permissions:
+      contents: write
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET 8
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
-      - name: Setup .NET 9
+      - name: Setup .NET 11
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 11.0.x
 
       - name: Detect version from tag
         run: |
@@ -32,12 +36,10 @@ jobs:
           echo "VERSION=${TAG#pure-v}" >> $GITHUB_ENV
 
       - name: Restore dependencies
-        run: |
-          dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
-          dotnet restore Sekiban.slnx
+        run: dotnet restore pure/Sekiban.Pure.slnx
 
       - name: Build with dotnet
-        run: dotnet build Sekiban.slnx -c Release
+        run: dotnet build pure/Sekiban.Pure.slnx -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
 
       - name: Pack NuGet packages
         run: |
@@ -54,12 +56,31 @@ jobs:
           dotnet pack pure/src/Sekiban.Pure.xUnit/Sekiban.Pure.xUnit.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
           dotnet pack pure/src/Sekiban.Pure.ReadModel/Sekiban.Pure.ReadModel.csproj -c Release -o out -p:PackageVersion=$VERSION --no-build
 
+      - name: Audit shipped packages for vulnerabilities
+        run: ./eng/validate-pure-security-audit.sh --repo-root .
+
+      - name: Validate packed packages
+        run: ./eng/validate-pure-packages.sh --repo-root . --dir out --version "$VERSION"
+
+      - name: Compose release body
+        run: ./eng/compose-pure-release-body.sh --repo-root . --version "$VERSION" --output out/release-body.md
+
+      - name: Mint short-lived NuGet key
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Push to NuGet.org
-        run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.NUGET_APIKEY }} --source https://api.nuget.org/v3/index.json
+        env:
+          NUGET_APIKEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push out/*.nupkg --api-key "$NUGET_APIKEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           files: out/*.nupkg
+          body_path: out/release-body.md
+          make_latest: 'false'
   

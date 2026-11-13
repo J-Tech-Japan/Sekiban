@@ -42,6 +42,7 @@
     <Project Path="tests/MemStat.Net.Test/MemStat.Net.Test.csproj" />
     <Project Path="tests/Pure.Domain.Test/Pure.Domain.Test.csproj" />
     <Project Path="tests/Pure.Domain.xUnit/Pure.Domain.xUnit.csproj" />
+    <Project Path="tests/Sekiban.Pure.Compatibility.Tests/Sekiban.Pure.Compatibility.Tests.csproj" />
     <Project Path="tests/Sekiban.Pure.Dapr.Tests/Sekiban.Pure.Dapr.Tests.csproj" />
   </Folder>
 </Solution>

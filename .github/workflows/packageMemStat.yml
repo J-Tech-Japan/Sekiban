@@ -17,6 +17,10 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 9.0.x
+    - name: Setup .NET 11
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 11.0.x
     - name: Restore dependencies
       run: |
         pushd ./

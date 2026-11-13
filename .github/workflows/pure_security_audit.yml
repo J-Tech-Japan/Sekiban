@@ -1,0 +1,36 @@
+name: Pure security audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'pure/**'
+      - 'Directory.Build.props'
+      - 'global.json'
+      - 'eng/validate-pure-security-audit.sh'
+      - '.github/workflows/pure_security_audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Setup .NET 11
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+      - name: Self-test of the audit decision logic (fixtures, no network)
+        run: ./eng/validate-pure-security-audit.sh --repo-root . --self-test
+      - name: Audit the 12 shipped Sekiban.Pure packages
+        run: ./eng/validate-pure-security-audit.sh --repo-root .

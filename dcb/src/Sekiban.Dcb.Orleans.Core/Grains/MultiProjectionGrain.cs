@@ -129,6 +129,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // Host-instance lifetime, independent of query-gate arm generations. Failed restoration without a known
     // record leaves a fresh host pristine, preserving the activation's replay from zero.
     private bool _hostIsPristine = true;
+    // A reference scopes the prohibition to the exact host whose rejected snapshot crossed an invalidation.
+    private IProjectionActorHost? _staleCheckpointHost;
+
+    private sealed class ExternalPersistenceBlockedByStaleHostException : Exception
+    {
+        public ExternalPersistenceBlockedByStaleHostException()
+            : base("External checkpoint persistence is blocked until the stale host is replayed.") { }
+    }
+
+    // A host replaced while its persist was in flight is superseded: its snapshot predates the replacement, so it is
+    // treated like a stale host and never written, whichever host is marked now.
+    private bool IsStaleCheckpointHost(IProjectionActorHost? host) =>
+        host is not null &&
+        (ReferenceEquals(host, _staleCheckpointHost) || (_host is not null && !ReferenceEquals(host, _host)));
 
     // Simple tracking
     private bool _isInitialized;
@@ -973,14 +987,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private async Task<bool> CanSaveToExternalStoreAsync(
         string projectorName,
         string projectorVersion,
-        long localSafeEventsProcessed)
+        long localSafeEventsProcessed,
+        IProjectionActorHost snapshotHost)
     {
         if (_multiProjectionStateStore is null)
         {
             return false;
         }
 
+        if (IsStaleCheckpointHost(snapshotHost)) return false;
         var latestResult = await _multiProjectionStateStore.GetLatestForVersionAsync(projectorName, projectorVersion);
+        // A concurrent persist can mark this host while the read is in flight. This is a deliberate skip,
+        // not a store-ahead/read-failure Warning, and must not build or upload another stale snapshot.
+        if (IsStaleCheckpointHost(snapshotHost)) return false;
         if (!latestResult.IsSuccess)
         {
             _lastError = $"External store read failed: {latestResult.GetException().Message}";
@@ -1100,7 +1119,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         string projectorName,
         PersistCheckpoint checkpoint,
         string filePath,
-        long tempFileSize)
+        long tempFileSize,
+        IProjectionActorHost snapshotHost)
     {
         if (_multiProjectionStateStore is null)
         {
@@ -1108,12 +1128,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         var uploadStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
-        if (!await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint)))
+        if (!await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint), snapshotHost))
         {
             _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
             return new StreamingExternalStorePersistResult(
                 ExternalStoreSaved: false,
-                UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds);
+                UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds,
+                BlockedByFault: IsStaleCheckpointHost(snapshotHost));
         }
 
         var writeRequest = new MultiProjectionStateWriteRequest(
@@ -1146,15 +1167,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var saveResult = await UpsertExternalStateCoordinatedAsync(
             writeRequest,
             uploadStream,
+            snapshotHost,
             _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
         if (!saveResult.IsSuccess)
         {
             // A fault-block is a deliberate skip, not a store failure: log it as such and never report saved.
-            if (saveResult.GetException() is ExternalPersistenceBlockedByFaultException)
+            if (saveResult.GetException() is ExternalPersistenceBlockedByFaultException or ExternalPersistenceBlockedByStaleHostException)
             {
                 _logger.LogDebug(
-                    "[{ProjectorName}] External store save skipped: projection is faulted",
-                    projectorName);
+                    "[{ProjectorName}] External store save skipped: {Reason}",
+                    projectorName, saveResult.GetException().Message);
             }
             else
             {
@@ -1165,7 +1187,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return new StreamingExternalStorePersistResult(
                 ExternalStoreSaved: false,
                 UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds,
-                BlockedByFault: saveResult.GetException() is ExternalPersistenceBlockedByFaultException);
+                BlockedByFault: saveResult.GetException() is ExternalPersistenceBlockedByFaultException or ExternalPersistenceBlockedByStaleHostException);
         }
 
         return new StreamingExternalStorePersistResult(
@@ -1526,14 +1548,55 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // hard crash is the documented known residual.)
     private async Task<Exception?> ResolveRebuildBeforeQueryAsync()
     {
-        if (_host is not IRebuildSignalingHost { RebuildRequired: true })
+        // Preserve the durable runtime rebuild, including a stale host's own retrograde invalidation.
+        if (_host is IRebuildSignalingHost { RebuildRequired: true })
         {
-            return null;
+            await TriggerDurableFullRebuildAsync("query");
+        }
+        else if (IsStaleCheckpointHost(_host) && !ExternalPersistenceBlockedByFault() && _projectionFault is null)
+        {
+            var staleHost = _host;
+            // A read already in flight owns this gate through apply and completion persist. Let it finish on
+            // the stale host before resetting any progress or replacing the host; release before the query barrier.
+            await using (await _catchUpExecutionGate.EnterAsync())
+            {
+                if (ReferenceEquals(_host, staleHost) && IsStaleCheckpointHost(_host) &&
+                    _host is not IRebuildSignalingHost { RebuildRequired: true } &&
+                    !ExternalPersistenceBlockedByFault() && _projectionFault is null)
+                {
+                    _firstQueryGate.Arm();
+                    try
+                    {
+                        var outcome = await _stateStore.ExecuteWriteAsync(
+                            GrainStateWriteKind.OperatorReset, ResetDerivedStateForFullRebuild);
+                        if (outcome != GrainStateWriteOutcome.Committed)
+                            throw new InvalidOperationException("Projection rebuild checkpoint clear was not committed.");
+                        // Interleaved timer work (e.g. the buffer flush) may have faulted the stale host while the write
+                        // was awaited. A fault keeps its G14 operator-reset semantics, so never discard it here.
+                        if (ReferenceEquals(_host, staleHost) && _host?.CurrentFault is null &&
+                            !ExternalPersistenceBlockedByFault() && _projectionFault is null)
+                        {
+                            RecreateHostForFullRebuild();
+                            ArmBoundedFullReplayEpisode();
+                            _orderedRebuildFromFreshHost =
+                                _checkpointMutation is { IsCapable: true, PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true };
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _lastError = $"Projection rebuild external/checkpoint clear failed: {ex.Message}";
+                        _firstQueryGate.Arm();
+                    }
+                }
+            }
+            if (_host is IRebuildSignalingHost { RebuildRequired: true })
+            {
+                await TriggerDurableFullRebuildAsync("query");
+            }
         }
 
-        await TriggerDurableFullRebuildAsync("query");
-
-        if (_host is IRebuildSignalingHost { RebuildRequired: true })
+        if (_host is IRebuildSignalingHost { RebuildRequired: true } ||
+            (IsStaleCheckpointHost(_host) && !ExternalPersistenceBlockedByFault() && _projectionFault is null))
         {
             return new InvalidOperationException(
                 MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix + " the durable rebuild marker is not yet committed, so the query fails "
@@ -1602,7 +1665,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         bool externalSaveBlockedByFault, bool isCompletionPersist, string? lastErrorBeforePersist)
     {
         // Completion runs while catch-up is still active. All other callers are intermediate during replay.
-        if (durableObligationPending && !externalStoreSaved && !externalSaveBlockedByFault)
+        if (durableObligationPending && !externalStoreSaved && !externalSaveBlockedByFault && !IsStaleCheckpointHost(_host))
         {
             if (_catchUpProgress.IsActive && !isCompletionPersist)
             {
@@ -1624,10 +1687,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     }
 
     private async Task<ResultBox<bool>> CompleteSkippedExternalPersistAsync(
-        string projectorName, PersistCheckpoint checkpoint, bool isCompletionPersist, string? lastErrorBeforePersist)
+        string projectorName, PersistCheckpoint checkpoint, bool isCompletionPersist, string? lastErrorBeforePersist,
+        bool staleHostBlocked = false)
     {
         var durableObligationPending = HasPendingDurableRebuildObligation();
-        _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
+        _logger.LogDebug("[{ProjectorName}] External store save skipped: {Reason}", projectorName,
+            staleHostBlocked ? "stale host must replay" : "store ahead or read failed");
         await WriteOrleansStateWithRetryAsync(projectorName, s =>
         {
             s.ProjectorName = projectorName;
@@ -1643,7 +1708,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         });
         _host!.CompactSafeHistory();
         CompactRetainedCollections();
-        CompletePersistErrorState(projectorName, durableObligationPending, false, false,
+        CompletePersistErrorState(projectorName, durableObligationPending, false, staleHostBlocked,
             isCompletionPersist, lastErrorBeforePersist);
         _lastPersistOutcome = PersistOutcomeNoDurableWrite;
         return ResultBox.FromValue(true);
@@ -1734,6 +1799,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var snapshotHost = _host;
             if (await StopPersistForRebuildAsync(snapshotHost)) return ResultBox.FromValue(false);
             var snapshotHostClean = snapshotHost is not IRebuildSignalingHost { RebuildRequired: true };
+            if (IsStaleCheckpointHost(snapshotHost))
+            {
+                return await CompleteSkippedExternalPersistAsync(projectorName, checkpoint, isCompletionPersist, lastErrorBeforePersist,
+                    staleHostBlocked: true);
+            }
             var shortCircuit = TryShortCircuitPersist(projectorName, checkpoint, snapshotHostClean);
             if (shortCircuit is not null)
             {
@@ -1749,9 +1819,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             if (_multiProjectionStateStore is not null &&
-                !await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint)))
+                !await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint), snapshotHost))
             {
-                return await CompleteSkippedExternalPersistAsync(projectorName, checkpoint, isCompletionPersist, lastErrorBeforePersist);
+                return await CompleteSkippedExternalPersistAsync(projectorName, checkpoint, isCompletionPersist, lastErrorBeforePersist,
+                    staleHostBlocked: IsStaleCheckpointHost(snapshotHost));
             }
 
             if (await StopPersistForRebuildAsync(snapshotHost)) return ResultBox.FromValue(false);
@@ -1810,7 +1881,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var externalSaveBlockedByFault = false;
             var externalStoreSaved = _multiProjectionStateStore == null;
             var allowExternalStoreSave = _multiProjectionStateStore is not null &&
-                                         await CanSaveToExternalStoreAsync(projectorName, projectorVersion, ResolveSafeEventsProcessed(checkpoint));
+                                         await CanSaveToExternalStoreAsync(projectorName, projectorVersion, ResolveSafeEventsProcessed(checkpoint), snapshotHost);
 
             if (await StopPersistForRebuildAsync(snapshotHost)) return ResultBox.FromValue(false);
 
@@ -1840,17 +1911,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 var saveResult = await UpsertExternalStateCoordinatedAsync(
                     writeRequest,
                     snapshotStream,
+                    snapshotHost,
                     _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
                 if (!saveResult.IsSuccess)
                 {
                     // externalStoreSaved stays false: no LastGood/persisted metadata may advance after this rejection.
                     // A fault-block is a deliberate skip, not a store failure — log accordingly and never report saved.
-                    if (saveResult.GetException() is ExternalPersistenceBlockedByFaultException)
+                    if (saveResult.GetException() is ExternalPersistenceBlockedByFaultException or ExternalPersistenceBlockedByStaleHostException)
                     {
                         externalSaveBlockedByFault = true;
                         _logger.LogDebug(
-                            "[{ProjectorName}] External store save skipped: projection is faulted",
-                            projectorName);
+                            "[{ProjectorName}] External store save skipped: {Reason}",
+                            projectorName, saveResult.GetException().Message);
                     }
                     else
                     {
@@ -1868,6 +1940,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             if (_multiProjectionStateStore != null && !allowExternalStoreSave)
             {
+                externalSaveBlockedByFault |= IsStaleCheckpointHost(snapshotHost);
                 _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
             }
 
@@ -1966,9 +2039,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         try
         {
             if (_multiProjectionStateStore is not null &&
-                !await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint)))
+                !await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint), snapshotHost))
             {
-                return await CompleteSkippedExternalPersistAsync(projectorName, checkpoint, isCompletionPersist, lastErrorBeforePersist);
+                return await CompleteSkippedExternalPersistAsync(projectorName, checkpoint, isCompletionPersist, lastErrorBeforePersist,
+                    staleHostBlocked: IsStaleCheckpointHost(snapshotHost));
             }
 
             // Step 1: Write snapshot to temp file
@@ -2018,7 +2092,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     projectorName,
                     checkpoint,
                     filePath,
-                    tempFileSize);
+                    tempFileSize,
+                    snapshotHost);
                 var externalStoreSaved = externalStorePersistResult.ExternalStoreSaved;
 
                 var peakMemory = GC.GetTotalMemory(forceFullCollection: false);
@@ -3455,6 +3530,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private Task<ResultBox<bool>> UpsertExternalStateCoordinatedAsync(
         MultiProjectionStateWriteRequest request,
         Stream stream,
+        IProjectionActorHost? snapshotHost,
         int offloadThreshold)
     {
         if (_checkpointMutation is null)
@@ -3468,8 +3544,30 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // The grain holds no raw checkpoint mutation reach. Serialised on the external-store coordinator gate here.
         return _externalStore.UpsertAsync(async () =>
         {
+            // Version rewrites pass null: they serialize a stored record, so guard the live host at gate entry.
+            var writeHost = snapshotHost ?? _host;
+            var sameVersion = string.Equals(request.ProjectorVersion, writeHost?.GetProjectorVersion(), StringComparison.Ordinal);
+            if (sameVersion && IsStaleCheckpointHost(writeHost))
+            {
+                _logger.LogDebug("[{ProjectorName}] External checkpoint save blocked for stale host", request.ProjectorName);
+                return ResultBox.Error<bool>(new ExternalPersistenceBlockedByStaleHostException());
+            }
+
             var previousSlot = _checkpointMutation.AdoptedSlot;
+            var heldGeneration = previousSlot?.Generation ?? 0;
             var result = await _checkpointMutation.PersistAsync(request, stream, offloadThreshold);
+            var adoptedGeneration = _checkpointMutation.AdoptedSlot?.Generation ?? 0;
+            if (!result.IsSuccess && adoptedGeneration > heldGeneration && sameVersion &&
+                ReferenceEquals(writeHost, _host) && !_hostIsPristine && !IsStaleCheckpointHost(writeHost))
+            {
+                _staleCheckpointHost = writeHost;
+                _firstQueryGate.Arm();
+                _logger.LogWarning(
+                    MultiProjectionLogEvents.StaleCheckpointHost,
+                    "[{ProjectorName}] Checkpoint rejection advanced generation {HeldGeneration} to {AdoptedGeneration}; host must replay before saving",
+                    request.ProjectorName, heldGeneration, adoptedGeneration);
+                result = ResultBox.Error<bool>(new ExternalPersistenceBlockedByStaleHostException());
+            }
             if (!ReferenceEquals(previousSlot, _checkpointMutation.AdoptedSlot) || result.IsSuccess)
             {
                 _orderedRebuildFromFreshHost = false;
@@ -3484,6 +3582,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private void RecreateHostForFullRebuild()
     {
         _rebuildWarningLogged = false;
+        // The replaced host stays blocked as superseded; drop the reference so its state can be collected.
+        _staleCheckpointHost = null;
         _eventsProcessed = 0;
         ClearProcessedEventCache();
         _unsafeEventIds.Clear();
@@ -4606,6 +4706,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     var saveResult = await UpsertExternalStateCoordinatedAsync(
                         writeRequest,
                         targetStream,
+                        null,
                         _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
                     // A fault-block returns a ResultBox.Error, so updated stays false and the MetadataMaintenance
                     // ProjectorVersion write below is skipped: no projector-version mutation may happen after rejection.

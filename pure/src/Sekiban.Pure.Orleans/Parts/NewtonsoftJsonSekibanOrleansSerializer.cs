@@ -13,7 +13,7 @@ public class NewtonsoftJsonSekibanOrleansSerializer : IGrainStorageSerializer
             // Similar to IncludeFields = true in System.Text.Json
             ContractResolver = new DefaultContractResolver()
         };
-    public BinaryData Serialize<T>(T input)
+    public BinaryData Serialize<T>(T? input)
     {
         var json = JsonConvert.SerializeObject(input, _settings);
         return BinaryData.FromString(json);
