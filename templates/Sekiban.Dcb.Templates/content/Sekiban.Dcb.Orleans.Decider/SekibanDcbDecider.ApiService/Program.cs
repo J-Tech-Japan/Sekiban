@@ -135,6 +135,8 @@ if (useInMemoryGrainStorage)
     builder.UseOrleans(siloBuilder =>
     {
         ConfigureClusterOptions(siloBuilder, builder.Configuration);
+        // Restoring a large multi-projection snapshot can take longer than the default 30 s activation timeout.
+        siloBuilder.Configure<Orleans.Configuration.GrainCollectionOptions>(options => options.ActivationTimeout = TimeSpan.FromMinutes(5));
         ConfigureEndpoints(siloBuilder, builder.Environment);
         ConfigureClusteringAndStorage(siloBuilder, builder.Configuration, builder.Environment);
         ConfigureStreaming(siloBuilder, builder.Configuration, orleansQueueType);
@@ -148,6 +150,8 @@ else
     builder.Host.UseOrleans((context, siloBuilder) =>
     {
         ConfigureClusterOptions(siloBuilder, context.Configuration);
+        // Restoring a large multi-projection snapshot can take longer than the default 30 s activation timeout.
+        siloBuilder.Configure<Orleans.Configuration.GrainCollectionOptions>(options => options.ActivationTimeout = TimeSpan.FromMinutes(5));
 
         // Configure endpoints for Azure Container Apps (non-development environments)
         ConfigureEndpoints(siloBuilder, context.HostingEnvironment);
@@ -741,7 +745,9 @@ void ConfigureOrleansServices(ISiloBuilder siloBuilder, IHostEnvironment environ
             EnableDynamicSafeWindow = databaseType != "sqlite" && !configuration.GetValue<bool>(InMemoryStreamsConfigKey),
             MaxExtraSafeWindowMs = 30000,
             LagEmaAlpha = 0.3,
-            LagDecayPerSecond = 0.98
+            LagDecayPerSecond = 0.98,
+            // A query during catch-up waits at most 5 s, then gets 503 + Retry-After (below the web front ends' 10 s attempt timeout).
+            FirstQueryCatchUpMaxWaitMs = 5000
         };
         services.AddTransient(_ => dynamicOptions);
     });
