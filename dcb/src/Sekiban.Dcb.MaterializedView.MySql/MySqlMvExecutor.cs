@@ -74,6 +74,10 @@ public sealed class MySqlMvExecutor : MvExecutorBase<MySqlConnection>, IMvExecut
         return connection;
     }
 
+    internal override async Task<IAsyncDisposable?> AcquireInitializationLockAsync(
+        MySqlConnection connection, IDbTransaction transaction, CancellationToken cancellationToken) =>
+        await MySqlMvInitializationLock.AcquireAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+
     protected override IMvApplyQueryPort CreateQueryPort(
         MySqlConnection connection,
         IDbTransaction transaction) =>

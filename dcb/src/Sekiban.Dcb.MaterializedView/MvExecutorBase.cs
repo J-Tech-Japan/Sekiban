@@ -206,6 +206,10 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
 
     protected abstract Task<TConnection> OpenConnectionAsync(CancellationToken cancellationToken);
 
+    internal virtual Task<IAsyncDisposable?> AcquireInitializationLockAsync(
+        TConnection connection, IDbTransaction transaction, CancellationToken cancellationToken) =>
+        Task.FromResult<IAsyncDisposable?>(null);
+
     protected abstract IMvApplyQueryPort CreateQueryPort(
         TConnection connection,
         IDbTransaction transaction);
@@ -349,6 +353,8 @@ public abstract class MvExecutorBase<TConnection> : IMvExecutor, IMvOrleansCatch
 
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using var initializationLock = await AcquireInitializationLockAsync(
+            connection, transaction, cancellationToken).ConfigureAwait(false);
         foreach (var statement in statements)
         {
             RecordProjectorCommandExecutionAttempt(statement.Sql);

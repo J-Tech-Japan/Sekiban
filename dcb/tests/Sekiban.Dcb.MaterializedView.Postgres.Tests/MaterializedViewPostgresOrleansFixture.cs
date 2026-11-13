@@ -230,6 +230,7 @@ public sealed class MaterializedViewPostgresOrleansFixture : IAsyncLifetime
                         options.PollInterval = TimeSpan.FromMilliseconds(50);
                         options.StreamReorderWindow = TimeSpan.FromSeconds(1);
                     });
+                    services.AddMaterializedView<G161StartupProjector>();
                     services.AddMaterializedView<OrderSummaryMvV1>();
                     services.AddMaterializedView<WeatherForecastMvV1>();
                     services.AddSekibanDcbMaterializedViewPostgres(SharedConnectionString, registerHostedWorker: false);

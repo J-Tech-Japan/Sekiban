@@ -57,6 +57,8 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
     {
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await PostgresMvInitializationLock.AcquireAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
 
         const string registrySql = """
             CREATE TABLE IF NOT EXISTS sekiban_mv_registry (
@@ -98,15 +100,15 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
             );
             """;
 
-        await connection.ExecuteAsync(new CommandDefinition(registrySql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(registrySql, transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
         const string checkpointMigrationSql = """
             ALTER TABLE sekiban_mv_registry
                 ADD COLUMN IF NOT EXISTS current_checkpoint_truth JSONB NULL;
             ALTER TABLE sekiban_mv_registry
                 ADD COLUMN IF NOT EXISTS target_checkpoint_truth JSONB NULL;
             """;
-        await connection.ExecuteAsync(new CommandDefinition(checkpointMigrationSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
-        await connection.ExecuteAsync(new CommandDefinition(activeSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(checkpointMigrationSql, transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(activeSql, transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
         const string activeGenerationMigrationSql = """
             ALTER TABLE sekiban_mv_active
                 ADD COLUMN IF NOT EXISTS active_generation BIGINT NOT NULL DEFAULT 0;
@@ -117,7 +119,8 @@ public sealed partial class PostgresMvRegistryStore : MvForcedReverseRegistrySto
             ALTER TABLE sekiban_mv_active
                 ADD COLUMN IF NOT EXISTS switched_at_utc TIMESTAMPTZ NULL;
             """;
-        await connection.ExecuteAsync(new CommandDefinition(activeGenerationMigrationSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(activeGenerationMigrationSql, transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task RegisterAsync(MvRegistryEntry entry, IDbTransaction? transaction = null, CancellationToken cancellationToken = default)

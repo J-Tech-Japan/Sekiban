@@ -204,12 +204,7 @@ public class SekG22StaleEmptyReservationRefreshTests
         {
             Interlocked.Increment(ref _latestTagCalls);
             if (LatestTagOutcome != null) return LatestTagOutcome(tag);
-            var result = await _inner.GetLatestTagAsync(tag);
-            // These read-count tests require a successfully cached empty tag. InMemory's absent-tag error now
-            // deliberately leaves catch-up incomplete; injected failures above must still exercise that contract.
-            return !result.IsSuccess && !(await _inner.TagExistsAsync(tag)).GetValue()
-                ? ResultBox.FromValue(StateFor((StudentTag)tag, string.Empty))
-                : result;
+            return await _inner.GetLatestTagAsync(tag);
         }
 
         public Task<ResultBox<IEnumerable<TagStream>>> ReadTagsAsync(ITag tag) => _inner.ReadTagsAsync(tag);
