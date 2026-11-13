@@ -53,8 +53,18 @@ public class DualStateProjectionWrapper<T>
     private string? _rebuildOffendingEventId;
     private string? _rebuildOffendingPosition;
 
-    private void SignalRebuild(Event offending)
+    private string? _rebuildReason;
+    private string? _rebuildSafeHeadPosition;
+    private string? _rebuildSafeHeadEventId;
+    private DateTime? _rebuildSignaledAtUtc;
+
+    private void SignalRebuild(Event offending, string reason)
     {
+        if (_rebuildRequired) return;
+        _rebuildReason = reason;
+        _rebuildSafeHeadPosition = _safeLastSortableUniqueId;
+        _rebuildSafeHeadEventId = _safeLastEventId.ToString();
+        _rebuildSignaledAtUtc = DateTime.UtcNow;
         _rebuildRequired = true;
         _rebuildOffendingEventId = offending.Id.ToString();
         _rebuildOffendingPosition = offending.SortableUniqueIdValue;
@@ -294,6 +304,13 @@ public class DualStateProjectionWrapper<T>
 
         // Already at/under the safe threshold. It must fold onto the safe state IN GLOBAL ORDER — never out of order into
         // the accumulator.
+        if (_useIncrementalSafePromotion)
+        {
+            // Older buffered events are necessarily safe too. Use the normal promotion path so the
+            // safe version and served baseline advance together before folding this arrival.
+            ProcessBufferedEvents(safeWindowThreshold, domainTypes, SafeEventOrderKey.From(evt));
+            if (_rebuildRequired) return this;
+        }
         _allSafeEvents[SafeEventOrderKey.From(evt)] = evt;
 
         if (_useIncrementalSafePromotion)
@@ -310,7 +327,7 @@ public class DualStateProjectionWrapper<T>
                 // Compacted/incremental baseline: the full history is gone, so the wrapper cannot reorder locally. Signal
                 // a full ordered rebuild from the authoritative event store (SEK-G18 integrity guard) rather than fold
                 // out of order or rebuild a compacted baseline from the initial payload.
-                SignalRebuild(evt);
+                SignalRebuild(evt, "safe arrival behind safe head");
                 _servedStateDirty = true;
             }
             if (!_rebuildRequired) Sekiban.Dcb.Runtime.ProjectionEventApplicationScope.RecordAppliedEvent();
@@ -369,6 +386,10 @@ public class DualStateProjectionWrapper<T>
     bool IDualStateRebuildSignals.RebuildRequired => _rebuildRequired;
     string? IDualStateRebuildSignals.RebuildOffendingEventId => _rebuildOffendingEventId;
     string? IDualStateRebuildSignals.RebuildOffendingPosition => _rebuildOffendingPosition;
+    string? IDualStateRebuildSignals.RebuildReason => _rebuildReason;
+    string? IDualStateRebuildSignals.RebuildSafeHeadPosition => _rebuildSafeHeadPosition;
+    string? IDualStateRebuildSignals.RebuildSafeHeadEventId => _rebuildSafeHeadEventId;
+    DateTime? IDualStateRebuildSignals.RebuildSignaledAtUtc => _rebuildSignaledAtUtc;
     IDualStateAccessor IDualStateAccessor.ProcessEventAs(
         Event evt, SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
     {
@@ -398,7 +419,8 @@ public class DualStateProjectionWrapper<T>
         _useIncrementalSafePromotion = true;
     }
 
-    private void ProcessBufferedEvents(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes)
+    private void ProcessBufferedEvents(SortableUniqueId safeWindowThreshold, DcbDomainTypes domainTypes,
+        SafeEventOrderKey? before = null)
     {
         RememberConsumptionContext(safeWindowThreshold, domainTypes);
         var eventsToProcess = new List<Event>();
@@ -410,7 +432,8 @@ public class DualStateProjectionWrapper<T>
             var ev = kvp.Value;
             var eventTime = new SortableUniqueId(ev.SortableUniqueIdValue);
 
-            if (eventTime.IsEarlierThanOrEqual(safeWindowThreshold))
+            if (eventTime.IsEarlierThanOrEqual(safeWindowThreshold) &&
+                (before is null || SafeEventOrderKey.From(ev).CompareTo(before.Value) < 0))
             {
                 eventsToProcess.Add(ev);
                 keysToRemove.Add(kvp.Key);
@@ -901,11 +924,19 @@ public class DualStateProjectionWrapper<T>
             // a full ordered rebuild rather than folding it out of global order.
             if (!IsStrictlyAfterSafeHead(ev))
             {
-                SignalRebuild(ev);
+                SignalRebuild(ev, "promotion behind safe head");
                 return;
             }
 
-            ProjectSafeInOrder(ev, domainTypes);
+            try
+            {
+                ProjectSafeInOrder(ev, domainTypes);
+            }
+            catch (Exception exception)
+            {
+                DeferredSafeRepairFaultAttribution.AnnotateReplayEvent(exception, ev);
+                throw;
+            }
         }
     }
 

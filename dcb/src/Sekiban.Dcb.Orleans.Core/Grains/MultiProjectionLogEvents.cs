@@ -97,6 +97,9 @@ public static class MultiProjectionLogEvents
 
     /// <summary>A completed persist could not satisfy a pending durable rebuild obligation.</summary>
     public static readonly EventId DurableRebuildObligationNotSaved = new(1030, "DurableRebuildObligationNotSaved");
+
+    /// <summary>A live ordering signal requires a durable full rebuild or fail-closed fault.</summary>
+    public static readonly EventId RuntimeFullRebuildRequired = new(1031, "RuntimeFullRebuildRequired");
     /// <summary>A rejected snapshot crossed a peer invalidation and its host must replay before saving.</summary>
     public static readonly EventId StaleCheckpointHost = new(1032, "StaleCheckpointHost");
 }

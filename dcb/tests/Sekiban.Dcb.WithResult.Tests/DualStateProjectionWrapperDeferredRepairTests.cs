@@ -20,6 +20,47 @@ namespace Sekiban.Dcb.Tests;
 public class DualStateProjectionWrapperDeferredRepairTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IncrementalPromotion_FaultIdentifiesBufferedEventInsteadOfTriggeringArrival(bool timerPromotion)
+    {
+        var fixture = new Fixture();
+        var logger = new RecordingLogger();
+        var options = new GeneralMultiProjectionActorOptions { SafeWindowMs = 300_000 };
+        var actor = new GeneralMultiProjectionActor(fixture.DomainTypes, CountingProjector.MultiProjectorName, options, logger);
+        var seed = CreateSeedEvents().Low;
+        await actor.AddEventsAsync([seed]);
+        actor.CompactSafeHistory();
+        var buffered = CreateEvent(new FoldEvent(2, "B"),
+            SortableUniqueId.Generate(DateTime.UtcNow.AddMinutes(-2), Guid.Empty), GuidFromInt(21));
+        var arrival = CreateEvent(new FoldEvent(3, "C"),
+            SortableUniqueId.Generate(DateTime.UtcNow.AddMinutes(-1), Guid.Empty), GuidFromInt(22)) with { EventType = "TriggerArrival" };
+        await actor.AddEventsAsync([buffered]);
+        var original = new InvalidOperationException("buffered safe fold failed");
+        fixture.TagTypes.ReplayFailures[buffered.Id] = original;
+        options.SafeWindowMs = 0;
+
+        var failure = timerPromotion
+            ? Assert.Throws<InvalidOperationException>(actor.ForcePromoteBufferedEvents)
+            : await Assert.ThrowsAsync<InvalidOperationException>(() => actor.AddEventsAsync([arrival]));
+
+        Assert.Same(original, failure);
+        Assert.Contains("ApplyEventsIncrementally", failure.StackTrace, StringComparison.Ordinal);
+        var fault = Assert.IsType<ProjectionFaultDescriptor>(actor.CurrentFault);
+        Assert.Equal(buffered.Id, fault.EventId);
+        Assert.Equal(buffered.EventType, fault.EventType);
+        Assert.Equal(buffered.SortableUniqueIdValue, fault.Position);
+        var log = Assert.Single(logger.Entries, entry => entry.EventId.Name == "ProjectionFaultFirstObserved");
+        Assert.Same(original, log.Exception);
+        Assert.Contains(buffered.Id.ToString(), log.Message);
+        Assert.Contains(buffered.SortableUniqueIdValue, log.Message);
+        Assert.DoesNotContain(arrival.Id.ToString(), log.Message);
+        Assert.Equal(buffered.Id.ToString(), failure.Data[ProjectionFaultDescriptor.EventIdDataKey]);
+        Assert.Equal(buffered.EventType, log.Exception!.Data[ProjectionFaultDescriptor.TargetDataKey]);
+        Assert.Equal(buffered.SortableUniqueIdValue, log.Exception.Data[ProjectionFaultDescriptor.PositionDataKey]);
+    }
+
+    [Theory]
     [InlineData("GetSafeProjection")]
     [InlineData("GetUnsafeProjection")]
     [InlineData("PromoteBufferedEventsZero")]
