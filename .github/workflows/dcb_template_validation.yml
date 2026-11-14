@@ -65,7 +65,9 @@ jobs:
       - name: Setup .NET 10 generated-output SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.1xx
       - name: Run template consumer against nuget.org
         run: |
           VERSION="$(bash dcb/tests/Sekiban.Dcb.TemplateValidation/read-template-version.sh --repo-root "$GITHUB_WORKSPACE")"
@@ -86,7 +88,9 @@ jobs:
       - name: Setup .NET 10 generated-output SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.1xx
 
       - name: Derive version from the five template authorities
         run: |
@@ -144,7 +148,9 @@ jobs:
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.1xx
 
       - name: Log SDK and runner image
         run: |
@@ -186,7 +192,9 @@ jobs:
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.1xx
 
       - name: Log SDK and runner image
         run: |

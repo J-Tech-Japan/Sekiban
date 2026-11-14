@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   packaged-consumer:
-    name: Pack and run PostgreSQL consumers on net9/net10
+    name: Pack and run PostgreSQL consumers on net11/net10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +31,9 @@ jobs:
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.1xx
 
       - name: Pack local chain and run positive/omission consumers
         run: dcb/tests/Sekiban.Dcb.Postgres.Tests/run-packaged-consumer.sh --repo-root "$GITHUB_WORKSPACE"
