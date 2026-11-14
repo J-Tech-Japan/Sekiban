@@ -24,6 +24,8 @@
         <GenerateSBOM>true</GenerateSBOM>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+        <!-- Microsoft.AspNetCore.App supplies the Microsoft.Extensions packages; prune them on net11.0 as on net10.0. -->
+        <RestoreEnablePackagePruning Condition="'$(TargetFramework)' == 'net11.0'">true</RestoreEnablePackagePruning>
     </PropertyGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net10.0' Or '$(TargetFramework)' == 'net11.0'">
