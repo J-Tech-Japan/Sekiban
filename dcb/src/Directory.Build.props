@@ -3,4 +3,8 @@
   <PropertyGroup>
     <Version>0.0.0-local</Version>
   </PropertyGroup>
+  <PropertyGroup>
+    <!-- Preserve the published 10.x dependency contract on both supported TFMs. -->
+    <RestoreEnablePackagePruning>false</RestoreEnablePackagePruning>
+  </PropertyGroup>
 </Project>

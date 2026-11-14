@@ -20,7 +20,7 @@ jobs:
     - name: Setup .NET 11
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 11.0.x
+        dotnet-version: 11.0.1xx
     - name: Restore dependencies
       run: |
         pushd ./

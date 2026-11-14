@@ -23,10 +23,10 @@
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <GenerateSBOM>true</GenerateSBOM>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     </PropertyGroup>
 
-    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0' Or '$(TargetFramework)' == 'net11.0'">
         <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.15"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.15"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15">
@@ -36,15 +36,6 @@
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3"/>
     </ItemGroup>
 
-    <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.23"/>
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.23"/>
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.23">
-            <PrivateAssets>all</PrivateAssets>
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-        </PackageReference>
-        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4"/>
-    </ItemGroup>
 
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App"/>

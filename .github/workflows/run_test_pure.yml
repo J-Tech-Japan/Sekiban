@@ -66,6 +66,10 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 11.0.x
+    - name: Setup pinned build SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 11.0.1xx
     - name: Secret Settings
       run: |
         pushd ./pure/tests/Pure.Domain.xUnit

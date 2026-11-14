@@ -6,7 +6,7 @@
       ICoreMultiProjectorTypes implementor from 10.18 must still load and be invoked by the current runtime.
     -->
     <PropertyGroup>
-        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>

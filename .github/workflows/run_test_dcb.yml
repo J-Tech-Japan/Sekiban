@@ -56,13 +56,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  dcbTestsNet9:
+  dcbTestsNet11:
     runs-on: ubuntu-latest
     env:
       SEKIBAN_TAG_STREAM_CONTROLLED_CEILING: '1'
       SEKIBAN_DYNAMODB_LOCAL_ENDPOINT: http://127.0.0.1:18000
     concurrency:
-      group: dcb-tests-net9-${{ github.ref }}
+      group: dcb-tests-net11-${{ github.ref }}
       cancel-in-progress: false
 
     steps:
@@ -81,7 +81,7 @@ jobs:
       - name: Setup .NET 11
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 11.0.x
+          dotnet-version: 11.0.1xx
 
       # SEK-G52: WithResult's frozen serialized-commit interop tests invoke the dependency-free Node runner.
       - name: Setup Node for serialized-commit interop runner
@@ -98,7 +98,7 @@ jobs:
       - name: dotnet build
         run: |
           dotnet build -c Release -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
-          dotnet build dcb/tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj -c Release --no-restore -f net9.0 -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
+          dotnet build dcb/tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj -c Release --no-restore -f net11.0 -p:GeneratePackageOnBuild=false --verbosity minimal -m:1
 
       - name: Verify DCB Orleans version authorities
         run: |
@@ -120,51 +120,40 @@ jobs:
           docker logs sekiban-g67-dynamodb-local
           exit 1
 
-      - name: Audit native apply binding cases on PostgreSQL and SQL Server (net9.0)
+      - name: Audit native apply binding cases on PostgreSQL and SQL Server (net11.0)
         run: |
-          trx_dir="$RUNNER_TEMP/g73-materialized-view-trx/net9"
+          trx_dir="$RUNNER_TEMP/g73-materialized-view-trx/net11"
           mkdir -p "$trx_dir"
-          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net9.0 --filter 'FullyQualifiedName~PostgresMvFreshProjectorApplyTests|FullyQualifiedName~PostgresMvG73AcceptanceTests' --logger 'trx;LogFileName=mv-postgres-net9.trx' --results-directory "$trx_dir" -- RunConfiguration.MaxCpuCount=1
-          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net9.0 --filter 'FullyQualifiedName~SqlServerMvFreshProjectorApplyTests|FullyQualifiedName~SqlServerMvG73AcceptanceTests' --logger 'trx;LogFileName=mv-sqlserver-net9.trx' --results-directory "$trx_dir" -- RunConfiguration.MaxCpuCount=1
-          ./eng/audit-mv-trx-results.sh --trx-dir "$trx_dir" --manifest eng/materialized-view-required-cases.txt --tfm net9.0
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net11.0 --filter 'FullyQualifiedName~PostgresMvFreshProjectorApplyTests|FullyQualifiedName~PostgresMvG73AcceptanceTests' --logger 'trx;LogFileName=mv-postgres-net11.trx' --results-directory "$trx_dir" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net11.0 --filter 'FullyQualifiedName~SqlServerMvFreshProjectorApplyTests|FullyQualifiedName~SqlServerMvG73AcceptanceTests' --logger 'trx;LogFileName=mv-sqlserver-net11.trx' --results-directory "$trx_dir" -- RunConfiguration.MaxCpuCount=1
+          ./eng/audit-mv-trx-results.sh --trx-dir "$trx_dir" --manifest eng/materialized-view-required-cases.txt --tfm net11.0
           swap_dir="$(mktemp -d)"
           cp "$trx_dir"/* "$swap_dir"/
-          mv "$swap_dir/mv-postgres-net9.trx" "$swap_dir/postgres.tmp.trx"
-          mv "$swap_dir/mv-sqlserver-net9.trx" "$swap_dir/mv-postgres-net9.trx"
-          mv "$swap_dir/postgres.tmp.trx" "$swap_dir/mv-sqlserver-net9.trx"
-          if ./eng/audit-mv-trx-results.sh --trx-dir "$swap_dir" --manifest eng/materialized-view-required-cases.txt --tfm net9.0; then
+          mv "$swap_dir/mv-postgres-net11.trx" "$swap_dir/postgres.tmp.trx"
+          mv "$swap_dir/mv-sqlserver-net11.trx" "$swap_dir/mv-postgres-net11.trx"
+          mv "$swap_dir/postgres.tmp.trx" "$swap_dir/mv-sqlserver-net11.trx"
+          if ./eng/audit-mv-trx-results.sh --trx-dir "$swap_dir" --manifest eng/materialized-view-required-cases.txt --tfm net11.0; then
             echo 'ERROR: swapped provider TRX unexpectedly passed the class-qualified audit'
             exit 1
           else
             echo 'swapped provider TRX correctly rejected by class-qualified audit'
           fi
 
-      - name: dotnet test DCB projects sequentially (net9.0)
+      - name: dotnet test DCB projects sequentially (net11.0)
         run: |
-          dotnet test dcb/tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test dcb/tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test dcb/tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.Tests/Sekiban.Dcb.MaterializedView.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.Postgres.Tests/Sekiban.Dcb.MaterializedView.Postgres.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
-          dotnet test dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net9.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.ColdEvents.Tests/Sekiban.Dcb.ColdEvents.Tests.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.WithResult.Tests/Sekiban.Dcb.WithResult.Tests.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.WithoutResult.Tests/Sekiban.Dcb.WithoutResult.Tests.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.Postgres.Tests/Sekiban.Dcb.Postgres.Tests.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.Tests/Sekiban.Dcb.MaterializedView.Tests.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.Postgres.Tests/Sekiban.Dcb.MaterializedView.Postgres.Tests.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests/Sekiban.Dcb.MaterializedView.MultiProvider.Tests.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
+          dotnet test dcb/tests/Sekiban.Dcb.BlobStorage.AzureStorage.Unit/Sekiban.Dcb.BlobStorage.AzureStorage.Unit.csproj -c Release --no-build -f net11.0 --verbosity normal --collect:"XPlat Code Coverage" -- RunConfiguration.MaxCpuCount=1
 
       - name: Stop pinned DynamoDB Local
         if: always()
         run: docker rm -f sekiban-g67-dynamodb-local || true
-
-      - name: Verify 10.14.1 materialized-view binary consumer without rebuild
-        run: |
-          dotnet build dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/Sekiban.Dcb.MaterializedView.BinaryConsumer.csproj -c Release --no-restore -f net9.0
-          dotnet dcb/tests/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier.dll dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.dll dcb/src/Sekiban.Dcb.MaterializedView/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.dll
-          cp dcb/src/Sekiban.Dcb.MaterializedView/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.dll dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/bin/Release/net9.0/
-          dotnet dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.BinaryConsumer.dll
-
-      - name: Verify current materialized-view consumer
-        run: |
-          dotnet dcb/tests/Sekiban.Dcb.MaterializedView.NewVersionConsumer/bin/Release/net9.0/Sekiban.Dcb.MaterializedView.NewVersionConsumer.dll
 
   dcbTestsNet10:
     runs-on: ubuntu-latest
@@ -191,7 +180,7 @@ jobs:
       - name: Setup .NET 11
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 11.0.x
+          dotnet-version: 11.0.1xx
 
       # SEK-G52: WithResult's frozen serialized-commit interop tests invoke the dependency-free Node runner.
       - name: Setup Node for serialized-commit interop runner
@@ -268,6 +257,17 @@ jobs:
         if: always()
         run: docker rm -f sekiban-g67-dynamodb-local || true
 
+      - name: Verify 10.14.1 materialized-view binary consumer without rebuild
+        run: |
+          dotnet build dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/Sekiban.Dcb.MaterializedView.BinaryConsumer.csproj -c Release --no-restore -f net10.0
+          dotnet dcb/tests/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier/bin/Release/net10.0/Sekiban.Dcb.MaterializedView.ApiSurfaceVerifier.dll dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/bin/Release/net10.0/Sekiban.Dcb.MaterializedView.dll dcb/src/Sekiban.Dcb.MaterializedView/bin/Release/net10.0/Sekiban.Dcb.MaterializedView.dll
+          cp dcb/src/Sekiban.Dcb.MaterializedView/bin/Release/net10.0/Sekiban.Dcb.MaterializedView.dll dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/bin/Release/net10.0/
+          dotnet dcb/tests/Sekiban.Dcb.MaterializedView.BinaryConsumer/bin/Release/net10.0/Sekiban.Dcb.MaterializedView.BinaryConsumer.dll
+
+      - name: Verify current materialized-view consumer
+        run: |
+          dotnet dcb/tests/Sekiban.Dcb.MaterializedView.NewVersionConsumer/bin/Release/net10.0/Sekiban.Dcb.MaterializedView.NewVersionConsumer.dll
+
   dcbCosmosEmulator:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -282,12 +282,14 @@ jobs:
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.1xx
       - name: Build Cosmos emulator tests
         run: dotnet build dcb/tests/Sekiban.Dcb.CosmosDb.Emulator.Tests/Sekiban.Dcb.CosmosDb.Emulator.Tests.csproj -c Release -p:GenerateSBOM=false -p:GeneratePackageOnBuild=false
       - name: Run Cosmos emulator tests on both frameworks
         run: |
-          for tfm in net9.0 net10.0; do
+          for tfm in net11.0 net10.0; do
             dotnet test dcb/tests/Sekiban.Dcb.CosmosDb.Emulator.Tests/Sekiban.Dcb.CosmosDb.Emulator.Tests.csproj -c Release --no-build -f "$tfm" --logger "trx;LogFileName=$tfm.trx" --results-directory "$RUNNER_TEMP/cosmos-emulator-trx"
           done
       - name: Require executed and passed emulator tests with no skips
@@ -298,7 +300,7 @@ jobs:
           import pathlib
           import xml.etree.ElementTree as ET
           ns = {'t': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
-          for tfm in ('net9.0', 'net10.0'):
+          for tfm in ('net11.0', 'net10.0'):
               path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'cosmos-emulator-trx' / (tfm + '.trx')
               root = ET.parse(path).getroot()
               counters = root.find('t:ResultSummary/t:Counters', ns)

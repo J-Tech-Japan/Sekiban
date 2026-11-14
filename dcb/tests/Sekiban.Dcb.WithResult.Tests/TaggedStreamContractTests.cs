@@ -595,7 +595,7 @@ public class TaggedStreamContractTests
             "dotnet test dcb/tests/Sekiban.Dcb.Orleans.Tests/Sekiban.Dcb.Orleans.Tests.csproj",
             workflow,
             StringComparison.Ordinal);
-        Assert.Contains("-f net9.0", workflow, StringComparison.Ordinal);
+        Assert.Contains("-f net11.0", workflow, StringComparison.Ordinal);
         Assert.Contains("-f net10.0", workflow, StringComparison.Ordinal);
     }
 

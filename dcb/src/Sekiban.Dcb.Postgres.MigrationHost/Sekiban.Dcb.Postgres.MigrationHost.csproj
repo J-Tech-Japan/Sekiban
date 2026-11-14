@@ -7,11 +7,11 @@
         <LangVersion>latest</LangVersion>
         <!-- This executable is a deployment-time EF migration host, not a distributable DCB package. -->
         <IsPackable>false</IsPackable>
-        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
         <NoWarn>$(NoWarn);MSB3277</NoWarn>
     </PropertyGroup>
 
-    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0' Or '$(TargetFramework)' == 'net11.0'">
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -21,15 +21,6 @@
         <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.15"/>
     </ItemGroup>
 
-    <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.23">
-            <PrivateAssets>all</PrivateAssets>
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-        </PackageReference>
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.23"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.23"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.23"/>
-    </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Sekiban.Dcb.Postgres\Sekiban.Dcb.Postgres.csproj"/>

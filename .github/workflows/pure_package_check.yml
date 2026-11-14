@@ -37,6 +37,10 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 11.0.x
+      - name: Setup pinned build SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.1xx
 
       - name: Self-test of the package validator (fixtures, no network)
         run: ./eng/validate-pure-packages.sh --repo-root . --self-test
