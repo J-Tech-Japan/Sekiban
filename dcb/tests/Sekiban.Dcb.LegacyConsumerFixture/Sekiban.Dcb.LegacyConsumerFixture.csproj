@@ -7,7 +7,7 @@
         DTO / the executor's existing overloads, THIS PROJECT WOULD FAIL TO COMPILE. Building it in CI is the proof.
     -->
     <PropertyGroup>
-        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>

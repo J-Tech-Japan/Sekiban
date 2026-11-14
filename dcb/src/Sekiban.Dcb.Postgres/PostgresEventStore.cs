@@ -897,6 +897,9 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             }
         }
 
+        // The batch key count selects SQL for every phase, including one-row repair/advance subsets.
+        // Zero keys follow main’s empty loops and send no head SQL.
+        var usePerKeySql = keys.Length <= 1;
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var created = new HashSet<TagHeadKey>();
         var heads = new Dictionary<TagHeadKey, string?>();
@@ -906,83 +909,164 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             // Phase 1: lazy rows are inserted in the exact same ordinal ordering as later FOR UPDATE acquisition. Never
             // let caller/event order reach the unique index first: reversed batches otherwise form a real 40P01 cycle.
             await InvokeTagHeadProtocolHookAsync();
-            foreach (var key in keys)
+            if (usePerKeySql)
             {
-                var inserted = await ExecuteNonQueryAsync(
-                    context,
-                    transaction,
-                    "INSERT INTO dcb_tag_heads (\"ServiceId\", \"Tag\", \"HeadPosition\") " +
-                    "VALUES (@serviceId, @tag, NULL) ON CONFLICT (\"ServiceId\", \"Tag\") DO NOTHING",
-                    cancellationToken,
-                    Parameter("serviceId", key.ServiceId),
-                    Parameter("tag", key.Tag));
-                if (inserted == 1)
+                foreach (var key in keys)
                 {
-                    created.Add(key);
-                }
-            }
-
-            // Phase 2: acquire every row in exactly the same canonical order. A newly inserted row is bootstraped from
-            // dcb_tags while this transaction owns its key; absence is only proven empty after the authoritative MAX.
-            foreach (var key in keys)
-            {
-                var head = await QueryNullableStringAsync(
-                    context,
-                    transaction,
-                    "SELECT \"HeadPosition\" FROM dcb_tag_heads " +
-                    "WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag FOR UPDATE",
-                    cancellationToken,
-                    Parameter("serviceId", key.ServiceId),
-                    Parameter("tag", key.Tag));
-
-                if (created.Contains(key))
-                {
-                    var authoritativeMaximum = await QueryNullableStringAsync(
+                    var inserted = await ExecuteNonQueryAsync(
                         context,
                         transaction,
-                        "SELECT MAX(\"SortableUniqueId\") FROM dcb_tags " +
-                        "WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag",
+                        "INSERT INTO dcb_tag_heads (\"ServiceId\", \"Tag\", \"HeadPosition\") " +
+                        "VALUES (@serviceId, @tag, NULL) ON CONFLICT (\"ServiceId\", \"Tag\") DO NOTHING",
                         cancellationToken,
                         Parameter("serviceId", key.ServiceId),
                         Parameter("tag", key.Tag));
-                    if (authoritativeMaximum is not null)
+                    if (inserted == 1)
                     {
-                        await UpdateHeadAsync(context, transaction, key, authoritativeMaximum, cancellationToken);
-                        head = authoritativeMaximum;
+                        created.Add(key);
                     }
-                    // A persisted null head is the explicit, transactionally proven-empty representation.
                 }
-
-                heads[key] = head;
             }
+            else
+            {
+                var keyParameters = KeyParameters(keys);
+                var insertedRows = await QueryHeadRowsAsync(context, transaction,
+                    "INSERT INTO dcb_tag_heads (\"ServiceId\", \"Tag\", \"HeadPosition\") " +
+                    "SELECT k.service_id, k.tag, NULL FROM unnest(@serviceIds, @tags) WITH ORDINALITY AS k(service_id, tag, ord) " +
+                    "ORDER BY k.ord ON CONFLICT (\"ServiceId\", \"Tag\") DO NOTHING " +
+                    "RETURNING \"ServiceId\", \"Tag\", \"HeadPosition\"",
+                    cancellationToken, keyParameters);
+                created.UnionWith(insertedRows.Select(row => row.Key));
+            }
+
+            // Phase 2: ORDER BY and FOR UPDATE must be at the same SELECT level. Ordinality preserves .NET UTF-16
+            // ordering, including supplementary-plane tags, across old and new nodes during a rolling upgrade.
+            if (usePerKeySql)
+            {
+                foreach (var key in keys)
+                {
+                    var head = await QueryNullableStringAsync(
+                        context,
+                        transaction,
+                        "SELECT \"HeadPosition\" FROM dcb_tag_heads " +
+                        "WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag FOR UPDATE",
+                        cancellationToken,
+                        Parameter("serviceId", key.ServiceId),
+                        Parameter("tag", key.Tag));
+
+                    if (created.Contains(key))
+                    {
+                        var authoritativeMaximum = await QueryNullableStringAsync(
+                            context,
+                            transaction,
+                            "SELECT MAX(\"SortableUniqueId\") FROM dcb_tags " +
+                            "WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag",
+                            cancellationToken,
+                            Parameter("serviceId", key.ServiceId),
+                            Parameter("tag", key.Tag));
+                        if (authoritativeMaximum is not null)
+                        {
+                            await UpdateHeadAsync(context, transaction, key, authoritativeMaximum, cancellationToken);
+                            head = authoritativeMaximum;
+                        }
+                        // A persisted null head is the explicit, transactionally proven-empty representation.
+                    }
+
+                    heads[key] = head;
+                }
+            }
+            else
+            {
+                var lockedRows = await QueryHeadRowsAsync(context, transaction,
+                    "SELECT h.\"ServiceId\", h.\"Tag\", h.\"HeadPosition\" " +
+                    "FROM unnest(@serviceIds, @tags) WITH ORDINALITY AS k(service_id, tag, ord) " +
+                    "JOIN dcb_tag_heads h ON h.\"ServiceId\" = k.service_id AND h.\"Tag\" = k.tag " +
+                    "ORDER BY k.ord FOR UPDATE OF h",
+                    cancellationToken, KeyParameters(keys));
+                foreach (var row in lockedRows)
+                {
+                    heads[row.Key] = row.Position;
+                }
+                // Seek the predecessor of the requested (service, tag) in the existing composite index, then check
+                // equality OUTSIDE LIMIT. An absent key may return its predecessor, which must never become its head.
+                // Keeping the leading key range and full index ordering avoids one-row estimates choosing a history
+                // scan plus sort before autoanalyze, for both custom and generic plans.
+                if (created.Count > 0)
+                {
+                    var bootstrapped = await QueryHeadRowsAsync(context, transaction,
+                        "UPDATE dcb_tag_heads h SET \"HeadPosition\" = m.position FROM (" +
+                        "SELECT k.service_id, k.tag, m.position " +
+                        "FROM unnest(@serviceIds, @tags) WITH ORDINALITY AS k(service_id, tag, ord) " +
+                        "CROSS JOIN LATERAL (SELECT t.\"ServiceId\" AS service_id, t.\"Tag\" AS tag, t.\"SortableUniqueId\" AS position FROM dcb_tags t " +
+                        "WHERE (t.\"ServiceId\", t.\"Tag\") <= (k.service_id, k.tag) " +
+                        "ORDER BY t.\"ServiceId\" DESC, t.\"Tag\" DESC, t.\"SortableUniqueId\" DESC LIMIT 1) m " +
+                        "WHERE m.service_id = k.service_id AND m.tag = k.tag) m " +
+                        "WHERE h.\"ServiceId\" = m.service_id AND h.\"Tag\" = m.tag AND m.position IS NOT NULL " +
+                        "RETURNING h.\"ServiceId\", h.\"Tag\", h.\"HeadPosition\"",
+                        cancellationToken, KeyParameters(keys.Where(created.Contains).ToArray()));
+                    foreach (var row in bootstrapped)
+                    {
+                        heads[row.Key] = row.Position;
+                    }
+                }
+            }
+
             await InvokeTagHeadProtocolHookAsync();
 
-            // Phase 3: reconciliation is always service-scoped. It observes only rows newer than this durable head and
-            // records / repairs them before expected-head comparison or command DML.
-            foreach (var key in keys)
+            // Phase 3 gets a fresh READ COMMITTED snapshot AFTER all Phase 2 lock waits have completed.
+            // Use the same bounded predecessor seek as bootstrap, then compare the latest row with the locked head.
+            // The equality filter stays outside LIMIT so a missing key cannot borrow another key's position.
+            if (usePerKeySql)
             {
-                var priorHead = heads[key];
-                var observedMaximum = await QueryNullableStringAsync(
-                    context,
-                    transaction,
-                    "SELECT MAX(\"SortableUniqueId\") FROM dcb_tags " +
-                    "WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag " +
-                    "AND (@headPosition IS NULL OR \"SortableUniqueId\" > @headPosition)",
-                    cancellationToken,
-                    Parameter("serviceId", key.ServiceId),
-                    Parameter("tag", key.Tag),
-                    NullableTextParameter("headPosition", priorHead));
-                if (observedMaximum is null)
+                foreach (var key in keys)
                 {
-                    continue;
-                }
+                    var priorHead = heads[key];
+                    var observedMaximum = await QueryNullableStringAsync(
+                        context,
+                        transaction,
+                        "SELECT MAX(\"SortableUniqueId\") FROM dcb_tags " +
+                        "WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag " +
+                        "AND (@headPosition IS NULL OR \"SortableUniqueId\" > @headPosition)",
+                        cancellationToken,
+                        Parameter("serviceId", key.ServiceId),
+                        Parameter("tag", key.Tag),
+                        NullableTextParameter("headPosition", priorHead));
+                    if (observedMaximum is null)
+                    {
+                        continue;
+                    }
 
-                await InsertViolationIdempotentlyAsync(
-                    context, transaction, key, priorHead, observedMaximum, writer, cancellationToken);
-                await UpdateHeadAsync(context, transaction, key, observedMaximum, cancellationToken);
-                heads[key] = observedMaximum;
-                repairs.Add(new TagHeadRepair(key, priorHead, observedMaximum));
+                    await InsertViolationIdempotentlyAsync(
+                        context, transaction, key, priorHead, observedMaximum, writer, cancellationToken);
+                    await UpdateHeadAsync(context, transaction, key, observedMaximum, cancellationToken);
+                    heads[key] = observedMaximum;
+                    repairs.Add(new TagHeadRepair(key, priorHead, observedMaximum));
+                }
             }
+            else
+            {
+                var newerRows = await QueryHeadRowsAsync(context, transaction,
+                    "SELECT k.service_id, k.tag, m.position " +
+                    "FROM unnest(@serviceIds, @tags, @positions) WITH ORDINALITY AS k(service_id, tag, position, ord) " +
+                    "CROSS JOIN LATERAL (SELECT t.\"ServiceId\" AS service_id, t.\"Tag\" AS tag, t.\"SortableUniqueId\" AS position FROM dcb_tags t " +
+                    "WHERE (t.\"ServiceId\", t.\"Tag\") <= (k.service_id, k.tag) " +
+                    "ORDER BY t.\"ServiceId\" DESC, t.\"Tag\" DESC, t.\"SortableUniqueId\" DESC LIMIT 1) m " +
+                    "WHERE m.service_id = k.service_id AND m.tag = k.tag " +
+                    "AND (k.position IS NULL OR m.position > k.position) ORDER BY k.ord",
+                    cancellationToken, HeadParameters(keys.Select(key => (key, heads[key])).ToArray()));
+                foreach (var row in newerRows)
+                {
+                    repairs.Add(new TagHeadRepair(row.Key, heads[row.Key], row.Position!));
+                    heads[row.Key] = row.Position;
+                }
+                if (repairs.Count > 0)
+                {
+                    await InsertViolationsIdempotentlyAsync(context, transaction, repairs, writer, cancellationToken);
+                    await UpdateHeadsAsync(context, transaction,
+                        repairs.Select(repair => (repair.Key, (string?)repair.ObservedHead)).ToArray(), cancellationToken);
+                }
+            }
+
             await InvokeTagHeadProtocolHookAsync();
 
             // Phase 4: ALL expectations compare after EVERY key has reconciled. A combined multi-tag conflict contains a
@@ -1011,15 +1095,29 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
 
                     // Repair-only conflict: preserve ONLY repaired heads and their idempotent audit rows. In particular a
                     // third unrelated lazy tag C cannot leak out of this transaction merely because tags A/B conflicted.
-                    foreach (var key in created.Where(key => repairs.All(repair => repair.Key != key)))
+                    var cleanup = keys.Where(key => created.Contains(key) && repairs.All(repair => repair.Key != key)).ToArray();
+                    if (cleanup.Length > 0)
                     {
-                        await ExecuteNonQueryAsync(
-                            context,
-                            transaction,
-                            "DELETE FROM dcb_tag_heads WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag",
-                            cancellationToken,
-                            Parameter("serviceId", key.ServiceId),
-                            Parameter("tag", key.Tag));
+                        if (usePerKeySql)
+                        {
+                            foreach (var key in created.Where(key => repairs.All(repair => repair.Key != key)))
+                            {
+                                await ExecuteNonQueryAsync(
+                                    context,
+                                    transaction,
+                                    "DELETE FROM dcb_tag_heads WHERE \"ServiceId\" = @serviceId AND \"Tag\" = @tag",
+                                    cancellationToken,
+                                    Parameter("serviceId", key.ServiceId),
+                                    Parameter("tag", key.Tag));
+                            }
+                        }
+                        else
+                        {
+                            await ExecuteNonQueryAsync(context, transaction,
+                                "DELETE FROM dcb_tag_heads h USING unnest(@serviceIds, @tags) WITH ORDINALITY AS k(service_id, tag, ord) " +
+                                "WHERE h.\"ServiceId\" = k.service_id AND h.\"Tag\" = k.tag",
+                                cancellationToken, KeyParameters(cleanup));
+                        }
                     }
                     await transaction.CommitAsync(cancellationToken);
                     LogCommittedRepairs(repairs, writer);
@@ -1059,6 +1157,7 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             await context.SaveChangesAsync(cancellationToken);
             await InvokeTagHeadProtocolHookAsync();
 
+            var advances = new List<(TagHeadKey Key, string? Position)>();
             foreach (var (key, batchMaximum) in GetPerTagBatchMaximums(events, serviceId))
             {
                 // Legacy writers deliberately perform no expectation comparison, but they still must never regress a
@@ -1068,8 +1167,20 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
                 if (reconciledHead is null ||
                     StringComparer.Ordinal.Compare(batchMaximum, reconciledHead) > 0)
                 {
-                    await UpdateHeadAsync(context, transaction, key, batchMaximum, cancellationToken);
+                    advances.Add((key, batchMaximum));
                     heads[key] = batchMaximum;
+                }
+            }
+            if (advances.Count > 0)
+            {
+                if (usePerKeySql)
+                {
+                    foreach (var (key, position) in advances)
+                        await UpdateHeadAsync(context, transaction, key, position, cancellationToken);
+                }
+                else
+                {
+                    await UpdateHeadsAsync(context, transaction, advances, cancellationToken);
                 }
             }
             await InvokeTagHeadProtocolHookAsync();
@@ -1204,6 +1315,72 @@ public class PostgresEventStore : IHotEventStore, ISerializableEventStreamReader
             Parameter("position", position),
             Parameter("serviceId", key.ServiceId),
             Parameter("tag", key.Tag));
+
+    private static NpgsqlParameter[] KeyParameters(IReadOnlyList<TagHeadKey> keys) =>
+    [
+        new NpgsqlParameter("serviceIds", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = keys.Select(key => key.ServiceId).ToArray() },
+        new NpgsqlParameter("tags", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = keys.Select(key => key.Tag).ToArray() }
+    ];
+
+    private static NpgsqlParameter[] HeadParameters(IReadOnlyList<(TagHeadKey Key, string? Position)> rows) =>
+    [
+        .. KeyParameters(rows.Select(row => row.Key).ToArray()),
+        new NpgsqlParameter("positions", NpgsqlDbType.Array | NpgsqlDbType.Text)
+        {
+            Value = rows.Select(row => row.Position).ToArray()
+        }
+    ];
+
+    private static async Task<List<(TagHeadKey Key, string? Position)>> QueryHeadRowsAsync(
+        SekibanDcbDbContext context,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        string commandText,
+        CancellationToken cancellationToken,
+        params NpgsqlParameter[] parameters)
+    {
+        await using var command = CreateCommand(context, transaction, commandText, parameters);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var rows = new List<(TagHeadKey Key, string? Position)>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add((new TagHeadKey(reader.GetString(0), reader.GetString(1)), reader.IsDBNull(2) ? null : reader.GetString(2)));
+        }
+        return rows;
+    }
+
+    private static Task InsertViolationsIdempotentlyAsync(
+        SekibanDcbDbContext context,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        IReadOnlyList<TagHeadRepair> repairs,
+        TagHeadWriter writer,
+        CancellationToken cancellationToken) =>
+        ExecuteNonQueryAsync(context, transaction,
+            "INSERT INTO dcb_tag_head_violations (\"ServiceId\", \"Tag\", \"PreviousHeadWasEmpty\", " +
+            "\"PreviousHeadPosition\", \"ObservedPosition\", \"DetectedAtUtc\", \"DetectingWriter\") " +
+            "SELECT k.service_id, k.tag, k.was_empty, k.previous, k.observed, @detectedAtUtc, @writer " +
+            "FROM unnest(@serviceIds, @tags, @wasEmpty, @previous, @observed) WITH ORDINALITY " +
+            "AS k(service_id, tag, was_empty, previous, observed, ord) ORDER BY k.ord " +
+            "ON CONFLICT (\"ServiceId\", \"Tag\", \"PreviousHeadWasEmpty\", \"PreviousHeadPosition\", \"ObservedPosition\") DO NOTHING",
+            cancellationToken,
+            [
+                .. KeyParameters(repairs.Select(repair => repair.Key).ToArray()),
+                Parameter("wasEmpty", repairs.Select(repair => repair.PreviousHead is null).ToArray()),
+                Parameter("previous", repairs.Select(repair => repair.PreviousHead ?? string.Empty).ToArray()),
+                Parameter("observed", repairs.Select(repair => repair.ObservedHead).ToArray()),
+                Parameter("detectedAtUtc", DateTime.UtcNow),
+                Parameter("writer", writer.ToString())
+            ]);
+
+    private static Task UpdateHeadsAsync(
+        SekibanDcbDbContext context,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        IReadOnlyList<(TagHeadKey Key, string? Position)> rows,
+        CancellationToken cancellationToken) =>
+        ExecuteNonQueryAsync(context, transaction,
+            "UPDATE dcb_tag_heads h SET \"HeadPosition\" = k.position " +
+            "FROM unnest(@serviceIds, @tags, @positions) WITH ORDINALITY AS k(service_id, tag, position, ord) " +
+            "WHERE h.\"ServiceId\" = k.service_id AND h.\"Tag\" = k.tag",
+            cancellationToken, HeadParameters(rows));
 
     private static async Task<int> ExecuteNonQueryAsync(
         SekibanDcbDbContext context,

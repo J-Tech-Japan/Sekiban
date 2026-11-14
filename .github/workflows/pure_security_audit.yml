@@ -30,6 +30,10 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 11.0.x
+      - name: Setup pinned build SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.1xx
       - name: Self-test of the audit decision logic (fixtures, no network)
         run: ./eng/validate-pure-security-audit.sh --repo-root . --self-test
       - name: Audit the 12 shipped Sekiban.Pure packages

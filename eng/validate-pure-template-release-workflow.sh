@@ -154,6 +154,7 @@ validate_release_workflow() {
         fi
     done
     require_step_with_line "$file" 'Setup .NET 10' '          dotnet-version: 10.0.x'
+    require_step_with_line "$file" 'Setup pinned build SDK' '          dotnet-version: 11.0.1xx'
     require_step_with_line "$file" 'Detect version from tag' '          if [[ "$TAG" != pureTemplates-v* ]]; then'
     require_step_with_line "$file" 'Detect version from tag' '          VERSION="${TAG#pureTemplates-v}"'
     require_step_with_line "$file" 'Detect version from tag' '          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then'
@@ -319,6 +320,8 @@ run_self_test() {
     st_mutant pull_request-added "$release_workflow" 's/^on:\n/on:\n  pull_request:\n/m' 'forbidden text [pull_request]' pull_request:
     st_mutant sdk-9-reintroduced "$release_workflow" 's/dotnet-version: 10\.0\.x/dotnet-version: 9.0.x/' 'forbidden text [dotnet-version: 9.0.x]' 'dotnet-version: 9.0.x'
     st_mutant sdk-11-added "$release_workflow" 's/(          dotnet-version: 10\.0\.x\n)/$1          dotnet-version: 11.0.x\n/' 'forbidden text [dotnet-version: 11.0.x]' 'dotnet-version: 11.0.x'
+    st_mutant pinned-sdk-step-removed "$release_workflow" 's/      - name: Setup pinned build SDK\n.*?\n\n//s' 'step [Setup pinned build SDK] not found'
+    st_mutant pinned-sdk-version-altered "$release_workflow" 's/dotnet-version: 11\.0\.1xx/dotnet-version: 11.0.2xx/' 'step [Setup pinned build SDK] lacks line [          dotnet-version: 11.0.1xx]' 'dotnet-version: 11.0.2xx'
     st_mutant if-false-on-the-on-main-step "$release_workflow" 's/(      - name: Require the tagged commit to be on main\n)/$1        if: false\n/' 'forbidden text [    if:]' 'if: false'
     st_mutant if-false-on-the-job "$release_workflow" 's/(    runs-on: ubuntu-latest\n)/$1    if: false\n/' 'forbidden text [    if:]' 'if: false'
     st_mutant continue-on-error-on-the-generate-step "$release_workflow" 's/(      - name: Generate, build and test both apps from the package\n)/$1        continue-on-error: true\n/' 'forbidden text [continue-on-error]' 'continue-on-error: true'
@@ -347,7 +350,7 @@ run_self_test() {
     st_mutant check-strict-pack-removed "$check_workflow" 's~\ \ \ \ \ \ \ \ \ \ dotnet\ pack\ templates/Sekiban\.Pure\.Templates\ \-c\ Release\ \-o\ "\$RUNNER_TEMP/pack"\ \-warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905\
 ~~m' 'missing line [          dotnet pack templates/Sekiban.Pure.Templates -c Release -o "$RUNNER_TEMP/pack" -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905]'
     ((st_failures == 0)) || fail "$st_failures self-test case(s) failed"
-    printf 'Self-test passed: 1 pass case; 43 mutants killed (exit 1 and reason asserted).\n'
+    printf 'Self-test passed: 1 pass case; 45 mutants killed (exit 1 and reason asserted).\n'
 }
 
 validate_all "$repo_root" || exit 1

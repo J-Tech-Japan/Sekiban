@@ -45,9 +45,11 @@ for dcb_package in "${dcb_package_ids[@]}"; do
   fi
 done
 
+cd "$repo_root"
+
 nuspec="$(unzip -p "$package" '*.nuspec')"
 for required in \
-  '<group targetFramework="net9.0">' \
+  '<group targetFramework="net11.0">' \
   '<group targetFramework="net10.0">' \
   'id="Sekiban.Dcb.Core" version="'$version'"' \
   'id="Sekiban.Dcb.Orleans.Core" version="'$version'"' \
@@ -58,6 +60,11 @@ for required in \
     exit 1
   }
 done
+
+if grep -Fq '<group targetFramework="net9.0">' <<<"$nuspec"; then
+  echo 'Unexpected net9.0 dependency group.' >&2
+  exit 1
+fi
 
 temp_root="$(mktemp -d "${TMPDIR:-/tmp}/sek-g76-azure-queue-consumer.XXXXXX")"
 trap 'rm -rf "$temp_root"' EXIT
@@ -111,7 +118,7 @@ cat > "$config" <<EOF
 </configuration>
 EOF
 
-for tfm in net9.0 net10.0; do
+for tfm in net11.0 net10.0; do
   project="$temp_root/consumer-$tfm"
   mkdir -p "$project"
   cat > "$project/consumer.csproj" <<EOF

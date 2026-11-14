@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Sekiban.Dcb.Postgres/Sekiban.Dcb.Postgres.csproj" />
+    <ProjectReference Include="../../internalUsages/Dcb.Domain/Dcb.Domain.csproj" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.10.0" />
+  </ItemGroup>
+</Project>

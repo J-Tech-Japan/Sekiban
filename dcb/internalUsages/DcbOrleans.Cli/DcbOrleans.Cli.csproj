@@ -10,14 +10,11 @@
         <UserSecretsId>dcb-cli</UserSecretsId>
     </PropertyGroup>
 
-    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0' Or '$(TargetFramework)' == 'net11.0'">
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.15"/>
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 
-    <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.23"/>
-    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.57.1"/>

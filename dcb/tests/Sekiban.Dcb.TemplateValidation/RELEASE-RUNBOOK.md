@@ -19,7 +19,7 @@ or a later main commit containing it. Never move an existing tag.
    running retry invalidates evidence. Partial job retries are not evidence.
 3. Write `intents/sekiban/releases/dcb-v{V}-release-record.json` in the host:
    schema 3, version V, stage `prepared`, `merged_sha`, non-negative
-   `candidate_pr`, exactly `dcbTestsNet9`, `dcbTestsNet10`, `packagedConsumer`,
+   `candidate_pr`, exactly `dcbTestsNet11`, `dcbTestsNet10`, `packagedConsumer`,
    `templateConsumer` with numeric `run_id`, and `release_bodies` with
    `library_en_sha256`, `library_ja_sha256`. Optional legacy template hashes
    are ignored; no other members are allowed. Bodies name V, are non-empty,
@@ -54,7 +54,7 @@ into v11. A missing `origin/dcb/v11` rejects previews; stable releases remain
 main-only. Full-depth checkouts fetch the branch when it exists.
 
 `dcb/v11` must contain this change before its first preview tag. Dispatch the
-workflows supplying all four record check aliases (`dcbTestsNet9`,
+workflows supplying all four record check aliases (`dcbTestsNet11`,
 `dcbTestsNet10`, `packagedConsumer`, `templateConsumer`) with `workflow_dispatch`
 on the exact `dcb/v11` candidate commit. Dispatch the stage check and
 `packagesDcb.yml` `trusted-publishing-check` on `main`; the stage check's
@@ -218,3 +218,7 @@ Offline verification never proves environment configuration, private-host
 credential validity, or actual public publication.
 
 Raise the stale currency-fixture version when templates begin using a newer library API so that the stale consumer still restores and builds before currency validation rejects it.
+
+For library release records through 10.24.x, the required test checks remain
+`dcbTestsNet9` and `dcbTestsNet10`. Records for 10.25.0 and later require
+`dcbTestsNet10` and `dcbTestsNet11`; historical records and fixtures stay unchanged.

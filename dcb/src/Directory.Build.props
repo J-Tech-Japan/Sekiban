@@ -3,4 +3,8 @@
   <PropertyGroup>
     <Version>0.0.0-local</Version>
   </PropertyGroup>
+  <PropertyGroup>
+    <!-- Keep the 10.x platform packages in the net11.0 dependency group (same as net10.0). -->
+    <RestoreEnablePackagePruning Condition="'$(TargetFramework)' == 'net11.0'">false</RestoreEnablePackagePruning>
+  </PropertyGroup>
 </Project>

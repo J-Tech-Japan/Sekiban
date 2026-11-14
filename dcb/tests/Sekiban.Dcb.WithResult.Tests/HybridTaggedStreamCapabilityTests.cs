@@ -12,7 +12,7 @@ using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Tests;
 
 /// <summary>
-///     SEK-G53 Hybrid tagged-stream tripwires deliberately live in WithResult.Tests, which both net9 and net10 DCB PR
+///     SEK-G53 Hybrid tagged-stream tripwires deliberately live in WithResult.Tests, which both net11 and net10 DCB PR
 ///     jobs execute. ColdEvents.Tests is not a test target in those jobs, so an equivalent test there is not CI evidence.
 /// </summary>
 public sealed class HybridTaggedStreamCapabilityTests

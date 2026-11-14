@@ -31,7 +31,13 @@ CHECKS = [('dcbTestsNet9', 'run_test_dcb.yml', 'dcbTestsNet9'),
           ('dcbTestsNet10', 'run_test_dcb.yml', 'dcbTestsNet10'),
           ('packagedConsumer', 'dcb_azure_queue_packaged_consumer.yml', 'packaged-consumer'),
           ('templateConsumer', 'dcb_template_validation.yml', 'Pack, install, generate, restore, build, and test templates')]
-VERSIONS = ('10.22.0', '42.7.3', '10.23.1')  # Explicit fixture inputs; never production defaults.
+VERSIONS = ('10.22.0', '42.7.3', '10.23.1', '10.24.3', '10.25.0')  # Explicit fixture inputs; never production defaults.
+
+def checks_for(version):
+    checks = list(CHECKS)
+    if tuple(map(int, version.split('-')[0].split('.'))) >= (10, 25, 0):
+        checks[0] = ('dcbTestsNet11', 'run_test_dcb.yml', 'dcbTestsNet11')
+    return checks
 
 class Failure(RuntimeError):
     pass
@@ -148,9 +154,9 @@ class Fixture:
         run(['git','remote','add','origin',str(root/'origin.git')],self.repo)
         self.api={}
         self.record={'schema_version':3,'version':version,'stage':'prepared','merged_sha':self.sha,'candidate_pr':1316,
-                     'checks':[{'name':name,'run_id':100+i} for i,(name,_,_) in enumerate(CHECKS)],
+                     'checks':[{'name':name,'run_id':100+i} for i,(name,_,_) in enumerate(checks_for(version))],
                      'release_bodies':{key:hashlib.sha256((self.repo/'docs/releases'/name).read_bytes()).hexdigest() for key,name in self.bodies.items()}}
-        for i,(_,workflow,job) in enumerate(CHECKS + [('templatePublicConsumer', 'dcb_template_validation.yml', 'Published-library template consumer')]):
+        for i,(_,workflow,job) in enumerate(checks_for(version) + [('templatePublicConsumer', 'dcb_template_validation.yml', 'Published-library template consumer')]):
             route=f'repos/{REPO}/actions/runs/{100+i}'
             self.api[route]={'id':100+i,'repository':{'full_name':REPO},'head_repository':{'full_name':REPO},
                              'path':f'.github/workflows/{workflow}','event':'workflow_dispatch','head_sha':self.sha,
@@ -241,7 +247,7 @@ class Fixture:
     def package(self,path,id,template=False,version=None):
         version=version or self.version
         groups=''
-        for framework, relational in [('net9.0','9.0.23'),('net10.0','10.0.15')]:
+        for framework, relational in [('net10.0','10.0.15'),('net11.0','10.0.15')]:
             deps=[]
             if id=='Sekiban.Dcb.Postgres': deps=[('Microsoft.EntityFrameworkCore.Relational',relational)]
             if id=='Sekiban.Dcb.Orleans.AzureQueue': deps=[('Azure.Storage.Queues','12.25.0'),('Microsoft.Orleans.Streaming.AzureStorage','10.4.2')]
@@ -544,7 +550,7 @@ def mutate(f,case):
         f.record['release_bodies']['library_en_sha256']=hashlib.sha256(b'').hexdigest()
     elif case=='missing-package': (f.local/f'Sekiban.Dcb.Core.{f.version}.nupkg').unlink()
     elif case=='wrong-version-package': f.package(f.local/f'Sekiban.Dcb.Core.{f.version}.nupkg','Sekiban.Dcb.Core',version='99.0.0')
-    elif case=='duplicate-alias': f.record['checks'][1]['name']='dcbTestsNet9'
+    elif case=='duplicate-alias': f.record['checks'][1]['name']=f.record['checks'][0]['name']
     elif case=='missing-alias': f.record['checks'].pop()
     elif case=='failed-job': f.api[route+'/attempts/2/jobs?per_page=100&page=1']['jobs'][0]['conclusion']='failure'
     elif case=='wrong-job-attempt': f.api[route+'/attempts/2/jobs?per_page=100&page=1']['jobs'][0]['run_attempt']=1
@@ -648,7 +654,7 @@ def later_release_cases(source, root):
                         ('library-not-ancestor','ancestor of the template')]:
         f=Fixture(source,root/case,'10.23.1'); f.workflow('library'); f.later_template()
         if case=='template-record-not-head': f.record['merged_sha']='c'*40
-        elif case=='template-record-library-checks': f.record['checks']=[{'name':n,'run_id':100+i} for i,(n,_,_) in enumerate(CHECKS)]
+        elif case=='template-record-library-checks': f.record['checks']=[{'name':n,'run_id':100+i} for i,(n,_,_) in enumerate(checks_for(f.version))]
         elif case in ['public-packages-fail-local-pass','public-consumer-skipped']:
             # The local-feed job remains successful; only public-version evidence fails.
             f.api[f'repos/{REPO}/actions/runs/104/attempts/2/jobs?per_page=100&page=1']['jobs'][0]['conclusion']='skipped' if case.endswith('skipped') else 'failure'
@@ -740,7 +746,7 @@ def later_release_cases(source, root):
         f.sha=historical; f.dll=source/REL/'bin/Release/net10.0/Sekiban.Dcb.TemplateValidation.dll'
         # The real-candidate branch retains original prepared fields; API transport is simulated.
         for check in f.record['checks']:
-            mapping=next(c for c in CHECKS if c[0]==check['name']); id=check['run_id']
+            mapping=next(c for c in checks_for(f.version) if c[0]==check['name']); id=check['run_id']
             route=f'repos/{REPO}/actions/runs/{id}'
             f.api[route]={'id':id,'repository':{'full_name':REPO},'head_repository':{'full_name':REPO},'path':'.github/workflows/'+mapping[1],'event':'workflow_dispatch','head_sha':historical,'status':'completed','conclusion':'success','run_attempt':1}
             jobs=f.api.setdefault(route+'/attempts/1/jobs?per_page=100&page=1',{'total_count':0,'jobs':[]})
@@ -765,7 +771,7 @@ def main():
         # Always run the incremental build: MSBuild detects missing/stale outputs,
         # including changed sources and project/import inputs, for every caller.
         build_host=root/'build-host'; build_host.mkdir()
-        write_json(build_host/'global.json',{'sdk':{'version':'10.0.100','rollForward':'latestFeature','allowPrerelease':False}})
+        write_json(build_host/'global.json',{'sdk':{'version':'11.0.100','rollForward':'latestPatch','allowPrerelease':False}})
         print(run(['dotnet','build',str(source/REL/'Sekiban.Dcb.TemplateValidation.csproj'),
                    '-c','Release','--nologo','-p:NuGetAudit=false'],build_host),flush=True)
         preview_cases(source, root, args.self_test)
