@@ -171,6 +171,16 @@ validate_release_workflow() {
     require_step_with_line "$file" 'Generate, build and test both apps from the package' '          dotnet new install "out/Sekiban.Pure.Templates.${VERSION}.nupkg" --debug:custom-hive "$RUNNER_TEMP/hive"'
     require_step_with_line "$file" 'Generate, build and test both apps from the package' '          dotnet new sekiban-orleans-aspire -n AcmeOrl -o "$RUNNER_TEMP/gen/AcmeOrl" --debug:custom-hive "$RUNNER_TEMP/hive"'
     require_step_with_line "$file" 'Generate, build and test both apps from the package' '          dotnet new sekiban-dapr-aspire -n AcmeDapr -o "$RUNNER_TEMP/gen/AcmeDapr" --debug:custom-hive "$RUNNER_TEMP/hive"'
+    require_step_with_line "$file" 'Generate, build and test both apps from the package' '          printf '"'"'{"sdk":{"version":"10.0.100","rollForward":"latestFeature"}}\n'"'"' > "$RUNNER_TEMP/gen/global.json"'
+    require_step_with_line "$file" 'Generate, build and test both apps from the package' '          cd "$RUNNER_TEMP/gen"'
+    require_step_with_line "$file" 'Generate, build and test both apps from the package' '          mkdir -p "$RUNNER_TEMP/gen"'
+    local gen_text pin_at new_at
+    gen_text="$(step_text "$file" 'Generate, build and test both apps from the package')"
+    pin_at="$(grep -nxF '          cd "$RUNNER_TEMP/gen"' <<<"$gen_text" | head -n 1 | cut -d: -f1)"
+    new_at="$(grep -nF '          dotnet new sekiban-' <<<"$gen_text" | head -n 1 | cut -d: -f1)"
+    if [[ -n "$pin_at" && -n "$new_at" ]] && ((new_at < pin_at)); then
+        violation "$release_label: step [Generate, build and test both apps from the package] runs dotnet new before it enters the SDK-pinned directory"
+    fi
     require_step_with_line "$file" 'Generate, build and test both apps from the package' '            dotnet build "$RUNNER_TEMP/gen/$name/$name.sln" -c Release -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905'
     require_step_with_line "$file" 'Generate, build and test both apps from the package' '            dotnet test "$RUNNER_TEMP/gen/$name/$name.Unit/$name.Unit.csproj" -c Release --no-build'
     require_step_with_line "$file" 'Compose release body' '        run: ./eng/compose-pure-release-body.sh --repo-root . --prefix pureTemplates --version "$VERSION" --output out/release-body.md'
@@ -322,6 +332,10 @@ run_self_test() {
     st_mutant sdk-11-added "$release_workflow" 's/(          dotnet-version: 10\.0\.x\n)/$1          dotnet-version: 11.0.x\n/' 'forbidden text [dotnet-version: 11.0.x]' 'dotnet-version: 11.0.x'
     st_mutant pinned-sdk-step-removed "$release_workflow" 's/      - name: Setup pinned build SDK\n.*?\n\n//s' 'step [Setup pinned build SDK] not found'
     st_mutant pinned-sdk-version-altered "$release_workflow" 's/dotnet-version: 11\.0\.1xx/dotnet-version: 11.0.2xx/' 'step [Setup pinned build SDK] lacks line [          dotnet-version: 11.0.1xx]' 'dotnet-version: 11.0.2xx'
+    st_mutant generated-apps-sdk-pin-removed "$release_workflow" 's/          printf [^\n]*global\.json"\n//' 'step [Generate, build and test both apps from the package] lacks line [          printf '"'"'{"sdk":{"version":"10.0.100","rollForward":"latestFeature"}}\n'"'"' > "$RUNNER_TEMP/gen/global.json"]'
+    st_mutant generated-apps-built-from-repo-directory "$release_workflow" 's/          cd "\$RUNNER_TEMP\/gen"\n//' 'step [Generate, build and test both apps from the package] lacks line [          cd "$RUNNER_TEMP/gen"]'
+    st_mutant dotnet-new-before-the-pinned-directory "$release_workflow" 's/(          cd "\$RUNNER_TEMP\/gen"\n)(          dotnet new sekiban-orleans-aspire[^\n]*\n)/$2$1/' 'runs dotnet new before it enters the SDK-pinned directory'
+    st_mutant generated-apps-directory-not-created "$release_workflow" 's/          mkdir -p "\$RUNNER_TEMP\/gen"\n//' 'lacks line [          mkdir -p "$RUNNER_TEMP/gen"]'
     st_mutant if-false-on-the-on-main-step "$release_workflow" 's/(      - name: Require the tagged commit to be on main\n)/$1        if: false\n/' 'forbidden text [    if:]' 'if: false'
     st_mutant if-false-on-the-job "$release_workflow" 's/(    runs-on: ubuntu-latest\n)/$1    if: false\n/' 'forbidden text [    if:]' 'if: false'
     st_mutant continue-on-error-on-the-generate-step "$release_workflow" 's/(      - name: Generate, build and test both apps from the package\n)/$1        continue-on-error: true\n/' 'forbidden text [continue-on-error]' 'continue-on-error: true'
@@ -350,7 +364,7 @@ run_self_test() {
     st_mutant check-strict-pack-removed "$check_workflow" 's~\ \ \ \ \ \ \ \ \ \ dotnet\ pack\ templates/Sekiban\.Pure\.Templates\ \-c\ Release\ \-o\ "\$RUNNER_TEMP/pack"\ \-warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905\
 ~~m' 'missing line [          dotnet pack templates/Sekiban.Pure.Templates -c Release -o "$RUNNER_TEMP/pack" -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905]'
     ((st_failures == 0)) || fail "$st_failures self-test case(s) failed"
-    printf 'Self-test passed: 1 pass case; 45 mutants killed (exit 1 and reason asserted).\n'
+    printf 'Self-test passed: 1 pass case; 49 mutants killed (exit 1 and reason asserted).\n'
 }
 
 validate_all "$repo_root" || exit 1

@@ -28,6 +28,7 @@ You need the .NET 10 SDK. Projects you generated earlier are not changed.
 ## What was not checked
 
 - **Dapr.** The Dapr template restores, builds and passes its unit tests, but it has not been run end to end against a Dapr runtime (placement service, scheduler and sidecars) on these versions.
+- **.NET 11 SDK.** The generated projects target `net10.0` and were built and tested with the .NET 10 SDK only. They were not built with the .NET 11 SDK; in our one attempt with 11.0.100, even a stock `net10.0` Blazor app did not build.
 - **Deployment files and browser tests.** The Bicep files, the deployment scripts and the Dockerfiles were not executed, and the Playwright tests of the Orleans template were not run.
 
 ## Package

@@ -77,6 +77,9 @@ jobs:
       - name: Generate, build and test both apps from the package
         run: |
           dotnet new install "out/Sekiban.Pure.Templates.${VERSION}.nupkg" --debug:custom-hive "$RUNNER_TEMP/hive"
+          mkdir -p "$RUNNER_TEMP/gen"
+          printf '{"sdk":{"version":"10.0.100","rollForward":"latestFeature"}}\n' > "$RUNNER_TEMP/gen/global.json"
+          cd "$RUNNER_TEMP/gen"
           dotnet new sekiban-orleans-aspire -n AcmeOrl -o "$RUNNER_TEMP/gen/AcmeOrl" --debug:custom-hive "$RUNNER_TEMP/hive"
           dotnet new sekiban-dapr-aspire -n AcmeDapr -o "$RUNNER_TEMP/gen/AcmeDapr" --debug:custom-hive "$RUNNER_TEMP/hive"
           for name in AcmeOrl AcmeDapr; do
