@@ -1045,7 +1045,12 @@ public class GeneralMultiProjectionActor
 
             try
             {
-                var result = method.Invoke(_singleStateAccessor, new object[] { ev, safeWindowThreshold, _domain });
+                var result = method.Invoke(
+                    _singleStateAccessor,
+                    System.Reflection.BindingFlags.DoNotWrapExceptions,
+                    null,
+                    new object[] { ev, safeWindowThreshold, _domain },
+                    null);
 
                 if (result is IMultiProjectionPayload payload)
                 {
@@ -1400,7 +1405,7 @@ public class GeneralMultiProjectionActor
                 }
                 catch { }
                 var getUnsafeMethod = accessorType.GetMethod("GetUnsafeProjection");
-                var projection = getUnsafeMethod?.Invoke(_singleStateAccessor, new object[] { _domain });
+                var projection = getUnsafeMethod?.Invoke(_singleStateAccessor, System.Reflection.BindingFlags.DoNotWrapExceptions, null, new object[] { _domain }, null);
                 statePayload = (IMultiProjectionPayload)(projection?.GetType().GetProperty("State")?.GetValue(projection) ?? _singleStateAccessor);
                 lastSortableId = (string)(projection?.GetType().GetProperty("LastSortableUniqueId")?.GetValue(projection) ?? _unsafeLastSortableUniqueId);
                 lastEventId = (Guid)(projection?.GetType().GetProperty("LastEventId")?.GetValue(projection) ?? _unsafeLastEventId);

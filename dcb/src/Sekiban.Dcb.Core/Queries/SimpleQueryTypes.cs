@@ -69,7 +69,7 @@ public class SimpleQueryTypes : ICoreQueryTypes
         // Invoke the static method
         try
         {
-            var result = handleMethod.Invoke(null, new object[] { projector, query, context });
+            var result = handleMethod.Invoke(null, BindingFlags.DoNotWrapExceptions, null, new object[] { projector, query, context }, null);
 
             if (IsResultBox(result))
             {
@@ -143,7 +143,7 @@ public class SimpleQueryTypes : ICoreQueryTypes
         try
         {
             // Execute filter
-            var filterResult = handleFilterMethod.Invoke(null, new object[] { projector, query, context });
+            var filterResult = handleFilterMethod.Invoke(null, BindingFlags.DoNotWrapExceptions, null, new object[] { projector, query, context }, null);
             var filteredItemsResult = ExtractEnumerableResult(filterResult);
             if (!filteredItemsResult.IsSuccess)
             {
@@ -153,7 +153,7 @@ public class SimpleQueryTypes : ICoreQueryTypes
             var filteredItems = filteredItemsResult.GetValue();
 
             // Execute sort
-            var sortResult = handleSortMethod.Invoke(null, new object?[] { filteredItems, query, context });
+            var sortResult = handleSortMethod.Invoke(null, BindingFlags.DoNotWrapExceptions, null, new object?[] { filteredItems, query, context }, null);
             var sortedItemsResult = ExtractEnumerableResult(sortResult);
             if (!sortedItemsResult.IsSuccess)
             {
