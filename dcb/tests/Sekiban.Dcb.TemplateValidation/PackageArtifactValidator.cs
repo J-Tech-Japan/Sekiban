@@ -164,11 +164,13 @@ internal static class PackageArtifactValidator
             "ResultBoxesAllowedPackageIds must be distinct and in ordinal order.");
         Assert(ResultBoxesAllowedPackageIds.All(id => PackageManifest.PackageIds.Contains(id, StringComparer.Ordinal)),
             "ResultBoxesAllowedPackageIds must name only DCB packages.");
-        var allowed = ResultBoxesAllowedPackageIds.ToHashSet(StringComparer.Ordinal);
+        // NuGet package IDs are case-insensitive and a nuspec keeps the csproj's spelling, so every
+        // ID comparison below ignores case (a "resultboxes" or "sekiban.dcb.core" spelling must not evade the ratchet).
+        var allowed = ResultBoxesAllowedPackageIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (allowedSubset is not null)
         {
             Assert(allowedSubset.All(allowed.Contains), "The ResultBoxes allowed subset may only narrow ResultBoxesAllowedPackageIds.");
-            allowed = allowedSubset.ToHashSet(StringComparer.Ordinal);
+            allowed = allowedSubset.ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
         foreach (var tfm in new[] { "net10.0", "net11.0" })
@@ -176,8 +178,8 @@ internal static class PackageArtifactValidator
             var dependencies = nuspecs.ToDictionary(
                 pair => pair.Key,
                 pair => DependencyIdsInGroup(pair.Value, tfm),
-                StringComparer.Ordinal);
-            var paths = new Dictionary<string, string?>(StringComparer.Ordinal);
+                StringComparer.OrdinalIgnoreCase);
+            var paths = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
             // Returns the dependency path to ResultBoxes ("A -> B -> ResultBoxes"), or null.
             string? PathToResultBoxes(string id, HashSet<string> visiting)
@@ -187,9 +189,9 @@ internal static class PackageArtifactValidator
                 string? found = null;
                 foreach (var dependency in dependencies[id])
                 {
-                    if (dependency == ResultBoxesPackageId)
+                    if (string.Equals(dependency, ResultBoxesPackageId, StringComparison.OrdinalIgnoreCase))
                     {
-                        found = $"{id} -> {ResultBoxesPackageId}";
+                        found = $"{id} -> {dependency}";
                         break;
                     }
                     if (dependencies.ContainsKey(dependency) && PathToResultBoxes(dependency, visiting) is { } inner)
@@ -205,7 +207,7 @@ internal static class PackageArtifactValidator
 
             foreach (var id in dependencies.Keys.Order(StringComparer.Ordinal))
             {
-                var path = PathToResultBoxes(id, new HashSet<string>(StringComparer.Ordinal));
+                var path = PathToResultBoxes(id, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
                 Assert(path is null || allowed.Contains(id),
                     $"{id} reaches {ResultBoxesPackageId} in {tfm} ({path}) but is outside the ResultBoxes allowed set; only the WithResult surface may depend on it.");
                 Assert(path is not null || !allowed.Contains(id),

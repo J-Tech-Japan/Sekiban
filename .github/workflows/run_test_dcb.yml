@@ -14,6 +14,8 @@ on:
       - 'dcb/OrleansVersion.props'
       - 'dcb/Directory.Build.props'
       - 'dcb/src/Directory.Build.props'
+      - 'dcb/src/Directory.Build.targets'
+      - 'dcb/src/PackageValidationBaseline/**'
       - 'dcb/src/Sekiban.Dcb.Orleans.WithResult/**'
       - 'dcb/src/Sekiban.Dcb.Orleans.WithoutResult/**'
       - 'dcb/src/Sekiban.Dcb.MaterializedView/**'

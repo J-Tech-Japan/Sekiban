@@ -820,11 +820,12 @@ def resultboxes_ratchet_cases(f, feed, command):
         entries[name] = entries[name].replace(before, after)
         with zipfile.ZipFile(path, 'w') as archive:
             for name, content in entries.items(): archive.writestr(name, content)
-    def rejected(case, reason, args=()):
+    def rejected(case, reason, args=(), also=()):
         try:
             run(command + list(args), f.repo, f.env)
         except Failure as error:
-            if reason not in str(error): raise Failure(f'{case}: wrong failure (wanted {reason}): {error}')
+            for wanted in (reason, *also):
+                if wanted not in str(error): raise Failure(f'{case}: wrong failure (wanted {wanted}): {error}')
             print(f'PASS rejects {case}: {reason}', flush=True)
         else:
             raise Failure(case+' unexpectedly passed')
@@ -845,6 +846,14 @@ def resultboxes_ratchet_cases(f, feed, command):
         rejected('resultboxes-direct-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> ResultBoxes) but is outside the ResultBoxes allowed set', narrowed)
         rewrite(target, direct, f'<dependency id="Sekiban.Dcb.Core" version="{f.version}" />'.encode())
         rejected('resultboxes-transitive-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> Sekiban.Dcb.Core -> ResultBoxes) but is outside the ResultBoxes allowed set', narrowed)
+        # NuGet IDs are case-insensitive; a nuspec keeps the csproj's spelling.
+        path.write_bytes(original)
+        rewrite(target, direct, b'<dependency id="resultboxes" version="0.4.0" />')
+        rejected('resultboxes-lowercase-direct-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> resultboxes) but is outside the ResultBoxes allowed set', narrowed)
+        path.write_bytes(original)
+        rewrite(target, direct, f'<dependency id="sekiban.dcb.core" version="{f.version}" />'.encode())
+        rejected('resultboxes-lowercase-transitive-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> ', narrowed,
+                 also=['-> ResultBoxes) but is outside the ResultBoxes allowed set'])
         rejected('resultboxes-subset-widens-list', 'may only narrow ResultBoxesAllowedPackageIds',
                  ['--resultboxes-allowed-subset', 'Sekiban.Dcb.Core,Sekiban.Dcb.Unlisted'])
     finally:
