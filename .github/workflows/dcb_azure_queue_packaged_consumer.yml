@@ -6,6 +6,8 @@ on:
       - '.github/workflows/dcb_azure_queue_packaged_consumer.yml'
       - '.github/workflows/packagesDcb.yml'
       - 'Directory.Build.props'
+      - 'dcb/Directory.Build.props'
+      - 'dcb/OrleansVersion.props'
       - 'dcb/src/**'
       - 'dcb/tests/Sekiban.Dcb.Orleans.Tests/run-packaged-consumer.sh'
       - 'dcb/tests/Sekiban.Dcb.TemplateValidation/**'
@@ -18,6 +20,7 @@ permissions:
 jobs:
   packaged-consumer:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -26,15 +29,17 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
-
-      - name: Setup .NET 11 SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 11.0.100-rc.3.26522.148
+          dotnet-version: |
+            10.0.x
+            11.0.1xx
 
       - name: Restore and build DCB
         run: |
@@ -80,6 +85,12 @@ jobs:
           dotnet pack dcb/src/Sekiban.Dcb.DynamoDB/Sekiban.Dcb.DynamoDB.csproj -c Release -o out -p:PackageVersion="$VERSION" -p:GenerateSBOM=false -p:IncludeSymbols=false -p:GeneratePackageOnBuild=false --no-build --nologo
           dotnet pack dcb/src/Sekiban.Dcb.BlobStorage.S3/Sekiban.Dcb.BlobStorage.S3.csproj -c Release -o out -p:PackageVersion="$VERSION" -p:GenerateSBOM=false -p:IncludeSymbols=false -p:GeneratePackageOnBuild=false --no-build --nologo
           test "$(find out -maxdepth 1 -name '*.nupkg' | wc -l | tr -d ' ')" = 26
+
+      - name: Validate packed dependency groups match across net10.0 and net11.0
+        env:
+          VERSION: 10.0.2-pr.${{ github.run_id }}
+        run: |
+          dotnet run --project dcb/tests/Sekiban.Dcb.TemplateValidation/Sekiban.Dcb.TemplateValidation.csproj -c Release --no-build --no-restore -- packages --directory "$GITHUB_WORKSPACE/out" --expected-version "$VERSION"
 
       - name: Validate manifest, nuspec dependencies, and run isolated consumers
         env:

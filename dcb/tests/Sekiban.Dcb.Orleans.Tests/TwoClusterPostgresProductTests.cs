@@ -101,6 +101,7 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
     private static async Task<TestCluster> BuildClusterAsync(string name)
     {
         var builder = new TestClusterBuilder();
+        MultiProjectionGrainWatermarkRetirementTests.ConfigureTestPorts(builder, name == "A" ? 4 : 8);
         builder.Options.InitialSilosCount = 1;
         var uid = Guid.NewGuid().ToString("N")[..8];
         builder.Options.ClusterId = $"G20-pg-{name}-{uid}";
@@ -338,124 +339,142 @@ public class TwoClusterPostgresProductTests : IAsyncLifetime
     [Fact]
     public async Task ParkedStaleWriter_OnRealPostgres_WithOffload_RejectedAgainstTombstone_RowAndBlobUnchanged_BothRestartConverge()
     {
-        var grainA = _clusterA.Client.GetGrain<IMultiProjectionGrain>(Projector);
-        var grainB = _clusterB.Client.GetGrain<IMultiProjectionGrain>(Projector);
-        var gateB = Gates["B"];
-        var gateA = Gates["A"];
-        var eventStore = _rootSp.GetRequiredService<IEventStore>();
 
-        // (1) One already-safe event; both clusters catch up + persist the CAS. The forced-low offload threshold offloads
-        //     the snapshot to a content-addressed blob. Shared row => Active(gen0), winner "later", IsOffloaded.
-        await WriteEventAsync("team-1", "later", 30);
-        await grainA.RefreshAsync();
-        Assert.True((await grainA.PersistStateAsync()).IsSuccess);
-        await grainB.RefreshAsync();
-        _ = await grainB.PersistStateAsync();
-        var gen0 = await ReadRowAsync();
-        Assert.True(gen0.IsActive);
-        Assert.Equal(0, gen0.Generation);
-        Assert.True(gen0.Record!.IsOffloaded, "the snapshot must be offloaded to a blob (forced-low threshold)");
-        var gen0Key = gen0.Record.OffloadKey!;
-        Assert.NotNull(Blob.TryGet(gen0Key));
-
-        // (2) A B-only safe event so B has a genuine stale persist on the gen0 token (its snapshot would offload to a
-        //     DIFFERENT content-addressed key).
-        await grainB.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("team-2", "B-stale"), DateTime.UtcNow.AddSeconds(-20))) });
-        await PollUnsafeContainsAsync(grainB, "team-2");
-
-        // (3) Arm B's upsert gate; launch B's REAL grain persist — it parks at the Postgres store boundary holding gen0.
         var bUpsert = new GatingCheckpointStore.Gate { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
-        gateB.UpsertGate = bUpsert;
-        var bPersist = grainB.PersistStateAsync();
-        await bUpsert.Arrived.Task;
-
-        // (4) Arm A's rebuilt-commit gate; deliver the retrograde "earlier" to A and drive its rebuild FIRE-AND-FORGET. A
-        //     durably Invalidates (tombstone gen1 in Postgres) then parks at its rebuilt commit, holding the tombstone open.
         var aCommit = new GatingCheckpointStore.Gate { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
-        gateA.CommitRebuiltGate = aCommit;
-        await WriteEventAsync("team-1", "earlier", 31);
-        await grainA.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31))) });
-        var aDrive = grainA.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);
-        await aCommit.Arrived.Task;
-        var tomb = await PollUntilTombstoneAsync();
-        Assert.True(tomb.IsTombstoned);
-        Assert.Equal(1, tomb.Generation);
-        Assert.Equal(gen0Key, tomb.Record!.OffloadKey);   // invalidate retains the prior payload/offload under the tombstone
-
-        // (5) Release B's parked stale persist. Its CAS on the gen0 token meets the tombstone => ConditionRejected. The
-        //     Postgres row is byte-identical: same generation/revision/lifecycle AND same OffloadKey + blob bytes — B's
-        //     stale candidate (a different content-addressed blob) applied NOTHING.
-        bUpsert.Release!.SetResult();
-        _ = await bPersist;
-        var afterB = await ReadRowAsync();
-        Assert.True(afterB.IsTombstoned, $"the shared Postgres row was re-contaminated: {afterB.Lifecycle} gen{afterB.Generation}");
-        Assert.Equal(1, afterB.Generation);
-        Assert.Equal(tomb.Revision, afterB.Revision);
-        Assert.Equal(gen0Key, afterB.Record!.OffloadKey);                 // OffloadKey unchanged
-        Assert.Equal(Blob.TryGet(gen0Key), Blob.TryGet(afterB.Record.OffloadKey!));   // blob bytes unchanged
-
-        // (5b) STALE-QUERY WINDOW — A's rebuilt commit stays PARKED (the shared row is held OPEN at the tombstone). Deliver
-        //      the retrograde "earlier" to B and start B's product state + scalar + list queries as background tasks. B's
-        //      armed barrier drives a from-scratch rebuild; B's rebuilt commit PARKS at its own gate (a deterministic
-        //      barrier-entry signal — NO sleeps). While parked, none of B's queries may normal-succeed with the stale
-        //      "later"/"team-2": each is either still pending on the shared barrier or has surfaced the fail-closed channel.
-        await grainB.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31))) });
         var bCommit = new GatingCheckpointStore.Gate { Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
-        gateB.CommitRebuiltGate = bCommit;
-        var execB = new OrleansDcbExecutor(_clusterB.Client, eventStore, G20Shared.BuildDomain());
-        var bState = grainB.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
-        var bScalar = execB.QueryAsync(new WinnerQuery("team-1"));
-        var bList = execB.QueryAsync(new WinnerListQuery());
-        await bCommit.Arrived.Task;   // deterministic barrier-entry: B's rebuild reached its rebuilt-commit boundary (parked)
+        try
+        {
+            var grainA = _clusterA.Client.GetGrain<IMultiProjectionGrain>(Projector);
+            var grainB = _clusterB.Client.GetGrain<IMultiProjectionGrain>(Projector);
+            var gateB = Gates["B"];
+            var gateA = Gates["A"];
+            var eventStore = _rootSp.GetRequiredService<IEventStore>();
 
-        // With BOTH A and B rebuilt commits parked on the tombstone, none of B's queries has served a stale success — each
-        // is pending on the shared barrier OR surfaced the fail-closed channel; NONE normal-succeeded with "later"/"team-2".
-        Assert.False(IsStaleStateSuccess(bState), "B state query normal-succeeded STALE while the barrier/tombstone was open");
-        Assert.False(IsStaleScalarSuccess(bScalar), "B scalar query normal-succeeded STALE while the barrier/tombstone was open");
-        Assert.False(IsStaleListSuccess(bList), "B list query normal-succeeded STALE while the barrier/tombstone was open");
+            // (1) One already-safe event; both clusters catch up + persist the CAS. The forced-low offload threshold offloads
+            //     the snapshot to a content-addressed blob. Shared row => Active(gen0), winner "later", IsOffloaded.
+            await WriteEventAsync("team-1", "later", 30);
+            await grainA.RefreshAsync();
+            Assert.True((await grainA.PersistStateAsync()).IsSuccess);
+            await grainB.RefreshAsync();
+            _ = await grainB.PersistStateAsync();
+            var gen0 = await ReadRowAsync();
+            Assert.True(gen0.IsActive);
+            Assert.Equal(0, gen0.Generation);
+            Assert.True(gen0.Record!.IsOffloaded, "the snapshot must be offloaded to a blob (forced-low threshold)");
+            var gen0Key = gen0.Record.OffloadKey!;
+            Assert.NotNull(Blob.TryGet(gen0Key));
 
-        // (6) TWO-SIDED rebuilt-commit race on the SAME exact tombstone token: release A and B together. Exactly ONE wins
-        //     (row advances Active(gen1) once), the loser is ConditionRejected and refetches/rebuilds.
-        var rowBeforeRace = await ReadRowAsync();
-        Assert.True(rowBeforeRace.IsTombstoned);   // still open right up to the release
-        aCommit.Release!.SetResult();
-        bCommit.Release!.SetResult();
-        _ = await aDrive;
-        _ = await bState;   // now B's queries may resolve
-        var final = await ReadRowAsync();
-        Assert.True(final.IsActive);                                     // exactly one winner advanced the row
-        Assert.Equal(1, final.Generation);
-        // The revision advanced EXACTLY ONCE from the tombstone token. Two commits winning the same token (i.e. the token
-        // CAS removed) would advance it TWICE — this pins one-winner at the product level, so removing the token CAS fails.
-        Assert.Equal((long.Parse(tomb.Revision) + 1).ToString(), final.Revision);
-        Assert.Equal(2, final.Record!.EventsProcessed);
-        Assert.True(final.Record.IsOffloaded);
-        Assert.NotNull(Blob.TryGet(final.Record.OffloadKey!));          // the winning blob is readable
+            // Arm before the B-only event: the first upsert, background or explicit, must park on gen0.
+            gateB.UpsertGate = bUpsert;
+            await grainB.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("team-2", "B-stale"), DateTime.UtcNow.AddSeconds(-20))) });
+            var bPersist = grainB.PersistStateAsync();
+            await bUpsert.Arrived.Task.WaitAsync(TimeSpan.FromMinutes(2));
 
-        // (7) After the release, B converges to the exact globally-earliest winner + safe state; the stale "team-2" is gone.
-        var safeB = await PollSafeWinnerAsync(grainB, "earlier");
-        Assert.Equal("earlier", WinnerOf(safeB));
-        Assert.True(safeB.IsSafeState);
-        Assert.False(((FirstWinsProjector)safeB.Payload).Winners.ContainsKey("team-2"));
+            // (4) Arm A's rebuilt-commit gate; deliver the retrograde "earlier" to A and drive its rebuild FIRE-AND-FORGET. A
+            //     durably Invalidates (tombstone gen1 in Postgres) then parks at its rebuilt commit, holding the tombstone open.
+            gateA.CommitRebuiltGate = aCommit;
+            await WriteEventAsync("team-1", "earlier", 31);
+            await grainA.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31))) });
+            var aDrive = grainA.GetStateAsync(canGetUnsafeState: true, waitForCatchUp: false);
+            await aCommit.Arrived.Task.WaitAsync(TimeSpan.FromMinutes(2));
+            var tomb = await PollUntilTombstoneAsync();
+            Assert.True(tomb.IsTombstoned);
+            Assert.Equal(1, tomb.Generation);
+            Assert.Equal(gen0Key, tomb.Record!.OffloadKey);   // invalidate retains the prior payload/offload under the tombstone
 
-        // (8) Restart BOTH clusters (fresh activations = NEW store instances). Both read the control plane before binding
-        //     payload and converge to the EXACT globally-earliest winner + safe state + position; the winning blob reads.
-        await grainA.RequestDeactivationAsync();
-        await grainB.RequestDeactivationAsync();
-        await Task.Delay(1500);
-        var a2 = _clusterA.Client.GetGrain<IMultiProjectionGrain>(Projector);
-        var b2 = _clusterB.Client.GetGrain<IMultiProjectionGrain>(Projector);
-        var ra = await PollSafeWinnerAsync(a2, "earlier");
-        var rb = await PollSafeWinnerAsync(b2, "earlier");
-        Assert.Equal("earlier", WinnerOf(ra));
-        Assert.Equal("earlier", WinnerOf(rb));
-        Assert.True(ra.IsSafeState);
-        Assert.True(rb.IsSafeState);
-        Assert.Equal(ra.LastSortableUniqueId, rb.LastSortableUniqueId);   // same converged position on both clusters
-        await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterA.Client, eventStore, G20Shared.BuildDomain()), "earlier");
-        await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterB.Client, eventStore, G20Shared.BuildDomain()), "earlier");
-        var afterRestart = await ReadRowAsync();
-        Assert.NotNull(Blob.TryGet(afterRestart.Record!.OffloadKey!));    // the winning blob is still readable after restart
+            // (5) Release B's parked stale persist. Its CAS on the gen0 token meets the tombstone => ConditionRejected. The
+            //     Postgres row is byte-identical: same generation/revision/lifecycle AND same OffloadKey + blob bytes — B's
+            //     stale candidate (a different content-addressed blob) applied NOTHING.
+            bUpsert.Release!.SetResult();
+            _ = await bPersist;
+            var afterB = await ReadRowAsync();
+            Assert.True(afterB.IsTombstoned, $"the shared Postgres row was re-contaminated: {afterB.Lifecycle} gen{afterB.Generation}");
+            Assert.Equal(1, afterB.Generation);
+            Assert.Equal(tomb.Revision, afterB.Revision);
+            Assert.Equal(gen0Key, afterB.Record!.OffloadKey);                 // OffloadKey unchanged
+            Assert.Equal(Blob.TryGet(gen0Key), Blob.TryGet(afterB.Record.OffloadKey!));   // blob bytes unchanged
+
+            var retainedBlob = Blob.TryGet(gen0Key)!.ToArray();
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                _ = await grainB.PersistStateAsync();
+                var blocked = await ReadRowAsync();
+                Assert.True(blocked.IsTombstoned);
+                Assert.Equal(tomb.Generation, blocked.Generation);
+                Assert.Equal(tomb.Revision, blocked.Revision);
+                Assert.Equal(gen0Key, blocked.Record!.OffloadKey);
+                Assert.Equal(retainedBlob, Blob.TryGet(gen0Key));
+            }
+
+            // (5b) STALE-QUERY WINDOW — A's rebuilt commit stays PARKED (the shared row is held OPEN at the tombstone). Deliver
+            //      the retrograde "earlier" to B and start B's product state + scalar + list queries as background tasks. B's
+            //      armed barrier drives a from-scratch rebuild; B's rebuilt commit PARKS at its own gate (a deterministic
+            //      barrier-entry signal — NO sleeps). While parked, none of B's queries may normal-succeed with the stale
+            //      "later"/"team-2": each is either still pending on the shared barrier or has surfaced the fail-closed channel.
+            await grainB.AddEventsAsync(new[] { ToSerializable(CreateEvent(new CreatedWithId("team-1", "earlier"), DateTime.UtcNow.AddSeconds(-31))) });
+            gateB.CommitRebuiltGate = bCommit;
+            var execB = new OrleansDcbExecutor(_clusterB.Client, eventStore, G20Shared.BuildDomain());
+            var bState = grainB.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            var bScalar = execB.QueryAsync(new WinnerQuery("team-1"));
+            var bList = execB.QueryAsync(new WinnerListQuery());
+            await bCommit.Arrived.Task.WaitAsync(TimeSpan.FromMinutes(2));   // deterministic barrier-entry: B's rebuild reached its rebuilt-commit boundary (parked)
+
+            // With BOTH A and B rebuilt commits parked on the tombstone, none of B's queries has served a stale success — each
+            // is pending on the shared barrier OR surfaced the fail-closed channel; NONE normal-succeeded with "later"/"team-2".
+            Assert.False(IsStaleStateSuccess(bState), "B state query normal-succeeded STALE while the barrier/tombstone was open");
+            Assert.False(IsStaleScalarSuccess(bScalar), "B scalar query normal-succeeded STALE while the barrier/tombstone was open");
+            Assert.False(IsStaleListSuccess(bList), "B list query normal-succeeded STALE while the barrier/tombstone was open");
+
+            // (6) TWO-SIDED rebuilt-commit race on the SAME exact tombstone token: release A and B together. Exactly ONE wins
+            //     (row advances Active(gen1) once), the loser is ConditionRejected and refetches/rebuilds.
+            var rowBeforeRace = await ReadRowAsync();
+            Assert.True(rowBeforeRace.IsTombstoned);   // still open right up to the release
+            aCommit.Release!.SetResult();
+            bCommit.Release!.SetResult();
+            _ = await aDrive;
+            _ = await bState;   // now B's queries may resolve
+            var final = await ReadRowAsync();
+            Assert.True(final.IsActive);                                     // exactly one winner advanced the row
+            Assert.Equal(1, final.Generation);
+            // The revision advanced EXACTLY ONCE from the tombstone token. Two commits winning the same token (i.e. the token
+            // CAS removed) would advance it TWICE — this pins one-winner at the product level, so removing the token CAS fails.
+            Assert.Equal((long.Parse(tomb.Revision) + 1).ToString(), final.Revision);
+            Assert.Equal(2, final.Record!.EventsProcessed);
+            Assert.True(final.Record.IsOffloaded);
+            Assert.NotNull(Blob.TryGet(final.Record.OffloadKey!));          // the winning blob is readable
+
+            // (7) After the release, B converges to the exact globally-earliest winner + safe state; the stale "team-2" is gone.
+            var safeB = await PollSafeWinnerAsync(grainB, "earlier");
+            Assert.Equal("earlier", WinnerOf(safeB));
+            Assert.True(safeB.IsSafeState);
+            Assert.False(((FirstWinsProjector)safeB.Payload).Winners.ContainsKey("team-2"));
+
+            // (8) Restart BOTH clusters (fresh activations = NEW store instances). Both read the control plane before binding
+            //     payload and converge to the EXACT globally-earliest winner + safe state + position; the winning blob reads.
+            await grainA.RequestDeactivationAsync();
+            await grainB.RequestDeactivationAsync();
+            await Task.Delay(1500);
+            var a2 = _clusterA.Client.GetGrain<IMultiProjectionGrain>(Projector);
+            var b2 = _clusterB.Client.GetGrain<IMultiProjectionGrain>(Projector);
+            var ra = await PollSafeWinnerAsync(a2, "earlier");
+            var rb = await PollSafeWinnerAsync(b2, "earlier");
+            Assert.Equal("earlier", WinnerOf(ra));
+            Assert.Equal("earlier", WinnerOf(rb));
+            Assert.True(ra.IsSafeState);
+            Assert.True(rb.IsSafeState);
+            Assert.Equal(ra.LastSortableUniqueId, rb.LastSortableUniqueId);   // same converged position on both clusters
+            await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterA.Client, eventStore, G20Shared.BuildDomain()), "earlier");
+            await AssertScalarAndListAsync(new OrleansDcbExecutor(_clusterB.Client, eventStore, G20Shared.BuildDomain()), "earlier");
+            var afterRestart = await ReadRowAsync();
+            Assert.NotNull(Blob.TryGet(afterRestart.Record!.OffloadKey!));    // the winning blob is still readable after restart
+        }
+        finally
+        {
+            bUpsert.Release!.TrySetResult();
+            aCommit.Release!.TrySetResult();
+            bCommit.Release!.TrySetResult();
+        }
     }
 
     // A standalone DbContextFactory over a connection string (no ServiceProvider needed), so the checkpoint store + gate

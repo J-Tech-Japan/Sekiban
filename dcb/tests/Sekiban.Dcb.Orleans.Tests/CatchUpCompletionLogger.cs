@@ -7,6 +7,7 @@ namespace Sekiban.Dcb.Orleans.Tests;
 // Capture the completion decision itself: unchanged-checkpoint skipping can hide a persist attempt from store counters.
 internal sealed class CatchUpCompletionLogger : ILogger<MultiProjectionGrain>, ILoggerProvider
 {
+    public ConcurrentQueue<(LogLevel Level, EventId EventId, IReadOnlyDictionary<string, object?> Fields)> Rebuilds { get; } = new();
     private readonly ConcurrentQueue<string> _reasons = new();
     public IReadOnlyList<string> Reasons => _reasons.ToArray();
     public ILogger CreateLogger(string categoryName) => this;
@@ -17,6 +18,9 @@ internal sealed class CatchUpCompletionLogger : ILogger<MultiProjectionGrain>, I
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
         Func<TState, Exception?, string> formatter)
     {
+        if (eventId == MultiProjectionLogEvents.RuntimeFullRebuildRequired &&
+            state is IEnumerable<KeyValuePair<string, object?>> rebuildFields)
+            Rebuilds.Enqueue((logLevel, eventId, rebuildFields.ToDictionary(pair => pair.Key, pair => pair.Value)));
         if (eventId.Name != "CatchUpCompleted" || state is not IEnumerable<KeyValuePair<string, object?>> fields)
             return;
         var reason = fields.Single(field => field.Key == "PersistReason").Value;

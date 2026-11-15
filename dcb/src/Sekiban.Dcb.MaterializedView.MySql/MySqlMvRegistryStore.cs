@@ -53,6 +53,9 @@ public sealed partial class MySqlMvRegistryStore : MvForcedReverseRegistryStoreB
         await using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
+        await using var initializationLock = await MySqlMvInitializationLock.AcquireAsync(
+            connection, null, cancellationToken).ConfigureAwait(false);
+
         const string registrySql = """
             CREATE TABLE IF NOT EXISTS sekiban_mv_registry (
                 service_id VARCHAR(200) NOT NULL,

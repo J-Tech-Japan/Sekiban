@@ -135,6 +135,8 @@ if (useInMemoryGrainStorage)
     builder.UseOrleans(siloBuilder =>
     {
         ConfigureClusterOptions(siloBuilder, builder.Configuration);
+        // Restoring a large multi-projection snapshot can take longer than the default 30 s activation timeout.
+        siloBuilder.Configure<Orleans.Configuration.GrainCollectionOptions>(options => options.ActivationTimeout = TimeSpan.FromMinutes(5));
         ConfigureEndpoints(siloBuilder, builder.Environment);
         ConfigureClusteringAndStorage(siloBuilder, builder.Configuration, builder.Environment);
         ConfigureStreaming(siloBuilder, builder.Configuration, orleansQueueType);
@@ -148,6 +150,8 @@ else
     builder.Host.UseOrleans((context, siloBuilder) =>
     {
         ConfigureClusterOptions(siloBuilder, context.Configuration);
+        // Restoring a large multi-projection snapshot can take longer than the default 30 s activation timeout.
+        siloBuilder.Configure<Orleans.Configuration.GrainCollectionOptions>(options => options.ActivationTimeout = TimeSpan.FromMinutes(5));
 
         // Configure endpoints for Azure Container Apps (non-development environments)
         ConfigureEndpoints(siloBuilder, context.HostingEnvironment);
@@ -360,7 +364,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                         cancellationToken: ct));
                 return Results.Ok(rows);
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMv");
 
     apiRoute
@@ -401,7 +404,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                     tombstoneCount
                 });
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMvDiagnostics");
 }
 
@@ -526,7 +528,8 @@ void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environmen
         {
             options.Configure<IServiceProvider>((opt, sp) =>
             {
-                opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansClusteringTable");
+                opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansClusteringTable") ??
+                    throw new InvalidOperationException("Required storage client for ConnectionStrings:DcbOrleansClusteringTable was not resolved.");
             });
         });
     }
@@ -547,7 +550,8 @@ void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environmen
     {
         options.Configure<IServiceProvider>((opt, sp) =>
         {
-            opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+            opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState") ??
+                throw new InvalidOperationException("Required storage client for ConnectionStrings:DcbOrleansGrainState was not resolved.");
             opt.ContainerName = "sekiban-grainstate";
         });
     });
@@ -558,7 +562,8 @@ void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environmen
         {
             options.Configure<IServiceProvider>((opt, sp) =>
             {
-                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState") ??
+                    throw new InvalidOperationException("Required storage client for ConnectionStrings:DcbOrleansGrainState was not resolved.");
                 opt.ContainerName = "sekiban-grainstate";
             });
         });
@@ -570,7 +575,8 @@ void ConfigureLocalOrleans(ISiloBuilder siloBuilder, IHostEnvironment environmen
         {
             options.Configure<IServiceProvider>((opt, sp) =>
             {
-                opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable") ??
+                    throw new InvalidOperationException("Required storage client for ConnectionStrings:DcbOrleansGrainTable was not resolved.");
             });
         });
     }
@@ -635,9 +641,12 @@ void ConfigureInMemoryStreams(ISiloBuilder siloBuilder)
 void ConfigureEventHubStreams(ISiloBuilder siloBuilder, IConfiguration configuration)
 {
     Console.WriteLine("[Orleans] Using Event Hub streams");
-    var eventHubConnection = configuration.GetConnectionString("OrleansEventHub");
-    var eventHubName = configuration["ORLEANS_QUEUE_EVENTHUB_NAME"];
-    var tableConnection = configuration.GetConnectionString("DcbOrleansGrainTable");
+    var eventHubConnection = configuration.GetConnectionString("OrleansEventHub") ??
+        throw new InvalidOperationException("Required setting ConnectionStrings:OrleansEventHub is missing.");
+    var eventHubName = configuration["ORLEANS_QUEUE_EVENTHUB_NAME"] ??
+        throw new InvalidOperationException("Required setting ORLEANS_QUEUE_EVENTHUB_NAME is missing.");
+    var tableConnection = configuration.GetConnectionString("DcbOrleansGrainTable") ??
+        throw new InvalidOperationException("Required setting ConnectionStrings:DcbOrleansGrainTable is missing.");
 
     void AddEventHubStream(string name, string checkpointTable)
     {
@@ -672,7 +681,8 @@ void ConfigureAzureQueueStreams(ISiloBuilder siloBuilder)
             {
                 options.Configure<IServiceProvider>((queueOptions, sp) =>
                 {
-                    queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue");
+                    queueOptions.QueueServiceClient = sp.GetKeyedService<QueueServiceClient>("DcbOrleansQueue") ??
+                        throw new InvalidOperationException("Required storage client for ConnectionStrings:DcbOrleansQueue was not resolved.");
                     queueOptions.QueueNames = queueNames;
                     queueOptions.MessageVisibilityTimeout = TimeSpan.FromMinutes(2);
                 });
@@ -735,7 +745,9 @@ void ConfigureOrleansServices(ISiloBuilder siloBuilder, IHostEnvironment environ
             EnableDynamicSafeWindow = databaseType != "sqlite" && !configuration.GetValue<bool>(InMemoryStreamsConfigKey),
             MaxExtraSafeWindowMs = 30000,
             LagEmaAlpha = 0.3,
-            LagDecayPerSecond = 0.98
+            LagDecayPerSecond = 0.98,
+            // A query during catch-up waits at most 5 s, then gets 503 + Retry-After (below the web front ends' 10 s attempt timeout).
+            FirstQueryCatchUpMaxWaitMs = 5000
         };
         services.AddTransient(_ => dynamicOptions);
     });

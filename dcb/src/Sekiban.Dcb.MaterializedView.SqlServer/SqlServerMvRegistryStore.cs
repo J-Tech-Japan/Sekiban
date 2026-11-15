@@ -154,6 +154,8 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await SqlServerMvInitializationLock.AcquireAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
 
         const string sql = """
             IF OBJECT_ID(N'sekiban_mv_registry', N'U') IS NULL
@@ -199,14 +201,14 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
             END;
             """;
 
-        await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(sql, transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
         const string checkpointMigrationSql = """
             IF COL_LENGTH(N'sekiban_mv_registry', N'current_checkpoint_truth') IS NULL
                 ALTER TABLE sekiban_mv_registry ADD current_checkpoint_truth NVARCHAR(MAX) NULL;
             IF COL_LENGTH(N'sekiban_mv_registry', N'target_checkpoint_truth') IS NULL
                 ALTER TABLE sekiban_mv_registry ADD target_checkpoint_truth NVARCHAR(MAX) NULL;
             """;
-        await connection.ExecuteAsync(new CommandDefinition(checkpointMigrationSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(checkpointMigrationSql, transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
         const string activeGenerationMigrationSql = """
             IF COL_LENGTH(N'sekiban_mv_active', N'active_generation') IS NULL
                 ALTER TABLE sekiban_mv_active ADD active_generation BIGINT NOT NULL CONSTRAINT DF_sekiban_mv_active_generation DEFAULT 0;
@@ -217,7 +219,8 @@ public sealed partial class SqlServerMvRegistryStore : MvForcedReverseRegistrySt
             IF COL_LENGTH(N'sekiban_mv_active', N'switched_at_utc') IS NULL
                 ALTER TABLE sekiban_mv_active ADD switched_at_utc DATETIMEOFFSET NULL;
             """;
-        await connection.ExecuteAsync(new CommandDefinition(activeGenerationMigrationSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(activeGenerationMigrationSql, transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task RegisterAsync(MvRegistryEntry entry, IDbTransaction? transaction = null, CancellationToken cancellationToken = default)

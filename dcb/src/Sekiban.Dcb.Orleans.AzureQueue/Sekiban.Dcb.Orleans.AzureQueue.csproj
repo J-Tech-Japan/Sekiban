@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <LangVersion>15</LangVersion>
-    <!-- Keep the per-TFM dependency contract explicit in the packed nuspec. -->
-    <RestoreEnablePackagePruning Condition="'$(TargetFramework)' == 'net11.0'">false</RestoreEnablePackagePruning>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Sekiban.Dcb.Orleans.AzureQueue</AssemblyName>
@@ -44,15 +42,15 @@
     </PackageReference>
   </ItemGroup>
 
-<ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.5" />
-</ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.15" />
+  </ItemGroup>
 
-<ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="11.0.0-rc.3.26522.148" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="11.0.0-rc.3.26522.148" />
-</ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="11.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="11.0.0" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Sekiban.Dcb.Core\Sekiban.Dcb.Core.csproj" />

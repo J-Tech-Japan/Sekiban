@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>ad4344bd-9e0f-4a8a-bea8-3078e8cb5c5e</UserSecretsId>
@@ -13,14 +13,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sekiban.Pure.Dapr" Version="1.0.1-preview21" />
-    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="1.0.1-preview21" />
-    <PackageReference Include="Sekiban.Pure.Postgres" Version="1.0.1-preview21" />
+    <PackageReference Include="Sekiban.Pure.Dapr" Version="10.0.0" />
+    <PackageReference Include="Sekiban.Pure.CosmosDb" Version="10.0.0" />
+    <PackageReference Include="Sekiban.Pure.Postgres" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.7" />
-    <PackageReference Include="Scalar.AspNetCore" Version="2.6.5" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.15" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.10.3" />
   </ItemGroup>
 
 </Project>

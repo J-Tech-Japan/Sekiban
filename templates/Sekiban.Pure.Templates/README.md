@@ -3,9 +3,9 @@
 <!-- SEKIBAN_PURE_POLICY_START -->
 > **Sekiban.Pure support policy / サポート方針**
 >
-> Sekiban.Pure is in maintenance mode (no new features; .NET 9). We plan to complete its lifecycle with .NET 9 (EOL Nov 10, 2026) — but if you run it in production, we will bring it to .NET 10/11 as a pure compatibility migration, no features (we shipped exactly this for Sekiban(Core) 0.25.0: unchanged public API, bidirectional data compatibility). Tell us in [#1169](https://github.com/J-Tech-Japan/Sekiban/issues/1169). For new projects we recommend Sekiban DCB.
+> Sekiban.Pure is in maintenance mode: no new features. Its main target is .NET 10, and it builds for .NET 10 and .NET 11 (Sekiban.Pure 9.x remains available for .NET 9). We apply security fixes only: fixes for vulnerabilities in Sekiban.Pure itself and dependency updates that resolve published security advisories. For new projects we recommend Sekiban DCB.
 >
-> Sekiban.Pure は現在メンテナンスモードです（機能追加なし・.NET 9 対応）。.NET 9 の EOL（2026-11-10）でライフサイクルを完了する予定ですが、本番利用中の方がいれば .NET 10/11 への対応を機能追加なしの互換移行として行います（Sekiban(Core) 0.25.0 で同方式を実施済み: 公開 API 無変更・保存データ双方向互換）。必要な方は [#1169](https://github.com/J-Tech-Japan/Sekiban/issues/1169) でお知らせください。新規プロジェクトには Sekiban DCB を推奨します。
+> Sekiban.Pure はメンテナンスモードです（機能追加なし）。メインの対応は .NET 10 で、.NET 10 と .NET 11 向けにビルドします（.NET 9 向けには Sekiban.Pure 9.x が引き続き利用できます）。対応するのはセキュリティ修正のみです（Sekiban.Pure 自身の脆弱性の修正と、公開済みのセキュリティ勧告を解消する依存関係の更新）。新規プロジェクトには Sekiban DCB を推奨します。
 <!-- SEKIBAN_PURE_POLICY_END -->
 
 
@@ -54,36 +54,48 @@ This template includes:
 
 ### 1. App Host Configuration
 
-Add PostgreSQL password to secrets.json:
-
-```json
-{
-  "Parameters:postgres-password": "your_strong_password"
-}
-```
-
-### 2. Optional: Cluster Settings
-
-Modify AppHost Program.cs for your clustering needs:
+No secret is needed to start: the AppHost runs Azure Storage (Azurite) and PostgreSQL in Docker containers, and Aspire generates the PostgreSQL password. To choose the password yourself, add `"Parameters:postgres-password": "your_strong_password"` to the user secrets of the AppHost project and pass the parameter to `AddPostgres`:
 
 ```csharp
-var storage = builder.AddAzureStorage("azurestorage")
-    .RunAsEmulator(r => r.WithImage("azure-storage/azurite", "3.33.0"));
-var clusteringTable = storage.AddTables("orleans-sekiban-clustering");
-var grainStorage = storage.AddBlobs("orleans-sekiban-grain-state");
-
 var postgresPassword = builder.AddParameter("postgres-password", true);
 var postgres = builder
     .AddPostgres("orleansSekibanPostgres", password: postgresPassword)
     .WithPgAdmin()
     .AddDatabase("SekibanPostgres");
+```
+
+### 2. Optional: Cluster Settings
+
+The AppHost `Program.cs` of the template wires Azure Storage, PostgreSQL and Orleans as shown below; change it for your own clustering needs:
+
+```csharp
+var storage = builder.AddAzureStorage("azurestorage")
+    // .RunAsEmulator(opt => opt.WithDataVolume());
+    .RunAsEmulator();
+var clusteringTable = storage.AddTables("OrleansSekibanClustering");
+var grainTable = storage.AddTables("OrleansSekibanGrainTable");
+var grainStorage = storage.AddBlobs("OrleansSekibanGrainState");
+var queue = storage.AddQueues("OrleansSekibanQueue");
+
+
+
+var postgres = builder
+    .AddPostgres("orleansSekibanPostgres")
+    // .WithDataVolume() // Uncomment to use a data volume
+    .WithPgAdmin()
+    .AddDatabase("SekibanPostgres");
 
 var orleans = builder.AddOrleans("default")
     .WithClustering(clusteringTable)
-    .WithGrainStorage("Default", grainStorage);
+    .WithGrainStorage("Default", grainStorage)
+    .WithGrainStorage("OrleansSekibanQueue", grainStorage)
+    .WithGrainStorage("OrleansSekibanGrainTable", grainTable)
+    .WithStreaming(queue);
 ```
 
 ## Dapr Template Configuration
+
+Status on .NET 10: the Dapr template restores, builds and passes its unit tests. It has not been run end to end against a Dapr runtime (placement service, scheduler and sidecars) for this version.
 
 ### 1. Dapr Components
 

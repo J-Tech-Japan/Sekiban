@@ -32,6 +32,7 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         var builder = new TestClusterBuilder();
+        MultiProjectionGrainWatermarkRetirementTests.ConfigureTestPorts(builder, offset: 24);
         builder.Options.InitialSilosCount = 1;
         var uniqueId = Guid.NewGuid().ToString("N")[..8];
         builder.Options.ClusterId = $"G97-runbook-{uniqueId}";
@@ -49,7 +50,7 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Provider_row_delete_then_deactivation_recovers_permanently_tombstoned_checkpoint()
+    public async Task Fresh_activation_heals_permanently_tombstoned_checkpoint_and_later_activation_restores_it()
     {
         // Pin all timestamps outside SafeWindow and insert in position order: all 50 events are already safe.
         var t0 = DateTime.UtcNow.AddMinutes(-5);
@@ -81,21 +82,6 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
             record.ProjectorName, record.ProjectorVersion, CheckpointExpectation.FromSlot(inflated.ResultingSlot!));
         Assert.Equal(CheckpointCasStatus.Committed, tombstone.Status);
 
-        // Each fresh activation fully replays, serves the correct count, but cannot replace the tombstone.
-        for (var activation = 0; activation < 2; activation++)
-        {
-            var fullReads = Env.Wrapped.FullReads;
-            await ReactivateAsync(grain);
-            await AssertCountAndIdleAsync(grain);
-            Assert.True(Env.Wrapped.FullReads > fullReads);
-            Assert.True(Env.Log.CountWarningOnCurrentActivation(1030) > 0);
-            Assert.Contains("External store has newer safe state (100) than local (50)",
-                (await grain.GetStatusAsync()).LastError);
-            var stuck = await ReadSlotAsync();
-            Assert.True(stuck.IsTombstoned);
-            Assert.Equal(tombstone.ResultingSlot!.Generation, stuck.Generation);
-        }
-
         Assert.True(await grain.DeleteExternalStateAsync());
         var unchanged = await ReadSlotAsync();
         Assert.True(unchanged.IsTombstoned);
@@ -103,23 +89,15 @@ public class PermanentlyTombstonedCheckpointRunbookTests : IAsyncLifetime
         Assert.Equal(100, (await Env.StateStore.GetLatestForVersionAsync(
             record.ProjectorName, record.ProjectorVersion)).GetValue().GetValue().EventsProcessed);
 
-        // The idle grain has no new writes and a one-hour persist interval: only its deactivation persist
-        // can race this provider delete. That old-token commit is rejected; it must not recreate the row.
-        var rejections = Env.StateStore.RejectedRebuilds;
-        Assert.True((await Env.StateStore.DeleteAsync(record.ProjectorName, record.ProjectorVersion)).GetValue());
-        Assert.False((await ReadSlotAsync()).Exists);
+        // A fresh host replays all 50 events and replaces the retained count of 100 at its first persist.
         var activations = Env.Log.CountEvent(1001);
         var replayReads = Env.Wrapped.FullReads;
-        await grain.RequestDeactivationAsync();
-        await PollUntilAsync(() => Task.FromResult(Env.StateStore.RejectedRebuilds > rejections),
-            10_000, "expected old-token deactivation persist rejection");
-        await Task.Delay(1000);
-        Assert.False((await ReadSlotAsync()).Exists);
+        await ReactivateAsync(grain);
         await AssertCountAndIdleAsync(grain);
-        Assert.Equal(activations + 1, Env.Log.CountEvent(1001));
         Assert.True(Env.Wrapped.FullReads > replayReads);
         await PollUntilAsync(async () => (await ReadSlotAsync()).IsActive, 5_000, "fresh Active checkpoint");
-        Assert.Equal(activations + 1, Env.StateStore.LastUpsertActivation);
+        Assert.Equal(activations + 1, Env.Log.CountEvent(1001));
+        Assert.Equal(0, Env.Log.CountWarningOnCurrentActivation(1030));
         Assert.Equal(50, (await Env.StateStore.GetLatestForVersionAsync(
             record.ProjectorName, record.ProjectorVersion)).GetValue().GetValue().EventsProcessed);
         Assert.Null((await grain.GetStatusAsync()).LastError);

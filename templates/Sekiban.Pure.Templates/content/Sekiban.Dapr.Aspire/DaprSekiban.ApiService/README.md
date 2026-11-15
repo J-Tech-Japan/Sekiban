@@ -6,7 +6,7 @@
 
 以下のツールがインストールされている必要があります：
 
-- .NET 9.0 SDK
+- .NET 10.0 SDK
 - Docker Desktop & Docker Compose
 - Dapr CLI
 

@@ -49,13 +49,13 @@ export NUGET_HTTP_CACHE_PATH="$work_root/nuget-http-cache"
 export DOTNET_NOLOGO=1
 mkdir -p "$DOTNET_CLI_HOME" "$NUGET_PACKAGES" "$NUGET_HTTP_CACHE_PATH"
 
-net9_host="$work_root/net9-host"
+net11_host="$work_root/net11-host"
 net10_host="$work_root/net10-host"
-mkdir -p "$net9_host" "$net10_host"
-printf '%s\n' '{"sdk":{"version":"9.0.100","rollForward":"latestFeature","allowPrerelease":false}}' > "$net9_host/global.json"
-printf '%s\n' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allowPrerelease":false}}' > "$net10_host/global.json"
-run_net9() { (cd "$net9_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
-run_net10() { (cd "$net10_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
+mkdir -p "$net11_host" "$net10_host"
+printf '%s\n' '{"sdk":{"version":"11.0.100","rollForward":"latestPatch","allowPrerelease":false}}' > "$net11_host/global.json"
+printf '%s\n' '{"sdk":{"version":"11.0.100","rollForward":"latestPatch","allowPrerelease":false}}' > "$net10_host/global.json"
+run_net11() { (cd "$net11_host" && dotnet "$@"); }
+run_net10() { (cd "$net10_host" && dotnet "$@"); }
 
 write_nuget_config() {
   local destination="$1"
@@ -78,7 +78,7 @@ write_nuget_config() {
     for pattern in \
       'Microsoft.*' 'Aspire.*' 'Azure.*' 'AWSSDK.*' 'Npgsql*' 'MySqlConnector' \
       'OpenTelemetry.*' 'CommunityToolkit.*' 'AspNetCore.HealthChecks.*' 'Polly*' \
-      'SQLitePCLRaw.*' 'SQLite' 'Grpc.*' 'Google.*' 'JsonPatch.*' 'KubernetesClient' \
+      'SQLitePCLRaw.*' 'Grpc.*' 'Google.*' 'JsonPatch.*' 'KubernetesClient' \
       'ModelContextProtocol' 'Semver' 'StreamJsonRpc' 'Humanizer.*' 'Dapper' 'DuckDB.*' \
       'Newtonsoft.Json' 'ResultBoxes' 'Scalar.*' \
       'OpenTelemetry' 'Polly' 'Polly.Core' 'Polly.Extensions' 'Polly.RateLimiting' \
@@ -87,6 +87,7 @@ write_nuget_config() {
       'AspNetCore.HealthChecks.NpgSql' 'Grpc.AspNetCore' 'Grpc.Net.ClientFactory' 'Grpc.Tools' \
       'JsonPointer.Net' 'Json.More.Net' 'Fractions' 'YamlDotNet' 'ModelContextProtocol.Core' \
       'MessagePack' 'MessagePack.Annotations' 'Nerdbank.Streams' 'SQLitePCLRaw.core' \
+      'Hex1b' 'Nerdbank.MessagePack' 'PolyType' 'QRCoder' \
       'SQLitePCLRaw.bundle_e_sqlite3' 'SQLitePCLRaw.lib_e_sqlite3' 'SQLitePCLRaw.lib.e_sqlite3' \
       'System.*' 'runtime.*' 'NETStandard.Library' 'NuGet.*' 'NUnit*' 'xunit*' \
       'coverlet.*' 'Microsoft.NET.Test.Sdk'; do
@@ -142,7 +143,7 @@ if [[ -z "$package_path" ]]; then
   mkdir -p "$pack_directory"
   carrier_project="$repo_root/templates/Sekiban.Dcb.Templates/Sekiban.Dcb.Templates.csproj"
   run_net10 restore "$carrier_project" --configfile "$nuget_config" --no-http-cache --nologo
-  run_net9 pack "$carrier_project" \
+  run_net11 pack "$carrier_project" \
     -c Release --no-restore --nologo -o "$pack_directory" -p:PackageVersion="$version"
   package_path="$(find "$pack_directory" -maxdepth 1 -name "Sekiban.Dcb.Templates.${version}.nupkg" -print -quit)"
 fi
@@ -164,9 +165,9 @@ real_retry_b_dir="$work_root/real-retry-b"
 mkdir -p "$real_retry_a_dir" "$real_retry_b_dir"
 carrier_project="$repo_root/templates/Sekiban.Dcb.Templates/Sekiban.Dcb.Templates.csproj"
 run_net10 restore "$carrier_project" --configfile "$nuget_config" --no-http-cache --nologo
-run_net9 pack "$carrier_project" -c Release --no-restore --nologo \
+run_net11 pack "$carrier_project" -c Release --no-restore --nologo \
   -o "$real_retry_a_dir" -p:PackageVersion="$version"
-run_net9 pack "$carrier_project" -c Release --no-restore --nologo \
+run_net11 pack "$carrier_project" -c Release --no-restore --nologo \
   -o "$real_retry_b_dir" -p:PackageVersion="$version"
 real_retry_a="$(find "$real_retry_a_dir" -maxdepth 1 -name "Sekiban.Dcb.Templates.${version}.nupkg" -print -quit)"
 real_retry_b="$(find "$real_retry_b_dir" -maxdepth 1 -name "Sekiban.Dcb.Templates.${version}.nupkg" -print -quit)"
@@ -212,7 +213,7 @@ rm "$real_retry_remote"
   --feed-base-url "file://$real_retry_feed" --request-timeout-seconds 2
 
 template_hive="$work_root/template-hive"
-run_net9 new install "$package_path" --debug:custom-hive "$template_hive" --force
+run_net11 new install "$package_path" --debug:custom-hive "$template_hive" --force
 
 template_specs=(
   'sekiban-dcb-orleans|TemplateOrleans|SekibanDcbOrleans.slnx'

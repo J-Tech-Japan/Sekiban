@@ -19,8 +19,8 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
     serverFarmId: appServicePlanId
     httpsOnly: true
     siteConfig: {
-      linuxFxVersion: 'DOTNETCORE|9.0'
-      netFrameworkVersion: 'v9.0'
+      linuxFxVersion: 'DOTNETCORE|10.0'
+      netFrameworkVersion: 'v10.0'
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       httpLoggingEnabled: true

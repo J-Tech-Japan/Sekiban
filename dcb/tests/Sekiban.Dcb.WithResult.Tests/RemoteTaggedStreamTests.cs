@@ -27,7 +27,7 @@ namespace Sekiban.Dcb.Tests;
 /// <summary>
 ///     SEK-G54 provider-real native tagged-stream matrix. Cosmos uses the existing container-shaped in-process emulator;
 ///     DynamoDB uses a request-shaped harness that evaluates the real request's key condition and returns BatchGet rows
-///     in deliberately hostile order. These tests live in WithResult.Tests so both net9/net10 DCB PR jobs execute them.
+///     in deliberately hostile order. These tests live in WithResult.Tests so both net11/net10 DCB PR jobs execute them.
 /// </summary>
 public sealed class RemoteTaggedStreamTests
 {

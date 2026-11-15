@@ -106,6 +106,8 @@ var databaseType = builder.Configuration.GetSection("Sekiban").GetValue<string>(
 // Configure Orleans
 builder.UseOrleans(config =>
 {
+    // Restoring a large multi-projection snapshot can take longer than the default 30 s activation timeout.
+    config.Configure<Orleans.Configuration.GrainCollectionOptions>(options => options.ActivationTimeout = TimeSpan.FromMinutes(5));
     if (builder.Environment.IsDevelopment())
     {
         config.UseLocalhostClustering();
@@ -115,7 +117,7 @@ builder.UseOrleans(config =>
         if ((builder.Configuration["ORLEANS_CLUSTERING_TYPE"] ?? "").ToLower() == "cosmos")
         {
             var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
-                                   throw new InvalidOperationException();
+                                   throw new InvalidOperationException("Required setting ConnectionStrings:OrleansCosmos is missing.");
             config.UseCosmosClustering(options =>
             {
                 options.ConfigureCosmosClient(connectionString);
@@ -166,8 +168,10 @@ builder.UseOrleans(config =>
                     configurator.ConfigureEventHub(ob => ob.Configure(options =>
                     {
                         options.ConfigureEventHubConnection(
-                            builder.Configuration.GetConnectionString("OrleansEventHub"),
-                            builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
+                            builder.Configuration.GetConnectionString("OrleansEventHub") ??
+                                throw new InvalidOperationException("Required setting ConnectionStrings:OrleansEventHub is missing."),
+                            builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"] ??
+                                throw new InvalidOperationException("Required setting ORLEANS_QUEUE_EVENTHUB_NAME is missing."),
                             "$Default");
                     }));
                     // 🔑 NEW –‑ tell Orleans where to persist checkpoints
@@ -176,7 +180,8 @@ builder.UseOrleans(config =>
                         cp.TableName = "EventHubCheckpointsEventStreamsProvider"; // any table name you like
                         cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
                         cp.TableServiceClient = new TableServiceClient(
-                            builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
+                            builder.Configuration.GetConnectionString("DcbOrleansGrainTable") ??
+                                throw new InvalidOperationException("Required setting ConnectionStrings:DcbOrleansGrainTable is missing."));
                     }));
                 });
             config.AddEventHubStreams(
@@ -187,8 +192,10 @@ builder.UseOrleans(config =>
                     configurator.ConfigureEventHub(ob => ob.Configure(options =>
                     {
                         options.ConfigureEventHubConnection(
-                            builder.Configuration.GetConnectionString("OrleansEventHub"),
-                            builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"],
+                            builder.Configuration.GetConnectionString("OrleansEventHub") ??
+                                throw new InvalidOperationException("Required setting ConnectionStrings:OrleansEventHub is missing."),
+                            builder.Configuration["ORLEANS_QUEUE_EVENTHUB_NAME"] ??
+                                throw new InvalidOperationException("Required setting ORLEANS_QUEUE_EVENTHUB_NAME is missing."),
                             "$Default");
                     }));
 
@@ -198,7 +205,8 @@ builder.UseOrleans(config =>
                         cp.TableName = "EventHubCheckpointsOrleansSekibanQueue"; // any table name you like
                         cp.PersistInterval = TimeSpan.FromSeconds(10); // write frequency
                         cp.TableServiceClient = new TableServiceClient(
-                            builder.Configuration.GetConnectionString("DcbOrleansGrainTable"));
+                            builder.Configuration.GetConnectionString("DcbOrleansGrainTable") ??
+                                throw new InvalidOperationException("Required setting ConnectionStrings:DcbOrleansGrainTable is missing."));
                     }));
 
                     // …your cache, queue‑mapper, pulling‑agent settings remain unchanged …
@@ -213,7 +221,8 @@ builder.UseOrleans(config =>
                     options.Configure<IServiceProvider>((queueOptions, sp) =>
                     {
                         queueOptions.QueueServiceClient = new QueueServiceClient(
-                            builder.Configuration.GetConnectionString("DcbOrleansQueue"));
+                            builder.Configuration.GetConnectionString("DcbOrleansQueue") ??
+                                throw new InvalidOperationException("Required setting ConnectionStrings:DcbOrleansQueue is missing."));
                         queueOptions.QueueNames =
                         [
                             "dcborleans-eventstreamprovider-0",
@@ -244,7 +253,8 @@ builder.UseOrleans(config =>
                     options.Configure<IServiceProvider>((queueOptions, sp) =>
                     {
                         queueOptions.QueueServiceClient = new QueueServiceClient(
-                            builder.Configuration.GetConnectionString("DcbOrleansQueue"));
+                            builder.Configuration.GetConnectionString("DcbOrleansQueue") ??
+                                throw new InvalidOperationException("Required setting ConnectionStrings:DcbOrleansQueue is missing."));
                         queueOptions.QueueNames =
                         [
                             "dcborleans-queue-0",
@@ -277,7 +287,7 @@ builder.UseOrleans(config =>
         config.AddCosmosGrainStorageAsDefault(options =>
         {
             var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
-                                   throw new InvalidOperationException();
+                                   throw new InvalidOperationException("Required setting ConnectionStrings:OrleansCosmos is missing.");
             options.ConfigureCosmosClient(connectionString);
             options.IsResourceCreationEnabled = true;
         });
@@ -289,7 +299,8 @@ builder.UseOrleans(config =>
         {
             options.Configure<IServiceProvider>((opt, sp) =>
             {
-                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState") ??
+                    throw new InvalidOperationException("Required storage client for ConnectionStrings:DcbOrleansGrainState was not resolved.");
                 opt.ContainerName = "sekiban-grainstate"; // 明示コンテナ
             });
         });
@@ -303,7 +314,7 @@ builder.UseOrleans(config =>
             options =>
             {
                 var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
-                                       throw new InvalidOperationException();
+                                       throw new InvalidOperationException("Required setting ConnectionStrings:OrleansCosmos is missing.");
                 options.ConfigureCosmosClient(connectionString);
                 options.IsResourceCreationEnabled = true;
             });
@@ -316,7 +327,8 @@ builder.UseOrleans(config =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState") ??
+                        throw new InvalidOperationException("Required storage client for ConnectionStrings:DcbOrleansGrainState was not resolved.");
                     opt.ContainerName = "sekiban-grainstate";
                 });
             });
@@ -330,7 +342,7 @@ builder.UseOrleans(config =>
             options =>
             {
                 var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
-                                       throw new InvalidOperationException();
+                                       throw new InvalidOperationException("Required setting ConnectionStrings:OrleansCosmos is missing.");
                 options.ConfigureCosmosClient(connectionString);
                 options.IsResourceCreationEnabled = true;
             });
@@ -343,7 +355,8 @@ builder.UseOrleans(config =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState");
+                    opt.BlobServiceClient = sp.GetKeyedService<BlobServiceClient>("DcbOrleansGrainState") ??
+                        throw new InvalidOperationException("Required storage client for ConnectionStrings:DcbOrleansGrainState was not resolved.");
                     opt.ContainerName = "sekiban-grainstate";
                 });
             });
@@ -356,7 +369,7 @@ builder.UseOrleans(config =>
             options =>
             {
                 var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
-                                       throw new InvalidOperationException();
+                                       throw new InvalidOperationException("Required setting ConnectionStrings:OrleansCosmos is missing.");
                 options.ConfigureCosmosClient(connectionString);
                 options.IsResourceCreationEnabled = true;
             });
@@ -369,7 +382,8 @@ builder.UseOrleans(config =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable") ??
+                        throw new InvalidOperationException("Required storage client for ConnectionStrings:DcbOrleansGrainTable was not resolved.");
                 });
             });
     }
@@ -384,7 +398,7 @@ builder.UseOrleans(config =>
                 options =>
                 {
                     var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
-                                           throw new InvalidOperationException();
+                                           throw new InvalidOperationException("Required setting ConnectionStrings:OrleansCosmos is missing.");
                     options.ConfigureCosmosClient(connectionString);
                     options.IsResourceCreationEnabled = true;
                 });
@@ -397,7 +411,8 @@ builder.UseOrleans(config =>
                 {
                     options.Configure<IServiceProvider>((opt, sp) =>
                     {
-                        opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                        opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable") ??
+                            throw new InvalidOperationException("Required storage client for ConnectionStrings:DcbOrleansGrainTable was not resolved.");
                         opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
                     });
                     options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
@@ -413,7 +428,7 @@ builder.UseOrleans(config =>
             options =>
             {
                 var connectionString = builder.Configuration.GetConnectionString("OrleansCosmos") ??
-                                       throw new InvalidOperationException();
+                                       throw new InvalidOperationException("Required setting ConnectionStrings:OrleansCosmos is missing.");
                 options.ConfigureCosmosClient(connectionString);
                 options.IsResourceCreationEnabled = true;
             });
@@ -426,7 +441,8 @@ builder.UseOrleans(config =>
             {
                 options.Configure<IServiceProvider>((opt, sp) =>
                 {
-                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable");
+                    opt.TableServiceClient = sp.GetKeyedService<TableServiceClient>("DcbOrleansGrainTable") ??
+                        throw new InvalidOperationException("Required storage client for ConnectionStrings:DcbOrleansGrainTable was not resolved.");
                     opt.GrainStorageSerializer = sp.GetRequiredService<NewtonsoftJsonDcbOrleansSerializer>();
                 });
                 options.Configure<IGrainStorageSerializer>((op, serializer) => op.GrainStorageSerializer = serializer);
@@ -481,7 +497,9 @@ builder.UseOrleans(config =>
             EnableDynamicSafeWindow = databaseType != "sqlite" && !builder.Configuration.GetValue<bool>("Orleans:UseInMemoryStreams"),
             MaxExtraSafeWindowMs = 30000,
             LagEmaAlpha = 0.3,
-            LagDecayPerSecond = 0.98
+            LagDecayPerSecond = 0.98,
+            // A query during catch-up waits at most 5 s, then gets 503 + Retry-After (below the web front ends' 10 s attempt timeout).
+            FirstQueryCatchUpMaxWaitMs = 5000
         };
         // Per-activation scope is appropriate; Orleans constructs grains per activation
         services.AddTransient<GeneralMultiProjectionActorOptions>(_ => dynamicOptions);
@@ -1202,7 +1220,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                         cancellationToken: ct));
                 return Results.Ok(rows);
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMv");
 
     apiRoute
@@ -1243,7 +1260,6 @@ if (app.Services.GetService<IMvOrleansQueryAccessor>() is not null)
                     tombstoneCount
                 });
             })
-        .WithOpenApi()
         .WithName("GetWeatherForecastUnsafeWindowMvDiagnostics");
 }
 

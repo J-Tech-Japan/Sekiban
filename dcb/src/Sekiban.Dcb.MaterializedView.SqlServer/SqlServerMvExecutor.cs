@@ -74,6 +74,13 @@ public sealed class SqlServerMvExecutor : MvExecutorBase<SqlConnection>, IMvExec
         return connection;
     }
 
+    internal override async Task<IAsyncDisposable?> AcquireInitializationLockAsync(
+        SqlConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
+    {
+        await SqlServerMvInitializationLock.AcquireAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+        return null;
+    }
+
     protected override IMvApplyQueryPort CreateQueryPort(
         SqlConnection connection,
         IDbTransaction transaction) =>

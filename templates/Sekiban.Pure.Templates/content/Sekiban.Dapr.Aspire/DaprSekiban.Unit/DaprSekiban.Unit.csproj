@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -14,7 +14,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.15" />
     <PackageReference Include="Xunit.Extensions.Logging" Version="1.1.0" />
   </ItemGroup>
 
@@ -23,8 +23,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sekiban.Pure" Version="1.0.1-preview21" />
-    <PackageReference Include="Sekiban.Pure.Dapr" Version="1.0.1-preview21" />
+    <PackageReference Include="Sekiban.Pure" Version="10.0.0" />
+    <PackageReference Include="Sekiban.Pure.Dapr" Version="10.0.0" />
   </ItemGroup>
 
 </Project>

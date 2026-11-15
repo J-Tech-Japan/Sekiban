@@ -36,19 +36,19 @@ internal static class PackageArtifactValidator
             nuspecs[id] = document;
         }
 
-        Assert(ids.SetEquals(PackageManifest.PackageIds), "The local package feed is not the exact DCB package set.");
         foreach (var (id, document) in nuspecs)
         {
-            var groups = document.Descendants()
-                .Where(element => element.Name.LocalName == "group" && element.Parent?.Name.LocalName == "dependencies")
-                .Select(element => element.Attribute("targetFramework")?.Value)
-                .OrderBy(value => value, StringComparer.Ordinal).ToArray();
-            Assert(groups.SequenceEqual(new[] { "net10.0", "net11.0" }),
-                $"Package {id} must have exactly net10.0 and net11.0 dependency groups.");
+            var groups = document.Descendants().Where(element => element.Name.LocalName == "group" && element.Parent?.Name.LocalName == "dependencies").ToArray();
+            Assert(groups.Length == 2 && groups.Select(group => group.Attribute("targetFramework")?.Value).ToHashSet().SetEquals(["net10.0", "net11.0"]),
+                $"{id} must have exactly net10.0 and net11.0 dependency groups, without net9.0.");
+            ValidateFrameworkGroups(id,
+                groups.Single(group => group.Attribute("targetFramework")?.Value == "net10.0"),
+                groups.Single(group => group.Attribute("targetFramework")?.Value == "net11.0"));
         }
+        Assert(ids.SetEquals(PackageManifest.PackageIds), "The local package feed is not the exact DCB package set.");
         foreach (var tfm in new[] { "net10.0", "net11.0" })
         {
-            var runtimeVersion = tfm == "net10.0" ? "10.0.3" : "11.0.0-rc.3.26522.148";
+            var runtimeVersion = tfm == "net10.0" ? "10.0.15" : "11.0.0";
             ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], tfm, "Microsoft.EntityFrameworkCore.Relational", runtimeVersion);
             ValidateDependency(nuspecs["Sekiban.Dcb.Core"], tfm, "Microsoft.Extensions.Logging.Abstractions", runtimeVersion);
             ValidateDependency(nuspecs["Sekiban.Dcb.Sqlite"], tfm, "Microsoft.Data.Sqlite", runtimeVersion);
@@ -57,7 +57,50 @@ internal static class PackageArtifactValidator
         }
         Assert(!DependencyIds(nuspecs["Sekiban.Dcb.Orleans.Core"]).Any(IsAzureDependency),
             "Sekiban.Dcb.Orleans.Core must remain Azure-free.");
-        Console.WriteLine($"Package artifact validation passed: {ids.Count} packages, exact net10/net11 groups and dependency versions, Azure-free Core, and Azure Queue groups.");
+        Console.WriteLine($"Package artifact validation passed: {ids.Count} packages, net10.0 groups on the 10.x platform line, net11.0 groups differing only by the 11.x platform upgrades, PostgreSQL relational closure, Azure-free Core, and Azure Queue groups.");
+    }
+
+    // The 11 line keeps the net10.0 group on the 10.x platform packages and moves only the
+    // platform packages that ship an 11.x release to that release on net11.0.
+    private static string? ElevenLineVersion(string dependencyId) =>
+        dependencyId == "Npgsql.EntityFrameworkCore.PostgreSQL" ? "11.0.0-rc.3"
+        : dependencyId.StartsWith("Microsoft.Extensions.", StringComparison.Ordinal) ||
+          dependencyId.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal) ||
+          dependencyId == "Microsoft.Data.Sqlite" ? "11.0.0"
+        : null;
+
+    private static void ValidateFrameworkGroups(string id, XElement net10, XElement net11)
+    {
+        static Dictionary<string, XElement> Index(XElement group) =>
+            group.Elements().Where(element => element.Name.LocalName == "dependency")
+                .ToDictionary(element => element.Attribute("id")?.Value ?? "", StringComparer.Ordinal);
+        static string Attributes(XElement element, bool withVersion) =>
+            string.Join(";", element.Attributes()
+                .Where(attribute => withVersion || attribute.Name.LocalName != "version")
+                .OrderBy(attribute => attribute.Name.LocalName, StringComparer.Ordinal)
+                .Select(attribute => $"{attribute.Name.LocalName}={attribute.Value}"));
+
+        var net10Dependencies = Index(net10);
+        var net11Dependencies = Index(net11);
+        Assert(net10Dependencies.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(net11Dependencies.Keys),
+            $"{id} must declare the same dependency IDs on net10.0 and net11.0.");
+        foreach (var (dependencyId, net10Dependency) in net10Dependencies)
+        {
+            var net11Dependency = net11Dependencies[dependencyId];
+            var eleven = ElevenLineVersion(dependencyId);
+            if (eleven is null)
+            {
+                Assert(Attributes(net10Dependency, true) == Attributes(net11Dependency, true),
+                    $"{id}: {dependencyId} must match across frameworks.");
+                continue;
+            }
+            Assert(Attributes(net10Dependency, false) == Attributes(net11Dependency, false),
+                $"{id}: {dependencyId} must declare the same assets across frameworks.");
+            Assert(net10Dependency.Attribute("version")?.Value.StartsWith("10.", StringComparison.Ordinal) == true,
+                $"{id}: {dependencyId} in net10.0 must stay on the 10.x line.");
+            Assert(net11Dependency.Attribute("version")?.Value == eleven,
+                $"{id}: {dependencyId} in net11.0 must be {eleven}.");
+        }
     }
 
     private static void ValidateDependency(XDocument document, string targetFramework, string id, string expectedVersion)

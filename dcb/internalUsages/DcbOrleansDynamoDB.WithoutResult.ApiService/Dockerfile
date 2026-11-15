@@ -1,5 +1,5 @@
 # Build stage
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG TARGETARCH
 WORKDIR /source
 
@@ -19,12 +19,12 @@ COPY internalUsages/DcbOrleans.ServiceDefaults/*.csproj internalUsages/DcbOrlean
 COPY internalUsages/Dcb.Domain.WithoutResult/*.csproj internalUsages/Dcb.Domain.WithoutResult/
 COPY internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/*.csproj internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/
 
-# Restore dependencies (target net9.0 only for Docker builds)
-# Use TargetFrameworks=net9.0 to override multi-targeting and avoid net10.0 SDK requirement
+# Restore dependencies (target net10.0 only for Docker builds)
+# Use TargetFrameworks=net10.0 to override multi-targeting and avoid net11.0 SDK requirement
 RUN dotnet restore internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/DcbOrleansDynamoDB.WithoutResult.ApiService.csproj \
     -a $TARGETARCH \
-    /p:TargetFramework=net9.0 \
-    /p:TargetFrameworks=net9.0
+    /p:TargetFramework=net10.0 \
+    /p:TargetFrameworks=net10.0
 
 # Copy all source code
 COPY src/ src/
@@ -33,16 +33,16 @@ COPY internalUsages/Dcb.Domain.WithoutResult/ internalUsages/Dcb.Domain.WithoutR
 COPY internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/ internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/
 
 # Build and publish
-# Use TargetFrameworks=net9.0 to override multi-targeting and avoid net10.0 SDK requirement
+# Use TargetFrameworks=net10.0 to override multi-targeting and avoid net11.0 SDK requirement
 RUN dotnet publish internalUsages/DcbOrleansDynamoDB.WithoutResult.ApiService/DcbOrleansDynamoDB.WithoutResult.ApiService.csproj \
     -c Release \
     -a $TARGETARCH \
-    -f net9.0 \
-    /p:TargetFrameworks=net9.0 \
+    -f net10.0 \
+    /p:TargetFrameworks=net10.0 \
     -o /app
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
 # Install curl for health checks

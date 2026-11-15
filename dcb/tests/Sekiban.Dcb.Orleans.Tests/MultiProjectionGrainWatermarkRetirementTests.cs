@@ -3,6 +3,9 @@ using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orleans.Runtime;
+using Orleans.Configuration;
+using Microsoft.Extensions.Options;
+using Sekiban.Dcb.Storage.Checkpoints;
 using Orleans.Runtime.Hosting;
 using Orleans.Storage;
 using Orleans.TestingHost;
@@ -49,10 +52,7 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         var id = Guid.NewGuid().ToString("N")[..8];
         builder.Options.ClusterId = $"G38-wm-{id}";
         builder.Options.ServiceId = $"G38-wm-{id}";
-        var portBase = 30_000 + (Environment.ProcessId % 4_000) * 4;
-        builder.PortAllocator = new FixedPortAllocator(portBase, portBase + 1);
-        builder.Options.BaseSiloPort = portBase;
-        builder.Options.BaseGatewayPort = portBase + 1;
+        ConfigureTestPorts(builder);
         builder.AddSiloBuilderConfigurator<SiloConfigurator>();
         _cluster = builder.Build();
         await _cluster.DeployAsync();
@@ -62,6 +62,274 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
     {
         await _cluster.StopAllSilosAsync();
         _cluster.Dispose();
+    }
+
+    [Theory]
+    [InlineData("query-result", false, false)]
+    [InlineData("query-throw", false, false)]
+    [InlineData("open-result", false, false)]
+    [InlineData("open-throw", false, false)]
+    [InlineData("host-result", false, false)]
+    [InlineData("host-throw", false, false)]
+    [InlineData("dispose", false, false)]
+    [InlineData("slot-result", false, false)]
+    [InlineData("host-result", false, true)]
+    [InlineData("host-throw", false, true)]
+    [InlineData("dispose", true, false)]
+    public async Task Cancelled_restore_fails_without_mutation_and_next_activation_restores(
+        string site, bool hostFailure, bool disposalFailure)
+    {
+        const string name = "g149-cancel";
+        _harness.UseCapableStore = true;
+        var seed = await _harness.SeedKnownPresentCheckpointAsync(name, 10_000, []);
+        var before = (await _harness.CapableStore.ReadCheckpointSlotAsync(name, "v1")).GetValue();
+        _harness.StateStore.CancellationSite = site;
+        _harness.RestoreBehavior = hostFailure ? RestoreBehavior.ResultBoxFailure : RestoreBehavior.None;
+        _harness.StreamBehavior = disposalFailure ? StateStreamBehavior.DisposeThrows : StateStreamBehavior.Success;
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(name);
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() => grain.GetStatusAsync());
+        Assert.True(ContainsCancellation(failure), failure.ToString());
+        Assert.Equal(before, (await _harness.StateStore.Inner.ReadCheckpointSlotAsync(name, "v1")).GetValue());
+        AssertWatermarkUnchanged(name);
+        Assert.Empty(_harness.EventStore.SnapshotReadSinceValues());
+        Assert.Single(_harness.Hosts);
+        Assert.Equal(0, _harness.ProviderStorage.WriteCalls);
+        Assert.Single(_harness.LoggerProvider.Entries, log => log.LogLevel == LogLevel.Warning && log.Message.Contains("Snapshot restore cancelled"));
+        _harness.StateStore.CancellationSite = null;
+        _harness.RestoreBehavior = RestoreBehavior.None;
+        _harness.StreamBehavior = StateStreamBehavior.Success;
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(() => _harness.EventStore.SnapshotReadSinceValues().Count > 0, TimeSpan.FromSeconds(10));
+        Assert.All(_harness.EventStore.SnapshotReadSinceValues(), since => Assert.Equal(seed.OldPosition, since));
+        Assert.Equal(2, _harness.Hosts.Count);
+        AssertWatermarkUnchanged(name);
+    }
+
+    [Fact]
+    public async Task Activation_timeout_does_not_retire_after_ignored_token_read_finishes_and_longer_timeout_restores()
+    {
+        const string name = "g149-timeout";
+        _harness.UseCapableStore = true;
+        var seed = await _harness.SeedKnownPresentCheckpointAsync(name, 10_000, []);
+        var options = ((InProcessSiloHandle)_cluster.Silos[0]).ServiceProvider
+            .GetRequiredService<IOptions<GrainCollectionOptions>>().Value;
+        options.ActivationTimeout = TimeSpan.FromMilliseconds(200);
+        _harness.StateStore.OpenDelay = TimeSpan.FromMilliseconds(800);
+        var before = (await _harness.CapableStore.ReadCheckpointSlotAsync(name, "v1")).GetValue();
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(name);
+        await Assert.ThrowsAnyAsync<Exception>(() => grain.GetStatusAsync());
+        await _harness.StateStore.SlowReadFinished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await WaitUntilAsync(() => _harness.LoggerProvider.Entries.Any(log => log.Message.Contains("needs a larger activation timeout")), TimeSpan.FromSeconds(10));
+        Assert.True(_harness.StateStore.SlowStreamDisposed.Task.IsCompletedSuccessfully);
+        AssertWatermarkUnchanged(name);
+        Assert.Equal(before, (await _harness.StateStore.Inner.ReadCheckpointSlotAsync(name, "v1")).GetValue());
+        Assert.Empty(_harness.EventStore.SnapshotReadSinceValues());
+        Assert.Single(_harness.Hosts);
+        Assert.Equal(0, _harness.ProviderStorage.WriteCalls);
+        options.ActivationTimeout = TimeSpan.FromSeconds(10);
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(() => _harness.EventStore.SnapshotReadSinceValues().Count > 0, TimeSpan.FromSeconds(10));
+        Assert.All(_harness.EventStore.SnapshotReadSinceValues(), since => Assert.Equal(seed.OldPosition, since));
+        AssertWatermarkUnchanged(name);
+    }
+
+    [Fact]
+    public async Task Activation_timeout_during_invalidation_read_preserves_checkpoint_and_watermark()
+    {
+        const string name = "g149-invalidation-timeout";
+        _harness.UseCapableStore = true;
+        var seed = await _harness.SeedKnownPresentCheckpointAsync(name, 10_000, []);
+        var before = (await _harness.StateStore.Inner.ReadCheckpointSlotAsync(name, "v1")).GetValue();
+        var options = ((InProcessSiloHandle)_cluster.Silos[0]).ServiceProvider
+            .GetRequiredService<IOptions<GrainCollectionOptions>>().Value;
+        options.ActivationTimeout = TimeSpan.FromMilliseconds(200);
+        _harness.RestoreBehavior = RestoreBehavior.ResultBoxFailure;
+        _harness.CapableStore.InvalidationReadDelay = TimeSpan.FromMilliseconds(800);
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(name);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => grain.GetStatusAsync());
+        await _harness.CapableStore.InvalidationReadFinished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await WaitUntilAsync(() => _harness.LoggerProvider.Entries.Any(log =>
+            log.Message.Contains("needs a larger activation timeout")), TimeSpan.FromSeconds(10));
+        Assert.True(_harness.CapableStore.InvalidationReadWasCancelled);
+        Assert.Equal(0, _harness.CapableStore.InvalidationCalls);
+        Assert.Equal(before, (await _harness.StateStore.Inner.ReadCheckpointSlotAsync(name, "v1")).GetValue());
+        AssertWatermarkUnchanged(name);
+        Assert.Empty(_harness.EventStore.SnapshotReadSinceValues());
+        Assert.Single(_harness.Hosts);
+
+        options.ActivationTimeout = TimeSpan.FromSeconds(10);
+        _harness.RestoreBehavior = RestoreBehavior.None;
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(() => _harness.EventStore.SnapshotReadSinceValues().Count > 0, TimeSpan.FromSeconds(10));
+        Assert.All(_harness.EventStore.SnapshotReadSinceValues(), since => Assert.Equal(seed.OldPosition, since));
+        AssertWatermarkUnchanged(name);
+    }
+
+    [Fact]
+    public async Task Activation_timeout_during_provider_tombstone_read_preserves_checkpoint_and_watermark()
+    {
+        const string name = "g149-provider-invalidation-timeout";
+        _harness.UseCapableStore = true;
+        var seed = await _harness.SeedKnownPresentCheckpointAsync(name, 10_000, []);
+        var before = (await _harness.StateStore.Inner.ReadCheckpointSlotAsync(name, "v1")).GetValue();
+        var options = ((InProcessSiloHandle)_cluster.Silos[0]).ServiceProvider
+            .GetRequiredService<IOptions<GrainCollectionOptions>>().Value;
+        options.ActivationTimeout = TimeSpan.FromSeconds(1);
+        _harness.RestoreBehavior = RestoreBehavior.ResultBoxFailure;
+        _harness.CapableStore.ProviderTombstoneReadDelay = TimeSpan.FromSeconds(3);
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(name);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => grain.GetStatusAsync());
+        await _harness.CapableStore.ProviderTombstoneReadFinished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await WaitUntilAsync(() => _harness.LoggerProvider.Entries.Any(log =>
+            log.Message.Contains("needs a larger activation timeout")), TimeSpan.FromSeconds(10));
+        Assert.Equal(1, _harness.CapableStore.InvalidationCalls);
+        Assert.True(_harness.CapableStore.ProviderTombstoneReadWasCancelled);
+        var after = (await _harness.StateStore.Inner.ReadCheckpointSlotAsync(name, "v1")).GetValue();
+        Assert.False(after.IsTombstoned);
+        Assert.Equal(before, after);
+        AssertWatermarkUnchanged(name);
+        Assert.Empty(_harness.EventStore.SnapshotReadSinceValues());
+        Assert.Single(_harness.Hosts);
+
+        options.ActivationTimeout = TimeSpan.FromSeconds(10);
+        _harness.RestoreBehavior = RestoreBehavior.None;
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(() => _harness.EventStore.SnapshotReadSinceValues().Count > 0, TimeSpan.FromSeconds(10));
+        Assert.All(_harness.EventStore.SnapshotReadSinceValues(), since => Assert.Equal(seed.OldPosition, since));
+        AssertWatermarkUnchanged(name);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Store_ahead_skip_builds_no_snapshot_or_blob_and_keeps_metadata_and_compaction_tail(bool streaming, bool capable)
+    {
+        const string name = "g149-skip";
+        _harness.UseCapableStore = capable;
+        _harness.Streaming = streaming;
+        _harness.SkipUnchanged = false;
+        var seed = await _harness.SeedKnownPresentCheckpointAsync(name, 10_000, []);
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(name);
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(() => _harness.EventStore.SnapshotReadSinceValues().Count > 0, TimeSpan.FromSeconds(10));
+        var host = Assert.Single(_harness.Hosts);
+        host.ForceSafeVersion(10_001);
+        // A peer advances the external record beyond our local safe checkpoint after restore.
+        var record = (await _harness.StateStore.GetLatestForVersionAsync(name, "v1")).GetValue().GetValue();
+        await ReplaceCheckpointCountAsync(_harness.StateStore.Inner, record, 20_000);
+        var writes = _harness.ProviderStorage.WriteCalls;
+        var compactions = host.CompactionCalls;
+        Assert.True((await grain.PersistStateAsync()).GetValue());
+        Assert.Equal(0, host.SnapshotBuildCalls);
+        Assert.Equal(0, _harness.Blobs.StoredObjectCount);
+        Assert.Equal(writes + 1, _harness.ProviderStorage.WriteCalls);
+        Assert.Equal(compactions + 1, host.CompactionCalls);
+        AssertWatermarkUnchanged(name);
+        host.FailCompaction = true;
+        Assert.False((await grain.PersistStateAsync()).IsSuccess);
+        Assert.Equal(0, host.SnapshotBuildCalls);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Capable_store_fresh_rebuild_commits_below_tombstoned_count_and_reactivation_restores(
+        bool adoptTombstone, bool durableMarker)
+    {
+        const string name = "g149-rebuild";
+        _harness.UseCapableStore = true;
+        var seed = await _harness.SeedKnownPresentCheckpointAsync(name, 10_000, BuildEvents(10));
+        if (adoptTombstone)
+        {
+            var slot = (await _harness.CapableStore.ReadCheckpointSlotAsync(name, "v1")).GetValue();
+            await _harness.CapableStore.InvalidateWithTombstoneAsync(name, "v1", CheckpointExpectation.FromSlot(slot));
+            var state = _harness.ProviderStorage.Get(name)!;
+            state.RebuildRequired = durableMarker;
+            _harness.ProviderStorage.Seed(name, state);
+        }
+        else
+        {
+            _harness.RestoreBehavior = RestoreBehavior.ResultBoxFailure;
+        }
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(name);
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(() => _harness.CapableStore.RebuiltCounts.Count > 0, TimeSpan.FromSeconds(15));
+        var slotAfter = (await _harness.CapableStore.ReadCheckpointSlotAsync(name, "v1")).GetValue();
+        Assert.True(slotAfter.IsActive);
+        Assert.All(_harness.CapableStore.RebuiltCounts, count => Assert.InRange(count, 1, seed.OldSafeVersion - 1));
+        _harness.RestoreBehavior = RestoreBehavior.None;
+        await grain.RequestDeactivationAsync();
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(() => _harness.EventStore.SnapshotReadSinceValues().Contains(slotAfter.Record!.LastSortableUniqueId), TimeSpan.FromSeconds(10));
+        Assert.Contains(_harness.Hosts, host => host.RestoreCalls > 0 && host.AppliedEventIds.Count == 0);
+    }
+
+    [Fact]
+    public async Task Capable_fault_reset_recreates_host_and_commits_below_old_count()
+    {
+        const string name = "g149-fault-reset";
+        _harness.UseCapableStore = true;
+        var seed = await _harness.SeedKnownPresentCheckpointAsync(name, 10_000, BuildEvents(10));
+        var state = _harness.ProviderStorage.Get(name)!;
+        state.FaultEventId = Guid.NewGuid().ToString();
+        state.FaultPosition = seed.OldPosition;
+        state.FaultEventType = "test";
+        state.FaultMessage = "recoverable fault";
+        state.FaultedAtUtcTicks = DateTime.UtcNow.Ticks;
+        _harness.ProviderStorage.Seed(name, state);
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(name);
+        await grain.GetStatusAsync();
+        Assert.True((await grain.ResetProjectionFaultAsync(new ResetProjectionFaultRequest(
+            name, state.FaultEventId, state.FaultPosition))).GetValue());
+        var query = grain.RefreshAsync();
+        await WaitUntilAsync(() => _harness.CapableStore.RebuiltCounts.Count > 0, TimeSpan.FromSeconds(15));
+        await query;
+        Assert.All(_harness.CapableStore.RebuiltCounts, count => Assert.InRange(count, 1, 9_999));
+        Assert.True((await _harness.CapableStore.ReadCheckpointSlotAsync(name, "v1")).GetValue().IsActive);
+    }
+
+    [Fact]
+    public async Task Tombstone_watermark_reset_write_failure_preserves_guard_and_cannot_commit_rebuild()
+    {
+        const string name = "g149-reset-failure";
+        _harness.UseCapableStore = true;
+        await _harness.SeedKnownPresentCheckpointAsync(name, 10_000, BuildEvents(10));
+        var slot = (await _harness.CapableStore.ReadCheckpointSlotAsync(name, "v1")).GetValue();
+        await _harness.CapableStore.InvalidateWithTombstoneAsync(name, "v1", CheckpointExpectation.FromSlot(slot));
+        _harness.ProviderStorage.FailWrites = true;
+        var grain = _cluster.Client.GetGrain<IMultiProjectionGrain>(name);
+        await grain.GetStatusAsync();
+        await WaitUntilAsync(() => _harness.Hosts.Any(host => host.AppliedEventIds.Count > 0), TimeSpan.FromSeconds(10));
+        Assert.False((await grain.PersistStateAsync()).GetValue());
+        AssertWatermarkUnchanged(name);
+        Assert.Empty(_harness.CapableStore.RebuiltCounts);
+        Assert.True((await _harness.CapableStore.ReadCheckpointSlotAsync(name, "v1")).GetValue().IsTombstoned);
+    }
+
+    internal static async Task ReplaceCheckpointCountAsync(
+        IMultiProjectionStateStore store, MultiProjectionStateRecord record, long count)
+    {
+        await using var payload = (await store.OpenStateDataReadStreamAsync(record)).GetValue();
+        var request = new MultiProjectionStateWriteRequest(
+            record.ProjectorName, record.ProjectorVersion, record.PayloadType, record.LastSortableUniqueId,
+            count, record.IsOffloaded, record.OffloadKey, record.OffloadProvider,
+            record.OriginalSizeBytes, record.CompressedSizeBytes, record.SafeWindowThreshold,
+            record.CreatedAt, record.UpdatedAt, record.BuildSource, record.BuildHost);
+        Assert.True((await store.UpsertFromStreamAsync(request, payload, 1_000_000)).IsSuccess);
+    }
+
+    private void AssertWatermarkUnchanged(string name)
+    {
+        var state = _harness.ProviderStorage.Get(name)!;
+        Assert.Equal(10_000, state.LastGoodSafeVersion);
+        Assert.Equal(701, state.LastGoodPayloadBytes);
+        Assert.Equal(702, state.LastGoodOriginalSizeBytes);
+        Assert.Equal(703, state.LastGoodEventsProcessed);
     }
 
     [Fact]
@@ -737,17 +1005,18 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
                 {
                     services.AddSingleton(_ => TestDomainTypes.Create());
                     services.AddSingleton<IEventStore>(ActiveHarness!.EventStore);
-                    services.AddSingleton<IMultiProjectionStateStore>(ActiveHarness.StateStore);
+                    services.AddSingleton<IMultiProjectionStateStore>(_ => ActiveHarness.UseCapableStore ? ActiveHarness.CapableStore : ActiveHarness.StateStore);
                     services.AddSingleton<IEventSubscriptionResolver>(
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
-                    services.AddSingleton<IBlobStorageSnapshotAccessor, MockBlobStorageSnapshotAccessor>();
+                    services.AddSingleton<IBlobStorageSnapshotAccessor>(ActiveHarness.Blobs);
                     services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
                     services.AddLogging(builder => builder.AddProvider(ActiveHarness!.LoggerProvider));
                     services.AddTransient(_ => new GeneralMultiProjectionActorOptions
                     {
                         SafeWindowMs = 20_000,
                         PersistIntervalSeconds = 0,
-                        SkipPersistWhenSafeCheckpointUnchanged = true
+                        SkipPersistWhenSafeCheckpointUnchanged = ActiveHarness.SkipUnchanged,
+                        UseStreamingSnapshotIO = ActiveHarness.Streaming
                     });
                     services.AddSekibanDcbNativeRuntime();
                     // The test factory must be registered after the native runtime's default factory so each test can
@@ -760,6 +1029,14 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
                 .AddMemoryStreams("EventStreamProvider")
                 .AddMemoryGrainStorage("EventStreamProvider");
         }
+    }
+
+    internal static void ConfigureTestPorts(TestClusterBuilder builder, int offset = 0)
+    {
+        var portBase = 30_000 + (Environment.ProcessId % 800) * 32 + offset;
+        builder.PortAllocator = new FixedPortAllocator(portBase, portBase + 1);
+        builder.Options.BaseSiloPort = portBase;
+        builder.Options.BaseGatewayPort = portBase + 1;
     }
 
     private sealed class FixedPortAllocator(int baseSiloPort, int baseGatewayPort) : ITestClusterPortAllocator
@@ -800,6 +1077,12 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
 
     private sealed class WatermarkHarness
     {
+        public bool UseCapableStore { get; set; }
+        public bool Streaming { get; set; }
+        public bool SkipUnchanged { get; set; } = true;
+        public MockBlobStorageSnapshotAccessor Blobs { get; } = new();
+        public CapableWatermarkStore CapableStore { get; }
+        public WatermarkHarness() => CapableStore = new(StateStore);
         public WatermarkEventStore EventStore { get; } = new();
         public WatermarkStateStore StateStore { get; } = new();
         public WatermarkGrainStorage ProviderStorage { get; } = new();
@@ -1080,6 +1363,9 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
 
         public string ProjectorName { get; } = projectorName;
         public int RestoreCalls { get; private set; }
+        public int SnapshotBuildCalls { get; private set; }
+        public int CompactionCalls { get; private set; }
+        public bool FailCompaction { get; set; }
         public IReadOnlyList<Guid> AppliedEventIds
         {
             get
@@ -1145,6 +1431,8 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
 
         private async Task<ResultBox<bool>> WriteSnapshotAsync(Stream target, CancellationToken cancellationToken)
         {
+            SnapshotBuildCalls++;
+            await harness.Blobs.WriteAsync(new MemoryStream([1]), ProjectorName, cancellationToken);
             await target.WriteAsync(new byte[] { 1 }, cancellationToken);
             return ResultBox.FromValue(true);
         }
@@ -1152,6 +1440,10 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
         public async Task<ResultBox<bool>> RestoreSnapshotFromStreamAsync(Stream source, CancellationToken cancellationToken)
         {
             RestoreCalls++;
+            if (harness.StateStore.CancellationSite == "host-result")
+                return ResultBox.Error<bool>(CancellationFailure());
+            if (harness.StateStore.CancellationSite == "host-throw")
+                throw CancellationFailure();
             if (harness.RestoreBehavior == RestoreBehavior.ResultBoxFailure)
             {
                 return ResultBox.Error<bool>(new InvalidOperationException("injected host restore ResultBox failure"));
@@ -1164,6 +1456,12 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
 
             var buffer = new byte[16];
             while (await source.ReadAsync(buffer, cancellationToken) > 0) { }
+            if (harness.UseCapableStore)
+            {
+                var restored = (await harness.StateStore.Inner.GetLatestForVersionAsync(ProjectorName, "v1")).GetValue().GetValue();
+                _forcedSafeVersion = (int)restored.EventsProcessed;
+                _safePosition = restored.LastSortableUniqueId;
+            }
             return ResultBox.FromValue(true);
         }
 
@@ -1183,7 +1481,11 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
 
         public void ForcePromoteBufferedEvents() { }
 
-        public void CompactSafeHistory() { }
+        public void CompactSafeHistory()
+        {
+            CompactionCalls++;
+            if (FailCompaction) throw new InvalidOperationException("deferred repair failed during compaction");
+        }
 
         public void ForcePromoteAllBufferedEvents() { }
 
@@ -1315,6 +1617,11 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
     private sealed class WatermarkStateStore : IMultiProjectionStateStore
     {
         private readonly InMemoryMultiProjectionStateStore _inner = new();
+        public InMemoryMultiProjectionStateStore Inner => _inner;
+        public string? CancellationSite { get; set; }
+        public TimeSpan OpenDelay { get; set; }
+        public TaskCompletionSource SlowStreamDisposed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource SlowReadFinished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly object _gate = new();
         private int _upsertCalls;
         public int UpsertCalls => Volatile.Read(ref _upsertCalls);
@@ -1359,6 +1666,9 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             string projectorVersion,
             CancellationToken cancellationToken = default)
         {
+            if (CancellationSite == "query-result")
+                return Task.FromResult(ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(CancellationFailure()));
+            if (CancellationSite == "query-throw") throw CancellationFailure();
             if (GetLatestBehavior == GetLatestBehavior.ResultBoxFailure)
             {
                 return Task.FromResult(ResultBox.Error<OptionalValue<MultiProjectionStateRecord>>(
@@ -1417,6 +1727,10 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
                 OpenedRecords.Add(record);
             }
 
+            if (CancellationSite == "open-result") return Task.FromResult(ResultBox.Error<Stream>(CancellationFailure()));
+            if (CancellationSite == "open-throw") throw CancellationFailure();
+            if (CancellationSite == "dispose") return Task.FromResult(ResultBox.FromValue<Stream>(new CancelledDisposeStream()));
+            if (OpenDelay > TimeSpan.Zero) return SlowOpenAsync(record);
             switch (StreamBehavior)
             {
                 case StateStreamBehavior.ResultBoxFailure:
@@ -1434,6 +1748,17 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
             }
         }
 
+        private async Task<ResultBox<Stream>> SlowOpenAsync(MultiProjectionStateRecord record)
+        {
+            // Deliberately ignores the activation token, like an abandoned dependency operation.
+            await Task.Delay(OpenDelay);
+            SlowReadFinished.TrySetResult();
+            var result = await _inner.OpenStateDataReadStreamAsync(record);
+            return result.IsSuccess
+                ? ResultBox.FromValue<Stream>(new DisposalTrackingStream(result.GetValue(), SlowStreamDisposed))
+                : result;
+        }
+
         public Task<ResultBox<bool>> UpsertFromStreamAsync(
             MultiProjectionStateWriteRequest request,
             Stream stream,
@@ -1448,6 +1773,100 @@ public sealed class MultiProjectionGrainWatermarkRetirementTests : IAsyncLifetim
                 LatestRecord = record;
             }
             return _inner.UpsertFromStreamAsync(request, stream, offloadThresholdBytes, cancellationToken);
+        }
+    }
+
+    private static bool ContainsCancellation(Exception exception) =>
+        exception is OperationCanceledException ||
+        (exception is AggregateException aggregate && aggregate.InnerExceptions.Any(ContainsCancellation)) ||
+        (exception.InnerException is { } inner && ContainsCancellation(inner));
+
+    private static Exception CancellationFailure() => new AggregateException(
+        new InvalidOperationException("unrelated"),
+        new InvalidOperationException("wrapped", new TaskCanceledException("injected restore cancellation")));
+
+    private sealed class DisposalTrackingStream(Stream inner, TaskCompletionSource disposed) : Stream
+    {
+        public override bool CanRead => inner.CanRead;
+        public override bool CanSeek => inner.CanSeek;
+        public override bool CanWrite => inner.CanWrite;
+        public override long Length => inner.Length;
+        public override long Position { get => inner.Position; set => inner.Position = value; }
+        public override void Flush() => inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+        public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+        public override void SetLength(long value) => inner.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
+        public override async ValueTask DisposeAsync()
+        {
+            await inner.DisposeAsync();
+            disposed.TrySetResult();
+            GC.SuppressFinalize(this);
+        }
+    }
+
+    private sealed class CancelledDisposeStream() : MemoryStream([1])
+    {
+        public override ValueTask DisposeAsync() => ValueTask.FromException(CancellationFailure());
+    }
+
+    private sealed class CapableWatermarkStore(WatermarkStateStore store) : DelegatingCheckpointStore(store.Inner), IMultiProjectionStateStore
+    {
+        public ConcurrentQueue<long> RebuiltCounts { get; } = new();
+        public TimeSpan InvalidationReadDelay { get; set; }
+        public TaskCompletionSource InvalidationReadFinished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _slotReads;
+        public int InvalidationCalls { get; private set; }
+        public bool InvalidationReadWasCancelled { get; private set; }
+        public TimeSpan ProviderTombstoneReadDelay { get; set; }
+        public TaskCompletionSource ProviderTombstoneReadFinished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool ProviderTombstoneReadWasCancelled { get; private set; }
+        public override async Task<ResultBox<CheckpointSlot>> ReadCheckpointSlotAsync(string p, string v, CancellationToken ct = default)
+        {
+            if (store.CancellationSite == "slot-result") return ResultBox.Error<CheckpointSlot>(CancellationFailure());
+            if (Interlocked.Increment(ref _slotReads) == 2 && InvalidationReadDelay > TimeSpan.Zero)
+            {
+                // Ignore cancellation to exercise the coordinator's check after an abandoned provider read.
+                await Task.Delay(InvalidationReadDelay);
+                var result = await base.ReadCheckpointSlotAsync(p, v);
+                InvalidationReadWasCancelled = ct.IsCancellationRequested;
+                InvalidationReadFinished.TrySetResult();
+                return result;
+            }
+            return await base.ReadCheckpointSlotAsync(p, v, ct);
+        }
+        public override async Task<CheckpointCasOutcome> InvalidateWithTombstoneAsync(
+            string p, string v, CheckpointExpectation e, CancellationToken ct = default)
+        {
+            InvalidationCalls++;
+            if (ProviderTombstoneReadDelay > TimeSpan.Zero)
+            {
+                try
+                {
+                    // Like Cosmos, read the document with the supplied token before attempting the tombstone CAS.
+                    await Task.Delay(ProviderTombstoneReadDelay, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    ProviderTombstoneReadWasCancelled = true;
+                    throw;
+                }
+                finally
+                {
+                    ProviderTombstoneReadFinished.TrySetResult();
+                }
+            }
+            return await base.InvalidateWithTombstoneAsync(p, v, e, ct);
+        }
+        public new Task<ResultBox<OptionalValue<MultiProjectionStateRecord>>> GetLatestForVersionAsync(string p, string v, CancellationToken ct = default) =>
+            store.GetLatestForVersionAsync(p, v, ct);
+        public new Task<ResultBox<Stream>> OpenStateDataReadStreamAsync(MultiProjectionStateRecord r, CancellationToken ct = default) =>
+            store.OpenStateDataReadStreamAsync(r, ct);
+        public override async Task<CheckpointCasOutcome> CommitRebuiltAsync(MultiProjectionStateWriteRequest r, Stream stream, CheckpointExpectation e, int o, CancellationToken ct = default)
+        {
+            var result = await base.CommitRebuiltAsync(r, stream, e, o, ct);
+            if (result.Status == CheckpointCasStatus.Committed) RebuiltCounts.Enqueue(r.EventsProcessed);
+            return result;
         }
     }
 

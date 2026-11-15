@@ -25,6 +25,4 @@ jobs:
         with:
           fetch-depth: 0
       - name: Validate canonical maintenance policy and mutants
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: ./eng/validate-pure-maintenance-mode.sh --repo-root . --self-test

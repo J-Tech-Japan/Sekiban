@@ -104,10 +104,14 @@ public sealed partial class SqliteMvRegistryStore : MvForcedReverseRegistryStore
             """;
 
         await connection.ExecuteAsync(new CommandDefinition(pragmaSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        // BEGIN IMMEDIATE takes SQLite's database-wide writer lock before inspecting migration columns.
+        // Projector initialization already uses the provider's default immediate transaction.
+        await using var transaction = connection.BeginTransaction(deferred: false);
         await connection.ExecuteAsync(new CommandDefinition(registrySql, cancellationToken: cancellationToken)).ConfigureAwait(false);
         await EnsureCheckpointColumnsAsync(connection, cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(activeSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
         await EnsureActiveGenerationColumnAsync(connection, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task EnsureCheckpointColumnsAsync(

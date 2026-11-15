@@ -1,0 +1,107 @@
+name: nuget package release for Pure templates
+
+on:
+  push:
+    tags:
+      - 'pureTemplates-v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: pure-release
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup pinned build SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.1xx
+
+      - name: Log SDK and runner image
+        run: |
+          dotnet --info
+          echo "Runner image: ${ImageOS} ${ImageVersion}"
+
+      - name: Detect version from tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" != pureTemplates-v* ]]; then
+            echo "Unexpected tag format: $TAG"
+            exit 1
+          fi
+          VERSION="${TAG#pureTemplates-v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Not a plain version: $VERSION"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Require the tagged commit to be on main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Tagged commit $GITHUB_SHA is not on main"
+            exit 1
+          fi
+
+      - name: Require the tag to match the package version
+        run: |
+          PACKAGE_VERSION="$(python3 -I -c 'import xml.etree.ElementTree as E; p=E.parse("templates/Sekiban.Pure.Templates/Sekiban.Pure.Templates.csproj"); print(p.findtext(".//PackageVersion"))')"
+          if [[ "$PACKAGE_VERSION" != "$VERSION" ]]; then
+            echo "Tag version $VERSION differs from PackageVersion $PACKAGE_VERSION of the template project"
+            exit 1
+          fi
+
+      - name: Validate the template tree
+        run: ./eng/validate-pure-templates.sh --repo-root .
+
+      - name: Pack the template
+        run: |
+          dotnet pack templates/Sekiban.Pure.Templates/Sekiban.Pure.Templates.csproj -c Release -o out -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905
+          shopt -s nullglob
+          packages=(out/*.nupkg)
+          [[ "${#packages[@]}" -eq 1 ]]
+          [[ "${packages[0]}" == "out/Sekiban.Pure.Templates.${VERSION}.nupkg" ]]
+
+      - name: Generate, build and test both apps from the package
+        run: |
+          dotnet new install "out/Sekiban.Pure.Templates.${VERSION}.nupkg" --debug:custom-hive "$RUNNER_TEMP/hive"
+          dotnet new sekiban-orleans-aspire -n AcmeOrl -o "$RUNNER_TEMP/gen/AcmeOrl" --debug:custom-hive "$RUNNER_TEMP/hive"
+          dotnet new sekiban-dapr-aspire -n AcmeDapr -o "$RUNNER_TEMP/gen/AcmeDapr" --debug:custom-hive "$RUNNER_TEMP/hive"
+          for name in AcmeOrl AcmeDapr; do
+            dotnet build "$RUNNER_TEMP/gen/$name/$name.sln" -c Release -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905
+            dotnet test "$RUNNER_TEMP/gen/$name/$name.Unit/$name.Unit.csproj" -c Release --no-build
+          done
+
+      - name: Compose release body
+        run: ./eng/compose-pure-release-body.sh --repo-root . --prefix pureTemplates --version "$VERSION" --output out/release-body.md
+
+      - name: Mint short-lived NuGet key
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push to NuGet.org
+        env:
+          NUGET_APIKEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push out/*.nupkg --api-key "$NUGET_APIKEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: out/*.nupkg
+          body_path: out/release-body.md
+          make_latest: 'false'
