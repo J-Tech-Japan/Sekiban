@@ -8,8 +8,48 @@ internal static class PackageArtifactValidator
     private const string AzureQueuePackageId = "Sekiban.Dcb.Orleans.AzureQueue";
     private const string PostgresPackageId = "Sekiban.Dcb.Postgres";
     private const string NpgsqlPinnedEfCoreVersion = "11.0.0-rc.3.26522.148";
+    private const string ResultBoxesPackageId = "ResultBoxes";
 
-    internal static void Validate(string directory, string expectedVersion)
+    // ResultBoxes dependency ratchet (DCB 11: ResultBox only on the WithResult surface).
+    // Exactly the packages whose nuspec reaches ResultBoxes, directly or through other packages of
+    // this set, in a dependency group (checked per net10.0 / net11.0 group). The list is exact in
+    // both directions: a package outside it that reaches ResultBoxes fails, and a listed package
+    // that no longer reaches it fails too, so a slice that removes the dependency shrinks this list
+    // in the same PR. Later slices may only remove names; the final set is the four WithResult
+    // packages: Sekiban.Dcb.Orleans.WithResult, Sekiban.Dcb.WithResult, Sekiban.Dcb.WithResult.Model,
+    // Sekiban.Dcb.WithResult.Testing. Kept in ordinal order.
+    internal static readonly string[] ResultBoxesAllowedPackageIds =
+    [
+        "Sekiban.Dcb.BlobStorage.AzureStorage",
+        "Sekiban.Dcb.BlobStorage.S3",
+        "Sekiban.Dcb.ColdStorage",
+        "Sekiban.Dcb.Core",
+        "Sekiban.Dcb.Core.Model",
+        "Sekiban.Dcb.Core.Testing",
+        "Sekiban.Dcb.CosmosDb",
+        "Sekiban.Dcb.DynamoDB",
+        "Sekiban.Dcb.MaterializedView",
+        "Sekiban.Dcb.MaterializedView.MySql",
+        "Sekiban.Dcb.MaterializedView.Orleans",
+        "Sekiban.Dcb.MaterializedView.Postgres",
+        "Sekiban.Dcb.MaterializedView.SqlServer",
+        "Sekiban.Dcb.MaterializedView.Sqlite",
+        "Sekiban.Dcb.Orleans.AzureQueue",
+        "Sekiban.Dcb.Orleans.Core",
+        "Sekiban.Dcb.Orleans.WithResult",
+        "Sekiban.Dcb.Orleans.WithoutResult",
+        "Sekiban.Dcb.Postgres",
+        "Sekiban.Dcb.Sqlite",
+        "Sekiban.Dcb.WithResult",
+        "Sekiban.Dcb.WithResult.Model",
+        "Sekiban.Dcb.WithResult.Testing",
+        "Sekiban.Dcb.WithoutResult",
+        "Sekiban.Dcb.WithoutResult.Model",
+        "Sekiban.Dcb.WithoutResult.Testing"
+    ];
+
+    // resultBoxesAllowedSubset can only narrow the allowed set (offline harness cases); it never adds a package.
+    internal static void Validate(string directory, string expectedVersion, IReadOnlyCollection<string>? resultBoxesAllowedSubset = null)
     {
         directory = Path.GetFullPath(directory);
         Assert(Directory.Exists(directory), $"Package output directory does not exist: {directory}");
@@ -60,7 +100,8 @@ internal static class PackageArtifactValidator
         }
         Assert(!DependencyIds(nuspecs["Sekiban.Dcb.Orleans.Core"]).Any(IsAzureDependency),
             "Sekiban.Dcb.Orleans.Core must remain Azure-free.");
-        Console.WriteLine($"Package artifact validation passed: {ids.Count} packages, net10.0 groups on the 10.x platform line, net11.0 groups differing only by the 11.x platform upgrades, PostgreSQL relational closure, Azure-free Core, and Azure Queue groups.");
+        ValidateResultBoxesRatchet(nuspecs, resultBoxesAllowedSubset);
+        Console.WriteLine($"Package artifact validation passed: {ids.Count} packages, net10.0 groups on the 10.x platform line, net11.0 groups differing only by the 11.x platform upgrades, PostgreSQL relational closure, Azure-free Core, Azure Queue groups, and the ResultBoxes ratchet ({ResultBoxesAllowedPackageIds.Length} allowed).");
     }
 
     // The 11 line keeps the net10.0 group on the 10.x platform packages and moves only the
@@ -113,6 +154,77 @@ internal static class PackageArtifactValidator
                 $"{id}: {dependencyId} in net11.0 must be {eleven}.");
         }
     }
+
+    private static void ValidateResultBoxesRatchet(
+        IReadOnlyDictionary<string, XDocument> nuspecs,
+        IReadOnlyCollection<string>? allowedSubset)
+    {
+        Assert(ResultBoxesAllowedPackageIds.SequenceEqual(
+                ResultBoxesAllowedPackageIds.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)),
+            "ResultBoxesAllowedPackageIds must be distinct and in ordinal order.");
+        Assert(ResultBoxesAllowedPackageIds.All(id => PackageManifest.PackageIds.Contains(id, StringComparer.Ordinal)),
+            "ResultBoxesAllowedPackageIds must name only DCB packages.");
+        // NuGet package IDs are case-insensitive and a nuspec keeps the csproj's spelling, so every
+        // ID comparison below ignores case (a "resultboxes" or "sekiban.dcb.core" spelling must not evade the ratchet).
+        var allowed = ResultBoxesAllowedPackageIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (allowedSubset is not null)
+        {
+            Assert(allowedSubset.All(allowed.Contains), "The ResultBoxes allowed subset may only narrow ResultBoxesAllowedPackageIds.");
+            allowed = allowedSubset.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        foreach (var tfm in new[] { "net10.0", "net11.0" })
+        {
+            var dependencies = nuspecs.ToDictionary(
+                pair => pair.Key,
+                pair => DependencyIdsInGroup(pair.Value, tfm),
+                StringComparer.OrdinalIgnoreCase);
+            var paths = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+            // Returns the dependency path to ResultBoxes ("A -> B -> ResultBoxes"), or null.
+            string? PathToResultBoxes(string id, HashSet<string> visiting)
+            {
+                if (paths.TryGetValue(id, out var known)) return known;
+                Assert(visiting.Add(id), $"Dependency cycle through {id} in {tfm}.");
+                string? found = null;
+                foreach (var dependency in dependencies[id])
+                {
+                    if (string.Equals(dependency, ResultBoxesPackageId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = $"{id} -> {dependency}";
+                        break;
+                    }
+                    if (dependencies.ContainsKey(dependency) && PathToResultBoxes(dependency, visiting) is { } inner)
+                    {
+                        found = $"{id} -> {inner}";
+                        break;
+                    }
+                }
+                visiting.Remove(id);
+                paths[id] = found;
+                return found;
+            }
+
+            foreach (var id in dependencies.Keys.Order(StringComparer.Ordinal))
+            {
+                var path = PathToResultBoxes(id, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                Assert(path is null || allowed.Contains(id),
+                    $"{id} reaches {ResultBoxesPackageId} in {tfm} ({path}) but is outside the ResultBoxes allowed set; only the WithResult surface may depend on it.");
+                Assert(path is not null || !allowed.Contains(id),
+                    $"{id} no longer reaches {ResultBoxesPackageId} in {tfm}; remove it from ResultBoxesAllowedPackageIds in the same change.");
+            }
+        }
+    }
+
+    private static string[] DependencyIdsInGroup(XDocument document, string targetFramework) =>
+        document.Descendants()
+            .Where(element => element.Name.LocalName == "group" &&
+                              element.Parent?.Name.LocalName == "dependencies" &&
+                              string.Equals(element.Attribute("targetFramework")?.Value, targetFramework, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(group => group.Elements().Where(element => element.Name.LocalName == "dependency"))
+            .Select(element => element.Attribute("id")?.Value ?? "")
+            .Where(id => id.Length > 0)
+            .ToArray();
 
     private static void ValidateDependency(XDocument document, string targetFramework, string id, string expectedVersion)
     {

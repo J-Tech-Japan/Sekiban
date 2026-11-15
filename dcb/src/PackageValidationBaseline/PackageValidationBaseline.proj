@@ -1,0 +1,25 @@
+<Project>
+  <!--
+    Restore-only project used by dcb/src/Directory.Build.targets to place one published baseline
+    package (SekibanBaselineId / SekibanBaselineVersion) in the NuGet global packages folder.
+    It keeps the baseline out of the packed project's own restore graph: a PackageDownload there is
+    written to its project.assets.json and the SBOM inside the .nupkg would list the baseline package.
+    Nothing is built or packed from this project.
+  -->
+  <PropertyGroup>
+    <ImportDirectoryBuildProps>false</ImportDirectoryBuildProps>
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+    <ImportDirectoryPackagesProps>false</ImportDirectoryPackagesProps>
+    <BaseIntermediateOutputPath>$(SekibanBaselineRestoreRoot)</BaseIntermediateOutputPath>
+  </PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageDownload Include="$(SekibanBaselineId)" Version="[$(SekibanBaselineVersion)]" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

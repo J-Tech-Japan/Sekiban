@@ -1,0 +1,35 @@
+<Project>
+  <!--
+    Public API baseline for the 11 line: every packable DCB library is compared with its published
+    10.25.0 package when it is packed (CP0001/CP0002/CP0006/... fail the pack, on net10.0 and net11.0).
+    Set here, after the project file, so IsPackable is known: non-packable projects such as
+    Sekiban.Dcb.Postgres.MigrationHost do not get it.
+
+    An intended break is recorded per project in CompatibilitySuppressions.xml next to the csproj,
+    regenerated with
+      dotnet pack <csproj> -c Release -p:ApiCompatGenerateSuppressionFile=true
+    and reviewed in the PR diff (see dcb/tests/Sekiban.Dcb.TemplateValidation/RELEASE-RUNBOOK.md).
+
+    The baseline path is given explicitly so the SDK does not add a PackageDownload to the packed
+    project: that would be recorded in its project.assets.json and listed in the SBOM shipped in the
+    .nupkg. The baseline is restored into the NuGet global packages folder by a separate
+    restore-only project instead (only when it is not there yet; its obj folder is outside the packed
+    project's directory, which the SBOM scan reads), so the packed contents are the same as without
+    package validation.
+  -->
+  <PropertyGroup Condition="'$(IsPackable)' != 'false'">
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>10.25.0</PackageValidationBaselineVersion>
+    <PackageValidationBaselinePath>$([MSBuild]::NormalizePath('$(NuGetPackageRoot)', '$(PackageId.ToLowerInvariant())', '$(PackageValidationBaselineVersion)', '$(PackageId.ToLowerInvariant()).$(PackageValidationBaselineVersion).nupkg'))</PackageValidationBaselinePath>
+  </PropertyGroup>
+
+  <Target Name="SekibanRestorePackageValidationBaseline"
+          BeforeTargets="RunPackageValidation"
+          Condition="'$(EnablePackageValidation)' == 'true' and '$(IsPackable)' != 'false' and !Exists('$(PackageValidationBaselinePath)')">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)PackageValidationBaseline/PackageValidationBaseline.proj"
+             Targets="Restore"
+             Properties="SekibanBaselineId=$(PackageId);SekibanBaselineVersion=$(PackageValidationBaselineVersion);SekibanBaselineRestoreRoot=$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', 'PackageValidationBaseline', 'obj', '$(PackageId)'));SekibanBaselineRestoreNonce=$([System.Guid]::NewGuid())" />
+    <Error Condition="!Exists('$(PackageValidationBaselinePath)')"
+           Text="Package validation baseline $(PackageId) $(PackageValidationBaselineVersion) was not restored to $(PackageValidationBaselinePath)." />
+  </Target>
+</Project>

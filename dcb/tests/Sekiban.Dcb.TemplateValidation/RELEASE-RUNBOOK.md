@@ -69,6 +69,35 @@ For reproducibility, preview rebuilds are dispatched with
 `dcb_release_reproducibility.yml` on the `dcb/v11` ref; the workflow installs
 SDK 11. The pull-request path keeps selecting the highest stable tag.
 
+### API baseline and ResultBoxes ratchet (11 line)
+
+Every packable library under `dcb/src` is packed with .NET package validation
+against its published `10.25.0` package (`dcb/src/Directory.Build.targets`), on
+net10.0 and net11.0. Any API difference (CP0001, CP0002, CP0006, ...) fails the
+pack, so the build, the release pack and the packaged-consumer packs all stop on
+an unrecorded break. The baseline is restored from nuget.org into the NuGet
+global packages folder when it is not there yet; it is not added to the packed
+project's restore, so the `.nupkg` contents and SBOM do not change.
+
+A slice that breaks the API on purpose records the break in the same PR:
+
+1. Regenerate the project's suppression file:
+   `dotnet pack dcb/src/<Project>/<Project>.csproj -c Release -p:ApiCompatGenerateSuppressionFile=true`.
+   This writes `dcb/src/<Project>/CompatibilitySuppressions.xml` (one entry per
+   member and target framework); the file is not packed.
+2. Review its diff: every entry must be an intended 11.0 break named in the
+   slice; anything else is a bug to fix, not to suppress.
+3. Commit the file with the change. When a later slice changes the same
+   project again, regenerate the file rather than editing it by hand.
+
+`TemplateValidation packages` also enforces the ResultBoxes ratchet:
+`PackageArtifactValidator.ResultBoxesAllowedPackageIds` lists exactly the
+packages whose dependency groups reach `ResultBoxes`, directly or through other
+DCB packages. A package outside the list that reaches it fails, and a listed
+package that no longer reaches it fails, so the slice that removes the
+dependency removes the name in the same PR. Names are only ever removed; the
+final list is the four WithResult packages.
+
 ## Template adjustment and release
 
 1. After V is public, audit the templates against best practice for a person

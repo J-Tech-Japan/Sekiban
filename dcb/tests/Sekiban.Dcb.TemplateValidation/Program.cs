@@ -127,7 +127,10 @@ internal static class Program
                     break;
 
                 case "packages":
-                    PackageArtifactValidator.Validate(Required(options, "directory"), expectedVersion);
+                    PackageArtifactValidator.Validate(Required(options, "directory"), expectedVersion,
+                        options.TryGetValue("resultboxes-allowed-subset", out var resultBoxesSubset)
+                            ? resultBoxesSubset.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            : null);
                     break;
 
                 case "orleans":
