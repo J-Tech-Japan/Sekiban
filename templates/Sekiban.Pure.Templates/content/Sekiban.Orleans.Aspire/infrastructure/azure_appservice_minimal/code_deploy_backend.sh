@@ -37,14 +37,14 @@ echo "Backend path: $BACKEND_PATH"
 APP_SERVICE_NAME="backend-${RESOURCE_GROUP}"
 
 # Build and publish the application
-echo "Building and publishing .NET 9.0 application..."
+echo "Building and publishing .NET 10.0 application..."
 pushd "$BACKEND_PATH"
 
 # Create a temporary publish directory
 PUBLISH_DIR="publish"
 mkdir -p "$PUBLISH_DIR"
 
-# Build and publish the .NET 9.0 application
+# Build and publish the .NET 10.0 application
 dotnet publish -c Release -o "$PUBLISH_DIR" --self-contained false
 
 # Check if publish was successful

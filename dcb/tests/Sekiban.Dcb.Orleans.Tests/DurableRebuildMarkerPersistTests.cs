@@ -32,15 +32,17 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
     private IClusterClient Client => _cluster!.Client;
     public Task InitializeAsync() => Task.CompletedTask;
 
-    private async Task StartAsync(bool streaming, int persistIntervalSeconds = 3600, bool skipUnchanged = true, int catchUpBatchSize = 1000)
+    private async Task StartAsync(bool streaming, int persistIntervalSeconds = 3600, bool skipUnchanged = true, int catchUpBatchSize = 1000, int waitMs = 0)
     {
         Env.Reset();
+        Env.WaitMs = waitMs;
         Env.Streaming = streaming;
         Env.PersistIntervalSeconds = persistIntervalSeconds;
         Env.SkipUnchanged = skipUnchanged;
         Env.CatchUpBatchSize = catchUpBatchSize;
         MarkerGrainStorage.Reset();
         var builder = new TestClusterBuilder();
+        MultiProjectionGrainWatermarkRetirementTests.ConfigureTestPorts(builder);
         builder.Options.InitialSilosCount = 1;
         var id = Guid.NewGuid().ToString("N")[..8];
         builder.Options.ClusterId = $"G95-marker-{id}";
@@ -55,6 +57,65 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         if (_cluster is null) return;
         await _cluster.StopAllSilosAsync();
         _cluster.Dispose();
+    }
+
+    [Theory]
+    [InlineData(false, "operator")]
+    [InlineData(true, "operator")]
+    [InlineData(false, "tombstone")]
+    [InlineData(true, "tombstone")]
+    [InlineData(false, "marker-tombstone")]
+    [InlineData(true, "marker-tombstone")]
+    public async Task FreshOrderedReplay_NormalIntervalCommitsBelowOldCount_QueriesRemainClosed(
+        bool streaming, string route)
+    {
+        await StartAsync(streaming, catchUpBatchSize: 2);
+        var t0 = DateTime.UtcNow;
+        var grain = await SeedAsync(t0);
+        var active = await SlotAsync();
+        // A retained old checkpoint is ahead of the available replay. Keep its valid native snapshot payload.
+        await MultiProjectionGrainWatermarkRetirementTests.ReplaceCheckpointCountAsync(Env.StateStore, active.Record!, 10_000);
+        var events = Enumerable.Range(0, 8)
+            .Select(i => ToSerializable(CreateEvent(new Counted($"tail{i}"), t0.AddSeconds(-29 + i)))).ToArray();
+        await Env.EventStore.WriteSerializableEventsAsync(events);
+        if (route == "operator")
+        {
+            await AddEarlierAsync(grain, t0);
+        }
+        else
+        {
+            await grain.RequestDeactivationAsync();
+            await Task.Delay(1000);
+            active = await SlotAsync();
+            Assert.Equal(10_000, active.Record!.EventsProcessed);
+            Assert.Equal(CheckpointCasStatus.Committed, (await Env.StateStore.InvalidateWithTombstoneAsync(
+                CountProjector.MultiProjectorName, CountProjector.MultiProjectorVersion,
+                CheckpointExpectation.FromSlot(active))).Status);
+            MarkerGrainStorage.SeedRetainedWatermark(route == "marker-tombstone");
+        }
+        var pause = Env.Counting.PauseNextContinuation();
+        try
+        {
+            var query = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            await pause.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            await FirstQueryBoundedWaitClusterTests.PollUntilAsync(async () => (await SlotAsync()).IsActive);
+            var intermediate = await SlotAsync();
+            Assert.InRange(intermediate.Record!.EventsProcessed, 1, 9_999);
+            Assert.True((await grain.GetStatusAsync()).IsCatchUpActive);
+            Assert.True((await grain.GetStatusAsync()).FirstQueryCatchUpPending);
+            var guarded = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            await Task.WhenAny(guarded, Task.Delay(100));
+            if (guarded.IsCompleted) Assert.False((await guarded).IsSuccess);
+            pause.Release.TrySetResult();
+            await guarded.WaitAsync(TimeSpan.FromSeconds(20));
+            await query.WaitAsync(TimeSpan.FromSeconds(20));
+            await AssertCountAndIdleAsync(grain, route == "operator" ? 10 : 9);
+            await AssertReactivationWithoutFullReplayAsync(grain, route == "operator" ? 10 : 9);
+        }
+        finally
+        {
+            pause.Release.TrySetResult();
+        }
     }
 
     [Theory]
@@ -119,10 +180,8 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
     [InlineData(false)]
     public async Task ResetWriteFailsAfterTombstone_ContaminatedPersistKeepsMarker_ReactivationFullyReplays(bool streaming)
     {
-        await StartAsync(streaming);
-        // The contaminated host retains its old safe checkpoint. Disable the optional skip only in this test
-        // to exercise the actual snapshot-save path after the failed reset (also used by timer/deactivation).
-        Env.SkipUnchanged = false;
+        // Exercise explicit, timer and deactivation persists with the unchanged-checkpoint skip disabled.
+        await StartAsync(streaming, persistIntervalSeconds: 1, skipUnchanged: false);
         var t0 = DateTime.UtcNow;
         var grain = await SeedAsync(t0);
         MarkerGrainStorage.FailResetWrites = true;
@@ -137,10 +196,19 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         Assert.NotNull(marker.RebuildOffendingEventId);
         Assert.NotNull(marker.RebuildOffendingPosition);
         var writes = Env.StateStore.WriteCount;
-        Assert.True((await grain.PersistStateAsync()).IsSuccess);
-        // Ensure we exercised a successful external save of the contaminated host, rather than an early skip.
-        Assert.Equal(writes + 1, Env.StateStore.WriteCount);
-        Assert.True((await SlotAsync()).IsActive);
+        var failuresBeforePersist = MarkerGrainStorage.ResetFailures;
+        var persist = await grain.PersistStateAsync();
+        Assert.True(persist.IsSuccess);
+        Assert.False(persist.GetValue());
+        Assert.True(MarkerGrainStorage.ResetFailures > failuresBeforePersist);
+        // Item 1c retries the transition, but must never snapshot the still-signalling host.
+        Assert.Equal(writes, Env.StateStore.WriteCount);
+        Assert.True((await SlotAsync()).IsTombstoned);
+        var resetFailures = MarkerGrainStorage.ResetFailures;
+        await FirstQueryBoundedWaitClusterTests.PollUntilAsync(() =>
+            Task.FromResult(MarkerGrainStorage.ResetFailures > resetFailures)); // A timer persist also retried.
+        Assert.Equal(writes, Env.StateStore.WriteCount);
+        Assert.True((await SlotAsync()).IsTombstoned);
         var afterPersist = MarkerGrainStorage.Read();
         Assert.True(afterPersist.RebuildRequired);
         Assert.Equal(marker.RebuildOffendingEventId, afterPersist.RebuildOffendingEventId);
@@ -148,8 +216,13 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         var readsBeforeDeactivation = MarkerGrainStorage.ReadCount;
         await grain.RequestDeactivationAsync();
         await Task.Delay(1000);
-        // Deactivation also persists the contaminated host. Recover the provider only after it is gone.
-        Assert.True(MarkerGrainStorage.Read().RebuildRequired);
+        // Deactivation records the same obligation without saving a snapshot or retrying the reset.
+        var afterDeactivation = MarkerGrainStorage.Read();
+        Assert.True(afterDeactivation.RebuildRequired);
+        Assert.Equal(marker.RebuildOffendingEventId, afterDeactivation.RebuildOffendingEventId);
+        Assert.Equal(marker.RebuildOffendingPosition, afterDeactivation.RebuildOffendingPosition);
+        Assert.Equal(writes, Env.StateStore.WriteCount);
+        Assert.True((await SlotAsync()).IsTombstoned);
         MarkerGrainStorage.FailResetWrites = false;
         var before = Env.Counting.FullReads;
         grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
@@ -159,24 +232,14 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, false)]
-    [InlineData(true, true)]
-    [InlineData(false, true)]
+    [InlineData(true)]
+    [InlineData(false)]
     public async Task TimerPersist_HostSwappedDuringExternalSave_KeepsMarker_ReactivationFullyReplays(
-        bool streaming, bool failedReset)
+        bool streaming)
     {
         await StartAsync(streaming, persistIntervalSeconds: 1, skipUnchanged: false);
         var t0 = DateTime.UtcNow;
         var grain = await SeedAsync(t0);
-        if (failedReset)
-        {
-            MarkerGrainStorage.FailResetWrites = true;
-            await AddEarlierAsync(grain, t0);
-            Assert.False((await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false)).IsSuccess);
-            Assert.True(MarkerGrainStorage.ResetFailures > 0);
-        }
-
         var recreated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var hook = CatchUpProductionTestHooks.Register(
             Sekiban.Dcb.ServiceId.DefaultServiceIdProvider.DefaultServiceId, CountProjector.MultiProjectorName,
@@ -190,24 +253,39 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         {
             // The Interleave=true persist timer has captured A's snapshot, but has not acquired the mutation gate.
             await saveGate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
-            MarkerGrainStorage.FailResetWrites = false;
-            if (!failedReset) await AddEarlierAsync(grain, t0);
+            await AddEarlierAsync(grain, t0);
             await grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
             await recreated.Task.WaitAsync(TimeSpan.FromSeconds(20));
-            Assert.True(MarkerGrainStorage.Read().RebuildRequired);
+            var marker = MarkerGrainStorage.Read();
+            Assert.True(marker.RebuildRequired);
+            Assert.NotNull(marker.RebuildOffendingEventId);
+            Assert.NotNull(marker.RebuildOffendingPosition);
+            Assert.True((await SlotAsync()).IsTombstoned);
             var writes = Env.StateStore.WriteCount;
             saveGate.Release.TrySetResult();
-            await FirstQueryBoundedWaitClusterTests.PollUntilAsync(() =>
-                Task.FromResult(Env.StateStore.WriteCount > writes && MarkerGrainStorage.Read().LastGoodSafeVersion == 1));
-            var staleSlot = await SlotAsync();
-            Assert.True(staleSlot.IsActive); // A's old snapshot really committed over B's tombstone.
-            Assert.Equal(1L, staleSlot.Record!.EventsProcessed);
-            Assert.True(MarkerGrainStorage.Read().RebuildRequired);
+            // A's snapshot was captured while A was clean, so A is not a signalling host (item 1c does not apply), but
+            // A was swapped out while its persist was parked (SEK-G156: a superseded host never writes). In both modes the
+            // resumed persist stops without an external write, A's old snapshot never commits over B's tombstone, and
+            // the marker survives.
+            await WaitForIdleAsync(grain);
+            await Task.Delay(2000); // Let the released timer persist finish; it must not write.
+            Assert.True((await SlotAsync()).IsTombstoned);
+            Assert.NotEqual(1, MarkerGrainStorage.Read().LastGoodSafeVersion);
+            var expectedWrites = writes;
+            Assert.Equal(expectedWrites, Env.StateStore.WriteCount);
+            var metadata = MarkerGrainStorage.Read();
+            Assert.True(metadata.RebuildRequired);
+            Assert.Equal(marker.RebuildOffendingEventId, metadata.RebuildOffendingEventId);
+            Assert.Equal(marker.RebuildOffendingPosition, metadata.RebuildOffendingPosition);
             await WaitForIdleAsync(grain);
             var readsBeforeDeactivation = MarkerGrainStorage.ReadCount;
             await grain.RequestDeactivationAsync();
             await Task.Delay(1000);
-            Assert.True(MarkerGrainStorage.Read().RebuildRequired);
+            var afterDeactivation = MarkerGrainStorage.Read();
+            Assert.True(afterDeactivation.RebuildRequired);
+            Assert.Equal(marker.RebuildOffendingEventId, afterDeactivation.RebuildOffendingEventId);
+            Assert.Equal(marker.RebuildOffendingPosition, afterDeactivation.RebuildOffendingPosition);
+            Assert.Equal(expectedWrites, Env.StateStore.WriteCount);
             Env.StateStore.RejectOtherSaves = false;
             var fullReads = Env.Counting.FullReads;
             grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
@@ -426,6 +504,74 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         }
     }
 
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(false, 100)]
+    [InlineData(true, 0)]
+    [InlineData(true, 100)]
+    public async Task Runtime_and_marker_replays_keep_queries_closed_until_background_replay_finishes(bool resumeMarker, int waitMs)
+    {
+        await StartAsync(false, waitMs: waitMs);
+        var t0 = DateTime.UtcNow;
+        var grain = await SeedAsync(t0);
+        if (resumeMarker)
+        {
+            await grain.RequestDeactivationAsync();
+            await Task.Delay(1000);
+            // Leave the old external snapshot intact. Activation must skip it and start at null.
+            MarkerGrainStorage.SeedRetainedWatermark(true);
+            MarkerGrainStorage.RetireSafeWatermark();
+            await Env.EventStore.WriteSerializableEventsAsync(new[]
+            {
+                ToSerializable(CreateEvent(new Counted("earlier"), t0.AddSeconds(-31)))
+            });
+        }
+        else
+        {
+            await AddEarlierAsync(grain, t0);
+            Assert.Single(Env.Log.Entries, entry => entry == (LogLevel.Warning, 1031));
+        }
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        CatchUpStartPositionLease? start = null;
+        using var hook = CatchUpProductionTestHooks.Register(
+            Sekiban.Dcb.ServiceId.DefaultServiceIdProvider.DefaultServiceId, CountProjector.MultiProjectorName,
+            async (point, observation) =>
+            {
+                if (point == CatchUpProductionHookPoint.BackgroundEnteredGate ||
+                    (waitMs == 0 && point == CatchUpProductionHookPoint.InvocationBeforeRead))
+                {
+                    start = observation.Start;
+                    entered.TrySetResult();
+                    await release.Task;
+                }
+            });
+        try
+        {
+            var query = grain.GetStateAsync(canGetUnsafeState: false, waitForCatchUp: false);
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            Assert.NotNull(start);
+            Assert.Null(start!.StartPosition);
+            if (waitMs > 0)
+            {
+                var result = await query.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.False(result.IsSuccess);
+                Assert.Contains(MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, result.GetException().Message);
+                Assert.True((await grain.GetStatusAsync()).FirstQueryCatchUpPending);
+            }
+            else
+            {
+                await Task.Delay(200);
+                Assert.False(query.IsCompleted);
+            }
+            release.TrySetResult();
+            await query.WaitAsync(TimeSpan.FromSeconds(20));
+            await AssertCountAndIdleAsync(grain, 2);
+            AssertMarkerCleared();
+        }
+        finally { release.TrySetResult(); }
+    }
+
     private async Task<IMultiProjectionGrain> SeedAsync(DateTime t0)
     {
         var grain = Client.GetGrain<IMultiProjectionGrain>(CountProjector.MultiProjectorName);
@@ -543,6 +689,21 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             WriteCount = 0;
             ReadCount = 0;
             ResetFailures = 0;
+        }
+
+        public static void SeedRetainedWatermark(bool marker)
+        {
+            lock (Gate)
+            {
+                foreach (var state in Store.Values)
+                {
+                    state.LastGoodSafeVersion = 10_000;
+                    state.LastGoodPayloadBytes = 701;
+                    state.LastGoodOriginalSizeBytes = 702;
+                    state.LastGoodEventsProcessed = 10_000;
+                    state.RebuildRequired = marker;
+                }
+            }
         }
 
         public static void RetireSafeWatermark()
@@ -671,10 +832,12 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
         {
             public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
             public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            public int ReadsToSkip { get; set; }
         }
         public SaveGate ParkNextSave()
         {
-            var gate = new SaveGate();
+            // Park the retained post-build ordering check, after the new pre-build check has passed.
+            var gate = new SaveGate { ReadsToSkip = 1 };
             Interlocked.Exchange(ref _nextSave, gate);
             return gate;
         }
@@ -684,6 +847,11 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
             var gate = Interlocked.Exchange(ref _nextSave, null);
             if (gate is not null)
             {
+                if (gate.ReadsToSkip-- > 0)
+                {
+                    Interlocked.Exchange(ref _nextSave, gate);
+                    return await _inner.GetLatestForVersionAsync(p, v, ct);
+                }
                 var captured = await _inner.GetLatestForVersionAsync(p, v, ct);
                 // Prevent later clean persists (including deactivation) from repairing the marker under test.
                 RejectOtherSaves = true;
@@ -730,6 +898,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
     {
         public static ObligationLogger Log { get; private set; } = new();
         public static bool Streaming { get; set; }
+        public static int WaitMs { get; set; }
         public static int PersistIntervalSeconds { get; set; } = 3600;
         public static int CatchUpBatchSize { get; set; } = 1000;
         public static bool SkipUnchanged { get; set; } = true;
@@ -785,7 +954,7 @@ public class DurableRebuildMarkerPersistTests : IAsyncLifetime
                         new DefaultOrleansEventSubscriptionResolver("EventStreamProvider", "AllEvents", Guid.Empty));
                     services.AddSingleton<IBlobStorageSnapshotAccessor, MockBlobStorageSnapshotAccessor>();
                     services.AddTransient<IMultiProjectionEventStatistics, NoOpMultiProjectionEventStatistics>();
-                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000, FirstQueryCatchUpMaxWaitMs = 0, CatchUpBatchSize = Env.CatchUpBatchSize, HotCatchUpPersistMaxFetchedEvents = Env.CatchUpBatchSize, UseStreamingSnapshotIO = Env.Streaming, SkipPersistWhenSafeCheckpointUnchanged = Env.SkipUnchanged, PersistIntervalSeconds = Env.PersistIntervalSeconds });
+                    services.AddTransient(_ => new GeneralMultiProjectionActorOptions { SafeWindowMs = 3000, FirstQueryCatchUpMaxWaitMs = Env.WaitMs, CatchUpBatchSize = Env.CatchUpBatchSize, HotCatchUpPersistMaxFetchedEvents = Env.CatchUpBatchSize, UseStreamingSnapshotIO = Env.Streaming, SkipPersistWhenSafeCheckpointUnchanged = Env.SkipUnchanged, PersistIntervalSeconds = Env.PersistIntervalSeconds });
                     services.AddSekibanDcbNativeRuntime();
                     services.AddGrainStorage("OrleansStorage", (sp, name) => new MarkerGrainStorage());
                 })

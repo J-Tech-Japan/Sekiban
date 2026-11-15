@@ -57,9 +57,11 @@ internal static class Schema3ReleaseRecordValidator
 {
     private const string Repository = "J-Tech-Japan/Sekiban";
     private const string Host = "J-Tech-Japan/SekibanIntentHost";
-    internal static readonly (string Alias, string Workflow, string Job)[] Checks =
+    internal static (string Alias, string Workflow, string Job)[] Checks(string version) =>
     [
-        ("dcbTestsNet9", "run_test_dcb.yml", "dcbTestsNet9"),
+        Version.Parse(version.Split('-')[0]) < new Version(10, 25, 0)
+            ? ("dcbTestsNet9", "run_test_dcb.yml", "dcbTestsNet9")
+            : ("dcbTestsNet11", "run_test_dcb.yml", "dcbTestsNet11"),
         ("dcbTestsNet10", "run_test_dcb.yml", "dcbTestsNet10"),
         ("packagedConsumer", "dcb_azure_queue_packaged_consumer.yml", "packaged-consumer"),
         ("templateConsumer", "dcb_template_validation.yml", "Pack, install, generate, restore, build, and test templates")
@@ -69,7 +71,7 @@ internal static class Schema3ReleaseRecordValidator
     {
         Require(Regex.IsMatch(version, @"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-preview(0[1-9]|[1-9][0-9]))?$", RegexOptions.None, TimeSpan.FromSeconds(1)), "Invalid release version.");
         Require(recordKind is "library" or "template", "Kind must be library or template.");
-        var checks = recordKind == "library" ? Checks : [("templatePublicConsumer", "dcb_template_validation.yml", "Published-library template consumer")];
+        var checks = recordKind == "library" ? Checks(version) : [("templatePublicConsumer", "dcb_template_validation.yml", "Published-library template consumer")];
         Require(state is "prepared" or "complete", "Stage must be prepared or complete.");
         Require(Path.GetFullPath(manifest) == Path.Combine(Path.GetFullPath(bundle), "bundle.json"), "Detached manifest is not accepted.");
         var index = Read(manifest);

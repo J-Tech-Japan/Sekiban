@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <!-- 78ec7d3f7: Configure became an explicit ISiloConfigurator implementation. -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Sekiban.Pure.Orleans.xUnit.SekibanOrleansTestBase`1.Configure(Orleans.Hosting.ISiloBuilder)</Target>
+  </Suppression>
+  <!-- 78ec7d3f7: ConfigureServices became protected for test subclasses. -->
+  <Suppression>
+    <DiagnosticId>CP0019</DiagnosticId>
+    <Target>M:Sekiban.Pure.Orleans.xUnit.SekibanOrleansTestBase`1.ConfigureServices(Microsoft.Extensions.DependencyInjection.IServiceCollection)</Target>
+  </Suppression>
+</Suppressions>

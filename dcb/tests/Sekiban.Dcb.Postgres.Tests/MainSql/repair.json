@@ -1,0 +1,8 @@
+[
+  "INSERT INTO dcb_tag_heads (\u0022ServiceId\u0022, \u0022Tag\u0022, \u0022HeadPosition\u0022) VALUES (@serviceId, @tag, NULL) ON CONFLICT (\u0022ServiceId\u0022, \u0022Tag\u0022) DO NOTHING",
+  "SELECT \u0022HeadPosition\u0022 FROM dcb_tag_heads WHERE \u0022ServiceId\u0022 = @serviceId AND \u0022Tag\u0022 = @tag FOR UPDATE",
+  "SELECT MAX(\u0022SortableUniqueId\u0022) FROM dcb_tags WHERE \u0022ServiceId\u0022 = @serviceId AND \u0022Tag\u0022 = @tag AND (@headPosition IS NULL OR \u0022SortableUniqueId\u0022 \u003E @headPosition)",
+  "INSERT INTO dcb_tag_head_violations (\u0022ServiceId\u0022, \u0022Tag\u0022, \u0022PreviousHeadWasEmpty\u0022, \u0022PreviousHeadPosition\u0022, \u0022ObservedPosition\u0022, \u0022DetectedAtUtc\u0022, \u0022DetectingWriter\u0022) VALUES (@serviceId, @tag, @wasEmpty, @previous, @observed, @detectedAtUtc, @writer) ON CONFLICT (\u0022ServiceId\u0022, \u0022Tag\u0022, \u0022PreviousHeadWasEmpty\u0022, \u0022PreviousHeadPosition\u0022, \u0022ObservedPosition\u0022) DO NOTHING",
+  "UPDATE dcb_tag_heads SET \u0022HeadPosition\u0022 = @position WHERE \u0022ServiceId\u0022 = @serviceId AND \u0022Tag\u0022 = @tag",
+  "UPDATE dcb_tag_heads SET \u0022HeadPosition\u0022 = @position WHERE \u0022ServiceId\u0022 = @serviceId AND \u0022Tag\u0022 = @tag"
+]

@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <SekibanDcbVersion>11.0.1-preview01</SekibanDcbVersion>
+    <SekibanDcbVersion>10.25.0</SekibanDcbVersion>
     <MicrosoftOrleansVersion>10.4.2</MicrosoftOrleansVersion>
   </PropertyGroup>
 </Project>

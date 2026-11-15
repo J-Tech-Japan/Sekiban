@@ -64,4 +64,8 @@ internal interface IDualStateRebuildSignals
 
     /// <summary>SEK-G20: the SortableUniqueId position of the offending event (null if none).</summary>
     string? RebuildOffendingPosition { get; }
+    string? RebuildReason => null;
+    string? RebuildSafeHeadPosition => null;
+    string? RebuildSafeHeadEventId => null;
+    DateTime? RebuildSignaledAtUtc => null;
 }

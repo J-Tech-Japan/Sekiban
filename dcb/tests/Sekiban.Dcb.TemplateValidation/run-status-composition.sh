@@ -45,7 +45,7 @@ printf '%s\n' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allow
 run_net10() { (cd "$net10_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
 net11_host="$work_root/net11-host"
 mkdir -p "$net11_host"
-printf '%s\n' '{"sdk":{"version":"11.0.100-rc.3.26522.148","rollForward":"disable","allowPrerelease":true}}' > "$net11_host/global.json"
+printf '%s\n' '{"sdk":{"version":"11.0.100","rollForward":"latestPatch","allowPrerelease":false}}' > "$net11_host/global.json"
 run_net11() { (cd "$net11_host" && echo "SDK $(dotnet --version): dotnet $*" >&2 && dotnet "$@"); }
 legacy_nuget_packages="$work_root/legacy-nuget-packages"
 legacy_nuget_http_cache="$work_root/legacy-nuget-http-cache"
@@ -84,6 +84,7 @@ write_nuget_config() {
       'AspNetCore.HealthChecks.NpgSql' 'Grpc.AspNetCore' 'Grpc.Net.ClientFactory' 'Grpc.Tools' \
       'JsonPointer.Net' 'Json.More.Net' 'Fractions' 'YamlDotNet' 'ModelContextProtocol.Core' \
       'MessagePack' 'MessagePack.Annotations' 'Nerdbank.Streams' 'SQLitePCLRaw.core' \
+      'Hex1b' 'Nerdbank.MessagePack' 'PolyType' 'QRCoder' \
       'SQLitePCLRaw.bundle_e_sqlite3' 'SQLitePCLRaw.lib_e_sqlite3' 'SQLitePCLRaw.lib.e_sqlite3' \
       'System.*' 'runtime.*' 'NETStandard.Library' 'NuGet.*' 'NUnit*' 'xunit*' \
       'coverlet.*' 'Microsoft.NET.Test.Sdk'; do

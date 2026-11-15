@@ -29,7 +29,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: |
+            8.0.x
+            11.0.1xx
 
       - name: Azure Login
         uses: azure/login@v1

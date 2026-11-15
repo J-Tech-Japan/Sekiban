@@ -8,7 +8,7 @@ public class SystemTextJsonStorageSerializer : IGrainStorageSerializer
         JsonSerializer.Deserialize<T>(data.ToString()) ??
         throw new InvalidOperationException("Failed to deserialize data.");
 
-    public BinaryData Serialize<T>(T state)
+    public BinaryData Serialize<T>(T? state)
     {
         var json = JsonSerializer.Serialize(state);
         return BinaryData.FromString(json);

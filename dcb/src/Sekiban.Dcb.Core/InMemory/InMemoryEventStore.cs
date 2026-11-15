@@ -265,7 +265,10 @@ public class InMemoryEventStore : IEventStore, ISerializableEventStreamReader, I
                 return Task.FromResult(ResultBox.FromValue(tagState));
             }
 
-            return Task.FromResult(ResultBox.Error<TagState>(new Exception($"Tag {tagString} not found")));
+            var group = tag.GetTagGroup();
+            return Task.FromResult(ResultBox.FromValue(new TagState(
+                new EmptyTagStatePayload(), 0, string.Empty, group,
+                tagString[(group.Length + 1)..], string.Empty, string.Empty)));
         }
     }
 

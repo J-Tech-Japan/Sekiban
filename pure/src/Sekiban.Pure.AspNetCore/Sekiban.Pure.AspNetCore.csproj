@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.AspNetCore</PackageId>
-        <Version>9.0.0</Version>
+        <Version>10.0.0</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework AspNetCore Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>9.0.0</PackageVersion>
+        <PackageVersion>10.0.0</PackageVersion>
         <Description>Multi Blob saving and reading issue resolved</Description>
         <AssemblyName>Sekiban.Pure.AspNetCore</AssemblyName>
         <RootNamespace>Sekiban.Pure.AspNetCore</RootNamespace>
@@ -20,7 +20,7 @@
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <GenerateSBOM>true</GenerateSBOM>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -28,7 +28,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Pure" Version="9.0.0"/>
         <ProjectReference Include="..\Sekiban.Pure\Sekiban.Pure.csproj"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
             <PrivateAssets>all</PrivateAssets>

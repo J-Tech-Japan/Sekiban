@@ -3,4 +3,8 @@
   <PropertyGroup>
     <Version>0.0.0-local</Version>
   </PropertyGroup>
+  <PropertyGroup>
+    <!-- Keep explicit package references on net11.0 (they move to 11.x on this line); the ASP.NET Core framework projects re-enable pruning. -->
+    <RestoreEnablePackagePruning Condition="'$(TargetFramework)' == 'net11.0'">false</RestoreEnablePackagePruning>
+  </PropertyGroup>
 </Project>

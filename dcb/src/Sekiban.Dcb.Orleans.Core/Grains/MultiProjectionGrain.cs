@@ -94,6 +94,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // and is the only type that calls any checkpoint mutation (CAS or legacy). It owns the adopted-token + rebuilt-pending
     // state and arms this grain's query barrier on a tombstone rejection. Null only when no external store is configured.
     private CheckpointMutationCoordinator? _checkpointMutation;
+    private bool _orderedRebuildFromFreshHost;
+    private volatile bool _activationRestoreCancellationRequested;
+    private bool _activationRestoreCompleted;
+    private bool _restoreActivationCancelled;
     private readonly GeneralMultiProjectionActorOptions? _injectedActorOptions;
     private readonly ILogger<MultiProjectionGrain> _logger;
     private readonly IEventStoreFactory? _eventStoreFactory;
@@ -125,6 +129,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // Host-instance lifetime, independent of query-gate arm generations. Failed restoration without a known
     // record leaves a fresh host pristine, preserving the activation's replay from zero.
     private bool _hostIsPristine = true;
+    // A reference scopes the prohibition to the exact host whose rejected snapshot crossed an invalidation.
+    private IProjectionActorHost? _staleCheckpointHost;
+
+    private sealed class ExternalPersistenceBlockedByStaleHostException : Exception
+    {
+        public ExternalPersistenceBlockedByStaleHostException()
+            : base("External checkpoint persistence is blocked until the stale host is replayed.") { }
+    }
+
+    // A host replaced while its persist was in flight is superseded: its snapshot predates the replacement, so it is
+    // treated like a stale host and never written, whichever host is marked now.
+    private bool IsStaleCheckpointHost(IProjectionActorHost? host) =>
+        host is not null &&
+        (ReferenceEquals(host, _staleCheckpointHost) || (_host is not null && !ReferenceEquals(host, _host)));
 
     // Simple tracking
     private bool _isInitialized;
@@ -146,6 +164,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // SEK-G85: tombstone arm episode generation. Fail-closed queries apply only while this matches the live gate generation.
     private int _tombstoneFailClosedArmGeneration;
     private int _boundedWaitArmGeneration;
+    private int _boundedFullReplayArmGeneration;
+    private bool _isDeactivating;
+    private bool _rebuildWarningLogged;
     private Task? _boundedCatchUpInitiation;
     private Task? _boundedGateSettlement;
     private int _firstQueryCatchUpMaxWaitMs;
@@ -413,7 +434,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         _multiProjectionStateStore = multiProjectionStateStore;
         _checkpointMutation = multiProjectionStateStore is null
             ? null
-            : new CheckpointMutationCoordinator(multiProjectionStateStore, () => _firstQueryGate.Arm());
+            : new CheckpointMutationCoordinator(multiProjectionStateStore, () =>
+            {
+                _orderedRebuildFromFreshHost = false;
+                _firstQueryGate.Arm();
+            });
         _eventStats = eventStats ?? new Sekiban.Dcb.MultiProjections.NoOpMultiProjectionEventStatistics();
         _injectedActorOptions = actorOptions;
         _tempFileSnapshotManager = tempFileSnapshotManager;
@@ -962,14 +987,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private async Task<bool> CanSaveToExternalStoreAsync(
         string projectorName,
         string projectorVersion,
-        long localSafeEventsProcessed)
+        long localSafeEventsProcessed,
+        IProjectionActorHost snapshotHost)
     {
         if (_multiProjectionStateStore is null)
         {
             return false;
         }
 
+        if (IsStaleCheckpointHost(snapshotHost)) return false;
         var latestResult = await _multiProjectionStateStore.GetLatestForVersionAsync(projectorName, projectorVersion);
+        // A concurrent persist can mark this host while the read is in flight. This is a deliberate skip,
+        // not a store-ahead/read-failure Warning, and must not build or upload another stale snapshot.
+        if (IsStaleCheckpointHost(snapshotHost)) return false;
         if (!latestResult.IsSuccess)
         {
             _lastError = $"External store read failed: {latestResult.GetException().Message}";
@@ -984,7 +1014,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // localSafeEventsProcessed is ours. (A legacy record persisted with the old total count is >= its safe count, so
         // the comparison is at worst conservatively skip-biased against a legacy peer — never a stale overwrite.)
         var latestOptional = latestResult.GetValue();
-        if (latestOptional.HasValue &&
+        var orderedTombstoneRebuild = _orderedRebuildFromFreshHost &&
+            _checkpointMutation is { IsCapable: true, PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true } &&
+            _checkpointMutation.AdoptedSlot.Record is { } adoptedRecord &&
+            string.Equals(adoptedRecord.ProjectorName, projectorName, StringComparison.Ordinal) &&
+            string.Equals(adoptedRecord.ProjectorVersion, projectorVersion, StringComparison.Ordinal) &&
+            latestOptional.HasValue && latestOptional.Value == adoptedRecord;
+        if (!orderedTombstoneRebuild && latestOptional.HasValue &&
             latestOptional.Value is { } latestRecord &&
             latestRecord.EventsProcessed > localSafeEventsProcessed)
         {
@@ -1001,26 +1037,35 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         return true;
     }
 
-    private async Task<bool> RetireIntegrityWatermarkAsync(string projectorName, string failureReason)
+    private async Task<bool> RetireIntegrityWatermarkAsync(
+        string projectorName, string failureReason, CancellationToken cancellationToken)
     {
+        var baseline = _stateStore.Committed;
+        var watermarkCleared = false;
         try
         {
+            ThrowIfRestoreCancelled(cancellationToken);
             var outcome = await _stateStore.ExecuteWriteAsync(
                 GrainStateWriteKind.MetadataMaintenance,
                 s =>
                 {
+                    ThrowIfRestoreCancelled(cancellationToken);
                     s.LastGoodSafeVersion = 0;
                     s.LastGoodPayloadBytes = 0;
                     s.LastGoodOriginalSizeBytes = 0;
                     s.LastGoodEventsProcessed = 0;
                 });
 
+            watermarkCleared = outcome == GrainStateWriteOutcome.Committed;
+            ThrowIfRestoreCancelled(cancellationToken);
             if (outcome == GrainStateWriteOutcome.Committed)
             {
                 // The external record was positively obtained but could not become a host snapshot. Invalidate that
-                // derived record before the ordered rebuild so the existing external-store ordering check remains
-                // unchanged and no recovery bypass is needed. The authoritative event stream remains untouched.
-                await InvalidateExternalDerivedSnapshotAsync();
+                // derived record before the ordered rebuild. A fresh-host rebuild may save below a tombstoned record's
+                // old count using the exact tombstone CAS token. The authoritative event stream remains untouched.
+                ThrowIfRestoreCancelled(cancellationToken);
+                await InvalidateExternalDerivedSnapshotAsync(cancellationToken);
+                ThrowIfRestoreCancelled(cancellationToken);
                 _retiredWatermarkAwaitingFreshSafeCheckpoint = true;
                 _logger.LogWarning(
                     "[{ProjectorName}] Integrity watermark retired after known-present snapshot restore failure. "
@@ -1042,6 +1087,19 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
+            if (watermarkCleared && (cancellationToken.IsCancellationRequested || IsRestoreCancellation(ex)))
+            {
+                // The invalidation read can outlive activation. Undo the metadata retirement before failing activation;
+                // the coordinator checks cancellation before mutating the external checkpoint.
+                await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.MetadataMaintenance, s =>
+                {
+                    s.LastGoodSafeVersion = baseline.LastGoodSafeVersion;
+                    s.LastGoodPayloadBytes = baseline.LastGoodPayloadBytes;
+                    s.LastGoodOriginalSizeBytes = baseline.LastGoodOriginalSizeBytes;
+                    s.LastGoodEventsProcessed = baseline.LastGoodEventsProcessed;
+                });
+            }
+            ThrowIfRestoreCancelled(cancellationToken, ex);
             _lastPersistOutcome = PersistOutcomeNoDurableWrite;
             _lastError = $"Integrity watermark retirement failed: {ex.Message}";
             _logger.LogError(
@@ -1061,7 +1119,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         string projectorName,
         PersistCheckpoint checkpoint,
         string filePath,
-        long tempFileSize)
+        long tempFileSize,
+        IProjectionActorHost snapshotHost)
     {
         if (_multiProjectionStateStore is null)
         {
@@ -1069,12 +1128,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
 
         var uploadStartMs = System.Diagnostics.Stopwatch.GetTimestamp();
-        if (!await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint)))
+        if (!await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint), snapshotHost))
         {
             _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
             return new StreamingExternalStorePersistResult(
                 ExternalStoreSaved: false,
-                UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds);
+                UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds,
+                BlockedByFault: IsStaleCheckpointHost(snapshotHost));
         }
 
         var writeRequest = new MultiProjectionStateWriteRequest(
@@ -1107,15 +1167,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var saveResult = await UpsertExternalStateCoordinatedAsync(
             writeRequest,
             uploadStream,
+            snapshotHost,
             _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
         if (!saveResult.IsSuccess)
         {
             // A fault-block is a deliberate skip, not a store failure: log it as such and never report saved.
-            if (saveResult.GetException() is ExternalPersistenceBlockedByFaultException)
+            if (saveResult.GetException() is ExternalPersistenceBlockedByFaultException or ExternalPersistenceBlockedByStaleHostException)
             {
                 _logger.LogDebug(
-                    "[{ProjectorName}] External store save skipped: projection is faulted",
-                    projectorName);
+                    "[{ProjectorName}] External store save skipped: {Reason}",
+                    projectorName, saveResult.GetException().Message);
             }
             else
             {
@@ -1126,7 +1187,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return new StreamingExternalStorePersistResult(
                 ExternalStoreSaved: false,
                 UploadElapsedMs: (long)System.Diagnostics.Stopwatch.GetElapsedTime(uploadStartMs).TotalMilliseconds,
-                BlockedByFault: saveResult.GetException() is ExternalPersistenceBlockedByFaultException);
+                BlockedByFault: saveResult.GetException() is ExternalPersistenceBlockedByFaultException or ExternalPersistenceBlockedByStaleHostException);
         }
 
         return new StreamingExternalStorePersistResult(
@@ -1317,7 +1378,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 _lastEventTime = DateTime.UtcNow;
             }
 
-            await RebuildProjectionIfSignaledAsync();
+            await RebuildProjectionIfSignaledAsync("AddEventsAsync");
         }
     }
 
@@ -1325,11 +1386,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // SortableUniqueId order versus the held safe head — which the incremental (compacted-baseline) path cannot reorder.
     // The single mandated remedy is a full ordered rebuild from the authoritative event store. NOT the G14 fault path —
     // that is reserved for failures OF the rebuild itself.
-    private async Task RebuildProjectionIfSignaledAsync()
+    private async Task RebuildProjectionIfSignaledAsync(string observingPath)
     {
         if (_host is IRebuildSignalingHost { RebuildRequired: true })
         {
-            await TriggerDurableFullRebuildAsync();
+            await TriggerDurableFullRebuildAsync(observingPath);
         }
     }
 
@@ -1343,8 +1404,40 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // so queries remain fail-closed and the next apply/query retries — never a stale success. The authoritative store is
     // read in SortableUniqueId order, so the from-beginning replay does not re-trip the guard; a poison event on replay
     // establishes the G14 persisted fault via the existing per-event boundary.
-    private async Task TriggerDurableFullRebuildAsync()
+    private async Task TriggerDurableFullRebuildAsync(string observingPath = "stream/batch processing")
     {
+        var signal = _host as IRebuildSignalingHost;
+        if (!_rebuildWarningLogged)
+        {
+            _logger.LogWarning(
+                MultiProjectionLogEvents.RuntimeFullRebuildRequired,
+                "Runtime full rebuild required: {ProjectorName}, OffendingEventId={OffendingEventId}, OffendingPosition={OffendingPosition}, Reason={Reason}, SafeHeadPosition={SafeHeadPosition}, SafeHeadEventId={SafeHeadEventId}, SignalTimeUtc={SignalTimeUtc}, ObservingPath={ObservingPath}, EventsProcessed={EventsProcessed}",
+                GetProjectorName(), signal?.RebuildOffendingEventId, signal?.RebuildOffendingPosition,
+                signal?.RebuildReason, signal?.RebuildSafeHeadPosition, signal?.RebuildSafeHeadEventId,
+                signal?.RebuildSignaledAtUtc, observingPath, _eventsProcessed);
+            _rebuildWarningLogged = true;
+        }
+        // A pre-existing fault remains the durable fail-closed authority.
+        if (_isDeactivating && (_projectionFault is not null || _host?.CurrentFault is not null ||
+            !string.IsNullOrEmpty(_stateStore.Committed.FaultMessage)))
+        {
+            // Keep a committed fault as is. A fault held only in memory (its earlier write failed) is persisted now,
+            // so the next activation stays fail-closed instead of restoring the old checkpoint.
+            if (string.IsNullOrEmpty(_stateStore.Committed.FaultMessage) &&
+                (_projectionFault ?? _host?.CurrentFault) is { } pendingFault)
+            {
+                try
+                {
+                    await _stateStore.ExecuteWriteAsync(
+                        GrainStateWriteKind.FaultDescriptor, s => WriteFaultIntoState(s, pendingFault));
+                }
+                catch (Exception ex)
+                {
+                    _lastError = $"Projection fault persist on deactivation failed: {ex.Message}";
+                }
+            }
+            return;
+        }
         await CatchUpProductionTestHooks.PublishAsync(
             CatchUpProductionHookPoint.RebuildRequiredDetected,
             new CatchUpProductionObservation(_serviceId, GetProjectorName(), _catchUpProgress.StartLease, _catchUpProgress.CurrentPosition));
@@ -1420,6 +1513,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return;
         }
 
+        // Deactivation only establishes the obligation; the next activation owns the replay.
+        if (_isDeactivating) return;
+
         // (2) Marker is durable. Invalidate the derived EXTERNAL snapshot and clear the derived checkpoint (the marker
         //     STAYS true — a failure here still leaves a durable rebuild requirement, so a crash rebuilds correctly).
         try
@@ -1438,6 +1534,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         //     full ordered history from the authoritative store before it can answer. The durable marker is cleared only
         //     after the rebuilt checkpoint is durably committed (in the persist path).
         RecreateHostForFullRebuild();
+        ArmBoundedFullReplayEpisode();
+        _orderedRebuildFromFreshHost =
+            _checkpointMutation is { IsCapable: true, PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true };
     }
 
     // SEK-G18 #6: called at the start of EVERY state/scalar/list query, before the first-query barrier. If the live host is
@@ -1449,14 +1548,55 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // hard crash is the documented known residual.)
     private async Task<Exception?> ResolveRebuildBeforeQueryAsync()
     {
-        if (_host is not IRebuildSignalingHost { RebuildRequired: true })
+        // Preserve the durable runtime rebuild, including a stale host's own retrograde invalidation.
+        if (_host is IRebuildSignalingHost { RebuildRequired: true })
         {
-            return null;
+            await TriggerDurableFullRebuildAsync("query");
+        }
+        else if (IsStaleCheckpointHost(_host) && !ExternalPersistenceBlockedByFault() && _projectionFault is null)
+        {
+            var staleHost = _host;
+            // A read already in flight owns this gate through apply and completion persist. Let it finish on
+            // the stale host before resetting any progress or replacing the host; release before the query barrier.
+            await using (await _catchUpExecutionGate.EnterAsync())
+            {
+                if (ReferenceEquals(_host, staleHost) && IsStaleCheckpointHost(_host) &&
+                    _host is not IRebuildSignalingHost { RebuildRequired: true } &&
+                    !ExternalPersistenceBlockedByFault() && _projectionFault is null)
+                {
+                    _firstQueryGate.Arm();
+                    try
+                    {
+                        var outcome = await _stateStore.ExecuteWriteAsync(
+                            GrainStateWriteKind.OperatorReset, ResetDerivedStateForFullRebuild);
+                        if (outcome != GrainStateWriteOutcome.Committed)
+                            throw new InvalidOperationException("Projection rebuild checkpoint clear was not committed.");
+                        // Interleaved timer work (e.g. the buffer flush) may have faulted the stale host while the write
+                        // was awaited. A fault keeps its G14 operator-reset semantics, so never discard it here.
+                        if (ReferenceEquals(_host, staleHost) && _host?.CurrentFault is null &&
+                            !ExternalPersistenceBlockedByFault() && _projectionFault is null)
+                        {
+                            RecreateHostForFullRebuild();
+                            ArmBoundedFullReplayEpisode();
+                            _orderedRebuildFromFreshHost =
+                                _checkpointMutation is { IsCapable: true, PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true };
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _lastError = $"Projection rebuild external/checkpoint clear failed: {ex.Message}";
+                        _firstQueryGate.Arm();
+                    }
+                }
+            }
+            if (_host is IRebuildSignalingHost { RebuildRequired: true })
+            {
+                await TriggerDurableFullRebuildAsync("query");
+            }
         }
 
-        await TriggerDurableFullRebuildAsync();
-
-        if (_host is IRebuildSignalingHost { RebuildRequired: true })
+        if (_host is IRebuildSignalingHost { RebuildRequired: true } ||
+            (IsStaleCheckpointHost(_host) && !ExternalPersistenceBlockedByFault() && _projectionFault is null))
         {
             return new InvalidOperationException(
                 MultiProjectionQueryFailClosedMessages.RebuildPendingPrefix + " the durable rebuild marker is not yet committed, so the query fails "
@@ -1525,7 +1665,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         bool externalSaveBlockedByFault, bool isCompletionPersist, string? lastErrorBeforePersist)
     {
         // Completion runs while catch-up is still active. All other callers are intermediate during replay.
-        if (durableObligationPending && !externalStoreSaved && !externalSaveBlockedByFault)
+        if (durableObligationPending && !externalStoreSaved && !externalSaveBlockedByFault && !IsStaleCheckpointHost(_host))
         {
             if (_catchUpProgress.IsActive && !isCompletionPersist)
             {
@@ -1546,13 +1686,59 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
     }
 
+    private async Task<ResultBox<bool>> CompleteSkippedExternalPersistAsync(
+        string projectorName, PersistCheckpoint checkpoint, bool isCompletionPersist, string? lastErrorBeforePersist,
+        bool staleHostBlocked = false)
+    {
+        var durableObligationPending = HasPendingDurableRebuildObligation();
+        _logger.LogDebug("[{ProjectorName}] External store save skipped: {Reason}", projectorName,
+            staleHostBlocked ? "stale host must replay" : "store ahead or read failed");
+        await WriteOrleansStateWithRetryAsync(projectorName, s =>
+        {
+            s.ProjectorName = projectorName;
+            s.ProjectorVersion = checkpoint.ProjectorVersion;
+            s.LastSortableUniqueId = checkpoint.SafePosition;
+            s.EventsProcessed = _eventsProcessed;
+            s.LastPersistTime = DateTime.UtcNow;
+            // ApplyPersistFields with externalStoreSaved=false: preserve LastGood and the durable marker.
+            s.SerializedState = null;
+            s.StateSize = 0;
+            s.SafeLastPosition = null;
+            s.LastPosition = null;
+        });
+        _host!.CompactSafeHistory();
+        CompactRetainedCollections();
+        CompletePersistErrorState(projectorName, durableObligationPending, false, staleHostBlocked,
+            isCompletionPersist, lastErrorBeforePersist);
+        _lastPersistOutcome = PersistOutcomeNoDurableWrite;
+        return ResultBox.FromValue(true);
+    }
+
     // Threshold for forcing GC before serialization (10MB payload)
     private const long LargePayloadThresholdBytes = 10_000_000;
 
     public Task<ResultBox<bool>> PersistStateAsync() => PersistStateCoreAsync(isCompletionPersist: false);
 
+    // This guard only establishes the rebuild obligation; it never calls persistence recursively.
+    private async Task<bool> StopPersistForRebuildAsync(IProjectionActorHost? snapshotHost = null)
+    {
+        if (snapshotHost is not null && !ReferenceEquals(snapshotHost, _host))
+        {
+            _lastPersistOutcome = PersistOutcomeNoDurableWrite;
+            return true;
+        }
+        if (_host is not IRebuildSignalingHost { RebuildRequired: true }) return false;
+        await TriggerDurableFullRebuildAsync(_isDeactivating ? "deactivation persist" : "persist force-promotion");
+        _lastPersistOutcome = PersistOutcomeNoDurableWrite;
+        return true;
+    }
+
     private async Task<ResultBox<bool>> PersistStateCoreAsync(bool isCompletionPersist)
     {
+        if (_restoreActivationCancelled || (!_activationRestoreCompleted && _activationRestoreCancellationRequested))
+        {
+            return ResultBox.Error<bool>(new OperationCanceledException("Snapshot restore cancelled"));
+        }
         var lastErrorBeforePersist = _lastError;
         _lastPersistOutcome = PersistOutcomeNotAttempted;
         if (_restoreRetirementFailed)
@@ -1576,11 +1762,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // into the state now, so the persisted snapshot re-establishes the fault on the next activation. A faulted
             // projection makes no safe-checkpoint progress, so the snapshot persist below would short-circuit and never
             // write the grain state; write it here directly so the fault survives a restart regardless.
-            if (_host.CurrentFault is { } liveFault)
+            if (_host.CurrentFault is { } liveFault &&
+                !(_isDeactivating && _host is IRebuildSignalingHost { RebuildRequired: true } &&
+                  !string.IsNullOrEmpty(_stateStore.Committed.FaultMessage)))
             {
                 _projectionFault = liveFault;
                 await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.FaultDescriptor, s => WriteFaultIntoState(s, liveFault));
             }
+
+            if (await StopPersistForRebuildAsync()) return ResultBox.FromValue(false);
 
             _logger.LogDebug(
                 "[{ProjectorName}] Starting persistence at {StartUtc:yyyy-MM-dd HH:mm:ss.fff} UTC",
@@ -1602,10 +1792,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 return ResultBox.Error<bool>(exception);
             }
 
+            if (await StopPersistForRebuildAsync()) return ResultBox.FromValue(false);
+
             var checkpoint = await CapturePersistCheckpointAsync(projectorName);
             // Bind marker repair to the host whose snapshot is written, before any save awaits.
             var snapshotHost = _host;
+            if (await StopPersistForRebuildAsync(snapshotHost)) return ResultBox.FromValue(false);
             var snapshotHostClean = snapshotHost is not IRebuildSignalingHost { RebuildRequired: true };
+            if (IsStaleCheckpointHost(snapshotHost))
+            {
+                return await CompleteSkippedExternalPersistAsync(projectorName, checkpoint, isCompletionPersist, lastErrorBeforePersist,
+                    staleHostBlocked: true);
+            }
             var shortCircuit = TryShortCircuitPersist(projectorName, checkpoint, snapshotHostClean);
             if (shortCircuit is not null)
             {
@@ -1619,6 +1817,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 return await PersistStateStreamingAsync(
                     projectorName, checkpoint, snapshotHost, snapshotHostClean, isCompletionPersist, lastErrorBeforePersist);
             }
+
+            if (_multiProjectionStateStore is not null &&
+                !await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint), snapshotHost))
+            {
+                return await CompleteSkippedExternalPersistAsync(projectorName, checkpoint, isCompletionPersist, lastErrorBeforePersist,
+                    staleHostBlocked: IsStaleCheckpointHost(snapshotHost));
+            }
+
+            if (await StopPersistForRebuildAsync(snapshotHost)) return ResultBox.FromValue(false);
 
             // Get snapshot as opaque bytes from the host
             await using var snapshotStream = new MemoryStream();
@@ -1674,7 +1881,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var externalSaveBlockedByFault = false;
             var externalStoreSaved = _multiProjectionStateStore == null;
             var allowExternalStoreSave = _multiProjectionStateStore is not null &&
-                                         await CanSaveToExternalStoreAsync(projectorName, projectorVersion, ResolveSafeEventsProcessed(checkpoint));
+                                         await CanSaveToExternalStoreAsync(projectorName, projectorVersion, ResolveSafeEventsProcessed(checkpoint), snapshotHost);
+
+            if (await StopPersistForRebuildAsync(snapshotHost)) return ResultBox.FromValue(false);
 
             // v10: Save to external store (Postgres/Cosmos) if available
             if (_multiProjectionStateStore != null && allowExternalStoreSave)
@@ -1702,17 +1911,18 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 var saveResult = await UpsertExternalStateCoordinatedAsync(
                     writeRequest,
                     snapshotStream,
+                    snapshotHost,
                     _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
                 if (!saveResult.IsSuccess)
                 {
                     // externalStoreSaved stays false: no LastGood/persisted metadata may advance after this rejection.
                     // A fault-block is a deliberate skip, not a store failure — log accordingly and never report saved.
-                    if (saveResult.GetException() is ExternalPersistenceBlockedByFaultException)
+                    if (saveResult.GetException() is ExternalPersistenceBlockedByFaultException or ExternalPersistenceBlockedByStaleHostException)
                     {
                         externalSaveBlockedByFault = true;
                         _logger.LogDebug(
-                            "[{ProjectorName}] External store save skipped: projection is faulted",
-                            projectorName);
+                            "[{ProjectorName}] External store save skipped: {Reason}",
+                            projectorName, saveResult.GetException().Message);
                     }
                     else
                     {
@@ -1730,6 +1940,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             if (_multiProjectionStateStore != null && !allowExternalStoreSave)
             {
+                externalSaveBlockedByFault |= IsStaleCheckpointHost(snapshotHost);
                 _logger.LogDebug("[{ProjectorName}] External store save skipped (store ahead or read failed)", projectorName);
             }
 
@@ -1827,12 +2038,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         string? tempFilePath = null;
         try
         {
+            if (_multiProjectionStateStore is not null &&
+                !await CanSaveToExternalStoreAsync(projectorName, checkpoint.ProjectorVersion, ResolveSafeEventsProcessed(checkpoint), snapshotHost))
+            {
+                return await CompleteSkippedExternalPersistAsync(projectorName, checkpoint, isCompletionPersist, lastErrorBeforePersist,
+                    staleHostBlocked: IsStaleCheckpointHost(snapshotHost));
+            }
+
             // Step 1: Write snapshot to temp file
             var (tempStream, filePath) = await _tempFileSnapshotManager!.CreateTempFileStreamAsync(projectorName);
             tempFilePath = filePath;
 
             try
             {
+                if (await StopPersistForRebuildAsync(snapshotHost)) return ResultBox.FromValue(false);
                 var writeResult = await snapshotHost.WriteSnapshotForPersistenceToStreamAsync(
                     tempStream,
                     canGetUnsafeState: false,
@@ -1865,13 +2084,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 var projectorVersion = checkpoint.ProjectorVersion;
                 var safePosition = checkpoint.SafePosition;
 
+                if (await StopPersistForRebuildAsync(snapshotHost)) return ResultBox.FromValue(false);
+
                 // Step 3: Stream to external store
                 var durableObligationPending = HasPendingDurableRebuildObligation();
                 var externalStorePersistResult = await SaveStreamingSnapshotToExternalStoreAsync(
                     projectorName,
                     checkpoint,
                     filePath,
-                    tempFileSize);
+                    tempFileSize,
+                    snapshotHost);
                 var externalStoreSaved = externalStorePersistResult.ExternalStoreSaved;
 
                 var peakMemory = GC.GetTotalMemory(forceFullCollection: false);
@@ -2431,6 +2653,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             var currentPosition = startLease.StartPosition;
             MarkProjectionStatusDirty(currentPosition?.Value);
             var invocationReached = currentPosition;
+            var inheritedNewEvents = _catchUpProgress.HadNewEvents;
             _catchUpProgress = new CatchUpProgress
             {
                 StartLease = startLease,
@@ -2438,7 +2661,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 CurrentPosition = currentPosition,
                 TargetPosition = null,
                 IsActive = true,
-                HadNewEvents = false,
+                HadNewEvents = inheritedNewEvents,
                 ConsecutiveEmptyBatches = 0,
                 BatchesProcessed = 0,
                 StartTime = DateTime.UtcNow,
@@ -2446,7 +2669,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             };
             ResetHybridCatchUpLogging();
             ResetCatchUpFailureTracking();
-            if (inheritedStart is null)
+            if (inheritedStart is null && !inheritedNewEvents)
             {
                 // A fresh invocation owns a new logical window. A forced first-query invocation with an inherited
                 // active run deliberately keeps the prior window's applied/fetched/time progress, including when
@@ -2456,6 +2679,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             _catchUpBatchSkipCount = 0;
 
             MoveBufferedStreamEventsToPending(currentPosition);
+            var invocationProgress = _catchUpProgress;
+            var invocationHost = _host;
 
             try
             {
@@ -2463,9 +2688,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     CatchUpProductionHookPoint.InvocationBeforeRead,
                     new CatchUpProductionObservation(_serviceId, projectorName, startLease, currentPosition));
                 const int maxRefreshBatches = 20000;
-                for (var i = 0; i < maxRefreshBatches && _catchUpProgress.IsActive; i++)
+                for (var i = 0; i < maxRefreshBatches && _catchUpProgress.IsActive &&
+                    IsCurrentCatchUpBatch(invocationProgress, invocationHost); i++)
                 {
                     var batch = await ProcessSingleCatchUpBatch();
+                    if (!IsCurrentCatchUpBatch(invocationProgress, invocationHost)) break;
                     if (batch.LastFetchedPosition is { } batchCursor &&
                         (invocationReached is null || batchCursor.IsLaterThan(invocationReached)))
                     {
@@ -2491,11 +2718,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 // The in-call loop removed its timer. During a bounded episode, release progress on every exit
                 // (including the batch limit and public RefreshAsync failures) so the next poll can resume.
                 // Keep the default blocking path's behavior unchanged.
-                if (BoundedWaitPending && _catchUpTimer is null) _catchUpProgress.IsActive = false;
+                if (IsCurrentCatchUpBatch(invocationProgress, invocationHost) && BoundedWaitPending && _catchUpTimer is null)
+                    _catchUpProgress.IsActive = false;
 
                 // RefreshAsync's in-call loop can fault the actor without going through the background failure handlers,
                 // so capture and persist the fault on this production path while preserving the original exception.
-                await CaptureAndPersistProjectionFaultIfAnyAsync();
+                if (IsCurrentCatchUpBatch(invocationProgress, invocationHost))
+                    await CaptureAndPersistProjectionFaultIfAnyAsync();
             }
 
             var result = new CatchUpInvocationResult(startLease, invocationReached);
@@ -2506,8 +2735,43 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
     }
 
+    private static bool IsRestoreCancellation(Exception exception) =>
+        exception is OperationCanceledException ||
+        (exception is AggregateException aggregate && aggregate.InnerExceptions.Any(IsRestoreCancellation)) ||
+        (exception.InnerException is { } inner && IsRestoreCancellation(inner));
+
+    private static void ThrowIfRestoreCancelled(CancellationToken cancellationToken, Exception? failure = null)
+    {
+        if (cancellationToken.IsCancellationRequested || (failure is not null && IsRestoreCancellation(failure)))
+        {
+            throw new OperationCanceledException("Snapshot restore cancelled", failure, cancellationToken);
+        }
+    }
+
     public override async Task OnActivateAsync(CancellationToken cancellationToken)
     {
+        using var cancellationRegistration = cancellationToken.Register(
+            () => _activationRestoreCancellationRequested = true);
+        try
+        {
+            await ActivateWithRestoreAsync(cancellationToken);
+        }
+        catch (Exception ex) when (cancellationToken.IsCancellationRequested || IsRestoreCancellation(ex))
+        {
+            _restoreActivationCancelled = true;
+            _logger.LogWarning(ex,
+                "[{ProjectorName}] Snapshot restore cancelled: {Failure}.{TimeoutAdvice}",
+                GetProjectorName(), ex.Message,
+                cancellationToken.IsCancellationRequested
+                    ? " A restore longer than GrainCollectionOptions.ActivationTimeout needs a larger activation timeout."
+                    : string.Empty);
+            throw new OperationCanceledException("Snapshot restore cancelled", ex, cancellationToken);
+        }
+    }
+
+    private async Task ActivateWithRestoreAsync(CancellationToken cancellationToken)
+    {
+        ThrowIfRestoreCancelled(cancellationToken);
         var projectorName = GetProjectorName();
         _logger.LogInformation(
             MultiProjectionLogEvents.ActivationStarted,
@@ -2589,9 +2853,11 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // on the exact tombstone token. An ACTIVE slot is ADOPTED so the first persist CASes on its exact token, so a
             // stale writer is rejected rather than re-contaminating the shared row.
             var checkpointTombstoned = false;
+            CheckpointSlot? activeSlotToAdopt = null;
             if (_checkpointMutation is { IsCapable: true })
             {
                 var slotResult = await _checkpointMutation.ReadSlotAsync(projectorName, projectorVersion, cancellationToken);
+                ThrowIfRestoreCancelled(cancellationToken, slotResult.IsSuccess ? null : slotResult.GetException());
                 if (slotResult.IsSuccess)
                 {
                     var slot = slotResult.GetValue();
@@ -2600,7 +2866,30 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         _logger.LogWarning(
                             "Checkpoint tombstone observed on activation: {ProjectorName} — forcing full ordered replay (rebuilt commit pending)",
                             projectorName);
+                        ThrowIfRestoreCancelled(cancellationToken);
+                        GrainStateWriteOutcome? resetOutcome = null;
+                        try
+                        {
+                            resetOutcome = await _stateStore.ExecuteWriteAsync(
+                                GrainStateWriteKind.MetadataMaintenance, s =>
+                                {
+                                    ThrowIfRestoreCancelled(cancellationToken);
+                                    s.LastGoodSafeVersion = 0;
+                                    s.LastGoodPayloadBytes = 0;
+                                    s.LastGoodOriginalSizeBytes = 0;
+                                    s.LastGoodEventsProcessed = 0;
+                                });
+                        }
+                        catch (Exception ex)
+                        {
+                            ThrowIfRestoreCancelled(cancellationToken, ex);
+                            _logger.LogWarning(ex,
+                                "[{ProjectorName}] Tombstone watermark reset did not commit; keeping the integrity guard",
+                                projectorName);
+                        }
+                        ThrowIfRestoreCancelled(cancellationToken);
                         _checkpointMutation.AdoptTombstone(slot);
+                        _orderedRebuildFromFreshHost = resetOutcome == GrainStateWriteOutcome.Committed;
                         if (!durableRebuildPending)
                         {
                             _firstQueryGate.Arm();
@@ -2611,7 +2900,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     }
                     else if (slot.IsActive)
                     {
-                        _checkpointMutation.AdoptActive(slot);
+                        ThrowIfRestoreCancelled(cancellationToken);
+                        activeSlotToAdopt = slot;
                     }
                 }
             }
@@ -2631,6 +2921,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         projectorVersion,
                         cancellationToken);
 
+                    ThrowIfRestoreCancelled(cancellationToken, stateStoreResult.IsSuccess ? null : stateStoreResult.GetException());
                     if (!stateStoreResult.IsSuccess)
                     {
                         // Explicit error from state store (e.g., blob read failure)
@@ -2654,6 +2945,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                         if (!stateStreamResult.IsSuccess)
                         {
+                            ThrowIfRestoreCancelled(cancellationToken, stateStreamResult.GetException());
                             var errorMsg = record.IsOffloaded
                                 ? $"State stream open failed for offloaded key: {record.OffloadKey}"
                                 : stateStreamResult.GetException().Message;
@@ -2667,105 +2959,113 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                             _stateRestoreSource = StateRestoreSource.Failed;
                             _activationFailureReason = errorMsg;
                             knownRecordFailureHandled = true;
-                            if (await RetireIntegrityWatermarkAsync(projectorName, errorMsg))
-                            {
-                                forceFullCatchUp = true;
-                            }
-                            else
-                            {
-                                _restoreRetirementFailed = true;
-                            }
                         }
                         else
                         {
-                            await using var snapshotStream = stateStreamResult.GetValue();
-                            long? restoredSnapshotBytes = null;
-                            if (snapshotStream.CanSeek)
+                            var snapshotStream = stateStreamResult.GetValue();
+                            Exception? snapshotFailure = null;
+                            try
                             {
-                                restoredSnapshotBytes = snapshotStream.Length;
-                                snapshotStream.Position = 0;
-                            }
-                            var restoreResult = await _host.RestoreSnapshotFromStreamAsync(snapshotStream, cancellationToken);
-
-                            if (!restoreResult.IsSuccess)
-                            {
-                                _logger.LogError(
-                                    MultiProjectionLogEvents.StateRestoreFailed,
-                                    restoreResult.GetException(),
-                                    "Snapshot restore failed: {ProjectorName}",
-                                    projectorName);
-                                var errorMsg = restoreResult.GetException().Message;
-                                _stateRestoreSource = StateRestoreSource.Failed;
-                                _activationFailureReason = errorMsg;
-                                knownRecordFailureHandled = true;
-                                if (await RetireIntegrityWatermarkAsync(projectorName, errorMsg))
+                                ThrowIfRestoreCancelled(cancellationToken);
+                                long? restoredSnapshotBytes = null;
+                                if (snapshotStream.CanSeek)
                                 {
-                                    forceFullCatchUp = true;
+                                    restoredSnapshotBytes = snapshotStream.Length;
+                                    snapshotStream.Position = 0;
+                                }
+                                var restoreResult = await _host.RestoreSnapshotFromStreamAsync(snapshotStream, cancellationToken);
+
+                                ThrowIfRestoreCancelled(cancellationToken, restoreResult.IsSuccess ? null : restoreResult.GetException());
+                                if (!restoreResult.IsSuccess)
+                                {
+                                    _logger.LogError(
+                                        MultiProjectionLogEvents.StateRestoreFailed,
+                                        restoreResult.GetException(),
+                                        "Snapshot restore failed: {ProjectorName}",
+                                        projectorName);
+                                    var errorMsg = restoreResult.GetException().Message;
+                                    _stateRestoreSource = StateRestoreSource.Failed;
+                                    _activationFailureReason = errorMsg;
+                                    knownRecordFailureHandled = true;
                                 }
                                 else
                                 {
-                                    _restoreRetirementFailed = true;
+                                    _hostIsPristine = false;
+                                    _eventsProcessed = record.EventsProcessed;
+                                    MarkProjectionStatusDirty(record.LastSortableUniqueId, record.LastSortableUniqueId);
+                                    ClearProcessedEventCache();
+
+                                    // SEK-G18 (#1086): take the catch-up start verbatim from the restored checkpoint record, so
+                                    // catch-up reads strictly AFTER the durable safe position (exclusive) without re-folding it.
+                                    _catchUpStartPositions.Restore(
+                                        string.IsNullOrEmpty(record.LastSortableUniqueId)
+                                            ? null
+                                            : new SortableUniqueId(record.LastSortableUniqueId));
+
+                                    // SEK-G18 (#1086): seed the last-persisted SafeWindowThreshold verbatim so a no-progress
+                                    // re-persist writes the SAME value instead of a fresh wall-clock threshold (no drift).
+                                    _lastPersistedSafeWindowThreshold = record.SafeWindowThreshold;
+
+                                    int? postSafeVersion = null;
+                                    int? postUnsafeVersion = null;
+                                    try
+                                    {
+                                        var metadataResult = await _host.GetStateMetadataAsync(includeUnsafe: true);
+                                        if (metadataResult.IsSuccess)
+                                        {
+                                            var metadata = metadataResult.GetValue();
+                                            postSafeVersion = metadata.SafeVersion;
+                                            postUnsafeVersion = metadata.UnsafeVersion;
+                                        }
+                                    }
+                                    catch (Exception ex) { ThrowIfRestoreCancelled(cancellationToken, ex); }
+                                    ThrowIfRestoreCancelled(cancellationToken);
+
+                                    _logger.LogInformation(
+                                        MultiProjectionLogEvents.RestoreDetails,
+                                        "Restore: {ProjectorName}, RecordEvents={RecordEvents}, StateDataLen={StateDataLen}, Original={OriginalSize}, Compressed={CompressedSize}, PostSafeVer={PostSafeVersion}, PostUnsafeVer={PostUnsafeVersion}",
+                                        projectorName,
+                                        record.EventsProcessed,
+                                        restoredSnapshotBytes ?? 0,
+                                        record.OriginalSizeBytes,
+                                        record.CompressedSizeBytes,
+                                        postSafeVersion,
+                                        postUnsafeVersion);
+
+                                    if (record.EventsProcessed > 1000 && postSafeVersion == 0)
+                                    {
+                                        _logger.LogWarning(
+                                            MultiProjectionLogEvents.SafeVersionZero,
+                                            "SUSPICIOUS: {ProjectorName} - {EventsProcessed} events but safeVersion=0 after restore",
+                                            projectorName,
+                                            record.EventsProcessed);
+                                    }
+
+                                    _logger.LogInformation(
+                                        MultiProjectionLogEvents.StateRestoreSuccess,
+                                        "State restored: {ProjectorName}, Position: {Position}, Events: {Events}",
+                                        projectorName, record.LastSortableUniqueId, record.EventsProcessed);
+                                    restoredFromExternalStore = true;
+                                    _stateRestoredAt = DateTime.UtcNow;
+                                    _stateRestoreSource = StateRestoreSource.ExternalStore;
                                 }
                             }
-                            else
+                            catch (Exception ex)
                             {
-                                _hostIsPristine = false;
-                                _eventsProcessed = record.EventsProcessed;
-                                MarkProjectionStatusDirty(record.LastSortableUniqueId, record.LastSortableUniqueId);
-                                ClearProcessedEventCache();
-
-                                // SEK-G18 (#1086): take the catch-up start verbatim from the restored checkpoint record, so
-                                // catch-up reads strictly AFTER the durable safe position (exclusive) without re-folding it.
-                                _catchUpStartPositions.Restore(
-                                    string.IsNullOrEmpty(record.LastSortableUniqueId)
-                                        ? null
-                                        : new SortableUniqueId(record.LastSortableUniqueId));
-
-                                // SEK-G18 (#1086): seed the last-persisted SafeWindowThreshold verbatim so a no-progress
-                                // re-persist writes the SAME value instead of a fresh wall-clock threshold (no drift).
-                                _lastPersistedSafeWindowThreshold = record.SafeWindowThreshold;
-
-                                int? postSafeVersion = null;
-                                int? postUnsafeVersion = null;
+                                snapshotFailure = ex;
+                                throw;
+                            }
+                            finally
+                            {
                                 try
                                 {
-                                    var metadataResult = await _host.GetStateMetadataAsync(includeUnsafe: true);
-                                    if (metadataResult.IsSuccess)
-                                    {
-                                        var metadata = metadataResult.GetValue();
-                                        postSafeVersion = metadata.SafeVersion;
-                                        postUnsafeVersion = metadata.UnsafeVersion;
-                                    }
+                                    await snapshotStream.DisposeAsync();
                                 }
-                                catch { }
-
-                                _logger.LogInformation(
-                                    MultiProjectionLogEvents.RestoreDetails,
-                                    "Restore: {ProjectorName}, RecordEvents={RecordEvents}, StateDataLen={StateDataLen}, Original={OriginalSize}, Compressed={CompressedSize}, PostSafeVer={PostSafeVersion}, PostUnsafeVer={PostUnsafeVersion}",
-                                    projectorName,
-                                    record.EventsProcessed,
-                                    restoredSnapshotBytes ?? 0,
-                                    record.OriginalSizeBytes,
-                                    record.CompressedSizeBytes,
-                                    postSafeVersion,
-                                    postUnsafeVersion);
-
-                                if (record.EventsProcessed > 1000 && postSafeVersion == 0)
+                                catch (Exception) when (snapshotFailure is not null && IsRestoreCancellation(snapshotFailure))
                                 {
-                                    _logger.LogWarning(
-                                        MultiProjectionLogEvents.SafeVersionZero,
-                                        "SUSPICIOUS: {ProjectorName} - {EventsProcessed} events but safeVersion=0 after restore",
-                                        projectorName,
-                                        record.EventsProcessed);
+                                    // Disposal must complete before cancellation escapes, but its failure must not
+                                    // replace cancellation already detected while restoring the snapshot.
                                 }
-
-                                _logger.LogInformation(
-                                    MultiProjectionLogEvents.StateRestoreSuccess,
-                                    "State restored: {ProjectorName}, Position: {Position}, Events: {Events}",
-                                    projectorName, record.LastSortableUniqueId, record.EventsProcessed);
-                                restoredFromExternalStore = true;
-                                _stateRestoredAt = DateTime.UtcNow;
-                                _stateRestoreSource = StateRestoreSource.ExternalStore;
                             }
                         }
                     }
@@ -2802,8 +3102,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                                     _stateStore.Committed.LastGoodSafeVersion,
                                     projectorName);
                             }
+                            ThrowIfRestoreCancelled(cancellationToken);
                             await _stateStore.ExecuteWriteAsync(GrainStateWriteKind.MetadataMaintenance, s =>
                             {
+                                ThrowIfRestoreCancelled(cancellationToken);
                                 s.LastGoodSafeVersion = 0;
                                 s.LastGoodPayloadBytes = 0;
                                 s.LastGoodOriginalSizeBytes = 0;
@@ -2814,6 +3116,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 }
                 catch (Exception ex)
                 {
+                    ThrowIfRestoreCancelled(cancellationToken, ex);
                     _logger.LogError(
                         MultiProjectionLogEvents.StateRestoreFailed,
                         ex,
@@ -2824,20 +3127,25 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         knownRecordFailureHandled = true;
                         _stateRestoreSource = StateRestoreSource.Failed;
                         _activationFailureReason = ex.Message;
-                        if (await RetireIntegrityWatermarkAsync(projectorName, ex.Message))
-                        {
-                            forceFullCatchUp = true;
-                        }
-                        else
-                        {
-                            _restoreRetirementFailed = true;
-                        }
                     }
                     else if (!knownRecordObtained)
                     {
                         _stateRestoreSource = StateRestoreSource.Failed;
                         _activationFailureReason = ex.Message;
                         forceFullCatchUp = true;
+                    }
+                }
+                // Classify all restore and disposal failures before making any durable retirement decision.
+                ThrowIfRestoreCancelled(cancellationToken);
+                if (knownRecordFailureHandled)
+                {
+                    if (await RetireIntegrityWatermarkAsync(projectorName, _activationFailureReason!, cancellationToken))
+                    {
+                        forceFullCatchUp = true;
+                    }
+                    else
+                    {
+                        _restoreRetirementFailed = true;
                     }
                 }
             }
@@ -2849,6 +3157,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     projectorName);
             }
 
+            ThrowIfRestoreCancelled(cancellationToken);
+            if (activeSlotToAdopt is not null && _checkpointMutation!.AdoptedSlot is null)
+            {
+                _orderedRebuildFromFreshHost = false;
+                _checkpointMutation.AdoptActive(activeSlotToAdopt);
+            }
             // A known record that failed at any point after record acquisition is not a valid restore baseline. This is
             // especially important when the host restore returned success but stream disposal then threw: discard any
             // partially-restored host only after the watermark retirement has committed, then begin the ordered replay
@@ -2858,6 +3172,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 !_restoreRetirementFailed)
             {
                 RecreateHostForFullRebuild();
+                _orderedRebuildFromFreshHost =
+                    _checkpointMutation is { IsCapable: true, PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true };
                 restoredFromExternalStore = false;
                 forceFullCatchUp = true;
             }
@@ -2869,7 +3185,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
         }
 
+        ThrowIfRestoreCancelled(cancellationToken);
         await base.OnActivateAsync(cancellationToken);
+        ThrowIfRestoreCancelled(cancellationToken);
 
         // Cleanup stale temp files from previous activations
         if (_tempFileSnapshotManager is not null)
@@ -2877,12 +3195,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             await _tempFileSnapshotManager.CleanupStaleFilesAsync();
         }
 
+        ThrowIfRestoreCancelled(cancellationToken);
         // After activation, start catch-up in background (fire-and-forget).
         // This prevents Orleans activation timeout when catch-up takes longer than 30 seconds.
         // Queries will return partial/stale data with IsCatchUpInProgress=true until catch-up completes.
         // Re-establish any persisted fault BEFORE the (fire-and-forget) catch-up starts, so the first query fails
         // closed instead of answering empty/partial success in the window before catch-up re-reaches the poison.
         await RestoreProjectionFaultIfPersistedAsync();
+        ThrowIfRestoreCancelled(cancellationToken);
+        _activationRestoreCompleted = true;
 
         // If nothing was restored, we cannot be sure a fault is not waiting in the un-caught-up tail (its descriptor
         // may have been lost to a process crash while persistence was failing). The first query must therefore
@@ -2955,6 +3276,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     public override async Task OnDeactivateAsync(DeactivationReason reason, CancellationToken cancellationToken)
     {
+        _isDeactivating = true;
         var projectorName = GetProjectorName();
         _logger.LogInformation(
             MultiProjectionLogEvents.DeactivationStarted,
@@ -3119,7 +3441,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 GrainStateWriteKind.OperatorReset,
                 committed => FaultTokenMatchesCommitted(committed, request),
                 ResetDerivedStateForFullRebuild,
-                beforeWrite: InvalidateExternalDerivedSnapshotAsync);
+                beforeWrite: () => InvalidateExternalDerivedSnapshotAsync());
         }
         catch (Exception ex)
         {
@@ -3145,6 +3467,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // the same position replays successfully.
         ClearLiveProjectionFault();
         RecreateHostForFullRebuild();
+        _orderedRebuildFromFreshHost =
+            _checkpointMutation is { IsCapable: true, PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true };
         return ResultBox.FromValue(true);
     }
 
@@ -3166,7 +3490,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // Invalidates the derived EXTERNAL snapshot (Postgres/Cosmos IMultiProjectionStateStore) for the current projector +
     // version, so a fresh activation cannot restore a pre-poison snapshot and the rebuild starts from the beginning.
     // Derived-state only — this never deletes authoritative events. A no-op when no external store is configured.
-    private async Task InvalidateExternalDerivedSnapshotAsync()
+    private async Task InvalidateExternalDerivedSnapshotAsync(CancellationToken cancellationToken = default)
     {
         if (_multiProjectionStateStore is null || _host is null)
         {
@@ -3175,14 +3499,22 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         // Route the invalidation through the external-store coordinator so any parked/in-flight snapshot upsert completes
         // BEFORE this invalidation, and no upsert runs concurrently with it.
-        await _externalStore.InvalidateAsync(PerformCheckpointInvalidationCoreAsync);
+        await _externalStore.InvalidateAsync(() =>
+        {
+            // A queued restore retirement must re-check after acquiring the external mutation gate too.
+            cancellationToken.ThrowIfCancellationRequested();
+            return PerformCheckpointInvalidationCoreAsync(cancellationToken);
+        });
     }
 
     // The SINGLE capability-aware invalidation shared by the retrograde-rebuild path and the admin DeleteExternalStateAsync
     // path — always run inside the external-store coordinator. Delegates to the sole CheckpointMutationCoordinator (durable
     // bump+tombstone CAS on a capable store; legacy delete otherwise). The grain holds no raw checkpoint mutation reach.
-    private Task PerformCheckpointInvalidationCoreAsync() =>
-        _checkpointMutation!.InvalidateAsync(GetProjectorName(), _host!.GetProjectorVersion());
+    private async Task PerformCheckpointInvalidationCoreAsync(CancellationToken cancellationToken = default)
+    {
+        _orderedRebuildFromFreshHost = false;
+        await _checkpointMutation!.InvalidateAsync(GetProjectorName(), _host!.GetProjectorVersion(), cancellationToken);
+    }
 
     // True while a fault exists on the live actor OR the committed persisted descriptor. No external snapshot may be
     // upserted in this state — a faulted projection has no valid derived state, and this stops a stale/late upsert from
@@ -3198,6 +3530,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     private Task<ResultBox<bool>> UpsertExternalStateCoordinatedAsync(
         MultiProjectionStateWriteRequest request,
         Stream stream,
+        IProjectionActorHost? snapshotHost,
         int offloadThreshold)
     {
         if (_checkpointMutation is null)
@@ -3209,7 +3542,38 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         // capable store (a stale writer is ConditionRejected and NEVER re-contaminates the row; a rebuilt commit is one
         // atomic same-row CAS on the exact tombstone token), or the legacy unconditional upsert on a non-capable store.
         // The grain holds no raw checkpoint mutation reach. Serialised on the external-store coordinator gate here.
-        return _externalStore.UpsertAsync(() => _checkpointMutation.PersistAsync(request, stream, offloadThreshold));
+        return _externalStore.UpsertAsync(async () =>
+        {
+            // Version rewrites pass null: they serialize a stored record, so guard the live host at gate entry.
+            var writeHost = snapshotHost ?? _host;
+            var sameVersion = string.Equals(request.ProjectorVersion, writeHost?.GetProjectorVersion(), StringComparison.Ordinal);
+            if (sameVersion && IsStaleCheckpointHost(writeHost))
+            {
+                _logger.LogDebug("[{ProjectorName}] External checkpoint save blocked for stale host", request.ProjectorName);
+                return ResultBox.Error<bool>(new ExternalPersistenceBlockedByStaleHostException());
+            }
+
+            var previousSlot = _checkpointMutation.AdoptedSlot;
+            var heldGeneration = previousSlot?.Generation ?? 0;
+            var result = await _checkpointMutation.PersistAsync(request, stream, offloadThreshold);
+            var adoptedGeneration = _checkpointMutation.AdoptedSlot?.Generation ?? 0;
+            if (!result.IsSuccess && adoptedGeneration > heldGeneration && sameVersion &&
+                ReferenceEquals(writeHost, _host) && !_hostIsPristine && !IsStaleCheckpointHost(writeHost))
+            {
+                _staleCheckpointHost = writeHost;
+                _firstQueryGate.Arm();
+                _logger.LogWarning(
+                    MultiProjectionLogEvents.StaleCheckpointHost,
+                    "[{ProjectorName}] Checkpoint rejection advanced generation {HeldGeneration} to {AdoptedGeneration}; host must replay before saving",
+                    request.ProjectorName, heldGeneration, adoptedGeneration);
+                result = ResultBox.Error<bool>(new ExternalPersistenceBlockedByStaleHostException());
+            }
+            if (!ReferenceEquals(previousSlot, _checkpointMutation.AdoptedSlot) || result.IsSuccess)
+            {
+                _orderedRebuildFromFreshHost = false;
+            }
+            return result;
+        });
     }
 
     // Recreates a fresh actor host in the current activation and re-arms the first-query barrier, so the next query
@@ -3217,6 +3581,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     // cycle is required and no early healthy answer is possible before the barrier's synchronous catch-up.
     private void RecreateHostForFullRebuild()
     {
+        _rebuildWarningLogged = false;
+        // The replaced host stays blocked as superseded; drop the reference so its state can be collected.
+        _staleCheckpointHost = null;
         _eventsProcessed = 0;
         ClearProcessedEventCache();
         _unsafeEventIds.Clear();
@@ -3655,15 +4022,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         (ex is InvalidOperationException && ex.Message.StartsWith(
             MultiProjectionQueryFailClosedMessages.CatchUpInProgressPrefix, StringComparison.Ordinal));
 
-    // Called only at the generic activation arm. Every other arm invalidates this generation naturally.
+    // Generic activation may resume a durable marker. Other arm sites remain excluded unless
+    // the runtime rebuild explicitly starts a fresh-host bounded replay episode.
     private void ArmActivationFirstQueryGate()
     {
         _firstQueryGate.Arm();
-        if (_firstQueryCatchUpMaxWaitMs > 0 &&
-            _stateStore.Committed is not IRebuildMarkerState { RebuildRequired: true })
+        if (_stateStore.Committed is IRebuildMarkerState { RebuildRequired: true })
+        {
+            ArmBoundedFullReplayEpisode();
+        }
+        else if (_firstQueryCatchUpMaxWaitMs > 0)
         {
             _boundedWaitArmGeneration = _firstQueryGate.ArmGeneration;
         }
+    }
+
+    private void ArmBoundedFullReplayEpisode()
+    {
+        if (_firstQueryCatchUpMaxWaitMs <= 0) return;
+        _boundedWaitArmGeneration = _firstQueryGate.ArmGeneration;
+        _boundedFullReplayArmGeneration = _firstQueryGate.ArmGeneration;
     }
 
     private bool IsBoundedWaitEpisode => _boundedWaitArmGeneration != 0 &&
@@ -3686,7 +4064,16 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         if (!BoundedWaitPending)
         {
-            await EnsureFirstQuerySyncCatchUpAsync();
+            while (_firstQueryGate.IsPending)
+            {
+                if (await ResolveRebuildBeforeQueryAsync() is { } rebuildError) throw rebuildError;
+                await EnsureFirstQuerySyncCatchUpAsync();
+                if (BoundedWaitPending)
+                {
+                    await AwaitFirstQueryCatchUpAsync();
+                    return;
+                }
+            }
             return;
         }
 
@@ -3694,7 +4081,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         var deadline = System.Diagnostics.Stopwatch.StartNew();
         if (!HasLiveProjectionFault)
         {
-            KickGateProgressIfNeeded(forceFull: false);
+            KickGateProgressIfNeeded(forceFull: _boundedFullReplayArmGeneration == generation);
         }
         while (BoundedWaitPending && !HasLiveProjectionFault &&
                deadline.ElapsedMilliseconds < _firstQueryCatchUpMaxWaitMs)
@@ -3702,10 +4089,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             await Task.Delay((int)Math.Max(1, Math.Min(20, _firstQueryCatchUpMaxWaitMs - deadline.ElapsedMilliseconds)));
         }
 
-        // A re-arm ends this episode; the new arm retains its blocking contract.
+        // A re-arm ends this episode; obey the replacement arm's own wait contract.
         if (generation != _firstQueryGate.ArmGeneration)
         {
-            await EnsureFirstQuerySyncCatchUpAsync();
+            await AwaitFirstQueryCatchUpAsync();
             return;
         }
         if (HasLiveProjectionFault)
@@ -3744,7 +4131,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     {
         // The idle Ensure owns progress while its authoritative read is pending, even with no timer.
         // Bounded polls must observe that attempt rather than recover it as stale and replace its run.
-        if (!forceFull && (HasLiveProjectionFault ||
+        if ((!forceFull || IsBoundedWaitEpisode) && (HasLiveProjectionFault ||
             (IsBoundedWaitEpisode && (_firstQueryGate.IsInFlight ||
                 _boundedGateSettlement is { IsCompleted: false } ||
                 _boundedCatchUpInitiation is { IsCompleted: false })))) return;
@@ -3772,7 +4159,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         if (!ForcedCatchUpReachedAuthoritativeHead())
         {
-            ObserveCatchUpRestart(CatchUpFromEventStoreAsync(forceFull));
+            ObserveCatchUpRestart(CatchUpFromEventStoreAsync(forceFull && _hostIsPristine));
             return;
         }
 
@@ -3849,6 +4236,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task RunFirstQuerySyncCatchUpAsync()
     {
+        // Publish the gate's in-flight owner before a synchronous provider can signal a rebuild and
+        // re-arm it. Otherwise the old Ensure assignment can overwrite the replacement's cleared owner.
+        await Task.Yield();
+        var generation = _firstQueryGate.ArmGeneration;
         if (_host is null)
         {
             return;
@@ -3893,6 +4284,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // A confirmed projection fault was established. The actor is faulted; the query surfaces it as an error.
             // The barrier's job is done — swallow the rethrown reject and complete.
         }
+
+        if (generation != _firstQueryGate.ArmGeneration) return;
 
         if (_host.CurrentFault is not null)
         {
@@ -4313,6 +4706,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     var saveResult = await UpsertExternalStateCoordinatedAsync(
                         writeRequest,
                         targetStream,
+                        null,
                         _injectedActorOptions?.MaxSnapshotSerializedSizeBytes ?? 2 * 1024 * 1024);
                     // A fault-block returns a ResultBox.Error, so updated stays false and the MetadataMaintenance
                     // ProjectorVersion write below is skipped: no projector-version mutation may happen after rejection.
@@ -4449,6 +4843,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // The target position will be updated dynamically during catch-up batches.
 
             // Initialize catch-up progress (TargetPosition will be set during first batch)
+            var inheritedNewEvents = _catchUpProgress.HadNewEvents;
             _catchUpProgress = new CatchUpProgress
             {
                 StartLease = startLease,
@@ -4456,7 +4851,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 CurrentPosition = currentPosition,
                 TargetPosition = null, // Will be determined during catch-up
                 IsActive = true,
-                HadNewEvents = false,
+                HadNewEvents = inheritedNewEvents,
                 ConsecutiveEmptyBatches = 0,
                 BatchesProcessed = 0,
                 StartTime = DateTime.UtcNow,
@@ -4464,7 +4859,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             };
             ResetHybridCatchUpLogging();
             ResetCatchUpFailureTracking();
-            ResetCatchUpPersistWindow(resetReadPath: true);
+            if (!inheritedNewEvents) ResetCatchUpPersistWindow(resetReadPath: true);
             _catchUpBatchSkipCount = 0;
 
             MoveBufferedStreamEventsToPending(currentPosition);
@@ -4569,6 +4964,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Process one batch
             if (BoundedWaitPending) _catchUpReadException = null;
             var batch = await ProcessSingleCatchUpBatch();
+            if (!ReferenceEquals(scheduledRun, _catchUpProgress)) return;
             if (_catchUpReadException is { } readError)
             {
                 RecordBackgroundCatchUpFailure(readError, generation);
@@ -4582,7 +4978,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 {
                     // Catch-up complete
                     await CompleteCatchUp();
-                    KickTombstoneIdleEnsureIfNeededAfterTimerCompleteCatchUp();
+                    if (ReferenceEquals(scheduledRun, _catchUpProgress))
+                        KickTombstoneIdleEnsureIfNeededAfterTimerCompleteCatchUp();
                 }
             }
             else
@@ -4594,6 +4991,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         catch (Exception ex)
         {
+            // A read superseded by an interleaving rebuild must not count against, or stop, the replacement run.
+            if (!ReferenceEquals(scheduledRun, _catchUpProgress)) return;
             RecordBackgroundCatchUpFailure(ex, generation);
             await HandleCatchUpBatchFailureAsync(ex, projectorName);
         }
@@ -4605,20 +5004,24 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task<int> ApplyHostEventsAsync(IReadOnlyList<SerializableEvent> events, bool finishedCatchUp)
     {
-        if (_host is NativeProjectionActorHost)
+        var host = _host;
+        if (host is NativeProjectionActorHost)
         {
-            using var receipts = ProjectionEventApplicationScope.Begin(() => _hostIsPristine = false);
-            await _host.AddSerializableEventsAsync(events, finishedCatchUp);
+            using var receipts = ProjectionEventApplicationScope.Begin(() =>
+            {
+                if (ReferenceEquals(host, _host)) _hostIsPristine = false;
+            });
+            await host.AddSerializableEventsAsync(events, finishedCatchUp);
             // Successful non-empty applications also cover native projectors that supply their own accessor.
             // Wrapper receipts additionally clear pristine as each event succeeds, before a later event can fail.
-            if (events.Count > 0) _hostIsPristine = false;
+            if (ReferenceEquals(host, _host) && events.Count > 0) _hostIsPristine = false;
             // Custom accessors outside the native wrapper retain their existing submitted-count semantics.
             return receipts.ObservedNativeWrapper ? receipts.AppliedCount : events.Count;
         }
 
         // Non-native hosts retain their existing submitted-count semantics.
-        await _host!.AddSerializableEventsAsync(events, finishedCatchUp);
-        if (events.Count > 0) _hostIsPristine = false;
+        await host!.AddSerializableEventsAsync(events, finishedCatchUp);
+        if (ReferenceEquals(host, _host) && events.Count > 0) _hostIsPristine = false;
         return events.Count;
     }
 
@@ -4669,6 +5072,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     /// </summary>
     private async Task<CatchUpBatchResult> ProcessSerializableBatch()
     {
+        var run = _catchUpProgress;
+        var host = _host;
         var projectorName = GetProjectorName();
         var catchUpStore = GetCatchUpEventStore();
         var hybridCatchUpStore = catchUpStore as HybridEventStore;
@@ -4692,6 +5097,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (catchUpStore is IStreamingSerializableEventStore streamingCatchUpStore)
         {
             return await ProcessStreamingSerializableBatch(
+                run,
+                host,
                 streamingCatchUpStore,
                 hybridCatchUpStore,
                 isHybridCatchUp,
@@ -4730,6 +5137,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         {
             readStopwatch.Stop();
         }
+
+        if (!IsCurrentCatchUpBatch(run, host)) return new CatchUpBatchResult(0, 0, null, null);
 
         if (!eventsResult.IsSuccess)
         {
@@ -4800,6 +5209,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         if (filtered.Count == 0)
         {
             await UpdateCatchUpProgressAfterBatch(
+                run, host,
                 batchNumber,
                 startPosition,
                 Array.Empty<Guid>(),
@@ -4815,12 +5225,15 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 hybridCatchUpStore,
                 hybridReadBatchMetadata,
                 BuildCatchUpEventTypeSummary(events.Select(e => e.EventPayloadName)));
+            if (!IsCurrentCatchUpBatch(run, host)) return new CatchUpBatchResult(0, 0, null, null);
             return new CatchUpBatchResult(
                 events.Count,
                 0,
                 new SortableUniqueId(events[^1].SortableUniqueIdValue),
                 null);
         }
+
+        if (!IsCurrentCatchUpBatch(run, host)) return new CatchUpBatchResult(0, 0, null, null);
 
         int appliedCount;
         var applyStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -4841,7 +5254,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             applyStopwatch.Stop();
         }
 
+        if (!IsCurrentCatchUpBatch(run, host)) return new CatchUpBatchResult(0, 0, null, null);
+
         await UpdateCatchUpProgressAfterBatch(
+            run, host,
             batchNumber,
             startPosition,
             filtered.Select(e => e.Id),
@@ -4858,6 +5274,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             hybridReadBatchMetadata,
             BuildCatchUpEventTypeSummary(filtered.Select(e => e.EventPayloadName)));
 
+        if (!IsCurrentCatchUpBatch(run, host)) return new CatchUpBatchResult(0, 0, null, null);
         return new CatchUpBatchResult(
             events.Count,
             appliedCount,
@@ -4865,7 +5282,13 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             new SortableUniqueId(filtered[^1].SortableUniqueIdValue));
     }
 
+    // Interleaving timers may replace both while a store read or host application is awaiting.
+    private bool IsCurrentCatchUpBatch(CatchUpProgress run, IProjectionActorHost? host) =>
+        ReferenceEquals(run, _catchUpProgress) && ReferenceEquals(host, _host);
+
     private async Task<CatchUpBatchResult> ProcessStreamingSerializableBatch(
+        CatchUpProgress run,
+        IProjectionActorHost? host,
         IStreamingSerializableEventStore streamingCatchUpStore,
         HybridEventStore? hybridCatchUpStore,
         bool isHybridCatchUp,
@@ -4878,7 +5301,6 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             return new CatchUpBatchResult(0, 0, null, null);
         }
 
-        var processedIds = new List<Guid>(Math.Min(batchSize, StreamingCatchUpApplyChunkSize * 2));
         var buffer = new List<SerializableEvent>(Math.Min(batchSize, StreamingCatchUpApplyChunkSize));
         string? lastFetchedSortableUniqueId = null;
         string? lastProcessedSortableUniqueId = null;
@@ -4902,22 +5324,26 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
         async Task FlushBufferAsync()
         {
-            if (buffer.Count == 0)
+            if (!IsCurrentCatchUpBatch(run, host) || buffer.Count == 0)
             {
                 return;
             }
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            await ApplyHostEventsAsync(buffer, finishedCatchUp: false);
+            var chunkAppliedCount = await ApplyHostEventsAsync(buffer, finishedCatchUp: false);
+            if (!IsCurrentCatchUpBatch(run, host)) return;
             sw.Stop();
             applyElapsedMs += sw.ElapsedMilliseconds;
 
             foreach (var item in buffer)
             {
-                processedIds.Add(item.Id);
+                TrackProcessedEventId(item.Id);
             }
 
-            appliedCount += buffer.Count;
+            _eventsProcessed += chunkAppliedCount;
+            _eventsProcessedSinceLastCatchUpPersist += chunkAppliedCount;
+            _catchUpProgress.HadNewEvents |= chunkAppliedCount > 0;
+            appliedCount += chunkAppliedCount;
             lastProcessedSortableUniqueId = buffer[^1].SortableUniqueIdValue;
             buffer.Clear();
         }
@@ -4931,6 +5357,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 batchSize,
                 async ev =>
                 {
+                    if (!IsCurrentCatchUpBatch(run, host)) return;
                     fetchedCount++;
                     lastFetchedSortableUniqueId = ev.SortableUniqueIdValue;
                     UpdateTargetPosition(ev.SortableUniqueIdValue);
@@ -4954,6 +5381,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                         await FlushBufferAsync();
                     }
                 });
+            if (!IsCurrentCatchUpBatch(run, host)) return new CatchUpBatchResult(0, 0, null, null);
             hybridReadBatchMetadata = HybridReadProjectionContext.BatchMetadata;
             var streamElapsedMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(readStartedAt).TotalMilliseconds;
             var readElapsedMs = Math.Max(0, streamElapsedMs - applyElapsedMs);
@@ -5003,10 +5431,12 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             await FlushBufferAsync();
+            if (!IsCurrentCatchUpBatch(run, host)) return new CatchUpBatchResult(0, 0, null, null);
             var filteredCount = Math.Max(0, fetchedCount - appliedCount);
             if (appliedCount == 0)
             {
                 await UpdateCatchUpProgressAfterBatch(
+                    run, host,
                     batchNumber,
                     startPosition,
                     Array.Empty<Guid>(),
@@ -5022,6 +5452,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                     hybridCatchUpStore,
                     hybridReadBatchMetadata,
                     BuildCatchUpEventTypeSummary(eventTypeNames));
+                if (!IsCurrentCatchUpBatch(run, host)) return new CatchUpBatchResult(0, 0, null, null);
                 return new CatchUpBatchResult(
                     fetchedCount,
                     0,
@@ -5030,9 +5461,10 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             }
 
             await UpdateCatchUpProgressAfterBatch(
+                run, host,
                 batchNumber,
                 startPosition,
-                processedIds,
+                Array.Empty<Guid>(),
                 lastFetchedSortableUniqueId!,
                 lastProcessedSortableUniqueId,
                 batchSize,
@@ -5044,7 +5476,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 pendingStreamEventsBefore,
                 hybridCatchUpStore,
                 hybridReadBatchMetadata,
-                BuildCatchUpEventTypeSummary(eventTypeNames));
+                BuildCatchUpEventTypeSummary(eventTypeNames),
+                appliedChunksAccounted: true);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("Unknown event type", StringComparison.Ordinal))
         {
@@ -5055,6 +5488,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             throw;
         }
 
+        if (!IsCurrentCatchUpBatch(run, host)) return new CatchUpBatchResult(0, 0, null, null);
         return new CatchUpBatchResult(
             fetchedCount,
             appliedCount,
@@ -5130,6 +5564,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
     }
 
     private async Task UpdateCatchUpProgressAfterBatch(
+        CatchUpProgress run,
+        IProjectionActorHost? host,
         int batchNumber,
         string startPosition,
         IEnumerable<Guid> processedIds,
@@ -5144,15 +5580,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         int pendingStreamEventsBefore,
         HybridEventStore? hybridCatchUpStore,
         HybridReadBatchMetadata? hybridReadBatchMetadata,
-        string eventTypeSummary)
+        string eventTypeSummary,
+        bool appliedChunksAccounted = false)
     {
+        if (!IsCurrentCatchUpBatch(run, host)) return;
         var projectorName = GetProjectorName();
 
         ObserveCatchUpReadPath(hybridReadBatchMetadata);
         _catchUpProgress.BatchesProcessed++;
-        _catchUpProgress.HadNewEvents |= appliedCount > 0;
-        _eventsProcessed += appliedCount;
-        _eventsProcessedSinceLastCatchUpPersist += appliedCount;
+        if (!appliedChunksAccounted)
+        {
+            _catchUpProgress.HadNewEvents |= appliedCount > 0;
+            _eventsProcessed += appliedCount;
+            _eventsProcessedSinceLastCatchUpPersist += appliedCount;
+        }
         _eventsFetchedSinceLastCatchUpPersist += fetchedCount;
         _lastHybridReadBatchMetadata = hybridReadBatchMetadata;
 
@@ -5181,8 +5622,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 persistElapsedMs = persistStopwatch.ElapsedMilliseconds;
                 // A completed persist attempt, including a short-circuit or failed ResultBox, closes this logical
                 // threshold window. Applied, fetched, and time tracking must reset as one unit.
-                ResetCatchUpPersistWindow();
+                if (IsCurrentCatchUpBatch(run, host)) ResetCatchUpPersistWindow();
             }
+            if (!IsCurrentCatchUpBatch(run, host)) return;
         }
 
         var totalElapsedMs = readElapsedMs + applyElapsedMs + persistElapsedMs;
@@ -5291,6 +5733,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
     private async Task CompleteCatchUp()
     {
+        var progress = _catchUpProgress;
         var projectorName = GetProjectorName();
         var pendingStreamEventsBefore = _pendingStreamEvents.Count;
         long safePromotionElapsedMs = 0;
@@ -5308,10 +5751,20 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             await FlushEventBufferAsync(
                 failOnSafePromotion: true,
                 allowDuringCatchUp: true);
+            if (!ReferenceEquals(progress, _catchUpProgress) ||
+                _host is IRebuildSignalingHost { RebuildRequired: true }) return;
 
             // Pending stream receipts are event-bearing work too. Drain them before the final promotion so the
             // completion decision covers every state mutation accepted during this catch-up window.
             await ProcessPendingStreamEvents();
+            if (!ReferenceEquals(progress, _catchUpProgress)) return;
+            if (_host is IRebuildSignalingHost { RebuildRequired: true })
+            {
+                // Applying a pending receipt behind the safe head only signals; start the rebuild in this turn so a
+                // query waiting on this catch-up cannot settle on the incomplete host.
+                await TriggerDurableFullRebuildAsync("catch-up completion");
+                return;
+            }
 
             var shouldPersist = _catchUpProgress.HadNewEvents ||
                 (_checkpointMutation is { PendingRebuiltCommit: true, AdoptedSlot.IsTombstoned: true } &&
@@ -5320,7 +5773,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
             // Every successful completion, including empty and duplicate-only refreshes, must perform the final
             // promotion stage while catch-up is still active. No later stage may run after promotion fails.
             var safePromotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            await TriggerSafePromotion(failOnFailure: true);
+            await TriggerSafePromotion(failOnFailure: true, observingPath: "catch-up completion");
+            if (!ReferenceEquals(progress, _catchUpProgress) ||
+                _host is IRebuildSignalingHost { RebuildRequired: true }) return;
             safePromotionStopwatch.Stop();
             safePromotionElapsedMs = safePromotionStopwatch.ElapsedMilliseconds;
 
@@ -5329,6 +5784,8 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
                 // Final persistence
                 var persistStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 var persistResult = await PersistStateCoreAsync(isCompletionPersist: true);
+                if (!ReferenceEquals(progress, _catchUpProgress) ||
+                    _host is IRebuildSignalingHost { RebuildRequired: true }) return;
                 if (!persistResult.IsSuccess)
                 {
                     throw new InvalidOperationException(
@@ -5356,6 +5813,9 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
             CompactRetainedCollections();
 
+            // An unfinished read retains this obligation across retries, including timerless refreshes.
+            // Clear it only after all completion stages succeeded.
+            _catchUpProgress.HadNewEvents = false;
             _catchUpProgress.IsActive = false;
 
             var elapsed = DateTime.UtcNow - _catchUpProgress.StartTime;
@@ -5378,14 +5838,17 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
         }
         finally
         {
-            _catchUpProgress.IsActive = false;
-            ResetCatchUpPersistWindow(resetReadPath: true);
-            ResetCatchUpFailureTracking();
-            EndCatchUpDeactivationDelay();
+            if (ReferenceEquals(progress, _catchUpProgress))
+            {
+                progress.IsActive = false;
+                ResetCatchUpPersistWindow(resetReadPath: true);
+                ResetCatchUpFailureTracking();
+                EndCatchUpDeactivationDelay();
+            }
         }
     }
 
-    private async Task TriggerSafePromotion(bool failOnFailure = false)
+    private async Task TriggerSafePromotion(bool failOnFailure = false, string observingPath = "timer/empty-flush")
     {
         try
         {
@@ -5398,6 +5861,7 @@ public class MultiProjectionGrain : Grain, IMultiProjectionGrain, ILifecyclePart
 
                 // Get the current safe state to trigger promotion
                 var safeState = await _host.GetStateAsync(canGetUnsafeState: false);
+                await RebuildProjectionIfSignaledAsync(observingPath);
                 if (safeState.IsSuccess)
                 {
                     var state = safeState.GetValue();

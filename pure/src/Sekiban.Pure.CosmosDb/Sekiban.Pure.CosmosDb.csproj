@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Pure.CosmosDb</PackageId>
-        <Version>9.0.0</Version>
+        <Version>10.0.0</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Pure Event Sourcing Framework CosmosDB Integration</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>9.0.0</PackageVersion>
+        <PackageVersion>10.0.0</PackageVersion>
         <Description>Multi Blob saving and reading issue resolved</Description>
         <AssemblyName>Sekiban.Pure.CosmosDb</AssemblyName>
         <RootNamespace>Sekiban.Pure.CosmosDb</RootNamespace>
@@ -20,7 +20,7 @@
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <GenerateSBOM>true</GenerateSBOM>
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -29,15 +29,14 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.53.1" />
-        <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="9.0.8"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="9.0.8"/>
+        <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.15"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.15"/>
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
         <PackageReference Include="Microsoft.Sbom.Targets" Version="4.1.2">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <None Include="../../README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="Sekiban.Pure.AspNetCore" Version="9.0.0"/>
     </ItemGroup>
 
 </Project>

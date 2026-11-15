@@ -3,7 +3,7 @@
     <PropertyGroup>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -14,7 +14,7 @@
             <PrivateAssets>all</PrivateAssets>
         </ProjectReference>
         <ProjectReference Include="..\..\src\Sekiban.Pure.Orleans\Sekiban.Pure.Orleans.csproj"/>
-        <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1"/>
+        <PackageReference Include="Microsoft.Orleans.Server" Version="10.4.2"/>
     </ItemGroup>
 
 </Project>

@@ -4,7 +4,7 @@ namespace Sekiban.Dcb.Tests.SerializedCommitWire;
 
 /// <summary>
 ///     Keeps the dependency-free JavaScript witness on the same CI path as the C# test project. GitHub's DCB jobs run
-///     this project for net9.0 and net10.0, so the Node half cannot silently become an unexecuted documentation script.
+///     this project for net11.0 and net10.0, so the Node half cannot silently become an unexecuted documentation script.
 /// </summary>
 public sealed class SerializedCommitInteropNodeRunnerTests
 {

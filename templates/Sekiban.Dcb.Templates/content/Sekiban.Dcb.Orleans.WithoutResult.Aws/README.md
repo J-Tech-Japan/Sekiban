@@ -26,7 +26,7 @@ The AppHost deliberately pins the LocalStack image in the AppHost to a release t
 
 Read the upstream guides before changing defaults:
 
-- [Immutable projection inputs](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/04_multiple_aggregate_projector.md): return new payloads; use `IMutatesProjectionInput` only as a deliberate optimization. Retryable catch-up and rebuild failures return 503 with `Retry-After`; bounded first-query waiting stays off.
+- [Immutable projection inputs](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/04_multiple_aggregate_projector.md): return new payloads; use `IMutatesProjectionInput` only as a deliberate optimization. Retryable catch-up and rebuild failures return 503 with `Retry-After`; a query during catch-up waits at most 5 seconds for it (`FirstQueryCatchUpMaxWaitMs = 5000`), and the Orleans activation timeout is 5 minutes for large snapshot restores.
 - [Snapshot storage and blob prefixes](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/11_storage_providers.md): this template uses a dedicated snapshot container or bucket without a prefix; plan isolation when sharing storage.
 - [Orleans and grain directory options](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/10_orleans_setup.md): distributed directory prerequisites must be met before enabling it.
 - [Fast and strict consistency](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/dcb_llm/04_multiple_aggregate_projector.md): choose the query guarantee deliberately.

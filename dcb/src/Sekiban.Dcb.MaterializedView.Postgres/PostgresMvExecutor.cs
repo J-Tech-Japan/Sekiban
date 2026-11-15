@@ -74,6 +74,13 @@ public sealed class PostgresMvExecutor : MvExecutorBase<NpgsqlConnection>, IMvEx
         return connection;
     }
 
+    internal override async Task<IAsyncDisposable?> AcquireInitializationLockAsync(
+        NpgsqlConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
+    {
+        await PostgresMvInitializationLock.AcquireAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+        return null;
+    }
+
     protected override IMvApplyQueryPort CreateQueryPort(
         NpgsqlConnection connection,
         IDbTransaction transaction) =>

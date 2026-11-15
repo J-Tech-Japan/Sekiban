@@ -9,14 +9,16 @@
         <NoWarn>$(NoWarn);MSB3277</NoWarn>
     </PropertyGroup>
 
-    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3"/>
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0' Or '$(TargetFramework)' == 'net11.0'">
         <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.15"/>
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
         <PackageReference Include="Microsoft.EntityFrameworkCore" Version="11.0.0-rc.3.26522.148"/>
-        <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.103" />
     </ItemGroup>
 
 
@@ -45,4 +47,7 @@
         <ProjectReference Include="..\Sekiban.Dcb.TestSupport\Sekiban.Dcb.TestSupport.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <None Update="MainSql/*.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>
