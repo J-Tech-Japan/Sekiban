@@ -76,10 +76,9 @@ public class SerializableQuerySerializationTests
         var roundTripBox = await serialized.ToListQueryResultAsync(_domainTypes);
 
         Assert.True(roundTripBox.IsSuccess);
-        var typedBox = roundTripBox.GetValue().ToTypedResult<TestRecord>();
-        Assert.True(typedBox.IsSuccess);
-        Assert.Equal(items.Cast<TestRecord>(), typedBox.GetValue().Items);
-        Assert.True(typedBox.GetValue().IsCatchUpInProgress);
+        var typed = roundTripBox.GetValue().ToTypedResult<TestRecord>();
+        Assert.Equal(items.Cast<TestRecord>(), typed.Items);
+        Assert.True(typed.IsCatchUpInProgress);
     }
 
     [Fact]
@@ -106,9 +105,8 @@ public class SerializableQuerySerializationTests
         var roundTripBox = await serializedBox.GetValue().ToListQueryResultAsync(_domainTypes);
         Assert.True(roundTripBox.IsSuccess);
 
-        var typedBox = roundTripBox.GetValue().ToTypedResult<TestRecord>();
-        Assert.True(typedBox.IsSuccess);
-        Assert.True(typedBox.GetValue().IsCatchUpInProgress);
+        var typed = roundTripBox.GetValue().ToTypedResult<TestRecord>();
+        Assert.True(typed.IsCatchUpInProgress);
     }
 
     private static DcbDomainTypes CreateDomainTypes() =>

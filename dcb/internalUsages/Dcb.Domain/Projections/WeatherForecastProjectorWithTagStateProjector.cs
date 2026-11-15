@@ -99,7 +99,7 @@ public record WeatherForecastProjectorWithTagStateProjector :
 
                     ITagStatePayload payload;
                     var bytes = System.Text.Encoding.UTF8.GetBytes(payloadJson);
-                    var rb = domainTypes.TagStatePayloadTypes.DeserializePayload(type, bytes);
+                    var rb = ResultBox.WrapTry(() => domainTypes.TagStatePayloadTypes.DeserializePayload(type, bytes));
                     if (!rb.IsSuccess) continue;
                     payload = rb.GetValue();
 

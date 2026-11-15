@@ -224,7 +224,7 @@ public partial class ObservedPositionClockSkewTests(ITestOutputHelper output)
                     new TagStateId(tag, ProbeCounterProjector.ProjectorName).GetTagStateId())).GetValue();
                 var state = await actor.GetStateAsync();
                 seenCount = state.ResolvedPayloadName == nameof(ProbeCounterState)
-                    ? ((ProbeCounterState)Domain.TagStatePayloadTypes.DeserializePayload(state.ResolvedPayloadName, state.Payload).GetValue()).Count
+                    ? ((ProbeCounterState)Domain.TagStatePayloadTypes.DeserializePayload(state.ResolvedPayloadName, state.Payload)).Count
                     : 0;
                 seenLast = state.LastSortedUniqueId;
                 var commit = await ((ISerializedSekibanDcbExecutor)executor.Executor).CommitSerializableEventsAsync(
@@ -302,7 +302,7 @@ public partial class ObservedPositionClockSkewTests(ITestOutputHelper output)
             if (state.ResolvedPayloadName == nameof(ProbeCounterState))
             {
                 count = ((ProbeCounterState)Domain.TagStatePayloadTypes
-                    .DeserializePayload(state.ResolvedPayloadName, state.Payload).GetValue()).Count;
+                    .DeserializePayload(state.ResolvedPayloadName, state.Payload)).Count;
             }
             return (count, state.Version, state.LastSortedUniqueId);
         }

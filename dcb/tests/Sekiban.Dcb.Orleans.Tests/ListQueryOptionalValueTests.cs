@@ -28,25 +28,19 @@ public class ListQueryOptionalValueTests
         var projector = new TestOptionalDateMultiProjector(new List<OptionalDateResult>(OptionalDateFixtures.SeedResults));
         var query = new OptionalDateListQuery();
 
-        var generalResult = await queryTypes.ExecuteListQueryAsGeneralAsync(
+        var payload = await queryTypes.ExecuteListQueryAsGeneralAsync(
             query,
-            () => Task.FromResult(ResultBox.FromValue<IMultiProjectionPayload>(projector)),
+            () => Task.FromResult<IMultiProjectionPayload>(projector),
             services,
             safeVersion: null,
             safeWindowThreshold: null,
             safeWindowThresholdTime: null,
             unsafeVersion: null);
 
-        Assert.True(generalResult.IsSuccess);
-        var payload = generalResult.GetValue();
-
         Assert.Equal(OptionalDateFixtures.SeedResults.Count, payload.Items.Count());
         Assert.Contains(nameof(OptionalDateResult), payload.RecordType);
 
-        var typedResult = payload.ToTypedResult<OptionalDateResult>();
-        Assert.True(typedResult.IsSuccess);
-
-        var items = typedResult.GetValue().Items.ToList();
+        var items = payload.ToTypedResult<OptionalDateResult>().Items.ToList();
         Assert.Equal(OptionalDateFixtures.SeedResults.Count, items.Count);
         Assert.Contains(items, item => item.Date.HasValue && item.Date.GetValue() == OptionalDateFixtures.ExpectedDate);
         Assert.Contains(items, item => !item.Date.HasValue);

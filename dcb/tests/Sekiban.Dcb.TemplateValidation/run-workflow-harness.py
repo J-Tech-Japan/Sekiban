@@ -44,7 +44,7 @@ class Failure(RuntimeError):
 
 def resultboxes_allowed(source):
     # The ResultBoxes ratchet list as compiled into the validator; fixture packages that are in it
-    # declare ResultBoxes directly, as the real packs reach it (directly or through Core/Core.Model).
+    # declare ResultBoxes directly, as the real packs reach it (directly or through Core).
     text=(source/REL/'PackageArtifactValidator.cs').read_text()
     block=re.search(r'ResultBoxesAllowedPackageIds =\s*\[(.*?)\];', text, re.S)
     assert block, 'ResultBoxesAllowedPackageIds not found'

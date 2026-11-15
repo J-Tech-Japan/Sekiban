@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Dcb.Common;
 using Sekiban.Dcb.MultiProjections;
 using System;
 using System.Collections;
@@ -23,7 +24,7 @@ public class SimpleQueryTypes : ICoreQueryTypes
 
     public IEnumerable<Type> GetQueryResponseTypes() => _responseTypes.Distinct();
 
-    public async Task<ResultBox<object>> ExecuteQueryAsync(
+    private async Task<ResultBox<object>> ExecuteQueryBoxAsync(
         IQueryCommon query,
         Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
         IServiceProvider serviceProvider,
@@ -88,7 +89,7 @@ public class SimpleQueryTypes : ICoreQueryTypes
         }
     }
 
-    public async Task<ResultBox<object>> ExecuteListQueryAsync(
+    private async Task<ResultBox<object>> ExecuteListQueryBoxAsync(
         IListQueryCommon query,
         Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
         IServiceProvider serviceProvider,
@@ -188,7 +189,7 @@ public class SimpleQueryTypes : ICoreQueryTypes
         }
     }
 
-    public async Task<ResultBox<ListQueryResultGeneral>> ExecuteListQueryAsGeneralAsync(
+    private async Task<ResultBox<ListQueryResultGeneral>> ExecuteListQueryAsGeneralBoxAsync(
         IListQueryCommon query,
         Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
         IServiceProvider serviceProvider,
@@ -198,7 +199,7 @@ public class SimpleQueryTypes : ICoreQueryTypes
     int? unsafeVersion = null)
     {
         // First execute the query normally
-        var result = await ExecuteListQueryAsync(
+        var result = await ExecuteListQueryBoxAsync(
             query,
             projectorProvider,
             serviceProvider,
@@ -250,29 +251,82 @@ public class SimpleQueryTypes : ICoreQueryTypes
             new ListQueryResultGeneral(totalCount, totalPages, currentPage, pageSize, objectItems, recordType, query));
     }
 
-    public ResultBox<Type> GetMultiProjectorType(IQueryCommon query)
+    public Task<object> ExecuteQueryAsync(
+        IQueryCommon query,
+        Func<Task<IMultiProjectionPayload>> projectorProvider,
+        IServiceProvider serviceProvider,
+        int? safeVersion = null,
+        string? safeWindowThreshold = null,
+        DateTime? safeWindowThresholdTime = null,
+        int? unsafeVersion = null) =>
+        ExecuteQueryBoxAsync(
+                query,
+                () => ResultBox.WrapTry(projectorProvider),
+                serviceProvider,
+                safeVersion,
+                safeWindowThreshold,
+                safeWindowThresholdTime,
+                unsafeVersion)
+            .GetValueOrRethrowAsync();
+
+    public Task<object> ExecuteListQueryAsync(
+        IListQueryCommon query,
+        Func<Task<IMultiProjectionPayload>> projectorProvider,
+        IServiceProvider serviceProvider,
+        int? safeVersion = null,
+        string? safeWindowThreshold = null,
+        DateTime? safeWindowThresholdTime = null,
+        int? unsafeVersion = null) =>
+        ExecuteListQueryBoxAsync(
+                query,
+                () => ResultBox.WrapTry(projectorProvider),
+                serviceProvider,
+                safeVersion,
+                safeWindowThreshold,
+                safeWindowThresholdTime,
+                unsafeVersion)
+            .GetValueOrRethrowAsync();
+
+    public Task<ListQueryResultGeneral> ExecuteListQueryAsGeneralAsync(
+        IListQueryCommon query,
+        Func<Task<IMultiProjectionPayload>> projectorProvider,
+        IServiceProvider serviceProvider,
+        int? safeVersion = null,
+        string? safeWindowThreshold = null,
+        DateTime? safeWindowThresholdTime = null,
+        int? unsafeVersion = null) =>
+        ExecuteListQueryAsGeneralBoxAsync(
+                query,
+                () => ResultBox.WrapTry(projectorProvider),
+                serviceProvider,
+                safeVersion,
+                safeWindowThreshold,
+                safeWindowThresholdTime,
+                unsafeVersion)
+            .GetValueOrRethrowAsync();
+
+    public Type GetMultiProjectorType(IQueryCommon query)
     {
         var queryType = query.GetType();
 
         if (_queryToProjectorMap.TryGetValue(queryType, out var projectorType))
         {
-            return ResultBox.FromValue(projectorType);
+            return projectorType;
         }
 
-        return ResultBox.Error<Type>(new InvalidOperationException($"Query type {queryType.Name} is not registered"));
+        throw new InvalidOperationException($"Query type {queryType.Name} is not registered");
     }
 
-    public ResultBox<Type> GetMultiProjectorType(IListQueryCommon query)
+    public Type GetMultiProjectorType(IListQueryCommon query)
     {
         var queryType = query.GetType();
 
         if (_queryToProjectorMap.TryGetValue(queryType, out var projectorType))
         {
-            return ResultBox.FromValue(projectorType);
+            return projectorType;
         }
 
-        return ResultBox.Error<Type>(
-            new InvalidOperationException($"List query type {queryType.Name} is not registered"));
+        throw new InvalidOperationException($"List query type {queryType.Name} is not registered");
     }
 
     public Type? GetTypeByName(string typeName) => _typeNameMap.TryGetValue(typeName, out var type) ? type : null;

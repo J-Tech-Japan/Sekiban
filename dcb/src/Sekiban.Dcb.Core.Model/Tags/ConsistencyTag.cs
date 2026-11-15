@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Common;
 namespace Sekiban.Dcb.Tags;
 
@@ -7,7 +6,10 @@ namespace Sekiban.Dcb.Tags;
 /// </summary>
 public record ConsistencyTag(ITag InnerTag) : ITag
 {
-    public OptionalValue<SortableUniqueId> SortableUniqueId { get; init; } = OptionalValue<SortableUniqueId>.None;
+    /// <summary>
+    ///     The sortable unique id the caller observed for the tag, or <c>null</c> when none was supplied.
+    /// </summary>
+    public SortableUniqueId? SortableUniqueId { get; init; }
 
     public bool IsConsistencyTag() => true;
 
@@ -24,5 +26,5 @@ public record ConsistencyTag(ITag InnerTag) : ITag
     ///     Creates a consistency tag from any tag with a specific SortableUniqueId
     /// </summary>
     public static ConsistencyTag FromTagWithSortableUniqueId(ITag tag, SortableUniqueId sortableUniqueId) =>
-        new(tag) { SortableUniqueId = new OptionalValue<SortableUniqueId>(sortableUniqueId) };
+        new(tag) { SortableUniqueId = sortableUniqueId };
 }

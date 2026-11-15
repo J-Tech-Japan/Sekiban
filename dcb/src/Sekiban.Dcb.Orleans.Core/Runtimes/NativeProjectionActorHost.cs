@@ -53,7 +53,7 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
         var resolvedLogger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
         var jsonOptions = domainTypes.JsonSerializerOptions;
 
-        var projectorVersion = domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName);
+        var projectorVersion = ResultBox.WrapTry(() => domainTypes.MultiProjectorTypes.GetProjectorVersion(projectorName));
         var version = projectorVersion.IsSuccess ? projectorVersion.GetValue() : "unknown";
 
         var accumulator = primitive.CreateNativeAccumulator(projectorName, version, options, logger);
@@ -92,7 +92,7 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
         }
 
         var safeState = safeResult.GetValue();
-        var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(_projectorName);
+        var versionResult = ResultBox.WrapTry(() => _domainTypes.MultiProjectorTypes.GetProjectorVersion(_projectorName));
         var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
 
         int unsafeVersion = 0;
@@ -220,7 +220,7 @@ public class NativeProjectionActorHost : IProjectionActorHost, IRebuildSignaling
 
     public string GetProjectorVersion()
     {
-        var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(_projectorName);
+        var versionResult = ResultBox.WrapTry(() => _domainTypes.MultiProjectorTypes.GetProjectorVersion(_projectorName));
         return versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
     }
 

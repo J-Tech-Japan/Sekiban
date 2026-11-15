@@ -394,7 +394,7 @@ public class ConsistencyReservationRulesTest
         var context = new CoreGeneralCommandContext(new FailingActorAccessor(), _domainTypes);
         var tag = new BaseTag(Guid.NewGuid().ToString());
 
-        var result = await context.TagExistsAsync(tag);
+        var result = await ResultBox.WrapTry(() => context.TagExistsAsync(tag));
 
         Assert.True(result.IsSuccess);
         Assert.False(result.GetValue());

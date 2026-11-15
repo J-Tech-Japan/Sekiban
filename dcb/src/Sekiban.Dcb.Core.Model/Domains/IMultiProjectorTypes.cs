@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Events;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.MultiProjections;
@@ -7,11 +6,12 @@ using System.Text.Json;
 namespace Sekiban.Dcb.Domains;
 
 /// <summary>
-///     Core registry and dispatcher for multi projectors in DCB (ResultBox-based).
+///     Core registry and dispatcher for multi projectors in DCB.
+///     Members throw on failure; a projector name that is not registered is a configuration error and throws.
 /// </summary>
 public interface ICoreMultiProjectorTypes
 {
-    ResultBox<IMultiProjectionPayload> Project(
+    IMultiProjectionPayload Project(
         string multiProjectorName,
         IMultiProjectionPayload payload,
         Event ev,
@@ -19,20 +19,20 @@ public interface ICoreMultiProjectorTypes
         DcbDomainTypes domainTypes,
         SortableUniqueId safeWindowThreshold);
 
-    ResultBox<string> GetProjectorVersion(string multiProjectorName);
+    string GetProjectorVersion(string multiProjectorName);
 
     /// <summary>
     ///     Gets all registered projector names.
     /// </summary>
     IReadOnlyList<string> GetAllProjectorNames();
 
-    ResultBox<Func<IMultiProjectionPayload>> GetInitialPayloadGenerator(string multiProjectorName);
+    Func<IMultiProjectionPayload> GetInitialPayloadGenerator(string multiProjectorName);
 
-    ResultBox<Type> GetProjectorType(string multiProjectorName);
+    Type GetProjectorType(string multiProjectorName);
 
-    ResultBox<IMultiProjectionPayload> GenerateInitialPayload(string multiProjectorName);
+    IMultiProjectionPayload GenerateInitialPayload(string multiProjectorName);
 
-    ResultBox<IMultiProjectionPayload> Deserialize(
+    IMultiProjectionPayload Deserialize(
         byte[] data,
         string multiProjectorName,
         JsonSerializerOptions jsonOptions);
@@ -47,7 +47,7 @@ public interface ICoreMultiProjectorTypes
     /// <param name="safeWindowThreshold">Safe window threshold (SortableUniqueId string) used when projector needs safe-only construction</param>
     /// <param name="payload">The payload to serialize</param>
     /// <returns>SerializationResult containing serialized data and size information</returns>
-    ResultBox<SerializationResult> Serialize(
+    SerializationResult Serialize(
         string projectorName,
         DcbDomainTypes domainTypes,
         string safeWindowThreshold,
@@ -72,27 +72,20 @@ public interface ICoreMultiProjectorTypes
     ///     <see cref="SerializationSizeInfo" /> describing the original and compressed byte
     ///     counts written to <paramref name="destination" />.
     /// </returns>
-    ResultBox<SerializationSizeInfo> SerializeToStream(
+    SerializationSizeInfo SerializeToStream(
         string projectorName,
         DcbDomainTypes domainTypes,
         string safeWindowThreshold,
         IMultiProjectionPayload payload,
         Stream destination)
     {
-        var result = Serialize(projectorName, domainTypes, safeWindowThreshold, payload);
-        if (!result.IsSuccess)
-        {
-            return ResultBox.Error<SerializationSizeInfo>(result.GetException());
-        }
-
-        var value = result.GetValue();
+        var value = Serialize(projectorName, domainTypes, safeWindowThreshold, payload);
         if (value.Data is { Length: > 0 })
         {
             destination.Write(value.Data, 0, value.Data.Length);
         }
 
-        return ResultBox.FromValue(
-            new SerializationSizeInfo(value.OriginalSizeBytes, value.CompressedSizeBytes));
+        return new SerializationSizeInfo(value.OriginalSizeBytes, value.CompressedSizeBytes);
     }
 
     /// <summary>
@@ -105,7 +98,7 @@ public interface ICoreMultiProjectorTypes
     /// <param name="safeWindowThreshold">Safe window threshold (SortableUniqueId string) to allow projector building safe internals if needed</param>
     /// <param name="json">JSON string to deserialize</param>
     /// <returns>Deserialized payload</returns>
-    ResultBox<IMultiProjectionPayload> Deserialize(
+    IMultiProjectionPayload Deserialize(
         string projectorName,
         DcbDomainTypes domainTypes,
         string safeWindowThreshold,
@@ -116,36 +109,23 @@ public interface ICoreMultiProjectorTypes
     ///     Default implementation uses GetProjectorType + JsonSerializer and works for reflection-based registries.
     ///     AOT registries should override this to use source-generated JsonTypeInfo instead.
     /// </summary>
-    ResultBox<IMultiProjectionPayload> DeserializeJson(
+    IMultiProjectionPayload DeserializeJson(
         string projectorName,
         string json,
         DcbDomainTypes domainTypes)
     {
-        ResultBox<Type> projectorTypeResult = GetProjectorType(projectorName);
-        if (!projectorTypeResult.IsSuccess)
+        Type projectorType = GetProjectorType(projectorName);
+        object? deserialized = JsonSerializer.Deserialize(
+            json,
+            projectorType,
+            domainTypes.JsonSerializerOptions);
+        if (deserialized is IMultiProjectionPayload payload)
         {
-            return ResultBox.Error<IMultiProjectionPayload>(projectorTypeResult.GetException());
+            return payload;
         }
 
-        try
-        {
-            object? deserialized = JsonSerializer.Deserialize(
-                json,
-                projectorTypeResult.GetValue(),
-                domainTypes.JsonSerializerOptions);
-            if (deserialized is IMultiProjectionPayload payload)
-            {
-                return ResultBox.FromValue(payload);
-            }
-
-            return ResultBox.Error<IMultiProjectionPayload>(
-                new InvalidOperationException(
-                    $"JSON for projector '{projectorName}' could not be deserialized to '{projectorTypeResult.GetValue().FullName}'."));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<IMultiProjectionPayload>(ex);
-        }
+        throw new InvalidOperationException(
+            $"JSON for projector '{projectorName}' could not be deserialized to '{projectorType.FullName}'.");
     }
 
     /// <summary>
@@ -154,7 +134,7 @@ public interface ICoreMultiProjectorTypes
     ///     The projector name is obtained from T.MultiProjectorName.
     /// </summary>
     /// <typeparam name="T">The projector type with custom serialization</typeparam>
-    /// <returns>Success or error result</returns>
-    ResultBox<bool> RegisterProjectorWithCustomSerialization<T>()
+    /// <returns><c>true</c> when the projector was registered</returns>
+    bool RegisterProjectorWithCustomSerialization<T>()
         where T : ICoreMultiProjectorWithCustomSerialization<T>, new();
 }

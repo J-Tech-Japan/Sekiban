@@ -1,7 +1,6 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 
 namespace Sekiban.Dcb.Domains;
@@ -19,95 +18,74 @@ public static class MultiProjectorStreamSerializationHelper
     /// <summary>
     ///     Validate common arguments for the stream-first serialize path.
     /// </summary>
-    public static ResultBox<SerializationSizeInfo>? ValidateCommonArguments(
+    /// <exception cref="ArgumentException"><paramref name="safeWindowThreshold" /> is empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="destination" /> is null.</exception>
+    public static void ValidateCommonArguments(
         string safeWindowThreshold,
         Stream destination)
     {
         if (string.IsNullOrWhiteSpace(safeWindowThreshold))
         {
-            return ResultBox.Error<SerializationSizeInfo>(
-                new ArgumentException("safeWindowThreshold must be supplied"));
+            throw new ArgumentException("safeWindowThreshold must be supplied");
         }
         if (destination is null)
         {
-            return ResultBox.Error<SerializationSizeInfo>(new ArgumentNullException(nameof(destination)));
+            throw new ArgumentNullException(nameof(destination));
         }
-        return null;
     }
 
     /// <summary>
     ///     Copy a pre-materialized <see cref="SerializationResult" /> (produced by a custom
     ///     serializer registration) to the destination stream and return the size info.
     /// </summary>
-    public static ResultBox<SerializationSizeInfo> CopyCustomResultToStream(
+    public static SerializationSizeInfo CopyCustomResultToStream(
         Stream destination,
         SerializationResult customResult)
     {
-        try
+        if (customResult.Data is { Length: > 0 } data)
         {
-            if (customResult.Data is { Length: > 0 } data)
-            {
-                destination.Write(data, 0, data.Length);
-            }
-            return ResultBox.FromValue(new SerializationSizeInfo(
-                customResult.OriginalSizeBytes,
-                customResult.CompressedSizeBytes));
+            destination.Write(data, 0, data.Length);
         }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<SerializationSizeInfo>(ex);
-        }
+        return new SerializationSizeInfo(
+            customResult.OriginalSizeBytes,
+            customResult.CompressedSizeBytes);
     }
 
     /// <summary>
     ///     Streams the payload as gzipped JSON directly into the destination stream and
     ///     returns the original (pre-compression) and compressed byte counts.
     /// </summary>
-    public static ResultBox<SerializationSizeInfo> WriteGzipJsonToStream(
+    public static SerializationSizeInfo WriteGzipJsonToStream(
         Stream destination,
         IMultiProjectionPayload payload,
         JsonSerializerOptions jsonOptions)
     {
-        try
-        {
-            var startPosition = destination.CanSeek ? destination.Position : 0L;
-            var originalSize = GzipCompression.CompressJsonToStream(
-                destination,
-                payload,
-                payload.GetType(),
-                jsonOptions);
-            var compressedSize = destination.CanSeek
-                ? Math.Max(0, destination.Position - startPosition)
-                : originalSize;
-            return ResultBox.FromValue(new SerializationSizeInfo(originalSize, compressedSize));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<SerializationSizeInfo>(ex);
-        }
+        var startPosition = destination.CanSeek ? destination.Position : 0L;
+        var originalSize = GzipCompression.CompressJsonToStream(
+            destination,
+            payload,
+            payload.GetType(),
+            jsonOptions);
+        var compressedSize = destination.CanSeek
+            ? Math.Max(0, destination.Position - startPosition)
+            : originalSize;
+        return new SerializationSizeInfo(originalSize, compressedSize);
     }
 
     /// <summary>
     ///     AOT-friendly overload that streams gzipped JSON via a strongly-typed
     ///     <see cref="JsonTypeInfo{T}" />.
     /// </summary>
-    public static ResultBox<SerializationSizeInfo> WriteGzipJsonToStream<T>(
+    public static SerializationSizeInfo WriteGzipJsonToStream<T>(
         Stream destination,
         T payload,
         JsonTypeInfo<T> typeInfo)
     {
-        try
-        {
-            var startPosition = destination.CanSeek ? destination.Position : 0L;
-            var originalSize = GzipCompression.CompressJsonToStream(destination, payload, typeInfo);
-            var compressedSize = destination.CanSeek
-                ? Math.Max(0, destination.Position - startPosition)
-                : originalSize;
-            return ResultBox.FromValue(new SerializationSizeInfo(originalSize, compressedSize));
-        }
-        catch (Exception ex)
-        {
-            return ResultBox.Error<SerializationSizeInfo>(ex);
-        }
+        var startPosition = destination.CanSeek ? destination.Position : 0L;
+        var originalSize = GzipCompression.CompressJsonToStream(destination, payload, typeInfo);
+        var compressedSize = destination.CanSeek
+            ? Math.Max(0, destination.Position - startPosition)
+            : originalSize;
+        return new SerializationSizeInfo(originalSize, compressedSize);
     }
 }

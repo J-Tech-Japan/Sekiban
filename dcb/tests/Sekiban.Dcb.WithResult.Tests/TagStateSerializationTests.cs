@@ -32,7 +32,7 @@ public class TagStateSerializationTests
         var payload = new TestPayload { Value = "test", Number = 42 };
 
         // Act
-        var result = _payloadTypes.SerializePayload(payload);
+        var result = ResultBox.WrapTry(() => _payloadTypes.SerializePayload(payload));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -45,12 +45,12 @@ public class TagStateSerializationTests
     {
         // Arrange
         var original = new TestPayload { Value = "test", Number = 42 };
-        var serializeResult = _payloadTypes.SerializePayload(original);
+        var serializeResult = ResultBox.WrapTry(() => _payloadTypes.SerializePayload(original));
         Assert.True(serializeResult.IsSuccess);
         var bytes = serializeResult.GetValue();
 
         // Act
-        var deserializeResult = _payloadTypes.DeserializePayload(nameof(TestPayload), bytes);
+        var deserializeResult = ResultBox.WrapTry(() => _payloadTypes.DeserializePayload(nameof(TestPayload), bytes));
 
         // Assert
         Assert.True(deserializeResult.IsSuccess);
@@ -67,7 +67,7 @@ public class TagStateSerializationTests
         var payload = new EmptyTagStatePayload();
 
         // Act
-        var result = _payloadTypes.SerializePayload(payload);
+        var result = ResultBox.WrapTry(() => _payloadTypes.SerializePayload(payload));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -79,7 +79,7 @@ public class TagStateSerializationTests
     public void DeserializePayload_WithEmptyPayload_ShouldSucceed()
     {
         // Arrange & Act
-        var result = _payloadTypes.DeserializePayload(nameof(EmptyTagStatePayload), Array.Empty<byte>());
+        var result = ResultBox.WrapTry(() => _payloadTypes.DeserializePayload(nameof(EmptyTagStatePayload), Array.Empty<byte>()));
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -104,11 +104,11 @@ public class TagStateSerializationTests
         };
 
         // Act
-        var serializeResult = _payloadTypes.SerializePayload(payload);
+        var serializeResult = ResultBox.WrapTry(() => _payloadTypes.SerializePayload(payload));
         Assert.True(serializeResult.IsSuccess);
         var bytes = serializeResult.GetValue();
 
-        var deserializeResult = _payloadTypes.DeserializePayload(nameof(ComplexTestPayload), bytes);
+        var deserializeResult = ResultBox.WrapTry(() => _payloadTypes.DeserializePayload(nameof(ComplexTestPayload), bytes));
 
         // Assert
         Assert.True(deserializeResult.IsSuccess);
@@ -126,7 +126,7 @@ public class TagStateSerializationTests
         var bytes = System.Text.Encoding.UTF8.GetBytes("{}");
 
         // Act
-        var result = _payloadTypes.DeserializePayload("UnregisteredType", bytes);
+        var result = ResultBox.WrapTry(() => _payloadTypes.DeserializePayload("UnregisteredType", bytes));
 
         // Assert
         Assert.False(result.IsSuccess);
@@ -141,7 +141,7 @@ public class TagStateSerializationTests
         var bytes = System.Text.Encoding.UTF8.GetBytes("invalid json");
 
         // Act
-        var result = _payloadTypes.DeserializePayload(nameof(TestPayload), bytes);
+        var result = ResultBox.WrapTry(() => _payloadTypes.DeserializePayload(nameof(TestPayload), bytes));
 
         // Assert
         Assert.False(result.IsSuccess);

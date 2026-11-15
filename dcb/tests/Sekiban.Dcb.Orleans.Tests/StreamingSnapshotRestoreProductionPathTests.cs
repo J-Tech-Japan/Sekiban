@@ -183,36 +183,36 @@ public sealed partial class StreamingSnapshotRestoreProductionPathTests
         public int StreamDeserializeCalls { get; private set; }
         public int BufferedDeserializeCalls { get; private set; }
 
-        public ResultBox<IMultiProjectionPayload> Project(string multiProjectorName, IMultiProjectionPayload payload,
+        public IMultiProjectionPayload Project(string multiProjectorName, IMultiProjectionPayload payload,
             Event ev, List<ITag> tags, DcbDomainTypes domainTypes, SortableUniqueId safeWindowThreshold) =>
             inner.Project(multiProjectorName, payload, ev, tags, domainTypes, safeWindowThreshold);
-        public ResultBox<string> GetProjectorVersion(string multiProjectorName) => inner.GetProjectorVersion(multiProjectorName);
+        public string GetProjectorVersion(string multiProjectorName) => inner.GetProjectorVersion(multiProjectorName);
         public IReadOnlyList<string> GetAllProjectorNames() => inner.GetAllProjectorNames();
-        public ResultBox<Func<IMultiProjectionPayload>> GetInitialPayloadGenerator(string multiProjectorName) =>
+        public Func<IMultiProjectionPayload> GetInitialPayloadGenerator(string multiProjectorName) =>
             inner.GetInitialPayloadGenerator(multiProjectorName);
-        public ResultBox<Type> GetProjectorType(string multiProjectorName) => inner.GetProjectorType(multiProjectorName);
-        public ResultBox<IMultiProjectionPayload> GenerateInitialPayload(string multiProjectorName) =>
+        public Type GetProjectorType(string multiProjectorName) => inner.GetProjectorType(multiProjectorName);
+        public IMultiProjectionPayload GenerateInitialPayload(string multiProjectorName) =>
             inner.GenerateInitialPayload(multiProjectorName);
-        public ResultBox<IMultiProjectionPayload> Deserialize(byte[] data, string multiProjectorName, JsonSerializerOptions jsonOptions) =>
+        public IMultiProjectionPayload Deserialize(byte[] data, string multiProjectorName, JsonSerializerOptions jsonOptions) =>
             inner.Deserialize(data, multiProjectorName, jsonOptions);
-        public ResultBox<SerializationResult> Serialize(string projectorName, DcbDomainTypes domainTypes,
+        public SerializationResult Serialize(string projectorName, DcbDomainTypes domainTypes,
             string safeWindowThreshold, IMultiProjectionPayload payload) =>
             inner.Serialize(projectorName, domainTypes, safeWindowThreshold, payload);
-        public ResultBox<SerializationSizeInfo> SerializeToStream(string projectorName, DcbDomainTypes domainTypes,
+        public SerializationSizeInfo SerializeToStream(string projectorName, DcbDomainTypes domainTypes,
             string safeWindowThreshold, IMultiProjectionPayload payload, Stream destination) =>
             inner.SerializeToStream(projectorName, domainTypes, safeWindowThreshold, payload, destination);
-        public ResultBox<IMultiProjectionPayload> Deserialize(string projectorName, DcbDomainTypes domainTypes,
+        public IMultiProjectionPayload Deserialize(string projectorName, DcbDomainTypes domainTypes,
             string safeWindowThreshold, byte[] data)
         {
             BufferedDeserializeCalls++;
             return inner.Deserialize(projectorName, domainTypes, safeWindowThreshold, data);
         }
-        public ResultBox<IMultiProjectionPayload> DeserializeJson(string projectorName, string json, DcbDomainTypes domainTypes) =>
+        public IMultiProjectionPayload DeserializeJson(string projectorName, string json, DcbDomainTypes domainTypes) =>
             inner.DeserializeJson(projectorName, json, domainTypes);
-        public ResultBox<bool> RegisterProjectorWithCustomSerialization<T>()
+        public bool RegisterProjectorWithCustomSerialization<T>()
             where T : ICoreMultiProjectorWithCustomSerialization<T>, new() => inner.RegisterProjectorWithCustomSerialization<T>();
         public bool SupportsStreamDeserialization(string projectorName) => _streaming.SupportsStreamDeserialization(projectorName);
-        public async Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(
+        public async Task<IMultiProjectionPayload> DeserializeFromStreamAsync(
             string projectorName,
             DcbDomainTypes domainTypes,
             string safeWindowThreshold,

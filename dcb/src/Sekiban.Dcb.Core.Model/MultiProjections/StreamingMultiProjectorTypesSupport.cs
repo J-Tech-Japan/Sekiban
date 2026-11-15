@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization.Metadata;
-using ResultBoxes;
 using Sekiban.Dcb.Domains;
 
 namespace Sekiban.Dcb.MultiProjections;
@@ -31,7 +30,7 @@ internal static class StreamingMultiProjectorTypesSupport
     internal static void RegisterCustomOrRemove<TProjector>(object registry, string projectorName)
         where TProjector : new() => GetDeserializers(registry).RegisterCustomOrRemove<TProjector>(projectorName);
 
-    internal static Task<ResultBox<IMultiProjectionPayload>> DeserializeAsync(
+    internal static Task<IMultiProjectionPayload> DeserializeAsync(
         object registry,
         string projectorName,
         DcbDomainTypes domainTypes,
@@ -45,7 +44,7 @@ internal static class StreamingMultiProjectorTypesSupport
         cancellationToken,
         static name => new NotSupportedException($"Projector '{name}' does not support streaming deserialization."));
 
-    internal static Task<ResultBox<IMultiProjectionPayload>> DeserializeWithProjectorNotFoundAsync(
+    internal static Task<IMultiProjectionPayload> DeserializeWithProjectorNotFoundAsync(
         object registry,
         string projectorName,
         DcbDomainTypes domainTypes,
@@ -112,7 +111,7 @@ internal static class StreamingMultiProjectorTypesSupport
             _deserializers.TryRemove(projectorName, out _);
         }
 
-        internal async Task<ResultBox<IMultiProjectionPayload>> DeserializeAsync(
+        internal async Task<IMultiProjectionPayload> DeserializeAsync(
             string projectorName,
             DcbDomainTypes domainTypes,
             string safeWindowThreshold,
@@ -122,29 +121,20 @@ internal static class StreamingMultiProjectorTypesSupport
         {
             if (string.IsNullOrWhiteSpace(safeWindowThreshold))
             {
-                return ResultBox.Error<IMultiProjectionPayload>(
-                    new ArgumentException("safeWindowThreshold must be supplied"));
+                throw new ArgumentException("safeWindowThreshold must be supplied");
             }
 
             if (source is null)
             {
-                return ResultBox.Error<IMultiProjectionPayload>(new ArgumentNullException(nameof(source)));
+                throw new ArgumentNullException(nameof(source));
             }
 
             if (!_deserializers.TryGetValue(projectorName, out var deserialize))
             {
-                return ResultBox.Error<IMultiProjectionPayload>(unsupportedProjectorException(projectorName));
+                throw unsupportedProjectorException(projectorName);
             }
 
-            try
-            {
-                return ResultBox.FromValue(
-                    await deserialize(domainTypes, safeWindowThreshold, source, cancellationToken).ConfigureAwait(false));
-            }
-            catch (Exception ex)
-            {
-                return ResultBox.Error<IMultiProjectionPayload>(ex);
-            }
+            return await deserialize(domainTypes, safeWindowThreshold, source, cancellationToken).ConfigureAwait(false);
         }
     }
 }

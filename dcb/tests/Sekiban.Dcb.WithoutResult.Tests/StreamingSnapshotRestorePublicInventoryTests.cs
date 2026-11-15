@@ -1,5 +1,4 @@
 using System.Reflection;
-using ResultBoxes;
 using Sekiban.Dcb.Domains;
 using Sekiban.Dcb.MultiProjections;
 
@@ -33,7 +32,7 @@ public sealed class StreamingSnapshotRestorePublicInventoryTests
         var deserialize = Assert.Single(
             implementation.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly),
             method => method.Name == nameof(IStreamingMultiProjectorTypes.DeserializeFromStreamAsync));
-        Assert.Equal(typeof(Task<ResultBox<IMultiProjectionPayload>>), deserialize.ReturnType);
+        Assert.Equal(typeof(Task<IMultiProjectionPayload>), deserialize.ReturnType);
         Assert.Equal(
             [typeof(string), typeof(DcbDomainTypes), typeof(string), typeof(Stream), typeof(CancellationToken)],
             deserialize.GetParameters().Select(parameter => parameter.ParameterType));

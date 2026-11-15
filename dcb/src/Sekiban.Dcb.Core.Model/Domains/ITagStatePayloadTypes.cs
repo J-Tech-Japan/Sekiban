@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Domains;
 
@@ -12,8 +11,9 @@ public interface ITagStatePayloadTypes
     ///     Gets the registered payload name for the supplied tag state payload
     /// </summary>
     /// <param name="payload">The payload instance</param>
-    /// <returns>ResultBox containing the registered payload name or error</returns>
-    ResultBox<string> GetPayloadName(ITagStatePayload payload);
+    /// <returns>The registered payload name</returns>
+    /// <exception cref="Exception">Thrown when the payload type is not registered.</exception>
+    string GetPayloadName(ITagStatePayload payload);
 
     /// <summary>
     ///     Gets the Type for a tag state payload by name
@@ -27,13 +27,15 @@ public interface ITagStatePayloadTypes
     /// </summary>
     /// <param name="payloadName">The name of the payload type</param>
     /// <param name="jsonBytes">The JSON bytes to deserialize</param>
-    /// <returns>ResultBox containing the deserialized payload or error</returns>
-    ResultBox<ITagStatePayload> DeserializePayload(string payloadName, byte[] jsonBytes);
+    /// <returns>The deserialized payload</returns>
+    /// <exception cref="Exception">Thrown when the payload type is unknown or the bytes cannot be deserialized.</exception>
+    ITagStatePayload DeserializePayload(string payloadName, byte[] jsonBytes);
 
     /// <summary>
     ///     Serializes a tag state payload to JSON bytes
     /// </summary>
     /// <param name="payload">The payload to serialize</param>
-    /// <returns>ResultBox containing the serialized JSON bytes or error</returns>
-    ResultBox<byte[]> SerializePayload(ITagStatePayload payload);
+    /// <returns>The serialized JSON bytes</returns>
+    /// <exception cref="Exception">Thrown when the payload type is unknown or serialization fails.</exception>
+    byte[] SerializePayload(ITagStatePayload payload);
 }

@@ -74,9 +74,7 @@ public class DuplicateRegistrationTests
         projectorTypes.RegisterProjector<Namespace1.TestProjector>();
 
         // Assert - Should not throw
-        var projectorResult = projectorTypes.GetProjectorFunction("TestProjector");
-        Assert.True(projectorResult.IsSuccess);
-        Assert.NotNull(projectorResult.GetValue());
+        Assert.NotNull(projectorTypes.GetProjectorFunction("TestProjector"));
     }
 
     [Fact]
@@ -129,7 +127,7 @@ public class DuplicateRegistrationTests
 
         // Assert - Should use type name
         Assert.NotNull(eventTypes.GetEventType("TestEvent"));
-        Assert.True(projectorTypes.GetProjectorFunction("TestProjector").IsSuccess);
+        Assert.NotNull(projectorTypes.GetProjectorFunction("TestProjector"));
         Assert.NotNull(payloadTypes.GetPayloadType("TestPayload"));
 
         // Act & Assert - Should throw when trying to register different type with same type name

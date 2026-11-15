@@ -1,9 +1,8 @@
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 namespace Sekiban.Dcb.Queries;
 
 /// <summary>
-///     Core interface for multi-projection queries that return a list of results (ResultBox-based)
+///     Core interface for multi-projection queries that return a list of results. Failures are thrown as exceptions.
 /// </summary>
 /// <typeparam name="TMultiProjector">The multi-projector type</typeparam>
 /// <typeparam name="TQuery">The query type</typeparam>
@@ -22,7 +21,7 @@ public interface
     /// <param name="query">The query instance</param>
     /// <param name="context">The query context</param>
     /// <returns>The filtered items</returns>
-    static abstract ResultBox<IEnumerable<TOutput>> HandleFilter(
+    static abstract IEnumerable<TOutput> HandleFilter(
         TMultiProjector projector,
         TQuery query,
         IQueryContext context);
@@ -34,7 +33,7 @@ public interface
     /// <param name="query">The query instance</param>
     /// <param name="context">The query context</param>
     /// <returns>The sorted items</returns>
-    static abstract ResultBox<IEnumerable<TOutput>> HandleSort(
+    static abstract IEnumerable<TOutput> HandleSort(
         IEnumerable<TOutput> filteredList,
         TQuery query,
         IQueryContext context);

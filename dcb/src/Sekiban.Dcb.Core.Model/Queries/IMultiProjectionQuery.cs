@@ -1,9 +1,8 @@
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 namespace Sekiban.Dcb.Queries;
 
 /// <summary>
-///     Core interface for multi-projection queries that return a single result (ResultBox-based)
+///     Core interface for multi-projection queries that return a single result. Failures are thrown as exceptions.
 /// </summary>
 /// <typeparam name="TMultiProjector">The multi-projector type</typeparam>
 /// <typeparam name="TQuery">The query type</typeparam>
@@ -20,5 +19,5 @@ public interface ICoreMultiProjectionQuery<TMultiProjector, TQuery, TOutput> : I
     /// <param name="query">The query instance</param>
     /// <param name="context">The query context</param>
     /// <returns>The query result</returns>
-    static abstract ResultBox<TOutput> HandleQuery(TMultiProjector projector, TQuery query, IQueryContext context);
+    static abstract TOutput HandleQuery(TMultiProjector projector, TQuery query, IQueryContext context);
 }

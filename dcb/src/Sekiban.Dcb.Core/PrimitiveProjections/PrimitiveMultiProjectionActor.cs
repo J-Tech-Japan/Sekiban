@@ -106,7 +106,7 @@ public sealed class PrimitiveMultiProjectionActor
     {
         var instance = EnsureInstance();
         var stateJson = instance.SerializeState();
-        var versionResult = _domainTypes.MultiProjectorTypes.GetProjectorVersion(_projectorName);
+        var versionResult = ResultBox.WrapTry(() => _domainTypes.MultiProjectorTypes.GetProjectorVersion(_projectorName));
         var projectorVersion = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
 
         return Task.FromResult(

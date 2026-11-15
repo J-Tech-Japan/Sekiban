@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.Tags;
 namespace Sekiban.Dcb.Events;
 
@@ -39,41 +38,6 @@ public record EventOrNone(EventPayloadWithTags? EventPayloadWithTags, bool HasEv
         HasEvent && EventPayloadWithTags is not null
             ? EventPayloadWithTags
             : throw new InvalidOperationException("No value");
-
-    /// <summary>
-    ///     Represents no event (alias for Empty) - Returns ResultBox for WithResult compatibility
-    /// </summary>
-    public static ResultBox<EventOrNone> None => ResultBox.FromValue(Empty);
-
-    /// <summary>
-    ///     Creates an EventOrNone from an event payload and tags (alias for From) - Returns ResultBox for WithResult compatibility
-    /// </summary>
-    public static ResultBox<EventOrNone> EventWithTags(IEventPayload eventPayload, params ITag[] tags) =>
-        ResultBox.FromValue(From(eventPayload, tags));
-
-    /// <summary>
-    ///     Creates an EventOrNone from EventPayloadWithTags - Returns ResultBox for WithResult compatibility
-    /// </summary>
-    public static ResultBox<EventOrNone> Event(EventPayloadWithTags eventPayloadWithTags) =>
-        ResultBox.FromValue(FromValue(eventPayloadWithTags));
-
-    /// <summary>
-    ///     Creates an EventOrNone from an event payload and a single tag - Returns ResultBox for WithResult compatibility
-    /// </summary>
-    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, ITag tag) =>
-        ResultBox.FromValue(From(eventPayload, tag));
-
-    /// <summary>
-    ///     Creates an EventOrNone from an event payload and two tags - Returns ResultBox for WithResult compatibility
-    /// </summary>
-    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, ITag tag1, ITag tag2) =>
-        ResultBox.FromValue(From(eventPayload, tag1, tag2));
-
-    /// <summary>
-    ///     Creates an EventOrNone from an event payload and three tags - Returns ResultBox for WithResult compatibility
-    /// </summary>
-    public static ResultBox<EventOrNone> Event(IEventPayload eventPayload, ITag tag1, ITag tag2, ITag tag3) =>
-        ResultBox.FromValue(From(eventPayload, tag1, tag2, tag3));
 
     /// <summary>
     ///     Implicit conversion from EventPayloadWithTags to EventOrNone

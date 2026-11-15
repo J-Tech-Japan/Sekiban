@@ -261,26 +261,16 @@ public static class DualStateProjectionWrapperFactory
         DcbDomainTypes domainTypes,
         string safeWindowThreshold)
     {
-        var serializeResult = multiProjectorTypes.Serialize(
+        var serialized = multiProjectorTypes.Serialize(
             projectorName,
             domainTypes,
             safeWindowThreshold,
             payload);
-        if (!serializeResult.IsSuccess)
-        {
-            throw serializeResult.GetException();
-        }
 
-        var deserializeResult = multiProjectorTypes.Deserialize(
+        return multiProjectorTypes.Deserialize(
             projectorName,
             domainTypes,
             safeWindowThreshold,
-            serializeResult.GetValue().Data);
-        if (!deserializeResult.IsSuccess)
-        {
-            throw deserializeResult.GetException();
-        }
-
-        return deserializeResult.GetValue();
+            serialized.Data);
     }
 }

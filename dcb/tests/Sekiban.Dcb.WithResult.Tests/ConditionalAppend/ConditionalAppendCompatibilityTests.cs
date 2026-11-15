@@ -88,8 +88,8 @@ public class ConditionalAppendCompatibilityTests
 
         var expected = new[]
         {
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[Sekiban.Dcb.Events.EventOrNone]] AppendEvent(Sekiban.Dcb.Events.EventPayloadWithTags eventPayloadWithTags)",
-            "System.Threading.Tasks.Task`1[ResultBoxes.ResultBox`1[Sekiban.Dcb.Events.EventOrNone]] AppendEvent(Sekiban.Dcb.Events.IEventPayload ev, Sekiban.Dcb.Tags.ITag[] tags)"
+            "System.Threading.Tasks.Task`1[Sekiban.Dcb.Events.EventOrNone] AppendEvent(Sekiban.Dcb.Events.EventPayloadWithTags eventPayloadWithTags)",
+            "System.Threading.Tasks.Task`1[Sekiban.Dcb.Events.EventOrNone] AppendEvent(Sekiban.Dcb.Events.IEventPayload ev, Sekiban.Dcb.Tags.ITag[] tags)"
         }.OrderBy(s => s, StringComparer.Ordinal).ToArray();
 
         Assert.Equal(expected, appendEvent);

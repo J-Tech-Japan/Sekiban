@@ -357,7 +357,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         var registryDeserialize = Assert.Single(
             registryCapability.GetMethods(),
             method => method.Name == nameof(IStreamingMultiProjectorTypes.DeserializeFromStreamAsync));
-        Assert.Equal(typeof(Task<ResultBox<IMultiProjectionPayload>>), registryDeserialize.ReturnType);
+        Assert.Equal(typeof(Task<IMultiProjectionPayload>), registryDeserialize.ReturnType);
         Assert.Equal(
             [typeof(string), typeof(DcbDomainTypes), typeof(string), typeof(Stream), typeof(CancellationToken)],
             registryDeserialize.GetParameters().Select(parameter => parameter.ParameterType));
@@ -614,7 +614,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         AssertMethod(
             methods,
             nameof(IStreamingMultiProjectorTypes.DeserializeFromStreamAsync),
-            typeof(Task<ResultBox<IMultiProjectionPayload>>),
+            typeof(Task<IMultiProjectionPayload>),
             typeof(string), typeof(DcbDomainTypes), typeof(string), typeof(Stream), typeof(CancellationToken));
     }
 
@@ -909,12 +909,12 @@ public sealed partial class StreamingSnapshotRestoreTests
         public static string MultiProjectorVersion => MatrixProjectorVersion;
         public static MatrixCustomPayloadProjector GenerateInitialPayload() => new(string.Empty);
 
-        public static ResultBox<MatrixCustomPayloadProjector> Project(
+        public static MatrixCustomPayloadProjector Project(
             MatrixCustomPayloadProjector payload,
             Event ev,
             List<ITag> tags,
             DcbDomainTypes domainTypes,
-            SortableUniqueId safeWindowThreshold) => ResultBox.FromValue(payload);
+            SortableUniqueId safeWindowThreshold) => payload;
 
         public static SerializationResult Serialize(
             DcbDomainTypes domainTypes,
@@ -985,7 +985,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         public List<string> BufferedSafeThresholds { get; } = [];
         public int StreamDeserializeCalls { get; private set; }
 
-        public override ResultBox<IMultiProjectionPayload> Deserialize(
+        public override IMultiProjectionPayload Deserialize(
             string name,
             DcbDomainTypes domain,
             string threshold,
@@ -998,7 +998,7 @@ public sealed partial class StreamingSnapshotRestoreTests
         public bool SupportsStreamDeserialization(string projectorName) =>
             _streaming.SupportsStreamDeserialization(projectorName);
 
-        public async Task<ResultBox<IMultiProjectionPayload>> DeserializeFromStreamAsync(
+        public async Task<IMultiProjectionPayload> DeserializeFromStreamAsync(
             string projectorName,
             DcbDomainTypes domainTypes,
             string safeWindowThreshold,

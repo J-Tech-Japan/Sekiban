@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Dcb.MultiProjections;
 using Sekiban.Dcb.Queries;
 
@@ -20,54 +19,54 @@ public sealed class AotQueryTypes : ICoreQueryTypes
     public IEnumerable<Type> GetQueryResponseTypes() => _queryResponseTypes.Values;
 
     /// <inheritdoc />
-    public Task<ResultBox<object>> ExecuteQueryAsync(
+    public Task<object> ExecuteQueryAsync(
         IQueryCommon query,
-        Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
+        Func<Task<IMultiProjectionPayload>> projectorProvider,
         IServiceProvider serviceProvider,
         int? safeVersion = null,
         string? safeWindowThreshold = null,
         DateTime? safeWindowThresholdTime = null,
         int? unsafeVersion = null)
     {
-        return Task.FromResult(
-            ResultBox.Error<object>(new NotSupportedException("Query execution must be registered explicitly in AOT mode")));
+        return Task.FromException<object>(
+            new NotSupportedException("Query execution must be registered explicitly in AOT mode"));
     }
 
     /// <inheritdoc />
-    public Task<ResultBox<object>> ExecuteListQueryAsync(
+    public Task<object> ExecuteListQueryAsync(
         IListQueryCommon query,
-        Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
+        Func<Task<IMultiProjectionPayload>> projectorProvider,
         IServiceProvider serviceProvider,
         int? safeVersion = null,
         string? safeWindowThreshold = null,
         DateTime? safeWindowThresholdTime = null,
         int? unsafeVersion = null)
     {
-        return Task.FromResult(
-            ResultBox.Error<object>(new NotSupportedException("List query execution must be registered explicitly in AOT mode")));
+        return Task.FromException<object>(
+            new NotSupportedException("List query execution must be registered explicitly in AOT mode"));
     }
 
     /// <inheritdoc />
-    public Task<ResultBox<ListQueryResultGeneral>> ExecuteListQueryAsGeneralAsync(
+    public Task<ListQueryResultGeneral> ExecuteListQueryAsGeneralAsync(
         IListQueryCommon query,
-        Func<Task<ResultBox<IMultiProjectionPayload>>> projectorProvider,
+        Func<Task<IMultiProjectionPayload>> projectorProvider,
         IServiceProvider serviceProvider,
         int? safeVersion = null,
         string? safeWindowThreshold = null,
         DateTime? safeWindowThresholdTime = null,
         int? unsafeVersion = null)
     {
-        return Task.FromResult(
-            ResultBox.Error<ListQueryResultGeneral>(new NotSupportedException("List query execution must be registered explicitly in AOT mode")));
+        return Task.FromException<ListQueryResultGeneral>(
+            new NotSupportedException("List query execution must be registered explicitly in AOT mode"));
     }
 
     /// <inheritdoc />
-    public ResultBox<Type> GetMultiProjectorType(IQueryCommon query) =>
-        ResultBox.Error<Type>(new NotSupportedException("GetMultiProjectorType is not supported in AOT mode"));
+    public Type GetMultiProjectorType(IQueryCommon query) =>
+        throw new NotSupportedException("GetMultiProjectorType is not supported in AOT mode");
 
     /// <inheritdoc />
-    public ResultBox<Type> GetMultiProjectorType(IListQueryCommon query) =>
-        ResultBox.Error<Type>(new NotSupportedException("GetMultiProjectorType is not supported in AOT mode"));
+    public Type GetMultiProjectorType(IListQueryCommon query) =>
+        throw new NotSupportedException("GetMultiProjectorType is not supported in AOT mode");
 
     /// <inheritdoc />
     public Type? GetTypeByName(string typeName) => null;

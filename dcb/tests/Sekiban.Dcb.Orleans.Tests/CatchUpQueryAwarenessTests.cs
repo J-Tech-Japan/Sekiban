@@ -315,7 +315,7 @@ public class CatchUpQueryAwarenessTests : IAsyncLifetime
     public sealed record CountingListQuery(
         int? PageNumber = null,
         int? PageSize = null
-    ) : ICoreMultiProjectionListQuery<CatchUpCountingProjector, CountingListQuery, CountItem>,
+    ) : IMultiProjectionListQuery<CatchUpCountingProjector, CountingListQuery, CountItem>,
         IQueryPagingParameter,
         IEquatable<CountingListQuery>
     {
