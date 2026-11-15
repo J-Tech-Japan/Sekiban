@@ -7,11 +7,11 @@
 ## 依存パッケージ
 
 - **net10.0** の依存バージョンは DCB 10.25.0 と同じです。
-- **net11.0** は .NET 11 のパッケージを使います。.NET と同じ版で出る `Microsoft.Extensions.*`、Entity Framework Core、`Microsoft.Data.Sqlite` は `11.0.0`、`Npgsql.EntityFrameworkCore.PostgreSQL` は `11.0.0-rc.3` です。net11.0 の `Npgsql` は 10.0.3 です。
+- **net11.0** は .NET 11.0.0 の正式版パッケージを使います。.NET と同じ版で出る `Microsoft.Extensions.*` と `Microsoft.Data.Sqlite` は `11.0.0` です。例外は PostgreSQL プロバイダーです。`Npgsql.EntityFrameworkCore.PostgreSQL` は `11.0.0-rc.3` で、Npgsql が Entity Framework Core の版を固定しているため、Entity Framework Core は `11.0.0-rc.3.26522.148` です。net11.0 の `Npgsql` は 10.0.3 です。
 - `Microsoft.Orleans.*` はどちらも 10.4.2 です。Orleans 10.4.2 への更新の注意点は、10.24.0 のリリースノートを参照してください。
 
 ## プレビューについて
 
-- net11.0 の `Npgsql.EntityFrameworkCore.PostgreSQL` はリリース候補版です。今後のプレビューで正式版に切り替えます。すべての依存が安定版になったら、正式版 11.0.1 を出します。
+- net11.0 の `Npgsql.EntityFrameworkCore.PostgreSQL` と、それが固定する Entity Framework Core はリリース候補版です。今後のプレビューで両方を正式版に切り替えます。すべての依存が安定版になったら、正式版 11.0.1 を出します。
 - 11 系がプレビューの間も、10.x 系のリリースは続けます。
 - このプレビューではテンプレートを出しません。DCB のテンプレートは 10.x 系のままです。

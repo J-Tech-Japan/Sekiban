@@ -6,6 +6,8 @@ namespace Sekiban.Dcb.TemplateValidation;
 internal static class PackageArtifactValidator
 {
     private const string AzureQueuePackageId = "Sekiban.Dcb.Orleans.AzureQueue";
+    private const string PostgresPackageId = "Sekiban.Dcb.Postgres";
+    private const string NpgsqlPinnedEfCoreVersion = "11.0.0-rc.3.26522.148";
 
     internal static void Validate(string directory, string expectedVersion)
     {
@@ -41,7 +43,7 @@ internal static class PackageArtifactValidator
             var groups = document.Descendants().Where(element => element.Name.LocalName == "group" && element.Parent?.Name.LocalName == "dependencies").ToArray();
             Assert(groups.Length == 2 && groups.Select(group => group.Attribute("targetFramework")?.Value).ToHashSet().SetEquals(["net10.0", "net11.0"]),
                 $"{id} must have exactly net10.0 and net11.0 dependency groups, without net9.0.");
-            ValidateFrameworkGroups(id,
+            ValidateFrameworkGroups(id, id == PostgresPackageId,
                 groups.Single(group => group.Attribute("targetFramework")?.Value == "net10.0"),
                 groups.Single(group => group.Attribute("targetFramework")?.Value == "net11.0"));
         }
@@ -49,7 +51,8 @@ internal static class PackageArtifactValidator
         foreach (var tfm in new[] { "net10.0", "net11.0" })
         {
             var runtimeVersion = tfm == "net10.0" ? "10.0.15" : "11.0.0";
-            ValidateDependency(nuspecs["Sekiban.Dcb.Postgres"], tfm, "Microsoft.EntityFrameworkCore.Relational", runtimeVersion);
+            ValidateDependency(nuspecs[PostgresPackageId], tfm, "Microsoft.EntityFrameworkCore.Relational",
+                tfm == "net10.0" ? "10.0.15" : NpgsqlPinnedEfCoreVersion);
             ValidateDependency(nuspecs["Sekiban.Dcb.Core"], tfm, "Microsoft.Extensions.Logging.Abstractions", runtimeVersion);
             ValidateDependency(nuspecs["Sekiban.Dcb.Sqlite"], tfm, "Microsoft.Data.Sqlite", runtimeVersion);
             ValidateDependency(nuspecs[AzureQueuePackageId], tfm, "Azure.Storage.Queues", "12.25.0");
@@ -62,14 +65,17 @@ internal static class PackageArtifactValidator
 
     // The 11 line keeps the net10.0 group on the 10.x platform packages and moves only the
     // platform packages that ship an 11.x release to that release on net11.0.
-    private static string? ElevenLineVersion(string dependencyId) =>
+    // Npgsql.EntityFrameworkCore.PostgreSQL 11.0.0-rc.3 pins EF Core to exactly this release
+    // candidate, so only the PostgreSQL package carries it on net11.0 (no NU1608).
+    private static string? ElevenLineVersion(string dependencyId, bool postgresPackage) =>
         dependencyId == "Npgsql.EntityFrameworkCore.PostgreSQL" ? "11.0.0-rc.3"
+        : postgresPackage && dependencyId.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal) ? NpgsqlPinnedEfCoreVersion
         : dependencyId.StartsWith("Microsoft.Extensions.", StringComparison.Ordinal) ||
           dependencyId.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal) ||
           dependencyId == "Microsoft.Data.Sqlite" ? "11.0.0"
         : null;
 
-    private static void ValidateFrameworkGroups(string id, XElement net10, XElement net11)
+    private static void ValidateFrameworkGroups(string id, bool postgresPackage, XElement net10, XElement net11)
     {
         static Dictionary<string, XElement> Index(XElement group) =>
             group.Elements().Where(element => element.Name.LocalName == "dependency")
@@ -87,7 +93,7 @@ internal static class PackageArtifactValidator
         foreach (var (dependencyId, net10Dependency) in net10Dependencies)
         {
             var net11Dependency = net11Dependencies[dependencyId];
-            var eleven = ElevenLineVersion(dependencyId);
+            var eleven = ElevenLineVersion(dependencyId, postgresPackage);
             if (eleven is null)
             {
                 Assert(Attributes(net10Dependency, true) == Attributes(net11Dependency, true),

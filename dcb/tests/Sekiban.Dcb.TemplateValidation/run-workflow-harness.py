@@ -249,7 +249,7 @@ class Fixture:
         groups=''
         for framework, relational in [('net10.0','10.0.15'),('net11.0','11.0.0')]:
             deps=[]
-            if id=='Sekiban.Dcb.Postgres': deps=[('Microsoft.EntityFrameworkCore.Relational',relational)]
+            if id=='Sekiban.Dcb.Postgres': deps=[('Microsoft.EntityFrameworkCore.Relational','10.0.15' if framework=='net10.0' else '11.0.0-rc.3.26522.148')]
             if id=='Sekiban.Dcb.Core': deps=[('Microsoft.Extensions.Logging.Abstractions',relational)]
             if id=='Sekiban.Dcb.Sqlite': deps=[('Microsoft.Data.Sqlite',relational)]
             if id=='Sekiban.Dcb.Orleans.AzureQueue': deps=[('Azure.Storage.Queues','12.25.0'),('Microsoft.Orleans.Streaming.AzureStorage','10.4.2')]
@@ -771,26 +771,33 @@ def package_group_cases(source, root):
         shutil.copy2(f.local/f'{id}.{f.version}.nupkg', feed)
     command = [f.dotnet, str(f.dll), 'packages', '--directory', str(feed), '--expected-version', f.version]
     run(command, f.repo, f.env)
-    path = feed/f'Sekiban.Dcb.Core.{f.version}.nupkg'
-    original = path.read_bytes()
-    for case, reason in [('third-net9-group', 'must have exactly net10.0 and net11.0 dependency groups'),
-                         ('wrong-net11-version', 'Microsoft.Extensions.Logging.Abstractions in net11.0 must be 11.0.0.')]:
-        path.write_bytes(original)
+    cases = [('Sekiban.Dcb.Core', 'third-net9-group', 'must have exactly net10.0 and net11.0 dependency groups',
+              b'</dependencies>', b'<group targetFramework="net9.0" /></dependencies>'),
+             ('Sekiban.Dcb.Core', 'wrong-net11-version', 'Microsoft.Extensions.Logging.Abstractions in net11.0 must be 11.0.0.',
+              b'version="11.0.0"', b'version="10.0.15"'),
+             ('Sekiban.Dcb.Postgres', 'postgres-ga-ef-core-on-net11', 'Microsoft.EntityFrameworkCore.Relational in net11.0 must be 11.0.0-rc.3.26522.148.',
+              b'version="11.0.0-rc.3.26522.148"', b'version="11.0.0"'),
+             ('Sekiban.Dcb.Core', 'rc-outside-postgres', 'Microsoft.Extensions.Logging.Abstractions in net11.0 must be 11.0.0.',
+              b'version="11.0.0"', b'version="11.0.0-rc.3.26522.148"')]
+    for package_id, case, reason, before, after in cases:
+        path = feed/f'{package_id}.{f.version}.nupkg'
+        original = path.read_bytes()
         with zipfile.ZipFile(path) as archive:
             entries = {entry.filename: archive.read(entry) for entry in archive.infolist()}
         name = next(name for name in entries if name.endswith('.nuspec'))
-        if case == 'third-net9-group':
-            entries[name] = entries[name].replace(b'</dependencies>', b'<group targetFramework="net9.0" /></dependencies>')
-        else:
-            entries[name] = entries[name].replace(b'version="11.0.0"', b'version="10.0.15"')
+        assert before in entries[name], case
+        entries[name] = entries[name].replace(before, after)
         with zipfile.ZipFile(path, 'w') as archive:
             for name, content in entries.items(): archive.writestr(name, content)
-        try: run(command, f.repo, f.env)
+        try:
+            run(command, f.repo, f.env)
         except Failure as error:
             if reason not in str(error): raise
             print(f'PASS rejects {case}: {reason}', flush=True)
-        else: raise Failure(case+' unexpectedly passed')
-
+        else:
+            raise Failure(case+' unexpectedly passed')
+        finally:
+            path.write_bytes(original)
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)

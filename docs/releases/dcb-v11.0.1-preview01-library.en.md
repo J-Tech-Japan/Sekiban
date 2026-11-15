@@ -7,11 +7,11 @@
 ## Dependencies
 
 - **net10.0** uses the same dependency versions as DCB 10.25.0.
-- **net11.0** uses the .NET 11 packages: `Microsoft.Extensions.*` (those versioned with .NET), Entity Framework Core and `Microsoft.Data.Sqlite` `11.0.0`, and `Npgsql.EntityFrameworkCore.PostgreSQL` `11.0.0-rc.3`. `Npgsql` is 10.0.3 on net11.0.
+- **net11.0** uses the .NET 11.0.0 GA packages: `Microsoft.Extensions.*` (those versioned with .NET) and `Microsoft.Data.Sqlite` `11.0.0`. The PostgreSQL provider is the exception: `Npgsql.EntityFrameworkCore.PostgreSQL` `11.0.0-rc.3` with Entity Framework Core `11.0.0-rc.3.26522.148`, because Npgsql pins that exact EF Core version. `Npgsql` is 10.0.3 on net11.0.
 - `Microsoft.Orleans.*` is 10.4.2 on both. For the Orleans 10.4.2 upgrade notes, see the 10.24.0 release notes.
 
 ## Preview status
 
-- `Npgsql.EntityFrameworkCore.PostgreSQL` on net11.0 is a release candidate. A later preview moves it to its GA release. The stable 11.0.1 follows when all dependencies are stable.
+- On net11.0, `Npgsql.EntityFrameworkCore.PostgreSQL` and the Entity Framework Core it pins are release candidates. A later preview moves both to GA. The stable 11.0.1 follows when all dependencies are stable.
 - The 10.x line continues to receive releases while the 11 line is in preview.
 - Templates are not released for this preview; the DCB templates stay on the 10.x line.
