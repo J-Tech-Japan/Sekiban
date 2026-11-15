@@ -75,6 +75,10 @@ internal static class PackageArtifactValidator
           dependencyId == "Microsoft.Data.Sqlite" ? "11.0.0"
         : null;
 
+    // The net10.0 group must carry exactly the 10 line's versions (what main ships).
+    private static string TenLineVersion(string dependencyId) =>
+        dependencyId == "Npgsql.EntityFrameworkCore.PostgreSQL" ? "10.0.3" : "10.0.15";
+
     private static void ValidateFrameworkGroups(string id, bool postgresPackage, XElement net10, XElement net11)
     {
         static Dictionary<string, XElement> Index(XElement group) =>
@@ -102,8 +106,9 @@ internal static class PackageArtifactValidator
             }
             Assert(Attributes(net10Dependency, false) == Attributes(net11Dependency, false),
                 $"{id}: {dependencyId} must declare the same assets across frameworks.");
-            Assert(net10Dependency.Attribute("version")?.Value.StartsWith("10.", StringComparison.Ordinal) == true,
-                $"{id}: {dependencyId} in net10.0 must stay on the 10.x line.");
+            var ten = TenLineVersion(dependencyId);
+            Assert(net10Dependency.Attribute("version")?.Value == ten,
+                $"{id}: {dependencyId} in net10.0 must stay on the 10 line's {ten}.");
             Assert(net11Dependency.Attribute("version")?.Value == eleven,
                 $"{id}: {dependencyId} in net11.0 must be {eleven}.");
         }
