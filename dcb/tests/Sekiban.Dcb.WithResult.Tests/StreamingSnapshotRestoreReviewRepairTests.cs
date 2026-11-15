@@ -609,7 +609,8 @@ public sealed partial class StreamingSnapshotRestoreTests
     private static void AssertStreamingRegistrySurface(Type registryType)
     {
         Assert.Contains(typeof(IStreamingMultiProjectorTypes), registryType.GetInterfaces());
-        var methods = registryType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly);
+        // Public instance members including inherited ones: the Simple registries share SimpleMultiProjectorTypesBase.
+        var methods = registryType.GetMethods(BindingFlags.Instance | BindingFlags.Public);
         AssertMethod(methods, nameof(IStreamingMultiProjectorTypes.SupportsStreamDeserialization), typeof(bool), typeof(string));
         AssertMethod(
             methods,
@@ -659,7 +660,7 @@ public sealed partial class StreamingSnapshotRestoreTests
 
     private static MethodInfo GetStreamingRegistryDeserializeMethod(Type registryType) =>
         Assert.Single(
-            registryType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly),
+            registryType.GetMethods(BindingFlags.Instance | BindingFlags.Public),
             method => method.Name == nameof(IStreamingMultiProjectorTypes.DeserializeFromStreamAsync));
 
     private static IEnumerable<MethodBase> GetConcreteMethodsIncludingNestedTypes(Type type)

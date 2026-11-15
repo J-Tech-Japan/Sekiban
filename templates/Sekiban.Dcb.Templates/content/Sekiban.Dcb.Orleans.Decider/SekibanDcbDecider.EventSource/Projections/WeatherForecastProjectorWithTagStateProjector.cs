@@ -2,7 +2,6 @@ using Dcb.EventSource.Weather;
 using Dcb.ImmutableModels.States.Weather;
 using Dcb.ImmutableModels.Events.Weather;
 using Dcb.ImmutableModels.Tags;
-using ResultBoxes;
 using Sekiban.Dcb;
 using Sekiban.Dcb.Common;
 using Sekiban.Dcb.Domains;
@@ -102,9 +101,14 @@ public record WeatherForecastProjectorWithTagStateProjector :
 
                     ITagStatePayload payload;
                     var bytes = System.Text.Encoding.UTF8.GetBytes(payloadJson);
-                    var rb = domainTypes.TagStatePayloadTypes.DeserializePayload(type, bytes);
-                    if (!rb.IsSuccess) continue;
-                    payload = rb.GetValue();
+                    try
+                    {
+                        payload = domainTypes.TagStatePayloadTypes.DeserializePayload(type, bytes);
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
 
                     var tag = new WeatherForecastTag(id);
                     var tagStateId = new TagStateId(tag, tagProjectorName);

@@ -36,8 +36,7 @@ static async Task ListProjectorsAsync()
 
     foreach (var name in projectorNames)
     {
-        var versionResult = domainTypes.MultiProjectorTypes.GetProjectorVersion(name);
-        var version = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
+        var version = domainTypes.MultiProjectorTypes.GetProjectorVersion(name);
         Console.WriteLine($"  - {name} (version: {version})");
     }
 
@@ -47,8 +46,7 @@ static async Task ListProjectorsAsync()
 
     foreach (var name in tagProjectorNames)
     {
-        var versionResult = domainTypes.TagProjectorTypes.GetProjectorVersion(name);
-        var version = versionResult.IsSuccess ? versionResult.GetValue() : "unknown";
+        var version = domainTypes.TagProjectorTypes.GetProjectorVersion(name);
         Console.WriteLine($"  - {name} (version: {version})");
     }
 
