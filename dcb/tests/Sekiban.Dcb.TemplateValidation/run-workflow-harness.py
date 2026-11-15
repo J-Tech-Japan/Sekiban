@@ -42,6 +42,14 @@ def checks_for(version):
 class Failure(RuntimeError):
     pass
 
+def resultboxes_allowed(source):
+    # The ResultBoxes ratchet list as compiled into the validator; fixture packages that are in it
+    # declare ResultBoxes directly, as the real packs reach it (directly or through Core/Core.Model).
+    text=(source/REL/'PackageArtifactValidator.cs').read_text()
+    block=re.search(r'ResultBoxesAllowedPackageIds =\s*\[(.*?)\];', text, re.S)
+    assert block, 'ResultBoxesAllowedPackageIds not found'
+    return re.findall(r'"(Sekiban\.Dcb[^"]+)"', block[1])
+
 def run(args, cwd, env=None):
     result = subprocess.run(args, cwd=cwd, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if result.returncode:
@@ -173,6 +181,7 @@ class Fixture:
             self.api[f'repos/{REPO}/git/tags/{obj}']={'sha':obj,'tag':tag,'object':{'sha':self.sha,'type':'commit'},
                         'tagger':{'date':'2026-09-14T19:00:00Z' if tag.startswith('dcbTemplates') else '2026-09-14T18:00:00Z'}}
         self.ids=re.findall(r'"(Sekiban\.Dcb[^\"]+)"',(source/REL/'PackageManifest.cs').read_text())
+        self.resultboxes=resultboxes_allowed(source)
         for tag in self.tags:
             library=tag.startswith('dcb-v')
             names=[f'{id}.{version}.nupkg' for id in self.ids] if library else [f'Sekiban.Dcb.Templates.{version}.nupkg']
@@ -253,6 +262,7 @@ class Fixture:
             if id=='Sekiban.Dcb.Core': deps=[('Microsoft.Extensions.Logging.Abstractions',relational)]
             if id=='Sekiban.Dcb.Sqlite': deps=[('Microsoft.Data.Sqlite',relational)]
             if id=='Sekiban.Dcb.Orleans.AzureQueue': deps=[('Azure.Storage.Queues','12.25.0'),('Microsoft.Orleans.Streaming.AzureStorage','10.4.2')]
+            if id in self.resultboxes: deps=deps+[('ResultBoxes','0.4.0')]
             groups+=f'<group targetFramework="{framework}">'+''.join(f'<dependency id="{n}" version="{v}" />' for n,v in deps)+'</group>'
         with zipfile.ZipFile(path,'w') as archive:
             archive.writestr(f'{id}.nuspec',f'<package><metadata><id>{id}</id><version>{version}</version><dependencies>{groups}</dependencies></metadata></package>')
@@ -798,6 +808,48 @@ def package_group_cases(source, root):
             raise Failure(case+' unexpectedly passed')
         finally:
             path.write_bytes(original)
+    resultboxes_ratchet_cases(f, feed, command)
+
+def resultboxes_ratchet_cases(f, feed, command):
+    def rewrite(package_id, before, after):
+        path = feed/f'{package_id}.{f.version}.nupkg'
+        with zipfile.ZipFile(path) as archive:
+            entries = {entry.filename: archive.read(entry) for entry in archive.infolist()}
+        name = next(name for name in entries if name.endswith('.nuspec'))
+        assert entries[name].count(before) == 2, (package_id, before)  # once per net10.0/net11.0 group
+        entries[name] = entries[name].replace(before, after)
+        with zipfile.ZipFile(path, 'w') as archive:
+            for name, content in entries.items(): archive.writestr(name, content)
+    def rejected(case, reason, args=()):
+        try:
+            run(command + list(args), f.repo, f.env)
+        except Failure as error:
+            if reason not in str(error): raise Failure(f'{case}: wrong failure (wanted {reason}): {error}')
+            print(f'PASS rejects {case}: {reason}', flush=True)
+        else:
+            raise Failure(case+' unexpectedly passed')
+    target = 'Sekiban.Dcb.MaterializedView.Postgres'
+    assert target in f.resultboxes and 'Sekiban.Dcb.Core' in f.resultboxes
+    direct = b'<dependency id="ResultBoxes" version="0.4.0" />'
+    path = feed/f'{target}.{f.version}.nupkg'
+    original = path.read_bytes()
+    # The validator only lets the harness narrow the compiled list. While every package is still
+    # listed, a narrowed list stands in for "this package is not in the allowed set".
+    narrowed = ['--resultboxes-allowed-subset', ','.join(id for id in f.resultboxes if id != target)]
+    try:
+        rewrite(target, direct, b'')
+        run(command + narrowed, f.repo, f.env)
+        print(f'PASS accepts {target} without ResultBoxes outside a narrowed allowed set', flush=True)
+        rejected('resultboxes-allowed-package-lost-dependency', 'no longer reaches ResultBoxes in net10.0; remove it from ResultBoxesAllowedPackageIds')
+        path.write_bytes(original)
+        rejected('resultboxes-direct-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> ResultBoxes) but is outside the ResultBoxes allowed set', narrowed)
+        rewrite(target, direct, f'<dependency id="Sekiban.Dcb.Core" version="{f.version}" />'.encode())
+        rejected('resultboxes-transitive-outside-allowed-set', f'{target} reaches ResultBoxes in net10.0 ({target} -> Sekiban.Dcb.Core -> ResultBoxes) but is outside the ResultBoxes allowed set', narrowed)
+        rejected('resultboxes-subset-widens-list', 'may only narrow ResultBoxesAllowedPackageIds',
+                 ['--resultboxes-allowed-subset', 'Sekiban.Dcb.Core,Sekiban.Dcb.Unlisted'])
+    finally:
+        path.write_bytes(original)
+    run(command, f.repo, f.env)
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
