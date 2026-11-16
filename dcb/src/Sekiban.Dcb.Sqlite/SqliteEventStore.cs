@@ -571,7 +571,11 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
         }
     }
 
-    /// <summary>Returns the event, or <c>null</c> when no readable event with <paramref name="eventId" /> exists.</summary>
+    /// <summary>
+    ///     Returns the event, or <c>null</c> when no event with <paramref name="eventId" /> exists. A stored row that
+    ///     cannot be read (unregistered type, unreadable payload or tags) is a failure: it throws the same
+    ///     <see cref="KeyNotFoundException" /> the 10.x store reported for it.
+    /// </summary>
     public async Task<Event?> ReadEventAsync(Guid eventId)
     {
         try
@@ -591,22 +595,25 @@ public class SqliteEventStore : IHotEventStore, IStorageDurabilityDescriptorProv
 
             await using var reader = await cmd.ExecuteReaderAsync();
 
-            if (await reader.ReadAsync())
+            if (!await reader.ReadAsync())
             {
-                var evt = ReadEvent(reader);
-                if (evt != null)
-                {
-                    return evt;
-                }
+                return null;
             }
 
-            return null;
+            var evt = ReadEvent(reader);
+            if (evt != null)
+            {
+                return evt;
+            }
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Error reading event from SQLite: {EventId}", eventId);
             throw;
         }
+
+        // Only reached when the row exists but ReadEvent could not read it (it has already logged why).
+        throw new KeyNotFoundException($"Event not found: {eventId}");
     }
 
     public async Task<(IReadOnlyList<Event> Events, IReadOnlyList<TagWriteResult> TagWrites)> WriteEventsAsync(

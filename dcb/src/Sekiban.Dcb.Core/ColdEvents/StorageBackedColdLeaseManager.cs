@@ -107,14 +107,26 @@ public sealed class StorageBackedColdLeaseManager : IColdLeaseManager
         string expectedToken,
         CancellationToken ct)
     {
-        var verify = await _storage.GetAsync(path, ct)
-            ?? throw new FileNotFoundException($"Cold object not found: {path}");
+        var verify = await _storage.GetAsync(path, ct) ?? await ThrowMissingObjectAsync(path, ct);
 
         var verifiedLease = DeserializeLease(verify.Data, verify.ETag, leaseId);
         if (verifiedLease.Token != expectedToken)
         {
             throw new InvalidOperationException($"Lease {leaseId} was acquired by another writer");
         }
+    }
+
+    /// <summary>
+    ///     Surfaces the storage's own missing-object failure (as 10.x did when it forwarded the failed read), by asking
+    ///     the storage to open the object it just reported as absent.
+    /// </summary>
+    private async Task<ColdStorageObject> ThrowMissingObjectAsync(string path, CancellationToken ct)
+    {
+        await using (await _storage.OpenReadAsync(path, ct))
+        {
+        }
+
+        throw new KeyNotFoundException($"Cold object not found: {path}");
     }
 
     private static string LeasePath(string leaseId)

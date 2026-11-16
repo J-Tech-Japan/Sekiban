@@ -10,7 +10,8 @@ namespace Sekiban.Dcb.InMemory;
 /// <summary>
 ///     Minimal in-memory event store (single process, test support) that the obsolete parameterless-store
 ///     <c>InMemoryDcbExecutor</c> constructors of both facades create. Events are kept in their serialized form, so
-///     payloads round-trip as bytes the way a real store returns them.
+///     payloads round-trip as bytes the way a real store returns them. Payloads and tag lists are copied on write and
+///     on every read, so changing an event a caller wrote or read never changes the stored history.
 /// </summary>
 internal sealed class InMemoryExecutorEventStore : IEventStore, IStreamingTaggedSerializableEventStore,
     ITaggedStreamCapabilityProvider
@@ -39,6 +40,9 @@ internal sealed class InMemoryExecutorEventStore : IEventStore, IStreamingTagged
         return _states.GetOrAdd(serviceId, _ => new ServiceState());
     }
 
+    private static SerializableEvent Copy(SerializableEvent ev) =>
+        ev with { Payload = (byte[])ev.Payload.Clone(), Tags = new List<string>(ev.Tags) };
+
     private static List<SerializableEvent> EventsWithTag(ServiceState state, string tagString) =>
         state.Events
             .Where(e => e.Tags.Contains(tagString))
@@ -55,7 +59,8 @@ internal sealed class InMemoryExecutorEventStore : IEventStore, IStreamingTagged
         var state = GetState();
         lock (state.Lock)
         {
-            return Task.FromResult(state.Events.FirstOrDefault(e => e.Id == eventId));
+            var stored = state.Events.FirstOrDefault(e => e.Id == eventId);
+            return Task.FromResult(stored is null ? null : Copy(stored));
         }
     }
 
@@ -167,7 +172,7 @@ internal sealed class InMemoryExecutorEventStore : IEventStore, IStreamingTagged
                 events = events.Take(maxCount.Value);
             }
 
-            return Task.FromResult<IEnumerable<SerializableEvent>>(events.ToList());
+            return Task.FromResult<IEnumerable<SerializableEvent>>(events.Select(Copy).ToList());
         }
     }
 
@@ -176,7 +181,8 @@ internal sealed class InMemoryExecutorEventStore : IEventStore, IStreamingTagged
         var state = GetState();
         lock (state.Lock)
         {
-            return Task.FromResult<IEnumerable<SerializableEvent>>(After(EventsWithTag(state, tag.GetTag()), since).ToList());
+            return Task.FromResult<IEnumerable<SerializableEvent>>(
+                After(EventsWithTag(state, tag.GetTag()), since).Select(Copy).ToList());
         }
     }
 
@@ -193,7 +199,7 @@ internal sealed class InMemoryExecutorEventStore : IEventStore, IStreamingTagged
             state.Events,
             static @event => @event.Tags,
             static @event => @event.SortableUniqueIdValue,
-            static @event => @event,
+            Copy,
             tag,
             since,
             until,
@@ -218,7 +224,7 @@ internal sealed class InMemoryExecutorEventStore : IEventStore, IStreamingTagged
 
         public void AddSerializableEvent(SerializableEvent ev)
         {
-            _state.Events.Add(ev);
+            _state.Events.Add(Copy(ev));
             if (string.Compare(ev.SortableUniqueIdValue, _state.MaxSortableUniqueId, StringComparison.Ordinal) > 0)
             {
                 _state.MaxSortableUniqueId = ev.SortableUniqueIdValue;

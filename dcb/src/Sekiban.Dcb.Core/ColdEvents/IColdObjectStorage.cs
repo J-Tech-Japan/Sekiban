@@ -11,12 +11,12 @@ public interface IColdObjectStorage
 
     /// <summary>
     ///     Opens the object at <paramref name="path" /> for reading. A missing object is a failure: the default
-    ///     implementation throws <see cref="FileNotFoundException" />.
+    ///     implementation throws <see cref="KeyNotFoundException" />.
     /// </summary>
     async Task<Stream> OpenReadAsync(string path, CancellationToken ct)
     {
         var storageObject = await GetAsync(path, ct).ConfigureAwait(false)
-            ?? throw new FileNotFoundException($"Cold object not found: {path}");
+            ?? throw new KeyNotFoundException($"Cold object not found: {path}");
         return new MemoryStream(storageObject.Data, writable: false);
     }
 
