@@ -62,6 +62,56 @@ public class DirectResultBoxQueryShapeTests
         Assert.Equal(["a"], supported.Items);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Object_valued_single_query_returning_a_box_is_rejected_not_returned(bool failedBox)
+    {
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _executor.ExecuteQueryAsync<ShapeProjector, DirectBoxObjectQuery, object>(
+                new DirectBoxObjectQuery(failedBox),
+                () => Task.FromResult(ShapeProjector.GenerateInitialPayload())));
+
+        Assert.Contains(typeof(DirectBoxObjectQuery).FullName!, failure.Message);
+        Assert.Contains("HandleQuery returns ResultBox<Object>", failure.Message);
+        Assert.Contains("WithResult IMultiProjectionQuery", failure.Message);
+    }
+
+    [Fact]
+    public async Task Object_valued_list_query_returning_boxes_is_rejected_not_returned()
+    {
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _executor.ExecuteListQueryAsync<ShapeProjector, DirectBoxObjectListQuery, object>(
+                new DirectBoxObjectListQuery(),
+                () => Task.FromResult(ShapeProjector.GenerateInitialPayload())));
+
+        Assert.Contains(typeof(DirectBoxObjectListQuery).FullName!, failure.Message);
+        Assert.Contains("HandleFilter returns ResultBox<IEnumerable<Object>>", failure.Message);
+        Assert.Contains("WithResult IMultiProjectionListQuery", failure.Message);
+    }
+
+    [Fact]
+    public async Task Object_valued_query_returning_a_value_type_fails_with_guidance()
+    {
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _executor.ExecuteQueryAsync<ShapeProjector, ValueTypeObjectQuery, object>(
+                new ValueTypeObjectQuery(),
+                () => Task.FromResult(ShapeProjector.GenerateInitialPayload())));
+
+        Assert.Contains("HandleQuery returns Int32, but Object is required", failure.Message);
+    }
+
+    [Fact]
+    public async Task Mismatched_return_of_a_type_nested_in_a_generic_type_fails_with_guidance()
+    {
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _executor.ExecuteQueryAsync<ShapeProjector, NestedReturnQuery, int>(
+                new NestedReturnQuery(),
+                () => Task.FromResult(ShapeProjector.GenerateInitialPayload())));
+
+        Assert.Contains("HandleQuery returns Inner<String>, but Int32 is required", failure.Message);
+    }
+
     public sealed record ShapeProjector : IMultiProjector<ShapeProjector>
     {
         public static string MultiProjectorName => "direct-result-box-query-shape";
@@ -116,5 +166,44 @@ public class DirectResultBoxQueryShapeTests
             WithResultListQuery query,
             IQueryContext context) =>
             ResultBox.FromValue(filteredList);
+    }
+
+    public sealed record DirectBoxObjectQuery(bool FailedBox) : IQueryCommon<DirectBoxObjectQuery, object>
+    {
+        public static ResultBox<object> HandleQuery(ShapeProjector projector, DirectBoxObjectQuery query, IQueryContext context) =>
+            query.FailedBox
+                ? ResultBox.Error<object>(new InvalidOperationException("box failure"))
+                : ResultBox.FromValue<object>("value");
+    }
+
+    public sealed record DirectBoxObjectListQuery : IListQueryCommon<DirectBoxObjectListQuery, object>
+    {
+        public static ResultBox<IEnumerable<object>> HandleFilter(
+            ShapeProjector projector,
+            DirectBoxObjectListQuery query,
+            IQueryContext context) =>
+            ResultBox.FromValue<IEnumerable<object>>(["a"]);
+
+        public static ResultBox<IEnumerable<object>> HandleSort(
+            IEnumerable<object> filteredList,
+            DirectBoxObjectListQuery query,
+            IQueryContext context) =>
+            ResultBox.FromValue(filteredList);
+    }
+
+    public sealed record ValueTypeObjectQuery : IQueryCommon<ValueTypeObjectQuery, object>
+    {
+        public static int HandleQuery(ShapeProjector projector, ValueTypeObjectQuery query, IQueryContext context) => 7;
+    }
+
+    public sealed record NestedReturnQuery : IQueryCommon<NestedReturnQuery, int>
+    {
+        public static Outer<string>.Inner HandleQuery(ShapeProjector projector, NestedReturnQuery query, IQueryContext context) =>
+            new();
+    }
+
+    public sealed class Outer<T>
+    {
+        public sealed class Inner;
     }
 }
