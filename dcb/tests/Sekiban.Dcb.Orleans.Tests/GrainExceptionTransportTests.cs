@@ -238,12 +238,29 @@ public class GrainExceptionTransportTests : IAsyncLifetime
     [InlineData(ProbeFailure.CodecLessInnerException, "[InvalidOperationException] outer failure")]
     [InlineData(ProbeFailure.NestedCodecLessData, "[InvalidOperationException] outer failure")]
     [InlineData(ProbeFailure.SelfReferencingData, "[InvalidOperationException] refers to itself")]
+    [InlineData(ProbeFailure.ValueTupleSelfReferencingData, "[InvalidOperationException] refers to itself")]
+    [InlineData(ProbeFailure.LazyInfiniteData, "[InvalidOperationException] lazy data")]
+    [InlineData(ProbeFailure.LargeByteArrayData, "[InvalidOperationException] bytes data")]
     public async Task ExceptionWithoutACodec_ArrivesInTheTypeMessageForm(ProbeFailure failure, string expectedMessage)
     {
         var thrown = await Assert.ThrowsAsync<Exception>(() => Probe().FailAsync(failure));
 
         Assert.Equal(typeof(Exception), thrown.GetType());
         Assert.Equal(expectedMessage, thrown.Message);
+    }
+
+    [Fact]
+    public async Task ProjectionFaultWithSelfReferencingData_TravelsThroughItsConverter()
+    {
+        var thrown = await Assert.ThrowsAsync<SekibanProjectionFaultException>(
+            () => Probe().FailAsync(ProbeFailure.ProjectionFaultSelfReferencingData));
+
+        var expected = ExpectedFault();
+        Assert.Equal(expected.Fault.EventId, thrown.Fault.EventId);
+        Assert.Equal(expected.Fault.ProjectorName, thrown.Fault.ProjectorName);
+        Assert.Equal(expected.Fault.Position, thrown.Fault.Position);
+        Assert.Equal(expected.Message, thrown.Message);
+        Assert.False(thrown.Data.Contains("self"));
     }
 
     [Fact]
@@ -318,6 +335,15 @@ public class GrainExceptionTransportTests : IAsyncLifetime
             new TagHeadExpectedObserved("service-a", "Probe:2", TagHeadExpectation.AssertEmpty(), null),
             new TagHeadExpectedObserved("service-a", "Probe:3", TagHeadExpectation.NoEnforcement(), "063930412334851845000116175000")
         ]);
+
+    internal static SekibanProjectionFaultException ExpectedFault() =>
+        new(new ProjectionFaultDescriptor(
+            Guid.Parse("5b7f0c1e-2d3a-4e5f-8a9b-0c1d2e3f4a5b"),
+            "ProbeEvent",
+            "probe-projector",
+            "063930412334851845000116174724",
+            "probe fold failure",
+            new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc).Ticks));
 
     internal static ConditionalAppendInDoubtException ExpectedInDoubt() =>
         ConditionalAppendInDoubtException.Create(
@@ -398,7 +424,11 @@ public enum ProbeFailure
     AggregateWithCodecLessData,
     AggregateOfFortySystemExceptions,
     CancellationWithCodecLessInnerException,
-    CancellationWithCodecLessData
+    CancellationWithCodecLessData,
+    ValueTupleSelfReferencingData,
+    ProjectionFaultSelfReferencingData,
+    LazyInfiniteData,
+    LargeByteArrayData
 }
 
 /// <summary>A test grain that fails with a chosen exception through the same transport preparation the Sekiban grains use.</summary>
@@ -416,6 +446,29 @@ public sealed class ExceptionTransportProbeGrain : Grain, IExceptionTransportPro
     {
         exception.Data[key] = value;
         return exception;
+    }
+
+    private static Exception ValueTupleSelfReferencing()
+    {
+        var exception = new InvalidOperationException("refers to itself");
+        exception.Data["self"] = ValueTuple.Create<Exception>(exception);
+        return exception;
+    }
+
+    private static Exception ProjectionFaultSelfReferencing()
+    {
+        var fault = GrainExceptionTransportTests.ExpectedFault();
+        fault.Data["self"] = fault;
+        return fault;
+    }
+
+    // Enumerating this never ends; the transport must not touch it.
+    private static IEnumerable<int> Endless()
+    {
+        for (var i = 0; ; i++)
+        {
+            yield return i;
+        }
     }
 
     private static Exception SelfReferencing()
@@ -455,6 +508,10 @@ public sealed class ExceptionTransportProbeGrain : Grain, IExceptionTransportPro
             new OperationCanceledException("restore cancelled"),
             "detail",
             new ProbeStoreFailureException("codec-less data")),
+        ProbeFailure.ValueTupleSelfReferencingData => ValueTupleSelfReferencing(),
+        ProbeFailure.ProjectionFaultSelfReferencingData => ProjectionFaultSelfReferencing(),
+        ProbeFailure.LazyInfiniteData => WithData(new InvalidOperationException("lazy data"), "items", Endless()),
+        ProbeFailure.LargeByteArrayData => WithData(new InvalidOperationException("bytes data"), "bytes", new byte[4 * 1024 * 1024]),
         _ => throw new ArgumentOutOfRangeException(nameof(failure))
     };
 }

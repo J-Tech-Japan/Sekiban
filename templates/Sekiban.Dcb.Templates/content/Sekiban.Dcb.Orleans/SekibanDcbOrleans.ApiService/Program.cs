@@ -1083,21 +1083,18 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 {
                     var start = DateTime.UtcNow;
                     var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
-                    Exception? persistFailure = null;
-                    var saved = false;
                     try
                     {
-                        saved = await grain.PersistStateAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        persistFailure = ex;
-                    }
-                    var end = DateTime.UtcNow;
-                    if (persistFailure is null)
+                        var saved = await grain.PersistStateAsync();
+                        var end = DateTime.UtcNow;
                         return Results.Ok(new { success = saved, elapsedMs = (end - start).TotalMilliseconds });
-                    var err = persistFailure.Message;
-                    return ProjectionErrors.Map(persistFailure, Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds }));
+                    }
+                    catch (Exception persistFailure)
+                    {
+                        var end = DateTime.UtcNow;
+                        var err = persistFailure.Message;
+                        return ProjectionErrors.Map(persistFailure, Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds }));
+                    }
                 }
                 catch (Exception ex)
                 {

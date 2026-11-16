@@ -1085,26 +1085,22 @@ if (TemplateEnvironment.IsDevelopment(app.Environment.EnvironmentName))
                 var start = DateTime.UtcNow;
                 logger.LogDebug("PersistProjectionState request: name={Name}, start={Start:O}", name, start);
                 var grain = client.GetGrain<IMultiProjectionGrain>(ServiceIdGrainKey.Build(serviceId, name));
-                Exception? persistFailure = null;
-                var saved = false;
                 try
                 {
-                    saved = await grain.PersistStateAsync();
-                }
-                catch (Exception ex)
-                {
-                    persistFailure = ex;
-                }
-                var end = DateTime.UtcNow;
-                var elapsedMs = (end - start).TotalMilliseconds;
-                if (persistFailure is null)
-                {
+                    var saved = await grain.PersistStateAsync();
+                    var end = DateTime.UtcNow;
+                    var elapsedMs = (end - start).TotalMilliseconds;
                     logger.LogDebug("PersistProjectionState success: name={Name}, elapsed={ElapsedMs:F1}ms", name, elapsedMs);
                     return Results.Ok(new { success = saved, elapsedMs });
                 }
-                var err = persistFailure.Message;
-                logger.LogWarning("PersistProjectionState failure: name={Name}, elapsed={ElapsedMs:F1}ms, error={Error}", name, elapsedMs, err);
-                return ProjectionErrors.Map(persistFailure, Results.BadRequest(new { error = err, elapsedMs }));
+                catch (Exception persistFailure)
+                {
+                    var end = DateTime.UtcNow;
+                    var elapsedMs = (end - start).TotalMilliseconds;
+                    var err = persistFailure.Message;
+                    logger.LogWarning("PersistProjectionState failure: name={Name}, elapsed={ElapsedMs:F1}ms, error={Error}", name, elapsedMs, err);
+                    return ProjectionErrors.Map(persistFailure, Results.BadRequest(new { error = err, elapsedMs }));
+                }
             })
             .WithName("PersistProjectionState");
 }

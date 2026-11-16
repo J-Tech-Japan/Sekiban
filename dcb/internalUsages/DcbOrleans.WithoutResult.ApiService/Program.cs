@@ -1239,25 +1239,20 @@ apiRoute
             var start = DateTime.UtcNow;
             Console.WriteLine($"[PersistEndpoint] Request name={name} start={start:O}");
             var grain = client.GetGrain<IMultiProjectionGrain>(name);
-            Exception? persistFailure = null;
-            var saved = false;
             try
             {
-                saved = await grain.PersistStateAsync();
-            }
-            catch (Exception ex)
-            {
-                persistFailure = ex;
-            }
-            var end = DateTime.UtcNow;
-            if (persistFailure is null)
-            {
+                var saved = await grain.PersistStateAsync();
+                var end = DateTime.UtcNow;
                 Console.WriteLine($"[PersistEndpoint] Success name={name} elapsed={(end - start).TotalMilliseconds:F1}ms");
                 return Results.Ok(new { success = saved, elapsedMs = (end - start).TotalMilliseconds });
             }
-            var err = persistFailure.Message;
-            Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
-            return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
+            catch (Exception persistFailure)
+            {
+                var end = DateTime.UtcNow;
+                var err = persistFailure.Message;
+                Console.WriteLine($"[PersistEndpoint] Failure name={name} elapsed={(end - start).TotalMilliseconds:F1}ms error={err}");
+                return Results.BadRequest(new { error = err, elapsedMs = (end - start).TotalMilliseconds });
+            }
         })
     .WithOpenApi()
     .WithName("PersistProjectionState");

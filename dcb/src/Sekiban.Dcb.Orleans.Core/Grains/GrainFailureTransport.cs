@@ -1,21 +1,29 @@
 using System.Collections;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans.Serialization;
+using Sekiban.Dcb.Actors;
+using Sekiban.Dcb.Storage;
 namespace Sekiban.Dcb.Orleans.Grains;
 
 /// <summary>
 ///     Prepares a failure that a grain contract reports by faulting its task for the trip to the caller. Orleans
 ///     serializes the exception itself, so its type and message survive the hop (and, for the Sekiban exception types
 ///     with a registered converter, the properties callers read). Orleans cannot carry every exception: a type it has no
-///     codec for, anywhere in the exception graph, makes the call fail with a codec error that drops the message, and a
-///     graph that refers back to itself (an exception in its own <see cref="Exception.Data" />) is never finished.
-///     Whether the failure can travel is decided by serializing it with this process's Orleans serializer. Only a
-///     failure that cannot is replaced: a cancellation by an <see cref="OperationCanceledException" /> with the same
-///     message, anything else by the form these grain contracts always delivered for it, an <see cref="Exception" />
-///     whose message is <c>[TypeName] message</c>. A failure that can travel is left as the same instance.
+///     codec for makes the call fail with a codec error that drops the message, and the exception codec does not track
+///     references, so a self-referring graph would be serialized without end.
+///     A failure travels as itself only when its structure is known to be finite and plain, and serializing it with this
+///     process's Orleans serializer succeeds. The structure check is deliberately conservative: an exception whose
+///     <see cref="Exception.Data" /> holds anything but simple values (strings, primitives, enums, decimal, dates,
+///     time spans, Guids) does not travel as itself. Any failure that does not travel is replaced: a cancellation by an
+///     <see cref="OperationCanceledException" /> with the same message, anything else by the form these grain contracts
+///     always delivered, an <see cref="Exception" /> whose message is <c>[TypeName] message</c>. A failure that travels
+///     is left as the same instance.
 /// </summary>
 internal static class GrainFailureTransport
 {
+    private const int MaxDepth = 64;
+    private const int MaxExceptions = 1024;
+
     /// <summary>Awaits <paramref name="task" /> and lets its failure travel as described on the type.</summary>
     internal static async Task<T> PrepareAsync<T>(Task<T> task, Func<IServiceProvider?> services)
     {
@@ -30,9 +38,8 @@ internal static class GrainFailureTransport
     }
 
     /// <summary>
-    ///     True when Orleans in this process can serialize the exception as it is. A grain that is not attached to a
-    ///     runtime (created directly in a unit test) has no serializer to judge with: its failure is left untouched.
-    ///     Never throws.
+    ///     True when the exception travels as itself. A grain that is not attached to a runtime (created directly in a unit
+    ///     test) has no serializer to judge with: its failure is left untouched. Never throws.
     /// </summary>
     internal static bool CanTravel(Exception exception, IServiceProvider? services)
     {
@@ -51,8 +58,8 @@ internal static class GrainFailureTransport
             return true;
         }
 
-        // The exception codec does not track references, so a cycle would be serialized without end.
-        if (HasCycle(exception))
+        // Only a finite, acyclic structure with simple Data reaches the serializer, so it cannot recurse without end.
+        if (!HasPlainStructure(exception))
         {
             return false;
         }
@@ -100,86 +107,101 @@ internal static class GrainFailureTransport
         }
     }
 
-    // A depth-first walk over the exceptions the exception codec follows from an exception: its inner exception(s) and
-    // exceptions held in its Data, as a key, a value or an item of a collection value. A path that reaches an exception
-    // already on the path is a cycle. A graph that cannot be walked counts as a cycle, so it never reaches the
-    // serializer.
-    private static bool HasCycle(Exception root)
+    // Walks only the exception structure: inner exception(s) and Data entries, which must all be simple values. An
+    // exception with a Sekiban converter travels through its surrogate, which carries only its own fields and, for some
+    // types, the inner exception; its Data is not serialized and is not inspected. Every exception is visited at most
+    // once and the walk is bounded in depth and size; reaching an exception twice, or any bound, fails the check.
+    private static bool HasPlainStructure(Exception root)
     {
-        var onPath = new HashSet<Exception>(ReferenceEqualityComparer.Instance);
-        var finished = new HashSet<Exception>(ReferenceEqualityComparer.Instance);
-        var stack = new Stack<(Exception Node, IEnumerator<Exception> Children)>();
+        var visited = new HashSet<Exception>(ReferenceEqualityComparer.Instance);
+        var pending = new Stack<(Exception Exception, int Depth)>();
+        pending.Push((root, 0));
         try
         {
-            onPath.Add(root);
-            stack.Push((root, Children(root).GetEnumerator()));
-            while (stack.Count > 0)
+            while (pending.Count > 0)
             {
-                var (node, children) = stack.Peek();
-                if (!children.MoveNext())
+                var (exception, depth) = pending.Pop();
+                if (depth > MaxDepth || !visited.Add(exception) || visited.Count > MaxExceptions)
                 {
-                    stack.Pop();
-                    onPath.Remove(node);
-                    finished.Add(node);
-                    continue;
+                    return false;
                 }
 
-                var child = children.Current;
-                if (onPath.Contains(child))
+                var converter = Converter(exception);
+                if (converter == ConverterKind.None && !HasSimpleData(exception))
                 {
-                    return true;
+                    return false;
                 }
 
-                if (finished.Contains(child))
+                if (converter == ConverterKind.WithoutInnerException)
                 {
                     continue;
                 }
 
-                onPath.Add(child);
-                stack.Push((child, Children(child).GetEnumerator()));
+                if (exception is AggregateException aggregate)
+                {
+                    foreach (var inner in aggregate.InnerExceptions)
+                    {
+                        pending.Push((inner, depth + 1));
+                    }
+                }
+                else if (exception.InnerException is { } inner)
+                {
+                    pending.Push((inner, depth + 1));
+                }
             }
 
-            return false;
+            return true;
         }
         catch (Exception)
         {
-            return true;
+            return false;
         }
     }
 
-    private static IEnumerable<Exception> Children(Exception exception)
+    private enum ConverterKind
     {
-        if (exception is AggregateException aggregate)
-        {
-            foreach (var inner in aggregate.InnerExceptions)
-            {
-                yield return inner;
-            }
-        }
-        else if (exception.InnerException is { } inner)
-        {
-            yield return inner;
-        }
+        None,
+        WithoutInnerException,
+        WithInnerException
+    }
 
-        if (exception.Data is not { Count: > 0 } data)
+    // The exception types the converters in Sekiban.Dcb.Orleans.Serialization carry, and whether their surrogate
+    // carries the inner exception.
+    private static ConverterKind Converter(Exception exception) => exception switch
+    {
+        SekibanProjectionFaultException or ExpectedTagPositionConflictException or TagHeadExpectationValidationException =>
+            ConverterKind.WithoutInnerException,
+        ConditionalAppendInDoubtException or KeyReuseConflictException => ConverterKind.WithInnerException,
+        _ => ConverterKind.None
+    };
+
+    private static bool HasSimpleData(Exception exception)
+    {
+        var data = exception.Data;
+        if (data is null || data.Count == 0)
         {
-            yield break;
+            return true;
         }
 
         foreach (DictionaryEntry entry in data)
         {
-            foreach (var held in Held(entry.Key).Concat(Held(entry.Value)))
+            if (!IsSimple(entry.Key) || !IsSimple(entry.Value))
             {
-                yield return held;
+                return false;
             }
         }
+
+        return true;
     }
 
-    private static IEnumerable<Exception> Held(object? value) => value switch
+    private static bool IsSimple(object? value)
     {
-        Exception exception => [exception],
-        string => [],
-        IEnumerable items => items.OfType<Exception>(),
-        _ => []
-    };
+        if (value is null or string)
+        {
+            return true;
+        }
+
+        var type = value.GetType();
+        return type.IsPrimitive || type.IsEnum || value is decimal or DateTime or DateTimeOffset or TimeSpan or Guid;
+    }
 }
